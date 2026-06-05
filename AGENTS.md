@@ -172,7 +172,7 @@ These rules are mandatory.
 9. Always log whether an action was executed or blocked, and why.
 10. Database profiles must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
-12. Only residuals that exactly match `kill_only_if` are ever signalled; a residual
+12. Only residuals that exactly match `kill_only_if` are ever signaled; a residual
     that does not match (or has an unresolvable exe) is reported, never killed. Any
     remaining residual makes the result `orphan_processes`, and a failed stop must
     not automatically start the service unless policy explicitly allows it.

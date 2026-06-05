@@ -1867,7 +1867,7 @@ A lock is **not active** (it is ignored, and may be reclaimed) when any of:
   owner_start_ticks (the PID was reused by an unrelated process).
 ```
 
-Otherwise the lock is **active** and blocks the actions its guards cover.
+Otherwise, the lock is **active** and blocks the actions its guards cover.
 
 Reclaiming a stale lock:
 
@@ -2042,7 +2042,7 @@ Selectors (`command_match`, `kill_only_if`) match on identity, never on a name:
   both are given).
 ```
 
-Unresolvable exe — fail safe:
+Unresolvable exe — fail-safe:
 
 ```text
 - If /proc/<pid>/exe cannot be read (permission), or resolves to a "(deleted)"
@@ -2077,7 +2077,7 @@ stop_policy:
 Any `stop_policy` field omitted by a profile or service inherits from
 `defaults.stop_policy` in the global config, which is merged in as the base layer
 during resolution (section 8, step 5a). Profiles should still state the timeouts
-that matter for that application explicitly, so the behaviour is readable without
+that matter for that application explicitly, so the behavior is readable without
 cross-referencing the defaults.
 
 Example:

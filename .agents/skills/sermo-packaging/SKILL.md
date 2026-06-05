@@ -73,7 +73,7 @@ shellcheck packaging/openrc/sermod
 go test ./...
 ```
 
-Use best effort when tools are not available.
+Use the best effort when tools are not available.
 
 ## Output format
 
