@@ -719,13 +719,26 @@ Backend detection priority:
 Automatic detection:
 
 ```text
-1. If systemctl exists and /run/systemd/system exists, use systemd.
-2. Else if rc-service exists and /run/openrc exists, use OpenRC.
-3. Else try rc-status as fallback.
-4. Else fail with a clear error.
+1. Probe systemd availability:
+   - systemctl exists
+   - /run/systemd/system exists
+   - systemctl is-system-running is usable; treat `running` and `degraded` as
+     usable states. `degraded` must not make detection fail.
+2. Probe OpenRC availability:
+   - rc-service exists
+   - /run/openrc exists, or rc-status works
+3. If exactly one backend is available, use it.
+4. If both backends are available, prefer the active init system:
+   - if PID 1 or systemctl state shows systemd is active, use systemd.
+   - else if /run/openrc exists and rc-status works, use OpenRC.
+   - else fail with a clear ambiguous-backend error and ask for --backend,
+     SERMO_BACKEND or engine.backend.
+5. If neither backend is available, fail with a clear error.
 ```
 
-Do not detect systemd by the presence of `systemctl` alone.
+Do not detect a backend by command presence alone. On hosts where both command
+sets are installed, the active init system wins over the mere presence of
+`systemctl` or `rc-service`.
 
 Systemd initial implementation:
 
@@ -2946,6 +2959,10 @@ internal/rules:
 internal/servicemgr:
   - systemd unit normalization
   - backend detection with fake paths/commands
+  - systemd detection treats `degraded` as usable
+  - when systemd and OpenRC both appear available, active init wins over command
+    presence
+  - ambiguous both-present detection fails clearly unless backend is explicit
   - openrc status parsing
   - alias resolution picks the first existing unit; clear error when none resolve
 

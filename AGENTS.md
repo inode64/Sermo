@@ -572,6 +572,8 @@ service clone resolution
 cycle detection
 variable expansion
 backend detection with mocked commands
+systemd degraded detection
+both-present backend detection prefers active init
 systemd service name normalization
 OpenRC status parsing
 rule engine and/or/not
