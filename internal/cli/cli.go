@@ -12,6 +12,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
 
@@ -33,6 +34,7 @@ type App struct {
 	Detector   BackendDetector
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
 	LoadConfig func(globalPath string) (*config.Config, error)
+	Discover   func(selectors []process.Selector) ([]process.Process, []string)
 	Env        func(string) string
 	Stdout     io.Writer
 	Stderr     io.Writer
@@ -63,6 +65,7 @@ func Main(ctx context.Context, args []string) int {
 		Detector:   servicemgr.NewDetector(),
 		NewManager: servicemgr.NewManager,
 		LoadConfig: config.Load,
+		Discover:   process.NewDiscoverer().Discover,
 		Env:        os.Getenv,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
@@ -89,6 +92,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.LoadConfig == nil {
 		a.LoadConfig = config.Load
+	}
+	if a.Discover == nil {
+		a.Discover = process.NewDiscoverer().Discover
 	}
 
 	opts, err := parseArgs(args)
@@ -126,6 +132,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runConfig(opts)
 	case "locks":
 		return a.runLocks(opts)
+	case "processes":
+		return a.runProcesses(opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -472,6 +480,80 @@ func formatLock(lock locks.Lock) string {
 	return line
 }
 
+// runProcesses discovers and reports the processes belonging to a service
+// (section 21), reading the service's `processes` selectors from resolved config.
+func (a App) runProcesses(opts options) int {
+	if opts.service() == "" {
+		fmt.Fprintln(a.Stderr, "usage error: processes requires a service name")
+		writeUsage(a.Stderr)
+		return exitUsage
+	}
+	service := opts.service()
+
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+	if _, ok := cfg.Services[service]; !ok {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
+		return exitRuntimeError
+	}
+
+	resolved, errs := cfg.Resolve(service)
+	if len(errs) > 0 {
+		a.printIssues(opts, scopedIssues(service, errs))
+		return exitConfigInvalid
+	}
+
+	selectors, warnings := process.ParseSelectors(resolved.Tree)
+	procs, discWarnings := a.Discover(selectors)
+	warnings = append(warnings, discWarnings...)
+
+	for _, w := range warnings {
+		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
+	}
+
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{"service": service, "processes": procs})
+		return exitSuccess
+	}
+
+	if len(procs) == 0 {
+		if !opts.quiet {
+			fmt.Fprintf(a.Stdout, "no processes found for %s\n", service)
+		}
+		return exitSuccess
+	}
+	for _, p := range procs {
+		fmt.Fprintln(a.Stdout, formatProcess(p))
+	}
+	return exitSuccess
+}
+
+func formatProcess(p process.Process) string {
+	exe := p.Exe
+	if !p.ExeOK {
+		exe = "unknown"
+	}
+	line := fmt.Sprintf("pid=%d ppid=%d user=%s exe=%s source=%s", p.PID, p.PPID, orUnknown(p.User), exe, p.Source)
+	if p.Role != "" {
+		line += " role=" + p.Role
+	}
+	return line
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
+}
+
 // serviceStatus resolves the backend, builds a manager and queries the service.
 // On any failure it reports the error and returns a non-success exit code.
 func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int) {
@@ -606,7 +688,7 @@ func parseArgs(args []string) (options, error) {
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
-	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | locks SERVICE")
+	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | locks SERVICE | processes SERVICE")
 }
 
 func writeJSON(w io.Writer, value any) {
