@@ -79,7 +79,7 @@ sermo/
 │   ├── config/       # YAML model, loader, merge, render, variables, validate
 │   ├── events/       # structured event model and logger
 │   ├── execx/        # external command runner with mandatory timeouts
-│   ├── locks/        # internal runtime locks and external lock checks
+│   ├── locks/        # named runtime locks, operation lock lifecycle and external lock checks
 │   ├── metrics/      # cpu/memory collectors
 │   ├── operation/    # safe start/stop/restart engine (shared by sermod + sermoctl)
 │   ├── preflight/    # preflight runner reusing the check runner
@@ -185,7 +185,10 @@ These rules are mandatory.
     honored only while active; an expired lock, or one whose owner PID is dead
     (checked via owner_start_ticks to survive PID reuse), is stale and must be
     reclaimed through a logged path, never silently overwritten. Lock files are
-    named `<service>[.<name>].lock`. See `implementation-spec.md` section 20.
+    named `<service>[.<name>].lock` for named runtime locks created by
+    `sermoctl lock`. The internal operation lock uses the separate path
+    `/run/sermo/ops/<service>.lock` so it cannot collide with a user lock named
+    `op`. See `implementation-spec.md` sections 18 and 20.
 16. The scheduler runs one independent worker per service; a long operation
     (a multi-minute restart) on one service must never block monitoring of
     another. Never serialize all services through a single loop. Mass restarts
@@ -428,7 +431,8 @@ Safe restart flow:
 1. Load resolved service profile.
 2. Detect backend.
 3. defer: emit exactly one event from the final result (registered first).
-4. Acquire internal operation lock (atomic; fail fast if held by a live owner).
+4. Acquire internal operation lock at `/run/sermo/ops/<service>.lock` (atomic;
+   fail fast if held by a live owner).
 5. defer: release the lock (registered only after a successful acquire).
 6. Evaluate blocking locks.        # any of 6-13 may return early
 7. Run required preflight checks.
@@ -506,6 +510,7 @@ within cycles
 guard blocking
 preflight blocking
 lock blocking
+operation lock path does not collide with named runtime locks
 remediation cooldown and rate limiting
 safe restart sequencing
 restart never starts after orphan_processes
