@@ -706,6 +706,18 @@ checks:
     timeout: 5s
 ```
 
+Field defaults:
+
+```text
+method         GET when omitted.
+expect_status  200 when omitted.
+timeout        engine.default_timeout when omitted.
+```
+
+`expect_status` is a single status code in the MVP (a `FlexInt`, see section 10).
+A status class such as `2xx` or a list of accepted codes is a documented post-MVP
+extension; the loader should reject a non-numeric `expect_status` until then.
+
 ### Command
 
 ```yaml
@@ -1636,6 +1648,11 @@ stop_policy:
 
 ## 22. Stop and kill policy
 
+Any `stop_policy` field omitted by a profile or service inherits from
+`defaults.stop_policy` in the global config (section 7). Profiles should still
+state the timeouts that matter for that application explicitly, so the behaviour
+is readable without cross-referencing the defaults.
+
 Example:
 
 ```yaml
@@ -1717,19 +1734,24 @@ sermoctl locks SERVICE
 
 sermoctl config validate [SERVICE]
 sermoctl config render SERVICE
-sermoctl config diff BASE SERVICE
+sermoctl config diff BASE SERVICE      # post-MVP
 
-sermoctl profile list
-sermoctl profile show PROFILE
+sermoctl profile list                 # post-MVP
+sermoctl profile show PROFILE         # post-MVP
 
-sermoctl service list
-sermoctl service show SERVICE
-sermoctl service clone SOURCE TARGET
+sermoctl service list                 # post-MVP
+sermoctl service show SERVICE         # post-MVP
+sermoctl service clone SOURCE TARGET  # post-MVP
 
 sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE --reason REASON --ttl DURATION
 sermoctl lock release SERVICE
 ```
+
+This is the full planned command surface. Commands marked `# post-MVP` are not
+required for the first implementation; the authoritative MVP subset is listed
+just below. `config diff` in particular is planned but out of scope for the MVP
+and is not covered by the section 30 validation requirements.
 
 MVP commands:
 
@@ -1878,6 +1900,7 @@ checks:
 stop_policy:
   graceful_timeout: 30s
   term_timeout: 10s
+  kill_timeout: 5s
   force_kill: true
   kill_only_if:
     users: ["${user}", root]

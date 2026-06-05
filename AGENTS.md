@@ -304,10 +304,12 @@ Implement these early:
 ```text
 sermoctl config validate
 sermoctl config render SERVICE
-sermoctl config diff BASE SERVICE
 ```
 
 `config render` must show the final resolved service and the source files used.
+
+`sermoctl config diff BASE SERVICE` is planned but post-MVP; see
+`implementation-spec.md` section 23.
 
 ## Rule engine
 
