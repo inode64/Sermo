@@ -43,6 +43,7 @@ rules
 guards
 locks
 preflight
+postflight
 process discovery
 safe restart behavior
 systemd/OpenRC detection

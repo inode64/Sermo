@@ -17,6 +17,7 @@ backend aliases
 variables
 version command
 config/preflight checks
+postflight health checks
 library checks if applicable
 process discovery
 health checks
@@ -49,6 +50,8 @@ commands:
   version: {}
 
 preflight: {}
+
+postflight: {}
 
 processes: {}
 

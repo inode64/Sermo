@@ -63,6 +63,7 @@ metric scope (service vs system); system metric rejected in remediation
 metric rate warm-up: first cycle not-ready evaluates false
 guard blocking
 preflight blocking; optional preflight warns but does not block
+postflight required failure returns postflight_failed; optional postflight warns
 lock blocking; atomic acquisition; TTL/dead-owner staleness and reclaim
 operation lock released on every early-return path; exactly one event
 cooldown suppression and max_actions rate limit; manual actions exempt

@@ -449,6 +449,7 @@ aliases       per-backend candidate unit names (section 11)
 variables     string variables for ${...} expansion (section 10)
 commands      optional named auxiliary commands (below)
 preflight     checks run before dangerous actions (section 19)
+postflight    checks run after start/restart actions (section 19)
 processes     process discovery selectors (section 21)
 checks        monitoring checks (section 12)
 stop_policy   stop/kill behaviour (section 22)
@@ -517,7 +518,7 @@ policy:
 ```
 
 Named sections must be maps keyed by name, not arrays. This applies to `checks`,
-`preflight`, `processes` and `rules`:
+`preflight`, `postflight`, `processes` and `rules`:
 
 ```yaml
 checks:
@@ -1709,11 +1710,12 @@ Operation result model:
 type ResultStatus string
 
 const (
-    ResultOK              ResultStatus = "ok"
-    ResultBlocked         ResultStatus = "blocked"
-    ResultPreflightFailed ResultStatus = "preflight_failed"
-    ResultFailed          ResultStatus = "failed"
-    ResultOrphanProcesses ResultStatus = "orphan_processes"
+    ResultOK               ResultStatus = "ok"
+    ResultBlocked          ResultStatus = "blocked"
+    ResultPreflightFailed  ResultStatus = "preflight_failed"
+    ResultPostflightFailed ResultStatus = "postflight_failed"
+    ResultFailed           ResultStatus = "failed"
+    ResultOrphanProcesses  ResultStatus = "orphan_processes"
 )
 
 type Result struct {
@@ -1730,7 +1732,7 @@ type Result struct {
 
 ---
 
-## 19. Preflight
+## 19. Preflight and postflight
 
 Preflight checks run before dangerous actions.
 
@@ -1752,7 +1754,30 @@ preflight:
     binary: /usr/sbin/apache2
 ```
 
-For MVP, implement preflight by reusing the check runner.
+For MVP, implement preflight and postflight by reusing the check runner.
+
+Postflight checks run after a successful backend `Start`, and after the `Start`
+phase of a safe restart. They use the same check schema and runner as
+`preflight` and `checks`, and are maps keyed by check name:
+
+```yaml
+postflight:
+  http:
+    type: http
+    url: http://127.0.0.1/health
+    expect_status: 200
+    timeout: 5s
+```
+
+Required postflight entries (the default, `optional:false`) are assertions that
+the action completed but the service did not become healthy. A required
+postflight failure returns `postflight_failed`, records the failed checks in the
+result and event, and exits like a failed check. It does NOT automatically roll
+back or stop the service. Optional postflight entries behave like optional
+preflight entries: failures are warnings recorded in the result and event.
+
+`Stop` does not run postflight checks. Use service status/residual process
+handling to validate stop operations.
 
 ### Optional preflight entries
 
@@ -2833,7 +2858,8 @@ either form works.
 - type: guard requires a non-empty blocks list; non-guard rules must not set blocks.
 - aliases keys are valid backends (systemd, openrc); each value is a non-empty list.
 - commands entries use array form with an optional valid duration timeout.
-- optional, where present on a preflight or check entry, is a boolean.
+- postflight uses the same entry schema and check types as preflight/checks.
+- optional, where present on a preflight, postflight or check entry, is a boolean.
 - file_exists checks must not point under Sermo's named runtime lock directory
   (`/run/sermo/locks` by default); use `sermoctl lock` without a guard, or point
   the check at a foreign lock/flag file Sermo does not own.
@@ -2954,6 +2980,7 @@ internal/config:
   - unknown metric name for the declared scope is rejected
   - block/alert action requires a message; guard requires a blocks list
   - invalid service expect/state or process state value is rejected
+  - postflight merges by name and uses the same check schema as preflight/checks
   - file_exists checks under /run/sermo/locks are rejected; Sermo named runtime
     locks are handled by the operation engine, not by guards
 
@@ -3010,6 +3037,8 @@ internal/operation:
   - exactly one event emitted per operation, including blocked/failed paths
   - concurrent operation fails fast with exit 75 while the op lock is held
   - optional preflight failure warns but does not block; required failure blocks
+  - postflight runs after start/restart; required failure returns postflight_failed,
+    optional failure warns, and no automatic rollback is attempted
 
 internal/locks:
   - atomic acquisition fails when an active lock already exists
