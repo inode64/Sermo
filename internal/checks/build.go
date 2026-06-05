@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -138,6 +139,30 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	default:
 		return nil, fmt.Sprintf("unsupported type %q", typ)
 	}
+}
+
+// BuildInline builds a single check from an inline entry (type + fields), used
+// by inline rule conditions (section 14). It returns an error rather than a
+// warning so the caller can surface a malformed inline probe.
+func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
+	runner := deps.Runner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	client := deps.HTTPClient
+	if client == nil {
+		client = &http.Client{}
+	}
+	b := base{
+		name:    name,
+		service: deps.Service,
+		timeout: durationOr(entry["timeout"], deps.DefaultTimeout),
+	}
+	check, warn := buildCheck(asString(entry["type"]), b, entry, runner, client, deps.Status)
+	if warn != "" {
+		return nil, errors.New(warn)
+	}
+	return check, nil
 }
 
 // Outcome summarizes a preflight/postflight run.
