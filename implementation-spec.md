@@ -543,10 +543,27 @@ checks:
 
 MVP variable rules:
 
-- Variables are strings.
+- Variables are flat literal strings.
 - Expansion is simple `${var}` substitution.
 - Missing variables are validation errors.
 - No expressions or template language in MVP.
+
+Expansion is a single pass and not recursive:
+
+```text
+- Field values are expanded once against the flat variable map.
+- A variable VALUE must not itself contain `${...}`; a variable that references
+  another variable is a validation error in the MVP. (Variable-to-variable
+  references are a possible post-MVP feature with cycle detection.)
+- Because variable values are literal and expansion is one pass, no `${...}` can
+  legitimately survive expansion. Any `${...}` left after the pass means an
+  undefined variable and is a validation error.
+- There is no escape syntax in the MVP: `${` always begins a variable reference.
+```
+
+Expansion runs after all merging (section 8, step 5d), so a value inherited from
+a default, profile or override is expanded with the variables visible on the
+final flattened service.
 
 ### Typed fields and variable interaction
 
@@ -2702,6 +2719,8 @@ checks:
 - clone points to an existing service.
 - Clone cycles are rejected.
 - Variables referenced with ${...} exist.
+- A variable value must not itself contain ${...} (no nested variables in MVP).
+- No ${...} remains after a single expansion pass.
 - rules is a map keyed by name; rule names are unique within a service.
 - Each rule has if and then (the name is the map key).
 - Each condition node has exactly one condition/operator.
@@ -2832,6 +2851,8 @@ internal/config:
   - enabled:false handling
   - variable expansion
   - missing variable detection
+  - a variable value containing ${...} is rejected (no nested variables)
+  - any ${...} left after one expansion pass is an error
   - clone cycle detection
   - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
   - metric value parsing (percentage vs absolute, invalid value rejected)
