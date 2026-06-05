@@ -73,36 +73,106 @@ sermo/
 │   └── sermoctl/
 │       └── main.go
 ├── internal/
-│   ├── app/          # daemon, scheduler and in-memory state (sermod)
-│   ├── checks/       # tcp, http, command, service, file, process, metric checks
-│   ├── cli/          # sermoctl command implementations
-│   ├── config/       # YAML model, loader, merge, render, variables, validate
-│   ├── events/       # structured event model and logger
-│   ├── execx/        # external command runner with mandatory timeouts
-│   ├── locks/        # named runtime locks, operation lock lifecycle and external lock checks
-│   ├── metrics/      # cpu/memory collectors
-│   ├── operation/    # safe start/stop/restart engine (shared by sermod + sermoctl)
-│   ├── preflight/    # preflight runner reusing the check runner
-│   ├── process/      # discovery, procfs, tree, signal, residual handling
-│   ├── profiles/     # profile registry, resolver and sources
-│   ├── rules/        # condition AST, evaluator, windows, rule state
-│   └── servicemgr/   # backend detection, systemd_exec, openrc
+│   ├── app/
+│   │   ├── daemon.go
+│   │   ├── scheduler.go
+│   │   └── state.go
+│   ├── cli/
+│   │   ├── root.go
+│   │   ├── backend.go
+│   │   ├── service.go
+│   │   ├── config.go
+│   │   ├── locks.go
+│   │   ├── preflight.go
+│   │   └── processes.go
+│   ├── config/
+│   │   ├── model.go
+│   │   ├── loader.go
+│   │   ├── merge.go
+│   │   ├── render.go
+│   │   ├── variables.go
+│   │   └── validate.go
+│   ├── profiles/
+│   │   ├── registry.go
+│   │   ├── resolver.go
+│   │   └── source.go
+│   ├── servicemgr/
+│   │   ├── manager.go
+│   │   ├── detector.go
+│   │   ├── systemd_exec.go
+│   │   ├── openrc.go
+│   │   └── errors.go
+│   ├── checks/
+│   │   ├── check.go
+│   │   ├── runner.go
+│   │   ├── tcp.go
+│   │   ├── http.go
+│   │   ├── command.go
+│   │   ├── service.go
+│   │   ├── file.go
+│   │   ├── process.go
+│   │   └── metric.go
+│   ├── rules/
+│   │   ├── condition.go
+│   │   ├── evaluator.go
+│   │   ├── window.go
+│   │   └── state.go
+│   ├── operation/
+│   │   ├── engine.go
+│   │   ├── start.go
+│   │   ├── stop.go
+│   │   ├── restart.go
+│   │   └── result.go
+│   ├── preflight/
+│   │   ├── runner.go
+│   │   └── result.go
+│   ├── locks/
+│   │   ├── manager.go
+│   │   ├── runtime.go
+│   │   ├── file.go
+│   │   └── external.go
+│   ├── process/
+│   │   ├── model.go
+│   │   ├── discover.go
+│   │   ├── procfs.go
+│   │   ├── tree.go
+│   │   ├── signal.go
+│   │   └── residual.go
+│   ├── metrics/
+│   │   ├── collector.go
+│   │   ├── cpu.go
+│   │   └── memory.go
+│   ├── events/
+│   │   ├── event.go
+│   │   └── logger.go
+│   └── execx/
+│       └── runner.go
 ├── profiles/
 │   ├── apache.yml
 │   ├── mysql.yml
+│   ├── mariadb.yml
 │   ├── redis.yml
 │   └── php-fpm.yml
 ├── configs/
-│   └── sermo.yml
+│   ├── sermo.yml
+│   └── apps-enabled/
+│       ├── apache-main.yml
+│       ├── mysql-main.yml
+│       └── redis-main.yml
 ├── packaging/
 │   ├── systemd/
 │   │   └── sermod.service
 │   └── openrc/
 │       └── sermod
 ├── docs/
-├── .agents/
-│   └── skills/
-└── AGENTS.md
+│   ├── configuration.md
+│   ├── rules.md
+│   ├── profiles.md
+│   └── safety.md
+├── go.mod
+├── go.sum
+├── Makefile
+└── README.md
 ```
 
 Notes on package responsibilities:
