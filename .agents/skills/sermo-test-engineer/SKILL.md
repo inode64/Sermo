@@ -43,30 +43,34 @@ Mock command execution and process tables.
 Create or maintain tests for:
 
 ```text
-config merge
+config merge; defaults merged as base layer (defaults < profile < overrides)
 profile uses resolution
-clone resolution
+clone resolution; clone copies the source unexpanded
 clone cycle detection
-variable expansion
+variable expansion; nested variable (value with ${...}) rejected
+flexible scalar parsing (port/expect_status as int, string or ${var})
 invalid YAML
-unknown fields where strict mode applies
-backend detection
+backend detection; alias resolution picks first existing unit
 systemd status parsing
 OpenRC status parsing
 command timeout
-check execution
+check execution; concurrency bounded by max_parallel_checks
+a probe shared by several rules runs at most once per cycle
 rule engine and/or/not
 for cycles
 within cycles
+metric scope (service vs system); system metric rejected in remediation
+metric rate warm-up: first cycle not-ready evaluates false
 guard blocking
-preflight blocking
-lock blocking
-operation ordering
-cooldown/backoff
-process discovery
-residual process handling
+preflight blocking; optional preflight warns but does not block
+lock blocking; atomic acquisition; TTL/dead-owner staleness and reclaim
+operation lock released on every early-return path; exactly one event
+cooldown suppression and max_actions rate limit; manual actions exempt
+scheduler: one worker per service; tick skipped (not queued) on overrun
+process discovery; exe matched by exact resolved /proc/<pid>/exe (never cmdline)
+residual handling: non-matching residual yields orphan_processes; no start after
 SIGKILL policy validation
-CLI exit codes
+CLI exit codes (0/1/2/64/75/78)
 ```
 
 ## Fixtures
@@ -79,6 +83,11 @@ internal/profiles/testdata/
 internal/rules/testdata/
 internal/servicemgr/testdata/
 internal/process/testdata/
+internal/preflight/testdata/
+internal/locks/testdata/
+internal/metrics/testdata/
+internal/operation/testdata/
+internal/app/testdata/
 ```
 
 ## Acceptance
