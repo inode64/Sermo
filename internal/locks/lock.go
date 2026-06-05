@@ -60,6 +60,22 @@ type ProcessProber interface {
 	StartTicks(pid int) (ticks uint64, ok bool)
 }
 
+// toLock builds a Lock from an on-disk payload and computed state.
+func toLock(lf lockFile, path string, state State, staleReason string) Lock {
+	return Lock{
+		Service:         lf.Service,
+		Name:            lf.Name,
+		Reason:          lf.Reason,
+		OwnerPID:        lf.OwnerPID,
+		OwnerStartTicks: lf.OwnerStartTicks,
+		CreatedAt:       lf.CreatedAt,
+		ExpiresAt:       lf.ExpiresAt,
+		Path:            path,
+		State:           state,
+		StaleReason:     staleReason,
+	}
+}
+
 // classify computes a lock's state from its payload, the current time and a
 // process prober (section 20: expired by TTL, stale by dead owner or PID reuse).
 func classify(lf lockFile, now time.Time, proc ProcessProber) (State, string) {
