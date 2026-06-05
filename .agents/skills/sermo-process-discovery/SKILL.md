@@ -61,12 +61,15 @@ After stop/restart:
 ```text
 1. discover expected processes
 2. wait graceful timeout
-3. if residuals remain and force_kill is false, block and report
-4. if force_kill is true, validate kill_only_if
-5. send SIGTERM if allowed
-6. wait term timeout
-7. send SIGKILL only if explicitly allowed
-8. verify residuals are gone
+3. if residuals remain and force_kill is false, fail orphan_processes
+4. if force_kill is true, classify residuals:
+   - killable only if EVERY field matches kill_only_if (exact resolved exe AND
+     real UID); an unresolvable exe is never killable
+5. SIGTERM the killable set; wait term timeout
+6. SIGKILL any of the killable set still present; wait kill timeout
+7. a residual that did not match kill_only_if is NEVER signalled
+8. result: ok only if no residual remains; otherwise orphan_processes listing
+   what is left. Never start the service after a stop that left orphans.
 ```
 
 ## Stop policy validation
@@ -108,6 +111,8 @@ SIGKILL allowed with kill_only_if
 name-only matching rejected
 exe matched exactly (substring/basename rejected); cmdline never used
 unresolvable or "(deleted)" exe never matches
+residual not matching kill_only_if is never signalled; result is orphan_processes
+no start after a stop that left orphans
 ```
 
 ## Output format
