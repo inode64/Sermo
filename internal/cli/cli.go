@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/process"
@@ -134,6 +135,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runLocks(opts)
 	case "processes":
 		return a.runProcesses(opts)
+	case "preflight":
+		return a.runPreflight(ctx, opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -412,6 +415,137 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 	return out
 }
 
+// runPreflight resolves a service, builds its preflight checks and runs them
+// under engine.default_timeout (section 19). A required check failure exits 1.
+func (a App) runPreflight(ctx context.Context, opts options) int {
+	if opts.service() == "" {
+		fmt.Fprintln(a.Stderr, "usage error: preflight requires a service name")
+		writeUsage(a.Stderr)
+		return exitUsage
+	}
+	service := opts.service()
+
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+	if _, ok := cfg.Services[service]; !ok {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
+		return exitRuntimeError
+	}
+
+	resolved, errs := cfg.Resolve(service)
+	if len(errs) > 0 {
+		a.printIssues(opts, scopedIssues(service, errs))
+		return exitConfigInvalid
+	}
+
+	section, _ := resolved.Tree["preflight"].(map[string]any)
+	deps := checks.Deps{
+		Service:        service,
+		DefaultTimeout: engineDefaultTimeout(cfg),
+		Status:         a.statusFunc(opts, serviceUnit(resolved.Tree, service)),
+	}
+	built, warnings := checks.Build(section, deps)
+	for _, w := range warnings {
+		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, preflightDeadline(deps.DefaultTimeout))
+	defer cancel()
+	results := checks.Run(ctx, built, 0)
+	outcome := checks.Evaluate(results)
+
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{"service": service, "ok": outcome.OK, "checks": results})
+	} else {
+		a.printPreflight(service, outcome)
+	}
+
+	if outcome.OK {
+		return exitSuccess
+	}
+	return exitNotActive
+}
+
+func (a App) printPreflight(service string, outcome checks.Outcome) {
+	overall := "OK"
+	if !outcome.OK {
+		overall = "FAIL"
+	}
+	if len(outcome.Results) == 0 {
+		fmt.Fprintf(a.Stdout, "preflight %s: %s (no checks)\n", service, overall)
+		return
+	}
+	fmt.Fprintf(a.Stdout, "preflight %s: %s\n", service, overall)
+	for _, r := range outcome.Results {
+		tag := "OK"
+		if !r.OK {
+			tag = "FAIL"
+			if r.Optional {
+				tag = "WARN"
+			}
+		}
+		fmt.Fprintf(a.Stdout, "  %-4s %s: %s\n", tag, r.Check, r.Message)
+	}
+}
+
+// statusFunc builds a lazy backend status query for `service` checks; it only
+// detects the backend when a service check actually runs.
+func (a App) statusFunc(opts options, unit string) func(context.Context) (servicemgr.Status, error) {
+	return func(ctx context.Context) (servicemgr.Status, error) {
+		detection, err := a.Detector.Detect(ctx, opts.backend)
+		if err != nil {
+			return "", err
+		}
+		manager, err := a.NewManager(detection.Backend)
+		if err != nil {
+			return "", err
+		}
+		status, err := manager.Status(ctx, unit)
+		if err != nil {
+			return "", err
+		}
+		return status.Status, nil
+	}
+}
+
+// serviceUnit is the backend unit name to probe for a service: its service.name,
+// falling back to the config service name.
+func serviceUnit(tree map[string]any, fallback string) string {
+	if svc, ok := tree["service"].(map[string]any); ok {
+		if name, _ := svc["name"].(string); name != "" {
+			return name
+		}
+	}
+	return fallback
+}
+
+func engineDefaultTimeout(cfg *config.Config) time.Duration {
+	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
+		if s, _ := engine["default_timeout"].(string); s != "" {
+			if d, err := time.ParseDuration(s); err == nil && d > 0 {
+				return d
+			}
+		}
+	}
+	return 10 * time.Second
+}
+
+// preflightDeadline bounds the whole run generously above a single check's
+// timeout so concurrent checks each get their full per-check budget.
+func preflightDeadline(perCheck time.Duration) time.Duration {
+	if perCheck <= 0 {
+		perCheck = 10 * time.Second
+	}
+	return perCheck + 5*time.Second
+}
+
 // runLocks reports the named runtime locks for a service (active, expired and
 // stale), reading the runtime root from the loaded config (section 20).
 func (a App) runLocks(opts options) int {
@@ -688,7 +822,8 @@ func parseArgs(args []string) (options, error) {
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
-	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | locks SERVICE | processes SERVICE")
+	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE")
+	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE")
 }
 
 func writeJSON(w io.Writer, value any) {
