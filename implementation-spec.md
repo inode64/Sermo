@@ -880,6 +880,48 @@ validation rules in section 30).
 The reference names use a `total_` prefix for system metrics and unprefixed names
 for service metrics, so a misplaced scope is easy to spot in review.
 
+### Metric collection
+
+Some metrics are instantaneous and some are rates, and this changes how they are
+collected:
+
+```text
+instantaneous  memory, total_memory, process_count, load*  — one read per cycle.
+rate           cpu, total_cpu  — a delta between two samples over elapsed time.
+```
+
+A rate cannot be computed from a single read. CPU% is
+`Δ(cpu_time) / (Δ(wall_time) * ncpu) * 100`, so the collector must remember the
+previous sample. This is why metric collection lives in a stateful, long-lived
+`internal/metrics` collector owned by the daemon, NOT in the per-call check:
+
+```text
+- The collector is sampled once per cycle (a metric check or condition reads the
+  already-sampled value, so several CPU rules in a cycle share one sample — this
+  matches the once-per-cycle probe rule of section 14).
+- Each cycle it reads a fresh sample, computes rates against the stored previous
+  sample, then stores the new sample as the next baseline.
+- Sources: service cpu = sum of utime+stime deltas (/proc/<pid>/stat fields
+  14-15) over the discovered process set; system total_cpu = /proc/stat aggregate
+  delta; memory = RSS sum or /proc/meminfo; both normalized as section 14
+  describes (absolute or %).
+```
+
+First-cycle behaviour:
+
+```text
+- A rate metric has no previous sample on the first cycle for a service, so its
+  value is NOT READY.
+- A metric condition over a not-ready value evaluates to false; it must never
+  fire a remediation on a value the collector could not compute yet.
+- The first real comparison happens on the second cycle. Document this small
+  warm-up so operators do not expect a cpu rule to fire on the very first tick.
+```
+
+The `Check.Run` interface stays single-shot and stateless: a metric check is a
+thin reader over the collector. The state lives in the collector, keyed by
+service (and one system collector), and is reset when a service is reloaded.
+
 ---
 
 ## 13. Rule model
@@ -2674,6 +2716,12 @@ internal/process:
   - pidfile parsing
   - process selector matching
   - kill safety selector validation
+
+internal/metrics:
+  - cpu rate computed from two injected samples; first cycle is not-ready
+  - a metric condition over a not-ready rate evaluates to false (no remediation)
+  - memory/process_count are instantaneous (single sample)
+  - percentage vs absolute normalization for service and system scope
 
 internal/operation:
   - restart blocked by guard
