@@ -339,9 +339,13 @@ within cycles: rolling window with min_matches
 
 Example:
 
+`rules` is a map keyed by rule name (like `checks`/`preflight`/`processes`), not
+a list; the key is the rule name and there is no inner `name` field. This lets a
+service override or disable a single inherited rule.
+
 ```yaml
 rules:
-  - name: restart-if-port-failed
+  restart-if-port-failed:
     type: remediation
     if:
       failed:
