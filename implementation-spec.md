@@ -1699,12 +1699,13 @@ The internal operation lock:
   queues.
 - If the existing lock is STALE (expired TTL, or a dead owner PID), reclaim it
   through the logged reclaim path of section 20, then acquire and proceed.
-- It is distinct from the named runtime locks created by `sermoctl lock`
-  (section 20): those guard against external work like backups; this one guards
-  against overlapping operations.
+- It is distinct from named runtime locks under `/run/sermo/locks` (section 20):
+  those guard against external work like backups; this one guards against
+  overlapping operations. The `sermoctl lock` creation commands for named
+  runtime locks are planned post-MVP.
 - It lives outside /run/sermo/locks on purpose, so it cannot collide with a
-  valid user lock such as `sermoctl lock mysql --name op`, and the named runtime
-  lock scanner must never report the operation lock as a user-held lock.
+  valid named runtime lock such as `mysql.op.lock`, and the named runtime lock
+  scanner must never report the operation lock as a user-held lock.
 ```
 
 For databases, default `force_kill` must be false.
@@ -1887,8 +1888,18 @@ Package: `internal/locks`
 
 Support two categories:
 
-1. Named runtime locks created by Sermo through `sermoctl lock`.
+1. Named runtime lock files under `/run/sermo/locks`.
 2. External lock checks defined in service profiles.
+
+MVP scope:
+
+```text
+- The operation engine reads active named runtime locks and blocks service
+  actions while they are active.
+- `sermoctl locks SERVICE` reports active, expired and stale named runtime locks.
+- The CLI commands that create or release named runtime locks (`sermoctl lock`,
+  `sermoctl lock acquire`, `sermoctl lock release`) are planned post-MVP.
+```
 
 The internal operation lock from section 18 is deliberately separate from this
 namespace. It uses `/run/sermo/ops/<service>.lock`, follows the same atomic
@@ -1896,7 +1907,7 @@ lifecycle, and serializes overlapping operations. It is not created by
 `sermoctl lock`, is not listed as a named runtime lock, and cannot be released by
 `sermoctl lock release`.
 
-CLI lock command:
+Planned post-MVP CLI lock command:
 
 ```bash
 sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mysqldump --single-transaction --all-databases
@@ -1971,11 +1982,12 @@ Reclaiming a stale lock:
 Release:
 
 ```text
-- `sermoctl lock SERVICE -- COMMAND` holds the lock for the lifetime of COMMAND
-  and unlinks it when COMMAND exits, on any path including a signal, via deferred
-  cleanup. If COMMAND is killed, the TTL still bounds the lock's lifetime.
-- `sermoctl lock acquire` / `sermoctl lock release` manage a lock explicitly;
-  release unlinks the owner's lock.
+- Post-MVP: `sermoctl lock SERVICE -- COMMAND` holds the lock for the lifetime
+  of COMMAND and unlinks it when COMMAND exits, on any path including a signal,
+  via deferred cleanup. If COMMAND is killed, the TTL still bounds the lock's
+  lifetime.
+- Post-MVP: `sermoctl lock acquire` / `sermoctl lock release` manage a lock
+  explicitly; release unlinks the owner's lock.
 - An owner only removes its own lock; stale removal goes through the reclaim path.
 ```
 
@@ -2010,16 +2022,18 @@ type ActiveLock struct {
 The two lock categories are complementary, not two ways to do the same thing:
 
 ```text
-Category 1 — Sermo named runtime locks (preferred when you can wrap the work).
-  Created with `sermoctl lock`. The operation engine blocks automatically on any
-  active named lock for the service (section 18, step 5). No rule is needed.
-  Use when the protecting job can call `sermoctl lock ... -- COMMAND`.
+Category 1 — Sermo named runtime locks (post-MVP preferred path when you can
+wrap the work).
+  The operation engine blocks automatically on any active named lock for the
+  service (section 18, step 5). No rule is needed. The CLI wrapper that creates
+  these locks (`sermoctl lock ... -- COMMAND`) is post-MVP.
 
 Category 2 — external lock CHECKS gated by a guard.
   A check (file_exists, process, ...) over a signal Sermo does NOT own: a backup
-  process started without `sermoctl lock`, or a foreign lock/flag file written by
-  another tool. Gate it with a guard rule.
-  Use when you cannot make the protecting job call `sermoctl lock`.
+  process not represented by a Sermo named runtime lock, or a foreign lock/flag
+  file written by another tool. Gate it with a guard rule.
+  Use in the MVP when the protecting job exposes a foreign signal that Sermo can
+  check safely.
 ```
 
 They compose: an action is blocked if a Sermo named runtime lock is active OR a
@@ -2031,8 +2045,8 @@ the guard should be removed (use the runtime lock) or the check should point at 
 foreign signal instead. Category-2 checks should reference foreign processes or
 foreign files, never Sermo's own lock files.
 
-External lock check example (category 2 — a backup tool that does not call
-`sermoctl lock`, so it is detected by its process):
+External lock check example (category 2 — a backup tool represented by a
+foreign process signal):
 
 ```yaml
 checks:
@@ -2054,8 +2068,8 @@ rules:
       message: "MySQL backup is running"
 ```
 
-A backup run as `sermoctl lock mysql --name backup -- mariabackup ...` needs no
-such guard: the named runtime lock blocks the restart on its own.
+Post-MVP, a backup wrapped with `sermoctl lock mysql --name backup -- ...` needs
+no such guard: the named runtime lock blocks the restart on its own.
 
 ---
 
@@ -2276,15 +2290,17 @@ sermoctl service list                 # post-MVP
 sermoctl service show SERVICE         # post-MVP
 sermoctl service clone SOURCE TARGET  # post-MVP
 
-sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...
-sermoctl lock acquire SERVICE --reason REASON --ttl DURATION
-sermoctl lock release SERVICE
+sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...  # post-MVP
+sermoctl lock acquire SERVICE --reason REASON --ttl DURATION        # post-MVP
+sermoctl lock release SERVICE                                       # post-MVP
 ```
 
 This is the full planned command surface. Commands marked `# post-MVP` are not
 required for the first implementation; the authoritative MVP subset is listed
 just below. `config diff` in particular is planned but out of scope for the MVP
-and is not covered by the section 30 validation requirements.
+and is not covered by the section 30 validation requirements. Lock creation and
+release commands are also post-MVP; the MVP only needs `sermoctl locks SERVICE`
+for reporting named runtime locks and the operation engine's lock-blocking path.
 
 MVP commands:
 
@@ -2619,8 +2635,8 @@ checks:
     command: ["${clientadmin}", "ping"]
     timeout: 5s
 
-  # Category-2 external lock check: a mariabackup run that did NOT go through
-  # `sermoctl lock` is detected by its process. A backup wrapped in
+  # Category-2 external lock check: a mariabackup run represented by a foreign
+  # process signal is detected by its process. Post-MVP, a backup wrapped in
   # `sermoctl lock mysql --name backup` is blocked by the engine automatically
   # and needs no check or guard here (see section 20).
   mariabackup:
@@ -2872,8 +2888,9 @@ either form works.
 - postflight uses the same entry schema and check types as preflight/checks.
 - optional, where present on a preflight, postflight or check entry, is a boolean.
 - file_exists checks must not point under Sermo's named runtime lock directory
-  (`/run/sermo/locks` by default); use `sermoctl lock` without a guard, or point
-  the check at a foreign lock/flag file Sermo does not own.
+  (`/run/sermo/locks` by default); the operation engine already checks named
+  runtime locks. Point guard checks at a foreign lock/flag file Sermo does not
+  own.
 - defaults.policy.cooldown must be present and a valid positive duration.
 - policy.cooldown, where set in a profile or service override, must be a valid
   positive duration.

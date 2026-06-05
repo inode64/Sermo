@@ -105,16 +105,18 @@ If a config validation command differs by distribution, make it override-friendl
 
 ## Locks
 
-Prefer Sermo named runtime locks when the protected job can be wrapped:
+Post-MVP, prefer Sermo named runtime locks when the protected job can be wrapped:
 
 ```bash
 sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mariabackup ...
 ```
 
 That needs no guard; the operation engine blocks the service automatically while
-the lock is active. Only add a guard for a foreign signal Sermo does not own,
-such as a backup process or a flag file created by another tool. Do not point a
-`file_exists` check at `/run/sermo/locks/`.
+the lock is active. In the MVP, only `sermoctl locks SERVICE` reporting and the
+operation engine's lock-blocking path are required, while `sermoctl lock` creation
+and release commands are post-MVP. Add a guard for a foreign signal Sermo does
+not own, such as a backup process or a flag file created by another tool. Do not
+point a `file_exists` check at `/run/sermo/locks/`.
 
 Example:
 
