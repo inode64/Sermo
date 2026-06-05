@@ -374,15 +374,33 @@ Resolution order:
 ```text
 1. Load packaged profiles from /usr/share/sermo/profiles.
 2. Load user profiles from /etc/sermo/apps-available.
-3. Load global configuration and conf.d files.
+3. Load global configuration and conf.d files, producing one effective `defaults`
+   block (sermo.yml layered with conf.d).
 4. Load enabled services from /etc/sermo/apps-enabled.
-5. Resolve services:
-   - apply uses profile
-   - apply clone chain
-   - merge overrides
-   - expand variables
-   - validate final flattened service
+5. Resolve each service into a flat definition, lowest precedence first:
+   a. Base layer: the effective global `defaults` (its stop_policy, policy and
+      rule_window). This is the lowest precedence.
+   b. Apply the `uses` profile, or the `clone` chain, merged on top of the base.
+   c. Merge the service's own fields (overrides) on top — highest precedence.
+   d. Expand ${var} variables (section 10), once, after all merging.
+   e. Validate the final flattened service.
 ```
+
+Precedence, low to high:
+
+```text
+global defaults  <  profile (uses) or clone source  <  service overrides
+```
+
+Only the per-service parts of `defaults` merge into a service: `stop_policy`,
+`policy`, and `rule_window` (the fallback window for a rule that declares neither
+`for` nor `within`, see section 13). Engine-wide settings (`interval`,
+`max_parallel_checks`, `default_timeout`, `backend`) are daemon configuration and
+are NOT merged into individual services.
+
+Because variable expansion is step 5d — after every merge — a default, profile or
+override may be written with `${var}` and is resolved using the variables visible
+on the final flattened service.
 
 The daemon must only work with resolved, flat service definitions.
 
@@ -1472,7 +1490,8 @@ Decision rule for an automatic action on service S at time now:
 ```
 
 When a service defines no policy, the global `defaults.policy` applies (cooldown
-`5m` in the reference config).
+`5m` in the reference config), merged in as the base layer during resolution
+(section 8, step 5a).
 
 ---
 
@@ -2019,9 +2038,10 @@ stop_policy:
 ## 22. Stop and kill policy
 
 Any `stop_policy` field omitted by a profile or service inherits from
-`defaults.stop_policy` in the global config (section 7). Profiles should still
-state the timeouts that matter for that application explicitly, so the behaviour
-is readable without cross-referencing the defaults.
+`defaults.stop_policy` in the global config, which is merged in as the base layer
+during resolution (section 8, step 5a). Profiles should still state the timeouts
+that matter for that application explicitly, so the behaviour is readable without
+cross-referencing the defaults.
 
 Example:
 
@@ -2815,6 +2835,8 @@ internal/config:
   - clone cycle detection
   - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
   - metric value parsing (percentage vs absolute, invalid value rejected)
+  - global defaults merge as base layer (defaults < profile < service overrides)
+  - engine settings (interval, max_parallel_checks) are not merged into services
   - reject scope: system metric used in a remediation rule
   - unknown metric name for the declared scope is rejected
   - block/alert action requires a message; guard requires a blocks list
