@@ -183,6 +183,10 @@ These rules are mandatory.
     (checked via owner_start_ticks to survive PID reuse), is stale and must be
     reclaimed through a logged path, never silently overwritten. Lock files are
     named `<service>[.<name>].lock`. See `implementation-spec.md` section 20.
+16. The scheduler runs one independent worker per service; a long operation
+    (a multi-minute restart) on one service must never block monitoring of
+    another. Never serialize all services through a single loop. Mass restarts
+    are bounded by a global operation semaphore. See section 24.
 
 ## Service manager abstraction
 
