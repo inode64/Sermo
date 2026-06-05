@@ -1130,6 +1130,8 @@ type WithinWindow struct {
 }
 ```
 
+`RuleType` and `Action` are defined in section 16.
+
 ---
 
 ## 16. Actions
@@ -1171,6 +1173,44 @@ then:
 ```
 
 For MVP, implement only single action.
+
+Go model:
+
+```go
+type RuleType string
+
+const (
+    RuleRemediation RuleType = "remediation"
+    RuleGuard       RuleType = "guard"
+    RuleAlert       RuleType = "alert"
+)
+
+type ActionType string
+
+const (
+    ActionRestart ActionType = "restart"
+    ActionStart   ActionType = "start"
+    ActionStop    ActionType = "stop"
+    ActionAlert   ActionType = "alert"
+    ActionBlock   ActionType = "block"
+    ActionExec    ActionType = "exec"
+)
+
+// Action is the resolved `then:` block of a rule. The MVP supports a single
+// action per rule; the optional multi-action form is post-MVP.
+type Action struct {
+    Type    ActionType `yaml:"action"`
+    Message string     `yaml:"message,omitempty"`
+
+    // exec action only, post-MVP. Array form, never a shell string.
+    Command []string      `yaml:"command,omitempty"`
+    Timeout time.Duration `yaml:"timeout,omitempty"`
+}
+```
+
+`message` is mandatory in practice for `block` and `alert`, where it is the
+reason shown to the operator and recorded in the event; it is optional for
+`restart`/`start`/`stop`. The guard examples in sections 17 and 25-27 rely on it.
 
 ### Remediation policy: cooldown and rate limiting
 
@@ -2179,6 +2219,10 @@ checks:
 - kill_only_if must define at least users or exe_any.
 - command checks and inline command conditions use array form, not shell string.
 - inline command conditions must declare a timeout.
+- then.action is one of restart, start, stop, alert, block (exec is post-MVP).
+- guard rules must use action block; only guard rules may use block.
+- block and alert actions require a non-empty message.
+- type: guard requires a non-empty blocks list; non-guard rules must not set blocks.
 - policy.cooldown, if set, must be a valid non-negative duration.
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
@@ -2289,6 +2333,7 @@ internal/config:
   - metric value parsing (percentage vs absolute, invalid value rejected)
   - reject scope: system metric used in a remediation rule
   - unknown metric name for the declared scope is rejected
+  - block/alert action requires a message; guard requires a blocks list
 
 internal/rules:
   - and/or/not evaluation
