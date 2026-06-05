@@ -256,11 +256,12 @@ These rules are mandatory.
     honored only while active; an expired lock, or one whose owner PID is dead
     (checked via owner_start_ticks to survive PID reuse), is stale and must be
     reclaimed through a logged path, never silently overwritten. Named runtime
-    lock files use `<service>[.<name>].lock` under `/run/sermo/locks`; the
-    `sermoctl lock` commands that create/release them are post-MVP. The internal
-    operation lock uses the separate path `/run/sermo/ops/<service>.lock` so it
-    cannot collide with a user lock named `op`. See `implementation-spec.md`
-    sections 18 and 20.
+    lock files use `<service>[.<name>].lock` under `<paths.runtime>/locks`
+    (default `/run/sermo/locks`); the `sermoctl lock` commands that
+    create/release them are post-MVP. The internal operation lock uses the
+    separate path `<paths.runtime>/ops/<service>.lock` so it cannot collide with
+    a user lock named `op`. `paths.locks` and `/etc/sermo/locks.d` have no MVP
+    semantics. See `implementation-spec.md` sections 18 and 20.
 16. The scheduler runs one independent worker per service; a long operation
     (a multi-minute restart) on one service must never block monitoring of
     another. Never serialize all services through a single loop. Mass restarts
@@ -401,6 +402,10 @@ daemon config and are NOT merged into services. Variable expansion runs once,
 after all merging. See `implementation-spec.md` section 8.
 The effective `defaults.policy.cooldown` is required and must be positive, and a
 service/profile override may only replace it with another positive duration.
+`paths.runtime` is the single runtime root (default `/run/sermo`). Named runtime
+locks live under `<paths.runtime>/locks` and operation locks under
+`<paths.runtime>/ops`. Do not use `paths.locks` or `/etc/sermo/locks.d` in the
+MVP; active locks are runtime state, not configuration files.
 
 Numeric fields that may also be written as a string or carry a `${var}` (for
 example `port` and `expect_status`) use a tolerant scalar type that accepts an
@@ -506,8 +511,9 @@ Safe restart flow:
 1. Load resolved service profile.
 2. Detect backend.
 3. defer: emit exactly one event from the final result (registered first).
-4. Acquire internal operation lock at `/run/sermo/ops/<service>.lock` (atomic;
-   fail fast if held by a live owner).
+4. Acquire internal operation lock at `<paths.runtime>/ops/<service>.lock`
+   (default `/run/sermo/ops/<service>.lock`; atomic; fail fast if held by a live
+   owner).
 5. defer: release the lock (registered only after a successful acquire).
 6. Evaluate blocking locks.        # any of 6-13 may return early
 7. Run required preflight checks.
@@ -531,7 +537,8 @@ distinct, complementary mechanisms — not two ways to do the same thing. Step 6
 blocks automatically on Sermo's own named runtime lock files; step 8 blocks on
 guard rules over checks of foreign signals Sermo does not own (a backup process,
 a foreign flag file). A `file_exists`/`process` check must point at a foreign
-signal, never at a file under `/run/sermo/locks/` (that would duplicate step 6).
+signal, never at a file under `<paths.runtime>/locks/` (default
+`/run/sermo/locks/`; that would duplicate step 6).
 The `sermoctl lock` creation/release commands are post-MVP; MVP CLI scope only
 requires `sermoctl locks SERVICE` for reporting. See `implementation-spec.md`
 section 20.
@@ -597,6 +604,7 @@ lock blocking
 operation lock path does not collide with named runtime locks
 remediation cooldown and rate limiting
 positive resolved policy.cooldown validation
+paths.runtime lock directory derivation and paths.locks rejection
 safe restart sequencing
 restart never starts after orphan_processes
 process matching safety

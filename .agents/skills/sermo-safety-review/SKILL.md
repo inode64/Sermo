@@ -38,7 +38,9 @@ Always verify:
 17. Locks are atomic (O_CREAT|O_EXCL) and TTL-bounded; a stale lock (expired or
     dead owner via owner_start_ticks) is reclaimed through a logged path, never
     silently overwritten. The internal operation lock is released on every exit
-    path (defer), so a blocked/failed operation never leaks it.
+    path (defer), so a blocked/failed operation never leaks it. Named runtime
+    locks live under `<paths.runtime>/locks`; internal operation locks live under
+    `<paths.runtime>/ops`; active locks are never loaded from `/etc/sermo`.
 
 ## High-risk services
 
@@ -78,6 +80,8 @@ serializes all services through one loop (a long op blocks other services)
 leaks the operation lock on an early-return path
 exposes config toggles that disable hard safety invariants
 allows automatic remediation with missing or zero policy.cooldown
+loads active locks from /etc/sermo/locks.d or supports ambiguous paths.locks
+lets named runtime locks and operation locks share a directory
 ```
 
 ## Required tests
@@ -90,6 +94,7 @@ guard blocks start
 preflight failure blocks restart
 preflight failure blocks start
 lock blocks stop/restart
+paths.locks rejected; named and operation lock dirs derive separately from paths.runtime
 force_kill false does not send SIGKILL
 force_kill true requires kill_only_if
 process name-only matching is rejected; exe matched by resolved /proc/<pid>/exe
