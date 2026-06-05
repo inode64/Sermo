@@ -176,6 +176,8 @@ These rules are mandatory.
 13. Remediation must trigger on service-scoped metrics only. A system-wide metric
     (total memory, total CPU, load) must never restart, start or stop an
     individual service; it may only drive an alert.
+14. Rule conditions are read-only predicates, evaluated at most once per cycle. A
+    condition must never mutate system state; mutation belongs to actions.
 
 ## Service manager abstraction
 
@@ -348,6 +350,12 @@ rules:
     then:
       action: restart
 ```
+
+Conditions are read-only predicates. The evaluator runs all declared checks and
+any inline condition probes once per cycle and caches the results, so a probe
+shared by several rules executes at most once per cycle. Inline `command`
+conditions must be side-effect-free, array form, with a timeout; prefer declaring
+anything expensive as a named check and referencing it with `failed`/`active`.
 
 Metric conditions carry a `scope` (`service`, the default, or `system`). Service
 metrics measure only the monitored service (its discovered process set or
