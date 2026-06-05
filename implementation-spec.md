@@ -830,6 +830,9 @@ checks:
     expect: active
 ```
 
+`expect` is one of the servicemgr statuses (section 11): `active`, `inactive`,
+`failed` or `unknown`. The check is OK when the resolved status equals `expect`.
+
 ### File exists
 
 Use this to detect a foreign flag/lock file written by another tool. Do not point
@@ -853,6 +856,17 @@ checks:
     user: mysql
     state: running
 ```
+
+`state` is one of:
+
+```text
+running  a process matching the selector exists and is not a zombie. Default.
+zombie   a matching process exists but is defunct (/proc/<pid>/stat state Z).
+absent   no process matches the selector.
+```
+
+The check is OK when the observed state equals `state`. Matching uses the exact
+resolved-exe and real-UID rules of section 21.
 
 ### Metric
 
@@ -1083,6 +1097,9 @@ if:
     state: active
 ```
 
+`state` uses the servicemgr statuses: `active`, `inactive`, `failed`, `unknown`
+(same set as the service check `expect`, section 12).
+
 ### Process condition
 
 ```yaml
@@ -1092,6 +1109,9 @@ if:
     user: mysql
     state: running
 ```
+
+`state` is `running` (default), `zombie` or `absent`, as defined for the process
+check in section 12.
 
 ### File condition
 
@@ -2654,6 +2674,9 @@ checks:
 - within.min_matches > 0 and <= within.cycles.
 - A rule cannot define both for and within in MVP.
 - All check references point to existing checks or preflight checks.
+- service check expect and service condition state are one of active, inactive,
+  failed, unknown.
+- process check/condition state is one of running, zombie, absent.
 - backend is one of auto, systemd, openrc.
 - engine.interval and engine.default_timeout are valid positive durations.
 - engine.max_parallel_checks, if set, is an integer > 0.
@@ -2779,6 +2802,7 @@ internal/config:
   - reject scope: system metric used in a remediation rule
   - unknown metric name for the declared scope is rejected
   - block/alert action requires a message; guard requires a blocks list
+  - invalid service expect/state or process state value is rejected
 
 internal/rules:
   - and/or/not evaluation
