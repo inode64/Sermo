@@ -49,7 +49,7 @@ Use these rules:
 scalars: override
 maps: recursive merge
 arrays: replace unless documented otherwise
-checks/preflight/processes/rules: maps keyed by name
+checks/preflight/postflight/processes/rules: maps keyed by name
 enabled: false disables inherited item
 delete: true removes inherited item
 ```
@@ -168,6 +168,7 @@ scope: system metric used in a remediation rule (must be alert only)
 typed fields (port, expect_status) parse to their target type after expansion
 policy: cooldown valid; max_actions requires max_actions_window
 block/alert actions require a message
+postflight entries use the same schema as preflight/checks; optional is boolean
 file_exists checks do not point under /run/sermo/locks; Sermo named runtime locks are checked by the engine
 ```
 

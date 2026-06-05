@@ -334,6 +334,7 @@ aliases          # per-backend candidate unit names (see spec section 11)
 commands         # optional informational commands, never auto-run
 checks
 preflight        # entries may set optional: true (best-effort, non-blocking)
+postflight       # checks after start/restart; required failures return postflight_failed
 processes
 rules
 guards
@@ -380,7 +381,7 @@ Merge rules:
 ```text
 scalars: override
 maps: recursive merge
-checks/preflight/processes/rules: keyed by name
+checks/preflight/postflight/processes/rules: keyed by name
 enabled: false disables inherited item
 delete: true removes inherited item
 ```
@@ -581,6 +582,7 @@ for cycles
 within cycles
 guard blocking
 preflight blocking
+postflight failure reporting
 lock blocking
 operation lock path does not collide with named runtime locks
 remediation cooldown and rate limiting
