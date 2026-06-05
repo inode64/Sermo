@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/locks"
 	"sermo/internal/servicemgr"
 )
 
@@ -122,6 +124,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runAction(ctx, opts, opts.command)
 	case "config":
 		return a.runConfig(opts)
+	case "locks":
+		return a.runLocks(opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -400,6 +404,74 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 	return out
 }
 
+// runLocks reports the named runtime locks for a service (active, expired and
+// stale), reading the runtime root from the loaded config (section 20).
+func (a App) runLocks(opts options) int {
+	if opts.service() == "" {
+		fmt.Fprintln(a.Stderr, "usage error: locks requires a service name")
+		writeUsage(a.Stderr)
+		return exitUsage
+	}
+
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+
+	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
+	report, err := locks.NewScanner(dir).Scan(opts.service())
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("scan locks failed: %v", err))
+		return exitRuntimeError
+	}
+
+	for _, w := range report.Warnings {
+		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
+	}
+
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{
+			"service": report.Service,
+			"locks":   report.Locks,
+		})
+		return exitSuccess
+	}
+
+	if len(report.Locks) == 0 {
+		if !opts.quiet {
+			fmt.Fprintf(a.Stdout, "no named runtime locks for %s\n", report.Service)
+		}
+		return exitSuccess
+	}
+	for _, lock := range report.Locks {
+		fmt.Fprintln(a.Stdout, formatLock(lock))
+	}
+	return exitSuccess
+}
+
+func formatLock(lock locks.Lock) string {
+	id := lock.Service
+	if lock.Name != "" {
+		id += "." + lock.Name
+	}
+	line := fmt.Sprintf("%s %s owner_pid=%d", id, lock.State, lock.OwnerPID)
+	if !lock.ExpiresAt.IsZero() {
+		line += " expires_at=" + lock.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	if lock.StaleReason != "" {
+		line += " (" + lock.StaleReason + ")"
+	}
+	if lock.Reason != "" {
+		line += fmt.Sprintf(" reason=%q", lock.Reason)
+	}
+	return line
+}
+
 // serviceStatus resolves the backend, builds a manager and queries the service.
 // On any failure it reports the error and returns a non-success exit code.
 func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int) {
@@ -534,7 +606,7 @@ func parseArgs(args []string) (options, error) {
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
-	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE")
+	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | locks SERVICE")
 }
 
 func writeJSON(w io.Writer, value any) {
