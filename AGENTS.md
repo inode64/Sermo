@@ -159,7 +159,7 @@ These rules are mandatory.
 1. Never kill processes by name only.
 2. Never use `SIGKILL` unless the service profile explicitly allows it.
 3. A `SIGKILL` policy must include a restrictive `kill_only_if` clause.
-4. Process matching must validate at least `exe` and `user`; prefer `pidfile` or `cgroup` as additional evidence.
+4. Process matching must validate at least `exe` and `user`; prefer `pidfile` or `cgroup` as additional evidence. `exe` is the resolved `/proc/<pid>/exe` path matched exactly (never argv[0]/cmdline, never a substring); an unresolvable `exe` never matches. See `implementation-spec.md` section 21.
 5. Never restart, start or stop a service when a matching guard blocks the action.
 6. Never restart or start when required preflight checks fail.
 7. Never perform service actions without a timeout.

@@ -1893,11 +1893,25 @@ type Process struct {
     PPID     int
     User     string
     UID      uint32
-    Exe      string
-    Cmdline  []string
+    Exe      string    // resolved /proc/<pid>/exe, NOT argv[0]
+    Cmdline  []string  // informational only, never used for matching
     Role     string
     Source   string
 }
+```
+
+### Process identity
+
+How each field is read is security-critical, because kill decisions depend on it:
+
+```text
+Exe   the resolved target of the /proc/<pid>/exe symlink: the absolute, real path
+      of the running binary. It is NEVER argv[0]/cmdline[0], which a process can
+      set to any string and is therefore unsafe to trust.
+UID   the real UID from /proc/<pid>/status (Uid: line, first value); User is that
+      UID resolved via the passwd database.
+Cmdline  read from /proc/<pid>/cmdline for display and logging only; never used
+      for matching or kill decisions.
 ```
 
 Discovery strategy:
@@ -1912,10 +1926,36 @@ Discovery strategy:
 5. Deduplicate by PID.
 ```
 
+### Matching rules
+
+Selectors (`command_match`, `kill_only_if`) match on identity, never on a name:
+
+```text
+- An exe selector (command_match.exe, kill_only_if.exe_any) matches only by EXACT
+  equality against the resolved /proc/<pid>/exe path, after canonicalizing both
+  sides (symlink resolution + path clean). No basename, prefix or substring
+  match — "mysqld" must never match by appearing somewhere in a string.
+- A user selector matches the process real UID exactly.
+- command_match requires ALL of its declared fields to match (exe AND user, when
+  both are given).
+```
+
+Unresolvable exe — fail safe:
+
+```text
+- If /proc/<pid>/exe cannot be read (permission), or resolves to a "(deleted)"
+  path (the binary was replaced, e.g. after a package upgrade), the process does
+  NOT match any exe selector. It is reported as a residual with exe unknown, and
+  any kill that depends on exe matching will NOT touch it.
+- Leaving an unidentifiable process alive is safer than killing the wrong one;
+  log it so an operator can investigate.
+```
+
 Safety rule:
 
 ```text
-Never kill a process based only on a partial name match.
+Never kill a process based only on a partial name match, and never on cmdline.
+A kill requires an exact resolved-exe and real-UID match against kill_only_if.
 ```
 
 Required safe selector for kill:
@@ -2716,6 +2756,9 @@ internal/process:
   - pidfile parsing
   - process selector matching
   - kill safety selector validation
+  - exe matched by exact resolved /proc/<pid>/exe; substring/basename never matches
+  - unresolvable or "(deleted)" exe never matches an exe selector
+  - cmdline/argv[0] is never used for matching
 
 internal/metrics:
   - cpu rate computed from two injected samples; first cycle is not-ready
@@ -2953,7 +2996,9 @@ Hard rules:
 1. Never restart if preflight fails and security.require_preflight_before_restart=true.
 2. Never restart or stop if a guard blocks the action.
 3. Never SIGKILL by default.
-4. Never kill by process name only.
+4. Never kill by process name only. A kill requires an exact match on the
+   resolved /proc/<pid>/exe path and the real UID against kill_only_if; argv[0]
+   and cmdline are never trusted. An unresolvable exe never matches (section 21).
 5. force_kill=true requires kill_only_if.
 6. Commands must be array form, not shell string.
 7. Avoid invoking shell unless explicitly configured later.

@@ -14,9 +14,15 @@ Never kill processes by name only.
 A process match should include at least:
 
 ```text
-exe absolute path
-effective user or UID
+exe  resolved /proc/<pid>/exe (real binary path), matched EXACTLY — never a
+     substring/basename, never argv[0]/cmdline
+user real UID from /proc/<pid>/status, matched exactly
 ```
+
+`cmdline` is for display/logging only, never for matching. If `/proc/<pid>/exe`
+is unreadable or "(deleted)" (binary replaced after an upgrade), the process does
+NOT match any exe selector and is not killed — leaving an unidentifiable process
+alive beats killing the wrong one. See `implementation-spec.md` section 21.
 
 Prefer adding one or more of:
 
@@ -100,6 +106,8 @@ SIGTERM path
 SIGKILL blocked by policy
 SIGKILL allowed with kill_only_if
 name-only matching rejected
+exe matched exactly (substring/basename rejected); cmdline never used
+unresolvable or "(deleted)" exe never matches
 ```
 
 ## Output format
