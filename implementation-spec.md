@@ -3395,7 +3395,7 @@ Later sinks:
 ```text
 JSON file
 syslog
-Prometheus metrics
+Prometheus metrics (post-MVP; client_golang only when specified)
 webhook
 ```
 

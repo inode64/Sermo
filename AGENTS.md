@@ -201,7 +201,6 @@ Allowed later dependencies:
 
 ```text
 github.com/coreos/go-systemd/v22
-github.com/prometheus/client_golang
 github.com/fsnotify/fsnotify
 ```
 
