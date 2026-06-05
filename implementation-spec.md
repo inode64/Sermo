@@ -869,7 +869,7 @@ extension; the loader should reject a non-numeric `expect_status` until then.
 
 ```yaml
 checks:
-  configtest:
+  config:
     type: command
     command: ["apachectl", "configtest"]
     expect_exit: 0
@@ -1547,7 +1547,7 @@ rules:
       - start
     if:
       failed:
-        check: configtest
+        check: config
     then:
       action: block
       message: "Configuration invalid, restart blocked"
@@ -1692,7 +1692,7 @@ Example:
 
 ```yaml
 preflight:
-  configtest:
+  config:
     type: command
     command: ["apachectl", "configtest"]
     timeout: 10s
