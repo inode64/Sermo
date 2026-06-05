@@ -83,7 +83,9 @@ Safety-sensitive changes should include tests for:
 
 ```text
 guard blocks restart
+guard blocks start
 preflight failure blocks restart
+preflight failure blocks start
 lock blocks stop/restart
 force_kill false does not send SIGKILL
 force_kill true requires kill_only_if

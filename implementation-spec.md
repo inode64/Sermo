@@ -1613,6 +1613,13 @@ Actions:
 - Stop
 - Restart
 
+Before `Start`, `Stop` or `Restart` executes any backend action, the engine
+acquires the internal operation lock, checks named runtime locks, and evaluates
+guards for the requested action. Required preflight checks run before `Start`
+and `Restart`; a failed required preflight blocks the action with
+`preflight_failed`. `Stop` does not require preflight by default, but still
+honors locks and guards.
+
 Restart flow:
 
 ```text
@@ -2956,6 +2963,8 @@ internal/metrics:
 internal/operation:
   - restart blocked by guard
   - restart blocked by preflight failure
+  - start blocked by guard
+  - start blocked by required preflight failure
   - restart blocked by active lock
   - restart uses backend Stop then Start, never backend Restart, so residual
     checks happen before any start
@@ -3189,8 +3198,8 @@ Implement:
 Hard rules:
 
 ```text
-1. Never restart if preflight fails and security.require_preflight_before_restart=true.
-2. Never restart or stop if a guard blocks the action.
+1. Never restart or start if a required preflight fails.
+2. Never restart, start or stop if a guard blocks the action.
 3. Never SIGKILL by default.
 4. Never kill by process name only. A kill requires an exact match on the
    resolved /proc/<pid>/exe path and the real UID against kill_only_if; argv[0]
