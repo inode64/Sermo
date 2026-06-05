@@ -1544,24 +1544,107 @@ Support two categories:
 CLI lock command:
 
 ```bash
-sermoctl lock mysql --reason "backup mysql" --ttl 4h -- mysqldump --single-transaction --all-databases
+sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mysqldump --single-transaction --all-databases
 ```
 
-While the command runs, Sermo should create a lock file in:
+Lock file naming:
 
 ```text
-/run/sermo/locks/mysql.lock
+/run/sermo/locks/<service>[.<name>].lock
+
+sermoctl lock mysql              -> /run/sermo/locks/mysql.lock
+sermoctl lock mysql --name backup -> /run/sermo/locks/mysql.backup.lock
 ```
 
-Suggested JSON format:
+A service may hold several named locks at once (for example `backup` and
+`migration`). The example above creates `/run/sermo/locks/mysql.backup.lock`,
+which is exactly the path the MySQL backup guard checks below, so the lock and
+the guard line up end to end.
+
+Lock file JSON format:
 
 ```json
 {
   "service": "mysql",
+  "name": "backup",
   "reason": "backup mysql",
   "owner_pid": 12345,
+  "owner_start_ticks": 884512,
   "created_at": "2026-06-05T12:00:00Z",
   "expires_at": "2026-06-05T16:00:00Z"
+}
+```
+
+`owner_start_ticks` is the owner process start time (field 22 of
+`/proc/<pid>/stat`). It is recorded so a stale lock left by a crashed owner can be
+told apart from a live one even after PID reuse.
+
+### Lock lifecycle
+
+Acquisition is atomic:
+
+```text
+1. Create the lock file with O_CREAT|O_EXCL under /run/sermo/locks.
+2. If it already exists, the existing lock is held UNLESS it is stale (below).
+   A new holder must never silently overwrite a live lock.
+3. Write the JSON payload and fsync the file, then fsync the directory so a lock
+   that exists is always complete and readable after a crash.
+```
+
+A lock is **not active** (it is ignored, and may be reclaimed) when any of:
+
+```text
+- expires_at is in the past (TTL elapsed); or
+- owner_pid is set and no process with that PID is alive (kill(pid, 0) fails); or
+- a process with owner_pid is alive but its start time does not match
+  owner_start_ticks (the PID was reused by an unrelated process).
+```
+
+Otherwise the lock is **active** and blocks the actions its guards cover.
+
+Reclaiming a stale lock:
+
+```text
+- Only sermod or sermoctl reclaim a stale lock, and only after emitting an event
+  that says why it was stale (expired vs dead owner vs PID reuse).
+- Reclaim is: read, confirm still stale, unlink, then acquire fresh. If the lock
+  turned active between the check and the unlink, abort and treat it as held.
+```
+
+Release:
+
+```text
+- `sermoctl lock SERVICE -- COMMAND` holds the lock for the lifetime of COMMAND
+  and unlinks it when COMMAND exits, on any path including a signal, via deferred
+  cleanup. If COMMAND is killed, the TTL still bounds the lock's lifetime.
+- `sermoctl lock acquire` / `sermoctl lock release` manage a lock explicitly;
+  release unlinks the owner's lock.
+- An owner only removes its own lock; stale removal goes through the reclaim path.
+```
+
+TTL guidance:
+
+```text
+- --ttl is the maximum lifetime even if the owner never releases (e.g. crash),
+  so a lock can never wedge remediation forever.
+- Choose a ttl safely above the real duration of the protected work. A ttl that
+  expires mid-backup would wrongly unblock restarts; this trade-off belongs in
+  docs/safety.md.
+```
+
+Go model:
+
+```go
+// ActiveLock is a lock currently considered active. Referenced by operation
+// results (section 18) and by `sermoctl locks SERVICE`.
+type ActiveLock struct {
+    Service   string    `json:"service"`
+    Name      string    `json:"name,omitempty"`
+    Reason    string    `json:"reason,omitempty"`
+    OwnerPID  int       `json:"owner_pid"`
+    CreatedAt time.Time `json:"created_at"`
+    ExpiresAt time.Time `json:"expires_at"`
+    Path      string    `json:"path"`
 }
 ```
 
@@ -2397,6 +2480,13 @@ internal/operation:
   - restart blocked by preflight failure
   - restart blocked by active lock
   - residual process handling with force_kill=false
+
+internal/locks:
+  - atomic acquisition fails when an active lock already exists
+  - expired (TTL) lock is treated as inactive and reclaimable
+  - lock with a dead owner_pid is treated as stale and reclaimed
+  - PID reuse detected via owner_start_ticks (alive PID, wrong start time)
+  - lock file naming: <service>[.<name>].lock
 ```
 
 Integration tests:
@@ -2618,6 +2708,10 @@ Hard rules:
 12. Rule conditions are read-only predicates evaluated at most once per cycle.
     A condition must never change system state; mutation belongs to actions, not
     to conditions.
+13. Locks are acquired atomically (O_CREAT|O_EXCL) and bounded by a TTL so they
+    cannot wedge remediation forever. A lock is honored only while active; an
+    expired lock, or one whose owner PID is dead, is stale and must be reclaimed
+    through the logged reclaim path, never silently overwritten.
 ```
 
 ---
