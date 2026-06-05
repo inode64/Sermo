@@ -498,6 +498,72 @@ MVP variable rules:
 - Missing variables are validation errors.
 - No expressions or template language in MVP.
 
+### Typed fields and variable interaction
+
+Variables are always strings, but several configuration fields are logically
+numeric (for example `port`, `expect_status`) or have a small grammar (for
+example a metric `value` such as `40%`). To let these fields be written both
+directly and through `${var}` substitution, Sermo accepts more than one YAML
+form for them and normalizes after expansion. These are all valid and resolve to
+the same value:
+
+```yaml
+port: 783
+port: "783"
+port: "${port}"     # where variables.port = "783"
+```
+
+Loading and resolution order for such fields:
+
+```text
+1. Load the field as a raw scalar, tolerating either an int or a string.
+2. Expand ${var} references. Because variables are strings, any field that
+   contains a variable reference is a string at this step.
+3. Parse the expanded value into the field's target type (int, percentage, ...).
+4. A value that cannot be parsed, or is out of range, is a config validation
+   error (exit code 78).
+```
+
+Implement this with a small tolerant scalar type instead of plain `int`, so YAML
+unmarshalling never fails just because a numeric field was quoted or carried a
+variable. The signature below is illustrative; adapt it to the YAML library:
+
+```go
+// FlexInt accepts a YAML integer or a string scalar (which may contain ${var}).
+// Raw holds the pre-expansion text; Val is filled in during resolution.
+type FlexInt struct {
+    Raw string
+    Val int
+}
+
+func (f *FlexInt) UnmarshalYAML(unmarshal func(any) error) error {
+    var s string
+    if err := unmarshal(&s); err == nil {
+        f.Raw = s
+        return nil
+    }
+    var i int
+    if err := unmarshal(&i); err != nil {
+        return err
+    }
+    f.Raw = strconv.Itoa(i)
+    return nil
+}
+```
+
+Target types for MVP fields:
+
+```text
+port            FlexInt, resolved to an int in range 1..65535.
+expect_status   FlexInt, resolved to an int (a single status code in MVP).
+timeout         duration string such as "3s" (already a string, no FlexInt).
+metric value    string with optional trailing "%"; see section 14.
+```
+
+Resolution (steps 2-4) happens once, when a service is flattened, so the daemon
+only ever sees parsed values. The raw form is kept only for `config render` and
+error messages.
+
 ---
 
 ## 11. Service manager abstraction
@@ -609,6 +675,11 @@ type Check interface {
     Run(ctx context.Context) Result
 }
 ```
+
+Field typing: `port` and `expect_status` are `FlexInt` (accept an int or a
+string, possibly a `${var}`), `timeout` is a duration string, and the metric
+`value` follows the grammar in section 14. See section 10, "Typed fields and
+variable interaction". Both `port: 783` and `port: "${port}"` are valid.
 
 MVP check types:
 
@@ -781,6 +852,19 @@ if:
     name: total_cpu
     op: ">"
     value: 30%
+```
+
+`op` is one of `>`, `>=`, `<`, `<=`, `==`, `!=`. `value` is loaded as a string
+(so it may carry a `${var}`) and parsed after expansion:
+
+```text
+- A trailing "%" marks a percentage value in 0..100, compared against the
+  metric's percentage form (for example total_memory as a percentage of RAM).
+- Otherwise the value is an absolute number, compared against the metric's
+  absolute form, in the metric's native unit.
+- A value that is neither a valid number nor number+"%" is a validation error.
+- Mixing forms (a "%" threshold against an absolute-only metric, or vice versa)
+  is a validation error.
 ```
 
 ### Service condition
@@ -2013,6 +2097,10 @@ checks:
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
 - policy.backoff, if set, requires initial > 0 and max >= initial.
+- After variable expansion, port fields resolve to an integer in 1..65535.
+- After variable expansion, expect_status resolves to a valid HTTP status integer.
+- metric value parses as a number with an optional trailing "%".
+- any field carrying ${var} must parse to its declared target type after expansion.
 ```
 
 Example error output:
@@ -2107,6 +2195,8 @@ internal/config:
   - variable expansion
   - missing variable detection
   - clone cycle detection
+  - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
+  - metric value parsing (percentage vs absolute, invalid value rejected)
 
 internal/rules:
   - and/or/not evaluation

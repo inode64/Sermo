@@ -163,7 +163,12 @@ These rules are mandatory.
 5. Never restart, start or stop a service when a matching guard blocks the action.
 6. Never restart or start when required preflight checks fail.
 7. Never perform service actions without a timeout.
-8. Never enter a restart loop; use cooldown/backoff.
+8. Never enter a restart loop. Automatic remediation must honor the per-service
+   `policy` block (cooldown, optional max_actions/backoff); see
+   `implementation-spec.md` section 16, "Remediation policy". Cooldown is decided
+   by the daemon's rule evaluation before the shared engine runs. Manual operator
+   commands are exempt from cooldown but still subject to locks, guards and
+   preflight.
 9. Always log whether an action was executed or blocked, and why.
 10. Database profiles must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
@@ -233,6 +238,7 @@ rules
 guards
 locks
 stop_policy
+policy
 ```
 
 Prefer maps keyed by name over lists for mergeable sections:
@@ -277,6 +283,12 @@ checks/preflight/processes/rules: keyed by name
 enabled: false disables inherited item
 delete: true removes inherited item
 ```
+
+Numeric fields that may also be written as a string or carry a `${var}` (for
+example `port` and `expect_status`) use a tolerant scalar type that accepts an
+int or a string and is parsed to its target type after variable expansion. The
+metric `value` is a string with an optional trailing `%`. See
+`implementation-spec.md` section 10, "Typed fields and variable interaction".
 
 The daemon should consume a fully resolved, flat configuration. Do not make the daemon reason about inheritance at runtime.
 
@@ -407,6 +419,7 @@ within cycles
 guard blocking
 preflight blocking
 lock blocking
+remediation cooldown and rate limiting
 safe restart sequencing
 process matching safety
 SIGKILL policy validation
