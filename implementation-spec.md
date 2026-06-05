@@ -752,10 +752,51 @@ checks:
 checks:
   memory:
     type: metric
-    name: total_memory
+    scope: service        # service | system; default service
+    name: memory
     op: ">"
     value: 40%
 ```
+
+Every metric has a **scope** that decides what it measures:
+
+```text
+service  (default)  measures only the monitored service: its discovered process
+                    set, summed across the process tree, or the service cgroup
+                    when the backend exposes one (systemd MainPID/cgroup).
+system              measures the whole machine, regardless of any service.
+```
+
+MVP metric catalog:
+
+```text
+scope: service
+  memory          resident memory of the service, as bytes or % of total RAM
+  cpu             CPU used by the service, as % of total CPU capacity
+                  (100% = all cores saturated)
+  process_count   number of discovered processes in the service set
+
+scope: system
+  total_memory    used memory of the whole machine, as bytes or % of total RAM
+  total_cpu       CPU used by the whole machine, as % of total CPU capacity
+  load1, load5, load15   load averages
+```
+
+Why scope matters for safety:
+
+```text
+A service metric answers "is THIS service unhealthy?" and is a sound trigger for
+remediation. A system metric answers "is the machine under pressure?" and is NOT
+a sound reason to restart one particular service: the pressure usually comes from
+something else, and restarting the wrong service can make an incident worse.
+```
+
+For this reason, remediation rules may only use `scope: service` metrics. System
+metrics are allowed only for `alert` actions in the MVP (see section 14 and the
+validation rules in section 30).
+
+The reference names use a `total_` prefix for system metrics and unprefixed names
+for service metrics, so a misplaced scope is easy to spot in review.
 
 ---
 
@@ -849,23 +890,31 @@ if:
 ```yaml
 if:
   metric:
-    name: total_cpu
+    scope: service        # service | system; default service
+    name: cpu
     op: ">"
     value: 30%
 ```
+
+`scope` and `name` follow the metric catalog in section 12. A condition that
+omits `scope` defaults to `scope: service`.
 
 `op` is one of `>`, `>=`, `<`, `<=`, `==`, `!=`. `value` is loaded as a string
 (so it may carry a `${var}`) and parsed after expansion:
 
 ```text
 - A trailing "%" marks a percentage value in 0..100, compared against the
-  metric's percentage form (for example total_memory as a percentage of RAM).
+  metric's percentage form (for example memory as a percentage of RAM).
 - Otherwise the value is an absolute number, compared against the metric's
   absolute form, in the metric's native unit.
 - A value that is neither a valid number nor number+"%" is a validation error.
 - Mixing forms (a "%" threshold against an absolute-only metric, or vice versa)
   is a validation error.
 ```
+
+Safety: a `scope: system` metric may appear only in rules whose action is
+`alert`. Using a system metric in a remediation rule (restart/start/stop) is a
+validation error. See sections 12 and 30.
 
 ### Service condition
 
@@ -966,7 +1015,7 @@ rules:
 Equivalent to:
 
 ```text
-if total cpu > 30% for 1 cycles then restart
+if service cpu > 30% for 1 cycles then restart
 ```
 
 YAML:
@@ -977,7 +1026,8 @@ rules:
     type: remediation
     if:
       metric:
-        name: total_cpu
+        scope: service
+        name: cpu
         op: ">"
         value: 30%
     for:
@@ -992,7 +1042,7 @@ rules:
 Equivalent to:
 
 ```text
-if total memory > 40% within 15 cycles then restart
+if service memory > 40% within 15 cycles then restart
 ```
 
 YAML:
@@ -1003,7 +1053,8 @@ rules:
     type: remediation
     if:
       metric:
-        name: total_memory
+        scope: service
+        name: memory
         op: ">"
         value: 40%
     within:
@@ -1943,12 +1994,13 @@ rules:
     type: remediation
     if:
       metric:
-        name: total_memory
+        scope: service
+        name: memory
         op: ">"
         value: 40%
     within:
       cycles: 15
-      min_matches: 1
+      min_matches: 5
     then:
       action: restart
 ```
@@ -2101,6 +2153,10 @@ checks:
 - After variable expansion, expect_status resolves to a valid HTTP status integer.
 - metric value parses as a number with an optional trailing "%".
 - any field carrying ${var} must parse to its declared target type after expansion.
+- metric scope is one of service or system; default is service.
+- metric name exists in the catalog for its scope (section 12).
+- a scope: system metric must not appear in a remediation rule; it is allowed
+  only in rules whose action is alert.
 ```
 
 Example error output:
@@ -2197,6 +2253,8 @@ internal/config:
   - clone cycle detection
   - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
   - metric value parsing (percentage vs absolute, invalid value rejected)
+  - reject scope: system metric used in a remediation rule
+  - unknown metric name for the declared scope is rejected
 
 internal/rules:
   - and/or/not evaluation
@@ -2334,7 +2392,8 @@ Implement:
 - and/or/not
 - failed/active check references
 - inline tcp condition
-- metric condition placeholder
+- metric condition with scope (service default) and the system-in-remediation
+  validation rule; full service metric collection can land with phase 7
 - for consecutive window
 - within sliding window
 ```
@@ -2343,7 +2402,13 @@ Acceptance:
 
 ```text
 Unit tests prove the three example Monit-like rules work.
+Config validation rejects a scope: system metric used in a remediation rule.
 ```
+
+Note: service-scoped metric collection builds on process discovery (phase 7) and
+the `internal/metrics` collectors. In phase 5 the evaluator can read metric
+values from an injected collector interface so rules and validation are testable
+before the real collector exists.
 
 ### Phase 6: Operation engine
 
@@ -2430,6 +2495,9 @@ Hard rules:
 10. Automatic remediation must respect the service cooldown/rate-limit policy and
     must never enter a restart loop. Manual operator actions are exempt from
     cooldown but still subject to locks, guards and preflight.
+11. Remediation rules must trigger on service-scoped metrics only. A system-wide
+    metric must never restart, start or stop an individual service; it may only
+    drive an alert.
 ```
 
 ---
