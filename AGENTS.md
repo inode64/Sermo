@@ -189,7 +189,9 @@ These rules are mandatory.
 16. The scheduler runs one independent worker per service; a long operation
     (a multi-minute restart) on one service must never block monitoring of
     another. Never serialize all services through a single loop. Mass restarts
-    are bounded by a global operation semaphore. See section 24.
+    are bounded by a global operation semaphore, and concurrent check execution
+    across all services is bounded by `engine.max_parallel_checks` (a separate
+    global pool). See sections 12 and 24.
 
 ## Service manager abstraction
 
