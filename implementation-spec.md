@@ -1391,19 +1391,48 @@ Restart flow:
 
 ```text
 1. Load resolved service.
-2. Acquire internal operation lock for the service.
-3. Check external locks.
-4. Run preflight checks required for restart.
-5. If any guard blocks restart, stop and return blocked result.
-6. Execute backend restart or stop/start.
-7. Verify final service status.
-8. Discover residual processes.
-9. If residual processes remain:
-   - if force_kill=false, return orphan_processes error.
-   - if force_kill=true, apply signal escalation policy.
-10. Run postflight checks.
-11. Release internal operation lock.
-12. Emit event.
+2. defer: emit exactly one event from the final result. Registered FIRST, so it
+   fires on every exit path below, including a failed lock acquisition.
+3. Acquire the internal operation lock for the service (see below). On failure,
+   set the result to blocked and return (step 2 still emits the event).
+4. defer: release the internal operation lock. Registered ONLY after a successful
+   acquire, so the engine never releases a lock it does not hold.
+5. Check external locks. If an active lock blocks the action, return blocked.
+6. Run preflight checks required for restart. If preflight fails, return
+   preflight_failed.
+7. If any guard blocks restart, return blocked.
+8. Execute backend restart, or stop/start.
+9. Verify final service status.
+10. Discover residual processes.
+11. If residual processes remain:
+    - if force_kill=false, return orphan_processes.
+    - if force_kill=true, apply the signal escalation policy.
+12. Run postflight checks.
+13. Return the result (ok or the relevant failure status).
+```
+
+Every numbered step from 5 onward is a possible early return. The two deferred
+steps mean cleanup lives in exactly two places: the event always fires (step 2)
+and the lock is always released when held (step 4), no matter which step returns
+or whether the function panics. Implement this with Go `defer`, ordered exactly
+as above; do not repeat release/emit at each return.
+
+The internal operation lock:
+
+```text
+- It serializes start/stop/restart for one service so two operations never run
+  concurrently (a manual sermoctl action and an automatic sermod remediation, or
+  two manual actions). Path: /run/sermo/locks/<service>.op.lock.
+- Acquire it atomically with O_CREAT|O_EXCL, following the lock lifecycle in
+  section 20.
+- If it is already held by a LIVE owner, fail fast: return a blocked result with
+  exit code 75 and message "operation in progress". The engine never waits or
+  queues.
+- If the existing lock is STALE (expired TTL, or a dead owner PID), reclaim it
+  through the logged reclaim path of section 20, then acquire and proceed.
+- It is distinct from the named runtime locks created by `sermoctl lock`
+  (section 20): those guard against external work like backups; this one guards
+  against overlapping operations.
 ```
 
 For databases, default `force_kill` must be false.
@@ -2480,6 +2509,9 @@ internal/operation:
   - restart blocked by preflight failure
   - restart blocked by active lock
   - residual process handling with force_kill=false
+  - internal operation lock released on every early-return path (no leak)
+  - exactly one event emitted per operation, including blocked/failed paths
+  - concurrent operation fails fast with exit 75 while the op lock is held
 
 internal/locks:
   - atomic acquisition fails when an active lock already exists

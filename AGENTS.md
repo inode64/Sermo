@@ -390,18 +390,23 @@ Safe restart flow:
 ```text
 1. Load resolved service profile.
 2. Detect backend.
-3. Acquire internal operation lock.
-4. Evaluate blocking locks.
-5. Run required preflight checks.
-6. Evaluate guard rules.
-7. Execute stop/restart/start through servicemgr.
-8. Wait for graceful stop where applicable.
-9. Discover residual processes.
-10. Apply stop_policy.
-11. Run postflight checks.
-12. Record event.
-13. Release lock.
+3. defer: emit exactly one event from the final result (registered first).
+4. Acquire internal operation lock (atomic; fail fast if held by a live owner).
+5. defer: release the lock (registered only after a successful acquire).
+6. Evaluate blocking locks.        # any of 6-11 may return early
+7. Run required preflight checks.
+8. Evaluate guard rules.
+9. Execute stop/restart/start through servicemgr.
+10. Wait for graceful stop where applicable.
+11. Discover residual processes; apply stop_policy.
+12. Run postflight checks and return the result.
 ```
+
+The two deferred steps mean the event always fires and the lock is always
+released when held, so a blocked, failed or panicking operation never leaks the
+lock and always emits exactly one event. Use Go `defer` in that order; never
+repeat release/record at each early return. See `implementation-spec.md`
+section 18.
 
 ## CLI expectations
 
