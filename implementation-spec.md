@@ -2241,6 +2241,7 @@ sermoctl stop SERVICE
 sermoctl restart SERVICE
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
+sermoctl locks SERVICE
 sermoctl config validate [SERVICE]
 sermoctl config render SERVICE
 ```
@@ -3008,6 +3009,7 @@ Integration tests:
 - Temporary config tree.
 - sermoctl config validate.
 - sermoctl config render.
+- sermoctl locks SERVICE with active, expired and stale lock fixtures.
 - sermoctl restart with guard blocking.
 ```
 
@@ -3137,6 +3139,7 @@ Implement:
 - preflight before restart
 - guard blocking
 - internal operation lock
+- sermoctl locks SERVICE active named lock reporting
 - result output
 ```
 
@@ -3144,6 +3147,7 @@ Acceptance:
 
 ```bash
 sermoctl restart mysql-main --config ./configs/sermo.yml
+sermoctl locks mysql-main --config ./configs/sermo.yml
 ```
 
 must block if the config preflight fails or backup lock exists.
