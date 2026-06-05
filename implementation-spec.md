@@ -1956,26 +1956,70 @@ Distinction between `2` and `78`:
 
 ## 24. Daemon design
 
-`sermod` should:
+`sermod` startup:
 
 ```text
 1. Load global config.
-2. Load and resolve profiles/services.
-3. Detect service backend.
-4. Start scheduler.
-5. For each service every interval:
-   - run checks
-   - evaluate guards
-   - evaluate remediation rules
-   - if a remediation rule fires, consult the service remediation policy
-     (cooldown, max_actions); if suppressed, log and skip the action
-   - execute safe operation through the shared engine only if allowed
-   - update remediation state (LastActionAt, RecentActions, backoff)
-   - persist in-memory rule state
-   - log event, recording whether the action was executed or suppressed and why
-6. Handle SIGTERM cleanly.
-7. Handle SIGHUP by reloading config later; MVP may log unsupported.
+2. Load and resolve profiles/services into flat definitions.
+3. Detect the service backend.
+4. Start the scheduler: one independent worker per enabled service.
+5. Block until SIGTERM/SIGINT, then shut down cleanly.
 ```
+
+### Scheduler concurrency
+
+Each enabled service is monitored by its own worker (goroutine) with an
+independent ticker at `engine.interval`. Workers do not share a cycle, so a long
+operation on one service never blocks monitoring of another. This is the core
+rule: the daemon must never serialize all services through a single loop, because
+a restart can take minutes (`graceful_timeout` + `term_timeout`) and would freeze
+every other service's monitoring.
+
+A service worker cycle is:
+
+```text
+- run this service's checks and cache results (section 14)
+- evaluate guards, then remediation/alert rules
+- if a remediation rule fires and is not blocked, consult the service policy
+  (cooldown, max_actions); if allowed, run the operation through the shared engine
+- update remediation state (LastActionAt, RecentActions, backoff)
+- emit events, recording whether the action ran or was suppressed and why
+```
+
+The cycle is synchronous WITHIN a service: checks, evaluation and any operation
+run one after another for that service. Pausing one service's monitoring while
+its own operation runs is fine — monitoring a service mid-restart is meaningless,
+and the internal operation lock (section 18) already forbids a second concurrent
+operation on it.
+
+Cycle overlap: if a worker's cycle is still running when its next tick fires
+(typically an operation in progress), that tick is SKIPPED, not queued; log it at
+debug. The interval is a minimum spacing, not a guarantee.
+
+Bounded concurrency, to avoid a correlated failure triggering a restart storm:
+
+```text
+- Workers start with a small per-service offset (jitter) so ticks spread across
+  the interval instead of all firing at once.
+- Operations across all services share a global operation semaphore (small
+  default). A worker that wants to operate waits for a slot; only that service's
+  monitoring pauses while it waits, so mass restarts serialize safely.
+- Check execution is bounded separately by engine.max_parallel_checks.
+```
+
+Shutdown:
+
+```text
+- On SIGTERM/SIGINT, stop starting new cycles and cancel each worker's context.
+- An in-flight operation observes the cancelled context, stops waiting on its
+  timeouts and returns; its deferred cleanup (section 18) releases the internal
+  lock and emits the event. A partially stopped service is left as-is, never
+  force-killed because of shutdown.
+- Wait for workers to return, up to a bounded shutdown grace, then exit.
+- Never start a new operation during shutdown.
+```
+
+SIGHUP: reload config later; the MVP may log it as unsupported.
 
 Initial `sermod` command:
 
@@ -2553,6 +2597,12 @@ internal/locks:
   - lock with a dead owner_pid is treated as stale and reclaimed
   - PID reuse detected via owner_start_ticks (alive PID, wrong start time)
   - lock file naming: <service>[.<name>].lock
+
+internal/app (scheduler):
+  - a long operation on one service does not block another service's cycles
+  - a tick is skipped (not queued) while the previous cycle is still running
+  - the global operation semaphore serializes mass restarts
+  - context cancellation on shutdown stops in-flight waits and releases locks
 ```
 
 Integration tests:
@@ -2727,10 +2777,12 @@ Implement:
 
 ```text
 - sermod run
+- one independent worker per service (no single serial loop)
+- per-service ticker with start jitter; skip a tick if the cycle still runs
 - periodic check execution
 - rule evaluation
-- remediation using operation engine
-- graceful shutdown
+- remediation using the operation engine, behind a global operation semaphore
+- graceful shutdown via context cancellation
 ```
 
 Acceptance:
