@@ -2012,15 +2012,31 @@ Signal escalation:
 1. backend.Stop(service)
 2. wait graceful_timeout
 3. discover residual processes
-4. if no residuals, success
+4. if no residuals, success (ok)
 5. if residuals and force_kill=false, fail with orphan_processes
 6. if residuals and force_kill=true:
-   - validate every process against kill_only_if
-   - send SIGTERM
-   - wait term_timeout
-   - discover again
-   - send SIGKILL only if still present and policy allows it
+   - classify each residual. A residual is KILLABLE only if every field matches
+     kill_only_if: exact resolved /proc/<pid>/exe AND real UID (section 21). A
+     residual with an unresolvable exe is never killable.
+   - SIGTERM the killable set; wait term_timeout; rediscover.
+   - SIGKILL any of the killable set still present (policy already allows it);
+     wait kill_timeout; rediscover.
+   - a residual that never matched kill_only_if is NEVER signalled.
+7. final result:
+   - ok only if no residuals remain at all.
+   - otherwise orphan_processes, whether the remaining process was deliberately
+     left alone (did not match kill_only_if) or survived SIGKILL. The result
+     lists every remaining process so an operator can act.
 ```
+
+Sermo only ever signals processes that exactly match `kill_only_if`, so a partial
+cleanup never touches an unauthorized process. A residual it is not allowed to
+identify and kill is reported, not killed: a clean `orphan_processes` failure is
+safer than killing the wrong thing or falsely reporting success.
+
+After a stop or the stop phase of a restart returns `orphan_processes`, the
+service must NOT be started (a restart aborts without starting). Auto-start after
+a failed stop is only allowed if policy explicitly enables it.
 
 Default:
 
@@ -2759,6 +2775,9 @@ internal/process:
   - exe matched by exact resolved /proc/<pid>/exe; substring/basename never matches
   - unresolvable or "(deleted)" exe never matches an exe selector
   - cmdline/argv[0] is never used for matching
+  - residual not matching kill_only_if is never signalled and yields orphan_processes
+  - killable residuals are SIGTERM/SIGKILLed; a survivor still yields orphan_processes
+  - orphan_processes from a stop does not lead to a start
 
 internal/metrics:
   - cpu rate computed from two injected samples; first cycle is not-ready
@@ -3017,6 +3036,10 @@ Hard rules:
     cannot wedge remediation forever. A lock is honored only while active; an
     expired lock, or one whose owner PID is dead, is stale and must be reclaimed
     through the logged reclaim path, never silently overwritten.
+14. Only processes that exactly match kill_only_if are ever signalled; a residual
+    that does not match (or whose exe is unresolvable) is reported, never killed.
+    If any residual remains, the result is orphan_processes, and the service must
+    not be started after a failed stop unless policy explicitly allows it.
 ```
 
 ---
