@@ -167,6 +167,7 @@ scope: system metric used in a remediation rule (must be alert only)
 typed fields (port, expect_status) parse to their target type after expansion
 policy: cooldown valid; max_actions requires max_actions_window
 block/alert actions require a message
+file_exists checks do not point under /run/sermo/locks; Sermo named runtime locks are checked by the engine
 ```
 
 ## Rendered config

@@ -102,15 +102,24 @@ If a config validation command differs by distribution, make it override-friendl
 
 ## Locks
 
-Add common operational locks for sensitive services.
+Prefer Sermo named runtime locks when the protected job can be wrapped:
+
+```bash
+sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mariabackup ...
+```
+
+That needs no guard; the operation engine blocks the service automatically while
+the lock is active. Only add a guard for a foreign signal Sermo does not own,
+such as a backup process or a flag file created by another tool. Do not point a
+`file_exists` check at `/run/sermo/locks/`.
 
 Example:
 
 ```yaml
 checks:
-  backup-lock:
+  backup-flag:
     type: file_exists
-    path: /run/sermo/locks/mysql.backup.lock
+    path: /run/mysql-backup/in-progress
 
 rules:
   block-restart-during-backup:
@@ -118,7 +127,7 @@ rules:
     blocks: ["restart", "stop"]
     if:
       active:
-        check: backup-lock
+        check: backup-flag
     then:
       action: block
       message: "backup is running"
