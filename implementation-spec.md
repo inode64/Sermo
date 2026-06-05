@@ -747,6 +747,32 @@ string, possibly a `${var}`), `timeout` is a duration string, and the metric
 `value` follows the grammar in section 14. See section 10, "Typed fields and
 variable interaction". Both `port: 783` and `port: "${port}"` are valid.
 
+### Check execution and concurrency
+
+Within a cycle, a service's distinct probes (declared checks and inline
+conditions, deduplicated per section 14) are run concurrently and their results
+collected before rule evaluation. Order does not matter: results are keyed by
+name, and rules read them from the per-cycle cache.
+
+`engine.max_parallel_checks` bounds how many checks run at once across the WHOLE
+daemon, not per service:
+
+```text
+- A single global semaphore of size max_parallel_checks gates every check
+  execution from every service worker. With many services this caps total
+  concurrent probes (sockets, subprocesses) instead of spawning one goroutine
+  per check unbounded.
+- Each check still runs under its own timeout (the check's `timeout`, else
+  engine.default_timeout), so a slow check holds a slot only until its timeout.
+- This pool is independent from the operation semaphore (section 24): checks and
+  start/stop/restart operations are bounded separately.
+- A check that cannot acquire a slot waits; it does not skip. If the whole cycle
+  cannot finish before the next tick, that tick is skipped (section 24).
+```
+
+`sermoctl` one-shot commands (`status`, `preflight`) run their checks directly
+under `default_timeout`; the global pool is a `sermod` concern.
+
 MVP check types:
 
 ### TCP
@@ -2629,6 +2655,8 @@ checks:
 - A rule cannot define both for and within in MVP.
 - All check references point to existing checks or preflight checks.
 - backend is one of auto, systemd, openrc.
+- engine.interval and engine.default_timeout are valid positive durations.
+- engine.max_parallel_checks, if set, is an integer > 0.
 - stop_policy.force_kill=true requires kill_only_if.
 - kill_only_if must define at least users or exe_any.
 - command checks and inline command conditions use array form, not shell string.
@@ -2806,6 +2834,7 @@ internal/app (scheduler):
   - a long operation on one service does not block another service's cycles
   - a tick is skipped (not queued) while the previous cycle is still running
   - the global operation semaphore serializes mass restarts
+  - concurrent check execution never exceeds max_parallel_checks across services
   - context cancellation on shutdown stops in-flight waits and releases locks
 ```
 
