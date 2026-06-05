@@ -62,6 +62,9 @@ after all merging. See `implementation-spec.md` section 8.
 The effective `defaults.policy.cooldown` is required and must be positive. A
 profile or service may omit `policy.cooldown` only when it inherits that value;
 any explicit override must also be positive.
+`paths.runtime` is the single runtime root. Named runtime locks are derived from
+`<paths.runtime>/locks`, and operation locks from `<paths.runtime>/ops`.
+`paths.locks` and `/etc/sermo/locks.d` are not supported in the MVP.
 
 Prefer this:
 
@@ -169,12 +172,15 @@ service expect/state in {active, inactive, failed, unknown}; process state in {r
 metric scope is service or system, and name exists in that scope's catalog
 scope: system metric used in a remediation rule (must be alert only)
 typed fields (port, expect_status) parse to their target type after expansion
+paths.runtime, if set, is an absolute directory
+paths.locks rejected in MVP; locks/ops directories derive from paths.runtime
+/etc/sermo/locks.d not scanned for active locks
 defaults.policy.cooldown present and positive
 resolved service policy.cooldown present and positive; profile/service omissions are allowed only when inherited
 policy.max_actions requires max_actions_window
 block/alert actions require a message
 postflight entries use the same schema as preflight/checks; optional is boolean
-file_exists checks do not point under /run/sermo/locks; Sermo named runtime locks are checked by the engine
+file_exists checks do not point under <paths.runtime>/locks; Sermo named runtime locks are checked by the engine
 ```
 
 ## Rendered config

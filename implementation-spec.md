@@ -267,14 +267,18 @@ Enabled services:
 Named runtime locks:
 
 ```text
-/run/sermo/locks/*.lock
+<paths.runtime>/locks/*.lock     # default: /run/sermo/locks/*.lock
 ```
 
 Internal operation locks:
 
 ```text
-/run/sermo/ops/*.lock
+<paths.runtime>/ops/*.lock       # default: /run/sermo/ops/*.lock
 ```
+
+There is no `/etc/sermo/locks.d` in the MVP. Active locks are runtime state, not
+configuration. Any future static lock-policy directory under `/etc/sermo` must be
+introduced as an explicit post-MVP feature with separate semantics.
 
 Recommended complete layout:
 
@@ -292,7 +296,6 @@ Recommended complete layout:
 │   ├── apache-main.yml
 │   ├── mysql-main.yml
 │   └── redis-cache.yml
-└── locks.d/
 ```
 
 ---
@@ -312,9 +315,7 @@ paths:
     - /etc/sermo/apps-available
   enabled:
     - /etc/sermo/apps-enabled
-  locks:
-    - /run/sermo/locks
-    - /etc/sermo/locks.d
+  runtime: /run/sermo
 
 defaults:
   rule_window:
@@ -347,6 +348,21 @@ Safety invariants are not configurable in YAML. In particular:
 Do not add `security:` toggles such as `allow_sigkill_by_default` or
 `block_restart_on_active_lock`; validation must reject them instead of treating
 them as policy.
+
+Path semantics:
+
+```text
+paths.runtime       Runtime root directory. Default: /run/sermo.
+runtime locks       Derived from paths.runtime: <runtime>/locks.
+operation locks     Derived from paths.runtime: <runtime>/ops.
+paths.locks         Not supported in the MVP; reject it as ambiguous.
+/etc/sermo/locks.d  Not used in the MVP and never scanned for active locks.
+```
+
+Named runtime locks and internal operation locks are active runtime state. They
+must not be loaded from `/etc/sermo`, and they must never share the same
+directory. Guard checks over external lock files should name those foreign files
+explicitly in the check definition instead of using a global lock directory.
 
 ---
 
@@ -929,8 +945,8 @@ checks:
 ### File exists
 
 Use this to detect a foreign flag/lock file written by another tool. Do not point
-it at Sermo's own lock files under `/run/sermo/locks/` — the engine already checks
-those (section 20).
+it at Sermo's own lock files under `<paths.runtime>/locks/` (default
+`/run/sermo/locks/`) — the engine already checks those (section 20).
 
 ```yaml
 checks:
@@ -1691,7 +1707,8 @@ The internal operation lock:
 ```text
 - It serializes start/stop/restart for one service so two operations never run
   concurrently (a manual sermoctl action and an automatic sermod remediation, or
-  two manual actions). Path: /run/sermo/ops/<service>.lock.
+  two manual actions). Path: `<paths.runtime>/ops/<service>.lock` (default
+  `/run/sermo/ops/<service>.lock`).
 - Acquire it atomically with O_CREAT|O_EXCL, following the lock lifecycle in
   section 20.
 - If it is already held by a LIVE owner, fail fast: return a blocked result with
@@ -1699,12 +1716,12 @@ The internal operation lock:
   queues.
 - If the existing lock is STALE (expired TTL, or a dead owner PID), reclaim it
   through the logged reclaim path of section 20, then acquire and proceed.
-- It is distinct from named runtime locks under `/run/sermo/locks` (section 20):
-  those guard against external work like backups; this one guards against
-  overlapping operations. The `sermoctl lock` creation commands for named
-  runtime locks are planned post-MVP.
-- It lives outside /run/sermo/locks on purpose, so it cannot collide with a
-  valid named runtime lock such as `mysql.op.lock`, and the named runtime lock
+- It is distinct from named runtime locks under `<paths.runtime>/locks`
+  (section 20): those guard against external work like backups; this one guards
+  against overlapping operations. The `sermoctl lock` creation commands for
+  named runtime locks are planned post-MVP.
+- It lives outside `<paths.runtime>/locks` on purpose, so it cannot collide with
+  a valid named runtime lock such as `mysql.op.lock`, and the named runtime lock
   scanner must never report the operation lock as a user-held lock.
 ```
 
@@ -1888,7 +1905,8 @@ Package: `internal/locks`
 
 Support two categories:
 
-1. Named runtime lock files under `/run/sermo/locks`.
+1. Named runtime lock files under `<paths.runtime>/locks`
+   (default `/run/sermo/locks`).
 2. External lock checks defined in service profiles.
 
 MVP scope:
@@ -1902,8 +1920,9 @@ MVP scope:
 ```
 
 The internal operation lock from section 18 is deliberately separate from this
-namespace. It uses `/run/sermo/ops/<service>.lock`, follows the same atomic
-lifecycle, and serializes overlapping operations. It is not created by
+namespace. It uses `<paths.runtime>/ops/<service>.lock` (default
+`/run/sermo/ops/<service>.lock`), follows the same atomic lifecycle, and
+serializes overlapping operations. It is not created by
 `sermoctl lock`, is not listed as a named runtime lock, and cannot be released by
 `sermoctl lock release`.
 
@@ -1916,9 +1935,10 @@ sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mysqldump 
 Lock file naming:
 
 ```text
-/run/sermo/locks/<service>[.<name>].lock
+<paths.runtime>/locks/<service>[.<name>].lock
 
-sermoctl lock mysql              -> /run/sermo/locks/mysql.lock
+default runtime:
+sermoctl lock mysql               -> /run/sermo/locks/mysql.lock
 sermoctl lock mysql --name backup -> /run/sermo/locks/mysql.backup.lock
 ```
 
@@ -1951,8 +1971,8 @@ Acquisition is atomic:
 
 ```text
 1. Create the lock file with O_CREAT|O_EXCL under the lock namespace directory
-   (`/run/sermo/locks` for named runtime locks, `/run/sermo/ops` for operation
-   locks).
+   (`<paths.runtime>/locks` for named runtime locks, `<paths.runtime>/ops` for
+   operation locks).
 2. If it already exists, the existing lock is held UNLESS it is stale (below).
    A new holder must never silently overwrite a live lock.
 3. Write the JSON payload and fsync the file, then fsync the directory so a lock
@@ -2040,10 +2060,10 @@ They compose: an action is blocked if a Sermo named runtime lock is active OR a
 guard blocks it. Both run on every operation.
 
 Do not model the same signal both ways. A `file_exists` check pointing at a path
-under `/run/sermo/locks/` duplicates the engine's category-1 check and is a sign
-the guard should be removed (use the runtime lock) or the check should point at a
-foreign signal instead. Category-2 checks should reference foreign processes or
-foreign files, never Sermo's own lock files.
+under `<paths.runtime>/locks/` duplicates the engine's category-1 check and is a
+sign the guard should be removed (use the runtime lock) or the check should point
+at a foreign signal instead. Category-2 checks should reference foreign processes
+or foreign files, never Sermo's own lock files.
 
 External lock check example (category 2 — a backup tool represented by a
 foreign process signal):
@@ -2869,6 +2889,12 @@ either form works.
 - backend is one of auto, systemd, openrc.
 - engine.interval and engine.default_timeout are valid positive durations.
 - engine.max_parallel_checks, if set, is an integer > 0.
+- paths.runtime, if set, must be an absolute directory. The default is
+  `/run/sermo`.
+- paths.locks is rejected in the MVP. Named runtime locks are derived from
+  `<paths.runtime>/locks`; operation locks are derived from `<paths.runtime>/ops`.
+- `/etc/sermo/locks.d` has no MVP semantics and must not be scanned for active
+  locks.
 - security toggles that try to disable hard safety invariants are rejected. In
   the MVP, reject `security.require_preflight_before_restart`,
   `security.block_restart_on_active_lock`, `security.allow_sigkill_by_default`
@@ -2888,9 +2914,9 @@ either form works.
 - postflight uses the same entry schema and check types as preflight/checks.
 - optional, where present on a preflight, postflight or check entry, is a boolean.
 - file_exists checks must not point under Sermo's named runtime lock directory
-  (`/run/sermo/locks` by default); the operation engine already checks named
-  runtime locks. Point guard checks at a foreign lock/flag file Sermo does not
-  own.
+  (`<paths.runtime>/locks`, default `/run/sermo/locks`); the operation engine
+  already checks named runtime locks. Point guard checks at a foreign lock/flag
+  file Sermo does not own.
 - defaults.policy.cooldown must be present and a valid positive duration.
 - policy.cooldown, where set in a profile or service override, must be a valid
   positive duration.
@@ -3012,12 +3038,14 @@ internal/config:
   - unknown metric name for the declared scope is rejected
   - block/alert action requires a message; guard requires a blocks list
   - invalid service expect/state or process state value is rejected
+  - paths.runtime defaults to /run/sermo and derives distinct locks/ops dirs
+  - paths.locks is rejected; /etc/sermo/locks.d is not scanned for active locks
   - defaults.policy.cooldown is required and positive
   - resolved service policy.cooldown is required and positive; `0s` and missing
     resolved cooldown are invalid
   - postflight merges by name and uses the same check schema as preflight/checks
-  - file_exists checks under /run/sermo/locks are rejected; Sermo named runtime
-    locks are handled by the operation engine, not by guards
+  - file_exists checks under <paths.runtime>/locks are rejected; Sermo named
+    runtime locks are handled by the operation engine, not by guards
 
 internal/rules:
   - and/or/not evaluation
@@ -3067,8 +3095,8 @@ internal/operation:
   - restart returns orphan_processes and does not call Start when residuals remain
   - residual process handling with force_kill=false
   - internal operation lock released on every early-return path (no leak)
-  - internal operation lock path is /run/sermo/ops/<service>.lock and cannot
-    collide with a user lock named `op`
+  - internal operation lock path is <paths.runtime>/ops/<service>.lock and
+    cannot collide with a user lock named `op`
   - exactly one event emitted per operation, including blocked/failed paths
   - concurrent operation fails fast with exit 75 while the op lock is held
   - optional preflight failure warns but does not block; required failure blocks
@@ -3081,8 +3109,10 @@ internal/locks:
   - lock with a dead owner_pid is treated as stale and reclaimed
   - PID reuse detected via owner_start_ticks (alive PID, wrong start time)
   - lock file naming: <service>[.<name>].lock
+  - named runtime locks live under <paths.runtime>/locks and operation locks live
+    under <paths.runtime>/ops
   - a named runtime lock such as <service>.op.lock is separate from the internal
-    operation lock under /run/sermo/ops
+    operation lock under <paths.runtime>/ops
 
 internal/app (scheduler):
   - a long operation on one service does not block another service's cycles

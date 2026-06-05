@@ -116,7 +116,8 @@ the lock is active. In the MVP, only `sermoctl locks SERVICE` reporting and the
 operation engine's lock-blocking path are required, while `sermoctl lock` creation
 and release commands are post-MVP. Add a guard for a foreign signal Sermo does
 not own, such as a backup process or a flag file created by another tool. Do not
-point a `file_exists` check at `/run/sermo/locks/`.
+point a `file_exists` check at `<paths.runtime>/locks/` (default
+`/run/sermo/locks/`).
 
 Example:
 
