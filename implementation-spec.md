@@ -2763,7 +2763,9 @@ either form works.
 - engine.interval and engine.default_timeout are valid positive durations.
 - engine.max_parallel_checks, if set, is an integer > 0.
 - stop_policy.force_kill=true requires kill_only_if.
-- kill_only_if must define at least users or exe_any.
+- kill_only_if must define both users and exe_any, each non-empty. A kill selector
+  with only a user or only an executable is invalid because residual signaling
+  requires both an exact resolved /proc/<pid>/exe match and a real-UID match.
 - command checks and inline command conditions use array form, not shell string.
 - inline command conditions must declare a timeout.
 - then.action is one of restart, start, stop, alert, block (exec is post-MVP).
@@ -3159,7 +3161,8 @@ Hard rules:
 4. Never kill by process name only. A kill requires an exact match on the
    resolved /proc/<pid>/exe path and the real UID against kill_only_if; argv[0]
    and cmdline are never trusted. An unresolvable exe never matches (section 21).
-5. force_kill=true requires kill_only_if.
+5. force_kill=true requires kill_only_if with both an exact executable selector
+   (`exe_any`) and a real-user selector (`users`).
 6. Commands must be array form, not shell string.
 7. Avoid invoking shell unless explicitly configured later.
 8. Every action must produce a structured event.
