@@ -36,6 +36,11 @@ name: redis-cache
 clone: redis-main
 ```
 
+`clone` copies the source service in UNEXPANDED form (its fields and `variables`,
+with `${...}` still literal), so overriding a single variable in the clone changes
+what `${var}` resolves to after expansion. Same for `uses` with a profile. See
+`implementation-spec.md` section 8.
+
 ## Merge rules
 
 Use these rules:

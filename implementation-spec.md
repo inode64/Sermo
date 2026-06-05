@@ -402,6 +402,26 @@ Because variable expansion is step 5d — after every merge — a default, profi
 override may be written with `${var}` and is resolved using the variables visible
 on the final flattened service.
 
+`uses` and `clone` both form the middle precedence layer (step 5b), and both are
+taken in UNEXPANDED form:
+
+```text
+- uses copies the named profile's definition (fields and its variables) with
+  `${...}` still literal.
+- clone copies the source service's merged-but-unexpanded definition: the result
+  of resolving that source through its own defaults/uses/clone/overrides, but
+  BEFORE its variable expansion, including its `variables` map.
+- The cloning (or using) service then merges its own fields and variable
+  overrides on top, and expansion (step 5d) runs once on the combined result.
+```
+
+This is why a clone can override a single variable and have it take effect: in
+`redis-cache` (section 29) setting `port: 6380` works only because the clone
+copies `redis-main` before expansion, so the override changes the value that
+`${port}` resolves to. If clone copied an already-expanded source, the override
+would not reach the already-substituted checks. Clone chains resolve
+transitively; cycles are rejected (section 30).
+
 The daemon must only work with resolved, flat service definitions.
 
 ### Document sections
@@ -2704,6 +2724,13 @@ checks:
     command: ["/usr/bin/redis-cli", "-p", "6380", "ping"]
 ```
 
+Here `redis-main` is a service that `uses: redis` with the default `port: 6379`.
+Because clone copies it unexpanded (section 8), overriding the `port` variable to
+`6380` is enough: every check that references `${port}` resolves to the new value
+after expansion. The explicit `checks.tcp.port` and `ping` overrides above are
+redundant when the base uses `${port}`, and are shown only to illustrate that
+either form works.
+
 ---
 
 ## 30. Config validation requirements
@@ -2854,6 +2881,7 @@ internal/config:
   - a variable value containing ${...} is rejected (no nested variables)
   - any ${...} left after one expansion pass is an error
   - clone cycle detection
+  - clone copies the source unexpanded: a cloned variable override changes ${var}
   - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
   - metric value parsing (percentage vs absolute, invalid value rejected)
   - global defaults merge as base layer (defaults < profile < service overrides)
