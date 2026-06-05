@@ -374,13 +374,16 @@ sermoctl config validate
 sermoctl config render SERVICE
 ```
 
-Exit codes:
+Exit codes (canonical list and the `2` vs `78` distinction are defined in
+`implementation-spec.md` section 23; keep this in sync):
 
 ```text
-0   success / active
-1   expected false condition, such as inactive
-2   internal error or invalid config
-75  temporarily blocked action, such as active backup lock
+0   success / active / allowed
+1   expected false condition, such as inactive or a failed check
+2   internal or runtime error / backend not detected
+64  usage error (bad flags or arguments)
+75  temporarily blocked action, such as an active backup lock or guard
+78  configuration invalid (syntax, schema or `config validate` failure)
 ```
 
 ## Testing requirements
