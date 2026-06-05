@@ -58,6 +58,11 @@ Prefer a reliable local CLI/daemon first.
 
 ## Repository layout
 
+The canonical repository layout is defined in `implementation-spec.md` section 5.
+That document is the single source of truth; the tree below must stay in sync with
+it. If you need to change the layout, change `implementation-spec.md` section 5
+first and then update this section to match.
+
 Use this structure unless there is a strong reason to change it:
 
 ```text
@@ -68,20 +73,20 @@ sermo/
 │   └── sermoctl/
 │       └── main.go
 ├── internal/
-│   ├── actions/
-│   ├── checks/
-│   ├── config/
-│   ├── events/
-│   ├── execx/
-│   ├── locks/
-│   ├── operation/
-│   ├── policy/
-│   ├── process/
-│   ├── profiles/
-│   ├── rules/
-│   ├── safety/
-│   ├── servicemgr/
-│   └── supervisor/
+│   ├── app/          # daemon, scheduler and in-memory state (sermod)
+│   ├── checks/       # tcp, http, command, service, file, process, metric checks
+│   ├── cli/          # sermoctl command implementations
+│   ├── config/       # YAML model, loader, merge, render, variables, validate
+│   ├── events/       # structured event model and logger
+│   ├── execx/        # external command runner with mandatory timeouts
+│   ├── locks/        # internal runtime locks and external lock checks
+│   ├── metrics/      # cpu/memory collectors
+│   ├── operation/    # safe start/stop/restart engine (shared by sermod + sermoctl)
+│   ├── preflight/    # preflight runner reusing the check runner
+│   ├── process/      # discovery, procfs, tree, signal, residual handling
+│   ├── profiles/     # profile registry, resolver and sources
+│   ├── rules/        # condition AST, evaluator, windows, rule state
+│   └── servicemgr/   # backend detection, systemd_exec, openrc
 ├── profiles/
 │   ├── apache.yml
 │   ├── mysql.yml
@@ -99,6 +104,16 @@ sermo/
 │   └── skills/
 └── AGENTS.md
 ```
+
+Notes on package responsibilities:
+
+- Safe operation logic (the old `safety/` idea) lives inside `operation/` and
+  `process/` (residual detection, `kill_only_if` validation, signal escalation),
+  not in a separate package.
+- Cooldown/backoff and other action-gating policy (the old `policy/` idea) is
+  tracked in `rules/` rule state and enforced by `operation/`.
+- The daemon lifecycle (the old `supervisor/` idea) is `app/` (`daemon.go`,
+  `scheduler.go`, `state.go`).
 
 ## Dependencies
 
