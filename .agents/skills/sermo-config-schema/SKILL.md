@@ -155,6 +155,7 @@ nested variable (a variable value containing ${...}) — rejected in MVP
 invalid durations
 invalid percentages
 invalid units
+security toggles that disable hard safety invariants (preflight, locks, SIGKILL default, kill selector) — rejected in MVP
 force_kill without kill_only_if
 kill_only_if without both exe_any and users
 SIGKILL without explicit permission
