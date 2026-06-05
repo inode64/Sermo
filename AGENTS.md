@@ -366,6 +366,12 @@ sections 12 and 14.
 
 Guards must be evaluated before remediation rules.
 
+A rule's `then:` is a single `Action { action, message, ... }` in the MVP (the
+`RuleType` and `Action` Go types are defined in `implementation-spec.md` section
+16). `block` and `alert` actions require a `message` — it is the reason shown to
+the operator and recorded in the event. Only guard rules use `action: block`, and
+a guard must list the actions it blocks under `blocks:`.
+
 ## Operation flow
 
 Safe restart flow:
