@@ -7,22 +7,23 @@ You are the rule engine designer for Sermo.
 
 ## Rule model
 
-A rule has:
+`rules` is a map keyed by rule name (like `checks`/`preflight`/`processes`), not
+a list. The key is the rule name; there is no inner `name` field. This lets a
+service override or disable a single inherited rule. An entry has:
 
 ```text
-name
-type
-if condition tree
-optional window
-then action
-optional blocks for guard rules
+type           remediation | guard | alert        (RuleType)
+if             condition tree
+for / within   optional window
+then           a single Action { action, message, ... }   (ActionType)
+blocks         list of actions a guard blocks (guard rules only)
 ```
 
 Example:
 
 ```yaml
 rules:
-  - name: restart-if-port-failed
+  restart-if-port-failed:
     type: remediation
     if:
       failed:
@@ -33,6 +34,10 @@ rules:
     then:
       action: restart
 ```
+
+`RuleType`/`ActionType` constants and the `Action` struct are defined in
+`implementation-spec.md` section 16. `block` and `alert` actions require a
+`message`; only guard rules use `action: block`, and a guard must list `blocks`.
 
 ## Condition tree
 
@@ -62,6 +67,17 @@ if:
         active:
           check: backup-running
 ```
+
+`metric` leaves carry a `scope` (`service` default, or `system`). Remediation
+rules may only trigger on `scope: service` metrics; a `scope: system` metric may
+drive `alert` only — never restart/start/stop a single service.
+
+Conditions are read-only predicates. The evaluator runs every distinct probe (a
+declared check or an inline condition) at most once per cycle and caches the
+result, so a probe shared by several rules never executes twice in a cycle, and a
+condition must never change system state. Inline `command` conditions must be
+side-effect-free, array form, with a timeout. See `implementation-spec.md`
+section 14.
 
 ## Windows
 
@@ -99,14 +115,14 @@ Example guard:
 
 ```yaml
 rules:
-  - name: block-restart-during-backup
+  block-restart-during-backup:
     type: guard
     blocks:
       - restart
       - stop
     if:
       active:
-        check: mysql-backup-lock
+        check: mariabackup
     then:
       action: block
       message: "MySQL backup is running"
@@ -117,25 +133,46 @@ rules:
 Use this order:
 
 ```text
-1. Execute checks.
+1. Run all declared checks and any inline rule probes once; cache the results for
+   this cycle (each distinct probe runs at most once).
 2. Evaluate guard rules.
 3. Evaluate remediation/alert rules.
-4. If remediation requests an action, evaluate blocking guards again for that action.
-5. Execute safe operation if not blocked.
-6. Record event.
+4. If remediation requests an action, evaluate blocking guards for that action.
+5. If not blocked, consult the service remediation policy (cooldown, max_actions);
+   if suppressed, log and skip the action.
+6. Execute the safe operation through the shared engine if allowed.
+7. Update remediation state and record the event.
 ```
+
+Step 5 applies to automatic remediation only. Manual `sermoctl` actions are
+exempt from cooldown but still pass guards, locks and preflight.
 
 ## State
 
-Keep per-rule history:
+There are two distinct kinds of state; do not conflate them.
+
+Per-rule window state (for evaluating `for`/`within`):
 
 ```text
 service
 rule name
-cycle results
-last fired time
-cooldown state
+cycle results history (consecutive count, or rolling window of matches)
 ```
+
+Per-service remediation policy state (for cooldown/rate-limit), in
+`internal/rules/state.go`:
+
+```text
+LastActionAt    time of the last executed remediation action
+RecentActions   timestamps still inside max_actions_window
+CurrentBackoff  current backoff duration (0 when disabled)
+```
+
+Cooldown and rate limiting are a per-service `policy` block (cooldown,
+max_actions, max_actions_window, optional backoff), NOT per-rule. The daemon
+checks this policy before invoking the operation engine (evaluation order step
+5). A rule may keep firing every cycle while the cooldown suppresses repeated
+execution. See `implementation-spec.md` section 16.
 
 ## Testing
 
@@ -152,7 +189,10 @@ metric comparisons
 for cycles
 within cycles
 guard before remediation
-cooldown prevents repeated action
+metric scope (service vs system); system metric rejected in remediation
+a probe shared by several rules runs at most once per cycle
+cooldown suppresses repeated remediation; max_actions rate limits within window
+manual action is exempt from cooldown but still passes guards/locks/preflight
 invalid rule rejected
 ```
 
