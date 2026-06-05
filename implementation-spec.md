@@ -412,6 +412,10 @@ Only the per-service parts of `defaults` merge into a service: `stop_policy`,
 `max_parallel_checks`, `default_timeout`, `backend`) are daemon configuration and
 are NOT merged into individual services.
 
+The effective global `defaults.policy.cooldown` is required and must be positive
+so every resolved service inherits a loop-prevention cooldown unless it overrides
+that value with another positive duration.
+
 Because variable expansion is step 5d — after every merge — a default, profile or
 override may be written with `${var}` and is resolved using the variables visible
 on the final flattened service.
@@ -1486,7 +1490,7 @@ reason shown to the operator and recorded in the event; it is optional for
 ### Remediation policy: cooldown and rate limiting
 
 Automatic remediation must never enter a restart loop. Every service has a
-remediation policy that gates how often actions may actually run:
+resolved remediation policy that gates how often actions may actually run:
 
 ```yaml
 policy:
@@ -1504,7 +1508,7 @@ Field meaning:
 ```text
 cooldown            minimum time that must pass after an executed remediation
                     action before another automatic action may run for the
-                    same service. Required mechanism for MVP.
+                    same service. Required and positive for MVP.
 max_actions         maximum number of executed remediation actions allowed
                     inside max_actions_window. Optional for MVP.
 max_actions_window  sliding window for max_actions. Optional for MVP.
@@ -1563,6 +1567,13 @@ Decision rule for an automatic action on service S at time now:
 When a service defines no policy, the global `defaults.policy` applies (cooldown
 `5m` in the reference config), merged in as the base layer during resolution
 (section 8, step 5a).
+
+Validation is performed on the resolved service, after defaults, profiles,
+clones, overrides and variable expansion are applied. Therefore a profile or
+service document may omit `policy.cooldown` if it inherits one, but the rendered
+service must contain a positive `policy.cooldown`. A value of `0s` is invalid:
+it disables the loop-prevention mechanism and must not be used as a way to opt
+out of cooldown.
 
 ---
 
@@ -2863,7 +2874,11 @@ either form works.
 - file_exists checks must not point under Sermo's named runtime lock directory
   (`/run/sermo/locks` by default); use `sermoctl lock` without a guard, or point
   the check at a foreign lock/flag file Sermo does not own.
-- policy.cooldown, if set, must be a valid non-negative duration.
+- defaults.policy.cooldown must be present and a valid positive duration.
+- policy.cooldown, where set in a profile or service override, must be a valid
+  positive duration.
+- each resolved service must have policy.cooldown > 0 after defaults, profile or
+  clone data, overrides and variables are applied.
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
 - policy.backoff, if set, requires initial > 0 and max >= initial.
@@ -2980,6 +2995,9 @@ internal/config:
   - unknown metric name for the declared scope is rejected
   - block/alert action requires a message; guard requires a blocks list
   - invalid service expect/state or process state value is rejected
+  - defaults.policy.cooldown is required and positive
+  - resolved service policy.cooldown is required and positive; `0s` and missing
+    resolved cooldown are invalid
   - postflight merges by name and uses the same check schema as preflight/checks
   - file_exists checks under /run/sermo/locks are rejected; Sermo named runtime
     locks are handled by the operation engine, not by guards
@@ -3276,9 +3294,11 @@ Hard rules:
 7. Avoid invoking shell unless explicitly configured later.
 8. Every action must produce a structured event.
 9. sermod and sermoctl must share the same operation code path.
-10. Automatic remediation must respect the service cooldown/rate-limit policy and
-    must never enter a restart loop. Manual operator actions are exempt from
-    cooldown but still subject to locks, guards and preflight.
+10. Automatic remediation must respect the resolved service cooldown/rate-limit
+    policy. `policy.cooldown` is mandatory and positive after config resolution,
+    and automatic remediation must never enter a restart loop. Manual operator
+    actions are exempt from cooldown but still subject to locks, guards and
+    preflight.
 11. Remediation rules must trigger on service-scoped metrics only. A system-wide
     metric must never restart, start or stop an individual service; it may only
     drive an alert.

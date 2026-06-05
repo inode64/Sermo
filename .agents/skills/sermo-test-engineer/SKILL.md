@@ -67,6 +67,7 @@ postflight required failure returns postflight_failed; optional postflight warns
 lock blocking; atomic acquisition; TTL/dead-owner staleness and reclaim
 operation lock released on every early-return path; exactly one event
 cooldown suppression and max_actions rate limit; manual actions exempt
+missing or zero resolved policy.cooldown rejected
 scheduler: one worker per service; tick skipped (not queued) on overrun
 process discovery; exe matched by exact resolved /proc/<pid>/exe (never cmdline)
 residual handling: non-matching residual yields orphan_processes; no start after

@@ -233,12 +233,13 @@ These rules are mandatory.
 5. Never restart, start or stop a service when a matching guard blocks the action.
 6. Never restart or start when required preflight checks fail.
 7. Never perform service actions without a timeout.
-8. Never enter a restart loop. Automatic remediation must honor the per-service
-   `policy` block (cooldown, optional max_actions/backoff); see
-   `implementation-spec.md` section 16, "Remediation policy". Cooldown is decided
-   by the daemon's rule evaluation before the shared engine runs. Manual operator
-   commands are exempt from cooldown but still subject to locks, guards and
-   preflight.
+8. Never enter a restart loop. Automatic remediation must honor the resolved
+   per-service `policy` block; `policy.cooldown` is mandatory and positive after
+   config resolution, with optional max_actions/backoff; see
+   `implementation-spec.md` section 16, "Remediation policy". Cooldown is
+   decided by the daemon's rule evaluation before the shared engine runs. Manual
+   operator commands are exempt from cooldown but still subject to locks, guards
+   and preflight.
 9. Always log whether an action was executed or blocked, and why.
 10. Database profiles must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
@@ -397,6 +398,8 @@ base layer of every service, so a field omitted everywhere falls back to it.
 Engine-wide settings (interval, max_parallel_checks, default_timeout, backend) are
 daemon config and are NOT merged into services. Variable expansion runs once,
 after all merging. See `implementation-spec.md` section 8.
+The effective `defaults.policy.cooldown` is required and must be positive, and a
+service/profile override may only replace it with another positive duration.
 
 Numeric fields that may also be written as a string or carry a `${var}` (for
 example `port` and `expect_status`) use a tolerant scalar type that accepts an
@@ -586,6 +589,7 @@ postflight failure reporting
 lock blocking
 operation lock path does not collide with named runtime locks
 remediation cooldown and rate limiting
+positive resolved policy.cooldown validation
 safe restart sequencing
 restart never starts after orphan_processes
 process matching safety
