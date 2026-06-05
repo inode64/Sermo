@@ -178,6 +178,11 @@ These rules are mandatory.
     individual service; it may only drive an alert.
 14. Rule conditions are read-only predicates, evaluated at most once per cycle. A
     condition must never mutate system state; mutation belongs to actions.
+15. Locks are acquired atomically (O_CREAT|O_EXCL) and bounded by a TTL. A lock is
+    honored only while active; an expired lock, or one whose owner PID is dead
+    (checked via owner_start_ticks to survive PID reuse), is stale and must be
+    reclaimed through a logged path, never silently overwritten. Lock files are
+    named `<service>[.<name>].lock`. See `implementation-spec.md` section 20.
 
 ## Service manager abstraction
 
