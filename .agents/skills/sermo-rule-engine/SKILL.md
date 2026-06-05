@@ -168,11 +168,11 @@ RecentActions   timestamps still inside max_actions_window
 CurrentBackoff  current backoff duration (0 when disabled)
 ```
 
-Cooldown and rate limiting are a per-service `policy` block (cooldown,
-max_actions, max_actions_window, optional backoff), NOT per-rule. The daemon
-checks this policy before invoking the operation engine (evaluation order step
-5). A rule may keep firing every cycle while the cooldown suppresses repeated
-execution. See `implementation-spec.md` section 16.
+Cooldown and rate limiting are a per-service `policy` block (mandatory positive
+cooldown, optional max_actions/max_actions_window/backoff), NOT per-rule. The
+daemon checks this resolved policy before invoking the operation engine
+(evaluation order step 5). A rule may keep firing every cycle while the cooldown
+suppresses repeated execution. See `implementation-spec.md` section 16.
 
 ## Testing
 
@@ -191,7 +191,8 @@ within cycles
 guard before remediation
 metric scope (service vs system); system metric rejected in remediation
 a probe shared by several rules runs at most once per cycle
-cooldown suppresses repeated remediation; max_actions rate limits within window
+cooldown suppresses repeated remediation; zero/missing resolved cooldown is invalid
+max_actions rate limits within window
 manual action is exempt from cooldown but still passes guards/locks/preflight
 invalid rule rejected
 ```

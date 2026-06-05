@@ -22,9 +22,10 @@ Always verify:
 9. Process matching validates `exe` and `user`: `exe` is the resolved
    `/proc/<pid>/exe` path matched exactly (an unresolvable exe never matches);
    prefer `pidfile` or `cgroup` as extra evidence.
-10. Restart loops are prevented by the per-service `policy` cooldown (mandatory),
-    optionally `max_actions` rate limiting and backoff. Manual actions are exempt
-    from cooldown but still honor locks, guards and preflight.
+10. Restart loops are prevented by the resolved per-service `policy` cooldown
+    (mandatory and positive), optionally `max_actions` rate limiting and backoff.
+    Manual actions are exempt from cooldown but still honor locks, guards and
+    preflight.
 11. Residual processes after stop are handled conservatively: only residuals that
     exactly match `kill_only_if` are signaled; any remaining residual yields
     `orphan_processes` and no auto-start.
@@ -76,6 +77,7 @@ triggers remediation from a system-scope metric
 serializes all services through one loop (a long op blocks other services)
 leaks the operation lock on an early-return path
 exposes config toggles that disable hard safety invariants
+allows automatic remediation with missing or zero policy.cooldown
 ```
 
 ## Required tests
@@ -92,6 +94,7 @@ force_kill false does not send SIGKILL
 force_kill true requires kill_only_if
 process name-only matching is rejected; exe matched by resolved /proc/<pid>/exe
 restart cooldown prevents loops; manual actions are exempt
+missing or zero resolved policy.cooldown is rejected
 residual not matching kill_only_if yields orphan_processes; no start after orphans
 system-scope metric in a remediation rule is rejected
 operation lock released on every early-return path
