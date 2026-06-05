@@ -74,18 +74,24 @@ failed
 
 ## Package guidance
 
-Use these packages:
+Use these packages. This is the full internal/ layout; it must match
+`implementation-spec.md` section 5 and AGENTS.md — do not invent or drop packages:
 
 ```text
-internal/execx        command runner
-internal/servicemgr   systemd/openrc abstraction
-internal/config       YAML loading and validation
-internal/profiles     profiles, services, clones, render
+internal/app          daemon, scheduler and in-memory state (sermod)
 internal/checks       check implementations
-internal/rules        rule engine
-internal/locks        lock management
+internal/cli          sermoctl command implementations
+internal/config       YAML model, loading, merge, render, variables, validation
+internal/events       structured event model and logger
+internal/execx        command runner
+internal/locks        runtime locks and external lock checks
+internal/metrics      cpu/memory collectors (service and system scope)
+internal/operation    safe start/stop/restart workflows (shared by sermod+sermoctl)
+internal/preflight    preflight runner (reuses the check runner)
 internal/process      process discovery and signaling
-internal/operation    safe start/stop/restart workflows
+internal/profiles     profiles, services, clones, render
+internal/rules        rule engine, windows and remediation state
+internal/servicemgr   systemd/openrc abstraction
 ```
 
 ## Test requirements
