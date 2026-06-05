@@ -68,7 +68,8 @@ checks:
 
 ## Variables
 
-Support simple variable expansion:
+Support simple variable expansion. The TCP check takes separate `host` and
+`port` fields (there is no `address` field):
 
 ```yaml
 variables:
@@ -78,12 +79,53 @@ variables:
 checks:
   tcp:
     type: tcp
-    address: "${host}:${port}"
+    host: "${host}"
+    port: "${port}"
 ```
 
 Do not introduce complex templating unless requested.
 
 Validation must fail on unresolved variables.
+
+## Typed fields and variable interaction
+
+Variables are always strings, but some fields are logically numeric or have a
+small grammar. Use a tolerant scalar (`FlexInt`) for these so YAML never fails
+just because a value was quoted or carried a `${var}`; parse after expansion. See
+`implementation-spec.md` section 10.
+
+```text
+port           int, quoted string or ${var}; resolves to an int in 1..65535.
+expect_status  int, quoted string or ${var}; resolves to an int (HTTP status).
+timeout        duration string such as "3s".
+metric value   string with an optional trailing "%" (see Metrics below).
+```
+
+These are all valid and equivalent: `port: 783`, `port: "783"`, `port: "${port}"`.
+
+## Metrics
+
+Metric checks and metric conditions carry a `scope`:
+
+```yaml
+checks:
+  memory:
+    type: metric
+    scope: service        # service (default) | system
+    name: memory
+    op: ">"
+    value: 40%
+```
+
+```text
+scope: service  measures only this service (its process set / cgroup). Default.
+scope: system   measures the whole machine (total_memory, total_cpu, load*).
+value           "%" suffix = percentage 0..100; otherwise an absolute number.
+```
+
+Safety: a remediation rule may only trigger on a `scope: service` metric. A
+`scope: system` metric may drive `alert` only — never restart/start/stop a
+single service. See `implementation-spec.md` sections 12 and 14.
 
 ## Required validation
 
@@ -106,6 +148,11 @@ SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
 service without service.name
+metric scope is service or system, and name exists in that scope's catalog
+scope: system metric used in a remediation rule (must be alert only)
+typed fields (port, expect_status) parse to their target type after expansion
+policy: cooldown valid; max_actions requires max_actions_window
+block/alert actions require a message
 ```
 
 ## Rendered config
