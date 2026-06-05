@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"sermo/internal/execx"
@@ -91,6 +92,61 @@ func TestOpenRCManagerStatus(t *testing.T) {
 	}
 }
 
+func TestSystemdManagerActionsUseRunner(t *testing.T) {
+	rec := &recordRunner{}
+	m := systemdManager{runner: rec}
+	ctx := context.Background()
+
+	if err := m.Start(ctx, "nginx"); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := m.Stop(ctx, "nginx"); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if err := m.Restart(ctx, "nginx"); err != nil {
+		t.Fatalf("Restart() error = %v", err)
+	}
+
+	want := []string{
+		"systemctl start nginx.service",
+		"systemctl stop nginx.service",
+		"systemctl restart nginx.service",
+	}
+	if len(rec.calls) != len(want) {
+		t.Fatalf("calls = %v, want %v", rec.calls, want)
+	}
+	for i := range want {
+		if rec.calls[i] != want[i] {
+			t.Errorf("call[%d] = %q, want %q", i, rec.calls[i], want[i])
+		}
+	}
+}
+
+func TestSystemdManagerActionFailureUsesStderr(t *testing.T) {
+	m := systemdManager{runner: stubRunner{
+		result: execx.Result{Stderr: "Unit nginx.service not found.\n", ExitCode: 5},
+		err:    errors.New("exit 5"),
+	}}
+	err := m.Start(context.Background(), "nginx")
+	if err == nil {
+		t.Fatal("Start() error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("error = %v, want stderr detail", err)
+	}
+}
+
+func TestOpenRCManagerActionUsesRunner(t *testing.T) {
+	rec := &recordRunner{}
+	m := openrcManager{runner: rec}
+	if err := m.Restart(context.Background(), "nginx"); err != nil {
+		t.Fatalf("Restart() error = %v", err)
+	}
+	if len(rec.calls) != 1 || rec.calls[0] != "rc-service nginx restart" {
+		t.Fatalf("calls = %v, want [rc-service nginx restart]", rec.calls)
+	}
+}
+
 func TestNewManagerUnsupportedBackend(t *testing.T) {
 	if _, err := newManager(BackendAuto, stubRunner{}); err == nil {
 		t.Fatal("newManager(auto) error = nil, want unsupported error")
@@ -104,4 +160,17 @@ type stubRunner struct {
 
 func (r stubRunner) Run(context.Context, string, ...string) (execx.Result, error) {
 	return r.result, r.err
+}
+
+type recordRunner struct {
+	calls []string
+}
+
+func (r *recordRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	call := name
+	for _, arg := range args {
+		call += " " + arg
+	}
+	r.calls = append(r.calls, call)
+	return execx.Result{}, nil
 }

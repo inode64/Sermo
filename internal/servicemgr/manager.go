@@ -17,8 +17,16 @@ type ServiceStatus struct {
 }
 
 // Manager queries and controls services on a specific backend.
+//
+// Start, Stop and Restart are raw backend actions: they invoke the underlying
+// service manager and report whether it succeeded. They do NOT implement the
+// safe operation engine (locks, guards, preflight, residual-process handling);
+// that wraps these primitives separately.
 type Manager interface {
 	Status(ctx context.Context, service string) (ServiceStatus, error)
+	Start(ctx context.Context, service string) error
+	Stop(ctx context.Context, service string) error
+	Restart(ctx context.Context, service string) error
 }
 
 // NewManager returns a Manager for backend using the real host commands.
@@ -59,6 +67,27 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 	}, nil
 }
 
+func (m systemdManager) Start(ctx context.Context, service string) error {
+	return m.action(ctx, "start", service)
+}
+
+func (m systemdManager) Stop(ctx context.Context, service string) error {
+	return m.action(ctx, "stop", service)
+}
+
+func (m systemdManager) Restart(ctx context.Context, service string) error {
+	return m.action(ctx, "restart", service)
+}
+
+func (m systemdManager) action(ctx context.Context, verb, service string) error {
+	unit := systemdUnit(service)
+	result, err := m.runner.Run(ctx, "systemctl", verb, unit)
+	if err != nil {
+		return actionError(fmt.Sprintf("systemctl %s %s", verb, unit), result, err)
+	}
+	return nil
+}
+
 // openrcManager queries services through rc-service.
 type openrcManager struct {
 	runner execx.Runner
@@ -77,6 +106,39 @@ func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatu
 		Unit:    service,
 		Status:  openrcStatus(result),
 	}, nil
+}
+
+func (m openrcManager) Start(ctx context.Context, service string) error {
+	return m.action(ctx, "start", service)
+}
+
+func (m openrcManager) Stop(ctx context.Context, service string) error {
+	return m.action(ctx, "stop", service)
+}
+
+func (m openrcManager) Restart(ctx context.Context, service string) error {
+	return m.action(ctx, "restart", service)
+}
+
+func (m openrcManager) action(ctx context.Context, verb, service string) error {
+	result, err := m.runner.Run(ctx, "rc-service", service, verb)
+	if err != nil {
+		return actionError(fmt.Sprintf("rc-service %s %s", service, verb), result, err)
+	}
+	return nil
+}
+
+// actionError builds an error for a failed backend action, preferring the
+// command's stderr/stdout for a useful message and falling back to the raw
+// runner error (which carries the exit code).
+func actionError(command string, result execx.Result, err error) error {
+	if msg := strings.TrimSpace(result.Stderr); msg != "" {
+		return fmt.Errorf("%s: %s", command, msg)
+	}
+	if msg := strings.TrimSpace(result.Stdout); msg != "" {
+		return fmt.Errorf("%s: %s", command, msg)
+	}
+	return fmt.Errorf("%s: %w", command, err)
 }
 
 // systemdUnitSuffixes are the unit types systemd recognizes; a service name that

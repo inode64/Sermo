@@ -84,7 +84,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return exitSuccess
 	}
 	if opts.timeout <= 0 {
-		opts.timeout = 2 * time.Second
+		opts.timeout = defaultTimeout(opts.command)
 	}
 	if opts.backend == "" {
 		envBackend, err := servicemgr.ParseBackend(a.Env("SERMO_BACKEND"))
@@ -102,6 +102,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runStatus(ctx, opts)
 	case "is-active":
 		return a.runIsActive(ctx, opts)
+	case "start", "stop", "restart":
+		return a.runAction(ctx, opts, opts.command)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -183,6 +185,68 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
+// runAction performs a raw backend start/stop/restart and reports the resulting
+// status. It does not implement the safe operation engine (locks, guards,
+// preflight); that wraps these primitives in a later step.
+func (a App) runAction(ctx context.Context, opts options, action string) int {
+	if opts.service == "" {
+		fmt.Fprintf(a.Stderr, "usage error: %s requires a service name\n", action)
+		writeUsage(a.Stderr)
+		return exitUsage
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
+	defer cancel()
+
+	detection, err := a.Detector.Detect(ctx, opts.backend)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
+		return exitRuntimeError
+	}
+
+	manager, err := a.NewManager(detection.Backend)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
+		return exitRuntimeError
+	}
+
+	var actErr error
+	switch action {
+	case "start":
+		actErr = manager.Start(ctx, opts.service)
+	case "stop":
+		actErr = manager.Stop(ctx, opts.service)
+	case "restart":
+		actErr = manager.Restart(ctx, opts.service)
+	}
+	if actErr != nil {
+		a.reportError(opts, fmt.Sprintf("%s failed: %v", action, actErr))
+		return exitRuntimeError
+	}
+
+	// Verify and report the state the action left the service in.
+	status, err := manager.Status(ctx, opts.service)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
+		return exitRuntimeError
+	}
+
+	switch {
+	case opts.json:
+		writeJSON(a.Stdout, actionJSON{
+			Service: status.Service,
+			Action:  action,
+			Backend: string(status.Backend),
+			Status:  string(status.Status),
+			Unit:    status.Unit,
+		})
+	case !opts.quiet:
+		fmt.Fprintf(a.Stdout, "%s %s status=%s backend=%s service=%s\n",
+			status.Service, action, status.Status, status.Backend, status.Unit)
+	}
+	return exitSuccess
+}
+
 // serviceStatus resolves the backend, builds a manager and queries the service.
 // On any failure it reports the error and returns a non-success exit code.
 func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int) {
@@ -222,6 +286,25 @@ type statusJSON struct {
 	Backend string `json:"backend"`
 	Status  string `json:"status"`
 	Unit    string `json:"unit"`
+}
+
+type actionJSON struct {
+	Service string `json:"service"`
+	Action  string `json:"action"`
+	Backend string `json:"backend"`
+	Status  string `json:"status"`
+	Unit    string `json:"unit"`
+}
+
+// defaultTimeout returns the per-command outer deadline used when --timeout is
+// not given. Backend actions can legitimately take much longer than a probe.
+func defaultTimeout(command string) time.Duration {
+	switch command {
+	case "start", "stop", "restart":
+		return 90 * time.Second
+	default:
+		return 2 * time.Second
+	}
 }
 
 func statusToJSON(status servicemgr.ServiceStatus) statusJSON {
@@ -291,7 +374,7 @@ func parseArgs(args []string) (options, error) {
 
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--json] [--quiet] [--timeout duration] COMMAND [SERVICE]")
-	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE")
+	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
 }
 
 func writeJSON(w io.Writer, value any) {
