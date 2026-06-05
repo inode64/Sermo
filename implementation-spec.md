@@ -979,6 +979,38 @@ Each condition node must contain exactly one of:
 and, or, not, failed, active, metric, service, process, file, command.
 ```
 
+### Condition evaluation semantics
+
+Conditions must be cheap and repeatable, because rules are evaluated on every
+scheduler cycle. To keep cost predictable and avoid side effects, the evaluator
+treats every leaf condition as a probe that runs at most once per cycle:
+
+```text
+1. At the start of a cycle, run all declared checks once and cache their results.
+2. Collect every inline leaf condition used across all rules (inline tcp, file,
+   process, metric, command) and deduplicate them by their normalized parameters.
+3. Run each distinct inline probe at most once and cache the result for the cycle.
+4. Evaluate all rule trees (guards first, then remediation) against the cached
+   results. `failed`/`active` references and inline conditions never cause a
+   second execution within the same cycle.
+```
+
+So the number of probe executions per cycle equals the number of distinct probes,
+independent of how many rules reference them.
+
+Inline `command` conditions:
+
+```text
+- Must be a read-only predicate: they decide true/false and must not change
+  system state. If you need to gate or mutate, use a guard or an action, not a
+  condition.
+- Use array form with a timeout, exactly like command checks.
+- Run once per cycle like any other probe.
+- Recommended: declare anything expensive or with external effects as a named
+  check under `checks:` and reference it with `failed`/`active`. That makes its
+  cost and intent explicit and includes it in `config render`.
+```
+
 ---
 
 ## 15. Rule windows
@@ -1266,7 +1298,8 @@ rules:
 Evaluation order:
 
 ```text
-1. Run checks.
+1. Run all declared checks and any inline rule probes once, and cache the results
+   for this cycle (see section 14, condition evaluation semantics).
 2. Evaluate guard rules.
 3. Evaluate remediation rules.
 4. If remediation wants an action, check whether any guard blocks that action.
@@ -2144,7 +2177,8 @@ checks:
 - backend is one of auto, systemd, openrc.
 - stop_policy.force_kill=true requires kill_only_if.
 - kill_only_if must define at least users or exe_any.
-- command checks use array form, not shell string.
+- command checks and inline command conditions use array form, not shell string.
+- inline command conditions must declare a timeout.
 - policy.cooldown, if set, must be a valid non-negative duration.
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
@@ -2264,6 +2298,7 @@ internal/rules:
   - within sliding windows
   - cooldown suppression of repeated remediation
   - max_actions rate limiting within window
+  - a probe shared by several rules runs at most once per cycle (memoization)
 
 internal/servicemgr:
   - systemd unit normalization
@@ -2498,6 +2533,9 @@ Hard rules:
 11. Remediation rules must trigger on service-scoped metrics only. A system-wide
     metric must never restart, start or stop an individual service; it may only
     drive an alert.
+12. Rule conditions are read-only predicates evaluated at most once per cycle.
+    A condition must never change system state; mutation belongs to actions, not
+    to conditions.
 ```
 
 ---
