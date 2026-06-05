@@ -13,6 +13,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -22,6 +23,7 @@ const (
 	exitNotActive     = 1
 	exitRuntimeError  = 2
 	exitUsage         = 64
+	exitBlocked       = 75
 	exitConfigInvalid = 78
 )
 
@@ -36,9 +38,13 @@ type App struct {
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
 	LoadConfig func(globalPath string) (*config.Config, error)
 	Discover   func(selectors []process.Selector) ([]process.Process, []string)
-	Env        func(string) string
-	Stdout     io.Writer
-	Stderr     io.Writer
+	// Operate runs a start/stop/restart through the operation engine for a
+	// resolved service. Injectable for testing; the error covers backend/wiring
+	// failures (the Result carries operational outcomes).
+	Operate func(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error)
+	Env     func(string) string
+	Stdout  io.Writer
+	Stderr  io.Writer
 }
 
 type options struct {
@@ -71,6 +77,7 @@ func Main(ctx context.Context, args []string) int {
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
 	}
+	app.Operate = app.defaultOperate
 	return app.Run(ctx, args)
 }
 
@@ -96,6 +103,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.Discover == nil {
 		a.Discover = process.NewDiscoverer().Discover
+	}
+	if a.Operate == nil {
+		a.Operate = a.defaultOperate
 	}
 
 	opts, err := parseArgs(args)
@@ -218,66 +228,134 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
-// runAction performs a raw backend start/stop/restart and reports the resulting
-// status. It does not implement the safe operation engine (locks, guards,
-// preflight); that wraps these primitives in a later step.
+// runAction performs a start/stop/restart through the safe operation engine
+// (section 18): the resolved service is run under the internal operation lock,
+// active named runtime locks, required preflight, guards, residual-process
+// handling and postflight. Manual sermoctl actions are not rate limited, but are
+// fully guarded (section 16).
 func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if opts.service() == "" {
 		fmt.Fprintf(a.Stderr, "usage error: %s requires a service name\n", action)
 		writeUsage(a.Stderr)
 		return exitUsage
 	}
+	service := opts.service()
+
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+	if _, ok := cfg.Services[service]; !ok {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
+		return exitRuntimeError
+	}
+	resolved, errs := cfg.Resolve(service)
+	if len(errs) > 0 {
+		a.printIssues(opts, scopedIssues(service, errs))
+		return exitConfigInvalid
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
+	result, err := a.Operate(ctx, opts, cfg, resolved, service, action)
+	if err != nil {
+		a.reportError(opts, err.Error())
+		return exitRuntimeError
+	}
+
+	if opts.json {
+		writeJSON(a.Stdout, result)
+	} else if !opts.quiet {
+		a.printOperation(result)
+	}
+	return operationExit(result.Status)
+}
+
+// defaultOperate wires the real operation engine from a resolved service and
+// runs the requested action.
+func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
-		return exitRuntimeError
+		return operation.Result{}, fmt.Errorf("backend detection failed: %v", err)
 	}
-
 	manager, err := a.NewManager(detection.Backend)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
-		return exitRuntimeError
+		return operation.Result{}, fmt.Errorf("service manager unavailable: %v", err)
 	}
 
-	var actErr error
+	runtime := cfg.Global.RuntimeDir()
+	locker := locks.NewOperationLocker(filepath.Join(runtime, "ops"))
+	engine := operation.New(operation.Config{
+		Service:    service,
+		Unit:       serviceUnit(resolved.Tree, service),
+		Backend:    string(detection.Backend),
+		Tree:       resolved.Tree,
+		Manager:    manager,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(runtime, "locks")),
+		Discoverer: process.NewDiscoverer(),
+		CheckDeps:  checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
+	})
+
 	switch action {
 	case "start":
-		actErr = manager.Start(ctx, opts.service())
+		return engine.Start(ctx), nil
 	case "stop":
-		actErr = manager.Stop(ctx, opts.service())
+		return engine.Stop(ctx), nil
 	case "restart":
-		actErr = manager.Restart(ctx, opts.service())
+		return engine.Restart(ctx), nil
+	default:
+		return operation.Result{}, fmt.Errorf("unknown action %q", action)
 	}
-	if actErr != nil {
-		a.reportError(opts, fmt.Sprintf("%s failed: %v", action, actErr))
-		return exitRuntimeError
-	}
+}
 
-	// Verify and report the state the action left the service in.
-	status, err := manager.Status(ctx, opts.service())
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
-		return exitRuntimeError
+func (a App) printOperation(r operation.Result) {
+	switch r.Status {
+	case operation.ResultOK:
+		fmt.Fprintf(a.Stdout, "%s %s ok\n", r.Service, r.Action)
+	case operation.ResultBlocked:
+		fmt.Fprintf(a.Stdout, "BLOCKED %s %s\n", r.Service, r.Action)
+		if r.Message != "" {
+			fmt.Fprintf(a.Stdout, "reason: %s\n", r.Message)
+		}
+	default:
+		fmt.Fprintf(a.Stdout, "%s %s %s\n", r.Service, r.Action, r.Status)
+		if r.Message != "" {
+			fmt.Fprintf(a.Stdout, "reason: %s\n", r.Message)
+		}
 	}
+	for _, c := range r.Checks {
+		if !c.OK {
+			fmt.Fprintf(a.Stdout, "  check %s failed: %s\n", c.Check, c.Message)
+		}
+	}
+	for _, p := range r.Processes {
+		exe := p.Exe
+		if !p.ExeOK {
+			exe = "unknown"
+		}
+		fmt.Fprintf(a.Stdout, "  residual pid=%d exe=%s\n", p.PID, exe)
+	}
+}
 
-	switch {
-	case opts.json:
-		writeJSON(a.Stdout, actionJSON{
-			Service: status.Service,
-			Action:  action,
-			Backend: string(status.Backend),
-			Status:  string(status.Status),
-			Unit:    status.Unit,
-		})
-	case !opts.quiet:
-		fmt.Fprintf(a.Stdout, "%s %s status=%s backend=%s service=%s\n",
-			status.Service, action, status.Status, status.Backend, status.Unit)
+// operationExit maps an operation result status to a process exit code (§23).
+func operationExit(status operation.ResultStatus) int {
+	switch status {
+	case operation.ResultOK:
+		return exitSuccess
+	case operation.ResultBlocked:
+		return exitBlocked
+	case operation.ResultFailed:
+		return exitRuntimeError
+	default: // preflight_failed, postflight_failed, orphan_processes
+		return exitNotActive
 	}
-	return exitSuccess
 }
 
 // runConfig dispatches the `config` subcommands (validate, render).
@@ -724,14 +802,6 @@ func (a App) reportError(opts options, msg string) {
 
 type statusJSON struct {
 	Service string `json:"service"`
-	Backend string `json:"backend"`
-	Status  string `json:"status"`
-	Unit    string `json:"unit"`
-}
-
-type actionJSON struct {
-	Service string `json:"service"`
-	Action  string `json:"action"`
 	Backend string `json:"backend"`
 	Status  string `json:"status"`
 	Unit    string `json:"unit"`
