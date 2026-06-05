@@ -386,6 +386,37 @@ Resolution order:
 
 The daemon must only work with resolved, flat service definitions.
 
+### Document sections
+
+A profile or service may contain these top-level sections, all maps keyed by
+name where applicable:
+
+```text
+service       backend target name and backend selector
+aliases       per-backend candidate unit names (section 11)
+variables     string variables for ${...} expansion (section 10)
+commands      optional named auxiliary commands (below)
+preflight     checks run before dangerous actions (section 19)
+processes     process discovery selectors (section 21)
+checks        monitoring checks (section 12)
+stop_policy   stop/kill behaviour (section 22)
+policy        remediation cooldown/rate limit (section 16)
+rules         guard/remediation/alert rules (section 13)
+```
+
+`commands` is optional, informational metadata: named commands an operator may
+want to keep with the profile (for example a version command). The MVP loads and
+validates them (array form, optional timeout) and `sermoctl service show` may
+display them, but the engine never runs them automatically as part of monitoring
+or remediation.
+
+```yaml
+commands:
+  version:
+    command: ["apachectl", "-v"]
+    timeout: 5s
+```
+
 ---
 
 ## 9. Merge rules
@@ -652,6 +683,40 @@ rc-service SERVICE start
 rc-service SERVICE stop
 rc-service SERVICE restart
 ```
+
+### Unit aliases
+
+The unit name differs across distributions (Apache is `apache2` on Debian,
+`httpd` on RHEL). A profile may list per-backend candidate names with `aliases`:
+
+```yaml
+service:
+  name: apache2
+  backend: auto
+
+aliases:
+  systemd:
+    - apache2.service
+    - httpd.service
+  openrc:
+    - apache2
+    - apache
+```
+
+Resolution, once the backend is known:
+
+```text
+1. Build the candidate list: service.name first, then aliases for the active
+   backend, in order, deduplicated.
+2. systemd: normalize each candidate (append `.service` if it has no unit
+   suffix). openrc: use the name as-is.
+3. Pick the first candidate the backend actually knows (systemd:
+   `systemctl cat`/`list-unit-files`; openrc: the init script exists). Cache it.
+4. If none resolve, fail with a clear error listing the candidates tried.
+```
+
+All later operations on the service use the resolved name. If `aliases` is
+absent, the candidate list is just `service.name`.
 
 ---
 
@@ -1498,6 +1563,30 @@ preflight:
 ```
 
 For MVP, implement preflight by reusing the check runner.
+
+### Optional preflight entries
+
+A preflight entry may set `optional: true`:
+
+```yaml
+preflight:
+  libraries:
+    type: libraries
+    binary: /usr/sbin/apache2
+    optional: true
+```
+
+```text
+- A required preflight entry (the default, optional:false) that fails blocks the
+  action and returns preflight_failed.
+- An optional preflight entry that fails is recorded as a warning in the result
+  and event, but does NOT block the action.
+- An optional entry that cannot run at all (tool missing) is treated the same as
+  a failed optional entry: a warning, not a block.
+```
+
+Use `optional` for best-effort validations such as `libraries` (ldd), which can
+be unreliable; never for the authoritative config test.
 
 Special check types to implement:
 
@@ -2450,6 +2539,9 @@ checks:
 - guard rules must use action block; only guard rules may use block.
 - block and alert actions require a non-empty message.
 - type: guard requires a non-empty blocks list; non-guard rules must not set blocks.
+- aliases keys are valid backends (systemd, openrc); each value is a non-empty list.
+- commands entries use array form with an optional valid duration timeout.
+- optional, where present on a preflight or check entry, is a boolean.
 - policy.cooldown, if set, must be a valid non-negative duration.
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
@@ -2576,6 +2668,7 @@ internal/servicemgr:
   - systemd unit normalization
   - backend detection with fake paths/commands
   - openrc status parsing
+  - alias resolution picks the first existing unit; clear error when none resolve
 
 internal/process:
   - pidfile parsing
@@ -2590,6 +2683,7 @@ internal/operation:
   - internal operation lock released on every early-return path (no leak)
   - exactly one event emitted per operation, including blocked/failed paths
   - concurrent operation fails fast with exit 75 while the op lock is held
+  - optional preflight failure warns but does not block; required failure blocks
 
 internal/locks:
   - atomic acquisition fails when an active lock already exists

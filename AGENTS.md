@@ -247,7 +247,11 @@ services
 clones
 overrides
 variables
+aliases          # per-backend candidate unit names (see spec section 11)
+commands         # optional informational commands, never auto-run
 checks
+preflight        # entries may set optional: true (best-effort, non-blocking)
+processes
 rules
 guards
 locks

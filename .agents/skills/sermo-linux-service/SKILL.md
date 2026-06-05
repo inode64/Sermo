@@ -98,6 +98,12 @@ aliases:
     - apache
 ```
 
+Resolution (see `implementation-spec.md` section 11): build the candidate list as
+`service.name` followed by the aliases for the active backend, normalize for the
+backend (systemd appends `.service`), pick the first candidate the backend
+actually knows, and cache it. If none resolve, fail with a clear error listing
+the candidates tried.
+
 ## Testing
 
 Use fake command runners. Do not require real systemd or OpenRC in unit tests.
@@ -111,6 +117,7 @@ both present
 neither present
 systemd degraded
 service name normalization
+alias resolution picks first existing unit; clear error when none resolve
 status parsing
 command timeout
 ```
