@@ -26,7 +26,7 @@ Always verify:
     optionally `max_actions` rate limiting and backoff. Manual actions are exempt
     from cooldown but still honor locks, guards and preflight.
 11. Residual processes after stop are handled conservatively: only residuals that
-    exactly match `kill_only_if` are signalled; any remaining residual yields
+    exactly match `kill_only_if` are signaled; any remaining residual yields
     `orphan_processes` and no auto-start.
 12. Every executed or blocked action records exactly one auditable event.
 13. Database profiles default to `force_kill: false`.

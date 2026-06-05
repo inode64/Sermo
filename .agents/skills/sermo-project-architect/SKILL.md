@@ -21,7 +21,7 @@ When this skill is active:
 
 1. Preserve the separation between daemon, CLI and shared internal engine.
 2. Keep the MVP small and operationally safe.
-3. Prefer explicit interfaces over hidden coupling.
+3. Prefer explicit interfaces to hidden coupling.
 4. Keep config rendering separate from runtime execution.
 5. Ensure new features fit the model: checks, rules, guards, locks, operations.
 6. Reject designs where `sermod` and `sermoctl` duplicate service-action logic.
