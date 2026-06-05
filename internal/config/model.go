@@ -36,6 +36,9 @@ type Document struct {
 	Body map[string]any
 }
 
+// DefaultRuntime is the runtime root used when paths.runtime is unset.
+const DefaultRuntime = "/run/sermo"
+
 // Global is the effective global configuration (sermo.yml plus conf.d), kept
 // mostly generic so its `defaults` block merges into services unchanged.
 type Global struct {
@@ -45,6 +48,14 @@ type Global struct {
 	Profiles []string
 	Enabled  []string
 	Runtime  string
+}
+
+// RuntimeDir returns the runtime root, falling back to the default when unset.
+func (g Global) RuntimeDir() string {
+	if g.Runtime == "" {
+		return DefaultRuntime
+	}
+	return g.Runtime
 }
 
 // Config is the full loaded configuration set.
