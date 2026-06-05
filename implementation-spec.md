@@ -330,16 +330,23 @@ defaults:
   policy:
     cooldown: 5m
 
-security:
-  require_preflight_before_restart: true
-  block_restart_on_active_lock: true
-  allow_sigkill_by_default: false
-  require_kill_selector: true
-
 logging:
   level: info
   format: text
 ```
+
+Safety invariants are not configurable in YAML. In particular:
+
+```text
+- Required preflight entries always block start/restart on failure.
+- Active named runtime locks always block service actions.
+- SIGKILL is never allowed by default.
+- force_kill=true always requires a restrictive kill_only_if selector.
+```
+
+Do not add `security:` toggles such as `allow_sigkill_by_default` or
+`block_restart_on_active_lock`; validation must reject them instead of treating
+them as policy.
 
 ---
 
@@ -2810,6 +2817,10 @@ either form works.
 - backend is one of auto, systemd, openrc.
 - engine.interval and engine.default_timeout are valid positive durations.
 - engine.max_parallel_checks, if set, is an integer > 0.
+- security toggles that try to disable hard safety invariants are rejected. In
+  the MVP, reject `security.require_preflight_before_restart`,
+  `security.block_restart_on_active_lock`, `security.allow_sigkill_by_default`
+  and `security.require_kill_selector`; these are not configurable policy.
 - stop_policy.force_kill=true requires kill_only_if.
 - kill_only_if must define both users and exe_any, each non-empty. A kill selector
   with only a user or only an executable is invalid because residual signaling

@@ -75,6 +75,7 @@ lets remediation bypass locks
 triggers remediation from a system-scope metric
 serializes all services through one loop (a long op blocks other services)
 leaks the operation lock on an early-return path
+exposes config toggles that disable hard safety invariants
 ```
 
 ## Required tests
