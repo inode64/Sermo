@@ -173,6 +173,9 @@ These rules are mandatory.
 10. Database profiles must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
 12. A failed stop with residual processes must not automatically start the service unless policy explicitly allows it.
+13. Remediation must trigger on service-scoped metrics only. A system-wide metric
+    (total memory, total CPU, load) must never restart, start or stop an
+    individual service; it may only drive an alert.
 
 ## Service manager abstraction
 
@@ -345,6 +348,13 @@ rules:
     then:
       action: restart
 ```
+
+Metric conditions carry a `scope` (`service`, the default, or `system`). Service
+metrics measure only the monitored service (its discovered process set or
+cgroup); system metrics measure the whole machine. Remediation rules must use
+service-scoped metrics only — a system-wide metric may drive an `alert` but must
+never restart, start or stop an individual service. See `implementation-spec.md`
+sections 12 and 14.
 
 Guards must be evaluated before remediation rules.
 
