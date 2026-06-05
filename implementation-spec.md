@@ -47,9 +47,10 @@ Sermo should provide:
 3. Safe restart workflow:
    - check locks
    - run preflight validation
-   - stop/restart via detected backend
-   - verify residual processes
+   - stop via detected backend
+   - verify residual processes before any start
    - optionally escalate to SIGTERM/SIGKILL only when explicitly allowed
+   - start via detected backend only if the stop phase is clean
    - run postflight checks
 4. Declarative YAML configuration.
 5. Packaged base profiles for applications such as Apache, Redis, MySQL/MariaDB and PHP-FPM.
@@ -693,6 +694,12 @@ type Manager interface {
     Restart(ctx context.Context, service string) error
 }
 ```
+
+`Manager.Restart` may wrap a backend's native restart command for backend-level
+capability, but the safe operation engine must not use it for Sermo restart
+actions. A Sermo restart is always `Stop` -> residual process handling -> `Start`
+so `orphan_processes` can abort the operation before the service is started
+again.
 
 Backend detection priority:
 
@@ -1615,14 +1622,17 @@ Restart flow:
 6. Run preflight checks required for restart. If preflight fails, return
    preflight_failed.
 7. If any guard blocks restart, return blocked.
-8. Execute backend restart, or stop/start.
-9. Verify final service status.
-10. Discover residual processes.
-11. If residual processes remain:
+8. Execute backend Stop.
+9. Wait graceful_timeout, then discover residual processes.
+10. If residual processes remain:
     - if force_kill=false, return orphan_processes.
     - if force_kill=true, apply the signal escalation policy.
-12. Run postflight checks.
-13. Return the result (ok or the relevant failure status).
+11. Rediscover residual processes after any signal escalation. If any remain,
+    return orphan_processes and do NOT start the service.
+12. Execute backend Start.
+13. Verify final service status.
+14. Run postflight checks.
+15. Return the result (ok or the relevant failure status).
 ```
 
 Every numbered step from 5 onward is a possible early return. The two deferred
@@ -2930,6 +2940,9 @@ internal/operation:
   - restart blocked by guard
   - restart blocked by preflight failure
   - restart blocked by active lock
+  - restart uses backend Stop then Start, never backend Restart, so residual
+    checks happen before any start
+  - restart returns orphan_processes and does not call Start when residuals remain
   - residual process handling with force_kill=false
   - internal operation lock released on every early-return path (no leak)
   - exactly one event emitted per operation, including blocked/failed paths

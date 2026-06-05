@@ -209,6 +209,11 @@ type Manager interface {
 }
 ```
 
+`Manager.Restart` may exist as a backend primitive, but Sermo's safe operation
+engine must not use it for `sermoctl restart` or automatic remediation. A safe
+restart is always `Stop` -> residual process handling -> `Start`, so any
+`orphan_processes` result aborts before the service is started again.
+
 Backends:
 
 ```text
@@ -425,13 +430,15 @@ Safe restart flow:
 3. defer: emit exactly one event from the final result (registered first).
 4. Acquire internal operation lock (atomic; fail fast if held by a live owner).
 5. defer: release the lock (registered only after a successful acquire).
-6. Evaluate blocking locks.        # any of 6-11 may return early
+6. Evaluate blocking locks.        # any of 6-13 may return early
 7. Run required preflight checks.
 8. Evaluate guard rules.
-9. Execute stop/restart/start through servicemgr.
+9. For restart, execute Stop through servicemgr.
 10. Wait for graceful stop where applicable.
-11. Discover residual processes; apply stop_policy.
-12. Run postflight checks and return the result.
+11. Discover residual processes and apply stop_policy.
+12. If any residual remains, return `orphan_processes` and do not start.
+13. Execute Start through servicemgr only after the stop phase is clean.
+14. Run postflight checks and return the result.
 ```
 
 The two deferred steps mean the event always fires and the lock is always
@@ -501,6 +508,7 @@ preflight blocking
 lock blocking
 remediation cooldown and rate limiting
 safe restart sequencing
+restart never starts after orphan_processes
 process matching safety
 SIGKILL policy validation
 ```
