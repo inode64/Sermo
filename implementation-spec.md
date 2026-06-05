@@ -264,10 +264,16 @@ Enabled services:
 /etc/sermo/apps-enabled/*.yml
 ```
 
-Runtime locks:
+Named runtime locks:
 
 ```text
 /run/sermo/locks/*.lock
+```
+
+Internal operation locks:
+
+```text
+/run/sermo/ops/*.lock
 ```
 
 Recommended complete layout:
@@ -1646,7 +1652,7 @@ The internal operation lock:
 ```text
 - It serializes start/stop/restart for one service so two operations never run
   concurrently (a manual sermoctl action and an automatic sermod remediation, or
-  two manual actions). Path: /run/sermo/locks/<service>.op.lock.
+  two manual actions). Path: /run/sermo/ops/<service>.lock.
 - Acquire it atomically with O_CREAT|O_EXCL, following the lock lifecycle in
   section 20.
 - If it is already held by a LIVE owner, fail fast: return a blocked result with
@@ -1657,6 +1663,9 @@ The internal operation lock:
 - It is distinct from the named runtime locks created by `sermoctl lock`
   (section 20): those guard against external work like backups; this one guards
   against overlapping operations.
+- It lives outside /run/sermo/locks on purpose, so it cannot collide with a
+  valid user lock such as `sermoctl lock mysql --name op`, and the named runtime
+  lock scanner must never report the operation lock as a user-held lock.
 ```
 
 For databases, default `force_kill` must be false.
@@ -1815,8 +1824,14 @@ Package: `internal/locks`
 
 Support two categories:
 
-1. Internal runtime locks created by Sermo.
+1. Named runtime locks created by Sermo through `sermoctl lock`.
 2. External lock checks defined in service profiles.
+
+The internal operation lock from section 18 is deliberately separate from this
+namespace. It uses `/run/sermo/ops/<service>.lock`, follows the same atomic
+lifecycle, and serializes overlapping operations. It is not created by
+`sermoctl lock`, is not listed as a named runtime lock, and cannot be released by
+`sermoctl lock release`.
 
 CLI lock command:
 
@@ -1861,7 +1876,9 @@ told apart from a live one even after PID reuse.
 Acquisition is atomic:
 
 ```text
-1. Create the lock file with O_CREAT|O_EXCL under /run/sermo/locks.
+1. Create the lock file with O_CREAT|O_EXCL under the lock namespace directory
+   (`/run/sermo/locks` for named runtime locks, `/run/sermo/ops` for operation
+   locks).
 2. If it already exists, the existing lock is held UNLESS it is stale (below).
    A new holder must never silently overwrite a live lock.
 3. Write the JSON payload and fsync the file, then fsync the directory so a lock
@@ -2945,6 +2962,8 @@ internal/operation:
   - restart returns orphan_processes and does not call Start when residuals remain
   - residual process handling with force_kill=false
   - internal operation lock released on every early-return path (no leak)
+  - internal operation lock path is /run/sermo/ops/<service>.lock and cannot
+    collide with a user lock named `op`
   - exactly one event emitted per operation, including blocked/failed paths
   - concurrent operation fails fast with exit 75 while the op lock is held
   - optional preflight failure warns but does not block; required failure blocks
@@ -2955,6 +2974,8 @@ internal/locks:
   - lock with a dead owner_pid is treated as stale and reclaimed
   - PID reuse detected via owner_start_ticks (alive PID, wrong start time)
   - lock file naming: <service>[.<name>].lock
+  - a named runtime lock such as <service>.op.lock is separate from the internal
+    operation lock under /run/sermo/ops
 
 internal/app (scheduler):
   - a long operation on one service does not block another service's cycles
