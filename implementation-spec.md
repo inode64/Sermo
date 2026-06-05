@@ -433,7 +433,8 @@ policy:
   cooldown: 5m
 ```
 
-Named sections must be maps, not arrays:
+Named sections must be maps keyed by name, not arrays. This applies to `checks`,
+`preflight`, `processes` and `rules`:
 
 ```yaml
 checks:
@@ -818,11 +819,13 @@ Package: `internal/rules`
 
 Rules are declarative logical trees.
 
-A rule has:
+`rules` is a map keyed by the rule name, like `checks`, `preflight` and
+`processes` (see section 9). The key is the rule name; there is no separate
+`name` field inside the entry. A rule has:
 
 ```yaml
 rules:
-  - name: string
+  RULE_NAME:
     type: remediation | guard | alert
     if: {}
     for: {}
@@ -830,7 +833,14 @@ rules:
     then: {}
 ```
 
-Only `if` and `then` are mandatory.
+Keying rules by name lets a service override or disable a single inherited rule
+(for example change `for.cycles`, or set `enabled: false`) exactly the way check
+overrides work. Only `if` and `then` are mandatory.
+
+Rule evaluation does not depend on map order. Guards are always evaluated before
+remediation (by `type`), and at most one remediation action runs per service per
+cycle; when several remediation rules are satisfied at once, they are considered
+in sorted key order and the first non-blocked action wins.
 
 If no `for` or `within` is defined, default is equivalent to:
 
@@ -1039,7 +1049,7 @@ YAML:
 
 ```yaml
 rules:
-  - name: port-783-down
+  port-783-down:
     type: remediation
     if:
       failed:
@@ -1066,7 +1076,7 @@ YAML:
 
 ```yaml
 rules:
-  - name: high-cpu
+  high-cpu:
     type: remediation
     if:
       metric:
@@ -1093,7 +1103,7 @@ YAML:
 
 ```yaml
 rules:
-  - name: high-memory
+  high-memory:
     type: remediation
     if:
       metric:
@@ -1121,8 +1131,11 @@ This means the condition must be true at least 5 times in the last 15 cycles.
 Go model:
 
 ```go
+// Rules are loaded as `Rules map[string]Rule`, keyed by rule name, like checks.
+// The map key is the canonical name; Rule.Name is filled from the key during
+// resolution and is not read from a yaml `name` field.
 type Rule struct {
-    Name   string    `yaml:"name"`
+    Name   string    `yaml:"-"`
     Type   RuleType  `yaml:"type"`
     If     Condition `yaml:"if"`
     For    *ForWindow `yaml:"for,omitempty"`
@@ -1314,7 +1327,7 @@ Example: block restart if config is invalid.
 
 ```yaml
 rules:
-  - name: block-restart-if-config-invalid
+  block-restart-if-config-invalid:
     type: guard
     blocks:
       - restart
@@ -1331,7 +1344,7 @@ Example: block stop/restart during backup.
 
 ```yaml
 rules:
-  - name: block-restart-during-backup
+  block-restart-during-backup:
     type: guard
     blocks:
       - restart
@@ -1567,7 +1580,7 @@ checks:
     state: running
 
 rules:
-  - name: block-restart-during-backup
+  block-restart-during-backup:
     type: guard
     blocks: [restart, stop]
     if:
@@ -1908,7 +1921,7 @@ stop_policy:
       - "${binary}"
 
 rules:
-  - name: block-restart-if-config-invalid
+  block-restart-if-config-invalid:
     type: guard
     blocks: [restart, start]
     if:
@@ -1918,7 +1931,7 @@ rules:
       action: block
       message: "Apache configuration is invalid"
 
-  - name: restart-if-http-failed
+  restart-if-http-failed:
     type: remediation
     if:
       failed:
@@ -1948,7 +1961,7 @@ checks:
     expect_status: 200
 
 rules:
-  - name: restart-if-http-failed
+  restart-if-http-failed:
     type: remediation
     if:
       failed:
@@ -2044,7 +2057,7 @@ policy:
   max_actions_window: 1h
 
 rules:
-  - name: block-restart-if-config-invalid
+  block-restart-if-config-invalid:
     type: guard
     blocks: [restart, start]
     if:
@@ -2054,7 +2067,7 @@ rules:
       action: block
       message: "MySQL configuration is invalid"
 
-  - name: block-restart-during-backup
+  block-restart-during-backup:
     type: guard
     blocks: [restart, stop]
     if:
@@ -2064,7 +2077,7 @@ rules:
       action: block
       message: "MySQL backup lock is active"
 
-  - name: restart-if-tcp-failed
+  restart-if-tcp-failed:
     type: remediation
     if:
       failed:
@@ -2075,7 +2088,7 @@ rules:
     then:
       action: restart
 
-  - name: restart-if-ping-failed
+  restart-if-ping-failed:
     type: remediation
     if:
       failed:
@@ -2086,7 +2099,7 @@ rules:
     then:
       action: restart
 
-  - name: restart-if-memory-high
+  restart-if-memory-high:
     type: remediation
     if:
       metric:
@@ -2167,7 +2180,7 @@ stop_policy:
   force_kill: false
 
 rules:
-  - name: restart-if-tcp-failed
+  restart-if-tcp-failed:
     type: remediation
     if:
       failed:
@@ -2178,7 +2191,7 @@ rules:
     then:
       action: restart
 
-  - name: restart-if-ping-failed
+  restart-if-ping-failed:
     type: remediation
     if:
       failed:
@@ -2230,7 +2243,8 @@ checks:
 - clone points to an existing service.
 - Clone cycles are rejected.
 - Variables referenced with ${...} exist.
-- Each rule has name, if and then.
+- rules is a map keyed by name; rule names are unique within a service.
+- Each rule has if and then (the name is the map key).
 - Each condition node has exactly one condition/operator.
 - for.cycles > 0.
 - within.cycles > 0.
