@@ -255,11 +255,12 @@ These rules are mandatory.
 15. Locks are acquired atomically (O_CREAT|O_EXCL) and bounded by a TTL. A lock is
     honored only while active; an expired lock, or one whose owner PID is dead
     (checked via owner_start_ticks to survive PID reuse), is stale and must be
-    reclaimed through a logged path, never silently overwritten. Lock files are
-    named `<service>[.<name>].lock` for named runtime locks created by
-    `sermoctl lock`. The internal operation lock uses the separate path
-    `/run/sermo/ops/<service>.lock` so it cannot collide with a user lock named
-    `op`. See `implementation-spec.md` sections 18 and 20.
+    reclaimed through a logged path, never silently overwritten. Named runtime
+    lock files use `<service>[.<name>].lock` under `/run/sermo/locks`; the
+    `sermoctl lock` commands that create/release them are post-MVP. The internal
+    operation lock uses the separate path `/run/sermo/ops/<service>.lock` so it
+    cannot collide with a user lock named `op`. See `implementation-spec.md`
+    sections 18 and 20.
 16. The scheduler runs one independent worker per service; a long operation
     (a multi-minute restart) on one service must never block monitoring of
     another. Never serialize all services through a single loop. Mass restarts
@@ -527,11 +528,13 @@ section 18.
 
 Step 6 ("evaluate blocking locks") and step 8 ("evaluate guard rules") are two
 distinct, complementary mechanisms — not two ways to do the same thing. Step 6
-blocks automatically on Sermo's own runtime locks (created by `sermoctl lock`);
-step 8 blocks on guard rules over checks of foreign signals Sermo does not own (a
-backup process, a foreign flag file). A `file_exists`/`process` check must point
-at a foreign signal, never at a file under `/run/sermo/locks/` (that would
-duplicate step 6). See `implementation-spec.md` section 20.
+blocks automatically on Sermo's own named runtime lock files; step 8 blocks on
+guard rules over checks of foreign signals Sermo does not own (a backup process,
+a foreign flag file). A `file_exists`/`process` check must point at a foreign
+signal, never at a file under `/run/sermo/locks/` (that would duplicate step 6).
+The `sermoctl lock` creation/release commands are post-MVP; MVP CLI scope only
+requires `sermoctl locks SERVICE` for reporting. See `implementation-spec.md`
+section 20.
 
 ## CLI expectations
 
@@ -550,6 +553,10 @@ sermoctl locks SERVICE
 sermoctl config validate
 sermoctl config render SERVICE
 ```
+
+For the MVP, `sermoctl locks SERVICE` is a reporting command. Commands that
+create or release named runtime locks (`sermoctl lock ...`, `sermoctl lock
+acquire`, `sermoctl lock release`) are post-MVP.
 
 Exit codes (canonical list and the `2` vs `78` distinction are defined in
 `implementation-spec.md` section 23; keep this in sync):
