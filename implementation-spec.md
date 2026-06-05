@@ -741,11 +741,15 @@ checks:
 
 ### File exists
 
+Use this to detect a foreign flag/lock file written by another tool. Do not point
+it at Sermo's own lock files under `/run/sermo/locks/` — the engine already checks
+those (section 20).
+
 ```yaml
 checks:
-  backup-lock:
+  backup-flag:
     type: file_exists
-    path: /run/sermo/locks/mysql.backup.lock
+    path: /run/mysql-backup/in-progress
 ```
 
 ### Process exists
@@ -893,7 +897,7 @@ if:
 ```yaml
 if:
   active:
-    check: backup-lock
+    check: backup-flag
 ```
 
 ### Inline TCP failure
@@ -1352,7 +1356,7 @@ rules:
     if:
       or:
         - active:
-            check: backup-lock
+            check: backup-flag
         - active:
             check: mariabackup
     then:
@@ -1397,7 +1401,8 @@ Restart flow:
    set the result to blocked and return (step 2 still emits the event).
 4. defer: release the internal operation lock. Registered ONLY after a successful
    acquire, so the engine never releases a lock it does not hold.
-5. Check external locks. If an active lock blocks the action, return blocked.
+5. Check Sermo runtime locks: if any active named lock exists for this service
+   (section 20, category 1), return blocked. This is automatic and needs no rule.
 6. Run preflight checks required for restart. If preflight fails, return
    preflight_failed.
 7. If any guard blocks restart, return blocked.
@@ -1677,14 +1682,37 @@ type ActiveLock struct {
 }
 ```
 
-External lock checks example:
+### Two blocking mechanisms, and when to use each
+
+The two lock categories are complementary, not two ways to do the same thing:
+
+```text
+Category 1 — Sermo runtime locks (preferred when you can wrap the work).
+  Created with `sermoctl lock`. The operation engine blocks automatically on any
+  active named lock for the service (section 18, step 5). No rule is needed.
+  Use when the protecting job can call `sermoctl lock ... -- COMMAND`.
+
+Category 2 — external lock CHECKS gated by a guard.
+  A check (file_exists, process, ...) over a signal Sermo does NOT own: a backup
+  process started without `sermoctl lock`, or a foreign lock/flag file written by
+  another tool. Gate it with a guard rule.
+  Use when you cannot make the protecting job call `sermoctl lock`.
+```
+
+They compose: an action is blocked if a Sermo runtime lock is active OR a guard
+blocks it. Both run on every operation.
+
+Do not model the same signal both ways. A `file_exists` check pointing at a path
+under `/run/sermo/locks/` duplicates the engine's category-1 check and is a sign
+the guard should be removed (use the runtime lock) or the check should point at a
+foreign signal instead. Category-2 checks should reference foreign processes or
+foreign files, never Sermo's own lock files.
+
+External lock check example (category 2 — a backup tool that does not call
+`sermoctl lock`, so it is detected by its process):
 
 ```yaml
 checks:
-  backup-lock:
-    type: file_exists
-    path: /run/sermo/locks/mysql.backup.lock
-
   mariabackup:
     type: process
     exe: /usr/bin/mariabackup
@@ -1696,15 +1724,15 @@ rules:
     type: guard
     blocks: [restart, stop]
     if:
-      or:
-        - active:
-            check: backup-lock
-        - active:
-            check: mariabackup
+      active:
+        check: mariabackup
     then:
       action: block
       message: "MySQL backup is running"
 ```
+
+A backup run as `sermoctl lock mysql --name backup -- mariabackup ...` needs no
+such guard: the runtime lock blocks the restart on its own.
 
 ---
 
@@ -2150,9 +2178,15 @@ checks:
     command: ["${clientadmin}", "ping"]
     timeout: 5s
 
-  backup-lock:
-    type: file_exists
-    path: /run/sermo/locks/mysql.backup.lock
+  # Category-2 external lock check: a mariabackup run that did NOT go through
+  # `sermoctl lock` is detected by its process. A backup wrapped in
+  # `sermoctl lock mysql --name backup` is blocked by the engine automatically
+  # and needs no check or guard here (see section 20).
+  mariabackup:
+    type: process
+    exe: /usr/bin/mariabackup
+    user: "${user}"
+    state: running
 
 stop_policy:
   graceful_timeout: 120s
@@ -2184,10 +2218,10 @@ rules:
     blocks: [restart, stop]
     if:
       active:
-        check: backup-lock
+        check: mariabackup
     then:
       action: block
-      message: "MySQL backup lock is active"
+      message: "MySQL backup is running"
 
   restart-if-tcp-failed:
     type: remediation

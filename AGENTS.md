@@ -408,6 +408,14 @@ lock and always emits exactly one event. Use Go `defer` in that order; never
 repeat release/record at each early return. See `implementation-spec.md`
 section 18.
 
+Step 6 ("evaluate blocking locks") and step 8 ("evaluate guard rules") are two
+distinct, complementary mechanisms — not two ways to do the same thing. Step 6
+blocks automatically on Sermo's own runtime locks (created by `sermoctl lock`);
+step 8 blocks on guard rules over checks of foreign signals Sermo does not own (a
+backup process, a foreign flag file). A `file_exists`/`process` check must point
+at a foreign signal, never at a file under `/run/sermo/locks/` (that would
+duplicate step 6). See `implementation-spec.md` section 20.
+
 ## CLI expectations
 
 Minimum CLI commands:
