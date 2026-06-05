@@ -146,6 +146,7 @@ unknown check types
 unknown rule condition types
 unknown actions
 missing variables
+nested variable (a variable value containing ${...}) — rejected in MVP
 invalid durations
 invalid percentages
 invalid units
