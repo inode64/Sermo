@@ -9,14 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
 
 const (
-	exitSuccess      = 0
-	exitNotActive    = 1
-	exitRuntimeError = 2
-	exitUsage        = 64
+	exitSuccess       = 0
+	exitNotActive     = 1
+	exitRuntimeError  = 2
+	exitUsage         = 64
+	exitConfigInvalid = 78
 )
 
 // BackendDetector detects the service manager backend.
@@ -28,6 +30,7 @@ type BackendDetector interface {
 type App struct {
 	Detector   BackendDetector
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
+	LoadConfig func(globalPath string) (*config.Config, error)
 	Env        func(string) string
 	Stdout     io.Writer
 	Stderr     io.Writer
@@ -39,8 +42,17 @@ type options struct {
 	quiet   bool
 	help    bool
 	timeout time.Duration
+	config  string
 	command string
-	service string
+	args    []string
+}
+
+// service returns the first positional argument after the command.
+func (o options) service() string {
+	if len(o.args) == 0 {
+		return ""
+	}
+	return o.args[0]
 }
 
 // Main runs sermoctl using process IO.
@@ -48,6 +60,7 @@ func Main(ctx context.Context, args []string) int {
 	app := App{
 		Detector:   servicemgr.NewDetector(),
 		NewManager: servicemgr.NewManager,
+		LoadConfig: config.Load,
 		Env:        os.Getenv,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
@@ -71,6 +84,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.NewManager == nil {
 		a.NewManager = servicemgr.NewManager
+	}
+	if a.LoadConfig == nil {
+		a.LoadConfig = config.Load
 	}
 
 	opts, err := parseArgs(args)
@@ -104,6 +120,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runIsActive(ctx, opts)
 	case "start", "stop", "restart":
 		return a.runAction(ctx, opts, opts.command)
+	case "config":
+		return a.runConfig(opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -139,7 +157,7 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 }
 
 func (a App) runStatus(ctx context.Context, opts options) int {
-	if opts.service == "" {
+	if opts.service() == "" {
 		fmt.Fprintln(a.Stderr, "usage error: status requires a service name")
 		writeUsage(a.Stderr)
 		return exitUsage
@@ -161,7 +179,7 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 }
 
 func (a App) runIsActive(ctx context.Context, opts options) int {
-	if opts.service == "" {
+	if opts.service() == "" {
 		fmt.Fprintln(a.Stderr, "usage error: is-active requires a service name")
 		writeUsage(a.Stderr)
 		return exitUsage
@@ -189,7 +207,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 // status. It does not implement the safe operation engine (locks, guards,
 // preflight); that wraps these primitives in a later step.
 func (a App) runAction(ctx context.Context, opts options, action string) int {
-	if opts.service == "" {
+	if opts.service() == "" {
 		fmt.Fprintf(a.Stderr, "usage error: %s requires a service name\n", action)
 		writeUsage(a.Stderr)
 		return exitUsage
@@ -213,11 +231,11 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	var actErr error
 	switch action {
 	case "start":
-		actErr = manager.Start(ctx, opts.service)
+		actErr = manager.Start(ctx, opts.service())
 	case "stop":
-		actErr = manager.Stop(ctx, opts.service)
+		actErr = manager.Stop(ctx, opts.service())
 	case "restart":
-		actErr = manager.Restart(ctx, opts.service)
+		actErr = manager.Restart(ctx, opts.service())
 	}
 	if actErr != nil {
 		a.reportError(opts, fmt.Sprintf("%s failed: %v", action, actErr))
@@ -225,7 +243,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	}
 
 	// Verify and report the state the action left the service in.
-	status, err := manager.Status(ctx, opts.service)
+	status, err := manager.Status(ctx, opts.service())
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
 		return exitRuntimeError
@@ -247,6 +265,141 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	return exitSuccess
 }
 
+// runConfig dispatches the `config` subcommands (validate, render).
+func (a App) runConfig(opts options) int {
+	if len(opts.args) == 0 {
+		fmt.Fprintln(a.Stderr, "usage error: config requires a subcommand (validate|render)")
+		writeUsage(a.Stderr)
+		return exitUsage
+	}
+
+	sub := opts.args[0]
+	rest := opts.args[1:]
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+
+	switch sub {
+	case "render":
+		return a.runConfigRender(globalPath, rest, opts)
+	case "validate":
+		return a.runConfigValidate(globalPath, rest, opts)
+	default:
+		fmt.Fprintf(a.Stderr, "usage error: unknown config subcommand %q\n", sub)
+		writeUsage(a.Stderr)
+		return exitUsage
+	}
+}
+
+func (a App) runConfigRender(globalPath string, rest []string, opts options) int {
+	if len(rest) == 0 {
+		fmt.Fprintln(a.Stderr, "usage error: config render requires a service name")
+		return exitUsage
+	}
+	service := rest[0]
+
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+	if _, ok := cfg.Services[service]; !ok {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
+		return exitRuntimeError
+	}
+
+	resolved, errs := cfg.Resolve(service)
+	if len(errs) > 0 {
+		a.printIssues(opts, scopedIssues(service, errs))
+		return exitConfigInvalid
+	}
+
+	var out []byte
+	if opts.json {
+		out, err = config.RenderJSON(resolved)
+	} else {
+		out, err = config.RenderYAML(resolved)
+	}
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("render failed: %v", err))
+		return exitRuntimeError
+	}
+
+	_, _ = a.Stdout.Write(out)
+	if n := len(out); n == 0 || out[n-1] != '\n' {
+		fmt.Fprintln(a.Stdout)
+	}
+	return exitSuccess
+}
+
+func (a App) runConfigValidate(globalPath string, rest []string, opts options) int {
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+
+	issues := config.Validate(cfg)
+	if len(rest) > 0 {
+		issues = filterIssues(issues, rest[0])
+	}
+
+	if len(issues) == 0 {
+		switch {
+		case opts.json:
+			writeJSON(a.Stdout, map[string]any{"valid": true})
+		case !opts.quiet:
+			fmt.Fprintln(a.Stdout, "OK")
+		}
+		return exitSuccess
+	}
+
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{"valid": false, "errors": issuesJSON(issues)})
+	} else {
+		a.printIssues(opts, issues)
+	}
+	return exitConfigInvalid
+}
+
+// printIssues writes validation findings in the section-30 ERROR format.
+func (a App) printIssues(opts options, issues []config.Issue) {
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{"valid": false, "errors": issuesJSON(issues)})
+		return
+	}
+	for _, is := range issues {
+		fmt.Fprintf(a.Stderr, "ERROR %s:\n  %s\n", is.Scope, is.Msg)
+	}
+}
+
+func scopedIssues(scope string, msgs []string) []config.Issue {
+	issues := make([]config.Issue, 0, len(msgs))
+	for _, m := range msgs {
+		issues = append(issues, config.Issue{Scope: scope, Msg: m})
+	}
+	return issues
+}
+
+func filterIssues(issues []config.Issue, scope string) []config.Issue {
+	out := make([]config.Issue, 0, len(issues))
+	for _, is := range issues {
+		if is.Scope == scope {
+			out = append(out, is)
+		}
+	}
+	return out
+}
+
+func issuesJSON(issues []config.Issue) []map[string]string {
+	out := make([]map[string]string, 0, len(issues))
+	for _, is := range issues {
+		out = append(out, map[string]string{"scope": is.Scope, "error": is.Msg})
+	}
+	return out
+}
+
 // serviceStatus resolves the backend, builds a manager and queries the service.
 // On any failure it reports the error and returns a non-success exit code.
 func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int) {
@@ -265,7 +418,7 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 
-	status, err := manager.Status(ctx, opts.service)
+	status, err := manager.Status(ctx, opts.service())
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
 		return servicemgr.ServiceStatus{}, exitRuntimeError
@@ -359,22 +512,29 @@ func parseArgs(args []string) (options, error) {
 				return opts, fmt.Errorf("--timeout: %w", err)
 			}
 			opts.timeout = timeout
+		case strings.HasPrefix(arg, "--config="):
+			opts.config = strings.TrimPrefix(arg, "--config=")
+		case arg == "--config":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--config requires a value")
+			}
+			opts.config = args[i]
 		case strings.HasPrefix(arg, "-"):
 			return opts, fmt.Errorf("unknown flag %s", arg)
 		case opts.command == "":
 			opts.command = arg
-		case opts.service == "":
-			opts.service = arg
 		default:
-			return opts, fmt.Errorf("unexpected argument %q", arg)
+			opts.args = append(opts.args, arg)
 		}
 	}
 	return opts, nil
 }
 
 func writeUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--json] [--quiet] [--timeout duration] COMMAND [SERVICE]")
+	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
+	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE")
 }
 
 func writeJSON(w io.Writer, value any) {
