@@ -320,6 +320,9 @@ defaults:
     kill_timeout: 5s
     force_kill: false
 
+  policy:
+    cooldown: 5m
+
 security:
   require_preflight_before_restart: true
   block_restart_on_active_lock: true
@@ -411,7 +414,7 @@ Maps merge recursively:
 
 ```yaml
 policy:
-  failures_before_action: 3
+  max_actions: 3
   cooldown: 2m
 ```
 
@@ -426,7 +429,7 @@ becomes:
 
 ```yaml
 policy:
-  failures_before_action: 3
+  max_actions: 3
   cooldown: 5m
 ```
 
@@ -1002,6 +1005,86 @@ then:
 
 For MVP, implement only single action.
 
+### Remediation policy: cooldown and rate limiting
+
+Automatic remediation must never enter a restart loop. Every service has a
+remediation policy that gates how often actions may actually run:
+
+```yaml
+policy:
+  cooldown: 5m
+  max_actions: 5
+  max_actions_window: 1h
+  backoff:
+    initial: 1m
+    factor: 2
+    max: 30m
+```
+
+Field meaning:
+
+```text
+cooldown            minimum time that must pass after an executed remediation
+                    action before another automatic action may run for the
+                    same service. Required mechanism for MVP.
+max_actions         maximum number of executed remediation actions allowed
+                    inside max_actions_window. Optional for MVP.
+max_actions_window  sliding window for max_actions. Optional for MVP.
+backoff             optional exponential growth of the effective cooldown after
+                    each consecutive remediation. Optional, post-MVP.
+```
+
+Relationship to rule windows:
+
+```text
+for / within  decide WHEN a rule fires (how many failed cycles are needed).
+policy        decides whether the action is allowed to run RIGHT NOW, given how
+              recently the service was already acted upon.
+```
+
+These are independent. A rule may keep firing every cycle while the cooldown
+suppresses repeated execution. `for`/`within` must not be abused as a cooldown.
+
+Scope:
+
+```text
+- Cooldown and rate limiting apply to AUTOMATIC remediation performed by sermod.
+- Manual operator actions (sermoctl restart, etc.) are NOT subject to cooldown;
+  the operator is acting deliberately. They remain subject to locks, guards and
+  preflight.
+- The shared operation engine performs the action. The cooldown decision is made
+  by the daemon's rule evaluation BEFORE it calls the engine, so manual and
+  automatic paths still share the same engine while only automatic remediation is
+  rate limited.
+```
+
+Remediation state lives in `internal/rules/state.go`, keyed by service:
+
+```go
+type RemediationState struct {
+    LastActionAt   time.Time
+    RecentActions  []time.Time   // timestamps still inside max_actions_window
+    CurrentBackoff time.Duration // 0 when backoff is disabled
+}
+```
+
+Decision rule for an automatic action on service S at time now:
+
+```text
+1. If now - LastActionAt < effective cooldown -> suppress (log, do not act).
+   effective cooldown = max(policy.cooldown, CurrentBackoff).
+2. Else if max_actions is set and len(RecentActions within window) >= max_actions
+   -> suppress (log, do not act).
+3. Else allow. After the engine runs:
+   - set LastActionAt = now
+   - append now to RecentActions and trim entries outside the window
+   - if backoff enabled, grow CurrentBackoff (capped at backoff.max)
+   - on a healthy interval with no firing rule, decay/reset CurrentBackoff.
+```
+
+When a service defines no policy, the global `defaults.policy` applies (cooldown
+`5m` in the reference config).
+
 ---
 
 ## 17. Guard rules
@@ -1091,6 +1174,12 @@ Restart flow:
 ```
 
 For databases, default `force_kill` must be false.
+
+The operation engine does not implement cooldown or rate limiting itself: those
+gate the *decision* to act and are enforced by the daemon's rule evaluation
+before the engine is called (see section 16, "Remediation policy"). This keeps
+manual `sermoctl` actions and automatic `sermod` remediation on the same engine
+while only automatic remediation is rate limited.
 
 Operation result model:
 
@@ -1495,9 +1584,12 @@ Distinction between `2` and `78`:
    - run checks
    - evaluate guards
    - evaluate remediation rules
-   - execute safe operation if required
+   - if a remediation rule fires, consult the service remediation policy
+     (cooldown, max_actions); if suppressed, log and skip the action
+   - execute safe operation through the shared engine only if allowed
+   - update remediation state (LastActionAt, RecentActions, backoff)
    - persist in-memory rule state
-   - log event
+   - log event, recording whether the action was executed or suppressed and why
 6. Handle SIGTERM cleanly.
 7. Handle SIGHUP by reloading config later; MVP may log unsupported.
 ```
@@ -1715,6 +1807,11 @@ stop_policy:
     exe_any:
       - "${binary}"
 
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+
 rules:
   - name: block-restart-if-config-invalid
     type: guard
@@ -1912,6 +2009,10 @@ checks:
 - stop_policy.force_kill=true requires kill_only_if.
 - kill_only_if must define at least users or exe_any.
 - command checks use array form, not shell string.
+- policy.cooldown, if set, must be a valid non-negative duration.
+- policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
+- policy.max_actions_window, if set, must be a valid positive duration.
+- policy.backoff, if set, requires initial > 0 and max >= initial.
 ```
 
 Example error output:
@@ -2013,6 +2114,8 @@ internal/rules:
   - metric comparison
   - for consecutive windows
   - within sliding windows
+  - cooldown suppression of repeated remediation
+  - max_actions rate limiting within window
 
 internal/servicemgr:
   - systemd unit normalization
@@ -2234,6 +2337,9 @@ Hard rules:
 7. Avoid invoking shell unless explicitly configured later.
 8. Every action must produce a structured event.
 9. sermod and sermoctl must share the same operation code path.
+10. Automatic remediation must respect the service cooldown/rate-limit policy and
+    must never enter a restart loop. Manual operator actions are exempt from
+    cooldown but still subject to locks, guards and preflight.
 ```
 
 ---
