@@ -1454,10 +1454,22 @@ Exit codes:
 ```text
 0   success / active / allowed
 1   service inactive, check failed or rule false
-2   internal error / config error / backend not detected
-64  usage error
+2   internal or runtime error / backend not detected
+64  usage error (bad flags or arguments)
 75  temporarily blocked by lock or guard
-78  configuration invalid
+78  configuration invalid (syntax, schema or validation failure)
+```
+
+Distinction between `2` and `78`:
+
+```text
+78  the configuration itself is wrong: YAML syntax error, missing kind/name,
+    unknown variable, unresolved uses/clone, failed `config validate`.
+    Use 78 whenever the problem is in the config files the operator can fix.
+2   everything else that is not a clean false (1), a usage error (64),
+    a temporary block (75) or a config problem (78): I/O errors, backend
+    not detected, an exec that could not be launched, an unexpected panic
+    recovered at the top level.
 ```
 
 `is-active` behavior:
