@@ -148,6 +148,7 @@ SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
 service without service.name
+service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog
 scope: system metric used in a remediation rule (must be alert only)
 typed fields (port, expect_status) parse to their target type after expansion
