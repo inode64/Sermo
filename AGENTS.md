@@ -383,6 +383,13 @@ service-scoped metrics only — a system-wide metric may drive an `alert` but mu
 never restart, start or stop an individual service. See `implementation-spec.md`
 sections 12 and 14.
 
+Rate metrics (cpu, total_cpu) are a delta between two samples, so the
+`internal/metrics` collector is stateful and sampled once per cycle; on the first
+cycle a rate is not-ready and its condition evaluates to false (no remediation on
+a warm-up value). Instantaneous metrics (memory, process_count, load) need no
+history. A metric `Check` stays single-shot — it reads the collector, which holds
+the state. See section 12.
+
 Guards must be evaluated before remediation rules.
 
 A rule's `then:` is a single `Action { action, message, ... }` in the MVP (the
