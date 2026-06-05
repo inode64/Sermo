@@ -2225,9 +2225,25 @@ its own operation runs is fine — monitoring a service mid-restart is meaningle
 and the internal operation lock (section 18) already forbids a second concurrent
 operation on it.
 
-Cycle overlap: if a worker's cycle is still running when its next tick fires
-(typically an operation in progress), that tick is SKIPPED, not queued; log it at
-debug. The interval is a minimum spacing, not a guarantee.
+Cycle overlap. A cycle (checks + evaluation + any operation) can exceed
+`interval`, mainly when an operation is in progress. The rules:
+
+```text
+- If a worker's cycle is still running when its next tick fires, that tick is
+  SKIPPED, not queued. Ticks never accumulate: a cycle that overruns by several
+  intervals causes several skips, not a backlog of catch-up cycles afterwards.
+- Skipping is per service: one service overrunning never delays another worker.
+- A multi-interval operation (a 120s restart with a 30s interval) is expected to
+  skip ~4 ticks; the next normal cycle resumes only after the operation returns.
+- This is not an unbounded stall: every operation runs under its own timeouts
+  (graceful/term/kill) and the internal operation lock is TTL-bounded (section
+  20), so a worker cannot be wedged in one cycle forever.
+- Log a skipped tick at debug, and the count of consecutive skips so a service
+  stuck mid-operation is observable.
+```
+
+Implement this by computing the next tick from cycle COMPLETION (or by draining a
+ticker that drops ticks), never by a fixed queue of pending ticks.
 
 Bounded concurrency, to avoid a correlated failure triggering a restart storm:
 
@@ -2857,6 +2873,7 @@ internal/locks:
 internal/app (scheduler):
   - a long operation on one service does not block another service's cycles
   - a tick is skipped (not queued) while the previous cycle is still running
+  - an overrun of N intervals causes N skips, not a backlog of catch-up cycles
   - the global operation semaphore serializes mass restarts
   - concurrent check execution never exceeds max_parallel_checks across services
   - context cancellation on shutdown stops in-flight waits and releases locks
