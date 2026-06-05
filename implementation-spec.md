@@ -1856,9 +1856,9 @@ sermoctl lock mysql --name backup -> /run/sermo/locks/mysql.backup.lock
 ```
 
 A service may hold several named locks at once (for example `backup` and
-`migration`). The example above creates `/run/sermo/locks/mysql.backup.lock`,
-which is exactly the path the MySQL backup guard checks below, so the lock and
-the guard line up end to end.
+`migration`). The example above creates `/run/sermo/locks/mysql.backup.lock`.
+That path is checked automatically by the operation engine; no guard or
+`file_exists` check should point at it.
 
 Lock file JSON format:
 
@@ -1954,7 +1954,7 @@ type ActiveLock struct {
 The two lock categories are complementary, not two ways to do the same thing:
 
 ```text
-Category 1 — Sermo runtime locks (preferred when you can wrap the work).
+Category 1 — Sermo named runtime locks (preferred when you can wrap the work).
   Created with `sermoctl lock`. The operation engine blocks automatically on any
   active named lock for the service (section 18, step 5). No rule is needed.
   Use when the protecting job can call `sermoctl lock ... -- COMMAND`.
@@ -1966,8 +1966,8 @@ Category 2 — external lock CHECKS gated by a guard.
   Use when you cannot make the protecting job call `sermoctl lock`.
 ```
 
-They compose: an action is blocked if a Sermo runtime lock is active OR a guard
-blocks it. Both run on every operation.
+They compose: an action is blocked if a Sermo named runtime lock is active OR a
+guard blocks it. Both run on every operation.
 
 Do not model the same signal both ways. A `file_exists` check pointing at a path
 under `/run/sermo/locks/` duplicates the engine's category-1 check and is a sign
@@ -1999,7 +1999,7 @@ rules:
 ```
 
 A backup run as `sermoctl lock mysql --name backup -- mariabackup ...` needs no
-such guard: the runtime lock blocks the restart on its own.
+such guard: the named runtime lock blocks the restart on its own.
 
 ---
 
@@ -2809,6 +2809,9 @@ either form works.
 - aliases keys are valid backends (systemd, openrc); each value is a non-empty list.
 - commands entries use array form with an optional valid duration timeout.
 - optional, where present on a preflight or check entry, is a boolean.
+- file_exists checks must not point under Sermo's named runtime lock directory
+  (`/run/sermo/locks` by default); use `sermoctl lock` without a guard, or point
+  the check at a foreign lock/flag file Sermo does not own.
 - policy.cooldown, if set, must be a valid non-negative duration.
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
@@ -2926,6 +2929,8 @@ internal/config:
   - unknown metric name for the declared scope is rejected
   - block/alert action requires a message; guard requires a blocks list
   - invalid service expect/state or process state value is rejected
+  - file_exists checks under /run/sermo/locks are rejected; Sermo named runtime
+    locks are handled by the operation engine, not by guards
 
 internal/rules:
   - and/or/not evaluation
