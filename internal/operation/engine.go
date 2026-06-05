@@ -1,0 +1,217 @@
+package operation
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"sermo/internal/checks"
+	"sermo/internal/locks"
+	"sermo/internal/process"
+	"sermo/internal/servicemgr"
+)
+
+// Manager is the subset of servicemgr.Manager the engine uses. Restart is built
+// from Stop+Start (not Manager.Restart) so residual processes can be handled
+// between the two phases (section 18).
+type Manager interface {
+	Start(ctx context.Context, service string) error
+	Stop(ctx context.Context, service string) error
+	Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error)
+}
+
+// Engine performs the section-18 flow for one service over injected capability
+// closures. A nil closure means that capability is absent (e.g. no preflight
+// section), which is treated as a pass.
+type Engine struct {
+	Service string // config service name
+	Unit    string // backend unit, passed to Manager
+	Backend string
+
+	Manager     Manager
+	AcquireLock func(ttl time.Duration) (release func() error, err error)
+	LockTTL     time.Duration
+	NamedLocks  func() ([]locks.Lock, error)
+	Guard       func(ctx context.Context, action string) (blocked bool, reason string, err error)
+	Preflight   func(ctx context.Context) checks.Outcome
+	Postflight  func(ctx context.Context) checks.Outcome
+	Discover    func() []process.Process
+	Reaper      process.Reaper
+	KillPolicy  process.KillPolicy
+	Sleep       func(time.Duration)
+	Emit        func(Result)
+}
+
+type plan struct {
+	action     string
+	preflight  bool
+	stop       bool
+	start      bool
+	postflight bool
+}
+
+// Restart stops the service, clears residuals, starts it again and verifies
+// health (section 18).
+func (e Engine) Restart(ctx context.Context) Result {
+	return e.run(ctx, plan{action: "restart", preflight: true, stop: true, start: true, postflight: true})
+}
+
+// Start runs preflight, starts the service and verifies health.
+func (e Engine) Start(ctx context.Context) Result {
+	return e.run(ctx, plan{action: "start", preflight: true, start: true, postflight: true})
+}
+
+// Stop stops the service and clears residuals. Stop runs no preflight or
+// postflight (section 19) but still honors locks and guards.
+func (e Engine) Stop(ctx context.Context) Result {
+	return e.run(ctx, plan{action: "stop", stop: true})
+}
+
+func (e Engine) run(ctx context.Context, p plan) (result Result) {
+	result = Result{Service: e.Service, Action: p.action, Backend: e.Backend, Status: ResultOK}
+
+	// Step 2: exactly one event per operation, on every exit path including a
+	// failed lock acquisition. Registered first.
+	defer func() {
+		if e.Emit != nil {
+			e.Emit(result)
+		}
+	}()
+
+	// Step 3: acquire the internal operation lock; fail fast if held.
+	release, err := e.AcquireLock(e.LockTTL)
+	if err != nil {
+		applyLockError(&result, err)
+		return result
+	}
+	// Step 4: release only after a successful acquire.
+	defer func() { _ = release() }()
+
+	// Step 5: active named runtime locks block the action automatically.
+	if e.NamedLocks != nil {
+		active, err := e.NamedLocks()
+		if err != nil {
+			result.Status = ResultFailed
+			result.Message = "lock scan: " + err.Error()
+			return result
+		}
+		if active = activeOnly(active); len(active) > 0 {
+			result.Status = ResultBlocked
+			result.Message = "blocked by active runtime lock"
+			result.Locks = active
+			return result
+		}
+	}
+
+	// Step 6: required preflight (start/restart only).
+	if p.preflight && e.Preflight != nil {
+		out := e.Preflight(ctx)
+		result.Checks = append(result.Checks, out.Results...)
+		if !out.OK {
+			result.Status = ResultPreflightFailed
+			result.Message = "preflight failed"
+			return result
+		}
+	}
+
+	// Step 7: guards.
+	if e.Guard != nil {
+		blocked, reason, err := e.Guard(ctx, p.action)
+		if err != nil {
+			result.Status = ResultFailed
+			result.Message = "guard: " + err.Error()
+			return result
+		}
+		if blocked {
+			result.Status = ResultBlocked
+			result.Message = reason
+			return result
+		}
+	}
+
+	// Steps 8-11: stop and residual-process handling.
+	if p.stop {
+		if err := e.Manager.Stop(ctx, e.Unit); err != nil {
+			result.Status = ResultFailed
+			result.Message = "stop: " + err.Error()
+			return result
+		}
+		if e.Sleep != nil && e.KillPolicy.GracefulTimeout > 0 {
+			e.Sleep(e.KillPolicy.GracefulTimeout)
+		}
+		if remaining := e.clearResiduals(); len(remaining) > 0 {
+			result.Status = ResultOrphanProcesses
+			result.Processes = remaining
+			result.Message = fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
+			return result // do NOT start
+		}
+	}
+
+	// Steps 12-13: start and verify status.
+	if p.start {
+		if err := e.Manager.Start(ctx, e.Unit); err != nil {
+			result.Status = ResultFailed
+			result.Message = "start: " + err.Error()
+			return result
+		}
+		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
+			result.Status = ResultFailed
+			result.Message = "service failed after start"
+			return result
+		}
+	}
+
+	// Step 14: required postflight (start/restart only).
+	if p.postflight && e.Postflight != nil {
+		out := e.Postflight(ctx)
+		result.Checks = append(result.Checks, out.Results...)
+		if !out.OK {
+			result.Status = ResultPostflightFailed
+			result.Message = "postflight failed"
+			return result
+		}
+	}
+
+	result.Message = p.action + " ok"
+	return result
+}
+
+// clearResiduals discovers residual processes after a stop and applies signal
+// escalation (section 22), returning whatever remains.
+func (e Engine) clearResiduals() []process.Process {
+	if e.Discover == nil {
+		return nil
+	}
+	residuals := e.Discover()
+	if len(residuals) == 0 {
+		return nil
+	}
+	reaper := e.Reaper
+	reaper.Rediscover = e.Discover // re-evaluate identity each round
+	return reaper.Reap(residuals, e.KillPolicy).Remaining
+}
+
+func applyLockError(r *Result, err error) {
+	var held *locks.HeldError
+	if errors.As(err, &held) {
+		r.Status = ResultBlocked
+		r.Message = held.Error()
+		if held.Lock.Path != "" {
+			r.Locks = []locks.Lock{held.Lock}
+		}
+		return
+	}
+	r.Status = ResultFailed
+	r.Message = "lock: " + err.Error()
+}
+
+func activeOnly(in []locks.Lock) []locks.Lock {
+	var out []locks.Lock
+	for _, l := range in {
+		if l.Active() {
+			out = append(out, l)
+		}
+	}
+	return out
+}
