@@ -156,6 +156,7 @@ invalid durations
 invalid percentages
 invalid units
 force_kill without kill_only_if
+kill_only_if without both exe_any and users
 SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
