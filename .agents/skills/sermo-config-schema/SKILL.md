@@ -49,6 +49,12 @@ enabled: false disables inherited item
 delete: true removes inherited item
 ```
 
+Precedence, low to high: `global defaults < profile (uses)/clone source < service
+overrides`. The global `defaults` (stop_policy, policy, rule_window) is the base
+layer of every service; engine settings (interval, max_parallel_checks,
+default_timeout, backend) are NOT merged into services. Variables expand once,
+after all merging. See `implementation-spec.md` section 8.
+
 Prefer this:
 
 ```yaml

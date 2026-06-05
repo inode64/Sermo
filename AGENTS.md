@@ -307,6 +307,18 @@ enabled: false disables inherited item
 delete: true removes inherited item
 ```
 
+Resolution precedence, low to high:
+
+```text
+global defaults  <  profile (uses) or clone source  <  service overrides
+```
+
+The global `defaults` block (stop_policy, policy, rule_window) is merged in as the
+base layer of every service, so a field omitted everywhere falls back to it.
+Engine-wide settings (interval, max_parallel_checks, default_timeout, backend) are
+daemon config and are NOT merged into services. Variable expansion runs once,
+after all merging. See `implementation-spec.md` section 8.
+
 Numeric fields that may also be written as a string or carry a `${var}` (for
 example `port` and `expect_status`) use a tolerant scalar type that accepts an
 int or a string and is parsed to its target type after variable expansion. The
