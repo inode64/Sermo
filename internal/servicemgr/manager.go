@@ -3,11 +3,16 @@ package servicemgr
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"sermo/internal/execx"
 )
+
+// cgroupRoot is the unified cgroup v2 mount point.
+const cgroupRoot = "/sys/fs/cgroup"
 
 // ServiceStatus is the resolved status of a single service on a backend.
 type ServiceStatus struct {
@@ -70,14 +75,67 @@ func MainPID(runner execx.Runner, backend Backend, unit string) (int, bool) {
 	return pid, true
 }
 
-// MainPIDFunc returns a process.Discoverer.MainPIDs closure for a unit, backed by
-// the real host commands.
-func MainPIDFunc(backend Backend, unit string) func() []int {
-	return func() []int {
-		if pid, ok := MainPID(execx.CommandRunner{}, backend, unit); ok {
-			return []int{pid}
+// CgroupPIDs returns every PID in a unit's control group (section 21, step 1).
+// systemd exposes the cgroup path via `systemctl show -p ControlGroup`, and all
+// processes in it belong to the service — more complete than MainPID alone.
+// readFile defaults to os.ReadFile.
+func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ([]int, bool) {
+	if backend != BackendSystemd {
+		return nil, false
+	}
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	if readFile == nil {
+		readFile = os.ReadFile
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultDetectTimeout)
+	defer cancel()
+
+	res, err := runner.Run(ctx, "systemctl", "show", "-p", "ControlGroup", "--value", "--", unit)
+	if err != nil {
+		return nil, false
+	}
+	cgroup := strings.TrimSpace(res.Stdout)
+	if cgroup == "" || cgroup == "/" {
+		return nil, false
+	}
+
+	data, err := readFile(filepath.Join(cgroupRoot, cgroup, "cgroup.procs"))
+	if err != nil {
+		return nil, false
+	}
+	var pids []int
+	for _, line := range strings.Split(string(data), "\n") {
+		if pid, err := strconv.Atoi(strings.TrimSpace(line)); err == nil && pid > 0 {
+			pids = append(pids, pid)
 		}
-		return nil
+	}
+	return pids, len(pids) > 0
+}
+
+// BackendPIDsFunc returns a process.Discoverer.BackendPIDs closure for a unit: it
+// reports the cgroup process set (preferred) plus the MainPID, deduplicated,
+// backed by the real host (section 21, step 1).
+func BackendPIDsFunc(backend Backend, unit string) func() []int {
+	return func() []int {
+		seen := map[int]bool{}
+		var pids []int
+		add := func(pid int) {
+			if pid > 0 && !seen[pid] {
+				seen[pid] = true
+				pids = append(pids, pid)
+			}
+		}
+		if cg, ok := CgroupPIDs(execx.CommandRunner{}, os.ReadFile, backend, unit); ok {
+			for _, pid := range cg {
+				add(pid)
+			}
+		}
+		if pid, ok := MainPID(execx.CommandRunner{}, backend, unit); ok {
+			add(pid)
+		}
+		return pids
 	}
 }
 

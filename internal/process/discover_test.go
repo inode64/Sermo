@@ -165,7 +165,7 @@ func TestDiscoverBackendMainPIDSeedsTree(t *testing.T) {
 	d := Discoverer{
 		Reader:      reader,
 		ResolveUser: fakeUsers(nil),
-		MainPIDs:    func() []int { return []int{100} },
+		BackendPIDs: func() []int { return []int{100} },
 	}
 
 	procs, _ := d.Discover(nil) // no selectors: backend MainPID is the only seed
@@ -187,7 +187,7 @@ func TestDiscoverMainPIDDedupedWithSelector(t *testing.T) {
 	d := Discoverer{
 		Reader:      reader,
 		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
-		MainPIDs:    func() []int { return []int{100} },
+		BackendPIDs: func() []int { return []int{100} },
 	}
 	// The same PID is found by MainPID and command_match; it appears once,
 	// keeping the backend source (found first).

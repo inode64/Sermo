@@ -70,7 +70,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	manager := deps.Manager
 
 	discoverer := process.NewDiscoverer()
-	discoverer.MainPIDs = servicemgr.MainPIDFunc(deps.Backend, unit)
+	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(deps.Backend, unit)
 	checkDeps := checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
