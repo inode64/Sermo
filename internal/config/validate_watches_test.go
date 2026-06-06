@@ -44,12 +44,29 @@ func TestValidateWatchesGood(t *testing.T) {
 	}
 }
 
+func TestValidateWatchesGoodForWindow(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-root": map[string]any{
+				"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
+				"for":   map[string]any{"cycles": 3},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
 func TestValidateWatchesBad(t *testing.T) {
 	cases := map[string]map[string]any{
 		"unknown type": {"check": map[string]any{"type": "bogus"}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"disk no path": {"check": map[string]any{"type": "disk", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"bad op":       {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"empty cmd":    {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
+		"for cycles 0": {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 0}},
+		"within cycles -1": {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": -1}},
 	}
 	for name, w := range cases {
 		t.Run(name, func(t *testing.T) {

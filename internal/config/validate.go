@@ -147,6 +147,29 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
 			add("watches.%s.interval %q must be a valid positive duration", name, scalarString(v))
 		}
+
+		validateWatchWindow(name, entry, add)
+	}
+}
+
+// validateWatchWindow checks the optional for/within window on a watch entry:
+// for.cycles and within.cycles must be positive integers and within.min_matches
+// (if present) a non-negative integer (spec 2026-06-06-host-watches-disk §5).
+func validateWatchWindow(name string, entry map[string]any, add func(string, ...any)) {
+	if f, ok := entry["for"].(map[string]any); ok {
+		if c, _ := scalarInt(f["cycles"]); c <= 0 {
+			add("watches.%s.for.cycles must be a positive integer", name)
+		}
+	}
+	if wn, ok := entry["within"].(map[string]any); ok {
+		if c, _ := scalarInt(wn["cycles"]); c <= 0 {
+			add("watches.%s.within.cycles must be a positive integer", name)
+		}
+		if raw, present := wn["min_matches"]; present {
+			if m, _ := scalarInt(raw); m < 0 {
+				add("watches.%s.within.min_matches must be a non-negative integer", name)
+			}
+		}
 	}
 }
 
