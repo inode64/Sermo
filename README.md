@@ -23,6 +23,24 @@ make test       # run the test suite
 Requires Go 1.26+. Runtime dependencies: `systemctl` or `rc-service` on the
 host; no root needed for read-only commands.
 
+## Install
+
+`make install` honors the standard GNU directory variables and `DESTDIR`
+staging, and installs the binaries, every profile (keeping the
+`services/apps/libs` layout), a sample `sermo.yml`, and both the systemd unit and
+the OpenRC init script (with their binary/config paths rewritten to match):
+
+```sh
+sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin, /etc/sermo, ...
+make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
+```
+
+Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
+`bindir`, `sbindir`, `datadir`, `sysconfdir`, `SYSTEMD_UNITDIR`, `OPENRC_INITDIR`.
+Granular targets are available too: `install-bin`, `install-profiles`,
+`install-config`, `install-systemd`, `install-openrc` (and `uninstall`). An
+existing `sermo.yml` is never overwritten.
+
 ## Quick start
 
 ```sh
