@@ -139,6 +139,8 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			validateHookBlock("watches."+name, entry, add)
 		case "net":
 			validateNetCheck(name, check, entry, add)
+		case "icmp":
+			validateICMPCheck(name, check, entry, add)
 		case "":
 			add("watches.%s.check.type is required", name)
 		default:
@@ -243,13 +245,7 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		}
 		switch key {
 		case "state":
-			exp := scalarString(m["expect"])
-			onChange := scalarString(m["on"]) == "change"
-			if exp == "" && !onChange {
-				add("%s requires expect: up|down or on: change", prefix)
-			} else if exp != "" && exp != "up" && exp != "down" {
-				add("%s.expect must be up or down", prefix)
-			}
+			validateStateMetric(prefix, m, add)
 		case "speed":
 			if scalarString(m["on"]) != "change" {
 				add("%s requires on: change", prefix)
@@ -273,6 +269,75 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 			}
 		default:
 			add("%s is not a supported net metric (state, speed, errors)", prefix)
+		}
+		validateHookBlock(prefix, m, add)
+		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateStateMetric validates a state metric condition shared by net/icmp:
+// expect up|down OR on: change.
+func validateStateMetric(prefix string, m map[string]any, add func(string, ...any)) {
+	exp := scalarString(m["expect"])
+	onChange := scalarString(m["on"]) == "change"
+	if exp == "" && !onChange {
+		add("%s requires expect: up|down or on: change", prefix)
+	} else if exp != "" && exp != "up" && exp != "down" {
+		add("%s.expect must be up or down", prefix)
+	}
+}
+
+// validateICMPCheck validates an icmp host watch: a host (+ optional positive
+// count) and a non-empty metrics map, each metric with a valid condition and its
+// own hook (spec 2026-06-06-icmp-host-watch §3).
+func validateICMPCheck(name string, check, entry map[string]any, add func(string, ...any)) {
+	if scalarString(check["host"]) == "" {
+		add("watches.%s.check.host is required for an icmp check", name)
+	}
+	if v, present := check["count"]; present {
+		if n, ok := scalarInt(v); !ok || n <= 0 {
+			add("watches.%s.check.count must be a positive integer", name)
+		}
+	}
+	metrics, ok := entry["metrics"].(map[string]any)
+	if !ok || len(metrics) == 0 {
+		add("watches.%s.metrics is required and must be non-empty for an icmp check", name)
+		return
+	}
+	for _, key := range sortedKeys(metrics) {
+		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
+		m, ok := metrics[key].(map[string]any)
+		if !ok {
+			add("%s must be a mapping", prefix)
+			continue
+		}
+		switch key {
+		case "state":
+			validateStateMetric(prefix, m, add)
+		case "latency":
+			th, hasT := m["threshold"].(map[string]any)
+			ch, hasC := m["change"].(map[string]any)
+			if !hasT && !hasC {
+				add("%s requires threshold {op, value} or change {delta}", prefix)
+			}
+			if hasT && hasC {
+				add("%s must set only one of threshold or change", prefix)
+			}
+			if hasT {
+				if !isValidDiskOp(scalarString(th["op"])) {
+					add("%s.threshold has an invalid op %q", prefix, scalarString(th["op"]))
+				}
+				if !isNumeric(scalarString(th["value"])) {
+					add("%s.threshold value %q must be numeric", prefix, scalarString(th["value"]))
+				}
+			}
+			if hasC {
+				if !isNumeric(scalarString(ch["delta"])) {
+					add("%s.change delta %q must be numeric", prefix, scalarString(ch["delta"]))
+				}
+			}
+		default:
+			add("%s is not a supported icmp metric (state, latency)", prefix)
 		}
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
