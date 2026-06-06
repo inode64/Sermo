@@ -1,0 +1,9 @@
+kind: profile
+name: smartd
+description: "Estado de los discos SMART"
+service: { name: "smartd", backend: auto }
+variables:
+  binary: "/usr/sbin/smartd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/smartd","-q","onecheck"], timeout: 10s }

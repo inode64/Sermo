@@ -1,0 +1,9 @@
+kind: profile
+name: pptpd
+description: "Pptpd"
+service: { name: "pptpd", backend: auto }
+variables:
+  binary: "/usr/sbin/pptpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/pptpd","-v"], timeout: 10s }

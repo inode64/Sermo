@@ -1,0 +1,9 @@
+kind: profile
+name: mongod
+description: "Mongo DB"
+service: { name: "mongod", backend: auto }
+variables:
+  binary: "/usr/bin/mongod"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/mongod","--version"], timeout: 10s }

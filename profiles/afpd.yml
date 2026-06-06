@@ -1,0 +1,9 @@
+kind: profile
+name: afpd
+description: "Afpd"
+service: { name: "afpd", backend: auto }
+variables:
+  binary: "/usr/sbin/afpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/afpd","-v"], timeout: 10s }

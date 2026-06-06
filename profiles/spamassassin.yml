@@ -1,0 +1,10 @@
+kind: profile
+name: spamassassin
+description: "Antispam"
+service: { name: "spamassassin", backend: auto }
+variables:
+  binary: "/usr/bin/spamassassin"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/spamassassin","--version"], timeout: 10s }
+  config: { type: command, command: ["/usr/bin/spamassassin","--lint"], timeout: 30s }

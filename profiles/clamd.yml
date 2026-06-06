@@ -1,0 +1,9 @@
+kind: profile
+name: clamd
+description: "Clamd"
+service: { name: "clamd", backend: auto }
+variables:
+  binary: "/usr/sbin/clamd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/clamd","--version"], timeout: 10s }

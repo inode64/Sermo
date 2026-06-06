@@ -1,0 +1,9 @@
+kind: profile
+name: ovsdb-client
+description: "OpenVsiwtch Database"
+service: { name: "ovsdb-client", backend: auto }
+variables:
+  binary: "/usr/bin/ovsdb-client"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/ovsdb-client","--version"], timeout: 10s }

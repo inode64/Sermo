@@ -1,0 +1,9 @@
+kind: profile
+name: lvm
+description: "LVM"
+service: { name: "lvm", backend: auto }
+variables:
+  binary: "/sbin/lvm"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/sbin/lvm","version"], timeout: 10s }

@@ -1,0 +1,9 @@
+kind: profile
+name: python2
+description: "Python 2"
+service: { name: "python2", backend: auto }
+variables:
+  binary: "/usr/bin/python2"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/python2","--version"], timeout: 10s }

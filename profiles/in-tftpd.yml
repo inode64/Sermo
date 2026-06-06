@@ -1,0 +1,9 @@
+kind: profile
+name: in-tftpd
+description: "In.tftpd"
+service: { name: "in-tftpd", backend: auto }
+variables:
+  binary: "/usr/sbin/in.tftpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/in.tftpd","-V"], timeout: 10s }

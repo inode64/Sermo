@@ -1,0 +1,9 @@
+kind: profile
+name: systemd-udevd-2
+description: "Systemd-udevd 2"
+service: { name: "systemd-udevd", backend: auto }
+variables:
+  binary: "/usr/lib/systemd/systemd-udevd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/lib/systemd/systemd-udevd","--version"], timeout: 10s }

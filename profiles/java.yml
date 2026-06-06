@@ -1,0 +1,9 @@
+kind: profile
+name: java
+description: "Java"
+service: { name: "java", backend: auto }
+variables:
+  binary: "/usr/bin/java"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/java","-version"], timeout: 10s }

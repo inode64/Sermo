@@ -1,0 +1,9 @@
+kind: profile
+name: xinetd
+description: "Xinetd"
+service: { name: "xinetd", backend: auto }
+variables:
+  binary: "/usr/sbin/xinetd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/xinetd","-version"], timeout: 10s }

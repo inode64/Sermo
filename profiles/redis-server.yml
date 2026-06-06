@@ -1,0 +1,9 @@
+kind: profile
+name: redis-server
+description: "Redis-server"
+service: { name: "redis-server", backend: auto }
+variables:
+  binary: "/usr/sbin/redis-server"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/redis-server","-v"], timeout: 10s }

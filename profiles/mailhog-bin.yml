@@ -1,0 +1,9 @@
+kind: profile
+name: mailhog-bin
+description: "Mailhog"
+service: { name: "mailhog-bin", backend: auto }
+variables:
+  binary: "/usr/bin/mailhog-bin"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/mailhog-bin","--version"], timeout: 10s }

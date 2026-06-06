@@ -1,0 +1,9 @@
+kind: profile
+name: libvirtd
+description: "Libvirtd"
+service: { name: "libvirtd", backend: auto }
+variables:
+  binary: "/usr/sbin/libvirtd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/libvirtd","-V"], timeout: 10s }

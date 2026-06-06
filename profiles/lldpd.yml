@@ -1,0 +1,9 @@
+kind: profile
+name: lldpd
+description: "Link Layer Discovery Protocol"
+service: { name: "lldpd", backend: auto }
+variables:
+  binary: "/usr/sbin/lldpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/lldpd","-v"], timeout: 10s }

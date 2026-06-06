@@ -1,0 +1,9 @@
+kind: profile
+name: ruby
+description: "An object-oriented scripting language"
+service: { name: "ruby", backend: auto }
+variables:
+  binary: "/usr/bin/ruby"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/ruby","--version"], timeout: 10s }

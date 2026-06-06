@@ -1,0 +1,9 @@
+kind: profile
+name: dspam
+description: "Dspam"
+service: { name: "dspam", backend: auto }
+variables:
+  binary: "/usr/bin/dspam"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/dspam","--version"], timeout: 10s }

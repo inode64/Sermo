@@ -1,0 +1,10 @@
+kind: profile
+name: smbd
+description: "Servidor de ficheros Windows - SMB"
+service: { name: "smbd", backend: auto }
+variables:
+  binary: "/usr/sbin/smbd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/smbd","--version"], timeout: 10s }
+  config: { type: command, command: ["/usr/bin/testparm","-s"], timeout: 30s }

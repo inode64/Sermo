@@ -1,0 +1,10 @@
+kind: profile
+name: php-fpm-7-2
+description: "PHP 7.2"
+service: { name: "php-fpm", backend: auto }
+variables:
+  binary: "/usr/lib64/php7.2/bin/php-fpm"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/lib64/php7.2/bin/php-fpm","-v"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/php7.2","configtest"], timeout: 30s }

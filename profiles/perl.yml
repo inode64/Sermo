@@ -1,0 +1,9 @@
+kind: profile
+name: perl
+description: "Perl"
+service: { name: "perl", backend: auto }
+variables:
+  binary: "/usr/bin/perl"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/perl","-v"], timeout: 10s }

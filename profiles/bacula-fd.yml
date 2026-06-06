@@ -1,0 +1,10 @@
+kind: profile
+name: bacula-fd
+description: "Backup file Server"
+service: { name: "bacula-fd", backend: auto }
+variables:
+  binary: "/usr/sbin/bacula-fd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/bacula-fd","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/bacula-fd","-t"], timeout: 30s }

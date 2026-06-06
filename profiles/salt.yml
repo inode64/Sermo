@@ -1,0 +1,9 @@
+kind: profile
+name: salt
+description: "Salt"
+service: { name: "salt", backend: auto }
+variables:
+  binary: "/usr/bin/salt"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/salt","--version"], timeout: 10s }

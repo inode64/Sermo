@@ -111,6 +111,11 @@ func validateDocuments(cfg *Config) []Issue {
 
 	for _, doc := range cfg.docs {
 		scope := documentScope(doc)
+		if d, present := doc.Body["description"]; present {
+			if _, ok := d.(string); !ok {
+				issues = append(issues, Issue{Scope: scope, Msg: "description must be a string"})
+			}
+		}
 		switch doc.Kind {
 		case kindProfile, kindService:
 		case "":
@@ -268,6 +273,11 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		case "command":
 			if !isStringArray(entry["command"]) {
 				add("%s command must be an array, not a shell string", path)
+			}
+			if v, present := entry["expect_exit"]; present {
+				if _, ok := scalarInt(v); !ok {
+					add("%s expect_exit must be an integer", path)
+				}
 			}
 		case "service":
 			if st := scalarString(entry["expect"]); st != "" {

@@ -1,0 +1,9 @@
+kind: profile
+name: rpc-mountd
+description: "RPC.mountd"
+service: { name: "rpc-mountd", backend: auto }
+variables:
+  binary: "/usr/sbin/rpc.mountd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/rpc.mountd","-v"], timeout: 10s }

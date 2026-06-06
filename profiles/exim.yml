@@ -1,0 +1,9 @@
+kind: profile
+name: exim
+description: "Gestor de correo SMTP Exim"
+service: { name: "exim", backend: auto }
+variables:
+  binary: "/usr/sbin/exim"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/exim","--version"], timeout: 10s }

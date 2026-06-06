@@ -1,0 +1,10 @@
+kind: profile
+name: bareos-sd
+description: "Backup storage Server"
+service: { name: "bareos-sd", backend: auto }
+variables:
+  binary: "/usr/sbin/bareos-sd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/bareos-sd","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["usr/sbin/bareos-sd","-t"], timeout: 30s }

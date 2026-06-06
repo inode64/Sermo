@@ -1,0 +1,9 @@
+kind: profile
+name: nmbd
+description: "Servidor de ficheros Windows - NMB"
+service: { name: "nmbd", backend: auto }
+variables:
+  binary: "/usr/sbin/nmbd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/nmbd","--version"], timeout: 10s }

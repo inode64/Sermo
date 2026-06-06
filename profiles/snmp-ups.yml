@@ -1,0 +1,9 @@
+kind: profile
+name: snmp-ups
+description: "Snmp-ups"
+service: { name: "snmp-ups", backend: auto }
+variables:
+  binary: "/lib/nut/snmp-ups"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/lib/nut/snmp-ups","-V"], timeout: 10s }

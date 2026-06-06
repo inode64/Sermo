@@ -1,0 +1,9 @@
+kind: profile
+name: keydb-server
+description: "Keydb-server"
+service: { name: "keydb-server", backend: auto }
+variables:
+  binary: "/usr/sbin/keydb-server"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/keydb-server","-v"], timeout: 10s }

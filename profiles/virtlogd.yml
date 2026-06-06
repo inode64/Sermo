@@ -1,0 +1,9 @@
+kind: profile
+name: virtlogd
+description: "Virtlogd"
+service: { name: "virtlogd", backend: auto }
+variables:
+  binary: "/usr/sbin/virtlogd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/virtlogd","-V"], timeout: 10s }

@@ -1,0 +1,9 @@
+kind: profile
+name: node
+description: "A JavaScript runtime built on Chrome's V8 JavaScript engine"
+service: { name: "node", backend: auto }
+variables:
+  binary: "/usr/bin/node"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/node","-v"], timeout: 10s }

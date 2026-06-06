@@ -1,0 +1,10 @@
+kind: profile
+name: bacula-dir
+description: "Backup director Server"
+service: { name: "bacula-dir", backend: auto }
+variables:
+  binary: "/usr/sbin/bacula-dir"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/bacula-dir","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/bacula-dir","-t"], timeout: 30s }

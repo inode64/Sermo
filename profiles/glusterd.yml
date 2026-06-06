@@ -1,0 +1,9 @@
+kind: profile
+name: glusterd
+description: "GlusterFS"
+service: { name: "glusterd", backend: auto }
+variables:
+  binary: "/usr/sbin/glusterd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/glusterd","--version"], timeout: 10s }

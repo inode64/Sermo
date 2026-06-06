@@ -1,0 +1,10 @@
+kind: profile
+name: nginx
+description: "Nginx"
+service: { name: "nginx", backend: auto }
+variables:
+  binary: "/usr/sbin/nginx"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/nginx","-V"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/nginx","configtest"], timeout: 30s }

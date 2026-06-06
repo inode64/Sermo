@@ -1,0 +1,10 @@
+kind: profile
+name: ssh
+description: "SSH"
+service: { name: "ssh", backend: auto }
+variables:
+  binary: "/usr/bin/ssh"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/ssh","-V"], timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/sshd","-t"], timeout: 30s }

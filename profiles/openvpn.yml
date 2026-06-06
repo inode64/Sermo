@@ -1,0 +1,9 @@
+kind: profile
+name: openvpn
+description: "OpenVPN"
+service: { name: "openvpn", backend: auto }
+variables:
+  binary: "/usr/sbin/openvpn"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/openvpn","--version"], timeout: 10s }

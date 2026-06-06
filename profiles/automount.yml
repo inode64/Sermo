@@ -1,0 +1,9 @@
+kind: profile
+name: automount
+description: "Automount"
+service: { name: "automount", backend: auto }
+variables:
+  binary: "/usr/sbin/automount"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/automount","-V"], timeout: 10s }

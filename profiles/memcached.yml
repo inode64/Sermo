@@ -1,0 +1,9 @@
+kind: profile
+name: memcached
+description: "Memcached"
+service: { name: "memcached", backend: auto }
+variables:
+  binary: "/usr/bin/memcached"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/memcached","-V"], timeout: 10s }

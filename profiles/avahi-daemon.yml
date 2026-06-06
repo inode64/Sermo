@@ -1,0 +1,9 @@
+kind: profile
+name: avahi-daemon
+description: "Zero Configuration Networking"
+service: { name: "avahi-daemon", backend: auto }
+variables:
+  binary: "/usr/sbin/avahi-daemon"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/avahi-daemon","-V"], timeout: 10s }

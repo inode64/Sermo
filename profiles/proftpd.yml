@@ -1,0 +1,10 @@
+kind: profile
+name: proftpd
+description: "Proftpd"
+service: { name: "proftpd", backend: auto }
+variables:
+  binary: "/usr/sbin/proftpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/proftpd","-V"], timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/proftpd","--configtest"], timeout: 30s }

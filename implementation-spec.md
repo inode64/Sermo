@@ -464,6 +464,7 @@ A profile or service may contain these top-level sections, all maps keyed by
 name where applicable:
 
 ```text
+description   optional human-readable label for the service or profile
 service       backend target name and backend selector
 aliases       per-backend candidate unit names (section 11)
 variables     string variables for ${...} expansion (section 10)
@@ -476,6 +477,10 @@ stop_policy   stop/kill behaviour (section 22)
 policy        remediation cooldown/rate limit (section 16)
 rules         guard/remediation/alert rules (section 13)
 ```
+
+`description` is an optional free-text label shown by `sermoctl service show` and
+included in `config render`. It is informational: the engine never acts on it. It
+is a top-level scalar (not a map), inherited and overridable like any other field.
 
 `commands` is optional, informational metadata: named commands an operator may
 want to keep with the profile (for example a version command). The MVP loads and
@@ -929,6 +934,11 @@ checks:
     expect_exit: 0
     timeout: 10s
 ```
+
+`command` is array form only (never a shell string). `expect_exit` is the exit
+code that means the command succeeded — the value the application must return for
+correct operation; it defaults to `0`. The check is OK when the command's actual
+exit code equals `expect_exit`.
 
 ### Service state
 
@@ -2913,6 +2923,8 @@ either form works.
 - commands entries use array form with an optional valid duration timeout.
 - postflight uses the same entry schema and check types as preflight/checks.
 - optional, where present on a preflight, postflight or check entry, is a boolean.
+- description, where present on a service or profile, is a string scalar.
+- command check expect_exit, where set, is an integer.
 - file_exists checks must not point under Sermo's named runtime lock directory
   (`<paths.runtime>/locks`, default `/run/sermo/locks`); the operation engine
   already checks named runtime locks. Point guard checks at a foreign lock/flag

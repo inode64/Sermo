@@ -1,0 +1,9 @@
+kind: profile
+name: upsmon
+description: "Upsmon"
+service: { name: "upsmon", backend: auto }
+variables:
+  binary: "/usr/sbin/upsmon"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/upsmon","-V"], timeout: 10s }

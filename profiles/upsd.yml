@@ -1,0 +1,9 @@
+kind: profile
+name: upsd
+description: "Upsd"
+service: { name: "upsd", backend: auto }
+variables:
+  binary: "/usr/sbin/upsd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/upsd","-V"], timeout: 10s }

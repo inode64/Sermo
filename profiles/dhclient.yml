@@ -1,0 +1,9 @@
+kind: profile
+name: dhclient
+description: "Cliente DHCP"
+service: { name: "dhclient", backend: auto }
+variables:
+  binary: "/sbin/dhclient"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/sbin/dhclient","--version"], timeout: 10s }

@@ -1,0 +1,9 @@
+kind: profile
+name: qemu-ga
+description: "Qemu-ga"
+service: { name: "qemu-ga", backend: auto }
+variables:
+  binary: "/usr/bin/qemu-ga"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/qemu-ga","-V"], timeout: 10s }

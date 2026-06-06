@@ -1,0 +1,9 @@
+kind: profile
+name: qemu-system-x86-64
+description: "QEMU"
+service: { name: "qemu-system-x86-64", backend: auto }
+variables:
+  binary: "/usr/bin/qemu-system-x86_64"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/qemu-system-x86_64","--version"], timeout: 10s }

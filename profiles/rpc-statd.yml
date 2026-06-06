@@ -1,0 +1,9 @@
+kind: profile
+name: rpc-statd
+description: "RPC"
+service: { name: "rpc-statd", backend: auto }
+variables:
+  binary: "/sbin/rpc.statd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/sbin/rpc.statd","--version"], timeout: 10s }

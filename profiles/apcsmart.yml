@@ -1,0 +1,9 @@
+kind: profile
+name: apcsmart
+description: "Apcsmart"
+service: { name: "apcsmart", backend: auto }
+variables:
+  binary: "/lib/nut/apcsmart"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/lib/nut/apcsmart","-V"], timeout: 10s }
