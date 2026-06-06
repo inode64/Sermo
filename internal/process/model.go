@@ -31,6 +31,7 @@ const (
 
 // Discovery source labels.
 const (
+	sourceBackend = "backend"
 	sourcePidfile = "pidfile"
 	sourceCommand = "command_match"
 	sourceChild   = "child"

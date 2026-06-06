@@ -14,6 +14,9 @@ import (
 type Discoverer struct {
 	Reader      Reader
 	ResolveUser UserResolver
+	// MainPIDs reports backend-provided main PIDs (systemd MainPID), tried first
+	// (section 21, step 1). Optional.
+	MainPIDs func() []int
 }
 
 // NewDiscoverer returns a Discoverer backed by the host /proc and passwd db.
@@ -45,6 +48,15 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		}
 		found[id.PID] = toProcess(id, role, source)
 		order = append(order, id.PID)
+	}
+
+	// 0. backend-provided main PIDs (systemd MainPID, section 21 step 1).
+	if d.MainPIDs != nil {
+		for _, pid := range d.MainPIDs() {
+			if id, ok := snapshot[pid]; ok {
+				add(id, "main", sourceBackend)
+			}
+		}
 	}
 
 	// 1. pidfiles.
