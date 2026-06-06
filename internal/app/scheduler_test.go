@@ -29,7 +29,7 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil)
 		close(done)
 	}()
 
@@ -58,7 +58,7 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil)
 		close(done)
 	}()
 
@@ -93,7 +93,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil)
 		close(done)
 	}()
 
@@ -105,6 +105,38 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	if got := atomic.LoadInt32(&n); got != 0 {
 		t.Fatalf("worker cycled even though shutdown interrupted the startup delay: got %d", got)
+	}
+}
+
+func TestSchedulerRunsWatches(t *testing.T) {
+	var fired int32
+	w := &Watch{
+		Name:     "disk-root",
+		Check:    stubCheck{name: "disk", ok: true},
+		Interval: 15 * time.Millisecond,
+		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+			atomic.AddInt32(&fired, 1)
+			return nil
+		}),
+		Hook: HookSpec{Command: []string{"/bin/true"}},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w})
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not return")
+	}
+	if atomic.LoadInt32(&fired) < 2 {
+		t.Fatalf("watch did not cycle repeatedly: %d", fired)
 	}
 }
 
