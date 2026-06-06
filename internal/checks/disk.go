@@ -61,6 +61,16 @@ func (c diskCheck) Run(_ context.Context) Result {
 		"free_bytes":  st.FreeBytes,
 		"total_bytes": st.TotalBytes,
 	}
+	res.Data["value"] = st.UsedPct
+	for _, p := range c.preds {
+		if p.field == "free_pct" {
+			res.Data["value"] = st.FreePct
+		}
+		if p.field == "used_pct" {
+			res.Data["value"] = st.UsedPct
+			break
+		}
+	}
 	return res
 }
 

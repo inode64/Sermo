@@ -44,21 +44,41 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	}
 }
 
-func TestWatchHookEnvFallsBackToFreePct(t *testing.T) {
-	var env map[string]string
-	w := &Watch{
-		Name:      "disk-root",
-		CheckType: "disk",
-		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/", "free_pct": 8.0}},
-		Hook:      HookSpec{Command: []string{"/bin/true"}},
-		Runner: HookRunnerFunc(func(_ context.Context, _ []string, e map[string]string, _ time.Duration) error {
-			env = e
-			return nil
-		}),
+func TestHookEnvMapsAllDataKeys(t *testing.T) {
+	res := checks.Result{
+		Check:   "net-eth0",
+		Message: "eth0 state up->down",
+		Data: map[string]any{
+			"interface": "eth0",
+			"metric":    "state",
+			"old":       "up",
+			"new":       "down",
+			"value":     "down",
+		},
 	}
-	w.RunCycle(context.Background())
-	if env["SERMO_VALUE"] != "8" {
-		t.Fatalf("expected SERMO_VALUE from free_pct, got %q", env["SERMO_VALUE"])
+	env := hookEnv("net-eth0", "net", res)
+	if env["SERMO_WATCH"] != "net-eth0" || env["SERMO_CHECK_TYPE"] != "net" || env["SERMO_MESSAGE"] != "eth0 state up->down" {
+		t.Fatalf("base env wrong: %v", env)
+	}
+	for k, want := range map[string]string{
+		"SERMO_INTERFACE": "eth0",
+		"SERMO_METRIC":    "state",
+		"SERMO_OLD":       "up",
+		"SERMO_NEW":       "down",
+		"SERMO_VALUE":     "down",
+	} {
+		if env[k] != want {
+			t.Fatalf("env[%s] = %q, want %q (full: %v)", k, env[k], want, env)
+		}
+	}
+}
+
+func TestHookEnvDiskKeysStillWork(t *testing.T) {
+	// Disk Data with a `value` key (set by the disk check) yields SERMO_PATH + SERMO_VALUE.
+	res := checks.Result{Data: map[string]any{"path": "/", "value": 92.0, "used_pct": 92.0}}
+	env := hookEnv("disk-root", "disk", res)
+	if env["SERMO_PATH"] != "/" || env["SERMO_VALUE"] != "92" {
+		t.Fatalf("disk env wrong: %v", env)
 	}
 }
 

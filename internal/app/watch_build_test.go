@@ -64,3 +64,55 @@ func TestBuildWatchesWarnsOnBadCheck(t *testing.T) {
 		t.Fatalf("expected 0 watches and a warning, got %d / %v", len(watches), warns)
 	}
 }
+
+func TestBuildWatchesExpandsNet(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"net-eth0": map[string]any{
+			"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{
+				"state": map[string]any{
+					"on":   "change",
+					"then": map[string]any{"hook": map[string]any{"command": []any{"/bin/state.sh"}}},
+				},
+				"errors": map[string]any{
+					"delta": map[string]any{"op": ">", "value": 100},
+					"then":  map[string]any{"hook": map[string]any{"command": []any{"/bin/err.sh"}}},
+				},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 2 {
+		t.Fatalf("expected 2 expanded watches, got %d", len(watches))
+	}
+	cmds := map[string]bool{}
+	for _, w := range watches {
+		if w.CheckType != "net" || w.Name != "net-eth0" || w.Interval != 30*time.Second {
+			t.Fatalf("unexpected watch: %+v", w)
+		}
+		cmds[w.Hook.Command[0]] = true
+	}
+	if !cmds["/bin/state.sh"] || !cmds["/bin/err.sh"] {
+		t.Fatalf("expected distinct per-metric hooks, got %v", cmds)
+	}
+}
+
+func TestBuildWatchesNetWarnsOnBadMetric(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"net-eth0": map[string]any{
+			"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{
+				"state": map[string]any{ // missing on/expect -> check build error
+					"then": map[string]any{"hook": map[string]any{"command": []any{"/bin/x.sh"}}},
+				},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{}, time.Second)
+	if len(watches) != 0 || len(warns) == 0 {
+		t.Fatalf("expected 0 watches and a warning, got %d / %v", len(watches), warns)
+	}
+}
