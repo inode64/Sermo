@@ -45,6 +45,17 @@ Only *automatic* remediation is rate limited (`cooldown`, `max_actions`,
 `backoff`). Manual `sermoctl` actions are deliberate and not subject to cooldown,
 but remain subject to locks, guards and preflight.
 
+## Pausing monitoring
+
+`sermoctl unmonitor SERVICE` pauses monitoring for a service; `monitor SERVICE`
+resumes it. While paused, the daemon runs no checks, rules or remediation for that
+service — useful during maintenance so a deliberate stop is not "remediated" by an
+automatic restart. The pause is a marker file under `<paths.runtime>/paused`, so
+it persists across daemon restarts until cleared. `sermoctl status SERVICE` shows
+`monitoring=paused` (and `"paused": true` in `--json`). Pausing only affects
+Sermo's monitoring; it does not stop the service itself, and manual `sermoctl`
+actions still work.
+
 ## System metrics
 
 A `scope: system` metric ("is the machine under pressure?") is **not** a sound

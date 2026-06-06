@@ -107,7 +107,7 @@ func TestStatusCommandJSON(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	want := `{"service":"mysql","backend":"systemd","status":"active","unit":"mysql.service"}`
+	want := `{"service":"mysql","backend":"systemd","status":"active","unit":"mysql.service","paused":false}`
 	if got := strings.TrimSpace(stdout.String()); got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}

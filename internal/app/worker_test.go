@@ -128,6 +128,21 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	}
 }
 
+func TestCyclePausedDoesNothing(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.IsPaused = func() bool { return true }
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Errorf("paused worker must run no actions, ops=%v", h.ops)
+	}
+	if len(h.events) != 0 {
+		t.Errorf("paused worker must emit nothing, events=%v", h.events)
+	}
+}
+
 func TestRuntimeVarsSubstitutedInMessage(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	tree := map[string]any{"rules": map[string]any{

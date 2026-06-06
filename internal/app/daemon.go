@@ -101,6 +101,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
 	sampleMetrics := metricSampler(name, tree, collector, discoverer)
+	pauses := locks.NewPauseStore(filepath.Join(deps.Runtime, "paused"))
 
 	return &Worker{
 		Service:   name,
@@ -130,8 +131,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 				return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
 			}
 		},
-		Now:  deps.Now,
-		Emit: deps.Emit,
+		IsPaused: func() bool { return pauses.Paused(name) },
+		Now:      deps.Now,
+		Emit:     deps.Emit,
 	}
 }
 

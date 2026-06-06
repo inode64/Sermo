@@ -29,8 +29,11 @@ type Worker struct {
 	Sample func(ctx context.Context) checks.MetricReader
 	// Operate runs an action through the operation engine.
 	Operate func(ctx context.Context, action string) operation.Result
-	Now     func() time.Time
-	Emit    func(Event)
+	// IsPaused reports whether monitoring is paused for this service (operator ran
+	// `unmonitor`). A paused cycle does nothing — no checks, rules or remediation.
+	IsPaused func() bool
+	Now      func() time.Time
+	Emit     func(Event)
 
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
@@ -45,6 +48,10 @@ type Worker struct {
 // fire any alert rules. The internal operation lock (section 18) already
 // prevents overlapping operations, so cycles never run concurrently per service.
 func (w *Worker) RunCycle(ctx context.Context) {
+	if w.IsPaused != nil && w.IsPaused() {
+		return // monitoring paused for this service
+	}
+
 	now := w.Now
 	if now == nil {
 		now = time.Now
