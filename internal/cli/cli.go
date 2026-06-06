@@ -56,6 +56,11 @@ type options struct {
 	config  string
 	command string
 	args    []string
+	// lock command flags
+	name        string
+	reason      string
+	ttl         time.Duration
+	commandArgs []string // tokens after `--`
 }
 
 // service returns the first positional argument after the command.
@@ -147,6 +152,12 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runProcesses(opts)
 	case "preflight":
 		return a.runPreflight(ctx, opts)
+	case "profile":
+		return a.runProfile(opts)
+	case "service":
+		return a.runService(opts)
+	case "lock":
+		return a.runLock(ctx, opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -387,6 +398,8 @@ func (a App) runConfig(opts options) int {
 		return a.runConfigRender(globalPath, rest, opts)
 	case "validate":
 		return a.runConfigValidate(globalPath, rest, opts)
+	case "diff":
+		return a.runConfigDiff(globalPath, rest, opts)
 	default:
 		fmt.Fprintf(a.Stderr, "usage error: unknown config subcommand %q\n", sub)
 		writeUsage(a.Stderr)
@@ -883,6 +896,42 @@ func parseArgs(args []string) (options, error) {
 				return opts, fmt.Errorf("--config requires a value")
 			}
 			opts.config = args[i]
+		case strings.HasPrefix(arg, "--name="):
+			opts.name = strings.TrimPrefix(arg, "--name=")
+		case arg == "--name":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--name requires a value")
+			}
+			opts.name = args[i]
+		case strings.HasPrefix(arg, "--reason="):
+			opts.reason = strings.TrimPrefix(arg, "--reason=")
+		case arg == "--reason":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--reason requires a value")
+			}
+			opts.reason = args[i]
+		case strings.HasPrefix(arg, "--ttl="):
+			d, err := time.ParseDuration(strings.TrimPrefix(arg, "--ttl="))
+			if err != nil {
+				return opts, fmt.Errorf("--ttl: %w", err)
+			}
+			opts.ttl = d
+		case arg == "--ttl":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--ttl requires a value")
+			}
+			d, err := time.ParseDuration(args[i])
+			if err != nil {
+				return opts, fmt.Errorf("--ttl: %w", err)
+			}
+			opts.ttl = d
+		case arg == "--":
+			// Everything after `--` is a literal command (the lock wrapper).
+			opts.commandArgs = append(opts.commandArgs, args[i+1:]...)
+			return opts, nil
 		case strings.HasPrefix(arg, "-"):
 			return opts, fmt.Errorf("unknown flag %s", arg)
 		case opts.command == "":
@@ -897,8 +946,11 @@ func parseArgs(args []string) (options, error) {
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
-	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE")
+	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE")
+	fmt.Fprintln(w, "          profile list | profile show PROFILE | service list | service show SERVICE")
+	fmt.Fprintln(w, "          service clone SOURCE TARGET")
+	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }
 
 func writeJSON(w io.Writer, value any) {

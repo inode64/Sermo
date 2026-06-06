@@ -170,6 +170,29 @@ func (l OperationLocker) reclaim(path string, expected lockFile, proc ProcessPro
 	return true
 }
 
+// reclaimStale re-reads a lock, confirms it is still the same stale lock, and
+// unlinks it. It returns false if the lock changed or turned active between the
+// classify and the unlink (section 20: abort and treat as held). Shared by the
+// operation and named lockers.
+func reclaimStale(path string, expected lockFile, proc ProcessProber, now func() time.Time) bool {
+	current, err := readLockFile(path)
+	if err != nil {
+		return os.IsNotExist(err)
+	}
+	if current.OwnerPID != expected.OwnerPID ||
+		current.OwnerStartTicks != expected.OwnerStartTicks ||
+		!current.ExpiresAt.Equal(expected.ExpiresAt) {
+		return false
+	}
+	if state, _ := classify(current, now(), proc); state == StateActive {
+		return false
+	}
+	if err := os.Remove(path); err != nil {
+		return os.IsNotExist(err)
+	}
+	return true
+}
+
 // writeLockFileExclusive creates path with O_CREAT|O_EXCL, writes the payload
 // and fsyncs the file and its directory so a lock that exists is always complete
 // after a crash (section 20). An existing file yields os.ErrExist.
