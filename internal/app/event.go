@@ -8,7 +8,8 @@ import "log/slog"
 // Event records what a worker cycle did, for the operator-visible log.
 type Event struct {
 	Service string
-	Kind    string // cycle | action | suppressed | alert | error
+	Watch   string // set for host-watch events (instead of Service)
+	Kind    string // cycle | action | suppressed | alert | error | hook | hook-failed
 	Rule    string
 	Action  string
 	Status  string
@@ -22,6 +23,9 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 	}
 	return func(e Event) {
 		attrs := []any{"service", e.Service, "kind", e.Kind}
+		if e.Watch != "" {
+			attrs = append(attrs, "watch", e.Watch)
+		}
 		if e.Rule != "" {
 			attrs = append(attrs, "rule", e.Rule)
 		}
@@ -35,9 +39,9 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 			attrs = append(attrs, "message", e.Message)
 		}
 		switch e.Kind {
-		case "error":
+		case "error", "hook-failed":
 			logger.Error("sermod", attrs...)
-		case "action", "alert", "suppressed":
+		case "action", "alert", "suppressed", "hook":
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
