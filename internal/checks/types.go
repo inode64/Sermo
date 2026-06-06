@@ -37,12 +37,13 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 }
 
 // httpCheck issues an HTTP request and compares the status code (section 12).
+// expect accepts a single code, a class (2xx) or a list (post-MVP).
 type httpCheck struct {
 	base
-	client       *http.Client
-	url          string
-	method       string
-	expectStatus int
+	client *http.Client
+	url    string
+	method string
+	expect statusMatcher
 }
 
 func (c httpCheck) Run(ctx context.Context) Result {
@@ -60,8 +61,40 @@ func (c httpCheck) Run(ctx context.Context) Result {
 	}
 	defer resp.Body.Close()
 
-	ok := resp.StatusCode == c.expectStatus
-	return c.result(ok, fmt.Sprintf("status %d (want %d)", resp.StatusCode, c.expectStatus), start)
+	ok := c.expect.matches(resp.StatusCode)
+	return c.result(ok, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
+}
+
+// statusMatcher matches an HTTP status against exact codes and/or classes (the
+// leading digit of an Nxx pattern).
+type statusMatcher struct {
+	codes   []int
+	classes []int
+}
+
+func (m statusMatcher) matches(code int) bool {
+	for _, c := range m.codes {
+		if c == code {
+			return true
+		}
+	}
+	for _, cl := range m.classes {
+		if code/100 == cl {
+			return true
+		}
+	}
+	return false
+}
+
+func (m statusMatcher) String() string {
+	parts := make([]string, 0, len(m.codes)+len(m.classes))
+	for _, c := range m.codes {
+		parts = append(parts, strconv.Itoa(c))
+	}
+	for _, cl := range m.classes {
+		parts = append(parts, strconv.Itoa(cl)+"xx")
+	}
+	return strings.Join(parts, ",")
 }
 
 // commandCheck runs a command and compares its exit code (section 12). The
