@@ -1,0 +1,10 @@
+kind: profile
+name: dovecot
+description: "Dovecot IMAP/POP3"
+service: { name: "dovecot", backend: auto }
+variables:
+  binary: "/usr/sbin/dovecot"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/dovecot","--version"], timeout: 10s }
+  config: { type: command, command: ["sh","-c","/usr/bin/doveconf >/dev/null"], timeout: 30s }

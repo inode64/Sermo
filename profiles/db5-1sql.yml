@@ -1,0 +1,9 @@
+kind: profile
+name: db5-1sql
+description: "Oracle Berkeley DB"
+service: { name: "db5-1sql", backend: auto }
+variables:
+  binary: "/usr/bin/db5.1sql"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/db5.1sql","--version"], timeout: 10s }

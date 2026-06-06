@@ -1,0 +1,9 @@
+kind: profile
+name: guacd
+description: "Guacamole daemon"
+service: { name: "guacd", backend: auto }
+variables:
+  binary: "/usr/sbin/guacd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/guacd","-v"], timeout: 10s }

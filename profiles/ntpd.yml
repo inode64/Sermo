@@ -1,0 +1,9 @@
+kind: profile
+name: ntpd
+description: "Network Time Protocol Daemon"
+service: { name: "ntpd", backend: auto }
+variables:
+  binary: "/usr/sbin/ntpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/ntpd","--version"], timeout: 10s }

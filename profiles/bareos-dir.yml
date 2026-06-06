@@ -1,0 +1,10 @@
+kind: profile
+name: bareos-dir
+description: "Backup director Server"
+service: { name: "bareos-dir", backend: auto }
+variables:
+  binary: "/usr/sbin/bareos-dir"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/bareos-dir","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["usr/sbin/bareos-dir","-t"], timeout: 30s }

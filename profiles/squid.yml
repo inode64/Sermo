@@ -1,0 +1,10 @@
+kind: profile
+name: squid
+description: "Squid"
+service: { name: "squid", backend: auto }
+variables:
+  binary: "/usr/sbin/squid"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/squid","-v"], timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/squid","-k","check"], timeout: 30s }

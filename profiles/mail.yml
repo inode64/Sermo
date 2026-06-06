@@ -1,0 +1,10 @@
+kind: profile
+name: mail
+description: "Mail"
+service: { name: "mail", backend: auto }
+variables:
+  binary: "/usr/bin/mail"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/mail","--version"], timeout: 10s }
+  config: { type: command, command: ["/usr/bin/mail","-v","-e"], timeout: 30s }

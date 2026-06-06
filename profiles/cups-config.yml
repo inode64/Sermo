@@ -1,0 +1,10 @@
+kind: profile
+name: cups-config
+description: "CUPSD"
+service: { name: "cups-config", backend: auto }
+variables:
+  binary: "/usr/bin/cups-config"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/cups-config","--version"], timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/cupsd","-t"], timeout: 30s }

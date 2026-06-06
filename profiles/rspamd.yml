@@ -1,0 +1,10 @@
+kind: profile
+name: rspamd
+description: "Rspamd"
+service: { name: "rspamd", backend: auto }
+variables:
+  binary: "/usr/bin/rspamd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/rspamd","-v"], timeout: 10s }
+  config: { type: command, command: ["/usr/bin/rspamadm","configtest"], timeout: 30s }

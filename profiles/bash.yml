@@ -1,0 +1,9 @@
+kind: profile
+name: bash
+description: "Bash"
+service: { name: "bash", backend: auto }
+variables:
+  binary: "/bin/bash"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/bin/bash","--version"], timeout: 10s }

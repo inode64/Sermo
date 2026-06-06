@@ -344,6 +344,47 @@ policy:
 	mustHave(t, issues, "max_actions must be an integer > 0")
 }
 
+func TestValidateDescriptionMustBeString(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+description: [not, a, string]
+service: { name: x }
+`)
+	mustHave(t, issues, "description must be a string")
+}
+
+func TestValidateDescriptionStringPasses(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+description: "A friendly label"
+service: { name: x }
+`)
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "description") {
+			t.Fatalf("valid description wrongly flagged: %v", is)
+		}
+	}
+}
+
+func TestValidateCommandExpectExit(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+preflight:
+  cfg: { type: command, command: ["check"], expect_exit: notanint }
+  ok: { type: command, command: ["check"], expect_exit: 1 }
+`)
+	mustHave(t, issues, "expect_exit must be an integer")
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "preflight.ok") {
+			t.Fatalf("integer expect_exit wrongly flagged: %v", is)
+		}
+	}
+}
+
 func TestValidateCommands(t *testing.T) {
 	issues := validateService(t, `
 kind: service

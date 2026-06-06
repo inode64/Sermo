@@ -1,0 +1,9 @@
+kind: profile
+name: postgres-9-4
+description: "PostgreSQL 9.4"
+service: { name: "postgres", backend: auto }
+variables:
+  binary: "/usr/lib64/postgresql-9.4/bin/postgres"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/lib64/postgresql-9.4/bin/postgres","--version"], timeout: 10s }

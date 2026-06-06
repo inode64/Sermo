@@ -1,0 +1,10 @@
+kind: profile
+name: bacula-sd
+description: "Backup storage Server"
+service: { name: "bacula-sd", backend: auto }
+variables:
+  binary: "/usr/sbin/bacula-sd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/bacula-sd","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/bacula-sd","-t"], timeout: 30s }

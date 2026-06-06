@@ -1,0 +1,9 @@
+kind: profile
+name: ovs-vswitchd
+description: "OpenVsiwtch Server"
+service: { name: "ovs-vswitchd", backend: auto }
+variables:
+  binary: "/usr/sbin/ovs-vswitchd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/ovs-vswitchd","--version"], timeout: 10s }

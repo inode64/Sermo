@@ -1,0 +1,9 @@
+kind: profile
+name: numad
+description: "Gestor NUMA"
+service: { name: "numad", backend: auto }
+variables:
+  binary: "/usr/bin/numad"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/numad","-V"], timeout: 10s }

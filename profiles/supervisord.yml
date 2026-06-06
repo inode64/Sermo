@@ -1,0 +1,9 @@
+kind: profile
+name: supervisord
+description: "supervisord"
+service: { name: "supervisord", backend: auto }
+variables:
+  binary: "/usr/bin/supervisord"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/supervisord","--version"], timeout: 10s }

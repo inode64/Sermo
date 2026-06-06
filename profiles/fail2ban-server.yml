@@ -1,0 +1,10 @@
+kind: profile
+name: fail2ban-server
+description: "Fail2ban-server"
+service: { name: "fail2ban-server", backend: auto }
+variables:
+  binary: "/usr/bin/fail2ban-server"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/fail2ban-server","--version"], timeout: 10s }
+  config: { type: command, command: ["/usr/bin/fail2ban-server","-t"], timeout: 30s }

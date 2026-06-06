@@ -1,0 +1,9 @@
+kind: profile
+name: db6-0sql
+description: "Oracle Berkeley DB"
+service: { name: "db6-0sql", backend: auto }
+variables:
+  binary: "/usr/bin/db6.0sql"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/db6.0sql","--version"], timeout: 10s }

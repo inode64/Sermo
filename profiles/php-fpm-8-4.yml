@@ -1,0 +1,10 @@
+kind: profile
+name: php-fpm-8-4
+description: "PHP 8.4"
+service: { name: "php-fpm", backend: auto }
+variables:
+  binary: "/usr/lib64/php8.4/bin/php-fpm"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/lib64/php8.4/bin/php-fpm","-v"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/php8.4","configtest"], timeout: 30s }

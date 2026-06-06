@@ -1,0 +1,9 @@
+kind: profile
+name: usbhid-ups
+description: "Usbhid-ups"
+service: { name: "usbhid-ups", backend: auto }
+variables:
+  binary: "/lib/nut/usbhid-ups"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/lib/nut/usbhid-ups","-V"], timeout: 10s }

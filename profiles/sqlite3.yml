@@ -1,0 +1,9 @@
+kind: profile
+name: sqlite3
+description: "SQLite"
+service: { name: "sqlite3", backend: auto }
+variables:
+  binary: "/usr/bin/sqlite3"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/sqlite3","-version"], timeout: 10s }

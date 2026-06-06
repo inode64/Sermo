@@ -1,0 +1,9 @@
+kind: profile
+name: fcron
+description: "Fcron"
+service: { name: "fcron", backend: auto }
+variables:
+  binary: "/usr/libexec/fcron"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/libexec/fcron","-V"], timeout: 10s }

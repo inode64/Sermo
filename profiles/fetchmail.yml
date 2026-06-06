@@ -1,0 +1,9 @@
+kind: profile
+name: fetchmail
+description: "Fetchmail"
+service: { name: "fetchmail", backend: auto }
+variables:
+  binary: "/usr/bin/fetchmail"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/fetchmail","-V"], timeout: 10s }

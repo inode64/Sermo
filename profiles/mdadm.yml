@@ -1,0 +1,9 @@
+kind: profile
+name: mdadm
+description: "mdadm"
+service: { name: "mdadm", backend: auto }
+variables:
+  binary: "/sbin/mdadm"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/sbin/mdadm","--version"], timeout: 10s }

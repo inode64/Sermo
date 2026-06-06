@@ -1,0 +1,9 @@
+kind: profile
+name: snmpd
+description: "Snmpd"
+service: { name: "snmpd", backend: auto }
+variables:
+  binary: "/usr/sbin/snmpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/snmpd","-v"], timeout: 10s }

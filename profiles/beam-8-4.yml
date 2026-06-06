@@ -1,0 +1,9 @@
+kind: profile
+name: beam-8-4
+description: "Beam"
+service: { name: "beam", backend: auto }
+variables:
+  binary: "/usr/lib64/erlang/erts-8.4/bin/beam"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/lib64/erlang/erts-8.4/bin/beam","-V"], timeout: 10s }

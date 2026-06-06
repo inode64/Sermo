@@ -1,0 +1,9 @@
+kind: profile
+name: slapd
+description: "Slapd"
+service: { name: "slapd", backend: auto }
+variables:
+  binary: "/usr/bin/openldap/slapd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/openldap/slapd","-VVV"], expect_exit: 1, timeout: 10s }

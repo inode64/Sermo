@@ -1,0 +1,9 @@
+kind: profile
+name: acpid
+description: "Acpid"
+service: { name: "acpid", backend: auto }
+variables:
+  binary: "/usr/sbin/acpid"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/acpid","-v"], timeout: 10s }

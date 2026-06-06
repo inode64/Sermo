@@ -1,0 +1,9 @@
+kind: profile
+name: pppd
+description: "Pppd"
+service: { name: "pppd", backend: auto }
+variables:
+  binary: "/usr/sbin/pppd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/pppd","--version"], timeout: 10s }

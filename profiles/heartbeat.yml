@@ -1,0 +1,9 @@
+kind: profile
+name: heartbeat
+description: "Heartbeat"
+service: { name: "heartbeat", backend: auto }
+variables:
+  binary: "/usr/lib64/heartbeat/heartbeat"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/lib64/heartbeat/heartbeat","-V"], timeout: 10s }

@@ -1,0 +1,10 @@
+kind: profile
+name: varnishd
+description: "Varnish"
+service: { name: "varnishd", backend: auto }
+variables:
+  binary: "/usr/sbin/varnishd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/varnishd","-V"], timeout: 10s }
+  config: { type: command, command: ["/usr/sbin/varnishd","-C","-f","/etc/varnish/default.vcl"], timeout: 30s }

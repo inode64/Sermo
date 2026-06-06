@@ -1,0 +1,10 @@
+kind: profile
+name: bareos-fd
+description: "Backup file Server"
+service: { name: "bareos-fd", backend: auto }
+variables:
+  binary: "/usr/sbin/bareos-fd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/bareos-fd","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["usr/sbin/bareos-fd","-t"], timeout: 30s }

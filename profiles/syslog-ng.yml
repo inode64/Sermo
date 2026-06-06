@@ -1,0 +1,9 @@
+kind: profile
+name: syslog-ng
+description: "Syslog-ng"
+service: { name: "syslog-ng", backend: auto }
+variables:
+  binary: "/usr/sbin/syslog-ng"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/syslog-ng","--version"], timeout: 10s }

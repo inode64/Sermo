@@ -1,0 +1,9 @@
+kind: profile
+name: catalina-sh-9-0
+description: "Tomcat 9.0"
+service: { name: "catalina-sh", backend: auto }
+variables:
+  binary: "/usr/share/tomcat-9.0/bin/catalina.sh"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/share/tomcat-9.0/bin/catalina.sh","version"], timeout: 10s }

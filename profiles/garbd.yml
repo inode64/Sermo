@@ -1,0 +1,9 @@
+kind: profile
+name: garbd
+description: "Synchronous multi-master replication engine that provides the wsrep API"
+service: { name: "garbd", backend: auto }
+variables:
+  binary: "/usr/bin/garbd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/garbd","-v"], timeout: 10s }

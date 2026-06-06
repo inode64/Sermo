@@ -1,0 +1,9 @@
+kind: profile
+name: dbus-daemon
+description: "DBus Daemon"
+service: { name: "dbus-daemon", backend: auto }
+variables:
+  binary: "/usr/bin/dbus-daemon"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/dbus-daemon","--version"], timeout: 10s }

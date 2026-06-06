@@ -1,0 +1,9 @@
+kind: profile
+name: certbot
+description: "Generador de certificados"
+service: { name: "certbot", backend: auto }
+variables:
+  binary: "/usr/bin/certbot"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/certbot","--version"], timeout: 10s }

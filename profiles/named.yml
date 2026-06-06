@@ -1,0 +1,10 @@
+kind: profile
+name: named
+description: "Named"
+service: { name: "named", backend: auto }
+variables:
+  binary: "/usr/sbin/named"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/named","-v"], timeout: 10s }
+  config: { type: command, command: ["sh","-c","/etc/init.d/named checkconfig && /etc/init.d/named checkzones"], timeout: 30s }

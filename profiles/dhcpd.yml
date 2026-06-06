@@ -1,0 +1,10 @@
+kind: profile
+name: dhcpd
+description: "Servidor DHCP"
+service: { name: "dhcpd", backend: auto }
+variables:
+  binary: "/usr/sbin/dhcpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/sbin/dhcpd","--version"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }

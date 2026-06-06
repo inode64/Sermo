@@ -1,0 +1,9 @@
+kind: profile
+name: openssl
+description: "Full-strength general purpose cryptography library (including SSL and TLS)"
+service: { name: "openssl", backend: auto }
+variables:
+  binary: "/usr/bin/openssl"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/openssl","version"], timeout: 10s }

@@ -1,0 +1,9 @@
+kind: profile
+name: rsync
+description: "RSync"
+service: { name: "rsync", backend: auto }
+variables:
+  binary: "/usr/bin/rsync"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/rsync","--version"], timeout: 10s }

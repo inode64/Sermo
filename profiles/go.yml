@@ -1,0 +1,9 @@
+kind: profile
+name: go
+description: "A concurrent garbage collected and typesafe programming language"
+service: { name: "go", backend: auto }
+variables:
+  binary: "/usr/bin/go"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/go","version"], timeout: 10s }

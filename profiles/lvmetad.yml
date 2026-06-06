@@ -1,0 +1,9 @@
+kind: profile
+name: lvmetad
+description: "Lvmetad"
+service: { name: "lvmetad", backend: auto }
+variables:
+  binary: "/sbin/lvmetad"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/sbin/lvmetad","-V"], expect_exit: 1, timeout: 10s }
