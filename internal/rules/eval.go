@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 )
 
 // Evaluator evaluates condition trees against the per-cycle check cache and, for
@@ -63,8 +64,8 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	if _, ok := node["process"]; ok {
 		return false, fmt.Errorf("process condition is not implemented in this slice")
 	}
-	if _, ok := node["metric"]; ok {
-		return false, fmt.Errorf("metric condition is not implemented in this slice")
+	if v, ok := node["metric"]; ok {
+		return e.evalMetric(v)
 	}
 	return false, fmt.Errorf("condition has no recognized operator")
 }
@@ -149,6 +150,28 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 		return false, err
 	}
 	return res.OK, nil
+}
+
+// evalMetric reads a sampled metric and compares it to the threshold
+// (section 14). With no metric source, or a not-ready rate metric, it is false
+// so a remediation never fires on an unavailable value.
+func (e *Evaluator) evalMetric(v any) (bool, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false, fmt.Errorf("metric condition must be a mapping")
+	}
+	if e.Deps.Metrics == nil {
+		return false, nil
+	}
+	scope := asString(m["scope"])
+	if scope == "" {
+		scope = "service"
+	}
+	reading, ok := e.Deps.Metrics(scope, asString(m["name"]))
+	if !ok {
+		return false, nil
+	}
+	return metrics.Compare(reading, asString(m["op"]), scalarString(m["value"]))
 }
 
 // evalInline builds and runs a leaf check whose truth is the check's OK.

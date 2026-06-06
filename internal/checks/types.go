@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
 
@@ -145,6 +146,37 @@ func (c binaryCheck) Run(_ context.Context) Result {
 		return c.result(false, c.path+" is not executable", start)
 	}
 	return c.result(true, c.path+" is executable", start)
+}
+
+// metricCheck reads a sampled metric and compares it to a threshold (section
+// 12/14). Its OK is the comparison result (the threshold being met), so
+// `active: {check: ...}` is true when the threshold is breached.
+type metricCheck struct {
+	base
+	scope  string
+	metric string
+	op     string
+	value  string
+	source MetricReader
+}
+
+func (c metricCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	if c.source == nil {
+		return c.result(false, "metric source unavailable", start)
+	}
+	reading, ok := c.source(c.scope, c.metric)
+	if !ok {
+		return c.result(false, fmt.Sprintf("metric %s/%s unavailable", c.scope, c.metric), start)
+	}
+	met, err := metrics.Compare(reading, c.op, c.value)
+	if err != nil {
+		return c.result(false, err.Error(), start)
+	}
+	if !reading.Ready {
+		return c.result(false, fmt.Sprintf("%s/%s not ready", c.scope, c.metric), start)
+	}
+	return c.result(met, fmt.Sprintf("%s/%s %s %s = %t", c.scope, c.metric, c.op, c.value, met), start)
 }
 
 func firstLine(s string) string {

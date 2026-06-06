@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 )
 
 func cache(results map[string]bool) map[string]checks.Result {
@@ -143,6 +144,41 @@ type countingRunner struct{ n int }
 func (r *countingRunner) Run(context.Context, string, ...string) (execx.Result, error) {
 	r.n++
 	return execx.Result{ExitCode: 0}, nil
+}
+
+func TestEvalMetricCondition(t *testing.T) {
+	source := func(scope, name string) (metrics.Reading, bool) {
+		if scope == "service" && name == "cpu" {
+			return metrics.Reading{Percent: 85, HasPercent: true, Ready: true}, true
+		}
+		return metrics.Reading{}, false
+	}
+	ev := &Evaluator{Deps: checks.Deps{Metrics: source}}
+
+	hot := map[string]any{"metric": map[string]any{"name": "cpu", "op": ">", "value": "80%"}}
+	if !evalNode(t, ev, hot) {
+		t.Error("cpu 85% > 80% should be true")
+	}
+	cool := map[string]any{"metric": map[string]any{"name": "cpu", "op": "<", "value": "80%"}}
+	if evalNode(t, ev, cool) {
+		t.Error("cpu 85% < 80% should be false")
+	}
+}
+
+func TestEvalMetricNotReadyOrAbsentIsFalse(t *testing.T) {
+	// Not ready -> false (never fire remediation on an uncomputed rate).
+	ev := &Evaluator{Deps: checks.Deps{Metrics: func(string, string) (metrics.Reading, bool) {
+		return metrics.Reading{Percent: 99, HasPercent: true, Ready: false}, true
+	}}}
+	if evalNode(t, ev, map[string]any{"metric": map[string]any{"name": "cpu", "op": ">", "value": "1%"}}) {
+		t.Error("not-ready metric must be false")
+	}
+
+	// No source at all -> false.
+	ev = &Evaluator{}
+	if evalNode(t, ev, map[string]any{"metric": map[string]any{"name": "cpu", "op": ">", "value": "1%"}}) {
+		t.Error("absent metric source must be false")
+	}
 }
 
 func TestParseRules(t *testing.T) {

@@ -13,8 +13,8 @@ import (
 
 func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 	var a, b int32
-	counter := func(n *int32) func(context.Context) map[string]checks.Result {
-		return func(context.Context) map[string]checks.Result {
+	counter := func(n *int32) func(context.Context, checks.Deps) map[string]checks.Result {
+		return func(context.Context, checks.Deps) map[string]checks.Result {
 			atomic.AddInt32(n, 1)
 			return nil
 		}

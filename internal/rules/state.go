@@ -95,6 +95,25 @@ func parseDuration(v any) time.Duration {
 	return d
 }
 
+// scalarString renders a YAML scalar as a string. A metric `value` is logically
+// a string (section 14) but `0` decodes as an int, so it must be stringified.
+func scalarString(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case uint64:
+		return strconv.FormatUint(t, 10)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return ""
+	}
+}
+
 func parseInt(v any) (int, bool) {
 	switch t := v.(type) {
 	case int:
