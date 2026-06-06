@@ -300,6 +300,51 @@ func TestCollectVariablesFirstExistingPath(t *testing.T) {
 	}
 }
 
+func TestDisplayNameFallsBackToName(t *testing.T) {
+	cases := []struct {
+		name string
+		body map[string]any
+		want string
+	}{
+		{"present", map[string]any{"display_name": "MariaDB"}, "MariaDB"},
+		{"absent", map[string]any{}, "mariadb"},
+		{"blank", map[string]any{"display_name": "   "}, "mariadb"},
+		{"non-string", map[string]any{"display_name": 7}, "mariadb"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DisplayName(tc.body, "mariadb"); got != tc.want {
+				t.Errorf("DisplayName(%v) = %q, want %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDescriptionHasNoFallback guards the asymmetry: unlike display_name,
+// description is never materialized from name. A document without a description
+// renders without one.
+func TestDescriptionHasNoFallback(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/plain.yml": `
+kind: service
+name: plain
+service: { name: plain }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("plain")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["description"]; present {
+		t.Errorf("description should be absent, got %v", resolved.Tree["description"])
+	}
+}
+
 func TestValidateDuplicateServiceName(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

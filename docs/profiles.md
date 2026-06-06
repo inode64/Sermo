@@ -18,6 +18,30 @@ The packaged profiles (`profiles/`) cover apache, mysql, mariadb, redis and
 php-fpm. They define variables, preflight, processes, checks, stop_policy and
 rules so a service usually only sets a few overrides.
 
+## Metadata fields
+
+A profile or service may carry two optional human-facing strings:
+
+```yaml
+kind: profile
+name: mariadb
+display_name: "MariaDB"      # pretty label; falls back to name when absent
+description: "..."           # free-text note; shown verbatim, nothing when absent
+```
+
+Both are optional and behave differently when missing:
+
+- **`display_name`** is the label used wherever Sermo shows the application to a
+  human (e.g. `profile list`, `service list`). When it is absent or blank, Sermo
+  falls back to `name`. Set it only when it adds something over `name` — a proper
+  brand (`MariaDB`, `PostgreSQL`, `OpenSSH`) or a version (`PHP-FPM 8.3`). If the
+  display name would just repeat `name`, leave it out and let the fallback apply.
+- **`description`** is an optional free-text note. It has **no fallback**: when it
+  is absent, nothing is shown for it — Sermo never substitutes `name`. Use it for
+  a real sentence, not a restatement of the name.
+
+Both must be strings if present; validation rejects non-string values.
+
 ## Unit aliases
 
 The unit name differs across distributions. A profile lists per-backend
