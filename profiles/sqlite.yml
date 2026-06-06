@@ -1,7 +1,7 @@
 kind: profile
-name: sqlite3
+name: sqlite
 description: "SQLite"
-service: { name: "sqlite3", backend: auto }
+service: { name: "sqlite", backend: auto }
 variables:
   binary: "/usr/bin/sqlite3"
 preflight:
