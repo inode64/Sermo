@@ -121,7 +121,7 @@ watches:
 The three metrics and their conditions:
 
 - **`state`** — interface up/down. Use `on: change` to fire on any transition, or
-  `expect: up` / `expect: down` to fire whenever the state is *not* the expected
+  `expect: up` / `expect: down` to fire whenever the state **is** the expected
   value.
 - **`speed`** — link speed in Mbps. Supports `on: change` only; it primes a
   baseline on the first cycle and fires when the speed differs afterwards.
