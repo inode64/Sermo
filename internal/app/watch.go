@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -51,22 +53,42 @@ func (w *Watch) emit(e Event) {
 	}
 }
 
-// hookEnv builds the SERMO_* environment for a hook from the check result.
-// checkType is the configured check type (e.g. "disk"); res.Check is the watch
-// name (base.name), so it must not be used for SERMO_CHECK_TYPE.
+// hookEnv builds the SERMO_* environment for a hook. Beyond the always-present
+// SERMO_WATCH/CHECK_TYPE/MESSAGE, every Result.Data key is exported as
+// SERMO_<UPPER_KEY> (non-alphanumerics become "_") so any check's metadata
+// reaches the hook without per-type code.
 func hookEnv(name, checkType string, res checks.Result) map[string]string {
 	env := map[string]string{
 		"SERMO_WATCH":      name,
 		"SERMO_CHECK_TYPE": checkType,
 		"SERMO_MESSAGE":    res.Message,
 	}
-	if p, ok := res.Data["path"].(string); ok {
-		env["SERMO_PATH"] = p
-	}
-	if v, ok := res.Data["used_pct"]; ok {
-		env["SERMO_VALUE"] = fmt.Sprintf("%v", v)
-	} else if v, ok := res.Data["free_pct"]; ok {
-		env["SERMO_VALUE"] = fmt.Sprintf("%v", v)
+	for k, v := range res.Data {
+		env["SERMO_"+envKey(k)] = stringifyValue(v)
 	}
 	return env
+}
+
+// envKey uppercases a Data key and replaces any non-alphanumeric rune with "_".
+func envKey(k string) string {
+	var b strings.Builder
+	for _, r := range k {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - 32)
+		case (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
+// stringifyValue renders a Data value; whole floats print without a trailing .0.
+func stringifyValue(v any) string {
+	if f, ok := v.(float64); ok {
+		return strconv.FormatFloat(f, 'f', -1, 64)
+	}
+	return fmt.Sprintf("%v", v)
 }

@@ -36,6 +36,8 @@ type Deps struct {
 	Processes func(exe, user string) string
 	// DiskUsage reports filesystem usage for `disk` checks. Nil uses statfs.
 	DiskUsage DiskUsageFunc
+	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
+	NetSampler NetSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -197,6 +199,53 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "disk check: " + err.Error()
 		}
 		return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage}, ""
+
+	case "net":
+		iface := asString(entry["interface"])
+		if iface == "" {
+			return nil, "net check requires an interface"
+		}
+		metric := asString(entry["metric"])
+		c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
+		switch metric {
+		case "state":
+			if exp := asString(entry["expect"]); exp != "" {
+				if exp != "up" && exp != "down" {
+					return nil, "net state expect must be up or down"
+				}
+				c.expect = exp
+			} else if asString(entry["on"]) == "change" {
+				c.onChange = true
+			} else {
+				return nil, "net state requires expect: up|down or on: change"
+			}
+		case "speed":
+			if asString(entry["on"]) != "change" {
+				return nil, "net speed requires on: change"
+			}
+			c.onChange = true
+		case "errors":
+			c.counters = stringArray(entry["counters"])
+			if len(c.counters) == 0 {
+				c.counters = []string{"rx_errors", "tx_errors"}
+			}
+			delta, ok := entry["delta"].(map[string]any)
+			if !ok {
+				return nil, "net errors requires a delta {op, value}"
+			}
+			op := asString(delta["op"])
+			if !validDiskOp(op) {
+				return nil, "net errors delta has an invalid op"
+			}
+			v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
+			if err != nil {
+				return nil, "net errors delta value must be numeric"
+			}
+			c.op, c.value = op, v
+		default:
+			return nil, "net check metric must be state, speed or errors"
+		}
+		return c, ""
 
 	case "":
 		return nil, "missing type"
