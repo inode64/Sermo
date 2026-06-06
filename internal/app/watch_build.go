@@ -35,31 +35,93 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			warnings = append(warnings, "watch "+name+": missing check")
 			continue
 		}
-		check, err := checks.BuildInline(name, checkEntry, checks.Deps{
-			DefaultTimeout: deps.DefaultTimeout,
-			DiskUsage:      nil, // statfs default
-		})
-		if err != nil {
-			warnings = append(warnings, "watch "+name+": "+err.Error())
-			continue
-		}
-
-		hook, err := parseHook(entry)
-		if err != nil {
-			warnings = append(warnings, "watch "+name+": "+err.Error())
-			continue
-		}
 
 		interval := defaultInterval
 		if d := durationField(entry["interval"]); d > 0 {
 			interval = d
 		}
 
-		watches = append(watches, &Watch{
+		switch stringField(checkEntry["type"]) {
+		case "net":
+			expanded, warns := buildNetWatches(name, entry, checkEntry, deps, interval)
+			watches = append(watches, expanded...)
+			warnings = append(warnings, warns...)
+		default:
+			w, warn := buildSingleWatch(name, entry, checkEntry, deps, interval)
+			if warn != "" {
+				warnings = append(warnings, warn)
+				continue
+			}
+			watches = append(watches, w)
+		}
+	}
+	return watches, warnings
+}
+
+// buildSingleWatch builds the standard one-Watch-per-entry shape (disk and any
+// future 1:1 check type): an inline check plus the entry's top-level then.hook.
+func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
+	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
+		DefaultTimeout: deps.DefaultTimeout,
+		DiskUsage:      nil, // statfs default
+	})
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	hook, err := parseHook(entry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	return &Watch{
+		Name:      name,
+		CheckType: stringField(checkEntry["type"]),
+		Check:     check,
+		Window:    rules.Rule{For: parseForField(entry["for"]), Within: parseWithinField(entry["within"])},
+		Hook:      hook,
+		Runner:    OSHookRunner{},
+		Interval:  interval,
+		Now:       deps.Now,
+		Emit:      deps.Emit,
+	}, ""
+}
+
+// buildNetWatches expands one net interface entry into one Watch per metric,
+// each with its own check, window and hook (spec 2026-06-06-net-interface-watch).
+func buildNetWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
+	iface := stringField(checkEntry["interface"])
+	metrics, ok := entry["metrics"].(map[string]any)
+	if !ok || len(metrics) == 0 {
+		return nil, []string{"watch " + name + ": net check requires a non-empty metrics map"}
+	}
+	var out []*Watch
+	var warns []string
+	for _, key := range sortedWatchNames(metrics) {
+		mEntry, ok := metrics[key].(map[string]any)
+		if !ok {
+			warns = append(warns, "watch "+name+".metrics."+key+": not a mapping")
+			continue
+		}
+		ce := map[string]any{"type": "net", "interface": iface, "metric": key}
+		for _, k := range []string{"on", "expect", "counters", "delta"} {
+			if v, ok := mEntry[k]; ok {
+				ce[k] = v
+			}
+		}
+		check, err := checks.BuildInline(name, ce, checks.Deps{DefaultTimeout: deps.DefaultTimeout})
+		if err != nil {
+			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
+			continue
+		}
+		hook, err := parseHook(mEntry)
+		if err != nil {
+			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
+			continue
+		}
+		out = append(out, &Watch{
 			Name:      name,
-			CheckType: stringField(checkEntry["type"]),
+			CheckType: "net",
 			Check:     check,
-			Window:    rules.Rule{For: parseForField(entry["for"]), Within: parseWithinField(entry["within"])},
+			Window:    rules.Rule{For: parseForField(mEntry["for"]), Within: parseWithinField(mEntry["within"])},
 			Hook:      hook,
 			Runner:    OSHookRunner{},
 			Interval:  interval,
@@ -67,7 +129,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			Emit:      deps.Emit,
 		})
 	}
-	return watches, warnings
+	return out, warns
 }
 
 func parseHook(entry map[string]any) (HookSpec, error) {

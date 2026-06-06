@@ -90,3 +90,54 @@ func TestValidateWatchesMessageMentionsName(t *testing.T) {
 		t.Fatalf("issue should name the watch: %v", issues)
 	}
 }
+
+func TestValidateWatchesNetGood(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"net-eth0": map[string]any{
+				"check": map[string]any{"type": "net", "interface": "eth0"},
+				"metrics": map[string]any{
+					"state":  map[string]any{"on": "change", "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+					"errors": map[string]any{"delta": map[string]any{"op": ">", "value": 100}, "then": map[string]any{"hook": map[string]any{"command": []any{"/y"}}}},
+				},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
+func TestValidateWatchesNetBad(t *testing.T) {
+	hook := map[string]any{"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}}
+	merge := func(m map[string]any) map[string]any {
+		out := map[string]any{}
+		for k, v := range hook {
+			out[k] = v
+		}
+		for k, v := range m {
+			out[k] = v
+		}
+		return out
+	}
+	cases := map[string]map[string]any{
+		"no interface": {"check": map[string]any{"type": "net"}, "metrics": map[string]any{"state": merge(map[string]any{"on": "change"})}},
+		"no metrics":   {"check": map[string]any{"type": "net", "interface": "eth0"}},
+		"unknown metric": {"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{"bogus": merge(map[string]any{"on": "change"})}},
+		"bad state": {"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{"state": merge(map[string]any{})}}, // no on/expect
+		"bad errors op": {"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{"errors": merge(map[string]any{"delta": map[string]any{"op": "=>", "value": 1}})}},
+		"empty hook cmd": {"check": map[string]any{"type": "net", "interface": "eth0"},
+			"metrics": map[string]any{"state": map[string]any{"on": "change", "then": map[string]any{"hook": map[string]any{"command": []any{}}}}}},
+	}
+	for name, w := range cases {
+		t.Run(name, func(t *testing.T) {
+			issues := watchIssues(validateRawGlobal(t, map[string]any{"watches": map[string]any{"net-eth0": w}}))
+			if len(issues) == 0 {
+				t.Fatalf("%s: expected a watch issue", name)
+			}
+		})
+	}
+}
