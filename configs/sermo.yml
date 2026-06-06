@@ -8,6 +8,10 @@ engine:
   interval: 30s
   max_parallel_checks: 8
   default_timeout: 10s
+  # Grace period before the daemon starts its first check cycle. Gives the host
+  # time to finish booting so services that are still coming up are not flagged
+  # or remediated prematurely. 0 (the default) disables the wait.
+  startup_delay: 0
 
 paths:
   profiles:

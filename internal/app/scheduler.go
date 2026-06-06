@@ -15,6 +15,10 @@ import (
 type Scheduler struct {
 	Interval time.Duration
 	OpSlots  int // global operation semaphore; <=0 means a default of 2
+	// StartupDelay holds the daemon for this long before starting any worker,
+	// giving the host time to finish booting so services that are still coming
+	// up are not flagged or remediated prematurely. <=0 disables the wait.
+	StartupDelay time.Duration
 }
 
 // Run starts every worker and blocks until ctx is cancelled and all workers have
@@ -30,6 +34,14 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker) {
 	interval := s.Interval
 	if interval <= 0 {
 		interval = 30 * time.Second
+	}
+
+	// Grace period before the first cycle so a still-booting host can settle.
+	// A shutdown signal during the wait aborts cleanly without starting workers.
+	if s.StartupDelay > 0 {
+		if !sleepCtx(ctx, s.StartupDelay) {
+			return
+		}
 	}
 
 	var wg sync.WaitGroup
