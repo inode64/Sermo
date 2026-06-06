@@ -46,6 +46,23 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	}
 }
 
+// ResolveProfile expands a profile's own body — no service merge — so its
+// concrete values (notably the binary path and preflight commands) can be
+// inspected directly, as the `apps` command does. ${name} and ${display_name}
+// are available; the returned errors mirror Resolve's.
+func (c *Config) ResolveProfile(name string) (Resolved, []string) {
+	doc, ok := c.Profiles[name]
+	if !ok {
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown profile %q", name)}
+	}
+	body := stripMeta(doc.Body)
+	vars := collectVariables(body)
+	errs := validateVariableValues(vars)
+	injectBuiltinVariables(vars, name, body)
+	expanded, expErrs := expandTree(body, vars)
+	return Resolved{Name: name, Tree: expanded}, append(errs, expErrs...)
+}
+
 // mergedService returns the merged-but-unexpanded body for a service, following
 // its uses/clone layering. chain tracks the active clone path for cycle
 // detection (section 8).
