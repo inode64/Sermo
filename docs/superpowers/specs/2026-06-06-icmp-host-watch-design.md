@@ -68,8 +68,13 @@ across cycles** (remembers the previous sample for `on: change` / `change`),
 implemented as a pointer type `*icmpCheck`; safe because each watch ticks
 sequentially on its own goroutine.
 
-- **Params:** `host` (required); `count` (default 3); `metric` (state|latency);
-  the per-metric condition fields.
+- **Params:** `host` (required); `count` (default 3 — applied in `buildCheck`,
+  like net's `counters` default, so inline use gets it too); `metric`
+  (state|latency); the per-metric condition fields.
+- **Timeout:** the check reads `base.timeout` (= `default_timeout`, since the
+  per-metric inline entry carries no `timeout` key) and passes it to the sampler
+  as the probe deadline. A per-watch timeout override is not plumbed (consistent
+  with net) — decision 6.
 - **Sampling:** injectable `Deps.PingSampler func(host string, count int, timeout
   time.Duration) (PingSample, error)`. `PingSample{Reachable bool, RTTms float64,
   RTTKnown bool}`. The default implementation uses `golang.org/x/net/icmp` +
@@ -102,7 +107,10 @@ checkEntry, deps, interval)` used by **both** `net` and `icmp`:
   `metric: <key>` plus every key from the metric block **except** `then`, `for`,
   `within` (those are watch-unit concerns). This is equivalent to the prior
   net-specific explicit copy of `on/expect/counters/delta`, but type-agnostic, so
-  it serves icmp's `threshold/change` fields too.
+  it serves icmp's `threshold/change` fields too. **Builder-set keys take
+  precedence:** copy the metric-block keys first, then set `type`/`metric` (and
+  the base check fields from `checkEntry`) so a stray `metric`/`type` inside a
+  metric block cannot override the builder's values.
 - Build the check via `checks.BuildInline`, the per-metric hook via `parseHook`
   (reads `then.hook`), the window from the metric's `for`/`within`; one `*Watch`
   per metric with `Name` = base watch name, `CheckType` = the check type.
