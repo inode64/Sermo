@@ -42,6 +42,29 @@ Both are optional and behave differently when missing:
 
 Both must be strings if present; validation rejects non-string values.
 
+### Using name and display_name in expansion
+
+`${name}` and `${display_name}` are always available as variables during
+resolution, without being declared under `variables`. `${name}` expands to the
+resolved service name and `${display_name}` to its display name (falling back to
+`name`). This lets a profile parameterize human-facing strings instead of
+hardcoding a brand:
+
+```yaml
+rules:
+  block-restart-during-backup:
+    type: guard
+    blocks: [restart, stop]
+    then:
+      action: block
+      message: "${display_name} backup is running"
+```
+
+When a service `uses` the profile, `${display_name}` resolves to whatever that
+service's display name is (the profile's, unless the service overrides it). An
+explicit `variables.name` or `variables.display_name` takes precedence over the
+built-in.
+
 ## Unit aliases
 
 The unit name differs across distributions. A profile lists per-backend

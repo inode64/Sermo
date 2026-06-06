@@ -118,6 +118,12 @@ checks:
 
 Do not introduce complex templating unless requested.
 
+`${name}` and `${display_name}` are built-in variables always available during
+resolution (no `variables` entry needed): `${name}` is the resolved service name,
+`${display_name}` is the display name (falling back to `name`). Use them to
+parameterize human-facing strings, e.g. `message: "${display_name} backup is
+running"`. An explicit `variables` entry of the same name overrides the built-in.
+
 Validation must fail on unresolved variables.
 
 ## Typed fields and variable interaction

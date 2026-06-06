@@ -87,7 +87,7 @@ rules:
         check: config
     then:
       action: block
-      message: "PHP-FPM configuration is invalid"
+      message: "${display_name} configuration is invalid"
 
   restart-if-tcp-failed:
     type: remediation
