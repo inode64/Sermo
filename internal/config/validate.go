@@ -42,11 +42,9 @@ var rejectedSecurityToggles = []string{
 // stop_policy.force_kill/kill_only_if, aliases, and rules (type, if/then, action,
 // guard/block constraints, for/within windows, and the condition tree: exactly
 // one operator per node, check references, states, and metric scope/catalog with
-// system metrics confined to alert rules).
-//
-// Not yet enforced: indirect system-metric use via a check reference, and the
-// metric value-form vs metric-form mismatch (a % threshold on an absolute-only
-// metric), which needs the metric catalog's per-metric forms.
+// system metrics confined to alert rules — directly and indirectly through a
+// metric check reference — and the metric threshold form matching the metric's
+// available forms).
 func Validate(cfg *Config) []Issue {
 	var issues []Issue
 	issues = append(issues, validateGlobal(cfg)...)
@@ -219,6 +217,21 @@ var metricCatalog = map[string]map[string]struct{}{
 	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
 }
 
+// metricForms records which value forms each metric exposes (section 12/14), so
+// a threshold's form can be checked against the metric.
+type metricForm struct{ absolute, percent bool }
+
+var metricForms = map[string]metricForm{
+	"memory":        {absolute: true, percent: true},
+	"cpu":           {percent: true},
+	"process_count": {absolute: true},
+	"total_memory":  {absolute: true, percent: true},
+	"total_cpu":     {percent: true},
+	"load1":         {absolute: true},
+	"load5":         {absolute: true},
+	"load15":        {absolute: true},
+}
+
 type addFunc func(format string, args ...any)
 
 // validateCheckSection validates a checks/preflight/postflight section: known
@@ -345,6 +358,7 @@ func validateRules(tree map[string]any, add addFunc) {
 		return
 	}
 	checkNames := collectCheckNames(tree)
+	systemMetricChecks := collectSystemMetricChecks(tree)
 
 	for _, name := range sortedKeys(ruleMap) {
 		path := "rules." + name
@@ -422,7 +436,7 @@ func validateRules(tree map[string]any, add addFunc) {
 		}
 
 		if hasIf {
-			validateCondition(ifNode, path+".if", checkNames, rtype == "alert", add)
+			validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, rtype == "alert", add)
 		}
 	}
 }
@@ -432,7 +446,7 @@ var conditionOperators = []string{"and", "or", "not", "failed", "active", "metri
 // validateCondition checks one condition node: exactly one operator/leaf, valid
 // check references, valid service/process states, command array+timeout, and
 // metric grammar (with system-scope allowed only in alert rules).
-func validateCondition(node map[string]any, path string, checkNames map[string]struct{}, allowSystemMetric bool, add addFunc) {
+func validateCondition(node map[string]any, path string, checkNames, systemMetricChecks map[string]struct{}, allowSystemMetric bool, add addFunc) {
 	present := presentOperators(node)
 	if len(present) != 1 {
 		add("%s must contain exactly one condition/operator", path)
@@ -453,7 +467,7 @@ func validateCondition(node map[string]any, path string, checkNames map[string]s
 				add("%s.%s[%d] must be a condition", path, key, i)
 				continue
 			}
-			validateCondition(child, fmt.Sprintf("%s.%s[%d]", path, key, i), checkNames, allowSystemMetric, add)
+			validateCondition(child, fmt.Sprintf("%s.%s[%d]", path, key, i), checkNames, systemMetricChecks, allowSystemMetric, add)
 		}
 	case "not":
 		child, ok := node["not"].(map[string]any)
@@ -461,9 +475,9 @@ func validateCondition(node map[string]any, path string, checkNames map[string]s
 			add("%s.not must be a condition", path)
 			return
 		}
-		validateCondition(child, path+".not", checkNames, allowSystemMetric, add)
+		validateCondition(child, path+".not", checkNames, systemMetricChecks, allowSystemMetric, add)
 	case "failed", "active":
-		validateProbe(node[key], path+"."+key, checkNames, add)
+		validateProbe(node[key], path+"."+key, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case "service":
 		validateState(node["service"], "state", serviceStates, "active, inactive, failed, unknown", path+".service", add)
 	case "process":
@@ -487,7 +501,7 @@ func validateCondition(node map[string]any, path string, checkNames map[string]s
 	}
 }
 
-func validateProbe(v any, path string, checkNames map[string]struct{}, add addFunc) {
+func validateProbe(v any, path string, checkNames, systemMetricChecks map[string]struct{}, allowSystemMetric bool, add addFunc) {
 	m, ok := v.(map[string]any)
 	if !ok {
 		add("%s must be a mapping", path)
@@ -496,6 +510,8 @@ func validateProbe(v any, path string, checkNames map[string]struct{}, add addFu
 	if ref := scalarString(m["check"]); ref != "" {
 		if _, ok := checkNames[ref]; !ok {
 			add("%s references unknown check %q", path, ref)
+		} else if _, isSys := systemMetricChecks[ref]; isSys && !allowSystemMetric {
+			add("%s references system metric check %q, which is only allowed in alert rules", path, ref)
 		}
 		return
 	}
@@ -535,18 +551,34 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 		add("%s scope %q is not service or system", path, scope)
 		return
 	}
-	if name := scalarString(entry["name"]); name == "" {
+	name := scalarString(entry["name"])
+	known := false
+	if name == "" {
 		add("%s requires a metric name", path)
 	} else if _, ok := catalog[name]; !ok {
 		add("%s metric %q is not in the %s catalog", path, name, scope)
+	} else {
+		known = true
 	}
 	if op := scalarString(entry["op"]); op != "" {
 		if _, ok := metricOps[op]; !ok {
 			add("%s op %q is not one of >, >=, <, <=, ==, !=", path, op)
 		}
 	}
-	if !parseMetricValue(scalarString(entry["value"])) {
-		add("%s value %q must be a number with an optional trailing %%", path, scalarString(entry["value"]))
+	value := scalarString(entry["value"])
+	if !parseMetricValue(value) {
+		add("%s value %q must be a number with an optional trailing %%", path, value)
+	} else if known {
+		// Form must match: a "%" threshold needs a percentage form, a bare number
+		// an absolute form (section 14).
+		form := metricForms[name]
+		if strings.HasSuffix(strings.TrimSpace(value), "%") {
+			if !form.percent {
+				add("%s uses a %% threshold but metric %q has no percentage form", path, name)
+			}
+		} else if !form.absolute {
+			add("%s uses an absolute threshold but metric %q has no absolute form", path, name)
+		}
 	}
 	if scope == "system" && !allowSystem {
 		add("%s scope: system metric is only allowed in alert rules", path)
@@ -558,6 +590,25 @@ func collectCheckNames(tree map[string]any) map[string]struct{} {
 	for _, section := range []string{"checks", "preflight"} {
 		if entries, ok := tree[section].(map[string]any); ok {
 			for name := range entries {
+				names[name] = struct{}{}
+			}
+		}
+	}
+	return names
+}
+
+// collectSystemMetricChecks returns the names of checks that are scope:system
+// metrics, so a remediation rule referencing one (via failed/active) can be
+// flagged (section 30).
+func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
+	names := map[string]struct{}{}
+	for _, section := range []string{"checks", "preflight"} {
+		entries, ok := tree[section].(map[string]any)
+		if !ok {
+			continue
+		}
+		for name, raw := range entries {
+			if e, ok := raw.(map[string]any); ok && scalarString(e["type"]) == "metric" && scalarString(e["scope"]) == "system" {
 				names[name] = struct{}{}
 			}
 		}
