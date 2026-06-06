@@ -100,6 +100,10 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 
+	if watches, ok := raw["watches"].(map[string]any); ok {
+		validateWatches(watches, add)
+	}
+
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
 	switch {
 	case !present:
@@ -109,6 +113,126 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	return issues
+}
+
+// validateWatches checks each host-watch entry: a known check type with valid
+// thresholds and a non-empty hook command (spec 2026-06-06-host-watches-disk).
+func validateWatches(watches map[string]any, add func(string, ...any)) {
+	for _, name := range sortedKeys(watches) {
+		entry, ok := watches[name].(map[string]any)
+		if !ok {
+			add("watches.%s must be a mapping", name)
+			continue
+		}
+		if v, ok := entry["enabled"].(bool); ok && !v {
+			continue
+		}
+
+		check, ok := entry["check"].(map[string]any)
+		if !ok {
+			add("watches.%s.check is required", name)
+			continue
+		}
+		switch scalarString(check["type"]) {
+		case "disk":
+			validateDiskCheck(name, check, add)
+		case "":
+			add("watches.%s.check.type is required", name)
+		default:
+			add("watches.%s.check.type %q is not supported", name, scalarString(check["type"]))
+		}
+
+		validateWatchHook(name, entry, add)
+
+		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
+			add("watches.%s.interval %q must be a valid positive duration", name, scalarString(v))
+		}
+
+		validateWatchWindow(name, entry, add)
+	}
+}
+
+// validateWatchWindow checks the optional for/within window on a watch entry:
+// for.cycles and within.cycles must be positive integers and within.min_matches
+// (if present) a non-negative integer (spec 2026-06-06-host-watches-disk §5).
+func validateWatchWindow(name string, entry map[string]any, add func(string, ...any)) {
+	if f, ok := entry["for"].(map[string]any); ok {
+		if c, _ := scalarInt(f["cycles"]); c <= 0 {
+			add("watches.%s.for.cycles must be a positive integer", name)
+		}
+	}
+	if wn, ok := entry["within"].(map[string]any); ok {
+		if c, _ := scalarInt(wn["cycles"]); c <= 0 {
+			add("watches.%s.within.cycles must be a positive integer", name)
+		}
+		if raw, present := wn["min_matches"]; present {
+			if m, _ := scalarInt(raw); m < 0 {
+				add("watches.%s.within.min_matches must be a non-negative integer", name)
+			}
+		}
+	}
+}
+
+func validateDiskCheck(name string, check map[string]any, add func(string, ...any)) {
+	if scalarString(check["path"]) == "" {
+		add("watches.%s.check.path is required for a disk check", name)
+	}
+	preds := 0
+	for _, field := range []string{"used_pct", "free_pct"} {
+		raw, present := check[field]
+		if !present {
+			continue
+		}
+		preds++
+		m, ok := raw.(map[string]any)
+		if !ok {
+			add("watches.%s.check.%s must be a mapping {op, value}", name, field)
+			continue
+		}
+		if !isValidDiskOp(scalarString(m["op"])) {
+			add("watches.%s.check.%s has an invalid op %q", name, field, scalarString(m["op"]))
+		}
+		if !isNumeric(scalarString(m["value"])) {
+			add("watches.%s.check.%s value %q must be numeric", name, field, scalarString(m["value"]))
+		}
+	}
+	if preds == 0 {
+		add("watches.%s.check requires at least one of used_pct/free_pct", name)
+	}
+}
+
+func validateWatchHook(name string, entry map[string]any, add func(string, ...any)) {
+	then, ok := entry["then"].(map[string]any)
+	if !ok {
+		add("watches.%s.then is required", name)
+		return
+	}
+	hook, ok := then["hook"].(map[string]any)
+	if !ok {
+		add("watches.%s.then.hook is required", name)
+		return
+	}
+	list, ok := hook["command"].([]any)
+	if !ok || len(list) == 0 {
+		add("watches.%s.then.hook.command must be a non-empty array", name)
+	}
+	if v, present := hook["timeout"]; present && !isPositiveDuration(scalarString(v)) {
+		add("watches.%s.then.hook.timeout %q must be a valid positive duration", name, scalarString(v))
+	}
+}
+
+func isValidDiskOp(op string) bool {
+	switch op {
+	case ">=", ">", "<=", "<", "==", "!=":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNumeric(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
 }
 
 func validateDocuments(cfg *Config) []Issue {

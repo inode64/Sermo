@@ -96,8 +96,14 @@ func run(args []string) int {
 	for _, w := range warnings {
 		logger.Warn("build workers", "warning", w)
 	}
-	if len(workers) == 0 {
-		logger.Error("no enabled services to monitor")
+
+	watches, watchWarnings := app.BuildWatches(cfg, deps, interval)
+	for _, w := range watchWarnings {
+		logger.Warn("build watches", "warning", w)
+	}
+
+	if len(workers) == 0 && len(watches) == 0 {
+		logger.Error("no enabled services or watches to monitor")
 		return 2
 	}
 
@@ -105,13 +111,13 @@ func run(args []string) int {
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
-	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers))
+	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers), "watches", len(watches))
 	scheduler := app.Scheduler{
 		Interval:     interval,
 		OpSlots:      engineInt(cfg, "max_parallel_operations", 2),
 		StartupDelay: startupDelay,
 	}
-	scheduler.Run(ctx, workers)
+	scheduler.Run(ctx, workers, watches)
 	logger.Info("sermod stopped")
 	return 0
 }

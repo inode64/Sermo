@@ -21,10 +21,16 @@ type Scheduler struct {
 	StartupDelay time.Duration
 }
 
-// Run starts every worker and blocks until ctx is cancelled and all workers have
-// returned (graceful shutdown, section 24). Each worker's Operate is wrapped so
-// it waits for a global operation slot, pausing only that service's monitoring.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker) {
+// cycler is anything the scheduler ticks once per interval.
+type cycler interface {
+	RunCycle(ctx context.Context)
+}
+
+// Run starts every worker and watch and blocks until ctx is cancelled and all of
+// them have returned (graceful shutdown, section 24). Each worker's Operate is
+// wrapped so it waits for a global operation slot, pausing only that service's
+// monitoring. Watches run on their own goroutines using their own interval.
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch) {
 	slots := s.OpSlots
 	if slots <= 0 {
 		slots = 2
@@ -51,16 +57,27 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker) {
 		wg.Add(1)
 		go func(w *Worker, offset time.Duration) {
 			defer wg.Done()
-			runWorker(ctx, w, interval, offset)
+			runCycler(ctx, w, interval, offset)
 		}(w, offset)
+	}
+	for _, wt := range watches {
+		wi := wt.Interval
+		if wi <= 0 {
+			wi = interval
+		}
+		wg.Add(1)
+		go func(wt *Watch, wi time.Duration) {
+			defer wg.Done()
+			runCycler(ctx, wt, wi, 0)
+		}(wt, wi)
 	}
 	wg.Wait()
 }
 
-// runWorker ticks a worker from cycle completion: jitter, then cycle, then wait
+// runCycler ticks a cycler from cycle completion: jitter, then cycle, then wait
 // one interval, repeat. A cancelled context stops between cycles (section 24:
 // never start a new operation during shutdown).
-func runWorker(ctx context.Context, w *Worker, interval, offset time.Duration) {
+func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 	if offset > 0 {
 		if !sleepCtx(ctx, offset) {
 			return
@@ -70,7 +87,7 @@ func runWorker(ctx context.Context, w *Worker, interval, offset time.Duration) {
 		if ctx.Err() != nil {
 			return
 		}
-		w.RunCycle(ctx)
+		c.RunCycle(ctx)
 		if !sleepCtx(ctx, interval) {
 			return
 		}
