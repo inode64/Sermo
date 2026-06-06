@@ -36,6 +36,22 @@ name: redis-cache
 clone: redis-main
 ```
 
+Every document has a `kind` and a `name`. Two optional human-facing strings may
+accompany them:
+
+```yaml
+kind: profile
+name: mariadb
+display_name: "MariaDB"   # optional pretty label
+description: "..."        # optional free-text note
+```
+
+- `display_name` is the label shown to humans (`profile list`, `service list`).
+  When absent or blank it falls back to `name`. Omit it when it would just repeat
+  `name`.
+- `description` is optional free text with NO fallback: when absent, nothing is
+  shown — never substitute `name`. Both must be strings if present.
+
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
 what `${var}` resolves to after expansion. Same for `uses` with a profile. See
@@ -167,6 +183,7 @@ kill_only_if without both exe_any and users
 SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
+display_name and description, if present, are strings (both optional; display_name falls back to name, description has no fallback)
 service without service.name
 service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog
