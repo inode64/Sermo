@@ -60,3 +60,24 @@ watches:
       hook:
         command: [/usr/local/bin/sermo-alert-disk.sh, "/"]
         timeout: 10s
+  net-eth0:
+    enabled: false
+    interval: 30s
+    check: { type: net, interface: eth0 }
+    metrics:
+      state:
+        on: change
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-net-state.sh, eth0]
+      speed:
+        on: change
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-net-speed.sh, eth0]
+      errors:
+        counters: [rx_errors, tx_errors]
+        delta: { op: ">", value: 100 }
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-net-errors.sh, eth0]
