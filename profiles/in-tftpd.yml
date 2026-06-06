@@ -1,5 +1,5 @@
 kind: profile
-name: in-tftpd
+name: in.tftpd
 display_name: "TFTP Server"
 description: "In.tftpd"
 service: { name: "in-tftpd", backend: auto }

@@ -1,10 +1,9 @@
 kind: profile
-name: qemu-system-x86-64
-display_name: "QEMU"
-description: "QEMU"
-service: { name: "qemu-system-x86-64", backend: auto }
+name: certbot
+display_name: "Certbot"
+description: "Generador de certificados"
 variables:
-  binary: "/usr/bin/qemu-system-x86_64"
+  binary: "/usr/bin/certbot"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

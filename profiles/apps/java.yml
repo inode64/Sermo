@@ -1,7 +1,6 @@
 kind: profile
 name: java
 display_name: "Java"
-service: { name: "java", backend: auto }
 variables:
   binary: "/usr/bin/java"
 preflight:

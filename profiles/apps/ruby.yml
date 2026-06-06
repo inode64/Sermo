@@ -2,7 +2,6 @@ kind: profile
 name: ruby
 display_name: "Ruby"
 description: "An object-oriented scripting language"
-service: { name: "ruby", backend: auto }
 variables:
   binary: "/usr/bin/ruby"
 preflight:

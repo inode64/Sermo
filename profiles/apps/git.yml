@@ -1,7 +1,6 @@
 kind: profile
 name: git
 display_name: "Git"
-service: { name: "git", backend: auto }
 variables:
   binary: "/usr/bin/git"
 preflight:

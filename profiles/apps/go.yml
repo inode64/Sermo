@@ -2,7 +2,6 @@ kind: profile
 name: go
 display_name: "Go"
 description: "A concurrent garbage collected and typesafe programming language"
-service: { name: "go", backend: auto }
 variables:
   binary: "/usr/bin/go"
 preflight:
