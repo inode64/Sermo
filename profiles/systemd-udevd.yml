@@ -3,7 +3,9 @@ name: systemd-udevd
 description: "Systemd-udevd"
 service: { name: "systemd-udevd", backend: auto }
 variables:
-  binary: "/lib/systemd/systemd-udevd"
+  binary:
+    - "/lib/systemd/systemd-udevd"
+    - "/usr/lib/systemd/systemd-udevd"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/lib/systemd/systemd-udevd","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

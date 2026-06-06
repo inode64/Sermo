@@ -260,6 +260,46 @@ variables:
 	}
 }
 
+func TestCollectVariablesFirstExistingPath(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "usr-lib-binary")
+	if err := os.WriteFile(present, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(dir, "lib-binary")
+
+	// First candidate is missing, second exists: resolves to the second.
+	vars := collectVariables(map[string]any{
+		"variables": map[string]any{
+			"binary": []any{missing, present},
+		},
+	})
+	if vars["binary"] != present {
+		t.Errorf("binary = %q, want first existing %q", vars["binary"], present)
+	}
+
+	// Stops at the first hit even when a later candidate also exists.
+	vars = collectVariables(map[string]any{
+		"variables": map[string]any{
+			"binary": []any{present, missing},
+		},
+	})
+	if vars["binary"] != present {
+		t.Errorf("binary = %q, want %q", vars["binary"], present)
+	}
+
+	// None exist: falls back to the first candidate so the value stays usable.
+	other := filepath.Join(dir, "also-missing")
+	vars = collectVariables(map[string]any{
+		"variables": map[string]any{
+			"binary": []any{missing, other},
+		},
+	})
+	if vars["binary"] != missing {
+		t.Errorf("binary = %q, want fallback to first %q", vars["binary"], missing)
+	}
+}
+
 func TestValidateDuplicateServiceName(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
