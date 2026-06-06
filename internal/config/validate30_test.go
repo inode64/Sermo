@@ -175,6 +175,70 @@ rules:
 	}
 }
 
+func TestValidateMetricFormMismatch(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  pct-on-count:
+    type: alert
+    if: { metric: { scope: service, name: process_count, op: ">", value: 50% } }
+    then: { action: alert, message: m }
+  abs-on-cpu:
+    type: alert
+    if: { metric: { scope: service, name: cpu, op: ">", value: 30 } }
+    then: { action: alert, message: m }
+`)
+	mustHave(t, issues, `% threshold but metric "process_count" has no percentage form`)
+	mustHave(t, issues, `absolute threshold but metric "cpu" has no absolute form`)
+}
+
+func TestValidateMetricFormValidCombinations(t *testing.T) {
+	// memory has both forms; cpu accepts %; load accepts absolute.
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  mem-pct: { type: alert, if: { metric: { name: memory, op: ">", value: 40% } }, then: { action: alert, message: m } }
+  mem-abs: { type: alert, if: { metric: { name: memory, op: ">", value: 1000000 } }, then: { action: alert, message: m } }
+  cpu-pct: { type: alert, if: { metric: { name: cpu, op: ">", value: 80% } }, then: { action: alert, message: m } }
+  load:    { type: alert, if: { metric: { scope: system, name: load1, op: ">", value: 4 } }, then: { action: alert, message: m } }
+`)
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "threshold") && strings.Contains(is.Msg, "form") {
+			t.Fatalf("valid metric form wrongly flagged: %v", is)
+		}
+	}
+}
+
+func TestValidateIndirectSystemMetricInRemediation(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  machine-hot: { type: metric, scope: system, name: total_cpu, op: ">", value: 90% }
+rules:
+  bad:
+    type: remediation
+    if: { active: { check: machine-hot } }
+    then: { action: restart }
+  ok-alert:
+    type: alert
+    if: { active: { check: machine-hot } }
+    then: { action: alert, message: m }
+`)
+	mustHave(t, issues, `references system metric check "machine-hot", which is only allowed in alert rules`)
+	// The alert rule referencing the same check must not be flagged.
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "ok-alert") && strings.Contains(is.Msg, "system metric") {
+			t.Fatalf("alert rule wrongly flagged: %v", is)
+		}
+	}
+}
+
 func TestValidateMetricCatalogAndValue(t *testing.T) {
 	issues := validateService(t, `
 kind: service
