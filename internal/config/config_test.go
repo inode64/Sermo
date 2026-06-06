@@ -507,6 +507,8 @@ func hasIssue(issues []Issue, substr string) bool {
 }
 
 func TestDiscoverVersions(t *testing.T) {
+	vtok := *tokenFor("x%v")
+	ntok := *tokenFor("x%n")
 	root := t.TempDir()
 	for _, v := range []string{"7.4", "8.3", "12.0.2"} {
 		dir := filepath.Join(root, "pkg-"+v, "bin")
@@ -522,13 +524,13 @@ func TestDiscoverVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := discoverVersions(root + "/pkg-${version}/bin/app")
+	got := discoverVersions(root+"/pkg-${version}/bin/app", vtok)
 	want := []string{"12.0.2", "7.4", "8.3"} // sorted lexicographically
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("discoverVersions = %v, want %v", got, want)
 	}
 
-	if v := discoverVersions(root + "/pkg-${version}/bin/missing"); len(v) != 0 {
+	if v := discoverVersions(root+"/pkg-${version}/bin/missing", vtok); len(v) != 0 {
 		t.Errorf("no matches expected, got %v", v)
 	}
 
@@ -543,7 +545,7 @@ func TestDiscoverVersions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got = discoverVersions(bin + "/db${version}sql")
+	got = discoverVersions(bin+"/db${version}sql", vtok)
 	want = []string{"4.8", "6.0"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("mid-filename discoverVersions = %v, want %v", got, want)
@@ -561,10 +563,27 @@ func TestDiscoverVersions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got = discoverVersions(sbin + "/php-fpm${version}")
+	got = discoverVersions(sbin+"/php-fpm${version}", vtok)
 	want = []string{"7.4", "8.3"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("trailing-version discoverVersions = %v, want %v", got, want)
+	}
+
+	// %n (${n}) accepts only whole integers: python2/python3 match, but
+	// python3.11 and python-config do not.
+	pbin := filepath.Join(root, "usrbin")
+	if err := os.MkdirAll(pbin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"python2", "python3", "python3.11", "python-config"} {
+		if err := os.WriteFile(filepath.Join(pbin, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got = discoverVersions(pbin+"/python${n}", ntok)
+	want = []string{"2", "3"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("integer discoverVersions = %v, want %v", got, want)
 	}
 }
 

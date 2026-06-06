@@ -7,45 +7,70 @@ import (
 	"strings"
 )
 
-// versionPlaceholder marks a profile name (and its filename) as a version
-// template: `php-fpm-%v` expands to `php-fpm-8.3`, `php-fpm-7.4`, ... — one
-// concrete profile per installed version.
-const versionPlaceholder = "%v"
+// tmplToken is a version-template placeholder. A profile name carrying one (e.g.
+// `php-fpm%v`, `python%n`) is a template: it materializes into one concrete
+// profile per discovered value. `placeholder` is replaced in the name; the body
+// uses `${variable}`; `capture` is the regex that extracts a value from a globbed
+// path, so different tokens accept different value shapes.
+type tmplToken struct {
+	placeholder string // in the name, e.g. "%v"
+	variable    string // in the body, e.g. "version" → ${version}
+	capture     string // regex for the value, e.g. "[0-9][^/]*"
+}
 
-// versionVar is the variable a template uses inside paths so the discovered
-// version can be substituted, e.g. binary: "/usr/lib64/php${version}/bin/php-fpm".
-const versionVar = "version"
+func (t tmplToken) marker() string { return "${" + t.variable + "}" }
+
+// tmplTokens are the supported placeholders. `%v` is a free-form version
+// (`8.3`, `12.0.2`); `%n` is a plain integer (`2`, `3`) — both must start with a
+// digit, but `%n` rejects anything past the digits so `python%n` matches
+// `python3` but not `python3.11`.
+var tmplTokens = []tmplToken{
+	{placeholder: "%v", variable: "version", capture: "[0-9][^/]*"},
+	{placeholder: "%n", variable: "n", capture: "[0-9]+"},
+}
+
+// tokenFor returns the template token a name carries, or nil if it is not a
+// version template.
+func tokenFor(name string) *tmplToken {
+	for i := range tmplTokens {
+		if strings.Contains(name, tmplTokens[i].placeholder) {
+			return &tmplTokens[i]
+		}
+	}
+	return nil
+}
 
 // materializeVersionTemplates replaces every version-template profile with one
-// concrete profile per installed version. Multiple versions of the same
-// application can be installed at once, so a single `name: foo-%v` profile yields
-// `foo-1.2`, `foo-3.4`, ... — each discovered by globbing the template's `binary`
-// path with `${version}` wildcarded. The template itself is dropped; if no
-// version is installed it simply yields nothing. A template may `uses` a base
-// profile (e.g. php-fpm-%v uses php-fpm) to inherit its checks, rules and
-// processes; only the version-specific binary differs.
+// concrete profile per installed value. Multiple versions of the same
+// application can be installed at once, so a single `name: foo%v` (or `foo%n`)
+// profile yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
+// template's discovery path (`versions.from`, else `binary`) with the token's
+// `${...}` wildcarded. The template itself is dropped; if nothing is installed it
+// yields nothing. A template may `uses` a base profile (e.g. php-fpm%v uses
+// php-fpm) to inherit its checks, rules and processes; only the binary differs.
 func (c *Config) materializeVersionTemplates() {
 	var templates []*Document
 	for _, name := range c.ProfileNames {
-		if strings.Contains(name, versionPlaceholder) {
+		if tokenFor(name) != nil {
 			if doc, ok := c.Profiles[name]; ok {
 				templates = append(templates, doc)
 			}
 		}
 	}
 	for _, tmpl := range templates {
+		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl)
-		for _, version := range discoverVersions(versionDiscoverySource(body)) {
-			c.add(instantiateVersion(body, tmpl.Name, version, tmpl.Path))
+		for _, value := range discoverVersions(versionDiscoverySource(body), *tok) {
+			c.add(instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path))
 		}
 		c.dropProfile(tmpl.Name)
 	}
 }
 
-// versionDiscoverySource returns the ${version}-bearing filesystem path Sermo
-// globs to find installed versions. It is `versions.from` when set, otherwise the
+// versionDiscoverySource returns the placeholder-bearing filesystem path Sermo
+// globs to find installed values. It is `versions.from` when set, otherwise the
 // `binary` variable. Decoupling them lets a template monitor a generic binary
-// (e.g. /usr/sbin/php-fpm) while discovering versions from a slot-specific path.
+// (e.g. /usr/sbin/php-fpm) while discovering from a slot-specific path.
 func versionDiscoverySource(body map[string]any) string {
 	if v, ok := body["versions"].(map[string]any); ok {
 		if from := scalarString(v["from"]); from != "" {
@@ -56,7 +81,7 @@ func versionDiscoverySource(body map[string]any) string {
 }
 
 // templateBody returns the template's body folded onto its `uses` base (if any),
-// with the resolution-control keys stripped. The `${version}` references are left
+// with the resolution-control keys stripped. The `${...}` references are left
 // intact for instantiateVersion to bind.
 func (c *Config) templateBody(tmpl *Document) map[string]any {
 	body := stripMeta(tmpl.Body)
@@ -78,23 +103,23 @@ func profileBinary(body map[string]any) string {
 	return ""
 }
 
-// discoverVersions globs the binary template with `${version}` replaced by a
-// filesystem wildcard and extracts the version that filled it from each match.
-// Versions are de-duplicated and sorted for stable ordering.
-func discoverVersions(binaryTmpl string) []string {
-	marker := "${" + versionVar + "}"
-	if !strings.Contains(binaryTmpl, marker) {
+// discoverVersions globs the discovery path with the token's `${...}` replaced by
+// a filesystem wildcard and extracts the value that filled it from each match.
+// Values are de-duplicated and sorted for stable ordering.
+func discoverVersions(discoverPath string, tok tmplToken) []string {
+	marker := tok.marker()
+	if !strings.Contains(discoverPath, marker) {
 		return nil
 	}
-	matches, err := filepath.Glob(strings.ReplaceAll(binaryTmpl, marker, "*"))
+	matches, err := filepath.Glob(strings.ReplaceAll(discoverPath, marker, "*"))
 	if err != nil {
 		return nil
 	}
-	// A version starts with a digit and never spans a path separator. Anchoring on
-	// a leading digit keeps an unbounded trailing placeholder (e.g.
+	// The captured value never spans a path separator. Its shape comes from the
+	// token (`capture`), which keeps an unbounded trailing placeholder (e.g.
 	// /usr/sbin/php-fpm${version}) from mistaking siblings like php-fpm.conf or a
-	// bare php-fpm symlink for a version.
-	re := regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(binaryTmpl), regexp.QuoteMeta(marker), "([0-9][^/]*)") + "$")
+	// bare symlink for a value.
+	re := regexp.MustCompile("^" + strings.ReplaceAll(regexp.QuoteMeta(discoverPath), regexp.QuoteMeta(marker), "("+tok.capture+")") + "$")
 	seen := map[string]bool{}
 	var out []string
 	for _, m := range matches {
@@ -111,36 +136,35 @@ func discoverVersions(binaryTmpl string) []string {
 	return out
 }
 
-// instantiateVersion bakes a concrete version into a copy of the template body:
-// `%v` in the name becomes the version, and every `${version}` reference in the
-// body (binary path, display_name, ...) is substituted. Other `${var}` references
-// are left for normal resolution.
-func instantiateVersion(body map[string]any, templateName, version, path string) *Document {
-	name := strings.ReplaceAll(templateName, versionPlaceholder, version)
-	out := bindVersion(cloneMap(body), version).(map[string]any)
+// instantiateVersion bakes a concrete value into a copy of the template body: the
+// token placeholder in the name becomes the value, and every `${...}` reference
+// for that token in the body (binary path, display_name, aliases, ...) is
+// substituted. Other `${var}` references are left for normal resolution.
+func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path string) *Document {
+	name := strings.ReplaceAll(templateName, tok.placeholder, value)
+	out := bindToken(cloneMap(body), tok.marker(), value).(map[string]any)
 	out["kind"] = kindProfile
 	out["name"] = name
 	delete(out, "versions") // discovery metadata, not part of the concrete profile
 	return &Document{Kind: kindProfile, Name: name, Path: path, Body: out}
 }
 
-// bindVersion replaces every "${version}" in every string of the tree with the
-// concrete version. Unlike full expansion it touches only the version marker.
-func bindVersion(v any, version string) any {
-	marker := "${" + versionVar + "}"
+// bindToken replaces every occurrence of marker in every string of the tree with
+// value. Unlike full expansion it touches only that one marker.
+func bindToken(v any, marker, value string) any {
 	switch t := v.(type) {
 	case string:
-		return strings.ReplaceAll(t, marker, version)
+		return strings.ReplaceAll(t, marker, value)
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, e := range t {
-			out[k] = bindVersion(e, version)
+			out[k] = bindToken(e, marker, value)
 		}
 		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, e := range t {
-			out[i] = bindVersion(e, version)
+			out[i] = bindToken(e, marker, value)
 		}
 		return out
 	default:
