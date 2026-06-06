@@ -18,6 +18,57 @@ The packaged profiles (`profiles/`) cover apache, mysql, mariadb, redis and
 php-fpm. They define variables, preflight, processes, checks, stop_policy and
 rules so a service usually only sets a few overrides.
 
+## Categories
+
+Profiles are grouped by the subdirectory they live in under a profiles root:
+
+```
+profiles/
+  services/   # daemon-managed long-running services (apache, nginx, mariadb, ...)
+  apps/       # installed tools/runtimes (java, perl, sqlite, go, git, ...)
+  libs/       # shared libraries used as restart triggers (glibc, pam)
+```
+
+The directory sets the profile's category (`service` / `app` / `library`); files
+placed directly in a profiles root default to `service`. `sermoctl apps` lists
+the `app` profiles and `sermoctl libs` the `library` profiles (see below).
+
+## Library profiles
+
+A library profile describes a shared library so services can restart when it is
+upgraded. It only needs identity plus the file to watch:
+
+```yaml
+kind: profile
+name: glibc
+display_name: "GNU C Library"
+description: "Standard C library (libc)"
+variables:
+  binary: "/lib64/libc.so.6"        # the file watched for changes (and its version)
+```
+
+A service (or service profile) opts in with `restart_on_change`:
+
+```yaml
+restart_on_change:
+  libraries: [glibc, pam]
+```
+
+On resolution this desugars into one remediation rule per library that restarts
+the service when that library's file changes:
+
+```yaml
+rules:
+  restart-on-change-glibc:
+    type: remediation
+    if: { changed: { library: glibc, path: /lib64/libc.so.6 } }
+    then: { action: restart }
+```
+
+The restart runs through the normal safe engine (guards, cooldown, max_actions),
+and the change is acknowledged once the restart succeeds, so it fires once per
+upgrade rather than every cycle. Referenced names must be `library` profiles.
+
 ## Metadata fields
 
 A profile or service may carry two optional human-facing strings:

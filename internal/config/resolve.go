@@ -26,6 +26,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	injectBuiltinVariables(vars, name, merged)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
+	errs = append(errs, c.expandRestartOnChange(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
 }
@@ -44,6 +45,46 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	if _, ok := vars["display_name"]; !ok {
 		vars["display_name"] = DisplayName(merged, name)
 	}
+}
+
+// expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block
+// into one remediation rule per library that restarts the service when the
+// library file changes. Each named library is resolved to its file via the
+// matching library profile, so the generated `changed:` condition carries a
+// concrete path. The block is removed; unknown or non-library references error.
+func (c *Config) expandRestartOnChange(tree map[string]any) []string {
+	roc, ok := tree["restart_on_change"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	delete(tree, "restart_on_change")
+
+	var errs []string
+	libraries, _ := tree["rules"].(map[string]any)
+	if libraries == nil {
+		libraries = map[string]any{}
+	}
+	for _, lib := range stringList(roc["libraries"]) {
+		doc, ok := c.Profiles[lib]
+		if !ok || doc.Category != CategoryLibrary {
+			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library profile", lib))
+			continue
+		}
+		path := profileBinary(doc.Body)
+		if path == "" {
+			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
+			continue
+		}
+		libraries["restart-on-change-"+lib] = map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"changed": map[string]any{"library": lib, "path": path}},
+			"then": map[string]any{"action": "restart"},
+		}
+	}
+	if len(libraries) > 0 {
+		tree["rules"] = libraries
+	}
+	return errs
 }
 
 // ResolveProfile expands a profile's own body — no service merge — so its

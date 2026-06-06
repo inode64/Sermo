@@ -56,10 +56,16 @@ if:
     - service: { state: active }
     - process: { exe: /usr/sbin/mysqld, user: mysql, state: running }
     - metric: { scope: service, name: cpu, op: ">", value: 30% }
+    - changed: { path: /lib64/libc.so.6 }  # the file changed since the last cycle
 ```
 
 `failed`/`active` may also take an inline probe (`tcp`, `command`, ...) instead
 of a `check:` reference.
+
+`changed` is true when the file at `path` differs (size/mtime) from the baseline
+tracked across cycles. The first cycle adopts the current value (a daemon start
+never fires), and a successful `restart`/`start` re-baselines it. It is the
+primitive behind `restart_on_change` (see Profiles → Library profiles).
 
 ### Windows
 

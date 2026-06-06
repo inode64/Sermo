@@ -78,9 +78,16 @@ func loadGlobal(path string) (Global, error) {
 	return g, nil
 }
 
-// loadDir reads every *.yml/*.yaml document in dir. A missing directory is not
-// an error (a host may not have user profiles), but an unreadable one is.
+// loadDir reads every *.yml/*.yaml document in dir, recursing into
+// subdirectories. A `services`/`apps`/`libs` subdirectory tags the profiles it
+// holds with that category; files directly in dir default to CategoryService. A
+// missing directory is not an error (a host may not have user profiles), but an
+// unreadable one is.
 func (c *Config) loadDir(dir string) error {
+	return c.loadCategoryDir(dir, "")
+}
+
+func (c *Config) loadCategoryDir(dir, category string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -90,23 +97,44 @@ func (c *Config) loadDir(dir string) error {
 	}
 
 	names := make([]string, 0, len(entries))
+	var subdirs []string
 	for _, e := range entries {
-		if e.IsDir() || !isYAML(e.Name()) {
+		if e.IsDir() {
+			subdirs = append(subdirs, e.Name())
 			continue
 		}
-		names = append(names, e.Name())
+		if isYAML(e.Name()) {
+			names = append(names, e.Name())
+		}
 	}
 	sort.Strings(names)
+	sort.Strings(subdirs)
 
 	for _, name := range names {
-		path := filepath.Join(dir, name)
-		doc, err := loadDocument(path)
+		doc, err := loadDocument(filepath.Join(dir, name))
 		if err != nil {
 			return err
 		}
+		doc.Category = effectiveCategory(category)
 		c.add(doc)
 	}
+	for _, name := range subdirs {
+		sub := category
+		if sub == "" {
+			sub = categoryFromDir(name) // only the top level names a category
+		}
+		if err := c.loadCategoryDir(filepath.Join(dir, name), sub); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func effectiveCategory(category string) string {
+	if category == "" {
+		return CategoryService
+	}
+	return category
 }
 
 func loadDocument(path string) (*Document, error) {
@@ -146,6 +174,19 @@ func (c *Config) add(doc *Document) {
 		c.ServiceNames = append(c.ServiceNames, doc.Name)
 	}
 	c.docs = append(c.docs, doc)
+}
+
+// ProfilesInCategory returns the names of profiles in a category (service | app |
+// library), sorted, for category-scoped listings such as `apps` and `libs`.
+func (c *Config) ProfilesInCategory(category string) []string {
+	var names []string
+	for _, name := range c.ProfileNames {
+		if doc, ok := c.Profiles[name]; ok && doc.Category == category {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // DisplayName returns the human-friendly `display_name` from a document body

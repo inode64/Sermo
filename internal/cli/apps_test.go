@@ -38,8 +38,9 @@ func TestAppsCommand(t *testing.T) {
 	}
 
 	profilesDir := filepath.Join(root, "profiles")
+	appsDir := filepath.Join(profilesDir, "apps") // category derived from the directory
 	enabledDir := filepath.Join(root, "enabled")
-	for _, d := range []string{profilesDir, enabledDir} {
+	for _, d := range []string{appsDir, enabledDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -55,7 +56,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 `, name, display, name, binary)
-		if err := os.WriteFile(filepath.Join(profilesDir, file), []byte(body), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(appsDir, file), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
