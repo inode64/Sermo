@@ -160,6 +160,54 @@ func TestCycleAlertFires(t *testing.T) {
 	}
 }
 
+func TestCycleForWindowDelaysAction(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{
+		"down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"for":  map[string]any{"cycles": 3},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	// No cooldown so the only gate is the for-window.
+	w := h.worker(tree, rules.Policy{}, nil)
+
+	// Three consecutive failing cycles: no action until the third.
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("must not act before 3 consecutive failures, ops=%v", h.ops)
+	}
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("ops = %v, want [restart] on the third failing cycle", h.ops)
+	}
+}
+
+func TestCycleForWindowResetsOnRecovery(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{
+		"down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"for":  map[string]any{"cycles": 2},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(tree, rules.Policy{}, nil)
+
+	h.cache = failedCache("http")
+	w.RunCycle(context.Background()) // fail 1
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	w.RunCycle(context.Background()) // healthy -> streak resets
+	h.cache = failedCache("http")
+	w.RunCycle(context.Background()) // fail 1 again, not 2 yet
+	if len(h.ops) != 0 {
+		t.Fatalf("recovery must reset the streak, ops=%v", h.ops)
+	}
+}
+
 func TestCycleAtMostOneRemediation(t *testing.T) {
 	tree := map[string]any{"rules": map[string]any{
 		"a": map[string]any{"type": "remediation", "if": map[string]any{"failed": map[string]any{"check": "http"}}, "then": map[string]any{"action": "restart"}},
