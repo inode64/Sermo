@@ -5,7 +5,7 @@ BIN := bin
 # DESTDIR stages the install under a temporary root (for packaging); the rest
 # follow the GNU directory conventions.
 DESTDIR ?=
-PREFIX ?= /usr/local
+PREFIX ?= /usr
 prefix ?= $(PREFIX)
 exec_prefix ?= $(prefix)
 bindir ?= $(exec_prefix)/bin
