@@ -37,6 +37,13 @@ func (a App) runLibs(ctx context.Context, opts options) int {
 	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries")
 }
 
+// runServices lists the service profiles (profiles/services and the root): which
+// are installed, the version their version command reports, and whether they
+// resolve without error.
+func (a App) runServices(ctx context.Context, opts options) int {
+	return a.listCategory(ctx, opts, config.CategoryService, "services", "installed services")
+}
+
 func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty string) int {
 	includeMissing := len(opts.args) > 0 && opts.args[0] == "all"
 

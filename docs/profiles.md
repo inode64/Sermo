@@ -30,8 +30,10 @@ profiles/
 ```
 
 The directory sets the profile's category (`service` / `app` / `library`); files
-placed directly in a profiles root default to `service`. `sermoctl apps` lists
-the `app` profiles and `sermoctl libs` the `library` profiles (see below).
+placed directly in a profiles root default to `service`. `sermoctl services`,
+`sermoctl apps` and `sermoctl libs` list each category, showing which are
+installed, the version their version command reports, and whether they resolve
+without error (add `all` to include the not-installed).
 
 ## Library profiles
 

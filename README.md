@@ -49,8 +49,9 @@ sermoctl backend
 sermoctl status nginx
 sermoctl is-active nginx
 
-# List installed applications and libraries, their version and health
-sermoctl --config /etc/sermo/sermo.yml apps         # only installed
+# List installed services, applications and libraries, their version and health
+sermoctl --config /etc/sermo/sermo.yml services      # service software (nginx, mariadb, ...)
+sermoctl --config /etc/sermo/sermo.yml apps          # tools/runtimes (only installed)
 sermoctl --config /etc/sermo/sermo.yml apps all      # include not-installed
 sermoctl --config /etc/sermo/sermo.yml libs          # shared libraries (restart triggers)
 
