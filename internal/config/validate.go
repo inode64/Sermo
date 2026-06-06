@@ -200,6 +200,7 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
 	validateAliases(tree, add)
+	validateCommands(tree, add)
 	validateRules(tree, add)
 
 	return issues
@@ -332,6 +333,29 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		dm, errMax := time.ParseDuration(scalarString(bo["max"]))
 		if errMax != nil || dm < di {
 			add("policy.backoff.max must be >= initial")
+		}
+	}
+}
+
+// validateCommands checks the optional `commands` section: each entry uses array
+// form with an optional valid duration timeout (section 30). The engine never
+// runs these; they are informational metadata.
+func validateCommands(tree map[string]any, add addFunc) {
+	commands, ok := tree["commands"].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, name := range sortedKeys(commands) {
+		entry, ok := commands[name].(map[string]any)
+		if !ok {
+			add("commands.%s must be a mapping", name)
+			continue
+		}
+		if !isStringArray(entry["command"]) {
+			add("commands.%s command must be an array, not a shell string", name)
+		}
+		if v, present := entry["timeout"]; present && !isPositiveDuration(scalarString(v)) {
+			add("commands.%s timeout %q must be a valid positive duration", name, scalarString(v))
 		}
 	}
 }

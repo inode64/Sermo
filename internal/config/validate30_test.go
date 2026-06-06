@@ -311,6 +311,25 @@ policy:
 	mustHave(t, issues, "max_actions must be an integer > 0")
 }
 
+func TestValidateCommands(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+commands:
+  version: { command: "apachectl -v" }
+  slow: { command: ["x"], timeout: nope }
+  ok: { command: ["apachectl", "-v"], timeout: 5s }
+`)
+	mustHave(t, issues, "commands.version command must be an array, not a shell string")
+	mustHave(t, issues, "commands.slow timeout")
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "commands.ok") {
+			t.Fatalf("valid command wrongly flagged: %v", is)
+		}
+	}
+}
+
 func TestValidateAliases(t *testing.T) {
 	issues := validateService(t, `
 kind: service

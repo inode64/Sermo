@@ -42,6 +42,16 @@ func run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
+	// SIGHUP is reserved for config reload (post-MVP); log it instead of letting
+	// its default disposition terminate the daemon (section 24).
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			logger.Warn("SIGHUP received; config reload is not supported in the MVP")
+		}
+	}()
+
 	detector := servicemgr.NewDetector()
 	backend, err := servicemgr.ParseBackend(engineString(cfg, "backend"))
 	if err != nil {
