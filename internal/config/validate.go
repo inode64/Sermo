@@ -136,13 +136,14 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		switch scalarString(check["type"]) {
 		case "disk":
 			validateDiskCheck(name, check, add)
+			validateHookBlock("watches."+name, entry, add)
+		case "net":
+			validateNetCheck(name, check, entry, add)
 		case "":
 			add("watches.%s.check.type is required", name)
 		default:
 			add("watches.%s.check.type %q is not supported", name, scalarString(check["type"]))
 		}
-
-		validateWatchHook(name, entry, add)
 
 		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
 			add("watches.%s.interval %q must be a valid positive duration", name, scalarString(v))
@@ -201,23 +202,100 @@ func validateDiskCheck(name string, check map[string]any, add func(string, ...an
 	}
 }
 
-func validateWatchHook(name string, entry map[string]any, add func(string, ...any)) {
-	then, ok := entry["then"].(map[string]any)
+func validateHookBlock(prefix string, block map[string]any, add func(string, ...any)) {
+	then, ok := block["then"].(map[string]any)
 	if !ok {
-		add("watches.%s.then is required", name)
+		add("%s.then is required", prefix)
 		return
 	}
 	hook, ok := then["hook"].(map[string]any)
 	if !ok {
-		add("watches.%s.then.hook is required", name)
+		add("%s.then.hook is required", prefix)
 		return
 	}
 	list, ok := hook["command"].([]any)
 	if !ok || len(list) == 0 {
-		add("watches.%s.then.hook.command must be a non-empty array", name)
+		add("%s.then.hook.command must be a non-empty array", prefix)
 	}
 	if v, present := hook["timeout"]; present && !isPositiveDuration(scalarString(v)) {
-		add("watches.%s.then.hook.timeout %q must be a valid positive duration", name, scalarString(v))
+		add("%s.then.hook.timeout %q must be a valid positive duration", prefix, scalarString(v))
+	}
+}
+
+// validateNetCheck validates a net interface watch: an interface and a non-empty
+// metrics map, each metric with a valid condition and its own hook
+// (spec 2026-06-06-net-interface-watch §4).
+func validateNetCheck(name string, check, entry map[string]any, add func(string, ...any)) {
+	if scalarString(check["interface"]) == "" {
+		add("watches.%s.check.interface is required for a net check", name)
+	}
+	metrics, ok := entry["metrics"].(map[string]any)
+	if !ok || len(metrics) == 0 {
+		add("watches.%s.metrics is required and must be non-empty for a net check", name)
+		return
+	}
+	for _, key := range sortedKeys(metrics) {
+		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
+		m, ok := metrics[key].(map[string]any)
+		if !ok {
+			add("%s must be a mapping", prefix)
+			continue
+		}
+		switch key {
+		case "state":
+			exp := scalarString(m["expect"])
+			onChange := scalarString(m["on"]) == "change"
+			if exp == "" && !onChange {
+				add("%s requires expect: up|down or on: change", prefix)
+			} else if exp != "" && exp != "up" && exp != "down" {
+				add("%s.expect must be up or down", prefix)
+			}
+		case "speed":
+			if scalarString(m["on"]) != "change" {
+				add("%s requires on: change", prefix)
+			}
+		case "errors":
+			delta, ok := m["delta"].(map[string]any)
+			if !ok {
+				add("%s.delta {op, value} is required", prefix)
+			} else {
+				if !isValidDiskOp(scalarString(delta["op"])) {
+					add("%s.delta has an invalid op %q", prefix, scalarString(delta["op"]))
+				}
+				if !isNumeric(scalarString(delta["value"])) {
+					add("%s.delta value %q must be numeric", prefix, scalarString(delta["value"]))
+				}
+			}
+			if c, present := m["counters"]; present {
+				if list, ok := c.([]any); !ok || len(list) == 0 {
+					add("%s.counters must be a non-empty list", prefix)
+				}
+			}
+		default:
+			add("%s is not a supported net metric (state, speed, errors)", prefix)
+		}
+		validateHookBlock(prefix, m, add)
+		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateMetricWindow validates a per-metric for/within window using the same
+// rules as validateWatchWindow but with a metric-scoped prefix.
+func validateMetricWindow(prefix string, m map[string]any, add func(string, ...any)) {
+	if f, ok := m["for"].(map[string]any); ok {
+		if c, _ := scalarInt(f["cycles"]); c <= 0 {
+			add("%s.for.cycles must be a positive integer", prefix)
+		}
+	}
+	if wn, ok := m["within"].(map[string]any); ok {
+		if c, _ := scalarInt(wn["cycles"]); c <= 0 {
+			add("%s.within.cycles must be a positive integer", prefix)
+		}
+		if raw, present := wn["min_matches"]; present {
+			if mm, _ := scalarInt(raw); mm < 0 {
+				add("%s.within.min_matches must be a non-negative integer", prefix)
+			}
+		}
 	}
 }
 
