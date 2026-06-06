@@ -63,6 +63,20 @@ packaging/gentoo/app-admin/sermo/sermo-9999.ebuild
 packaging/debian/
 ```
 
+## make install
+
+`make install` is the canonical installer. It uses standard GNU directory
+variables and `DESTDIR` staging, composed of granular targets: `install-bin`
+(sermoctl→`$(bindir)`, sermod→`$(sbindir)`), `install-profiles` (recursive,
+preserving `services/apps/libs`), `install-config` (sample `sermo.yml`, never
+overwriting an existing one; creates apps-available/-enabled), `install-systemd`
+and `install-openrc`. The unit/init templates carry default `/usr/bin/sermod` and
+`/etc/sermo` paths that install rewrites to the chosen `$(sbindir)` /
+`$(SERMO_CONFDIR)`; the sample config's `/usr/share/sermo` and `/etc/sermo` paths
+are rewritten too, so the install is relocatable. Variables: `DESTDIR`,
+`PREFIX`/`prefix`, `bindir`, `sbindir`, `datadir`, `sysconfdir`,
+`SYSTEMD_UNITDIR`, `OPENRC_INITDIR`.
+
 ## Tests/checks
 
 Review packaging with:
