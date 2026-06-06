@@ -96,7 +96,7 @@ rules:
         check: mariabackup
     then:
       action: block
-      message: "MariaDB backup is running"
+      message: "${display_name} backup is running"
 
   restart-if-tcp-failed:
     type: remediation

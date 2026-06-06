@@ -125,7 +125,7 @@ rules:
         check: mariabackup
     then:
       action: block
-      message: "MySQL backup is running"
+      message: "${display_name} backup is running"
 ```
 
 ## Evaluation order

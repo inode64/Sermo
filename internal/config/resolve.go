@@ -23,10 +23,27 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 
 	vars := collectVariables(merged)
 	errs := validateVariableValues(vars)
+	injectBuiltinVariables(vars, name, merged)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
+}
+
+// injectBuiltinVariables makes the document's identity available for ${...}
+// expansion: ${name} (the resolved service name) and ${display_name} (the
+// display_name field, falling back to name). They let profiles parameterize
+// human-facing strings — e.g. message: "${display_name} backup is running".
+// Injected after validateVariableValues so a display_name carrying its own
+// ${...} is not mistaken for a nested variable; an explicit `variables` entry of
+// the same name takes precedence and is left untouched.
+func injectBuiltinVariables(vars map[string]string, name string, merged map[string]any) {
+	if _, ok := vars["name"]; !ok {
+		vars["name"] = name
+	}
+	if _, ok := vars["display_name"]; !ok {
+		vars["display_name"] = DisplayName(merged, name)
+	}
 }
 
 // mergedService returns the merged-but-unexpanded body for a service, following

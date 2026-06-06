@@ -136,7 +136,7 @@ rules:
         check: backup-flag
     then:
       action: block
-      message: "backup is running"
+      message: "${display_name} backup is running"
 ```
 
 ## Output format

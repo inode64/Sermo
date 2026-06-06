@@ -78,7 +78,7 @@ rules:
         check: config
     then:
       action: block
-      message: "Apache configuration is invalid"
+      message: "${display_name} configuration is invalid"
 
   restart-if-http-failed:
     type: remediation

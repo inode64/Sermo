@@ -300,6 +300,87 @@ func TestCollectVariablesFirstExistingPath(t *testing.T) {
 	}
 }
 
+func TestBuiltinNameAndDisplayNameVariables(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/db.yml": `
+kind: profile
+name: db
+display_name: "MariaDB"
+rules:
+  guard-backup:
+    type: guard
+    blocks: [restart]
+    if:
+      active:
+        check: service
+    then:
+      action: block
+      message: "${display_name} backup is running on ${name}"
+`,
+		// Inherits the profile's display_name; name is its own.
+		"enabled/db-main.yml": `
+kind: service
+name: db-main
+uses: db
+service: { name: db }
+`,
+		// No display_name anywhere: ${display_name} must fall back to name.
+		"enabled/plain.yml": `
+kind: service
+name: plain
+service: { name: plain }
+rules:
+  alert-x:
+    type: alert
+    if:
+      failed:
+        check: service
+    then:
+      action: alert
+      message: "${display_name} is down"
+`,
+		// Explicit variable overrides the built-in.
+		"enabled/custom.yml": `
+kind: service
+name: custom
+service: { name: custom }
+variables:
+  display_name: "Overridden"
+rules:
+  alert-y:
+    type: alert
+    if:
+      failed:
+        check: service
+    then:
+      action: alert
+      message: "${display_name}"
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	check := func(service, rule string, want string) {
+		t.Helper()
+		resolved, errs := cfg.Resolve(service)
+		if len(errs) != 0 {
+			t.Fatalf("Resolve(%q) errors = %v", service, errs)
+		}
+		then := nested(t, resolved.Tree, "rules", rule, "then")
+		if got := scalarString(then["message"]); got != want {
+			t.Errorf("%s message = %q, want %q", service, got, want)
+		}
+	}
+
+	check("db-main", "guard-backup", "MariaDB backup is running on db-main")
+	check("plain", "alert-x", "plain is down")
+	check("custom", "alert-y", "Overridden")
+}
+
 func TestDisplayNameFallsBackToName(t *testing.T) {
 	cases := []struct {
 		name string
