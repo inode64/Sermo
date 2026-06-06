@@ -45,6 +45,12 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	if _, ok := vars["display_name"]; !ok {
 		vars["display_name"] = DisplayName(merged, name)
 	}
+	if _, ok := vars["service"]; !ok {
+		vars["service"] = ServiceUnit(merged, name)
+	}
+	if _, ok := vars["host"]; !ok {
+		vars["host"] = detectedHost
+	}
 }
 
 // expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block

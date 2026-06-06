@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,6 +125,32 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	w.RunCycle(context.Background())
 	if len(h.ops) != 1 {
 		t.Fatalf("acknowledged change must not refire, ops=%v", h.ops)
+	}
+}
+
+func TestRuntimeVarsSubstitutedInMessage(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := map[string]any{"rules": map[string]any{
+		"notify": map[string]any{
+			"type": "alert",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "alert", "message": "${service} ${event} at ${date}"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	e, ok := h.eventOf("alert")
+	if !ok {
+		t.Fatalf("no alert emitted: %+v", h.events)
+	}
+	if strings.Contains(e.Message, "${") {
+		t.Errorf("runtime vars not substituted: %q", e.Message)
+	}
+	want := "web notify at " + t0.Format(time.RFC3339)
+	if e.Message != want {
+		t.Errorf("message = %q, want %q", e.Message, want)
 	}
 }
 

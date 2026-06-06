@@ -506,6 +506,78 @@ func hasIssue(issues []Issue, substr string) bool {
 	return false
 }
 
+func TestBuiltinHostServiceAndRuntimeVars(t *testing.T) {
+	old := detectedHost
+	detectedHost = "myhost"
+	defer func() { detectedHost = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/web.yml": `
+kind: service
+name: web
+service: { name: nginx }
+checks:
+  ping:
+    type: tcp
+    host: "${host}"
+    port: "80"
+rules:
+  alert-down:
+    type: alert
+    if: { failed: { check: ping } }
+    then:
+      action: alert
+      message: "${service} on ${host}: ${event}/${action} at ${date}"
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v (runtime vars must not error)", errs)
+	}
+	// ${host} falls back to the hostname (no user-defined host variable).
+	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "myhost" {
+		t.Errorf("ping host = %q, want myhost", got)
+	}
+	// ${service} → the backend unit name; ${host} resolved; runtime vars deferred.
+	msg := scalarString(nested(t, resolved.Tree, "rules", "alert-down", "then")["message"])
+	if !strings.Contains(msg, "nginx on myhost") {
+		t.Errorf("message = %q, want service/host substituted", msg)
+	}
+	for _, lit := range []string{"${event}", "${action}", "${date}"} {
+		if !strings.Contains(msg, lit) {
+			t.Errorf("message = %q, want %s left for runtime", msg, lit)
+		}
+	}
+}
+
+func TestUserHostVariableOverridesBuiltin(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/web.yml": `
+kind: service
+name: web
+service: { name: web }
+variables:
+  host: 127.0.0.1
+checks:
+  ping: { type: tcp, host: "${host}", port: "80" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, _ := cfg.Resolve("web")
+	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "127.0.0.1" {
+		t.Errorf("ping host = %q, want user-defined 127.0.0.1", got)
+	}
+}
+
 func TestOSSelectorCollapses(t *testing.T) {
 	old := detectedOS
 	detectedOS = "gentoo"

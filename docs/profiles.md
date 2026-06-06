@@ -134,6 +134,28 @@ substituted the same way — e.g. `confdir: "/etc/${os}-apache"`.
 `${arch}` and `${os}` can be overridden with the `SERMO_ARCH` / `SERMO_OS`
 environment variables (useful for testing or building config off-host).
 
+### All built-in variables
+
+| Variable          | Value                                   | Resolved        |
+|-------------------|-----------------------------------------|-----------------|
+| `${name}`         | the resolved service/profile name       | resolution      |
+| `${display_name}` | the display name (falls back to name)   | resolution      |
+| `${service}`      | the backend unit name (`service.name`)  | resolution      |
+| `${host}`         | hostname (`SERMO_HOST` override)        | resolution¹     |
+| `${arch}`         | machine architecture (`SERMO_ARCH`)     | load (baked)    |
+| `${os}`           | os-release id (`SERMO_OS`)              | load (baked)    |
+| `${date}`         | event timestamp (RFC3339)               | runtime²        |
+| `${event}`        | the firing rule's name                  | runtime²        |
+| `${action}`       | the action taken (restart/start/stop)   | runtime²        |
+
+¹ `${host}` only applies when the profile does not define a `host` variable (a
+bind address like `127.0.0.1`); an explicit `host` always wins.
+
+² `${date}`/`${event}`/`${action}` are substituted when the worker emits a rule
+message, so they belong in `message:` strings — e.g.
+`message: "[${host}] ${service}: ${event} → ${action} at ${date}"`. Elsewhere they
+stay literal.
+
 ### OS-specific blocks (os:)
 
 Beyond the `${os}` string, an `os:` key anywhere in a document selects a whole

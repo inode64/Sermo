@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -202,7 +203,28 @@ func (w *Worker) windowState(name string) *rules.WindowState {
 
 func (w *Worker) emit(e Event) {
 	e.Service = w.Service
+	e.Message = w.expandRuntime(e.Message, e)
 	if w.Emit != nil {
 		w.Emit(e)
 	}
+}
+
+// expandRuntime substitutes the runtime built-ins a rule message may carry —
+// ${date} (now), ${event} (the firing rule), ${action} — which resolution left
+// literal. ${host}/${service} were already substituted at resolution.
+func (w *Worker) expandRuntime(msg string, e Event) string {
+	if !strings.Contains(msg, "${") {
+		return msg
+	}
+	now := w.Now
+	if now == nil {
+		now = time.Now
+	}
+	r := strings.NewReplacer(
+		"${date}", now().Format(time.RFC3339),
+		"${event}", e.Rule,
+		"${action}", e.Action,
+		"${service}", e.Service,
+	)
+	return r.Replace(msg)
 }

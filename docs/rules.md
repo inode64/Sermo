@@ -88,6 +88,10 @@ block-during-backup:
 Guards are evaluated before remediation; a remediation action that a guard
 blocks never runs.
 
+`message:` strings may use the runtime built-ins `${date}` (RFC3339), `${event}`
+(the firing rule's name) and `${action}`, plus the resolved `${service}`/`${host}`
+— e.g. `message: "[${host}] ${service}: ${event} → ${action} at ${date}"`.
+
 ## Remediation policy
 
 ```yaml

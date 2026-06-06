@@ -107,11 +107,19 @@ func expandValue(v any, vars map[string]string, path string, errs *[]string) any
 	}
 }
 
+// runtimeVars are substituted by the worker when an event is emitted, not during
+// resolution. expandString leaves them as literal ${...} (without erroring) so a
+// rule message can reference the firing event's context.
+var runtimeVars = map[string]bool{"date": true, "event": true, "action": true}
+
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {
 	return varRef.ReplaceAllStringFunc(s, func(match string) string {
 		name := strings.TrimSpace(varRef.FindStringSubmatch(match)[1])
 		if val, ok := vars[name]; ok {
 			return val
+		}
+		if runtimeVars[name] {
+			return match // resolved at emit time by the worker
 		}
 		*errs = append(*errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
 		return match

@@ -179,6 +179,13 @@ version-discovery paths — so it works in `binary`, library paths and
 os-release ID (`gentoo`, `debian`, ...), substituted the same way. Both honor
 `SERMO_ARCH` / `SERMO_OS` env overrides.
 
+Other built-ins: `${service}` (backend unit name) and `${host}` (hostname,
+`SERMO_HOST` override; only applies when no `host` variable is defined) resolve at
+resolution time. `${date}` (RFC3339 timestamp), `${event}` (firing rule name) and
+`${action}` (restart/start/stop) are RUNTIME values substituted by the worker when
+it emits a rule message — use them in `message:` strings; elsewhere they stay
+literal.
+
 An `os:` key anywhere (value = map of os-id -> block) is an OS SELECTOR: at load,
 the branch for the detected OS (or a `default` branch) is merged into the parent
 and the rest discarded. It works at any depth — aliases, checks, processes,
