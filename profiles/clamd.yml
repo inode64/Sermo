@@ -1,7 +1,6 @@
 kind: profile
 name: clamd
 display_name: "ClamAV Daemon"
-description: "Clamd"
 service: { name: "clamd", backend: auto }
 variables:
   binary: "/usr/sbin/clamd"

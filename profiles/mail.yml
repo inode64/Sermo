@@ -1,7 +1,6 @@
 kind: profile
 name: mail
 display_name: "Mail"
-description: "Mail"
 service: { name: "mail", backend: auto }
 variables:
   binary: "/usr/bin/mail"

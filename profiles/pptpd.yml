@@ -1,7 +1,6 @@
 kind: profile
 name: pptpd
 display_name: "PPTP Server"
-description: "Pptpd"
 service: { name: "pptpd", backend: auto }
 variables:
   binary: "/usr/sbin/pptpd"

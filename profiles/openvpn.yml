@@ -1,7 +1,6 @@
 kind: profile
 name: openvpn
 display_name: "OpenVPN"
-description: "OpenVPN"
 service: { name: "openvpn", backend: auto }
 variables:
   binary: "/usr/sbin/openvpn"

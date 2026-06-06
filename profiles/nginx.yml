@@ -1,7 +1,6 @@
 kind: profile
 name: nginx
 display_name: "Nginx"
-description: "Nginx"
 service: { name: "nginx", backend: auto }
 variables:
   binary: "/usr/sbin/nginx"

@@ -1,7 +1,6 @@
 kind: profile
 name: asterisk
 display_name: "Asterisk PBX"
-description: "Asterisk"
 service: { name: "asterisk", backend: auto }
 variables:
   binary: "/usr/sbin/asterisk"
