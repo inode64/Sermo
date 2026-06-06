@@ -42,8 +42,8 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 		}
 
 		switch stringField(checkEntry["type"]) {
-		case "net":
-			expanded, warns := buildNetWatches(name, entry, checkEntry, deps, interval)
+		case "net", "icmp":
+			expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 			watches = append(watches, expanded...)
 			warnings = append(warnings, warns...)
 		default:
@@ -85,13 +85,15 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	}, ""
 }
 
-// buildNetWatches expands one net interface entry into one Watch per metric,
-// each with its own check, window and hook (spec 2026-06-06-net-interface-watch).
-func buildNetWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
-	iface := stringField(checkEntry["interface"])
+// buildMetricWatches expands one multi-metric watch entry (net/icmp) into one
+// Watch per metric, each with its own check, window and hook. The per-metric
+// check entry is the watch's base check fields plus metric:<key> plus the
+// metric block's condition keys (everything except then/for/within). Builder-set
+// keys (type, host/interface, count, metric) take precedence over the block.
+func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
 	metrics, ok := entry["metrics"].(map[string]any)
 	if !ok || len(metrics) == 0 {
-		return nil, []string{"watch " + name + ": net check requires a non-empty metrics map"}
+		return nil, []string{"watch " + name + ": " + stringField(checkEntry["type"]) + " check requires a non-empty metrics map"}
 	}
 	var out []*Watch
 	var warns []string
@@ -101,12 +103,19 @@ func buildNetWatches(name string, entry, checkEntry map[string]any, deps Deps, i
 			warns = append(warns, "watch "+name+".metrics."+key+": not a mapping")
 			continue
 		}
-		ce := map[string]any{"type": "net", "interface": iface, "metric": key}
-		for _, k := range []string{"on", "expect", "counters", "delta"} {
-			if v, ok := mEntry[k]; ok {
+		ce := map[string]any{}
+		for k, v := range mEntry { // condition keys
+			switch k {
+			case "then", "for", "within":
+			default:
 				ce[k] = v
 			}
 		}
+		for k, v := range checkEntry { // base check fields win
+			ce[k] = v
+		}
+		ce["metric"] = key
+
 		check, err := checks.BuildInline(name, ce, checks.Deps{DefaultTimeout: deps.DefaultTimeout})
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
@@ -119,7 +128,7 @@ func buildNetWatches(name string, entry, checkEntry map[string]any, deps Deps, i
 		}
 		out = append(out, &Watch{
 			Name:      name,
-			CheckType: "net",
+			CheckType: stringField(checkEntry["type"]),
 			Check:     check,
 			Window:    rules.Rule{For: parseForField(mEntry["for"]), Within: parseWithinField(mEntry["within"])},
 			Hook:      hook,
