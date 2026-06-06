@@ -172,6 +172,11 @@ resolution (no `variables` entry needed): `${name}` is the resolved service name
 parameterize human-facing strings, e.g. `message: "${display_name} backup is
 running"`. An explicit `variables` entry of the same name overrides the built-in.
 
+`${arch}` is the machine architecture (uname -m: `x86_64`, `aarch64`, ...),
+substituted everywhere on load — including inside variable values and
+version-discovery paths — so it works in `binary`, library paths and
+`versions.from`, e.g. `binary: /usr/bin/qemu-system-${arch}`.
+
 Validation must fail on unresolved variables.
 
 ## Typed fields and variable interaction

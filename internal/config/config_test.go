@@ -506,6 +506,42 @@ func hasIssue(issues []Issue, substr string) bool {
 	return false
 }
 
+func TestArchVariableBaked(t *testing.T) {
+	old := detectedArch
+	detectedArch = "aarch64"
+	defer func() { detectedArch = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/apps/qemu.yml": `
+kind: profile
+name: qemu
+display_name: "QEMU"
+variables:
+  binary: "/usr/bin/qemu-system-${arch}"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	// ${arch} is baked into the variable value (so the no-nested-variables rule
+	// never sees it) and flows through expansion.
+	if got := profileBinary(cfg.Profiles["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
+		t.Errorf("baked binary = %q, want /usr/bin/qemu-system-aarch64", got)
+	}
+	resolved, errs := cfg.ResolveProfile("qemu")
+	if len(errs) != 0 {
+		t.Fatalf("ResolveProfile() errors = %v", errs)
+	}
+	bin := nested(t, resolved.Tree, "preflight", "binary")
+	if scalarString(bin["path"]) != "/usr/bin/qemu-system-aarch64" {
+		t.Errorf("resolved binary path = %v, want /usr/bin/qemu-system-aarch64", bin["path"])
+	}
+}
+
 func TestProfileCategoryFromDirectory(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml":               baseGlobal,
