@@ -56,6 +56,38 @@ services that are still coming up are not flagged or remediated prematurely. The
 wait applies once, on startup, before any worker runs; a shutdown signal during
 the wait aborts cleanly without starting any worker. The default `0` disables it.
 
+## Host watches
+
+`watches` monitor host-level resources independently of any service and run a
+**hook** (a local command) when a threshold is crossed. They are daemon
+configuration; they never merge into a service.
+
+```yaml
+watches:
+  disk-root:
+    enabled: true          # optional, default true
+    interval: 1m           # optional, default engine.interval
+    check:
+      type: disk
+      path: /
+      used_pct: { op: ">=", value: 90 }   # check fires when crossed
+    for: { cycles: 3 }     # optional window; reuses the rules engine
+    then:
+      hook:
+        command: [/usr/local/bin/alert-disk.sh, "/"]
+        timeout: 10s       # optional, default engine.default_timeout
+```
+
+The `disk` check reads filesystem usage for `path` and is true when every
+present predicate (`used_pct` and/or `free_pct`, each `{op, value}` with
+`op ∈ >=,>,<=,<,==,!=`) holds. When the condition holds for the `for`/`within`
+window, the hook command runs (argv only, never a shell) with these environment
+variables: `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_PATH`, `SERMO_VALUE`,
+`SERMO_MESSAGE`.
+
+Other resource types (network, file counts) will be added as new check `type`
+values using the same watch/hook structure.
+
 ## Global defaults
 
 Only the per-service parts of `defaults` merge into a service: `stop_policy`,
