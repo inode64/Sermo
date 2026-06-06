@@ -135,6 +135,24 @@ variables:
 `/usr/bin/python*` then materializes `python2` and `python3`, but not
 `python3.11` or `python-config`.
 
+### Listing installed applications
+
+`sermoctl apps` reports the applications described by profiles: which are
+installed (their binary is present and executable), the version their version
+command reports, and whether they resolve without error.
+
+```text
+APPLICATION   VERSION                      STATUS
+Nginx         nginx version: nginx/1.24.0  ok
+Python 3      Python 3.11.2                ok
+Redis         -                            error: /usr/sbin/redis-server is not executable
+```
+
+Only installed applications are shown; `sermoctl apps all` also lists the rest as
+`not installed`. With version templates this lists each installed version as its
+own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` emits the structured
+`name`, `display_name`, `binary`, `version`, `installed`, `ok` and `status`.
+
 A template may `uses` a base profile to inherit its checks, processes and rules,
 overriding only the version-specific binary. The packaged `php-fpm-%v` builds on
 `php-fpm`:
