@@ -9,6 +9,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/locks"
+	"sermo/internal/metrics"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -25,6 +26,9 @@ type Deps struct {
 	Sleep          func(time.Duration)
 	Now            func() time.Time
 	Emit           func(Event)
+	// SystemFreshness caches system metrics so concurrent workers in one cycle
+	// share a computation; it must be below the scheduler interval.
+	SystemFreshness time.Duration
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
@@ -33,6 +37,10 @@ type Deps struct {
 func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 	var workers []*Worker
 	var warnings []string
+	collector := metrics.New(metrics.OSReader{})
+	if deps.SystemFreshness > 0 {
+		collector.SystemFreshness = deps.SystemFreshness
+	}
 
 	for _, name := range serviceNames(cfg) {
 		doc := cfg.Services[name]
@@ -44,12 +52,12 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 			warnings = append(warnings, "skip service "+name+": "+errs[0])
 			continue
 		}
-		workers = append(workers, buildWorker(name, resolved.Tree, deps))
+		workers = append(workers, buildWorker(name, resolved.Tree, deps, collector))
 	}
 	return workers, warnings
 }
 
-func buildWorker(name string, tree map[string]any, deps Deps) *Worker {
+func buildWorker(name string, tree map[string]any, deps Deps, collector *metrics.Collector) *Worker {
 	unit := serviceUnit(tree, name)
 	manager := deps.Manager
 
@@ -81,6 +89,8 @@ func buildWorker(name string, tree map[string]any, deps Deps) *Worker {
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
+	discoverer := process.NewDiscoverer()
+	sampleMetrics := metricSampler(name, tree, collector, discoverer)
 
 	return &Worker{
 		Service:   name,
@@ -88,9 +98,10 @@ func buildWorker(name string, tree map[string]any, deps Deps) *Worker {
 		Policy:    rules.ParsePolicy(tree),
 		State:     &rules.RemediationState{},
 		CheckDeps: checkDeps,
-		Checks: func(ctx context.Context) map[string]checks.Result {
+		Sample:    sampleMetrics,
+		Checks: func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 			section, _ := tree["checks"].(map[string]any)
-			built, _ := checks.Build(section, checkDeps)
+			built, _ := checks.Build(section, d)
 			cache := map[string]checks.Result{}
 			for _, r := range checks.Run(ctx, built, maxParallel) {
 				cache[r.Check] = r
@@ -112,6 +123,109 @@ func buildWorker(name string, tree map[string]any, deps Deps) *Worker {
 		Now:  deps.Now,
 		Emit: deps.Emit,
 	}
+}
+
+// metricSampler returns a per-cycle metric reader for a service, or nil when the
+// service references no metrics (so the daemon does not read /proc every cycle
+// for nothing). Service metrics are sampled over the discovered process set;
+// system metrics come from the shared collector's cached system sample.
+func metricSampler(service string, tree map[string]any, collector *metrics.Collector, discoverer process.Discoverer) func(context.Context) checks.MetricReader {
+	needService, needSystem := usesMetrics(tree)
+	if !needService && !needSystem {
+		return nil
+	}
+	selectors, _ := process.ParseSelectors(tree)
+
+	return func(ctx context.Context) checks.MetricReader {
+		var svc, sys metrics.Snapshot
+		if needService {
+			procs, _ := discoverer.Discover(selectors)
+			pids := make([]int, 0, len(procs))
+			for _, p := range procs {
+				pids = append(pids, p.PID)
+			}
+			svc = collector.SampleService(service, pids)
+		}
+		if needSystem {
+			sys = collector.SampleSystem()
+		}
+		return func(scope, name string) (metrics.Reading, bool) {
+			snap := svc
+			if scope == "system" {
+				snap = sys
+			}
+			if snap == nil {
+				return metrics.Reading{}, false
+			}
+			r, ok := snap[name]
+			return r, ok
+		}
+	}
+}
+
+// usesMetrics scans a resolved service for metric checks and metric conditions,
+// reporting whether service-scope and/or system-scope metrics are referenced.
+func usesMetrics(tree map[string]any) (service, system bool) {
+	mark := func(scope string) {
+		if scope == "system" {
+			system = true
+		} else {
+			service = true
+		}
+	}
+	for _, section := range []string{"checks", "preflight", "postflight"} {
+		entries, ok := tree[section].(map[string]any)
+		if !ok {
+			continue
+		}
+		for _, e := range entries {
+			if m, ok := e.(map[string]any); ok {
+				if t, _ := m["type"].(string); t == "metric" {
+					mark(scopeOf(m))
+				}
+			}
+		}
+	}
+	if ruleMap, ok := tree["rules"].(map[string]any); ok {
+		for _, e := range ruleMap {
+			if m, ok := e.(map[string]any); ok {
+				if ifNode, ok := m["if"].(map[string]any); ok {
+					scanMetricScopes(ifNode, mark)
+				}
+			}
+		}
+	}
+	return service, system
+}
+
+func scanMetricScopes(node map[string]any, mark func(string)) {
+	for k, v := range node {
+		switch k {
+		case "metric":
+			if m, ok := v.(map[string]any); ok {
+				mark(scopeOf(m))
+			}
+		case "and", "or":
+			if list, ok := v.([]any); ok {
+				for _, item := range list {
+					if m, ok := item.(map[string]any); ok {
+						scanMetricScopes(m, mark)
+					}
+				}
+			}
+		case "not":
+			if m, ok := v.(map[string]any); ok {
+				scanMetricScopes(m, mark)
+			}
+		}
+	}
+}
+
+func scopeOf(m map[string]any) string {
+	if s, _ := m["scope"].(string); s != "" {
+		return s
+	}
+	return "service"
 }
 
 func serviceNames(cfg *config.Config) []string {

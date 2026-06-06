@@ -59,15 +59,17 @@ func run(args []string) int {
 		return 2
 	}
 
+	interval := engineDuration(cfg, "interval", 30*time.Second)
 	deps := app.Deps{
-		Backend:        detection.Backend,
-		Manager:        manager,
-		Runtime:        cfg.Global.RuntimeDir(),
-		DefaultTimeout: engineDuration(cfg, "default_timeout", 10*time.Second),
-		MaxParallel:    engineInt(cfg, "max_parallel_checks", 8),
-		Sleep:          time.Sleep,
-		Now:            time.Now,
-		Emit:           app.SlogEmitter(logger),
+		Backend:         detection.Backend,
+		Manager:         manager,
+		Runtime:         cfg.Global.RuntimeDir(),
+		DefaultTimeout:  engineDuration(cfg, "default_timeout", 10*time.Second),
+		MaxParallel:     engineInt(cfg, "max_parallel_checks", 8),
+		Sleep:           time.Sleep,
+		Now:             time.Now,
+		Emit:            app.SlogEmitter(logger),
+		SystemFreshness: interval / 2,
 	}
 
 	workers, warnings := app.BuildWorkers(cfg, deps)
@@ -81,7 +83,7 @@ func run(args []string) int {
 
 	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers))
 	scheduler := app.Scheduler{
-		Interval: engineDuration(cfg, "interval", 30*time.Second),
+		Interval: interval,
 		OpSlots:  engineInt(cfg, "max_parallel_operations", 2),
 	}
 	scheduler.Run(ctx, workers)

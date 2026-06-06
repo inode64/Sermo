@@ -29,7 +29,7 @@ func (h *workerHarness) worker(tree map[string]any, policy rules.Policy, state *
 		Rules:   ruleSet,
 		Policy:  policy,
 		State:   state,
-		Checks:  func(context.Context) map[string]checks.Result { return h.cache },
+		Checks:  func(context.Context, checks.Deps) map[string]checks.Result { return h.cache },
 		Operate: func(_ context.Context, action string) operation.Result {
 			h.ops = append(h.ops, action)
 			res := h.opResult

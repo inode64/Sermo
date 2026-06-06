@@ -20,7 +20,10 @@ type Worker struct {
 	CheckDeps checks.Deps
 
 	// Checks produces this cycle's named-check cache (section 14).
-	Checks func(ctx context.Context) map[string]checks.Result
+	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
+	// Sample produces this cycle's metric reader (section 12). Nil when the
+	// service uses no metrics.
+	Sample func(ctx context.Context) checks.MetricReader
 	// Operate runs an action through the operation engine.
 	Operate func(ctx context.Context, action string) operation.Result
 	Now     func() time.Time
@@ -41,8 +44,12 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		now = time.Now
 	}
 
-	cache := w.Checks(ctx)
-	ev := &rules.Evaluator{Cache: cache, Deps: w.CheckDeps}
+	deps := w.CheckDeps
+	if w.Sample != nil {
+		deps.Metrics = w.Sample(ctx)
+	}
+	cache := w.Checks(ctx, deps)
+	ev := &rules.Evaluator{Cache: cache, Deps: deps}
 
 	w.runRemediation(ctx, ev, now)
 	w.runAlerts(ctx, ev)
