@@ -80,7 +80,8 @@ New check type registered in the existing `buildCheck` type switch.
   func(path string) (DiskStats, error)`; a real `statfs`-backed default is used
   when the field is nil so the check works for both the daemon and inline use.
 - **Growth point:** future `net` / `files` checks are added as new `case`
-  branches in the same switch with their own params — no other change needed.
+  branches in the same shared `buildCheck` switch (`internal/checks/build.go`)
+  with their own params — no other change needed.
 
 ### 2. `hook` action — `internal/watch` (new package)
 
@@ -100,13 +101,25 @@ New check type registered in the existing `buildCheck` type switch.
   (`For`/`Within`), the hook spec, and the effective `Interval`.
 - `RunCycle(ctx)`:
   1. run the check → `cond = result.OK`
-  2. advance the window: `WindowState.Fires(...)`
+  2. advance the window. `rules.WindowState.Fires` has signature
+     `Fires(r rules.Rule, conditionTrue bool) bool` and reads only `r.For` /
+     `r.Within`. A watch has no `rules.Rule`, so the watch builder constructs a
+     **synthetic** `rules.Rule{For: ..., Within: ...}` once and passes it each
+     cycle. (No refactor of `internal/rules` is required.)
   3. if it fires, run the hook with the env derived from `result.Data` and emit
-     events (`hook` on success, `hook-failed` on error), reusing the
-     `app.Event` emitter shape.
+     events (`hook` on success, `hook-failed` on error).
 - The watch reuses `internal/rules` window types; it does **not** go through the
   service operation engine (no operation locks, no cooldown policy — a hook is a
   notification, not a service operation).
+
+**Event/emitter changes (`internal/app/event.go`):** `app.Event` today has a
+`Service` field but no watch identity, and `SlogEmitter` only routes the kinds
+`action`/`alert`/`suppressed`/`error` at Info (others fall to Debug). To make
+hook firings operator-visible:
+- add a `Watch` field to `Event` (the watch name; `Service` stays empty for
+  watch events);
+- extend `SlogEmitter`'s switch to log `hook`/`hook-failed` at Info;
+- extend the `Kind` doc comment to enumerate the new kinds.
 
 ### 4. Scheduler integration — `internal/app`
 
@@ -119,6 +132,11 @@ New check type registered in the existing `buildCheck` type switch.
   service workers.
 
 ### 5. Validation — `internal/config/validate.go`
+
+`Validate()` today only iterates global settings and per-service documents; there
+is **no** generic hook for a new top-level section. This is net-new plumbing: add
+a `validateWatches(...)` step called from `Validate()` that reads the section
+from `cfg.Global.Raw["watches"]` (same access pattern as `engine`/`paths`).
 
 For each `watches.<name>`:
 - `check.type` must be a known type; for `disk`: `path` required and at least one
