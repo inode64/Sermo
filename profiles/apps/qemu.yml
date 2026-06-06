@@ -1,7 +1,6 @@
 kind: profile
-name: qemu-system-x86-64
+name: qemu
 display_name: "QEMU"
-description: "QEMU"
 variables:
   binary: "/usr/bin/qemu-system-x86_64"
 preflight:
