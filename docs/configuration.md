@@ -141,6 +141,57 @@ In general, **every key a check puts in its result `Data` is exported to the hoo
 as `SERMO_<UPPER_KEY>`** (non-alphanumeric characters become `_`). The lists above
 are simply the keys each built-in check emits.
 
+### `icmp` — external host (ping)
+
+An `icmp` watch monitors an **external host** by ICMP echo (ping): its
+reachability and its round-trip latency. Like `net` it is grouped per host — the
+host is named once and each metric is independent, with its own condition **and
+its own hook**. The entry expands into one watch per metric, so the metrics never
+share state and fire separately.
+
+```yaml
+watches:
+  ping-gw:
+    enabled: false
+    interval: 30s
+    check: { type: icmp, host: 8.8.8.8, count: 3 }   # count optional, default 3
+    metrics:
+      state:                       # reachable / unreachable
+        on: change                 # fire on any transition; or `expect: up|down`
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-host-state.sh, "8.8.8.8"]
+      latency:                     # round-trip time (ms)
+        threshold: { op: ">", value: 100 }   # fire when rtt crosses the threshold
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
+```
+
+The two metrics and their conditions:
+
+- **`state`** — host reachable (`up`) or unreachable (`down`). Use `on: change`
+  to fire on any transition, or `expect: up` / `expect: down` to fire whenever the
+  state **is** the expected value.
+- **`latency`** — round-trip time in milliseconds. Use either
+  `threshold: {op, value}` (same operator set as disk) to fire when the RTT
+  crosses a fixed bound, **or** `change: {delta}` to fire on an abrupt jump
+  (`|rtt − rtt_prev| > delta`); set exactly one. Latency conditions only apply
+  while the host is reachable; an unreachable cycle never fires latency and never
+  updates the change baseline (so the baseline is the last *reachable* RTT).
+
+The change-based metrics (`state` with `on: change`, `latency` with `change`) are
+**stateful across cycles**: the first cycle establishes a baseline and does not
+fire.
+
+An icmp hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_HOST`,
+`SERMO_METRIC`, `SERMO_VALUE`, `SERMO_MESSAGE`, and — for the change metrics —
+`SERMO_OLD` and `SERMO_NEW`.
+
+ICMP requires elevated privileges: the daemon needs the `CAP_NET_RAW` capability
+(or the host's `net.ipv4.ping_group_range` sysctl must include the daemon's gid)
+to open a raw ICMP socket. This iteration is **IPv4-only**.
+
 Other resource types (file counts, …) will be added as new check `type` values
 using the same watch/hook structure.
 

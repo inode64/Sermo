@@ -11,9 +11,10 @@ It ships two binaries:
   validate/render, locks, processes, preflight).
 - **`sermod`** — the daemon: one independent worker per service that runs
   checks, evaluates rules, and drives remediation through the same safe
-  operation engine `sermoctl` uses. It also runs **host watches** (disk space
-  and network interfaces — state, speed and rx/tx errors) that fire a hook
-  command when a threshold is crossed.
+  operation engine `sermoctl` uses. It also runs **host watches** (disk space,
+  network interfaces — state, speed and rx/tx errors — and external hosts via
+  ICMP — reachability and latency) that fire a hook command when a threshold is
+  crossed.
 
 ## Build
 

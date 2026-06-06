@@ -81,3 +81,18 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-net-errors.sh, eth0]
+  ping-gw:
+    enabled: false
+    interval: 30s
+    check: { type: icmp, host: 8.8.8.8, count: 3 }
+    metrics:
+      state:
+        on: change
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-host-state.sh, "8.8.8.8"]
+      latency:
+        threshold: { op: ">", value: 100 }
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
