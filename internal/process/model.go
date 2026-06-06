@@ -54,5 +54,6 @@ type Identity struct {
 	User    string
 	Exe     string
 	ExeOK   bool
+	State   string // /proc/<pid>/stat run state: R, S, D, Z (zombie), ...
 	Cmdline []string
 }

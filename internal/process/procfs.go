@@ -43,7 +43,7 @@ func (OSReader) PIDs() ([]int, error) {
 
 // Identity reads PPID, real UID, resolved exe and cmdline for a process.
 func (OSReader) Identity(pid int) (Identity, bool) {
-	ppid, uid, ok := readStatus(pid)
+	ppid, uid, state, ok := readStatus(pid)
 	if !ok {
 		return Identity{}, false
 	}
@@ -52,20 +52,25 @@ func (OSReader) Identity(pid int) (Identity, bool) {
 		PPID:    ppid,
 		UID:     uid,
 		User:    lookupUser(uid),
+		State:   state,
 		Cmdline: readCmdline(pid),
 	}
 	id.Exe, id.ExeOK = readExe(pid)
 	return id, true
 }
 
-func readStatus(pid int) (ppid int, uid uint32, ok bool) {
+func readStatus(pid int) (ppid int, uid uint32, state string, ok bool) {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
 	if err != nil {
-		return 0, 0, false
+		return 0, 0, "", false
 	}
 	var gotPPID, gotUID bool
 	for _, line := range strings.Split(string(data), "\n") {
 		switch {
+		case strings.HasPrefix(line, "State:"):
+			if fields := strings.Fields(strings.TrimPrefix(line, "State:")); len(fields) > 0 {
+				state = fields[0] // single char: R, S, Z, ...
+			}
 		case strings.HasPrefix(line, "PPid:"):
 			if v, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "PPid:"))); err == nil {
 				ppid, gotPPID = v, true
@@ -79,7 +84,7 @@ func readStatus(pid int) (ppid int, uid uint32, ok bool) {
 			}
 		}
 	}
-	return ppid, uid, gotPPID && gotUID
+	return ppid, uid, state, gotPPID && gotUID
 }
 
 // readExe resolves /proc/<pid>/exe. It returns ok=false when the link cannot be

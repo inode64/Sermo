@@ -528,6 +528,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		Service:        service,
 		DefaultTimeout: engineDefaultTimeout(cfg),
 		Status:         a.statusFunc(opts, serviceUnit(resolved.Tree, service)),
+		Processes:      process.NewDiscoverer().ObserveState,
 	}
 	built, warnings := checks.Build(section, deps)
 	for _, w := range warnings {

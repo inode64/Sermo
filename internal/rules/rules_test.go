@@ -181,6 +181,39 @@ func TestEvalMetricNotReadyOrAbsentIsFalse(t *testing.T) {
 	}
 }
 
+func TestEvalProcessCondition(t *testing.T) {
+	observe := func(exe, user string) string {
+		if exe == "/usr/bin/mariabackup" && user == "mysql" {
+			return "running"
+		}
+		return "absent"
+	}
+	ev := &Evaluator{Deps: checks.Deps{Processes: observe}}
+
+	node := map[string]any{"process": map[string]any{"exe": "/usr/bin/mariabackup", "user": "mysql", "state": "running"}}
+	if !evalNode(t, ev, node) {
+		t.Error("matching running process should be true")
+	}
+	// Default state is running; an absent process is false.
+	absent := map[string]any{"process": map[string]any{"exe": "/nope"}}
+	if evalNode(t, ev, absent) {
+		t.Error("absent process (default state running) should be false")
+	}
+	// No source -> false.
+	if (&Evaluator{}).mustFalse(t, node) {
+		t.Error("absent process source must be false")
+	}
+}
+
+func (e *Evaluator) mustFalse(t *testing.T, node map[string]any) bool {
+	t.Helper()
+	got, err := e.Eval(context.Background(), node)
+	if err != nil {
+		t.Fatalf("Eval error = %v", err)
+	}
+	return got
+}
+
 func TestParseRules(t *testing.T) {
 	tree := map[string]any{
 		"rules": map[string]any{

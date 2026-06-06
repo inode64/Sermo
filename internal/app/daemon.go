@@ -61,6 +61,7 @@ func buildWorker(name string, tree map[string]any, deps Deps, collector *metrics
 	unit := serviceUnit(tree, name)
 	manager := deps.Manager
 
+	discoverer := process.NewDiscoverer()
 	checkDeps := checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
@@ -71,6 +72,7 @@ func buildWorker(name string, tree map[string]any, deps Deps, collector *metrics
 			}
 			return st.Status, nil
 		},
+		Processes: discoverer.ObserveState,
 	}
 
 	locker := locks.NewOperationLocker(filepath.Join(deps.Runtime, "ops"))
@@ -89,7 +91,6 @@ func buildWorker(name string, tree map[string]any, deps Deps, collector *metrics
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
-	discoverer := process.NewDiscoverer()
 	sampleMetrics := metricSampler(name, tree, collector, discoverer)
 
 	return &Worker{

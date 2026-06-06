@@ -179,6 +179,27 @@ func (c metricCheck) Run(_ context.Context) Result {
 	return c.result(met, fmt.Sprintf("%s/%s %s %s = %t", c.scope, c.metric, c.op, c.value, met), start)
 }
 
+// processCheck passes when the observed state of processes matching its
+// exe/user selector equals the expected state (section 12). Matching uses the
+// exact resolved-exe and real-UID rules of section 21.
+type processCheck struct {
+	base
+	exe     string
+	user    string
+	expect  string
+	observe func(exe, user string) string
+}
+
+func (c processCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	if c.observe == nil {
+		return c.result(false, "process discovery unavailable", start)
+	}
+	state := c.observe(c.exe, c.user)
+	ok := state == c.expect
+	return c.result(ok, fmt.Sprintf("state %s (want %s)", state, c.expect), start)
+}
+
 func firstLine(s string) string {
 	for i, r := range s {
 		if r == '\n' {
