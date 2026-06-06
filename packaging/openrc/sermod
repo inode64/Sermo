@@ -1,0 +1,23 @@
+#!/sbin/openrc-run
+# OpenRC init script for the Sermo service supervisor.
+
+name="sermod"
+description="Sermo service supervisor"
+
+command="/usr/bin/sermod"
+command_args="run --config /etc/sermo/sermo.yml"
+command_background="yes"
+pidfile="/run/sermod.pid"
+
+# Capture daemon output to a log file.
+output_log="/var/log/sermod.log"
+error_log="/var/log/sermod.log"
+
+depend() {
+	need net
+	after firewall
+}
+
+start_pre() {
+	checkpath --directory --mode 0755 /run/sermo
+}

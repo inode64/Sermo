@@ -1,0 +1,21 @@
+[Unit]
+Description=Sermo service supervisor
+Documentation=https://github.com/sermo/sermo
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/sermod run --config /etc/sermo/sermo.yml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+# Sermo needs to inspect and signal other services' processes, so it runs as
+# root. The operation engine only ever signals processes that exactly match a
+# service's kill_only_if selector (resolved exe + real UID).
+User=root
+# RuntimeDirectory creates /run/sermo for named and operation locks.
+RuntimeDirectory=sermo
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target

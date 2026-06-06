@@ -1,0 +1,23 @@
+kind: service
+name: apache-main
+uses: apache
+
+variables:
+  health_path: /health
+
+checks:
+  http:
+    url: "http://${host}:${port}${health_path}"
+    expect_status: 200
+
+rules:
+  restart-if-http-failed:
+    type: remediation
+    if:
+      failed:
+        check: http
+    for:
+      cycles: 5
+      mode: consecutive
+    then:
+      action: restart

@@ -1,0 +1,91 @@
+kind: profile
+name: apache
+type: webserver
+
+service:
+  name: apache2
+  backend: auto
+
+aliases:
+  systemd:
+    - apache2.service
+    - httpd.service
+  openrc:
+    - apache2
+    - apache
+
+variables:
+  binary: /usr/sbin/apache2
+  user: www-data
+  host: 127.0.0.1
+  port: 80
+  health_path: /
+
+commands:
+  version:
+    command: ["apachectl", "-v"]
+
+preflight:
+  config:
+    type: command
+    command: ["apachectl", "configtest"]
+    timeout: 10s
+
+  libraries:
+    type: libraries
+    binary: "${binary}"
+    optional: true
+
+processes:
+  main:
+    type: command_match
+    exe: "${binary}"
+    user: root
+
+  workers:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  http:
+    type: http
+    url: "http://${host}:${port}${health_path}"
+    expect_status: 200
+    timeout: 5s
+
+stop_policy:
+  graceful_timeout: 30s
+  term_timeout: 10s
+  kill_timeout: 5s
+  force_kill: true
+  kill_only_if:
+    users: ["${user}", root]
+    exe_any:
+      - "${binary}"
+
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: "Apache configuration is invalid"
+
+  restart-if-http-failed:
+    type: remediation
+    if:
+      failed:
+        check: http
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart

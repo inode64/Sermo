@@ -1,0 +1,100 @@
+kind: profile
+name: php-fpm
+type: appserver
+
+service:
+  name: php-fpm
+  backend: auto
+
+aliases:
+  systemd:
+    - php-fpm.service
+    - php8.2-fpm.service
+    - php-fpm8.2.service
+  openrc:
+    - php-fpm
+    - php-fpm8.2
+
+variables:
+  binary: /usr/sbin/php-fpm
+  user: www-data
+  host: 127.0.0.1
+  port: 9000
+  pidfile: /run/php/php-fpm.pid
+
+commands:
+  version:
+    command: ["${binary}", "--version"]
+
+preflight:
+  binary:
+    type: binary
+    path: "${binary}"
+
+  config:
+    type: command
+    command: ["${binary}", "--test"]
+    timeout: 10s
+
+  libraries:
+    type: libraries
+    binary: "${binary}"
+    optional: true
+
+processes:
+  pidfile:
+    type: pidfile
+    path: "${pidfile}"
+
+  master:
+    type: command_match
+    exe: "${binary}"
+    user: root
+
+  workers:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  tcp:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+
+stop_policy:
+  graceful_timeout: 30s
+  term_timeout: 10s
+  kill_timeout: 5s
+  force_kill: true
+  kill_only_if:
+    users: ["${user}", root]
+    exe_any:
+      - "${binary}"
+
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: "PHP-FPM configuration is invalid"
+
+  restart-if-tcp-failed:
+    type: remediation
+    if:
+      failed:
+        check: tcp
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
