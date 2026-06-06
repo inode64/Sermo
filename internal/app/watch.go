@@ -65,6 +65,8 @@ func hookEnv(name, checkType string, res checks.Result) map[string]string {
 	}
 	if v, ok := res.Data["used_pct"]; ok {
 		env["SERMO_VALUE"] = fmt.Sprintf("%v", v)
+	} else if v, ok := res.Data["free_pct"]; ok {
+		env["SERMO_VALUE"] = fmt.Sprintf("%v", v)
 	}
 	return env
 }
