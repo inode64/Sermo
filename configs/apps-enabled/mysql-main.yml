@@ -1,0 +1,6 @@
+kind: service
+name: mysql-main
+uses: mysql
+
+service:
+  name: mysql

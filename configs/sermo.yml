@@ -1,0 +1,38 @@
+# Sermo global configuration.
+#
+# Engine-wide settings are not merged into individual services; only the
+# per-service parts of `defaults` (stop_policy, policy, rule_window) are.
+
+engine:
+  backend: auto
+  interval: 30s
+  max_parallel_checks: 8
+  default_timeout: 10s
+
+paths:
+  profiles:
+    - /usr/share/sermo/profiles
+    - /etc/sermo/apps-available
+  enabled:
+    - /etc/sermo/apps-enabled
+  runtime: /run/sermo
+
+defaults:
+  rule_window:
+    cycles: 1
+    mode: consecutive
+
+  stop_policy:
+    graceful_timeout: 30s
+    term_timeout: 15s
+    kill_timeout: 5s
+    force_kill: false
+
+  # Required and positive: every resolved service inherits a loop-prevention
+  # cooldown unless it overrides this value.
+  policy:
+    cooldown: 5m
+
+logging:
+  level: info
+  format: text
