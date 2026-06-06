@@ -90,3 +90,16 @@ func TestBuildDiskCheckRejectsMissing(t *testing.T) {
 		t.Fatal("expected a warning for disk check without path/predicate")
 	}
 }
+
+func TestDiskCheckDataHasValueKey(t *testing.T) {
+	// used_pct predicate -> value is used_pct.
+	c := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"used_pct", ">=", 90}}, usage: fakeDisk(92, 8, 80, 1000)}
+	if v := c.Run(context.Background()).Data["value"]; v != 92.0 {
+		t.Fatalf("value = %v, want 92.0 (used_pct)", v)
+	}
+	// only free_pct predicate -> value is free_pct.
+	c2 := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"free_pct", "<", 5}}, usage: fakeDisk(96, 4, 40, 1000)}
+	if v := c2.Run(context.Background()).Data["value"]; v != 4.0 {
+		t.Fatalf("value = %v, want 4.0 (free_pct)", v)
+	}
+}
