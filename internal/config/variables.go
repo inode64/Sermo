@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -13,7 +14,9 @@ import (
 var varRef = regexp.MustCompile(`\$\{([^}]*)\}`)
 
 // collectVariables reads the merged `variables` section into a flat string map.
-// Values are stringified (a YAML int like `port: 8080` becomes "8080").
+// Values are stringified (a YAML int like `port: 8080` becomes "8080"). A
+// list-valued variable is treated as candidate paths and resolves to the first
+// one that exists on the filesystem (see firstExistingPath).
 func collectVariables(tree map[string]any) map[string]string {
 	raw, ok := tree["variables"].(map[string]any)
 	if !ok {
@@ -21,9 +24,37 @@ func collectVariables(tree map[string]any) map[string]string {
 	}
 	vars := make(map[string]string, len(raw))
 	for k, v := range raw {
+		if list, ok := v.([]any); ok {
+			vars[k] = firstExistingPath(list)
+			continue
+		}
 		vars[k] = scalarString(v)
 	}
 	return vars
+}
+
+// firstExistingPath resolves a list-valued variable to the first candidate path
+// that exists on the filesystem, stopping at the first hit. This lets a profile
+// list alternative locations for the same binary (e.g. /lib vs /usr/lib) and
+// bind the variable to whichever is present, so the rest of the document can
+// reference it via ${name}. If none exist, it falls back to the first candidate
+// so the value stays well-formed and downstream preflight checks report it as
+// missing rather than expanding to an empty string.
+func firstExistingPath(candidates []any) string {
+	var first string
+	for i, c := range candidates {
+		p := scalarString(c)
+		if i == 0 {
+			first = p
+		}
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return first
 }
 
 // validateVariableValues rejects variable values that themselves contain
