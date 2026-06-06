@@ -1,0 +1,306 @@
+package config
+
+import (
+	"strings"
+	"testing"
+)
+
+// validateService builds a single-service config (merged onto baseGlobal) and
+// returns the issues for that service.
+func validateService(t *testing.T, serviceYAML string) []Issue {
+	t.Helper()
+	global := writeConfig(t, map[string]string{
+		"sermo.yml":       baseGlobal,
+		"enabled/svc.yml": serviceYAML,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	return Validate(cfg)
+}
+
+func mustHave(t *testing.T, issues []Issue, substr string) {
+	t.Helper()
+	if !hasIssue(issues, substr) {
+		t.Fatalf("missing issue %q in %v", substr, issues)
+	}
+}
+
+func TestValidateEngineDurations(t *testing.T) {
+	global := writeConfig(t, map[string]string{"sermo.yml": `
+engine:
+  interval: notaduration
+  default_timeout: 0s
+  max_parallel_checks: 0
+paths:
+  enabled: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+`})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := Validate(cfg)
+	for _, want := range []string{"engine.interval", "engine.default_timeout", "engine.max_parallel_checks"} {
+		mustHave(t, issues, want)
+	}
+}
+
+func TestValidateRuleStructure(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  bad-action:
+    type: remediation
+    if: { failed: { check: http } }
+    then: { action: explode }
+  guard-no-blocks:
+    type: guard
+    if: { failed: { check: http } }
+    then: { action: block, message: "x" }
+  remediation-with-blocks:
+    type: remediation
+    blocks: [restart]
+    if: { failed: { check: http } }
+    then: { action: restart }
+  block-no-message:
+    type: guard
+    blocks: [restart]
+    if: { failed: { check: http } }
+    then: { action: block }
+`)
+	mustHave(t, issues, "then.action \"explode\" is not one of")
+	mustHave(t, issues, "guard requires a non-empty blocks list")
+	mustHave(t, issues, "only guard rules may set blocks")
+	mustHave(t, issues, "action block requires a non-empty message")
+}
+
+func TestValidateRuleWindows(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  both:
+    type: remediation
+    if: { failed: { check: http } }
+    for: { cycles: 0 }
+    within: { cycles: 5, min_matches: 9 }
+    then: { action: restart }
+`)
+	mustHave(t, issues, "cannot define both for and within")
+	mustHave(t, issues, "for.cycles must be > 0")
+	mustHave(t, issues, "within.min_matches must be <= within.cycles")
+}
+
+func TestValidateUnknownCheckReference(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  r:
+    type: remediation
+    if: { failed: { check: nonexistent } }
+    then: { action: restart }
+`)
+	mustHave(t, issues, `references unknown check "nonexistent"`)
+}
+
+func TestValidateConditionExactlyOneOperator(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  r:
+    type: remediation
+    if:
+      failed: { check: http }
+      active: { check: http }
+    then: { action: restart }
+`)
+	mustHave(t, issues, "must contain exactly one condition/operator")
+}
+
+func TestValidateInlineCommandConditionNeedsTimeout(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  r:
+    type: remediation
+    if:
+      command:
+        command: ["can-restart"]
+    then: { action: restart }
+`)
+	mustHave(t, issues, "command condition must declare a timeout")
+}
+
+func TestValidateSystemMetricOnlyInAlert(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  bad:
+    type: remediation
+    if: { metric: { scope: system, name: total_cpu, op: ">", value: 90% } }
+    then: { action: restart }
+  ok-alert:
+    type: alert
+    if: { metric: { scope: system, name: total_cpu, op: ">", value: 90% } }
+    then: { action: alert, message: "machine hot" }
+`)
+	mustHave(t, issues, "scope: system metric is only allowed in alert rules")
+	// The alert rule's identical condition must NOT be flagged.
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "ok-alert") && strings.Contains(is.Msg, "system metric") {
+			t.Fatalf("alert rule wrongly flagged: %v", is)
+		}
+	}
+}
+
+func TestValidateMetricCatalogAndValue(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  r:
+    type: alert
+    if: { metric: { scope: service, name: not_a_metric, op: "~", value: abc } }
+    then: { action: alert, message: "m" }
+`)
+	mustHave(t, issues, `metric "not_a_metric" is not in the service catalog`)
+	mustHave(t, issues, "op \"~\" is not one of")
+	mustHave(t, issues, "value \"abc\" must be a number")
+}
+
+func TestValidateStopPolicyKillSelector(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+stop_policy:
+  force_kill: true
+  kill_only_if:
+    users: [mysql]
+`)
+	mustHave(t, issues, "kill_only_if must define both users and exe_any")
+}
+
+func TestValidateForceKillRequiresSelector(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+stop_policy:
+  force_kill: true
+`)
+	mustHave(t, issues, "force_kill=true requires kill_only_if")
+}
+
+func TestValidateCheckEntrySchemas(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  cmd: { type: command, command: "echo hi" }
+  svc-state: { type: service, expect: bogus }
+  proc: { type: process, exe: /x, state: weird }
+  opt: { type: binary, path: /x, optional: "yes" }
+preflight:
+  lockfile: { type: file_exists, path: /run/sermo/locks/x.lock }
+`)
+	mustHave(t, issues, "command must be an array, not a shell string")
+	mustHave(t, issues, `expect "bogus" is not one of`)
+	mustHave(t, issues, `state "weird" is not one of`)
+	mustHave(t, issues, "optional must be a boolean")
+	mustHave(t, issues, "must not point under the runtime lock dir")
+}
+
+func TestValidatePolicyMaxActions(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy:
+  cooldown: 5m
+  max_actions: 0
+`)
+	mustHave(t, issues, "max_actions must be an integer > 0")
+}
+
+func TestValidateAliases(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+aliases:
+  upstart: [foo]
+  openrc: []
+`)
+	mustHave(t, issues, `aliases key "upstart" is not a valid backend`)
+	mustHave(t, issues, "aliases.openrc must be a non-empty list")
+}
+
+func TestValidateCleanServicePasses(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+variables:
+  host: 127.0.0.1
+  port: 8080
+checks:
+  http: { type: http, url: "http://${host}:${port}/health", expect_status: 200 }
+preflight:
+  binary: { type: binary, path: /usr/sbin/x, optional: true }
+stop_policy:
+  force_kill: true
+  kill_only_if:
+    users: [www-data]
+    exe_any: [/usr/sbin/x]
+policy:
+  cooldown: 5m
+  max_actions: 3
+  max_actions_window: 1h
+rules:
+  restart-if-down:
+    type: remediation
+    if:
+      and:
+        - failed: { check: http }
+        - not: { active: { check: http } }
+    for: { cycles: 3 }
+    then: { action: restart }
+  block-during-backup:
+    type: guard
+    blocks: [restart, stop]
+    if: { file: { path: /run/backup/flag, exists: true } }
+    then: { action: block, message: "backup running" }
+  warn-cpu:
+    type: alert
+    if: { metric: { scope: service, name: cpu, op: ">", value: 80% } }
+    then: { action: alert, message: "cpu high" }
+`)
+	if len(issues) != 0 {
+		t.Fatalf("clean service should have no issues, got: %v", issues)
+	}
+}
