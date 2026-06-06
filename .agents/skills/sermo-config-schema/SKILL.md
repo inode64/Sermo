@@ -57,6 +57,30 @@ with `${...}` still literal), so overriding a single variable in the clone chang
 what `${var}` resolves to after expansion. Same for `uses` with a profile. See
 `implementation-spec.md` section 8.
 
+## Version templates
+
+A profile whose name contains `%v` is a version template: it materializes into one
+concrete profile per installed version when several can coexist (php-fpm, postgres,
+catalina, beam, db). The `%v` may sit anywhere in the name (`db%vsql` →
+`db4.8sql`). Put `${version}` in the `binary` path; on load Sermo globs that
+path with `${version}` wildcarded, extracts each installed version, and registers
+`name` with `%v`→version and every `${version}` substituted (binary, display_name).
+The template is then dropped and yields nothing when no version is installed. Keep
+exactly one file, named to match (`postgres-%v.yml`). `%v` is substituted only in
+the name; inside the body always use `${version}` (binary, display_name, aliases).
+When the monitored `binary` is version-agnostic, point discovery at a
+version-specific path with `versions.from` (discovery-only; stripped from the
+materialized profile). A template may also `uses` a base profile to inherit
+checks/processes/rules and override only the binary.
+
+```yaml
+kind: profile
+name: postgres-%v
+display_name: "PostgreSQL ${version}"
+variables:
+  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+```
+
 ## Merge rules
 
 Use these rules:

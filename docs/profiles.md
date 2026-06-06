@@ -65,6 +65,73 @@ service's display name is (the profile's, unless the service overrides it). An
 explicit `variables.name` or `variables.display_name` takes precedence over the
 built-in.
 
+## Versioned profiles
+
+Some applications ship one binary per version and several can be installed at
+once (php-fpm, postgres, tomcat/catalina, erlang/beam, berkeley db). Instead of one file per
+version, write a single **version template**: a profile whose name (and filename)
+contains `%v`, with `${version}` in the binary path.
+
+```yaml
+kind: profile
+name: postgres-%v
+display_name: "PostgreSQL ${version}"
+service: { name: postgres }
+variables:
+  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+```
+
+On load, Sermo discovers installed versions by globbing the `binary` path with
+`${version}` wildcarded (here `/usr/lib64/postgresql-*/bin/postgres`) and
+extracting what filled it. Each match becomes a concrete profile with `%v` and
+`${version}` substituted everywhere (name, binary, display_name, aliases, ...) —
+`postgres-14`, `postgres-16`, ... — and the template itself is dropped. If nothing
+is installed the template yields nothing. The filename mirrors the name
+(`postgres-%v.yml`); only that one file is needed. `%v` may sit anywhere in the
+name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
+the body always use `${version}` (e.g. in `aliases`).
+
+When the monitored `binary` is generic (no version in its path), point discovery
+at a version-specific path with `versions.from`:
+
+```yaml
+kind: profile
+name: php-fpm%v
+service: { name: php-fpm }
+versions:
+  from: "/usr/lib64/php${version}/bin/php-fpm"   # globbed to find versions
+aliases:
+  systemd: [ "php${version}-fpm.service" ]
+variables:
+  binary: /usr/sbin/php-fpm                       # the actual binary, version-agnostic
+```
+
+`versions.from` is discovery-only metadata; it never appears in the materialized
+profile. When omitted, discovery falls back to the `binary` path.
+
+A discovered version must start with a digit, so siblings of an unbounded
+trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
+for versions. Even so, a placeholder bounded on both sides (e.g.
+`/usr/lib64/php${version}/bin/php-fpm`, via `versions.from`) discovers most
+precisely.
+
+A template may `uses` a base profile to inherit its checks, processes and rules,
+overriding only the version-specific binary. The packaged `php-fpm-%v` builds on
+`php-fpm`:
+
+```yaml
+kind: profile
+name: php-fpm-%v
+uses: php-fpm
+display_name: "PHP-FPM ${version}"
+variables:
+  binary: "/usr/lib64/php${version}/bin/php-fpm"
+```
+
+A service then targets a concrete version, e.g. `uses: php-fpm-8.3`.
+
 ## Unit aliases
 
 The unit name differs across distributions. A profile lists per-backend

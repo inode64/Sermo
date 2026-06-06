@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -503,4 +504,265 @@ func hasIssue(issues []Issue, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestDiscoverVersions(t *testing.T) {
+	root := t.TempDir()
+	for _, v := range []string{"7.4", "8.3", "12.0.2"} {
+		dir := filepath.Join(root, "pkg-"+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "app"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A decoy that does not match the template's surrounding literals.
+	if err := os.MkdirAll(filepath.Join(root, "other", "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := discoverVersions(root + "/pkg-${version}/bin/app")
+	want := []string{"12.0.2", "7.4", "8.3"} // sorted lexicographically
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("discoverVersions = %v, want %v", got, want)
+	}
+
+	if v := discoverVersions(root + "/pkg-${version}/bin/missing"); len(v) != 0 {
+		t.Errorf("no matches expected, got %v", v)
+	}
+
+	// Version embedded mid-filename, wrapped by literals on both sides (the
+	// Berkeley DB db%vsql shape: /usr/bin/db4.8sql).
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"db4.8sql", "db6.0sql", "dbsql" /* no version, must be ignored */} {
+		if err := os.WriteFile(filepath.Join(bin, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got = discoverVersions(bin + "/db${version}sql")
+	want = []string{"4.8", "6.0"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("mid-filename discoverVersions = %v, want %v", got, want)
+	}
+
+	// Version at the end of the name (unbounded on the right): only digit-leading
+	// matches count, so a bare binary and a stray .conf are not mistaken for a
+	// version.
+	sbin := filepath.Join(root, "sbin")
+	if err := os.MkdirAll(sbin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"php-fpm8.3", "php-fpm7.4", "php-fpm" /* generic */, "php-fpm.conf" /* decoy */} {
+		if err := os.WriteFile(filepath.Join(sbin, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got = discoverVersions(sbin + "/php-fpm${version}")
+	want = []string{"7.4", "8.3"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("trailing-version discoverVersions = %v, want %v", got, want)
+	}
+}
+
+// TestVersionTemplateDiscoverFrom covers a template whose monitored binary is
+// generic (no ${version}); versions come from an explicit `versions.from` path,
+// and ${version} is baked into aliases. The `versions` block must not leak into
+// the materialized profile.
+func TestVersionTemplateDiscoverFrom(t *testing.T) {
+	root := t.TempDir()
+	slots := filepath.Join(root, "lib")
+	for _, v := range []string{"7.4", "8.3"} {
+		dir := filepath.Join(slots, "php"+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "php-fpm"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	profilesDir := filepath.Join(root, "profiles")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tmpl := fmt.Sprintf(`
+kind: profile
+name: php-fpm%%v
+display_name: "PHP-FPM ${version}"
+service: { name: php-fpm }
+versions:
+  from: "%s/php${version}/bin/php-fpm"
+aliases:
+  systemd:
+    - php${version}-fpm.service
+variables:
+  binary: /usr/sbin/php-fpm
+`, slots)
+	if err := os.WriteFile(filepath.Join(profilesDir, "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { profiles: [ %s ], enabled: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, profilesDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, v := range []string{"7.4", "8.3"} {
+		doc, ok := cfg.Profiles["php-fpm"+v]
+		if !ok {
+			t.Fatalf("expected materialized profile php-fpm%s", v)
+		}
+		// Generic binary is preserved; version did not leak into it.
+		if got := profileBinary(doc.Body); got != "/usr/sbin/php-fpm" {
+			t.Errorf("php-fpm%s binary = %q, want /usr/sbin/php-fpm", v, got)
+		}
+		// ${version} baked into the alias.
+		sysd := nested(t, doc.Body, "aliases")["systemd"].([]any)
+		if got := sysd[0].(string); got != "php"+v+"-fpm.service" {
+			t.Errorf("php-fpm%s alias = %q, want php%s-fpm.service", v, got, v)
+		}
+		// Discovery metadata stripped from the concrete profile.
+		if _, present := doc.Body["versions"]; present {
+			t.Errorf("php-fpm%s still carries versions block", v)
+		}
+	}
+}
+
+// TestVersionTemplateMaterialization exercises a `name: foo-%v` template: it must
+// produce one profile per installed version (with ${version} baked into binary
+// and display_name), inherit a `uses` base, and drop the template itself.
+func TestVersionTemplateMaterialization(t *testing.T) {
+	root := t.TempDir()
+	binRoot := filepath.Join(root, "opt")
+	for _, v := range []string{"7.4", "8.3"} {
+		dir := filepath.Join(binRoot, "php"+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "php-fpm"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	profilesDir := filepath.Join(root, "profiles")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(dir, file, content string) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Rich base with a marker rule and an extra variable, to prove inheritance.
+	write(profilesDir, "php-fpm.yml", `
+kind: profile
+name: php-fpm
+display_name: "PHP-FPM"
+service: { name: php-fpm }
+variables:
+  binary: /usr/sbin/php-fpm
+  user: www-data
+rules:
+  block-bad-config:
+    type: guard
+    blocks: [restart]
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"
+`)
+	// Version template inheriting the base, overriding only the binary.
+	write(profilesDir, "php-fpm-%v.yml", fmt.Sprintf(`
+kind: profile
+name: php-fpm-%%v
+uses: php-fpm
+display_name: "PHP-FPM ${version}"
+variables:
+  binary: "%s/php${version}/bin/php-fpm"
+`, binRoot))
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths:
+  profiles: [ %s ]
+  enabled: [ %s ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`, profilesDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Template must be gone; one concrete profile per installed version present.
+	if _, ok := cfg.Profiles["php-fpm-%v"]; ok {
+		t.Errorf("template php-fpm-%%v should not be registered")
+	}
+	for _, v := range []string{"7.4", "8.3"} {
+		name := "php-fpm-" + v
+		doc, ok := cfg.Profiles[name]
+		if !ok {
+			t.Fatalf("expected materialized profile %q", name)
+		}
+		// display_name has the version baked in (no literal ${version}).
+		if got := DisplayName(doc.Body, name); got != "PHP-FPM "+v {
+			t.Errorf("%s display_name = %q, want %q", name, got, "PHP-FPM "+v)
+		}
+		// Inherited the base rule, and ${version} is baked into the binary path.
+		wantBin := fmt.Sprintf("%s/php%s/bin/php-fpm", binRoot, v)
+		if got := profileBinary(doc.Body); got != wantBin {
+			t.Errorf("%s binary = %q, want %q", name, got, wantBin)
+		}
+		if _, ok := nested(t, doc.Body, "rules")["block-bad-config"]; !ok {
+			t.Errorf("%s did not inherit base rule", name)
+		}
+	}
+
+	// A service using a materialized version resolves end to end, including the
+	// inherited rule message expanding through the baked display_name.
+	write(enabledDir, "site.yml", `
+kind: service
+name: site
+uses: php-fpm-8.3
+service: { name: php-fpm }
+`)
+	cfg, err = Load(global)
+	if err != nil {
+		t.Fatalf("Load() reload error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("site")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(site) errors = %v", errs)
+	}
+	then := nested(t, resolved.Tree, "rules", "block-bad-config", "then")
+	if got := scalarString(then["message"]); got != "PHP-FPM 8.3 configuration is invalid" {
+		t.Errorf("message = %q, want %q", got, "PHP-FPM 8.3 configuration is invalid")
+	}
 }

@@ -1,6 +1,6 @@
 kind: profile
-name: php-fpm
-display_name: "PHP-FPM"
+name: php-fpm%v
+display_name: "PHP-FPM ${version}"
 type: appserver
 
 service:
@@ -9,19 +9,17 @@ service:
 
 aliases:
   systemd:
-    - php-fpm.service
-    - php8.2-fpm.service
-    - php-fpm8.2.service
+    - php${version}-fpm.service
+    - php-fpm${version}.service
   openrc:
-    - php-fpm
-    - php-fpm8.2
+    - php-fpm${version}
 
 variables:
-  binary: /usr/sbin/php-fpm
+  binary: /usr/sbin/php-fpm${version}
   user: www-data
   host: 127.0.0.1
   port: 9000
-  pidfile: /run/php/php-fpm.pid
+  pidfile: /run/php/php-fpm${version}.pid
 
 commands:
   version:

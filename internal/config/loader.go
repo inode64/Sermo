@@ -47,6 +47,7 @@ func Load(globalPath string) (*Config, error) {
 			return nil, err
 		}
 	}
+	cfg.materializeVersionTemplates()
 	return cfg, nil
 }
 
