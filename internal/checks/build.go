@@ -145,6 +145,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}
 		return binaryCheck{base: b, path: path}, ""
 
+	case "libraries":
+		binary := asString(entry["binary"])
+		if binary == "" {
+			return nil, "libraries check requires a binary"
+		}
+		return librariesCheck{base: b, runner: runner, binary: binary}, ""
+
 	case "metric":
 		name := asString(entry["name"])
 		if name == "" {

@@ -117,6 +117,41 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 	}
 }
 
+type scriptedRunner struct{ result execx.Result }
+
+func (r scriptedRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	return r.result, nil
+}
+
+func TestLibrariesCheck(t *testing.T) {
+	cases := []struct {
+		name   string
+		result execx.Result
+		wantOK bool
+	}{
+		{"all resolve", execx.Result{Stdout: "libc.so.6 => /lib/libc.so.6 (0x00)\n"}, true},
+		{"missing lib", execx.Result{Stdout: "libfoo.so => not found\n"}, false},
+		{"static binary", execx.Result{Stderr: "\tnot a dynamic executable\n", ExitCode: 1}, true},
+		{"ldd error", execx.Result{Stderr: "ldd: ./x: No such file or directory\n", ExitCode: 1}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := librariesCheck{base: base{name: "lib"}, runner: scriptedRunner{tc.result}, binary: "/usr/sbin/x"}
+			if res := c.Run(context.Background()); res.OK != tc.wantOK {
+				t.Fatalf("OK = %v, want %v (%s)", res.OK, tc.wantOK, res.Message)
+			}
+		})
+	}
+}
+
+func TestLibrariesCheckRealBinary(t *testing.T) {
+	// /bin/sh is dynamically linked on this host; its libraries must resolve.
+	c := librariesCheck{base: base{name: "lib", timeout: time.Second}, runner: execx.CommandRunner{}, binary: "/bin/sh"}
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("/bin/sh libraries should resolve: %s", res.Message)
+	}
+}
+
 func TestProcessCheck(t *testing.T) {
 	observe := func(exe, user string) string {
 		if exe == "/usr/bin/mariabackup" {
