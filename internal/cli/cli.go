@@ -310,7 +310,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	runtime := cfg.Global.RuntimeDir()
 	locker := locks.NewOperationLocker(filepath.Join(runtime, "ops"))
 	discoverer := process.NewDiscoverer()
-	discoverer.MainPIDs = servicemgr.MainPIDFunc(detection.Backend, unit)
+	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(detection.Backend, unit)
 	engine := operation.New(operation.Config{
 		Service:    service,
 		Unit:       unit,

@@ -2,6 +2,7 @@ package servicemgr
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"sermo/internal/execx"
@@ -114,6 +115,42 @@ func TestMainPID(t *testing.T) {
 	}
 	if _, ok := MainPID(stdoutRunner{out: "4242\n"}, BackendOpenRC, "nginx"); ok {
 		t.Error("OpenRC must report no MainPID")
+	}
+}
+
+func TestCgroupPIDs(t *testing.T) {
+	runner := stdoutRunner{out: "/system.slice/nginx.service\n"}
+	files := map[string]string{
+		"/sys/fs/cgroup/system.slice/nginx.service/cgroup.procs": "1508\n1600\n1602\n",
+	}
+	readFile := func(path string) ([]byte, error) {
+		if v, ok := files[path]; ok {
+			return []byte(v), nil
+		}
+		return nil, os.ErrNotExist
+	}
+
+	pids, ok := CgroupPIDs(runner, readFile, BackendSystemd, "nginx.service")
+	if !ok {
+		t.Fatal("CgroupPIDs ok = false, want true")
+	}
+	want := []int{1508, 1600, 1602}
+	if len(pids) != len(want) {
+		t.Fatalf("pids = %v, want %v", pids, want)
+	}
+	for i := range want {
+		if pids[i] != want[i] {
+			t.Fatalf("pids = %v, want %v", pids, want)
+		}
+	}
+
+	// Empty control group -> not found.
+	if _, ok := CgroupPIDs(stdoutRunner{out: "/\n"}, readFile, BackendSystemd, "x"); ok {
+		t.Error("root/empty control group should report no cgroup PIDs")
+	}
+	// OpenRC has no cgroup query.
+	if _, ok := CgroupPIDs(runner, readFile, BackendOpenRC, "nginx"); ok {
+		t.Error("OpenRC must report no cgroup PIDs")
 	}
 }
 
