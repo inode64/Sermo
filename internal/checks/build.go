@@ -38,6 +38,8 @@ type Deps struct {
 	DiskUsage DiskUsageFunc
 	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
 	NetSampler NetSamplerFunc
+	// PingSampler probes a host via ICMP for `icmp` checks. Nil uses native ICMP.
+	PingSampler PingSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -244,6 +246,57 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			c.op, c.value = op, v
 		default:
 			return nil, "net check metric must be state, speed or errors"
+		}
+		return c, ""
+
+	case "icmp":
+		host := asString(entry["host"])
+		if host == "" {
+			return nil, "icmp check requires a host"
+		}
+		count := 3
+		if v, ok := intField(entry["count"]); ok {
+			if v <= 0 {
+				return nil, "icmp count must be a positive integer"
+			}
+			count = v
+		}
+		metric := asString(entry["metric"])
+		c := &icmpCheck{base: b, host: host, count: count, metric: metric, sampler: deps.PingSampler}
+		switch metric {
+		case "state":
+			if exp := asString(entry["expect"]); exp != "" {
+				if exp != "up" && exp != "down" {
+					return nil, "icmp state expect must be up or down"
+				}
+				c.expect = exp
+			} else if asString(entry["on"]) == "change" {
+				c.onChange = true
+			} else {
+				return nil, "icmp state requires expect: up|down or on: change"
+			}
+		case "latency":
+			if th, ok := entry["threshold"].(map[string]any); ok {
+				op := asString(th["op"])
+				if !validDiskOp(op) {
+					return nil, "icmp latency threshold has an invalid op"
+				}
+				v, err := strconv.ParseFloat(scalarString(th["value"]), 64)
+				if err != nil {
+					return nil, "icmp latency threshold value must be numeric"
+				}
+				c.hasThreshold, c.op, c.value = true, op, v
+			} else if ch, ok := entry["change"].(map[string]any); ok {
+				d, err := strconv.ParseFloat(scalarString(ch["delta"]), 64)
+				if err != nil {
+					return nil, "icmp latency change delta must be numeric"
+				}
+				c.hasChange, c.delta = true, d
+			} else {
+				return nil, "icmp latency requires threshold {op, value} or change {delta}"
+			}
+		default:
+			return nil, "icmp check metric must be state or latency"
 		}
 		return c, ""
 
