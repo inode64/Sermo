@@ -83,6 +83,9 @@ func validateGlobal(cfg *Config) []Issue {
 		if runtime := scalarString(paths["runtime"]); runtime != "" && !filepath.IsAbs(runtime) {
 			add("paths.runtime %q must be an absolute directory", runtime)
 		}
+		if stateDir := scalarString(paths["state"]); stateDir != "" && !filepath.IsAbs(stateDir) {
+			add("paths.state %q must be an absolute directory", stateDir)
+		}
 	}
 
 	if security, ok := raw["security"].(map[string]any); ok {
@@ -182,6 +185,13 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 		add("backend %q is not one of auto, systemd, openrc", backend)
 	}
 
+	if mode, present := tree["monitor"]; present {
+		s, isStr := mode.(string)
+		if _, ok := validMonitorModes[s]; !isStr || !ok {
+			add("monitor %q is not one of enabled, disabled, previous", scalarString(mode))
+		}
+	}
+
 	cooldown, present := policyCooldown(tree)
 	switch {
 	case !present:
@@ -218,6 +228,7 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 
 // ---- section 30: checks, stop_policy, policy, aliases, rules ----
 
+var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")

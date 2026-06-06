@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 func main() {
@@ -69,6 +71,13 @@ func run(args []string) int {
 		return 2
 	}
 
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		logger.Error("open state store", "error", err)
+		return 2
+	}
+	defer store.Close()
+
 	interval := engineDuration(cfg, "interval", 30*time.Second)
 	deps := app.Deps{
 		Backend:         detection.Backend,
@@ -79,6 +88,7 @@ func run(args []string) int {
 		Sleep:           time.Sleep,
 		Now:             time.Now,
 		Emit:            app.SlogEmitter(logger),
+		Monitor:         store,
 		SystemFreshness: interval / 2,
 	}
 

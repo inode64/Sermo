@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"sermo/internal/locks"
+	"sermo/internal/state"
 )
 
 // runMonitor pauses (`unmonitor`) or resumes (`monitor`) monitoring of a service.
 // A paused service keeps its config but the daemon runs no checks, rules or
-// remediation for it until resumed. The state is a marker file under
-// <runtime>/paused, so it survives daemon restarts.
+// remediation for it until resumed. The state lives in the persistent store
+// under paths.state (default /var/lib/sermo), so it survives daemon restarts and
+// reboots — and a service whose `monitor` flag is `previous` is restored to it on
+// the next daemon start.
 func (a App) runMonitor(opts options, pause bool) int {
 	verb := "monitor"
 	if pause {
@@ -31,41 +33,45 @@ func (a App) runMonitor(opts options, pause bool) int {
 		return exitRuntimeError
 	}
 
-	store := locks.NewPauseStore(filepath.Join(cfg.Global.RuntimeDir(), "paused"))
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("%s failed: %v", verb, err))
+		return exitRuntimeError
+	}
+	defer store.Close()
 
 	if pause {
-		path, err := store.Pause(service)
-		if err != nil {
+		if err := store.SetActive(service, false, state.SourceCLI); err != nil {
 			a.reportError(opts, fmt.Sprintf("unmonitor failed: %v", err))
 			return exitRuntimeError
 		}
-		a.reportMonitor(opts, service, "paused", path)
+		a.reportMonitor(opts, service, "paused")
 		return exitSuccess
 	}
 
-	was, err := store.Resume(service)
+	active, found, err := store.Active(service)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("monitor failed: %v", err))
 		return exitRuntimeError
 	}
-	state := "resumed"
-	if !was {
-		state = "not-paused"
+	if err := store.SetActive(service, true, state.SourceCLI); err != nil {
+		a.reportError(opts, fmt.Sprintf("monitor failed: %v", err))
+		return exitRuntimeError
 	}
-	a.reportMonitor(opts, service, state, "")
+	status := "resumed"
+	if !found || active {
+		status = "not-paused"
+	}
+	a.reportMonitor(opts, service, status)
 	return exitSuccess
 }
 
-func (a App) reportMonitor(opts options, service, state, path string) {
+func (a App) reportMonitor(opts options, service, status string) {
 	if opts.json {
-		out := map[string]any{"service": service, "monitoring": state}
-		if path != "" {
-			out["marker"] = path
-		}
-		writeJSON(a.Stdout, out)
+		writeJSON(a.Stdout, map[string]any{"service": service, "monitoring": status})
 		return
 	}
-	switch state {
+	switch status {
 	case "paused":
 		fmt.Fprintf(a.Stdout, "monitoring paused for %s\n", service)
 	case "resumed":

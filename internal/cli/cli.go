@@ -17,6 +17,7 @@ import (
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 const (
@@ -248,7 +249,13 @@ func (a App) servicePaused(opts options) bool {
 	if err != nil {
 		return false
 	}
-	return locks.NewPauseStore(filepath.Join(cfg.Global.RuntimeDir(), "paused")).Paused(opts.service())
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		return false
+	}
+	defer store.Close()
+	active, found, err := store.Active(opts.service())
+	return err == nil && found && !active
 }
 
 func (a App) runIsActive(ctx context.Context, opts options) int {

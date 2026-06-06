@@ -77,6 +77,7 @@ func loadGlobal(path string) (Global, error) {
 		g.Profiles = stringList(paths["profiles"])
 		g.Enabled = stringList(paths["enabled"])
 		g.Runtime = scalarString(paths["runtime"])
+		g.State = scalarString(paths["state"])
 	}
 	return g, nil
 }

@@ -16,6 +16,10 @@ User=root
 # RuntimeDirectory creates /run/sermo for named and operation locks.
 RuntimeDirectory=sermo
 RuntimeDirectoryMode=0755
+# StateDirectory creates /var/lib/sermo for the persistent state database
+# (monitoring state, restored across reboots). Survives restarts, unlike /run.
+StateDirectory=sermo
+StateDirectoryMode=0750
 
 [Install]
 WantedBy=multi-user.target
