@@ -44,3 +44,19 @@ defaults:
 logging:
   level: info
   format: text
+
+# Host watches: monitor host resources (disk, …) independently of services and
+# run a hook command when a threshold is crossed. Disabled by default.
+watches:
+  disk-root:
+    enabled: false
+    interval: 1m
+    check:
+      type: disk
+      path: /
+      used_pct: { op: ">=", value: 90 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-alert-disk.sh, "/"]
+        timeout: 10s
