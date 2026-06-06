@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"sermo/internal/execx"
@@ -198,6 +199,37 @@ func (c processCheck) Run(_ context.Context) Result {
 	state := c.observe(c.exe, c.user)
 	ok := state == c.expect
 	return c.result(ok, fmt.Sprintf("state %s (want %s)", state, c.expect), start)
+}
+
+// librariesCheck runs ldd on a binary and fails if any shared library does not
+// resolve (section 19). It is typically an optional preflight entry.
+type librariesCheck struct {
+	base
+	runner execx.Runner
+	binary string
+}
+
+func (c librariesCheck) Run(ctx context.Context) Result {
+	start := time.Now()
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+
+	res, _ := c.runner.Run(ctx, "ldd", c.binary)
+	out := res.Stdout + res.Stderr
+	if strings.Contains(out, "not found") {
+		return c.result(false, c.binary+": missing shared libraries", start)
+	}
+	if strings.Contains(out, "not a dynamic executable") {
+		return c.result(true, c.binary+": static binary, no shared libraries", start)
+	}
+	if res.ExitCode != 0 {
+		msg := firstLine(res.Stderr)
+		if msg == "" {
+			msg = fmt.Sprintf("ldd exit %d", res.ExitCode)
+		}
+		return c.result(false, "ldd "+c.binary+": "+msg, start)
+	}
+	return c.result(true, c.binary+": all shared libraries resolve", start)
 }
 
 func firstLine(s string) string {
