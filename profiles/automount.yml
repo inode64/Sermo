@@ -1,5 +1,6 @@
 kind: profile
 name: automount
+display_name: "Automount"
 description: "Automount"
 service: { name: "automount", backend: auto }
 variables:

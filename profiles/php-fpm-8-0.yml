@@ -1,5 +1,6 @@
 kind: profile
 name: php-fpm-8-0
+display_name: "PHP-FPM 8.0"
 description: "PHP 8.0"
 service: { name: "php-fpm", backend: auto }
 variables:

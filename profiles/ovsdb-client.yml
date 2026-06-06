@@ -1,5 +1,6 @@
 kind: profile
 name: ovsdb-client
+display_name: "Open vSwitch Database"
 description: "OpenVsiwtch Database"
 service: { name: "ovsdb-client", backend: auto }
 variables:

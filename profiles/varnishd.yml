@@ -1,5 +1,6 @@
 kind: profile
 name: varnishd
+display_name: "Varnish"
 description: "Varnish"
 service: { name: "varnishd", backend: auto }
 variables:

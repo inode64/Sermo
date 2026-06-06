@@ -1,5 +1,6 @@
 kind: profile
 name: mongod
+display_name: "MongoDB"
 description: "Mongo DB"
 service: { name: "mongod", backend: auto }
 variables:

@@ -1,5 +1,6 @@
 kind: profile
 name: cups-config
+display_name: "CUPS"
 description: "CUPSD"
 service: { name: "cups-config", backend: auto }
 variables:

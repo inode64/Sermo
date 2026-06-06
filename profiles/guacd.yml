@@ -1,5 +1,6 @@
 kind: profile
 name: guacd
+display_name: "Apache Guacamole"
 description: "Guacamole daemon"
 service: { name: "guacd", backend: auto }
 variables:

@@ -1,5 +1,6 @@
 kind: profile
 name: bacula-dir
+display_name: "Bacula Director"
 description: "Backup director Server"
 service: { name: "bacula-dir", backend: auto }
 variables:

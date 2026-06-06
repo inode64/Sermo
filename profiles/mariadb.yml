@@ -1,5 +1,6 @@
 kind: profile
 name: mariadb
+display_name: "MariaDB"
 type: database
 
 service:

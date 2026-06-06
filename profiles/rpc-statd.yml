@@ -1,5 +1,6 @@
 kind: profile
 name: rpc-statd
+display_name: "NFS Status Monitor"
 description: "RPC"
 service: { name: "rpc-statd", backend: auto }
 variables:

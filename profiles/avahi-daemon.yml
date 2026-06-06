@@ -1,5 +1,6 @@
 kind: profile
 name: avahi-daemon
+display_name: "Avahi"
 description: "Zero Configuration Networking"
 service: { name: "avahi-daemon", backend: auto }
 variables:

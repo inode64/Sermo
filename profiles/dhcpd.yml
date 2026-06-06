@@ -1,5 +1,6 @@
 kind: profile
 name: dhcpd
+display_name: "DHCP Server"
 description: "Servidor DHCP"
 service: { name: "dhcpd", backend: auto }
 variables:

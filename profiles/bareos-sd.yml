@@ -1,5 +1,6 @@
 kind: profile
 name: bareos-sd
+display_name: "Bareos Storage Daemon"
 description: "Backup storage Server"
 service: { name: "bareos-sd", backend: auto }
 variables:

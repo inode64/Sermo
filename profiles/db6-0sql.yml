@@ -1,5 +1,6 @@
 kind: profile
 name: db6-0sql
+display_name: "Berkeley DB 6.0"
 description: "Oracle Berkeley DB"
 service: { name: "db6-0sql", backend: auto }
 variables:

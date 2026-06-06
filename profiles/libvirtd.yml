@@ -1,5 +1,6 @@
 kind: profile
 name: libvirtd
+display_name: "libvirt"
 description: "Libvirtd"
 service: { name: "libvirtd", backend: auto }
 variables:

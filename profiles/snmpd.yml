@@ -1,5 +1,6 @@
 kind: profile
 name: snmpd
+display_name: "Net-SNMP Daemon"
 description: "Snmpd"
 service: { name: "snmpd", backend: auto }
 variables:

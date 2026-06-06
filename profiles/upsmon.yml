@@ -1,5 +1,6 @@
 kind: profile
 name: upsmon
+display_name: "NUT UPS Monitor"
 description: "Upsmon"
 service: { name: "upsmon", backend: auto }
 variables:

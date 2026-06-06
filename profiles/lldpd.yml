@@ -1,5 +1,6 @@
 kind: profile
 name: lldpd
+display_name: "LLDP Daemon"
 description: "Link Layer Discovery Protocol"
 service: { name: "lldpd", backend: auto }
 variables:

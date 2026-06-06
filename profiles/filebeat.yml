@@ -1,5 +1,6 @@
 kind: profile
 name: filebeat
+display_name: "Filebeat"
 description: "Lightweight log shipper for Logstash and Elasticsearch"
 service: { name: "filebeat", backend: auto }
 variables:

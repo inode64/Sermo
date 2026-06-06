@@ -1,5 +1,6 @@
 kind: profile
 name: redis
+display_name: "Redis"
 type: cache
 
 service:

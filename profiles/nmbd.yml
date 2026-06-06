@@ -1,5 +1,6 @@
 kind: profile
 name: nmbd
+display_name: "Samba NMB"
 description: "Servidor de ficheros Windows - NMB"
 service: { name: "nmbd", backend: auto }
 variables:

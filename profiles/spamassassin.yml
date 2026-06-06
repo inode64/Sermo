@@ -1,5 +1,6 @@
 kind: profile
 name: spamassassin
+display_name: "SpamAssassin"
 description: "Antispam"
 service: { name: "spamassassin", backend: auto }
 variables:

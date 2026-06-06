@@ -1,5 +1,6 @@
 kind: profile
 name: bareos-fd
+display_name: "Bareos File Daemon"
 description: "Backup file Server"
 service: { name: "bareos-fd", backend: auto }
 variables:

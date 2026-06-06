@@ -1,5 +1,6 @@
 kind: profile
 name: git
+display_name: "Git"
 description: "GIT"
 service: { name: "git", backend: auto }
 variables:

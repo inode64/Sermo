@@ -1,5 +1,6 @@
 kind: profile
 name: keydb-server
+display_name: "KeyDB"
 description: "Keydb-server"
 service: { name: "keydb-server", backend: auto }
 variables:
