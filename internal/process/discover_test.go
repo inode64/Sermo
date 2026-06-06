@@ -156,6 +156,47 @@ func TestDiscoverPidfileDeadPIDWarns(t *testing.T) {
 	}
 }
 
+func TestDiscoverBackendMainPIDSeedsTree(t *testing.T) {
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 110, Exe: "/usr/sbin/mysqld", ExeOK: true},
+		200: {PID: 200, PPID: 100, UID: 110, Exe: "/bin/sh", ExeOK: true}, // child of MainPID
+		400: {PID: 400, PPID: 1, UID: 0, Exe: "/sbin/init", ExeOK: true},  // unrelated
+	}}
+	d := Discoverer{
+		Reader:      reader,
+		ResolveUser: fakeUsers(nil),
+		MainPIDs:    func() []int { return []int{100} },
+	}
+
+	procs, _ := d.Discover(nil) // no selectors: backend MainPID is the only seed
+	got := pidsOf(procs)
+	if len(got) != 2 || got[0] != 100 || got[1] != 200 {
+		t.Fatalf("pids = %v, want [100 200] (MainPID + child)", got)
+	}
+	for _, p := range procs {
+		if p.PID == 100 && p.Source != sourceBackend {
+			t.Errorf("MainPID source = %q, want backend", p.Source)
+		}
+	}
+}
+
+func TestDiscoverMainPIDDedupedWithSelector(t *testing.T) {
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 110, Exe: testExe, ExeOK: true},
+	}}
+	d := Discoverer{
+		Reader:      reader,
+		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
+		MainPIDs:    func() []int { return []int{100} },
+	}
+	// The same PID is found by MainPID and command_match; it appears once,
+	// keeping the backend source (found first).
+	procs, _ := d.Discover([]Selector{{Name: "m", Type: SelectorCommandMatch, Exe: testExe}})
+	if len(procs) != 1 || procs[0].Source != sourceBackend {
+		t.Fatalf("procs = %+v, want one process from the backend source", procs)
+	}
+}
+
 func TestObserveState(t *testing.T) {
 	d := func(ids map[int]Identity) Discoverer {
 		return Discoverer{Reader: fakeReader{ids: ids}, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}

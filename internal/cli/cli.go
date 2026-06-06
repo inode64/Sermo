@@ -298,6 +298,8 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 
 	runtime := cfg.Global.RuntimeDir()
 	locker := locks.NewOperationLocker(filepath.Join(runtime, "ops"))
+	discoverer := process.NewDiscoverer()
+	discoverer.MainPIDs = servicemgr.MainPIDFunc(detection.Backend, unit)
 	engine := operation.New(operation.Config{
 		Service:    service,
 		Unit:       unit,
@@ -306,7 +308,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Manager:    manager,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(runtime, "locks")),
-		Discoverer: process.NewDiscoverer(),
+		Discoverer: discoverer,
 		CheckDeps:  checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
 	})
 

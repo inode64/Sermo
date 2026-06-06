@@ -3,6 +3,7 @@ package servicemgr
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"sermo/internal/execx"
@@ -42,6 +43,41 @@ func newManager(backend Backend, runner execx.Runner) (Manager, error) {
 		return openrcManager{runner: runner}, nil
 	default:
 		return nil, fmt.Errorf("no service manager for backend %q", backend)
+	}
+}
+
+// MainPID returns the backend's main process ID for a unit (section 21, step 1).
+// systemd exposes it via `systemctl show -p MainPID`; OpenRC has no uniform
+// equivalent, so it returns false there (pidfile selectors cover OpenRC).
+func MainPID(runner execx.Runner, backend Backend, unit string) (int, bool) {
+	if backend != BackendSystemd {
+		return 0, false
+	}
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultDetectTimeout)
+	defer cancel()
+
+	res, err := runner.Run(ctx, "systemctl", "show", "-p", "MainPID", "--value", "--", unit)
+	if err != nil {
+		return 0, false
+	}
+	pid, perr := strconv.Atoi(strings.TrimSpace(res.Stdout))
+	if perr != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
+}
+
+// MainPIDFunc returns a process.Discoverer.MainPIDs closure for a unit, backed by
+// the real host commands.
+func MainPIDFunc(backend Backend, unit string) func() []int {
+	return func() []int {
+		if pid, ok := MainPID(execx.CommandRunner{}, backend, unit); ok {
+			return []int{pid}
+		}
+		return nil
 	}
 }
 

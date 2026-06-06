@@ -99,6 +99,24 @@ func TestResolveOpenRCByInitScript(t *testing.T) {
 	}
 }
 
+type stdoutRunner struct{ out string }
+
+func (r stdoutRunner) Run(_ context.Context, _ string, _ ...string) (execx.Result, error) {
+	return execx.Result{Stdout: r.out}, nil
+}
+
+func TestMainPID(t *testing.T) {
+	if pid, ok := MainPID(stdoutRunner{out: "4242\n"}, BackendSystemd, "nginx.service"); !ok || pid != 4242 {
+		t.Fatalf("MainPID = %d/%v, want 4242/true", pid, ok)
+	}
+	if _, ok := MainPID(stdoutRunner{out: "0\n"}, BackendSystemd, "nginx.service"); ok {
+		t.Error("MainPID 0 should report not found")
+	}
+	if _, ok := MainPID(stdoutRunner{out: "4242\n"}, BackendOpenRC, "nginx"); ok {
+		t.Error("OpenRC must report no MainPID")
+	}
+}
+
 func TestResolveDeduplicatesCandidates(t *testing.T) {
 	// service.name repeated in aliases is probed once.
 	rr := scriptRunner{results: map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, calls: map[string]int{}}
