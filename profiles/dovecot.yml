@@ -6,5 +6,5 @@ variables:
   binary: "/usr/sbin/dovecot"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/dovecot","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["sh","-c","/usr/bin/doveconf >/dev/null"], timeout: 30s }

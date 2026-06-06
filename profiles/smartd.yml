@@ -6,4 +6,4 @@ variables:
   binary: "/usr/sbin/smartd"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/smartd","-q","onecheck"], timeout: 10s }
+  version: { type: command, command: ["${binary}","-q","onecheck"], timeout: 10s }

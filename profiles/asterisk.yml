@@ -6,4 +6,4 @@ variables:
   binary: "/usr/sbin/asterisk"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/asterisk","-V"], timeout: 10s }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

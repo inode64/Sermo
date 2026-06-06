@@ -6,4 +6,4 @@ variables:
   binary: "/usr/bin/filebeat"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/bin/filebeat","version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","version"], timeout: 10s }

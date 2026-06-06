@@ -6,4 +6,4 @@ variables:
   binary: "/usr/lib64/postgresql-9.6/bin/postgres"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/lib64/postgresql-9.6/bin/postgres","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
