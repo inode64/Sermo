@@ -81,6 +81,39 @@ rules:
 	mustHave(t, issues, "action block requires a non-empty message")
 }
 
+func TestValidateMultiAction(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  ok-multi:
+    type: remediation
+    if: { failed: { check: http } }
+    then:
+      actions:
+        - { type: alert, message: "down, restarting" }
+        - { type: restart }
+  bad-multi:
+    type: remediation
+    if: { failed: { check: http } }
+    then:
+      actions:
+        - { type: alert }
+        - { type: explode }
+`)
+	// The valid multi-action rule must not be flagged.
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "ok-multi") {
+			t.Fatalf("valid multi-action rule wrongly flagged: %v", is)
+		}
+	}
+	mustHave(t, issues, "action alert requires a non-empty message")
+	mustHave(t, issues, `then.action "explode" is not one of`)
+}
+
 func TestValidateRuleWindows(t *testing.T) {
 	issues := validateService(t, `
 kind: service

@@ -187,8 +187,8 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 				add("%s = %q must resolve to a port in 1..65535", path, value)
 			}
 		case "expect_status":
-			if n, err := strconv.Atoi(value); err != nil || n < 100 || n > 599 {
-				add("%s = %q must resolve to a valid HTTP status", path, value)
+			if !validExpectStatus(value) {
+				add("%s = %q must resolve to a valid HTTP status, class (2xx) or list", path, value)
 			}
 		}
 	})
@@ -407,32 +407,35 @@ func validateRules(tree map[string]any, add addFunc) {
 		if !hasThen {
 			add("%s has no then action", path)
 		}
-		action := scalarString(then["action"])
-		if action != "" {
-			if _, ok := validActions[action]; !ok {
-				add("%s then.action %q is not one of restart, start, stop, alert, block", path, action)
-			}
-		}
-
+		actions := ruleActions(then)
 		isGuard := rtype == "guard"
 		blocks := stringSlice(entry["blocks"])
+		hasBlock := false
+		for _, act := range actions {
+			if act.typ != "" {
+				if _, ok := validActions[act.typ]; !ok {
+					add("%s then.action %q is not one of restart, start, stop, alert, block", path, act.typ)
+				}
+			}
+			if act.typ == "block" {
+				hasBlock = true
+				if !isGuard {
+					add("%s only guard rules may use action block", path)
+				}
+			}
+			if (act.typ == "block" || act.typ == "alert") && act.message == "" {
+				add("%s action %s requires a non-empty message", path, act.typ)
+			}
+		}
 		if isGuard {
 			if len(blocks) == 0 {
 				add("%s guard requires a non-empty blocks list", path)
 			}
-			if action != "block" {
+			if !hasBlock {
 				add("%s guard rules must use action block", path)
 			}
-		} else {
-			if len(blocks) > 0 {
-				add("%s only guard rules may set blocks", path)
-			}
-			if action == "block" {
-				add("%s only guard rules may use action block", path)
-			}
-		}
-		if (action == "block" || action == "alert") && scalarString(then["message"]) == "" {
-			add("%s action %s requires a non-empty message", path, action)
+		} else if len(blocks) > 0 {
+			add("%s only guard rules may set blocks", path)
 		}
 
 		_, hasFor := entry["for"]
@@ -609,6 +612,26 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	}
 }
 
+type valAction struct {
+	typ     string
+	message string
+}
+
+// ruleActions returns a rule's actions, supporting both the single
+// `then: {action, message}` and the multi `then: {actions: [...]}` forms.
+func ruleActions(then map[string]any) []valAction {
+	if list, ok := then["actions"].([]any); ok {
+		out := make([]valAction, 0, len(list))
+		for _, item := range list {
+			if m, ok := item.(map[string]any); ok {
+				out = append(out, valAction{typ: scalarString(m["type"]), message: scalarString(m["message"])})
+			}
+		}
+		return out
+	}
+	return []valAction{{typ: scalarString(then["action"]), message: scalarString(then["message"])}}
+}
+
 func collectCheckNames(tree map[string]any) map[string]struct{} {
 	names := map[string]struct{}{}
 	for _, section := range []string{"checks", "preflight"} {
@@ -771,6 +794,16 @@ func walkScalarValue(path, key string, v any, visit func(path, key, value string
 	default:
 		visit(path, key, scalarString(t))
 	}
+}
+
+// validExpectStatus accepts a single status (100..599) or a class like "2xx".
+// A list is validated element-by-element by walkScalars.
+func validExpectStatus(value string) bool {
+	if len(value) == 3 && (value[1] == 'x' || value[1] == 'X') && (value[2] == 'x' || value[2] == 'X') && value[0] >= '1' && value[0] <= '5' {
+		return true
+	}
+	n, err := strconv.Atoi(value)
+	return err == nil && n >= 100 && n <= 599
 }
 
 func isValidBackend(b string) bool {

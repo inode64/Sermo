@@ -229,6 +229,59 @@ func TestCycleBackoffGrowsAndRecovers(t *testing.T) {
 	}
 }
 
+func TestCycleMultiActionRunsAlertThenOperation(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{
+		"down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"actions": []any{
+				map[string]any{"type": "alert", "message": "http is down, restarting"},
+				map[string]any{"type": "restart"},
+			}},
+		},
+	}}
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("ops = %v, want [restart]", h.ops)
+	}
+	if e, ok := h.eventOf("alert"); !ok || e.Message != "http is down, restarting" {
+		t.Fatalf("expected the alert action to also fire: %+v", h.events)
+	}
+	if _, ok := h.eventOf("action"); !ok {
+		t.Fatalf("expected the restart action event")
+	}
+}
+
+func TestCycleMultiActionSuppressedDoesNotAlert(t *testing.T) {
+	// When the operation is suppressed by cooldown, the rule's alert does not
+	// fire either (no alert spam every cycle).
+	tree := map[string]any{"rules": map[string]any{
+		"down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"actions": []any{
+				map[string]any{"type": "alert", "message": "down"},
+				map[string]any{"type": "restart"},
+			}},
+		},
+	}}
+	h := &workerHarness{cache: failedCache("http")}
+	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("cooldown must suppress, ops=%v", h.ops)
+	}
+	if _, ok := h.eventOf("alert"); ok {
+		t.Fatalf("alert must not fire while suppressed: %+v", h.events)
+	}
+}
+
 func TestCycleAtMostOneRemediation(t *testing.T) {
 	tree := map[string]any{"rules": map[string]any{
 		"a": map[string]any{"type": "remediation", "if": map[string]any{"failed": map[string]any{"check": "http"}}, "then": map[string]any{"action": "restart"}},

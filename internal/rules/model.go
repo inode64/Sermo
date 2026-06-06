@@ -1,10 +1,8 @@
 // Package rules models and evaluates Sermo's guard/remediation/alert rules
-// (sections 13-17).
-//
-// This slice implements the condition tree (and/or/not, failed/active over
-// named checks or inline probes, plus file/command/service leaves) and guard
-// evaluation, which the operation engine consults before acting. Rule windows
-// (for/within) and metric/process conditions are not yet implemented.
+// (sections 13-17): the condition tree (and/or/not; failed/active over named
+// checks or inline probes; file/command/service/process/metric leaves), guard
+// evaluation, for/within windows, the remediation policy (cooldown, rate limit,
+// backoff), and single- or multi-action `then` blocks.
 package rules
 
 import "sort"
@@ -51,13 +49,67 @@ type WithinWindow struct {
 // Rule is a resolved rule. If is kept as the generic condition tree; the
 // evaluator walks it directly so a parse step does not duplicate the model.
 type Rule struct {
-	Name   string
-	Type   RuleType
-	If     map[string]any
-	For    *ForWindow
-	Within *WithinWindow
-	Then   Action
-	Blocks []string
+	Name    string
+	Type    RuleType
+	If      map[string]any
+	For     *ForWindow
+	Within  *WithinWindow
+	Then    Action   // the primary action (the operation, or the first)
+	Actions []Action // all actions in order (post-MVP multi-action then)
+	Blocks  []string
+}
+
+// OperationAction returns the rule's restart/start/stop action, if any.
+func (r Rule) OperationAction() (ActionType, bool) {
+	for _, a := range r.Actions {
+		switch a.Type {
+		case ActionRestart, ActionStart, ActionStop:
+			return a.Type, true
+		}
+	}
+	return "", false
+}
+
+// AlertMessages returns the messages of the rule's alert actions, in order.
+func (r Rule) AlertMessages() []string {
+	var out []string
+	for _, a := range r.Actions {
+		if a.Type == ActionAlert {
+			out = append(out, a.Message)
+		}
+	}
+	return out
+}
+
+// parseActions parses a `then` block into one or more actions. The single form
+// `then: {action, message}` and the multi form `then: {actions: [...]}` are both
+// accepted (section 16).
+func parseActions(then map[string]any) []Action {
+	if list, ok := then["actions"].([]any); ok {
+		var out []Action
+		for _, item := range list {
+			if m, ok := item.(map[string]any); ok {
+				out = append(out, Action{Type: ActionType(asString(m["type"])), Message: asString(m["message"])})
+			}
+		}
+		return out
+	}
+	return []Action{{Type: ActionType(asString(then["action"])), Message: asString(then["message"])}}
+}
+
+// primaryAction is the action other code treats as the rule's main one: the
+// operation (restart/start/stop) if present, else the first.
+func primaryAction(actions []Action) Action {
+	for _, a := range actions {
+		switch a.Type {
+		case ActionRestart, ActionStart, ActionStop:
+			return a
+		}
+	}
+	if len(actions) > 0 {
+		return actions[0]
+	}
+	return Action{}
 }
 
 // ParseRules extracts the resolved `rules` section into Rules, skipping
@@ -90,14 +142,16 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			warnings = append(warnings, "rule "+name+" has no then action")
 			continue
 		}
+		actions := parseActions(thenNode)
 		rules = append(rules, Rule{
-			Name:   name,
-			Type:   RuleType(asString(entry["type"])),
-			If:     ifNode,
-			For:    parseForWindow(entry["for"]),
-			Within: parseWithinWindow(entry["within"]),
-			Then:   Action{Type: ActionType(asString(thenNode["action"])), Message: asString(thenNode["message"])},
-			Blocks: stringList(entry["blocks"]),
+			Name:    name,
+			Type:    RuleType(asString(entry["type"])),
+			If:      ifNode,
+			For:     parseForWindow(entry["for"]),
+			Within:  parseWithinWindow(entry["within"]),
+			Then:    primaryAction(actions),
+			Actions: actions,
+			Blocks:  stringList(entry["blocks"]),
 		})
 	}
 	return rules, warnings

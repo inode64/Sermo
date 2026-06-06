@@ -104,11 +104,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if method == "" {
 			method = http.MethodGet
 		}
-		expect := 200
-		if v, ok := intField(entry["expect_status"]); ok {
-			expect = v
+		expect, err := parseStatusMatcher(entry["expect_status"])
+		if err != nil {
+			return nil, "http check: " + err.Error()
 		}
-		return httpCheck{base: b, client: client, url: url, method: method, expectStatus: expect}, ""
+		return httpCheck{base: b, client: client, url: url, method: method, expect: expect}, ""
 
 	case "command":
 		argv := stringArray(entry["command"])
@@ -296,6 +296,34 @@ func stringArray(v any) []string {
 		}
 	}
 	return out
+}
+
+// parseStatusMatcher parses an expect_status field: a single code, a class
+// ("2xx"), or a list of either. Empty defaults to 200 (section 12).
+func parseStatusMatcher(v any) (statusMatcher, error) {
+	if v == nil {
+		return statusMatcher{codes: []int{200}}, nil
+	}
+	var m statusMatcher
+	var items []any
+	if list, ok := v.([]any); ok {
+		items = list
+	} else {
+		items = []any{v}
+	}
+	for _, item := range items {
+		if n, ok := intField(item); ok {
+			m.codes = append(m.codes, n)
+			continue
+		}
+		s := strings.TrimSpace(asString(item))
+		if len(s) == 3 && (s[1] == 'x' || s[1] == 'X') && (s[2] == 'x' || s[2] == 'X') && s[0] >= '1' && s[0] <= '5' {
+			m.classes = append(m.classes, int(s[0]-'0'))
+			continue
+		}
+		return statusMatcher{}, fmt.Errorf("invalid expect_status %q", s)
+	}
+	return m, nil
 }
 
 // intField parses a field that may be a YAML int, float or string (a resolved

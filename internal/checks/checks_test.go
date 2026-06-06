@@ -46,14 +46,53 @@ func TestHTTPCheck(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ok := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/health", method: "GET", expectStatus: 200}
+	ok := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{codes: []int{200}}}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("200 should pass: %s", res.Message)
 	}
 
-	bad := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/down", method: "GET", expectStatus: 200}
+	bad := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{codes: []int{200}}}
 	if res := bad.Run(context.Background()); res.OK {
 		t.Errorf("503 should fail when expecting 200")
+	}
+
+	// A 2xx class accepts 200; a list accepts 200 or 204.
+	class := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/health", method: "GET", expect: statusMatcher{classes: []int{2}}}
+	if res := class.Run(context.Background()); !res.OK {
+		t.Errorf("2xx class should accept 200: %s", res.Message)
+	}
+	classBad := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{classes: []int{2}}}
+	if res := classBad.Run(context.Background()); res.OK {
+		t.Errorf("2xx class should reject 503")
+	}
+}
+
+func TestParseStatusMatcher(t *testing.T) {
+	cases := []struct {
+		in    any
+		code  int
+		match bool
+	}{
+		{nil, 200, true},   // default 200
+		{nil, 201, false},  //
+		{200, 200, true},   // single
+		{"2xx", 204, true}, // class
+		{"2xx", 301, false},
+		{[]any{200, 204}, 204, true}, // list
+		{[]any{200, 204}, 500, false},
+		{[]any{"2xx", 301}, 301, true}, // mixed list
+	}
+	for _, tc := range cases {
+		m, err := parseStatusMatcher(tc.in)
+		if err != nil {
+			t.Fatalf("parseStatusMatcher(%v) error = %v", tc.in, err)
+		}
+		if got := m.matches(tc.code); got != tc.match {
+			t.Errorf("matches(%v, %d) = %v, want %v", tc.in, tc.code, got, tc.match)
+		}
+	}
+	if _, err := parseStatusMatcher("nope"); err == nil {
+		t.Error("invalid expect_status should error")
 	}
 }
 

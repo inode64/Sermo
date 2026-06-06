@@ -79,7 +79,13 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	}
 
 	for _, r := range firing {
-		action := string(r.Then.Type)
+		op, hasOp := r.OperationAction()
+		if !hasOp {
+			// A remediation rule with no operation (alert-only) just notifies.
+			w.emitAlerts(r)
+			continue
+		}
+		action := string(op)
 		// A remediation rule must never bypass guards (section 17). If a guard
 		// blocks this action, try the next firing rule (first non-blocked wins).
 		blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
@@ -98,6 +104,8 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			return
 		}
 
+		// All actions of this rule run together: alerts notify, then the operation.
+		w.emitAlerts(r)
 		result := w.Operate(ctx, action)
 		w.State.Record(now(), w.Policy)
 		w.emit(Event{Kind: "action", Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
@@ -111,8 +119,14 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator) {
 			continue
 		}
 		if w.fires(ctx, ev, r) {
-			w.emit(Event{Kind: "alert", Rule: r.Name, Message: r.Then.Message})
+			w.emitAlerts(r)
 		}
+	}
+}
+
+func (w *Worker) emitAlerts(r rules.Rule) {
+	for _, msg := range r.AlertMessages() {
+		w.emit(Event{Kind: "alert", Rule: r.Name, Message: msg})
 	}
 }
 
