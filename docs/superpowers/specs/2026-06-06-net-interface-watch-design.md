@@ -94,6 +94,8 @@ type (`*netCheck`) so the state persists across `Run` calls.
   `Counters map[string]uint64`.
 - **Behavior per metric** (`Result.OK == true` means "fire"):
   - `state` + `expect: up|down` → OK when the current state equals `expect`.
+  - `state` + `expect: up|down` `Data`: `value` = the current state (e.g. "down");
+    no `old`/`new` keys in this mode.
   - `state` + `on: change` → OK when the current state differs from the previous
     cycle's. First cycle: record, OK=false. `Data`: `old`, `new`, `value=new`.
   - `speed` + `on: change` → OK when the current valid speed differs from the
@@ -135,9 +137,10 @@ Replace the disk-specific env mapping with a generic one:
 - Key names are uppercased; non-alphanumeric chars become `_`.
 
 To preserve disk's documented `SERMO_VALUE`, the **disk check** now adds a
-`value` key to its `Data` (the breaching percentage: `used_pct` if a `used_pct`
-predicate is configured, else `free_pct`). This replaces the previous
-`hookEnv` fallback logic, which is removed. `SERMO_PATH` continues to come from
+`value` key to its `Data` (the breaching percentage). Precedence: use `used_pct`
+when a `used_pct` predicate is configured, else `free_pct` — key off **predicate
+presence** (the disk check knows its `preds`), which matches the prior fallback
+order. This replaces the previous `hookEnv` fallback logic, which is removed. `SERMO_PATH` continues to come from
 the existing `path` key. (Disk's `used_pct`/`free_pct`/`free_bytes`/`total_bytes`
 also surface as `SERMO_USED_PCT` etc. — harmless, and documented.)
 
@@ -157,6 +160,13 @@ Extend `validateWatches` with a per-`check.type` branch:
     `then.hook.timeout` a valid positive duration.
   - optional per-metric `for`/`within` validated with the same window checks.
 - Top-level `interval` validated as today.
+
+**Hook-validation reuse boundary:** the existing `validateWatchHook(name, entry, add)`
+reads the *watch-level* `entry["then"]["hook"]`. For `net`, the hook lives at
+`entry["metrics"][<key>]["then"]["hook"]`, so it cannot be reused unchanged.
+Generalise it to accept the sub-map and a scoped message prefix (e.g.
+`validateHookBlock(prefix string, block map[string]any, add)`), and call it with
+`watches.<name>` for disk and `watches.<name>.metrics.<key>` for each net metric.
 
 Issue messages are watch-scoped, e.g.
 `watches.net-eth0.metrics.errors.delta has an invalid op "=>"`.
