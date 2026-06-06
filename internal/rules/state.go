@@ -5,18 +5,27 @@ import (
 	"time"
 )
 
+// Backoff grows the effective cooldown after consecutive remediations (§16).
+type Backoff struct {
+	Initial time.Duration
+	Factor  float64
+	Max     time.Duration
+}
+
 // Policy is the resolved remediation policy that gates how often AUTOMATIC
-// actions may run for a service (section 16). Backoff is post-MVP.
+// actions may run for a service (section 16).
 type Policy struct {
 	Cooldown         time.Duration
 	MaxActions       int // 0 means unlimited
 	MaxActionsWindow time.Duration
+	Backoff          *Backoff // nil when disabled
 }
 
 // RemediationState is the per-service remediation history (section 16).
 type RemediationState struct {
-	LastActionAt  time.Time
-	RecentActions []time.Time
+	LastActionAt   time.Time
+	RecentActions  []time.Time
+	CurrentBackoff time.Duration // 0 when backoff is disabled or has decayed
 }
 
 // Allow decides whether an automatic action may run now, returning a reason when
@@ -26,7 +35,11 @@ type RemediationState struct {
 //  2. else max_actions reached inside the window -> suppress;
 //  3. else allow.
 func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
-	if p.Cooldown > 0 && !state.LastActionAt.IsZero() && now.Sub(state.LastActionAt) < p.Cooldown {
+	effective := p.Cooldown
+	if state.CurrentBackoff > effective {
+		effective = state.CurrentBackoff
+	}
+	if effective > 0 && !state.LastActionAt.IsZero() && now.Sub(state.LastActionAt) < effective {
 		return false, "cooldown"
 	}
 	if p.MaxActions > 0 {
@@ -37,13 +50,13 @@ func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
 	return true, ""
 }
 
-// Record updates the state after an action runs, trimming entries outside the
-// rate-limit window (section 16).
-func (s *RemediationState) Record(now time.Time, window time.Duration) {
+// Record updates the state after an action runs: stamps the time, trims the
+// rate-limit window, and grows the backoff if enabled (section 16).
+func (s *RemediationState) Record(now time.Time, p Policy) {
 	s.LastActionAt = now
 	s.RecentActions = append(s.RecentActions, now)
-	if window > 0 {
-		cutoff := now.Add(-window)
+	if p.MaxActionsWindow > 0 {
+		cutoff := now.Add(-p.MaxActionsWindow)
 		kept := s.RecentActions[:0]
 		for _, t := range s.RecentActions {
 			if t.After(cutoff) {
@@ -52,6 +65,32 @@ func (s *RemediationState) Record(now time.Time, window time.Duration) {
 		}
 		s.RecentActions = kept
 	}
+	if p.Backoff != nil {
+		s.growBackoff(p.Backoff)
+	}
+}
+
+// growBackoff advances the effective cooldown: initial, then ×factor each
+// consecutive remediation, capped at max (section 16).
+func (s *RemediationState) growBackoff(b *Backoff) {
+	if s.CurrentBackoff <= 0 {
+		s.CurrentBackoff = b.Initial
+	} else {
+		factor := b.Factor
+		if factor <= 0 {
+			factor = 2
+		}
+		s.CurrentBackoff = time.Duration(float64(s.CurrentBackoff) * factor)
+	}
+	if b.Max > 0 && s.CurrentBackoff > b.Max {
+		s.CurrentBackoff = b.Max
+	}
+}
+
+// Recover resets the backoff after a healthy cycle with no firing rule
+// (section 16).
+func (s *RemediationState) Recover() {
+	s.CurrentBackoff = 0
 }
 
 func (s *RemediationState) countWithin(now time.Time, window time.Duration) int {
@@ -80,7 +119,37 @@ func ParsePolicy(tree map[string]any) Policy {
 	if n, ok := parseInt(section["max_actions"]); ok {
 		p.MaxActions = n
 	}
+	if bo, ok := section["backoff"].(map[string]any); ok {
+		b := &Backoff{
+			Initial: parseDuration(bo["initial"]),
+			Factor:  parseFloat(bo["factor"]),
+			Max:     parseDuration(bo["max"]),
+		}
+		if b.Factor <= 0 {
+			b.Factor = 2
+		}
+		p.Backoff = b
+	}
 	return p
+}
+
+func parseFloat(v any) float64 {
+	switch t := v.(type) {
+	case float64:
+		return t
+	case int:
+		return float64(t)
+	case int64:
+		return float64(t)
+	case string:
+		f, err := strconv.ParseFloat(t, 64)
+		if err != nil {
+			return 0
+		}
+		return f
+	default:
+		return 0
+	}
 }
 
 func parseDuration(v any) time.Duration {

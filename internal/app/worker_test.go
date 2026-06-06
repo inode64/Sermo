@@ -208,6 +208,27 @@ func TestCycleForWindowResetsOnRecovery(t *testing.T) {
 	}
 }
 
+func TestCycleBackoffGrowsAndRecovers(t *testing.T) {
+	tree := remediationTree("restart-if-down", "http", "restart")
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	policy := rules.Policy{Cooldown: time.Minute, Backoff: &rules.Backoff{Initial: 2 * time.Minute, Factor: 2}}
+	state := &rules.RemediationState{}
+	w := h.worker(tree, policy, state)
+
+	// First failing cycle acts and arms the backoff.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || state.CurrentBackoff != 2*time.Minute {
+		t.Fatalf("after first action: ops=%v backoff=%v", h.ops, state.CurrentBackoff)
+	}
+
+	// A healthy cycle resets the backoff.
+	h.cache = map[string]checks.Result{"http": {Check: "http", OK: true}}
+	w.RunCycle(context.Background())
+	if state.CurrentBackoff != 0 {
+		t.Fatalf("healthy cycle should reset backoff, got %v", state.CurrentBackoff)
+	}
+}
+
 func TestCycleAtMostOneRemediation(t *testing.T) {
 	tree := map[string]any{"rules": map[string]any{
 		"a": map[string]any{"type": "remediation", "if": map[string]any{"failed": map[string]any{"check": "http"}}, "then": map[string]any{"action": "restart"}},

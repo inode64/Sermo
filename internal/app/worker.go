@@ -56,6 +56,9 @@ func (w *Worker) RunCycle(ctx context.Context) {
 }
 
 func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time) {
+	if w.State == nil {
+		w.State = &rules.RemediationState{}
+	}
 	// Update every remediation rule's window this cycle, then act on the first
 	// firing rule that is not guard-blocked (section 13/15). Updating all windows
 	// keeps consecutive/sliding counts correct even when an earlier rule acts.
@@ -67,6 +70,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		if w.fires(ctx, ev, r) {
 			firing = append(firing, r)
 		}
+	}
+
+	// A healthy cycle (no remediation rule fired) decays the backoff (section 16).
+	if len(firing) == 0 {
+		w.State.Recover()
+		return
 	}
 
 	for _, r := range firing {
@@ -90,7 +99,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 
 		result := w.Operate(ctx, action)
-		w.State.Record(now(), w.Policy.MaxActionsWindow)
+		w.State.Record(now(), w.Policy)
 		w.emit(Event{Kind: "action", Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
 		return // at most one remediation action per cycle
 	}
