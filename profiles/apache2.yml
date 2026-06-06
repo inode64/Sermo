@@ -6,5 +6,5 @@ variables:
   binary: "/usr/sbin/apache2"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/apache2","-V"], timeout: 10s }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
   config: { type: command, command: ["/etc/init.d/apache2","configtest"], timeout: 30s }

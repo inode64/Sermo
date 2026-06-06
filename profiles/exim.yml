@@ -6,4 +6,4 @@ variables:
   binary: "/usr/sbin/exim"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/exim","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

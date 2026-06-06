@@ -6,5 +6,5 @@ variables:
   binary: "/usr/bin/mysql"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/bin/mysql","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["/etc/init.d/mysql","checkconfig"], timeout: 30s }

@@ -6,4 +6,4 @@ variables:
   binary: "/usr/share/tomcat-8.0/bin/catalina.sh"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/share/tomcat-8.0/bin/catalina.sh","version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","version"], timeout: 10s }

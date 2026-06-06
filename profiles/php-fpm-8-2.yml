@@ -6,5 +6,5 @@ variables:
   binary: "/usr/lib64/php8.2/bin/php-fpm"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/lib64/php8.2/bin/php-fpm","-v"], timeout: 10s }
+  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
   config: { type: command, command: ["/etc/init.d/php8.2","configtest"], timeout: 30s }

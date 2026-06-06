@@ -6,5 +6,5 @@ variables:
   binary: "/usr/sbin/proftpd"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/proftpd","-V"], timeout: 10s }
-  config: { type: command, command: ["/usr/sbin/proftpd","--configtest"], timeout: 30s }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+  config: { type: command, command: ["${binary}","--configtest"], timeout: 30s }

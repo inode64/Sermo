@@ -6,5 +6,5 @@ variables:
   binary: "/usr/sbin/bacula-fd"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/sbin/bacula-fd","-?"], expect_exit: 1, timeout: 10s }
-  config: { type: command, command: ["/usr/sbin/bacula-fd","-t"], timeout: 30s }
+  version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["${binary}","-t"], timeout: 30s }

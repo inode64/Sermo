@@ -6,5 +6,5 @@ variables:
   binary: "/usr/bin/spamassassin"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["/usr/bin/spamassassin","--version"], timeout: 10s }
-  config: { type: command, command: ["/usr/bin/spamassassin","--lint"], timeout: 30s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  config: { type: command, command: ["${binary}","--lint"], timeout: 30s }
