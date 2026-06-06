@@ -13,10 +13,12 @@ sbindir ?= $(exec_prefix)/sbin
 datarootdir ?= $(prefix)/share
 datadir ?= $(datarootdir)
 sysconfdir ?= /etc
+localstatedir ?= /var
 
 # Sermo-specific locations derived from the standard dirs.
 SERMO_CONFDIR ?= $(sysconfdir)/sermo
 SERMO_DATADIR ?= $(datadir)/sermo
+SERMO_STATEDIR ?= $(localstatedir)/lib/sermo
 SYSTEMD_UNITDIR ?= /usr/lib/systemd/system
 OPENRC_INITDIR ?= $(sysconfdir)/init.d
 
@@ -29,7 +31,7 @@ unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(S
 config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check tidy clean \
-        install install-bin install-profiles install-config install-systemd install-openrc \
+        install install-bin install-profiles install-config install-state install-systemd install-openrc \
         uninstall
 
 all: build
@@ -57,8 +59,8 @@ tidy:
 clean:
 	rm -rf $(BIN)
 
-# Full install: binaries, profiles, sample config, and both init systems.
-install: install-bin install-profiles install-config install-systemd install-openrc
+# Full install: binaries, profiles, sample config, state dir, and both init systems.
+install: install-bin install-profiles install-config install-state install-systemd install-openrc
 
 install-bin: build
 	$(INSTALL) -Dm755 $(BIN)/sermoctl $(DESTDIR)$(bindir)/sermoctl
@@ -83,6 +85,11 @@ install-config:
 		chmod 644 $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
 	fi
 
+# Create the persistent state directory (the daemon creates sermo.db inside it on
+# first run). 0750 so only root/the daemon user can read the state database.
+install-state:
+	$(INSTALL) -d -m 750 $(DESTDIR)$(SERMO_STATEDIR)
+
 install-systemd:
 	$(INSTALL) -d $(DESTDIR)$(SYSTEMD_UNITDIR)
 	$(unit_subst) packaging/systemd/sermod.service > $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service
@@ -98,3 +105,4 @@ uninstall:
 	rm -f $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service $(DESTDIR)$(OPENRC_INITDIR)/sermod
 	rm -rf $(DESTDIR)$(SERMO_DATADIR)/profiles
 	@echo "left $(DESTDIR)$(SERMO_CONFDIR) (config) in place"
+	@echo "left $(DESTDIR)$(SERMO_STATEDIR) (state database) in place"

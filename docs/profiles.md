@@ -335,6 +335,34 @@ checks:
     delete: true     # remove the inherited entry
 ```
 
+## Monitoring flag
+
+The top-level `monitor` flag sets a service's monitoring behavior when the
+daemon starts:
+
+```yaml
+kind: service
+name: web
+uses: nginx
+monitor: enabled    # enabled (default) | disabled | previous
+```
+
+- **`enabled`** (the default when the flag is absent): always monitor on startup.
+- **`disabled`**: never monitor — the worker exists but every cycle is skipped.
+- **`previous`**: restore the runtime state the service had before the daemon
+  last stopped. On the very first run (no recorded state) it defaults to
+  monitored.
+
+This is distinct from the top-level `enabled: false`, which disables the service
+entirely (no worker is built for it at all). With `monitor`, the worker is always
+present; only whether it runs its checks/rules each cycle changes.
+
+The live state is toggled at runtime with `sermoctl monitor <svc>` /
+`sermoctl unmonitor <svc>` and persisted in the state database under
+`paths.state` (see [configuration](configuration.md)). Because that database
+survives reboots, a `previous` service comes back up in whatever state an
+operator last left it.
+
 ## Auxiliary commands
 
 `commands` is informational metadata (e.g. a version command). Sermo loads and

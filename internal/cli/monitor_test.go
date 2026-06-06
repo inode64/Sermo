@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"sermo/internal/locks"
+	"sermo/internal/state"
 )
 
 func TestMonitorUnmonitorCommand(t *testing.T) {
@@ -16,7 +16,8 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 	profilesDir := filepath.Join(root, "profiles")
 	enabledDir := filepath.Join(root, "enabled")
 	runDir := filepath.Join(root, "run")
-	for _, d := range []string{profilesDir, enabledDir, runDir} {
+	stateDir := filepath.Join(root, "state")
+	for _, d := range []string{profilesDir, enabledDir, runDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -30,9 +31,9 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], enabled: [ %s ], runtime: %s }
+paths: { profiles: [ %s ], enabled: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, profilesDir, enabledDir, runDir))
+`, profilesDir, enabledDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	run := func(args ...string) int {
@@ -40,19 +41,31 @@ defaults: { policy: { cooldown: 5m } }
 		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
 		return app.Run(context.Background(), append([]string{"--config", global}, args...))
 	}
-	store := locks.NewPauseStore(filepath.Join(runDir, "paused"))
+
+	paused := func(service string) bool {
+		store, err := state.Open(filepath.Join(stateDir, state.Filename))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer store.Close()
+		active, found, err := store.Active(service)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return found && !active
+	}
 
 	if code := run("unmonitor", "web"); code != exitSuccess {
 		t.Fatalf("unmonitor exit = %d", code)
 	}
-	if !store.Paused("web") {
+	if !paused("web") {
 		t.Error("web should be paused after unmonitor")
 	}
 
 	if code := run("monitor", "web"); code != exitSuccess {
 		t.Fatalf("monitor exit = %d", code)
 	}
-	if store.Paused("web") {
+	if paused("web") {
 		t.Error("web should be resumed after monitor")
 	}
 

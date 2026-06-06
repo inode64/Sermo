@@ -23,10 +23,18 @@ paths:
   enabled:
     - /etc/sermo/apps-enabled
   runtime: /run/sermo
+  state: /var/lib/sermo
 ```
 
 `paths.runtime` is the root for named runtime locks (`<runtime>/locks`) and
-internal operation locks (`<runtime>/ops`). `paths.locks` is **not** supported.
+internal operation locks (`<runtime>/ops`). It lives on tmpfs and is wiped on
+reboot. `paths.locks` is **not** supported.
+
+`paths.state` (default `/var/lib/sermo`) is the root for the persistent state
+database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
+is what lets a service's `monitor: previous` flag restore its last monitoring
+state. The schema is versioned and migrated forward automatically, so future
+features can add tables without a manual upgrade.
 
 ## Global defaults
 

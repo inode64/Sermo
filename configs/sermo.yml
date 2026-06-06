@@ -15,7 +15,11 @@ paths:
     - /etc/sermo/apps-available
   enabled:
     - /etc/sermo/apps-enabled
+  # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
+  # Persistent state database (monitoring state, future history/metrics). Lives
+  # under /var/lib so it survives reboots — required for `monitor: previous`.
+  state: /var/lib/sermo
 
 defaults:
   rule_window:

@@ -64,6 +64,30 @@ type Document struct {
 // DefaultRuntime is the runtime root used when paths.runtime is unset.
 const DefaultRuntime = "/run/sermo"
 
+// DefaultState is the persistent state root used when paths.state is unset. It
+// lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
+const DefaultState = "/var/lib/sermo"
+
+// Monitor modes for a service's per-service `monitor` flag. They set the
+// daemon's startup behavior:
+//   - MonitorEnabled : always monitor on startup (the default)
+//   - MonitorDisabled: never monitor
+//   - MonitorPrevious: restore the persisted runtime state from the last run
+const (
+	MonitorEnabled  = "enabled"
+	MonitorDisabled = "disabled"
+	MonitorPrevious = "previous"
+)
+
+// MonitorMode returns a resolved service's `monitor` flag, defaulting to
+// MonitorEnabled so services are monitored unless told otherwise.
+func MonitorMode(tree map[string]any) string {
+	if v, ok := tree["monitor"].(string); ok && v != "" {
+		return v
+	}
+	return MonitorEnabled
+}
+
 // Global is the effective global configuration (sermo.yml plus conf.d), kept
 // mostly generic so its `defaults` block merges into services unchanged.
 type Global struct {
@@ -73,6 +97,7 @@ type Global struct {
 	Profiles []string
 	Enabled  []string
 	Runtime  string
+	State    string
 }
 
 // RuntimeDir returns the runtime root, falling back to the default when unset.
@@ -81,6 +106,15 @@ func (g Global) RuntimeDir() string {
 		return DefaultRuntime
 	}
 	return g.Runtime
+}
+
+// StateDir returns the persistent state root, falling back to the default when
+// unset.
+func (g Global) StateDir() string {
+	if g.State == "" {
+		return DefaultState
+	}
+	return g.State
 }
 
 // ServiceUnit returns a resolved service's backend unit name (its service.name),

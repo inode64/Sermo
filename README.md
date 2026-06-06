@@ -77,8 +77,9 @@ sermod run --config /etc/sermo/sermo.yml
 /usr/share/sermo/profiles/*.yml   packaged profiles (apache, mysql, redis, ...)
 /etc/sermo/apps-available/*.yml   user profiles
 /etc/sermo/apps-enabled/*.yml     enabled services
-/run/sermo/locks/*.lock           named runtime locks
+/run/sermo/locks/*.lock           named runtime locks (tmpfs, wiped on reboot)
 /run/sermo/ops/*.lock             internal operation locks
+/var/lib/sermo/sermo.db           persistent state DB (monitoring state; survives reboot)
 ```
 
 Example profiles and configs are under [`profiles/`](profiles/) and

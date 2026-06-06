@@ -14,7 +14,17 @@ import (
 	"sermo/internal/process"
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
+
+// MonitorStore is the persistent monitoring-state store the daemon consults to
+// decide whether a service is actively monitored. It is implemented by
+// internal/state.Store; kept as an interface so workers can be tested without a
+// database. A nil store means "always monitor" (no persistence).
+type MonitorStore interface {
+	Active(service string) (active, found bool, err error)
+	SetActive(service string, active bool, source string) error
+}
 
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
@@ -26,6 +36,9 @@ type Deps struct {
 	Sleep          func(time.Duration)
 	Now            func() time.Time
 	Emit           func(Event)
+	// Monitor persists per-service monitoring state (active/paused) across daemon
+	// restarts and reboots. Optional: nil means every service is always monitored.
+	Monitor MonitorStore
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration
@@ -52,6 +65,10 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 		if len(errs) > 0 {
 			warnings = append(warnings, "skip service "+name+": "+errs[0])
 			continue
+		}
+
+		if w := applyMonitorMode(deps.Monitor, name, config.MonitorMode(resolved.Tree)); w != "" {
+			warnings = append(warnings, w)
 		}
 
 		base := config.ServiceUnit(resolved.Tree, name)
@@ -101,7 +118,6 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
 	sampleMetrics := metricSampler(name, tree, collector, discoverer)
-	pauses := locks.NewPauseStore(filepath.Join(deps.Runtime, "paused"))
 
 	return &Worker{
 		Service:   name,
@@ -131,9 +147,54 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 				return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
 			}
 		},
-		IsPaused: func() bool { return pauses.Paused(name) },
+		IsPaused: monitorPaused(deps.Monitor, name),
 		Now:      deps.Now,
 		Emit:     deps.Emit,
+	}
+}
+
+// applyMonitorMode reconciles a service's persisted monitoring state with its
+// `monitor` flag at daemon startup, returning a non-empty warning on store error.
+//   - enabled : force monitoring on
+//   - disabled: force monitoring off
+//   - previous: keep the persisted state; first run defaults to on
+func applyMonitorMode(store MonitorStore, name, mode string) string {
+	if store == nil {
+		return ""
+	}
+	var err error
+	switch mode {
+	case config.MonitorDisabled:
+		err = store.SetActive(name, false, state.SourceConfig)
+	case config.MonitorPrevious:
+		if _, found, e := store.Active(name); e != nil {
+			err = e
+		} else if !found {
+			err = store.SetActive(name, true, state.SourceConfig)
+		}
+	default: // MonitorEnabled
+		err = store.SetActive(name, true, state.SourceConfig)
+	}
+	if err != nil {
+		return "service " + name + ": persist monitor state: " + err.Error()
+	}
+	return ""
+}
+
+// monitorPaused returns the worker's live pause check. It reads the persisted
+// state every cycle so an operator's monitor/unmonitor takes effect without a
+// daemon restart. It fails open: on a missing row or a store error the service
+// is monitored, never silently dropped.
+func monitorPaused(store MonitorStore, name string) func() bool {
+	if store == nil {
+		return func() bool { return false }
+	}
+	return func() bool {
+		active, found, err := store.Active(name)
+		if err != nil || !found {
+			return false
+		}
+		return !active
 	}
 }
 
