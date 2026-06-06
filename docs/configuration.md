@@ -85,8 +85,64 @@ window, the hook command runs (argv only, never a shell) with these environment
 variables: `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_PATH`, `SERMO_VALUE`,
 `SERMO_MESSAGE`.
 
-Other resource types (network, file counts) will be added as new check `type`
-values using the same watch/hook structure.
+### `net` — network interface
+
+A `net` watch monitors one interface, grouped under a single entry that names the
+interface once and lists the metrics it cares about. Each metric is independent:
+it has its own condition **and its own hook**. Internally the entry expands into
+one watch per metric, so the metrics never share state and fire (and remediate)
+separately.
+
+```yaml
+watches:
+  net-eth0:
+    enabled: false
+    interval: 30s
+    check: { type: net, interface: eth0 }
+    metrics:
+      state:                       # interface up/down
+        on: change                 # fire on any state change; or `expect: up|down`
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-net-state.sh, eth0]
+      speed:                       # link speed (Mbps)
+        on: change                 # speed only supports change detection
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-net-speed.sh, eth0]
+      errors:                      # rx/tx error counters
+        counters: [rx_errors, tx_errors]   # optional, this is the default
+        delta: { op: ">", value: 100 }     # fire when the per-cycle delta crosses
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-net-errors.sh, eth0]
+```
+
+The three metrics and their conditions:
+
+- **`state`** — interface up/down. Use `on: change` to fire on any transition, or
+  `expect: up` / `expect: down` to fire whenever the state is *not* the expected
+  value.
+- **`speed`** — link speed in Mbps. Supports `on: change` only; it primes a
+  baseline on the first cycle and fires when the speed differs afterwards.
+- **`errors`** — sums the named `counters` (default `rx_errors`, `tx_errors`) and
+  fires when the per-cycle **delta** satisfies `delta: {op, value}` (same operator
+  set as disk). The first cycle primes a baseline; counter resets clamp the delta
+  to zero (never fire on a reset).
+
+Change/delta metrics are **stateful across cycles**: the first cycle establishes a
+baseline and does not fire.
+
+A net hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_INTERFACE`,
+`SERMO_METRIC`, `SERMO_VALUE`, `SERMO_MESSAGE`, and — for the change metrics
+(`state`, `speed`) — `SERMO_OLD` and `SERMO_NEW`.
+
+In general, **every key a check puts in its result `Data` is exported to the hook
+as `SERMO_<UPPER_KEY>`** (non-alphanumeric characters become `_`). The lists above
+are simply the keys each built-in check emits.
+
+Other resource types (file counts, …) will be added as new check `type` values
+using the same watch/hook structure.
 
 ## Global defaults
 
