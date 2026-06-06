@@ -44,6 +44,24 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	}
 }
 
+func TestWatchHookEnvFallsBackToFreePct(t *testing.T) {
+	var env map[string]string
+	w := &Watch{
+		Name:      "disk-root",
+		CheckType: "disk",
+		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/", "free_pct": 8.0}},
+		Hook:      HookSpec{Command: []string{"/bin/true"}},
+		Runner: HookRunnerFunc(func(_ context.Context, _ []string, e map[string]string, _ time.Duration) error {
+			env = e
+			return nil
+		}),
+	}
+	w.RunCycle(context.Background())
+	if env["SERMO_VALUE"] != "8" {
+		t.Fatalf("expected SERMO_VALUE from free_pct, got %q", env["SERMO_VALUE"])
+	}
+}
+
 func TestWatchDoesNotFireWhenConditionFalse(t *testing.T) {
 	var calls int
 	w := &Watch{
