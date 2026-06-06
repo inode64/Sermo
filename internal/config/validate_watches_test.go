@@ -141,3 +141,57 @@ func TestValidateWatchesNetBad(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateWatchesICMPGood(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"ping-gw": map[string]any{
+				"check": map[string]any{"type": "icmp", "host": "8.8.8.8", "count": 3},
+				"metrics": map[string]any{
+					"state":   map[string]any{"on": "change", "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+					"latency": map[string]any{"threshold": map[string]any{"op": ">", "value": 100}, "then": map[string]any{"hook": map[string]any{"command": []any{"/y"}}}},
+				},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
+func TestValidateWatchesICMPBad(t *testing.T) {
+	hook := map[string]any{"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}}
+	merge := func(m map[string]any) map[string]any {
+		out := map[string]any{}
+		for k, v := range hook {
+			out[k] = v
+		}
+		for k, v := range m {
+			out[k] = v
+		}
+		return out
+	}
+	cases := map[string]map[string]any{
+		"no host":    {"check": map[string]any{"type": "icmp"}, "metrics": map[string]any{"state": merge(map[string]any{"on": "change"})}},
+		"bad count":  {"check": map[string]any{"type": "icmp", "host": "h", "count": 0}, "metrics": map[string]any{"state": merge(map[string]any{"on": "change"})}},
+		"no metrics": {"check": map[string]any{"type": "icmp", "host": "h"}},
+		"unknown metric": {"check": map[string]any{"type": "icmp", "host": "h"},
+			"metrics": map[string]any{"bogus": merge(map[string]any{"on": "change"})}},
+		"bad state": {"check": map[string]any{"type": "icmp", "host": "h"},
+			"metrics": map[string]any{"state": merge(map[string]any{})}},
+		"latency neither": {"check": map[string]any{"type": "icmp", "host": "h"},
+			"metrics": map[string]any{"latency": merge(map[string]any{})}},
+		"bad threshold op": {"check": map[string]any{"type": "icmp", "host": "h"},
+			"metrics": map[string]any{"latency": merge(map[string]any{"threshold": map[string]any{"op": "=>", "value": 1}})}},
+		"bad change delta": {"check": map[string]any{"type": "icmp", "host": "h"},
+			"metrics": map[string]any{"latency": merge(map[string]any{"change": map[string]any{"delta": "abc"}})}},
+	}
+	for name, w := range cases {
+		t.Run(name, func(t *testing.T) {
+			issues := watchIssues(validateRawGlobal(t, map[string]any{"watches": map[string]any{"ping-gw": w}}))
+			if len(issues) == 0 {
+				t.Fatalf("%s: expected a watch issue", name)
+			}
+		})
+	}
+}

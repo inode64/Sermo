@@ -100,6 +100,41 @@ func TestBuildWatchesExpandsNet(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesExpandsICMP(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"ping-gw": map[string]any{
+			"check": map[string]any{"type": "icmp", "host": "8.8.8.8", "count": 3},
+			"metrics": map[string]any{
+				"state": map[string]any{
+					"on":   "change",
+					"then": map[string]any{"hook": map[string]any{"command": []any{"/bin/state.sh"}}},
+				},
+				"latency": map[string]any{
+					"threshold": map[string]any{"op": ">", "value": 100},
+					"then":      map[string]any{"hook": map[string]any{"command": []any{"/bin/lat.sh"}}},
+				},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 2 {
+		t.Fatalf("expected 2 expanded watches, got %d", len(watches))
+	}
+	cmds := map[string]bool{}
+	for _, w := range watches {
+		if w.CheckType != "icmp" || w.Name != "ping-gw" {
+			t.Fatalf("unexpected watch: %+v", w)
+		}
+		cmds[w.Hook.Command[0]] = true
+	}
+	if !cmds["/bin/state.sh"] || !cmds["/bin/lat.sh"] {
+		t.Fatalf("expected distinct per-metric hooks, got %v", cmds)
+	}
+}
+
 func TestBuildWatchesNetWarnsOnBadMetric(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"net-eth0": map[string]any{
