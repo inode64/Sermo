@@ -483,7 +483,7 @@ func validateRules(tree map[string]any, add addFunc) {
 	}
 }
 
-var conditionOperators = []string{"and", "or", "not", "failed", "active", "metric", "service", "process", "file", "command"}
+var conditionOperators = []string{"and", "or", "not", "failed", "active", "metric", "service", "process", "file", "command", "changed"}
 
 // validateCondition checks one condition node: exactly one operator/leaf, valid
 // check references, valid service/process states, command array+timeout, and
@@ -539,6 +539,10 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case "metric":
 		if m, ok := node["metric"].(map[string]any); ok {
 			validateMetric(m, path+".metric", allowSystemMetric, add)
+		}
+	case "changed":
+		if m, ok := node["changed"].(map[string]any); !ok || scalarString(m["path"]) == "" {
+			add("%s.changed requires a path", path)
 		}
 	}
 }

@@ -84,6 +84,27 @@ variables:
   binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 ```
 
+## Categories and library restarts
+
+Profiles are categorized by the subdirectory under a profiles root: `services/`,
+`apps/`, `libs/` (files at the root default to `service`). Loading recurses; the
+directory sets `Document.Category`. `apps` and `libs` are minimal profiles (name,
+display_name, description, binary, version) surfaced by `sermoctl apps` / `libs`.
+
+A `library` profile names a shared library and the file to watch (`variables.binary`,
+e.g. `/lib64/libc.so.6`). A service opts into library-change restarts with:
+
+```yaml
+restart_on_change:
+  libraries: [glibc, pam]
+```
+
+This desugars at resolution into one remediation rule per library:
+`if: { changed: { library: X, path: <lib file> } } then: { action: restart }`.
+The `changed` condition (true when the file's size/mtime differs from the
+across-cycle baseline; first cycle adopts, successful restart re-baselines) is the
+primitive; referenced names must be `library` profiles.
+
 ## Merge rules
 
 Use these rules:
@@ -203,7 +224,8 @@ missing profiles in uses
 missing service targets in clone
 clone cycles
 unknown check types
-unknown rule condition types
+unknown rule condition types (and/or/not/failed/active/metric/service/process/file/command/changed)
+changed condition requires a path; restart_on_change references must be library profiles
 unknown actions
 missing variables
 nested variable (a variable value containing ${...}) — rejected in MVP

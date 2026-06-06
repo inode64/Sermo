@@ -61,7 +61,9 @@ func (c *Config) materializeVersionTemplates() {
 		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl)
 		for _, value := range discoverVersions(versionDiscoverySource(body), *tok) {
-			c.add(instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path))
+			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path)
+			inst.Category = tmpl.Category
+			c.add(inst)
 		}
 		c.dropProfile(tmpl.Name)
 	}

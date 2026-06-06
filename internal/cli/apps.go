@@ -23,11 +23,21 @@ type appReport struct {
 	Status      string `json:"status"`
 }
 
-// runApps lists the applications described by profiles: which are installed (their
-// binary is present and executable), the version their version command reports,
-// and whether they resolve without error. Only installed apps are shown unless
-// `apps all` is given.
+// runApps lists the applications (profiles under profiles/apps): which are
+// installed (their binary is present and executable), the version their version
+// command reports, and whether they resolve without error. Only installed apps
+// are shown unless `apps all` is given.
 func (a App) runApps(ctx context.Context, opts options) int {
+	return a.listCategory(ctx, opts, config.CategoryApp, "apps", "installed applications")
+}
+
+// runLibs lists the library profiles (profiles/libs) services can watch for
+// changes, with the version each reports and whether it is present.
+func (a App) runLibs(ctx context.Context, opts options) int {
+	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries")
+}
+
+func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty string) int {
 	includeMissing := len(opts.args) > 0 && opts.args[0] == "all"
 
 	cfg, code := a.loadConfig(opts)
@@ -36,7 +46,7 @@ func (a App) runApps(ctx context.Context, opts options) int {
 	}
 
 	var reports []appReport
-	for _, name := range sortedUnique(cfg.Profiles) {
+	for _, name := range cfg.ProfilesInCategory(category) {
 		resolved, _ := cfg.ResolveProfile(name)
 		r := a.inspectApp(ctx, name, resolved)
 		if !r.Installed && !includeMissing {
@@ -46,10 +56,10 @@ func (a App) runApps(ctx context.Context, opts options) int {
 	}
 
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"apps": reports})
+		writeJSON(a.Stdout, map[string]any{jsonKey: reports})
 		return exitSuccess
 	}
-	a.printApps(reports)
+	a.printApps(reports, empty)
 	return exitSuccess
 }
 
@@ -108,9 +118,9 @@ func (a App) inspectApp(ctx context.Context, name string, resolved config.Resolv
 	return r
 }
 
-func (a App) printApps(reports []appReport) {
+func (a App) printApps(reports []appReport, empty string) {
 	if len(reports) == 0 {
-		fmt.Fprintln(a.Stdout, "no installed applications")
+		fmt.Fprintf(a.Stdout, "no %s\n", empty)
 		return
 	}
 	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
 	"sermo/internal/checks"
@@ -31,6 +33,9 @@ type Worker struct {
 
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
+	// libBaseline holds the acknowledged fingerprint of each watched path (a
+	// `changed:` condition target, typically a library .so) across cycles.
+	libBaseline map[string]string
 }
 
 // RunCycle runs one monitoring cycle for the service (section 24): build the
@@ -49,7 +54,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		deps.Metrics = w.Sample(ctx)
 	}
 	cache := w.Checks(ctx, deps)
-	ev := &rules.Evaluator{Cache: cache, Deps: deps}
+	ev := &rules.Evaluator{Cache: cache, Deps: deps, Changed: w.changed}
 
 	w.runRemediation(ctx, ev, now)
 	w.runAlerts(ctx, ev)
@@ -108,6 +113,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		w.emitAlerts(r)
 		result := w.Operate(ctx, action)
 		w.State.Record(now(), w.Policy)
+		// A successful (re)launch now runs against the current files, so refresh
+		// the watched baselines — otherwise a `changed:`-driven restart would fire
+		// again every cycle.
+		if result.OK() && (action == "restart" || action == "start") {
+			w.acknowledgeChanges()
+		}
 		w.emit(Event{Kind: "action", Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
 		return // at most one remediation action per cycle
 	}
@@ -140,6 +151,41 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule) b
 		cond = false
 	}
 	return w.windowState(r.Name).Fires(r, cond)
+}
+
+// changed reports whether the file at path differs from the acknowledged
+// baseline. The first observation adopts the current fingerprint (so a daemon
+// start never triggers a restart); thereafter it is true until acknowledged.
+func (w *Worker) changed(path string) (bool, error) {
+	if w.libBaseline == nil {
+		w.libBaseline = map[string]string{}
+	}
+	cur := fileFingerprint(path)
+	base, seen := w.libBaseline[path]
+	if !seen {
+		w.libBaseline[path] = cur
+		return false, nil
+	}
+	return cur != base, nil
+}
+
+// acknowledgeChanges refreshes every watched baseline to the current fingerprint,
+// clearing pending `changed:` signals after a successful (re)launch.
+func (w *Worker) acknowledgeChanges() {
+	for path := range w.libBaseline {
+		w.libBaseline[path] = fileFingerprint(path)
+	}
+}
+
+// fileFingerprint summarizes a file's identity for change detection: its size and
+// modification time. A missing or unreadable file yields "", distinct from any
+// real file, so install/removal counts as a change.
+func fileFingerprint(path string) string {
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
 }
 
 func (w *Worker) windowState(name string) *rules.WindowState {

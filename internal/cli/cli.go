@@ -163,6 +163,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runProfile(opts)
 	case "apps":
 		return a.runApps(ctx, opts)
+	case "libs":
+		return a.runLibs(ctx, opts)
 	case "service":
 		return a.runService(opts)
 	case "lock":
@@ -957,7 +959,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE")
-	fmt.Fprintln(w, "          apps [all] | profile list | profile show PROFILE | service list | service show SERVICE")
+	fmt.Fprintln(w, "          apps [all] | libs [all] | profile list | profile show PROFILE | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }

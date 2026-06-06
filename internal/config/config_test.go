@@ -506,6 +506,97 @@ func hasIssue(issues []Issue, substr string) bool {
 	return false
 }
 
+func TestProfileCategoryFromDirectory(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml":               baseGlobal,
+		"profiles/nginx.yml":      "kind: profile\nname: nginx\nservice: { name: nginx }\n",
+		"profiles/apps/git.yml":   "kind: profile\nname: git\nservice: { name: git }\n",
+		"profiles/libs/glibc.yml": "kind: profile\nname: glibc\nvariables: { binary: /lib64/libc.so.6 }\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cases := map[string]string{"nginx": CategoryService, "git": CategoryApp, "glibc": CategoryLibrary}
+	for name, want := range cases {
+		doc, ok := cfg.Profiles[name]
+		if !ok {
+			t.Fatalf("profile %q not loaded", name)
+		}
+		if doc.Category != want {
+			t.Errorf("%s category = %q, want %q", name, doc.Category, want)
+		}
+	}
+	if got := cfg.ProfilesInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {
+		t.Errorf("ProfilesInCategory(app) = %v, want [git]", got)
+	}
+}
+
+func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/libs/glibc.yml": `
+kind: profile
+name: glibc
+display_name: "GNU C Library"
+variables:
+  binary: "/lib64/libc.so.6"
+`,
+		"enabled/web.yml": `
+kind: service
+name: web
+service: { name: web }
+restart_on_change:
+  libraries: [glibc]
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["restart_on_change"]; present {
+		t.Errorf("restart_on_change should be desugared away")
+	}
+	then := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "then")
+	if scalarString(then["action"]) != "restart" {
+		t.Errorf("generated rule action = %v, want restart", then["action"])
+	}
+	changed := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "if", "changed")
+	if scalarString(changed["path"]) != "/lib64/libc.so.6" {
+		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
+	}
+}
+
+func TestRestartOnChangeUnknownLibraryErrors(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		// nginx is a service profile, not a library: referencing it must error.
+		"profiles/nginx.yml": "kind: profile\nname: nginx\nservice: { name: nginx }\n",
+		"enabled/web.yml": `
+kind: service
+name: web
+service: { name: web }
+restart_on_change:
+  libraries: [nginx, ghost]
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs := cfg.Resolve("web")
+	joined := strings.Join(errs, "\n")
+	for _, want := range []string{"nginx", "ghost"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected error mentioning %q, got %v", want, errs)
+		}
+	}
+}
+
 func TestDiscoverVersions(t *testing.T) {
 	vtok := *tokenFor("x%v")
 	ntok := *tokenFor("x%n")

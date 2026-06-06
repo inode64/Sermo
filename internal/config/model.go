@@ -15,6 +15,30 @@ const (
 	kindService = "service"
 )
 
+// Profile categories, derived from the subdirectory a profile is loaded from
+// (profiles/services, profiles/apps, profiles/libs). Files directly under a
+// profiles root default to CategoryService.
+const (
+	CategoryService = "service"
+	CategoryApp     = "app"
+	CategoryLibrary = "library"
+)
+
+// categoryFromDir maps a profiles subdirectory name to a category, or "" when the
+// directory is not a recognized category (its files inherit the default).
+func categoryFromDir(name string) string {
+	switch name {
+	case "services":
+		return CategoryService
+	case "apps":
+		return CategoryApp
+	case "libs":
+		return CategoryLibrary
+	default:
+		return ""
+	}
+}
+
 // metaKeys are the document keys that control resolution and are not part of a
 // service's merged body.
 var metaKeys = map[string]struct{}{
@@ -30,10 +54,11 @@ var perServiceDefaults = []string{"stop_policy", "policy", "rule_window"}
 
 // Document is a single loaded profile or service in raw, unexpanded form.
 type Document struct {
-	Kind string
-	Name string
-	Path string
-	Body map[string]any
+	Kind     string
+	Name     string
+	Path     string
+	Category string // service | app | library (profiles only; from the directory)
+	Body     map[string]any
 }
 
 // DefaultRuntime is the runtime root used when paths.runtime is unset.

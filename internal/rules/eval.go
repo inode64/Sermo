@@ -18,6 +18,10 @@ type Evaluator struct {
 	Cache map[string]checks.Result
 	// Deps builds inline probes (tcp/command/service/file).
 	Deps checks.Deps
+	// Changed reports whether the file at the given path differs from a baseline
+	// tracked across cycles (section 14, library-change restarts). Injected by the
+	// worker; nil makes every `changed:` condition false.
+	Changed func(path string) (bool, error)
 
 	memo map[string]checks.Result
 }
@@ -66,6 +70,9 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	}
 	if v, ok := node["metric"]; ok {
 		return e.evalMetric(v)
+	}
+	if v, ok := node["changed"]; ok {
+		return e.evalChanged(v)
 	}
 	return false, fmt.Errorf("condition has no recognized operator")
 }
@@ -190,6 +197,24 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 		return false, nil
 	}
 	return metrics.Compare(reading, asString(m["op"]), scalarString(m["value"]))
+}
+
+// evalChanged is true when the watched file's fingerprint differs from the
+// baseline (section 14). With no Changed source it is false, so a remediation
+// never fires on an unavailable signal.
+func (e *Evaluator) evalChanged(v any) (bool, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false, fmt.Errorf("changed condition must be a mapping")
+	}
+	path := asString(m["path"])
+	if path == "" {
+		return false, fmt.Errorf("changed condition requires a path")
+	}
+	if e.Changed == nil {
+		return false, nil
+	}
+	return e.Changed(path)
 }
 
 // evalInline builds and runs a leaf check whose truth is the check's OK.

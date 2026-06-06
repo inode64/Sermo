@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -78,6 +80,50 @@ func TestCycleFiresRemediation(t *testing.T) {
 	}
 	if e, ok := h.eventOf("action"); !ok || e.Action != "restart" || e.Status != "ok" {
 		t.Errorf("missing action event: %+v", h.events)
+	}
+}
+
+func TestCycleRestartsOnLibraryChange(t *testing.T) {
+	lib := filepath.Join(t.TempDir(), "libc.so.6")
+	if err := os.WriteFile(lib, []byte("v1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := &workerHarness{opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"restart-on-change-glibc": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"changed": map[string]any{"path": lib}},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+
+	// Cycle 1: first observation adopts the baseline; no restart on startup.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("first cycle must not restart, ops=%v", h.ops)
+	}
+
+	// The library is upgraded (different size and mtime).
+	if err := os.WriteFile(lib, []byte("v2-larger"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(lib, future, future); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cycle 2: change detected → one restart, then baseline acknowledged.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("change should restart once, ops=%v", h.ops)
+	}
+
+	// Cycle 3: nothing changed since the restart → no further restart.
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 {
+		t.Fatalf("acknowledged change must not refire, ops=%v", h.ops)
 	}
 }
 
