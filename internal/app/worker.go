@@ -25,6 +25,9 @@ type Worker struct {
 	Operate func(ctx context.Context, action string) operation.Result
 	Now     func() time.Time
 	Emit    func(Event)
+
+	// windows holds per-rule for/within state across cycles (section 15).
+	windows map[string]*rules.WindowState
 }
 
 // RunCycle runs one monitoring cycle for the service (section 24): build the
@@ -46,19 +49,20 @@ func (w *Worker) RunCycle(ctx context.Context) {
 }
 
 func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time) {
+	// Update every remediation rule's window this cycle, then act on the first
+	// firing rule that is not guard-blocked (section 13/15). Updating all windows
+	// keeps consecutive/sliding counts correct even when an earlier rule acts.
+	var firing []rules.Rule
 	for _, r := range w.Rules {
 		if r.Type != rules.RuleRemediation {
 			continue
 		}
-		fired, err := ev.Eval(ctx, r.If)
-		if err != nil {
-			w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})
-			continue
+		if w.fires(ctx, ev, r) {
+			firing = append(firing, r)
 		}
-		if !fired {
-			continue
-		}
+	}
 
+	for _, r := range firing {
 		action := string(r.Then.Type)
 		// A remediation rule must never bypass guards (section 17). If a guard
 		// blocks this action, try the next firing rule (first non-blocked wins).
@@ -90,15 +94,34 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator) {
 		if r.Type != rules.RuleAlert {
 			continue
 		}
-		fired, err := ev.Eval(ctx, r.If)
-		if err != nil {
-			w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})
-			continue
-		}
-		if fired {
+		if w.fires(ctx, ev, r) {
 			w.emit(Event{Kind: "alert", Rule: r.Name, Message: r.Then.Message})
 		}
 	}
+}
+
+// fires evaluates a rule's condition this cycle and advances its window state,
+// returning whether the rule fires now (section 15). An evaluation error counts
+// as a false cycle.
+func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
+	cond, err := ev.Eval(ctx, r.If)
+	if err != nil {
+		w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})
+		cond = false
+	}
+	return w.windowState(r.Name).Fires(r, cond)
+}
+
+func (w *Worker) windowState(name string) *rules.WindowState {
+	if w.windows == nil {
+		w.windows = map[string]*rules.WindowState{}
+	}
+	s := w.windows[name]
+	if s == nil {
+		s = &rules.WindowState{}
+		w.windows[name] = s
+	}
+	return s
 }
 
 func (w *Worker) emit(e Event) {

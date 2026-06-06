@@ -35,12 +35,27 @@ type Action struct {
 	Message string
 }
 
+// ForWindow requires the condition to hold for N consecutive cycles (section 15).
+type ForWindow struct {
+	Cycles int
+	Mode   string // only "consecutive" in the MVP
+}
+
+// WithinWindow requires the condition to be true at least MinMatches times in the
+// last Cycles cycles (sliding window, section 15).
+type WithinWindow struct {
+	Cycles     int
+	MinMatches int
+}
+
 // Rule is a resolved rule. If is kept as the generic condition tree; the
 // evaluator walks it directly so a parse step does not duplicate the model.
 type Rule struct {
 	Name   string
 	Type   RuleType
 	If     map[string]any
+	For    *ForWindow
+	Within *WithinWindow
 	Then   Action
 	Blocks []string
 }
@@ -79,6 +94,8 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			Name:   name,
 			Type:   RuleType(asString(entry["type"])),
 			If:     ifNode,
+			For:    parseForWindow(entry["for"]),
+			Within: parseWithinWindow(entry["within"]),
 			Then:   Action{Type: ActionType(asString(thenNode["action"])), Message: asString(thenNode["message"])},
 			Blocks: stringList(entry["blocks"]),
 		})
