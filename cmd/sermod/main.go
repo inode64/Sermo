@@ -101,10 +101,15 @@ func run(args []string) int {
 		return 2
 	}
 
+	startupDelay := engineDuration(cfg, "startup_delay", 0)
+	if startupDelay > 0 {
+		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
+	}
 	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers))
 	scheduler := app.Scheduler{
-		Interval: interval,
-		OpSlots:  engineInt(cfg, "max_parallel_operations", 2),
+		Interval:     interval,
+		OpSlots:      engineInt(cfg, "max_parallel_operations", 2),
+		StartupDelay: startupDelay,
 	}
 	scheduler.Run(ctx, workers)
 	logger.Info("sermod stopped")

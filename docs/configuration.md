@@ -36,12 +36,32 @@ is what lets a service's `monitor: previous` flag restore its last monitoring
 state. The schema is versioned and migrated forward automatically, so future
 features can add tables without a manual upgrade.
 
+## Engine settings
+
+The `engine` block is daemon-wide configuration consumed by `sermod`; it never
+merges into a service:
+
+```yaml
+engine:
+  backend: auto          # auto | systemd | openrc
+  interval: 30s          # base cycle interval per worker
+  max_parallel_checks: 8 # bound on concurrent checks
+  default_timeout: 10s   # default per-check timeout
+  startup_delay: 0       # grace period before the first cycle (0 disables)
+```
+
+`engine.startup_delay` is a non-negative duration that holds the daemon before
+it starts its first check cycle, giving the host time to finish booting so
+services that are still coming up are not flagged or remediated prematurely. The
+wait applies once, on startup, before any worker runs; a shutdown signal during
+the wait aborts cleanly without starting any worker. The default `0` disables it.
+
 ## Global defaults
 
 Only the per-service parts of `defaults` merge into a service: `stop_policy`,
 `policy`, and `rule_window`. Engine-wide settings (`interval`,
-`max_parallel_checks`, `default_timeout`, `backend`) are daemon configuration
-and never merge into a service.
+`max_parallel_checks`, `default_timeout`, `startup_delay`, `backend`) are daemon
+configuration and never merge into a service.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.

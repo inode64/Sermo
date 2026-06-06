@@ -35,7 +35,8 @@ var rejectedSecurityToggles = []string{
 //
 // Covered: document kind/name presence and uniqueness, uses/clone resolution and
 // cycles, variable existence/nesting/expansion, backend values, engine durations
-// and max_parallel_checks, paths.locks rejection, paths.runtime absoluteness,
+// (including the non-negative startup_delay) and max_parallel_checks, paths.locks
+// rejection, paths.runtime absoluteness,
 // security toggles, policy.cooldown/max_actions/backoff, port/expect_status range,
 // check/preflight/postflight entry schemas (type, optional, command array form,
 // service/process states, metric grammar, file_exists not under the lock dir),
@@ -68,6 +69,9 @@ func validateGlobal(cfg *Config) []Issue {
 			if v, present := engine[field]; present && !isPositiveDuration(scalarString(v)) {
 				add("engine.%s %q must be a valid positive duration", field, scalarString(v))
 			}
+		}
+		if v, present := engine["startup_delay"]; present && !isNonNegativeDuration(scalarString(v)) {
+			add("engine.startup_delay %q must be a valid non-negative duration (0 disables the wait)", scalarString(v))
 		}
 		if v, present := engine["max_parallel_checks"]; present {
 			if n, ok := scalarInt(v); !ok || n <= 0 {
@@ -844,6 +848,11 @@ func isValidBackend(b string) bool {
 func isPositiveDuration(s string) bool {
 	d, err := time.ParseDuration(s)
 	return err == nil && d > 0
+}
+
+func isNonNegativeDuration(s string) bool {
+	d, err := time.ParseDuration(s)
+	return err == nil && d >= 0
 }
 
 func documentScope(doc *Document) string {

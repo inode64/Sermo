@@ -44,6 +44,70 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 	}
 }
 
+func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
+	var n int32
+	workers := []*Worker{
+		{Service: "a", Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			atomic.AddInt32(&n, 1)
+			return nil
+		}},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers)
+		close(done)
+	}()
+
+	// During the startup delay no cycle must have run yet.
+	time.Sleep(30 * time.Millisecond)
+	if got := atomic.LoadInt32(&n); got != 0 {
+		t.Fatalf("worker cycled during startup delay: got %d cycles, want 0", got)
+	}
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not return after context cancellation")
+	}
+
+	if atomic.LoadInt32(&n) < 1 {
+		t.Fatalf("worker never cycled after startup delay: got %d", n)
+	}
+}
+
+func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
+	var n int32
+	workers := []*Worker{
+		{Service: "a", Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			atomic.AddInt32(&n, 1)
+			return nil
+		}},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not return when cancelled during startup delay")
+	}
+
+	if got := atomic.LoadInt32(&n); got != 0 {
+		t.Fatalf("worker cycled even though shutdown interrupted the startup delay: got %d", got)
+	}
+}
+
 func TestGateOperateSerializesAcrossWorkers(t *testing.T) {
 	sem := make(chan struct{}, 1) // one global operation slot
 
