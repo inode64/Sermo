@@ -1,7 +1,6 @@
 kind: profile
 name: sqlite
 display_name: "SQLite"
-service: { name: "sqlite", backend: auto }
 variables:
   binary: "/usr/bin/sqlite3"
 preflight:
