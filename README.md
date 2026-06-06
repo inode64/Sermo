@@ -43,6 +43,10 @@ sermoctl --config /etc/sermo/sermo.yml config render apache-main
 # Operate a configured service through the safe engine
 sermoctl --config /etc/sermo/sermo.yml restart apache-main
 
+# Pause / resume monitoring of a service (e.g. for maintenance)
+sermoctl --config /etc/sermo/sermo.yml unmonitor apache-main   # daemon stops checking it
+sermoctl --config /etc/sermo/sermo.yml monitor apache-main     # resume
+
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml
 ```

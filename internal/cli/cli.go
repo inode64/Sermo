@@ -169,6 +169,10 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runService(opts)
 	case "lock":
 		return a.runLock(ctx, opts)
+	case "unmonitor":
+		return a.runMonitor(opts, true)
+	case "monitor":
+		return a.runMonitor(opts, false)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -215,14 +219,34 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		return code
 	}
 
+	paused := a.servicePaused(opts)
 	if opts.json {
-		writeJSON(a.Stdout, statusToJSON(status))
+		writeJSON(a.Stdout, statusToJSON(status, paused))
 		return exitSuccess
 	}
 
-	fmt.Fprintf(a.Stdout, "%s %s backend=%s service=%s\n",
-		status.Service, status.Status, status.Backend, status.Unit)
+	monitoring := ""
+	if paused {
+		monitoring = " monitoring=paused"
+	}
+	fmt.Fprintf(a.Stdout, "%s %s backend=%s service=%s%s\n",
+		status.Service, status.Status, status.Backend, status.Unit, monitoring)
 	return exitSuccess
+}
+
+// servicePaused reports whether monitoring is paused for the requested service.
+// It is best-effort: status works without config, so a config that fails to load
+// simply yields false.
+func (a App) servicePaused(opts options) bool {
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		return false
+	}
+	return locks.NewPauseStore(filepath.Join(cfg.Global.RuntimeDir(), "paused")).Paused(opts.service())
 }
 
 func (a App) runIsActive(ctx context.Context, opts options) int {
@@ -239,7 +263,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 
 	switch {
 	case opts.json:
-		writeJSON(a.Stdout, statusToJSON(status))
+		writeJSON(a.Stdout, statusToJSON(status, a.servicePaused(opts)))
 	case !opts.quiet:
 		fmt.Fprintln(a.Stdout, status.Status)
 	}
@@ -834,6 +858,7 @@ type statusJSON struct {
 	Backend string `json:"backend"`
 	Status  string `json:"status"`
 	Unit    string `json:"unit"`
+	Paused  bool   `json:"paused"`
 }
 
 // defaultTimeout returns the per-command outer deadline used when --timeout is
@@ -847,12 +872,13 @@ func defaultTimeout(command string) time.Duration {
 	}
 }
 
-func statusToJSON(status servicemgr.ServiceStatus) statusJSON {
+func statusToJSON(status servicemgr.ServiceStatus, paused bool) statusJSON {
 	return statusJSON{
 		Service: status.Service,
 		Backend: string(status.Backend),
 		Status:  string(status.Status),
 		Unit:    status.Unit,
+		Paused:  paused,
 	}
 }
 
@@ -958,7 +984,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
-	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE")
+	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          apps [all] | libs [all] | profile list | profile show PROFILE | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
