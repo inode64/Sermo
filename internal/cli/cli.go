@@ -289,11 +289,18 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		return operation.Result{}, fmt.Errorf("service manager unavailable: %v", err)
 	}
 
+	base := config.ServiceUnit(resolved.Tree, service)
+	aliases := config.UnitAliases(resolved.Tree, string(detection.Backend))
+	unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, base, aliases)
+	if err != nil {
+		return operation.Result{}, err
+	}
+
 	runtime := cfg.Global.RuntimeDir()
 	locker := locks.NewOperationLocker(filepath.Join(runtime, "ops"))
 	engine := operation.New(operation.Config{
 		Service:    service,
-		Unit:       serviceUnit(resolved.Tree, service),
+		Unit:       unit,
 		Backend:    string(detection.Backend),
 		Tree:       resolved.Tree,
 		Manager:    manager,
@@ -527,7 +534,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	deps := checks.Deps{
 		Service:        service,
 		DefaultTimeout: engineDefaultTimeout(cfg),
-		Status:         a.statusFunc(opts, serviceUnit(resolved.Tree, service)),
+		Status:         a.statusFunc(opts, resolved.Tree, config.ServiceUnit(resolved.Tree, service)),
 		Processes:      process.NewDiscoverer().ObserveState,
 	}
 	built, warnings := checks.Build(section, deps)
@@ -575,8 +582,9 @@ func (a App) printPreflight(service string, outcome checks.Outcome) {
 }
 
 // statusFunc builds a lazy backend status query for `service` checks; it only
-// detects the backend when a service check actually runs.
-func (a App) statusFunc(opts options, unit string) func(context.Context) (servicemgr.Status, error) {
+// detects the backend and resolves the unit (aliases, section 11) when a service
+// check actually runs.
+func (a App) statusFunc(opts options, tree map[string]any, base string) func(context.Context) (servicemgr.Status, error) {
 	return func(ctx context.Context) (servicemgr.Status, error) {
 		detection, err := a.Detector.Detect(ctx, opts.backend)
 		if err != nil {
@@ -586,23 +594,17 @@ func (a App) statusFunc(opts options, unit string) func(context.Context) (servic
 		if err != nil {
 			return "", err
 		}
+		aliases := config.UnitAliases(tree, string(detection.Backend))
+		unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, base, aliases)
+		if err != nil {
+			return "", err
+		}
 		status, err := manager.Status(ctx, unit)
 		if err != nil {
 			return "", err
 		}
 		return status.Status, nil
 	}
-}
-
-// serviceUnit is the backend unit name to probe for a service: its service.name,
-// falling back to the config service name.
-func serviceUnit(tree map[string]any, fallback string) string {
-	if svc, ok := tree["service"].(map[string]any); ok {
-		if name, _ := svc["name"].(string); name != "" {
-			return name
-		}
-	}
-	return fallback
 }
 
 func engineDefaultTimeout(cfg *config.Config) time.Duration {

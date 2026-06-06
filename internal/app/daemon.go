@@ -41,6 +41,7 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 	if deps.SystemFreshness > 0 {
 		collector.SystemFreshness = deps.SystemFreshness
 	}
+	resolver := servicemgr.NewUnitResolver()
 
 	for _, name := range serviceNames(cfg) {
 		doc := cfg.Services[name]
@@ -52,13 +53,20 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 			warnings = append(warnings, "skip service "+name+": "+errs[0])
 			continue
 		}
-		workers = append(workers, buildWorker(name, resolved.Tree, deps, collector))
+
+		base := config.ServiceUnit(resolved.Tree, name)
+		aliases := config.UnitAliases(resolved.Tree, string(deps.Backend))
+		unit, err := resolver.Resolve(context.Background(), deps.Backend, base, aliases)
+		if err != nil {
+			warnings = append(warnings, "service "+name+": "+err.Error()+" (using "+base+")")
+			unit = base
+		}
+		workers = append(workers, buildWorker(name, unit, resolved.Tree, deps, collector))
 	}
 	return workers, warnings
 }
 
-func buildWorker(name string, tree map[string]any, deps Deps, collector *metrics.Collector) *Worker {
-	unit := serviceUnit(tree, name)
+func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) *Worker {
 	manager := deps.Manager
 
 	discoverer := process.NewDiscoverer()
@@ -245,13 +253,4 @@ func isDisabled(body map[string]any) bool {
 	}
 	b, ok := v.(bool)
 	return ok && !b
-}
-
-func serviceUnit(tree map[string]any, fallback string) string {
-	if svc, ok := tree["service"].(map[string]any); ok {
-		if name, _ := svc["name"].(string); name != "" {
-			return name
-		}
-	}
-	return fallback
 }
