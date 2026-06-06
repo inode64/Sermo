@@ -1,7 +1,6 @@
 kind: profile
 name: lvm
 display_name: "LVM"
-description: "LVM"
 service: { name: "lvm", backend: auto }
 variables:
   binary: "/sbin/lvm"

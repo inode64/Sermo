@@ -1,7 +1,5 @@
 kind: profile
 name: rsync
-display_name: "rsync"
-description: "RSync"
 service: { name: "rsync", backend: auto }
 variables:
   binary: "/usr/bin/rsync"

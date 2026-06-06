@@ -1,7 +1,6 @@
 kind: profile
 name: rspamd
 display_name: "Rspamd"
-description: "Rspamd"
 service: { name: "rspamd", backend: auto }
 variables:
   binary: "/usr/bin/rspamd"

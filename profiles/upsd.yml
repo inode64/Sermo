@@ -1,7 +1,6 @@
 kind: profile
 name: upsd
 display_name: "NUT UPS Daemon"
-description: "Upsd"
 service: { name: "upsd", backend: auto }
 variables:
   binary: "/usr/sbin/upsd"

@@ -1,7 +1,6 @@
 kind: profile
 name: ssh
 display_name: "OpenSSH"
-description: "SSH"
 service: { name: "ssh", backend: auto }
 variables:
   binary: "/usr/bin/ssh"

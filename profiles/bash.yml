@@ -1,7 +1,6 @@
 kind: profile
 name: bash
 display_name: "Bash"
-description: "Bash"
 service: { name: "bash", backend: auto }
 variables:
   binary: "/bin/bash"

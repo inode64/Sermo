@@ -1,7 +1,6 @@
 kind: profile
 name: usbhid-ups
 display_name: "USB HID UPS Driver"
-description: "Usbhid-ups"
 service: { name: "usbhid-ups", backend: auto }
 variables:
   binary: "/lib/nut/usbhid-ups"

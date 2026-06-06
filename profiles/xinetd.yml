@@ -1,7 +1,5 @@
 kind: profile
 name: xinetd
-display_name: "xinetd"
-description: "Xinetd"
 service: { name: "xinetd", backend: auto }
 variables:
   binary: "/usr/sbin/xinetd"

@@ -1,7 +1,6 @@
 kind: profile
 name: perl
 display_name: "Perl"
-description: "Perl"
 service: { name: "perl", backend: auto }
 variables:
   binary: "/usr/bin/perl"

@@ -1,7 +1,6 @@
 kind: profile
 name: fcron
 display_name: "Fcron"
-description: "Fcron"
 service: { name: "fcron", backend: auto }
 variables:
   binary: "/usr/libexec/fcron"

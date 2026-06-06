@@ -1,7 +1,6 @@
 kind: profile
 name: redis-server
 display_name: "Redis"
-description: "Redis-server"
 service: { name: "redis-server", backend: auto }
 variables:
   binary: "/usr/sbin/redis-server"

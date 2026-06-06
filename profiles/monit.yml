@@ -1,7 +1,6 @@
 kind: profile
 name: monit
 display_name: "Monit"
-description: "Monit"
 service: { name: "monit", backend: auto }
 variables:
   binary: "/usr/bin/monit"

@@ -1,7 +1,5 @@
 kind: profile
 name: mdadm
-display_name: "mdadm"
-description: "mdadm"
 service: { name: "mdadm", backend: auto }
 variables:
   binary: "/sbin/mdadm"
