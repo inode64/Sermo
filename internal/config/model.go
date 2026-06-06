@@ -58,6 +58,37 @@ func (g Global) RuntimeDir() string {
 	return g.Runtime
 }
 
+// ServiceUnit returns a resolved service's backend unit name (its service.name),
+// falling back to the given name.
+func ServiceUnit(tree map[string]any, fallback string) string {
+	if svc, ok := tree["service"].(map[string]any); ok {
+		if name, _ := svc["name"].(string); name != "" {
+			return name
+		}
+	}
+	return fallback
+}
+
+// UnitAliases returns the per-backend alias candidates of a resolved service
+// (section 11).
+func UnitAliases(tree map[string]any, backend string) []string {
+	aliases, ok := tree["aliases"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	list, ok := aliases[backend].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, e := range list {
+		if s, ok := e.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // Config is the full loaded configuration set.
 type Config struct {
 	Global       Global
