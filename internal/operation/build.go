@@ -50,6 +50,9 @@ func New(c Config) Engine {
 			return st.Status, nil
 		}
 	}
+	if deps.Processes == nil {
+		deps.Processes = c.Discoverer.ObserveState
+	}
 
 	tree := c.Tree
 	killPolicy, _ := process.ParseStopPolicy(tree)

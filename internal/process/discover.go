@@ -88,6 +88,50 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	return result, warnings
 }
 
+// Process states reported by ObserveState (section 12).
+const (
+	StateRunning = "running"
+	StateZombie  = "zombie"
+	StateAbsent  = "absent"
+)
+
+// ObserveState reports the state of processes matching an exe/user selector
+// (section 12), using the exact resolved-exe and real-UID rules of section 21:
+//
+//   - running: at least one live (non-zombie) process matches;
+//   - zombie:  matches exist but all are defunct;
+//   - absent:  no process matches.
+func (d Discoverer) ObserveState(exe, user string) string {
+	reader := d.Reader
+	if reader == nil {
+		reader = OSReader{}
+	}
+	resolve := d.ResolveUser
+	if resolve == nil {
+		resolve = OSUserResolver
+	}
+	sel := Selector{Type: SelectorCommandMatch, Exe: exe, User: user}
+
+	matched, live := false, false
+	for _, id := range snapshotIdentities(reader) {
+		if !d.matches(sel, id, resolve) {
+			continue
+		}
+		matched = true
+		if id.State != "Z" {
+			live = true
+		}
+	}
+	switch {
+	case live:
+		return StateRunning
+	case matched:
+		return StateZombie
+	default:
+		return StateAbsent
+	}
+}
+
 // matches reports whether a process satisfies every declared field of a
 // command_match selector (exe AND user when both are present, section 21).
 func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) bool {

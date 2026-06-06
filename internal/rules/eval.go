@@ -61,8 +61,8 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	if v, ok := node["service"]; ok {
 		return e.evalService(ctx, v)
 	}
-	if _, ok := node["process"]; ok {
-		return false, fmt.Errorf("process condition is not implemented in this slice")
+	if v, ok := node["process"]; ok {
+		return e.evalProcess(v)
 	}
 	if v, ok := node["metric"]; ok {
 		return e.evalMetric(v)
@@ -150,6 +150,24 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 		return false, err
 	}
 	return res.OK, nil
+}
+
+// evalProcess is true when the observed state of processes matching the
+// exe/user selector equals the requested state (default running, section 14).
+// With no process source it is false.
+func (e *Evaluator) evalProcess(v any) (bool, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return false, fmt.Errorf("process condition must be a mapping")
+	}
+	if e.Deps.Processes == nil {
+		return false, nil
+	}
+	want := asString(m["state"])
+	if want == "" {
+		want = "running"
+	}
+	return e.Deps.Processes(asString(m["exe"]), asString(m["user"])) == want, nil
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold

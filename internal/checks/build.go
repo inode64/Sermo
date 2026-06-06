@@ -31,6 +31,9 @@ type Deps struct {
 	Status func(context.Context) (servicemgr.Status, error)
 	// Metrics reads a sampled metric value, for `metric` checks.
 	Metrics MetricReader
+	// Processes reports the observed state (running/zombie/absent) of processes
+	// matching an exe/user selector, for `process` checks.
+	Processes func(exe, user string) string
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -69,7 +72,7 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 		}
 		typ := asString(entry["type"])
 
-		check, warn := buildCheck(typ, b, entry, runner, client, deps.Status, deps.Metrics)
+		check, warn := buildCheck(typ, b, entry, runner, client, deps)
 		if warn != "" {
 			warnings = append(warnings, fmt.Sprintf("check %q: %s", name, warn))
 			continue
@@ -79,7 +82,7 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 	return built, warnings
 }
 
-func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, status func(context.Context) (servicemgr.Status, error), metricReader MetricReader) (Check, string) {
+func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
 	switch typ {
 	case "tcp":
 		port, ok := intField(entry["port"])
@@ -123,10 +126,10 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if expect == "" {
 			return nil, "service check requires expect"
 		}
-		if status == nil {
+		if deps.Status == nil {
 			return nil, "service check needs backend detection, unavailable here"
 		}
-		return serviceCheck{base: b, expect: expect, status: status}, ""
+		return serviceCheck{base: b, expect: expect, status: deps.Status}, ""
 
 	case "file_exists":
 		path := asString(entry["path"])
@@ -155,10 +158,25 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if op == "" {
 			return nil, "metric check requires an op"
 		}
-		if metricReader == nil {
+		if deps.Metrics == nil {
 			return nil, "metric check needs a metric source, unavailable here"
 		}
-		return metricCheck{base: b, scope: scope, metric: name, op: op, value: scalarString(entry["value"]), source: metricReader}, ""
+		return metricCheck{base: b, scope: scope, metric: name, op: op, value: scalarString(entry["value"]), source: deps.Metrics}, ""
+
+	case "process":
+		exe := asString(entry["exe"])
+		user := asString(entry["user"])
+		if exe == "" && user == "" {
+			return nil, "process check requires exe and/or user"
+		}
+		if deps.Processes == nil {
+			return nil, "process check needs process discovery, unavailable here"
+		}
+		expect := asString(entry["state"])
+		if expect == "" {
+			expect = "running"
+		}
+		return processCheck{base: b, exe: exe, user: user, expect: expect, observe: deps.Processes}, ""
 
 	case "":
 		return nil, "missing type"
@@ -184,7 +202,7 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 		service: deps.Service,
 		timeout: durationOr(entry["timeout"], deps.DefaultTimeout),
 	}
-	check, warn := buildCheck(asString(entry["type"]), b, entry, runner, client, deps.Status, deps.Metrics)
+	check, warn := buildCheck(asString(entry["type"]), b, entry, runner, client, deps)
 	if warn != "" {
 		return nil, errors.New(warn)
 	}

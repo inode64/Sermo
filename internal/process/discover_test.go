@@ -156,6 +156,32 @@ func TestDiscoverPidfileDeadPIDWarns(t *testing.T) {
 	}
 }
 
+func TestObserveState(t *testing.T) {
+	d := func(ids map[int]Identity) Discoverer {
+		return Discoverer{Reader: fakeReader{ids: ids}, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
+	}
+
+	running := d(map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"}})
+	if got := running.ObserveState(testExe, "mysql"); got != StateRunning {
+		t.Errorf("ObserveState = %q, want running", got)
+	}
+
+	zombie := d(map[int]Identity{100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "Z"}})
+	if got := zombie.ObserveState(testExe, "mysql"); got != StateZombie {
+		t.Errorf("ObserveState = %q, want zombie", got)
+	}
+
+	absent := d(map[int]Identity{100: {PID: 100, UID: 999, Exe: testExe, ExeOK: true, State: "S"}})
+	if got := absent.ObserveState(testExe, "mysql"); got != StateAbsent {
+		t.Errorf("ObserveState = %q, want absent (wrong user)", got)
+	}
+
+	unresolved := d(map[int]Identity{100: {PID: 100, UID: 110, ExeOK: false, State: "S"}})
+	if got := unresolved.ObserveState(testExe, "mysql"); got != StateAbsent {
+		t.Errorf("ObserveState = %q, want absent (unresolvable exe)", got)
+	}
+}
+
 func TestParseSelectors(t *testing.T) {
 	tree := map[string]any{
 		"processes": map[string]any{
