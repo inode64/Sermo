@@ -59,10 +59,13 @@ what `${var}` resolves to after expansion. Same for `uses` with a profile. See
 
 ## Version templates
 
-A profile whose name contains `%v` is a version template: it materializes into one
-concrete profile per installed version when several can coexist (php-fpm, postgres,
-catalina, beam, db). The `%v` may sit anywhere in the name (`db%vsql` →
-`db4.8sql`). Put `${version}` in the `binary` path; on load Sermo globs that
+A profile whose name contains `%v` (free-form version) or `%n` (plain integer) is
+a version template: it materializes into one concrete profile per installed
+version when several can coexist (php-fpm, postgres, catalina, beam, db, python).
+`%v` pairs with `${version}` and accepts `8.3`/`12.0.2`; `%n` pairs with `${n}`
+and matches only whole integers (`python%n` → `python2`, `python3`, not
+`python3.11`). The placeholder may sit anywhere in the name (`db%vsql` →
+`db4.8sql`). Put the matching `${...}` in the `binary` path; on load Sermo globs that
 path with `${version}` wildcarded, extracts each installed version, and registers
 `name` with `%v`→version and every `${version}` substituted (binary, display_name).
 The template is then dropped and yields nothing when no version is installed. Keep

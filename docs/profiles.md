@@ -117,6 +117,24 @@ for versions. Even so, a placeholder bounded on both sides (e.g.
 `/usr/lib64/php${version}/bin/php-fpm`, via `versions.from`) discovers most
 precisely.
 
+### Integer placeholder (%n)
+
+`%v`/`${version}` accepts a free-form version (`8.3`, `12.0.2`). When the value is
+a plain integer, use `%n`/`${n}` instead: it matches only whole numbers, so it
+rejects siblings like `python3.11`. Otherwise it works exactly like `%v`.
+
+```yaml
+kind: profile
+name: python%n
+display_name: "Python ${n}"
+service: { name: python${n} }
+variables:
+  binary: "/usr/bin/python${n}"
+```
+
+`/usr/bin/python*` then materializes `python2` and `python3`, but not
+`python3.11` or `python-config`.
+
 A template may `uses` a base profile to inherit its checks, processes and rules,
 overriding only the version-specific binary. The packaged `php-fpm-%v` builds on
 `php-fpm`:

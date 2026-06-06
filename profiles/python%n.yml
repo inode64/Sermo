@@ -1,10 +1,9 @@
 kind: profile
-name: python3
-display_name: "Python 3"
-description: "Python 3"
-service: { name: "python3", backend: auto }
+name: python%n
+display_name: "Python ${n}"
+service: { name: "python${n}", backend: auto }
 variables:
-  binary: "/usr/bin/python3"
+  binary: "/usr/bin/python${n}"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
