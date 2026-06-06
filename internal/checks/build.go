@@ -34,6 +34,8 @@ type Deps struct {
 	// Processes reports the observed state (running/zombie/absent) of processes
 	// matching an exe/user selector, for `process` checks.
 	Processes func(exe, user string) string
+	// DiskUsage reports filesystem usage for `disk` checks. Nil uses statfs.
+	DiskUsage DiskUsageFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -184,6 +186,17 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			expect = "running"
 		}
 		return processCheck{base: b, exe: exe, user: user, expect: expect, observe: deps.Processes}, ""
+
+	case "disk":
+		path := asString(entry["path"])
+		if path == "" {
+			return nil, "disk check requires a path"
+		}
+		preds, err := parseDiskPreds(entry)
+		if err != nil {
+			return nil, "disk check: " + err.Error()
+		}
+		return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage}, ""
 
 	case "":
 		return nil, "missing type"
