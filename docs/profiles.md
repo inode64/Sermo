@@ -116,6 +116,18 @@ service's display name is (the profile's, unless the service overrides it). An
 explicit `variables.name` or `variables.display_name` takes precedence over the
 built-in.
 
+`${arch}` is a third built-in: the machine architecture in `uname -m` form
+(`x86_64`, `aarch64`, ...). Use it to locate an arch-specific binary or library:
+
+```yaml
+variables:
+  binary: "/usr/bin/qemu-system-${arch}"   # → /usr/bin/qemu-system-x86_64
+```
+
+`${arch}` is substituted everywhere on load (including inside variable values and
+version-template discovery paths), so it works in `binary`, library paths, and
+`versions.from` alike.
+
 ## Versioned profiles
 
 Some applications ship one binary per version and several can be installed at

@@ -2,7 +2,7 @@ kind: profile
 name: qemu
 display_name: "QEMU"
 variables:
-  binary: "/usr/bin/qemu-system-x86_64"
+  binary: "/usr/bin/qemu-system-${arch}"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
