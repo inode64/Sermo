@@ -1,5 +1,6 @@
 kind: profile
 name: irqbalance
+display_name: "irqbalance"
 description: "Irqbalance"
 service: { name: "irqbalance", backend: auto }
 variables:

@@ -1,5 +1,6 @@
 kind: profile
 name: mailhog-bin
+display_name: "MailHog"
 description: "Mailhog"
 service: { name: "mailhog-bin", backend: auto }
 variables:

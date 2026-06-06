@@ -1,5 +1,6 @@
 kind: profile
 name: memcached
+display_name: "Memcached"
 description: "Memcached"
 service: { name: "memcached", backend: auto }
 variables:

@@ -1,5 +1,6 @@
 kind: profile
 name: lvmetad
+display_name: "LVM Metadata Daemon"
 description: "Lvmetad"
 service: { name: "lvmetad", backend: auto }
 variables:

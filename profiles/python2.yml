@@ -1,5 +1,6 @@
 kind: profile
 name: python2
+display_name: "Python 2"
 description: "Python 2"
 service: { name: "python2", backend: auto }
 variables:

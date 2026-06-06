@@ -1,5 +1,6 @@
 kind: profile
 name: dovecot
+display_name: "Dovecot"
 description: "Dovecot IMAP/POP3"
 service: { name: "dovecot", backend: auto }
 variables:

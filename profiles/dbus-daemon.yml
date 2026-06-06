@@ -1,5 +1,6 @@
 kind: profile
 name: dbus-daemon
+display_name: "D-Bus"
 description: "DBus Daemon"
 service: { name: "dbus-daemon", backend: auto }
 variables:

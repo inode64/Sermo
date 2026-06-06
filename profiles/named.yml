@@ -1,5 +1,6 @@
 kind: profile
 name: named
+display_name: "BIND (named)"
 description: "Named"
 service: { name: "named", backend: auto }
 variables:

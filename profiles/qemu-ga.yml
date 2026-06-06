@@ -1,5 +1,6 @@
 kind: profile
 name: qemu-ga
+display_name: "QEMU Guest Agent"
 description: "Qemu-ga"
 service: { name: "qemu-ga", backend: auto }
 variables:

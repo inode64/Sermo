@@ -1,5 +1,6 @@
 kind: profile
 name: smbd
+display_name: "Samba SMB"
 description: "Servidor de ficheros Windows - SMB"
 service: { name: "smbd", backend: auto }
 variables:

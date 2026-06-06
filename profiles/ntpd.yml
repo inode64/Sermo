@@ -1,5 +1,6 @@
 kind: profile
 name: ntpd
+display_name: "NTP Daemon"
 description: "Network Time Protocol Daemon"
 service: { name: "ntpd", backend: auto }
 variables:

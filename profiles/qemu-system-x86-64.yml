@@ -1,5 +1,6 @@
 kind: profile
 name: qemu-system-x86-64
+display_name: "QEMU"
 description: "QEMU"
 service: { name: "qemu-system-x86-64", backend: auto }
 variables:

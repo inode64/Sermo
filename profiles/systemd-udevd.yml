@@ -1,5 +1,6 @@
 kind: profile
 name: systemd-udevd
+display_name: "systemd-udevd"
 description: "Systemd-udevd"
 service: { name: "systemd-udevd", backend: auto }
 variables:

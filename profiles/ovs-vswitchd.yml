@@ -1,5 +1,6 @@
 kind: profile
 name: ovs-vswitchd
+display_name: "Open vSwitch"
 description: "OpenVsiwtch Server"
 service: { name: "ovs-vswitchd", backend: auto }
 variables:

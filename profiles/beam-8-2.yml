@@ -1,5 +1,6 @@
 kind: profile
 name: beam-8-2
+display_name: "Erlang BEAM 8.2"
 description: "Beam"
 service: { name: "beam", backend: auto }
 variables:

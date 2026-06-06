@@ -1,5 +1,6 @@
 kind: profile
 name: certbot
+display_name: "Certbot"
 description: "Generador de certificados"
 service: { name: "certbot", backend: auto }
 variables:

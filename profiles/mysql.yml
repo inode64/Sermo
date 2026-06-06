@@ -1,5 +1,6 @@
 kind: profile
 name: mysql
+display_name: "MySQL"
 type: database
 
 service:

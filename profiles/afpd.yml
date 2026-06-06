@@ -1,5 +1,6 @@
 kind: profile
 name: afpd
+display_name: "Netatalk AFP Daemon"
 description: "Afpd"
 service: { name: "afpd", backend: auto }
 variables:

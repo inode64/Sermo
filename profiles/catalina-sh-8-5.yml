@@ -1,5 +1,6 @@
 kind: profile
 name: catalina-sh-8-5
+display_name: "Apache Tomcat 8.5"
 description: "Tomcat 8.5"
 service: { name: "catalina-sh", backend: auto }
 variables:

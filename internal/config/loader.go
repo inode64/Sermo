@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/goccy/go-yaml"
 )
@@ -144,6 +145,16 @@ func (c *Config) add(doc *Document) {
 		c.ServiceNames = append(c.ServiceNames, doc.Name)
 	}
 	c.docs = append(c.docs, doc)
+}
+
+// DisplayName returns the human-friendly `display_name` from a document body
+// (e.g. "MariaDB"), falling back to fallback — typically the document's own
+// `name` — when the field is absent or blank.
+func DisplayName(body map[string]any, fallback string) string {
+	if s, ok := body["display_name"].(string); ok && strings.TrimSpace(s) != "" {
+		return s
+	}
+	return fallback
 }
 
 func stringList(v any) []string {

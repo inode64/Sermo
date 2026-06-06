@@ -1,5 +1,6 @@
 kind: profile
 name: php-fpm-7-3
+display_name: "PHP-FPM 7.3"
 description: "PHP 7.3"
 service: { name: "php-fpm", backend: auto }
 variables:

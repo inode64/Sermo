@@ -23,7 +23,7 @@ func (a App) runProfile(opts options) int {
 
 	switch opts.args[0] {
 	case "list":
-		a.printNames(opts, sortedUnique(cfg.Profiles), "profiles")
+		a.printNamed(opts, sortedUnique(cfg.Profiles), cfg.Profiles, "profiles")
 		return exitSuccess
 	case "show":
 		if len(opts.args) < 2 {
@@ -57,7 +57,7 @@ func (a App) runService(opts options) int {
 
 	switch opts.args[0] {
 	case "list":
-		a.printNames(opts, sortedUnique(cfg.Services), "services")
+		a.printNamed(opts, sortedUnique(cfg.Services), cfg.Services, "services")
 		return exitSuccess
 	case "show":
 		if len(opts.args) < 2 {
@@ -202,9 +202,20 @@ func (a App) renderTree(opts options, r config.Resolved) int {
 	return exitSuccess
 }
 
-func (a App) printNames(opts options, names []string, kind string) {
+// printNamed lists documents alongside their display_name. In text mode it
+// prints "name<TAB>Display Name" (omitting the suffix when the display name is
+// just the id); in JSON it emits objects with name and display_name.
+func (a App) printNamed(opts options, names []string, docs map[string]*config.Document, kind string) {
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{kind: names})
+		out := make([]map[string]string, 0, len(names))
+		for _, n := range names {
+			display := n
+			if doc, ok := docs[n]; ok {
+				display = config.DisplayName(doc.Body, n)
+			}
+			out = append(out, map[string]string{"name": n, "display_name": display})
+		}
+		writeJSON(a.Stdout, map[string]any{kind: out})
 		return
 	}
 	if len(names) == 0 {
@@ -212,7 +223,15 @@ func (a App) printNames(opts options, names []string, kind string) {
 		return
 	}
 	for _, n := range names {
-		fmt.Fprintln(a.Stdout, n)
+		display := n
+		if doc, ok := docs[n]; ok {
+			display = config.DisplayName(doc.Body, n)
+		}
+		if display == n {
+			fmt.Fprintln(a.Stdout, n)
+		} else {
+			fmt.Fprintf(a.Stdout, "%s\t%s\n", n, display)
+		}
 	}
 }
 

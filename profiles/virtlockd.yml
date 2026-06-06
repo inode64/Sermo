@@ -1,5 +1,6 @@
 kind: profile
 name: virtlockd
+display_name: "libvirt Lock Daemon"
 description: "Virtlockd"
 service: { name: "virtlockd", backend: auto }
 variables:

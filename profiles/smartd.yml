@@ -1,5 +1,6 @@
 kind: profile
 name: smartd
+display_name: "S.M.A.R.T. Daemon"
 description: "Estado de los discos SMART"
 service: { name: "smartd", backend: auto }
 variables:

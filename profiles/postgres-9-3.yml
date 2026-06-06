@@ -1,5 +1,6 @@
 kind: profile
 name: postgres-9-3
+display_name: "PostgreSQL 9.3"
 description: "PostgreSQL 9.3"
 service: { name: "postgres", backend: auto }
 variables:

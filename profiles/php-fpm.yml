@@ -1,5 +1,6 @@
 kind: profile
 name: php-fpm
+display_name: "PHP-FPM"
 type: appserver
 
 service:

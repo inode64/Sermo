@@ -1,5 +1,6 @@
 kind: profile
 name: rpc-mountd
+display_name: "NFS Mount Daemon"
 description: "RPC.mountd"
 service: { name: "rpc-mountd", backend: auto }
 variables:

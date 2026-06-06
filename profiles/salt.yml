@@ -1,5 +1,6 @@
 kind: profile
 name: salt
+display_name: "Salt"
 description: "Salt"
 service: { name: "salt", backend: auto }
 variables:

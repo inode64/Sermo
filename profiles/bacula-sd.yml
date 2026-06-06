@@ -1,5 +1,6 @@
 kind: profile
 name: bacula-sd
+display_name: "Bacula Storage Daemon"
 description: "Backup storage Server"
 service: { name: "bacula-sd", backend: auto }
 variables:

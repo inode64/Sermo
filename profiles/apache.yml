@@ -1,5 +1,6 @@
 kind: profile
 name: apache
+display_name: "Apache HTTP Server"
 type: webserver
 
 service:
