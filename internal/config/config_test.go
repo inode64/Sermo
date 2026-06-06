@@ -506,6 +506,96 @@ func hasIssue(issues []Issue, substr string) bool {
 	return false
 }
 
+func TestOSSelectorCollapses(t *testing.T) {
+	old := detectedOS
+	detectedOS = "gentoo"
+	defer func() { detectedOS = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/apache.yml": `
+kind: profile
+name: apache
+service: { name: apache }
+aliases:
+  os:
+    gentoo:
+      systemd: [apache.service]
+      openrc: [apache]
+    debian:
+      systemd: [apache2.service]
+      openrc: [apache2]
+checks:
+  http:
+    type: http
+    timeout: 5s
+    os:
+      gentoo: { url: "http://localhost/gentoo" }
+      debian: { url: "http://localhost/debian" }
+policy:
+  os:
+    debian: { cooldown: 1m }
+    default: { cooldown: 9m }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	body := cfg.Profiles["apache"].Body
+
+	// aliases: the os: block is replaced by the gentoo branch.
+	aliases := body["aliases"].(map[string]any)
+	if _, present := aliases["os"]; present {
+		t.Errorf("os selector not collapsed: %v", aliases)
+	}
+	if sysd, _ := aliases["systemd"].([]any); len(sysd) != 1 || sysd[0] != "apache.service" {
+		t.Errorf("aliases.systemd = %v, want [apache.service]", aliases["systemd"])
+	}
+
+	// checks.http: branch merged with its siblings (timeout kept, url added).
+	http := nested(t, body, "checks", "http")
+	if scalarString(http["timeout"]) != "5s" || scalarString(http["url"]) != "http://localhost/gentoo" {
+		t.Errorf("checks.http = %v, want timeout 5s + gentoo url", http)
+	}
+
+	// policy: gentoo absent → the default branch applies.
+	policy := body["policy"].(map[string]any)
+	if scalarString(policy["cooldown"]) != "9m" {
+		t.Errorf("policy.cooldown = %v, want default 9m", policy["cooldown"])
+	}
+}
+
+func TestOSVariableBaked(t *testing.T) {
+	old := detectedOS
+	detectedOS = "debian"
+	defer func() { detectedOS = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/app.yml": `
+kind: profile
+name: app
+variables:
+  binary: "/opt/${os}/bin/app"
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := profileBinary(cfg.Profiles["app"].Body); got != "/opt/debian/bin/app" {
+		t.Errorf("baked binary = %q, want /opt/debian/bin/app", got)
+	}
+}
+
+func TestDetectOSFromEnv(t *testing.T) {
+	t.Setenv("SERMO_OS", "Gentoo")
+	if got := detectOS(); got != "gentoo" {
+		t.Errorf("detectOS() = %q, want gentoo", got)
+	}
+}
+
 func TestArchVariableBaked(t *testing.T) {
 	old := detectedArch
 	detectedArch = "aarch64"

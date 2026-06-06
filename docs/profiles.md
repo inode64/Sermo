@@ -128,6 +128,42 @@ variables:
 version-template discovery paths), so it works in `binary`, library paths, and
 `versions.from` alike.
 
+`${os}` is the OS id from `/etc/os-release` (`gentoo`, `debian`, `ubuntu`, ...),
+substituted the same way — e.g. `confdir: "/etc/${os}-apache"`.
+
+`${arch}` and `${os}` can be overridden with the `SERMO_ARCH` / `SERMO_OS`
+environment variables (useful for testing or building config off-host).
+
+### OS-specific blocks (os:)
+
+Beyond the `${os}` string, an `os:` key anywhere in a document selects a whole
+sub-block by OS. The block for the detected OS (or a `default` block) is merged
+into its parent and the rest discarded — at load, before resolution. It is not
+limited to init/aliases; use it in checks, processes, policy, variables, anywhere:
+
+```yaml
+aliases:
+  os:
+    gentoo: { systemd: [apache.service],  openrc: [apache]  }
+    debian: { systemd: [apache2.service], openrc: [apache2] }
+
+checks:
+  http:
+    type: http
+    timeout: 5s          # kept for every OS
+    os:
+      gentoo: { url: "http://localhost/gentoo-health" }
+      debian: { url: "http://localhost/debian-health" }
+
+policy:
+  os:
+    debian:  { cooldown: 1m }
+    default: { cooldown: 9m }   # used when the OS has no branch
+```
+
+Siblings of `os:` are preserved and the selected branch merges over them. `os` is
+reserved as a selector key wherever its value is a map.
+
 ## Versioned profiles
 
 Some applications ship one binary per version and several can be installed at

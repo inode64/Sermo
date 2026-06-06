@@ -175,7 +175,14 @@ running"`. An explicit `variables` entry of the same name overrides the built-in
 `${arch}` is the machine architecture (uname -m: `x86_64`, `aarch64`, ...),
 substituted everywhere on load — including inside variable values and
 version-discovery paths — so it works in `binary`, library paths and
-`versions.from`, e.g. `binary: /usr/bin/qemu-system-${arch}`.
+`versions.from`, e.g. `binary: /usr/bin/qemu-system-${arch}`. `${os}` is the
+os-release ID (`gentoo`, `debian`, ...), substituted the same way. Both honor
+`SERMO_ARCH` / `SERMO_OS` env overrides.
+
+An `os:` key anywhere (value = map of os-id -> block) is an OS SELECTOR: at load,
+the branch for the detected OS (or a `default` branch) is merged into the parent
+and the rest discarded. It works at any depth — aliases, checks, processes,
+policy, variables — and is the structural counterpart to the `${os}` string.
 
 Validation must fail on unresolved variables.
 
