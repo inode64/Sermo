@@ -11,6 +11,7 @@ import (
 type CheckSnapshot struct {
 	OK       bool
 	Optional bool
+	Skipped  bool
 	Message  string
 	At       time.Time
 }
@@ -41,7 +42,7 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result) {
 	at := now()
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
-		m[name] = CheckSnapshot{OK: r.OK, Optional: r.Optional, Message: r.Message, At: at}
+		m[name] = CheckSnapshot{OK: r.OK, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message, At: at}
 	}
 	s.mu.Lock()
 	s.byService[service] = m

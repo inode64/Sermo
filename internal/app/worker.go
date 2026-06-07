@@ -27,6 +27,10 @@ type Worker struct {
 	// lets cheap checks run often and expensive ones run rarely (section 24).
 	Interval time.Duration
 
+	// Gates holds per-check interdependencies (by check name): a check is skipped
+	// this cycle when a required check is failing or a watched file has changed.
+	Gates map[string]CheckGate
+
 	// Checks produces this cycle's named-check cache (section 14).
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// Sample produces this cycle's metric reader (section 12). Nil when the
@@ -74,6 +78,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		deps.Metrics = w.Sample(ctx)
 	}
 	cache := w.Checks(ctx, deps)
+	w.applyGates(cache)
 	if w.RecordHealth != nil {
 		w.RecordHealth(requiredChecksOK(cache))
 	}
@@ -84,6 +89,56 @@ func (w *Worker) RunCycle(ctx context.Context) {
 
 	w.runRemediation(ctx, ev, now)
 	w.runAlerts(ctx, ev)
+}
+
+// CheckGate is one check's interdependencies: it is skipped this cycle when any
+// Requires check is missing/failing, or any SkipWhenChanged path has changed since
+// its acknowledged baseline (e.g. a config file or library was updated).
+type CheckGate struct {
+	Requires        []string
+	SkipWhenChanged []string
+}
+
+// applyGates rewrites a gated-off check's result to a Skipped result so it does
+// not alert, fail the service or count toward SLA. Gates are evaluated after the
+// cycle's checks ran, so Requires sees this cycle's results; SkipWhenChanged uses
+// the shared change baseline (acknowledged on a successful (re)start). A skipped
+// check keeps its optional flag and is marked Skipped/OK.
+func (w *Worker) applyGates(cache map[string]checks.Result) {
+	for name, gate := range w.Gates {
+		r, ok := cache[name]
+		if !ok || r.Skipped {
+			continue
+		}
+		if reason := w.gateReason(gate, cache); reason != "" {
+			cache[name] = checks.Result{
+				Check:    name,
+				OK:       true,
+				Skipped:  true,
+				Optional: r.Optional,
+				Message:  "skipped: " + reason,
+			}
+		}
+	}
+}
+
+// gateReason returns why a check is skipped this cycle, or "" to run it.
+func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) string {
+	for _, path := range gate.SkipWhenChanged {
+		if changed, _ := w.changed(path); changed {
+			return "file changed: " + path
+		}
+	}
+	for _, dep := range gate.Requires {
+		d, ok := cache[dep]
+		if !ok {
+			continue // dependency not run yet (e.g. its own interval) — do not skip
+		}
+		if !d.OK {
+			return "requires check " + dep
+		}
+	}
+	return ""
 }
 
 // requiredChecksOK reports the service's availability this cycle: true unless a

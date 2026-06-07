@@ -554,6 +554,36 @@ checks:
 	mustHave(t, bad, "checks.bad-match.match must be all, any or none")
 }
 
+func TestValidateCheckGate(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  tcp:   { type: tcp, host: 127.0.0.1, port: 3306 }
+  query: { type: command, command: ["/bin/true"], requires: [tcp], skip_when_changed: ["/etc/my.cnf"] }
+`)
+	if hasIssue(good, "checks.query") {
+		t.Fatalf("a valid gated check was flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  tcp:   { type: tcp, host: 127.0.0.1, port: 3306 }
+  self:  { type: tcp, host: 127.0.0.1, port: 80, requires: [self] }
+  ghost: { type: tcp, host: 127.0.0.1, port: 80, requires: [missing] }
+  badsk: { type: tcp, host: 127.0.0.1, port: 80, skip_when_changed: 5 }
+`)
+	mustHave(t, bad, "checks.self.requires cannot reference itself")
+	mustHave(t, bad, `checks.ghost.requires references unknown check "missing"`)
+	mustHave(t, bad, "checks.badsk.skip_when_changed must be a file path or a list")
+}
+
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service

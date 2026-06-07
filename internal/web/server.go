@@ -45,6 +45,7 @@ type Check struct {
 	Type     string `json:"type"`
 	OK       bool   `json:"ok"`
 	Optional bool   `json:"optional"`
+	Skipped  bool   `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
 	Message  string `json:"message,omitempty"`
 	Ran      bool   `json:"ran"` // false if not observed yet
 }

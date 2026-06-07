@@ -169,6 +169,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		State:     &rules.RemediationState{},
 		CheckDeps: checkDeps,
 		Interval:  durationField(tree["interval"]),
+		Gates:     parseCheckGates(tree),
 		Sample:    sampleMetrics,
 		Checks: func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 			cycle++
@@ -297,6 +298,49 @@ func measurementRecorder(deps Deps, name string, tree map[string]any) func(check
 			deps.Emit(Event{Service: name, Kind: "error", Message: "record measurement: " + err.Error()})
 		}
 	}
+}
+
+// parseCheckGates reads each check's `requires` and `skip_when_changed` fields
+// into the worker's interdependency map. Returns nil when no check is gated.
+func parseCheckGates(tree map[string]any) map[string]CheckGate {
+	section, _ := tree["checks"].(map[string]any)
+	gates := map[string]CheckGate{}
+	for name, raw := range section {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		gate := CheckGate{
+			Requires:        stringSlice(m["requires"]),
+			SkipWhenChanged: stringSlice(m["skip_when_changed"]),
+		}
+		if len(gate.Requires) > 0 || len(gate.SkipWhenChanged) > 0 {
+			gates[name] = gate
+		}
+	}
+	if len(gates) == 0 {
+		return nil
+	}
+	return gates
+}
+
+// stringSlice converts a YAML list (or single scalar) to a []string.
+func stringSlice(v any) []string {
+	switch t := v.(type) {
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		if t != "" {
+			return []string{t}
+		}
+	}
+	return nil
 }
 
 // measuredCheckNames returns the names of a service's checks whose type is graphed
