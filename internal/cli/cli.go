@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/app"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
@@ -379,16 +380,23 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 
-	switch action {
-	case "start":
-		return engine.Start(ctx), nil
-	case "stop":
-		return engine.Stop(ctx), nil
-	case "restart":
-		return engine.Restart(ctx), nil
-	default:
+	gate := app.NewOpGate(app.OpSlotsFromConfig(cfg), cfg.Global.RuntimeDir())
+	result := gate.Run(ctx, service, action, func(ctx context.Context) operation.Result {
+		switch action {
+		case "start":
+			return engine.Start(ctx)
+		case "stop":
+			return engine.Stop(ctx)
+		case "restart":
+			return engine.Restart(ctx)
+		default:
+			return operation.Result{Service: service, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
+		}
+	})
+	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
 		return operation.Result{}, fmt.Errorf("unknown action %q", action)
 	}
+	return result, nil
 }
 
 func (a App) printOperation(r operation.Result) {
