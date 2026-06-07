@@ -34,10 +34,11 @@ type SLARecorder interface {
 	RecordSLA(service string, up bool, at time.Time) error
 }
 
-// SLAReader reports a service's availability over the rolling windows, for the web
-// detail view. Implemented by internal/state.Store.
+// SLAReader reports a service's availability for the web detail view: the rolling
+// windows and the per-minute history series. Implemented by internal/state.Store.
 type SLAReader interface {
 	SLAReport(service string, now time.Time) ([]state.SLAValue, error)
+	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
 }
 
 // Deps are the host capabilities the daemon wires into each worker.

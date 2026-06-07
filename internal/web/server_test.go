@@ -7,13 +7,15 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeBackend struct {
-	services  []Service
-	operated  []string // "name/action"
-	monitored map[string]bool
-	failOp    bool
+	services    []Service
+	operated    []string // "name/action"
+	monitored   map[string]bool
+	failOp      bool
+	seriesSince time.Duration
 }
 
 func (f *fakeBackend) Services(context.Context) []Service { return f.services }
@@ -29,6 +31,16 @@ func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 		}
 	}
 	return Detail{}, false
+}
+func (f *fakeBackend) Series(_ context.Context, name string, since time.Duration) ([]SeriesPoint, bool) {
+	for _, s := range f.services {
+		if s.Name == name {
+			f.seriesSince = since
+			r := 1.0
+			return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: 2}}, true
+		}
+	}
+	return nil, false
 }
 func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
 	f.operated = append(f.operated, name+"/"+action)
@@ -98,6 +110,51 @@ func TestServiceDetailUnknown(t *testing.T) {
 	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown detail = %d, want 404", rec.Code)
+	}
+}
+
+func TestSLASeries(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/sla?since=168h", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("series status %d", rec.Code)
+	}
+	if b.seriesSince != 168*time.Hour {
+		t.Fatalf("since not parsed: %v", b.seriesSince)
+	}
+	var body struct {
+		Since  string        `json:"since"`
+		Points []SeriesPoint `json:"points"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Points) != 1 || body.Points[0].Total != 2 {
+		t.Fatalf("unexpected points: %+v", body.Points)
+	}
+}
+
+func TestSLASeriesDefaultsAndCaps(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	h := newServer(b)
+	// no since -> default 24h
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/services/web/sla", nil))
+	if b.seriesSince != 24*time.Hour {
+		t.Fatalf("default since = %v, want 24h", b.seriesSince)
+	}
+	// absurd since -> capped at the retention window
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/services/web/sla?since=99999h", nil))
+	if b.seriesSince != maxSeriesWindow {
+		t.Fatalf("since not capped: %v", b.seriesSince)
+	}
+}
+
+func TestSLASeriesUnknown(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/sla", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown series = %d, want 404", rec.Code)
 	}
 }
 

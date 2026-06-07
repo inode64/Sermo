@@ -204,6 +204,31 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	return d, true
 }
 
+func (b *WebBackend) Series(_ context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
+	e := b.entries[name]
+	if e == nil {
+		return nil, false
+	}
+	if b.sla == nil {
+		return []web.SeriesPoint{}, true
+	}
+	now := time.Now()
+	pts, err := b.sla.SLASeries(name, now.Add(-since), now)
+	if err != nil {
+		return []web.SeriesPoint{}, true
+	}
+	out := make([]web.SeriesPoint, 0, len(pts))
+	for _, p := range pts {
+		sp := web.SeriesPoint{Start: p.Start.Format(time.RFC3339), Up: p.Up, Total: p.Total}
+		if p.Total > 0 {
+			ratio := float64(p.Up) / float64(p.Total)
+			sp.Ratio = &ratio
+		}
+		out = append(out, sp)
+	}
+	return out, true
+}
+
 func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {

@@ -129,6 +129,10 @@ function renderDetail(d) {
     return `<div><div class="v">${v}</div><div class="muted">${esc(w.window)}</div></div>`;
   }).join("") || '<span class="muted">No SLA data.</span>';
 
+  const wins = [["24h", "24h"], ["7d", "168h"], ["30d", "720h"]]
+    .map(([label, val]) => `<button onclick="setWin('${val}')"${val === seriesWindow ? ' style="background:#8883"' : ''}>${label}</button>`)
+    .join(" ");
+
   $("#detail").style.display = "block";
   $("#detail").innerHTML = `
     <button class="close" onclick="closeDetail()">close</button>
@@ -136,7 +140,59 @@ function renderDetail(d) {
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Availability</h2>
-    <div class="sla">${sla}</div>`;
+    <div class="sla">${sla}</div>
+    <h2>History <span class="muted">${wins}</span></h2>
+    <div id="chart" class="muted">loading…</div>`;
+  loadSeries(d.name);
+}
+
+let seriesWindow = "24h";
+const windowMs = { "24h": 864e5, "168h": 6048e5, "720h": 2592e6 };
+
+function setWin(win) { seriesWindow = win; if (current) detail(current); }
+
+async function loadSeries(name) {
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${seriesWindow}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    $("#chart").innerHTML = drawChart(body.points || []);
+    $("#chart").classList.remove("muted");
+  } catch (e) {
+    $("#chart").textContent = "Failed to load history: " + e.message;
+  }
+}
+
+function drawChart(points) {
+  const W = 640, H = 140, pad = 26, cols = 120;
+  const span = windowMs[seriesWindow] || 864e5;
+  const startMs = Date.now() - span;
+  const buckets = Array.from({ length: cols }, () => ({ up: 0, total: 0 }));
+  for (const p of points) {
+    const t = Date.parse(p.start);
+    if (isNaN(t)) continue;
+    const i = Math.floor((t - startMs) / (span / cols));
+    if (i >= 0 && i < cols) { buckets[i].up += p.up; buckets[i].total += p.total; }
+  }
+  const bw = (W - 2 * pad) / cols;
+  let bars = "", any = false;
+  buckets.forEach((b, i) => {
+    if (b.total === 0) return;
+    any = true;
+    const ratio = b.up / b.total;
+    const h = ratio * (H - 2 * pad);
+    const x = pad + i * bw, y = H - pad - h;
+    const color = ratio >= 0.99 ? "#1a7f37" : ratio >= 0.95 ? "#9a6700" : "#cf222e";
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw - 0.4, 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"></rect>`;
+  });
+  if (!any) return '<span class="muted">No availability data yet for this window.</span>';
+  const axis = `
+    <line x1="${pad}" y1="${pad}" x2="${W - pad}" y2="${pad}" stroke="#8884"></line>
+    <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#8886"></line>
+    <text x="2" y="${pad + 4}" font-size="10" fill="#888">100%</text>
+    <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${new Date(startMs).toLocaleString()}</text>
+    <text x="${W - pad}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${bars}</svg>`;
 }
 
 function closeDetail() { current = null; $("#detail").style.display = "none"; }
