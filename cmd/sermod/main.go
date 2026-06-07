@@ -101,6 +101,7 @@ func run(args []string) int {
 		Monitor:         store,
 		SLA:             store,
 		Notifiers:       notifiers,
+		Snapshots:       app.NewSnapshots(),
 		SystemFreshness: interval / 2,
 	}
 

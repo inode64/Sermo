@@ -36,10 +36,38 @@ type ActionResult struct {
 	Message string `json:"message,omitempty"`
 }
 
+// Check is one check's latest observed result in a service detail.
+type Check struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	OK       bool   `json:"ok"`
+	Optional bool   `json:"optional"`
+	Message  string `json:"message,omitempty"`
+	Ran      bool   `json:"ran"` // false if not observed yet
+}
+
+// SLAWindow is a service's availability over one rolling window. Ratio is nil
+// when the window has no data.
+type SLAWindow struct {
+	Window string   `json:"window"`
+	Ratio  *float64 `json:"ratio"`
+	Up     int64    `json:"up"`
+	Total  int64    `json:"total"`
+}
+
+// Detail is a single service's view: its summary plus its checks and SLA.
+type Detail struct {
+	Service
+	Checks []Check     `json:"checks"`
+	SLA    []SLAWindow `json:"sla"`
+}
+
 // Backend is what the web server needs from the daemon.
 type Backend interface {
 	// Services returns the current view of every monitored service.
 	Services(ctx context.Context) []Service
+	// Detail returns one service's checks and SLA; ok is false for unknown names.
+	Detail(ctx context.Context, name string) (Detail, bool)
 	// Operate runs start|stop|restart on a service through the safe engine.
 	Operate(ctx context.Context, name, action string) ActionResult
 	// SetMonitored pauses (false) or resumes (true) monitoring of a service.
@@ -63,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("GET /api/services", s.handleServices)
+	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	return mux
 }
@@ -98,6 +127,15 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Services(r.Context()))
+}
+
+func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
+	detail, ok := s.Backend.Detail(r.Context(), r.PathValue("name"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	writeJSON(w, http.StatusOK, detail)
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
