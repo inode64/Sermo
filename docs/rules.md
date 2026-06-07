@@ -47,16 +47,19 @@ checks:
     expect_status: 200                 # code, class (2xx) or list (default 200)
     expect_body: "ready"               # optional: response must contain this substring
     expect_json:                       # optional: response JSON must match (dotted paths)
-      status: ok
-      data.replicas: 3                 # numbers/booleans are compared as strings
+      status: ok                       # equality (scalar)
+      data.replicas: { op: ">=", value: 2 }   # operator: >, >=, <, <=, ==, !=, contains
+      data.message: { op: contains, value: "healthy" }
 ```
 
 It passes (health-style, `OK == true`) when the status matches **and** every
 assertion holds. `json:` marshals the value and sets `Content-Type:
 application/json` (override it via `headers`); `body:` sends a raw string. The
 response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
-`expect_json` looks up **dotted paths** into nested objects, comparing the value
-as a string — handy for asserting a JSON health endpoint's fields without parsing.
+`expect_json` looks up **dotted paths** into nested objects. A scalar value is an
+equality check (compared as a string); a `{op, value}` mapping uses an operator —
+`>`, `>=`, `<`, `<=` (numeric), `==`, `!=` or `contains` (string) — handy for
+asserting a JSON health endpoint's fields without parsing.
 
 ### Cert
 

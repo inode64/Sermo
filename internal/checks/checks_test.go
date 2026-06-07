@@ -130,6 +130,33 @@ func TestHTTPCheckExpectJSONMismatch(t *testing.T) {
 	}
 }
 
+func TestHTTPCheckExpectJSONOperators(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"replicas":3,"state":"healthy","errors":0}`))
+	}))
+	defer srv.Close()
+
+	pass, _ := buildHTTP(t, srv, map[string]any{
+		"type": "http", "url": srv.URL,
+		"expect_json": map[string]any{
+			"replicas": map[string]any{"op": ">=", "value": 2},
+			"errors":   map[string]any{"op": "<", "value": 1},
+			"state":    map[string]any{"op": "contains", "value": "health"},
+		},
+	})
+	if res := pass.Run(context.Background()); !res.OK {
+		t.Fatalf("operator assertions should pass: %s", res.Message)
+	}
+
+	fail, _ := buildHTTP(t, srv, map[string]any{
+		"type": "http", "url": srv.URL,
+		"expect_json": map[string]any{"replicas": map[string]any{"op": ">", "value": 5}},
+	})
+	if res := fail.Run(context.Background()); res.OK {
+		t.Fatal("replicas 3 > 5 must fail")
+	}
+}
+
 func TestHTTPCheckNonJSONResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("not json"))

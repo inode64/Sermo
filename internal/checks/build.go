@@ -159,7 +159,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			contentType: contentType,
 			expect:      expect,
 			expectBody:  asString(entry["expect_body"]),
-			expectJSON:  stringMap(entry["expect_json"]),
+			expectJSON:  parseJSONAssertions(entry["expect_json"]),
 		}, ""
 
 	case "command":
@@ -583,6 +583,29 @@ func scalarString(v any) string {
 func asBool(v any) bool {
 	b, _ := v.(bool)
 	return b
+}
+
+// parseJSONAssertions reads the expect_json mapping into ordered assertions: a
+// scalar value is an equality check; a {op, value} mapping is an operator check.
+func parseJSONAssertions(v any) []jsonAssertion {
+	m, ok := v.(map[string]any)
+	if !ok || len(m) == 0 {
+		return nil
+	}
+	out := make([]jsonAssertion, 0, len(m))
+	for _, path := range sortedKeys(m) {
+		raw := m[path]
+		if cond, ok := raw.(map[string]any); ok {
+			op := asString(cond["op"])
+			if op == "" {
+				op = "=="
+			}
+			out = append(out, jsonAssertion{path: path, op: op, value: scalarString(cond["value"])})
+		} else {
+			out = append(out, jsonAssertion{path: path, op: "==", value: scalarString(raw)})
+		}
+	}
+	return out
 }
 
 // stringMap converts a YAML mapping to map[string]string, stringifying scalar
