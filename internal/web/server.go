@@ -14,6 +14,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -71,8 +72,24 @@ type SeriesPoint struct {
 	Total int64    `json:"total"`
 }
 
+// Event is one recorded daemon event for the activity log.
+type Event struct {
+	Time    string `json:"time"` // RFC3339
+	Service string `json:"service,omitempty"`
+	Watch   string `json:"watch,omitempty"`
+	Kind    string `json:"kind"`
+	Rule    string `json:"rule,omitempty"`
+	Action  string `json:"action,omitempty"`
+	Status  string `json:"status,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 // maxSeriesWindow bounds the history a single request may ask for (the retention).
 const maxSeriesWindow = 366 * 24 * time.Hour
+
+// defaultEventLimit / maxEventLimit bound how many log events a request returns.
+const defaultEventLimit = 100
+const maxEventLimit = 1000
 
 // defaultSeriesWindow is used when no (or an invalid) `since` is given.
 const defaultSeriesWindow = 24 * time.Hour
@@ -86,6 +103,11 @@ type Backend interface {
 	// Series returns a service's per-minute availability history over since; ok is
 	// false for unknown names.
 	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
+	// Events returns up to limit recent events, newest first (the global feed).
+	Events(ctx context.Context, limit int) []Event
+	// ServiceEvents returns up to limit recent events for one service, newest
+	// first; ok is false for unknown names.
+	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
 	// Operate runs start|stop|restart on a service through the safe engine.
 	Operate(ctx context.Context, name, action string) ActionResult
 	// SetMonitored pauses (false) or resumes (true) monitoring of a service.
@@ -111,8 +133,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
+	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	return mux
+}
+
+// eventLimit reads the `limit` query param, defaulting and capping it.
+func eventLimit(r *http.Request) int {
+	limit := defaultEventLimit
+	if q := r.URL.Query().Get("limit"); q != "" {
+		if n, err := strconv.Atoi(q); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > maxEventLimit {
+		limit = maxEventLimit
+	}
+	return limit
 }
 
 // Run serves until ctx is cancelled, then shuts down gracefully.
@@ -173,6 +211,19 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"since": since.String(), "points": points})
+}
+
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Events(r.Context(), eventLimit(r)))
+}
+
+func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
+	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue("name"), eventLimit(r))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {

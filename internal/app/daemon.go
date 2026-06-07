@@ -70,6 +70,9 @@ type Deps struct {
 	// Snapshots collects each service's latest check results for the web detail
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
+	// Events is the recent-event log the web UI reads (global and per-service).
+	// Optional: nil disables it. Wire it into Emit via MultiEmit to populate it.
+	Events *EventLog
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration

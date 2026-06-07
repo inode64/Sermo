@@ -128,9 +128,16 @@ monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, and its SLA over the rolling windows),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
 for the window; `since` is a duration, default 24h, capped at the ~1-year
-retention), and `POST /api/services/{name}/{action}` where action is `monitor`,
-`unmonitor`, `start`, `stop` or `restart`. Clicking a service in the dashboard
-opens its detail. The dashboard auto-refreshes every 5s.
+retention), `GET /api/events?limit=N` (the **global event feed**, newest first)
+and `GET /api/services/{name}/events?limit=N` (a service's events), and
+`POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
+`start`, `stop` or `restart`. Clicking a service in the dashboard opens its
+detail. The dashboard auto-refreshes every 5s.
+
+Events are the daemon's activity — actions, alerts, suppressions, hook/notify
+results and errors — kept in an in-memory ring (the last 1000); they also go to
+the daemon log. `limit` defaults to 100 (max 1000). The dashboard shows a global
+feed; a service's detail shows its own events.
 
 The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence

@@ -21,7 +21,8 @@ It ships two binaries:
   **notifications** (email and Slack, pluggable for Teams/…) when a threshold is
   crossed or an attribute changes. It can also serve a small **web dashboard**
   (`web.port`, recommended `9797`) to view services and monitor/start/stop/restart
-  them, with a per-service detail showing its checks and SLA history.
+  them, with a per-service detail showing its checks and SLA history, and a global
+  and per-service event feed.
 
 ## Build
 
