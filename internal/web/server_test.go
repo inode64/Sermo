@@ -19,7 +19,8 @@ type fakeBackend struct {
 	eventLimit  int
 	metricCheck string
 	metricSince time.Duration
-	opsSlots    OperationSlots
+	opsSlots        OperationSlots
+	preflightCalled string
 }
 
 func (f *fakeBackend) Services(context.Context) []Service { return f.services }
@@ -88,6 +89,18 @@ func (f *fakeBackend) SetMonitored(_ context.Context, name string, monitored boo
 	}
 	f.monitored[name] = monitored
 	return nil
+}
+func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult, bool) {
+	for _, s := range f.services {
+		if s.Name == name {
+			f.preflightCalled = name
+			return PreflightResult{
+				OK: true,
+				Checks: []Check{{Name: "disk", OK: true, Ran: true, Message: "ok"}},
+			}, true
+		}
+	}
+	return PreflightResult{}, false
 }
 
 func newServer(b Backend) http.Handler {
@@ -359,6 +372,33 @@ func TestFailedOperateIsConflict(t *testing.T) {
 	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, postReq("/api/services/web/restart"))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("failed operate = %d, want 409", rec.Code)
+	}
+}
+
+func TestPreflightEndpoint(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/services/web/preflight"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("preflight status = %d, want 200", rec.Code)
+	}
+	if b.preflightCalled != "web" {
+		t.Fatalf("preflightCalled = %q, want web", b.preflightCalled)
+	}
+	var body PreflightResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body.OK || len(body.Checks) != 1 || body.Checks[0].Name != "disk" {
+		t.Fatalf("body = %+v", body)
+	}
+}
+
+func TestPreflightUnknownService(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/services/ghost/preflight"))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown preflight = %d, want 404", rec.Code)
 	}
 }
 

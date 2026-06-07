@@ -85,8 +85,9 @@ type WebBackend struct {
 	diagStore diag.Store
 	host      diag.Host
 	measure   MeasurementReader
-	emit      func(Event)
-	opGate    *OpGate
+	emit           func(Event)
+	opGate         *OpGate
+	defaultTimeout time.Duration
 }
 
 // NewWebBackend resolves every enabled service once and wires its status, engine
@@ -96,7 +97,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{
 		entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots,
 		events: deps.Events, remediation: deps.Remediation, cfg: cfg, host: diag.OSHost{},
-		emit: deps.Emit, opGate: deps.OpGate,
+		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
