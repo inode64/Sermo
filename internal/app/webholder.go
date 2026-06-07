@@ -63,6 +63,13 @@ func (h *WebBackendHolder) Notifiers(ctx context.Context) []web.Notifier {
 	return nil
 }
 
+func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
+	if b := h.backend(); b != nil {
+		return b.DaemonInfo(ctx)
+	}
+	return web.DaemonInfo{}
+}
+
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)
