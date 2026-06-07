@@ -393,6 +393,36 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 	return out
 }
 
+func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
+	info := web.DaemonInfo{}
+
+	if b.cfg != nil {
+		g := b.cfg.Global
+		info.ConfigPath = g.Path
+		info.RuntimeDir = g.RuntimeDir()
+		info.StateDir = g.StateDir()
+
+		// Engine block (effective values with documented fallbacks)
+		info.Interval = EngineInterval(b.cfg, 30*time.Second).String()
+		info.MaxParallelChecks = EngineInt(b.cfg, "max_parallel_checks", 8)
+		info.MaxParallelOperations = EngineInt(b.cfg, "max_parallel_operations", 2)
+		info.DefaultTimeout = EngineDuration(b.cfg, "default_timeout", 10*time.Second).String()
+		info.OperationTimeout = EngineDuration(b.cfg, "operation_timeout", 90*time.Second).String()
+		info.StartupDelay = EngineDuration(b.cfg, "startup_delay", 0).String()
+
+		if em := engineMap(b.cfg); em != nil {
+			if be, ok := em["backend"].(string); ok && be != "" {
+				info.Backend = be
+			}
+		}
+		if info.Backend == "" {
+			info.Backend = "auto"
+		}
+	}
+
+	return info
+}
+
 func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	e := b.entries[name]
 	if e == nil {

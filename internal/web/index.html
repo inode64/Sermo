@@ -79,6 +79,28 @@
   <p class="muted" style="font-size:.8rem">Named targets that watches can notify (email, slack, ...).</p>
 </section>
 
+<section id="daemon-section" style="margin-top:1rem;">
+  <h2 style="font-size:1.05rem">Daemon / Engine settings</h2>
+  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem;">
+    <div>
+      <div style="font-weight:600; margin-bottom:.25rem;">Daemon</div>
+      <div>Backend: <b id="daemon-backend"></b></div>
+      <div>Config: <code id="daemon-config" style="font-size:.8rem;"></code></div>
+      <div>Runtime: <code id="daemon-runtime" style="font-size:.8rem;"></code></div>
+      <div>State: <code id="daemon-state" style="font-size:.8rem;"></code></div>
+    </div>
+    <div>
+      <div style="font-weight:600; margin-bottom:.25rem;">Engine</div>
+      <div>Interval: <b id="engine-interval"></b></div>
+      <div>Max parallel checks: <b id="engine-max-checks"></b></div>
+      <div>Max parallel ops: <b id="engine-max-ops"></b></div>
+      <div>Default timeout: <b id="engine-default-timeout"></b></div>
+      <div>Operation timeout: <b id="engine-op-timeout"></b></div>
+      <div>Startup delay: <b id="engine-startup-delay"></b></div>
+    </div>
+  </div>
+</section>
+
 <div id="detail"></div>
 
 <section>
@@ -155,6 +177,14 @@ async function load() {
     const nr = await fetch("api/notifiers");
     if (nr.ok) {
       renderNotifiers(await nr.json());
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Daemon / Engine settings panel.
+  try {
+    const dr = await fetch("api/daemon");
+    if (dr.ok) {
+      renderDaemon(await dr.json());
     }
   } catch (_) { /* non-fatal */ }
 
@@ -363,6 +393,24 @@ function renderNotifiers(notifiers) {
   if (cnt) cnt.textContent = `(${notifiers.length})`;
   const rows = notifiers.map((n) => `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td></tr>`);
   tbody.innerHTML = rows.join("") || `<tr><td colspan="2" class="muted">No notifiers.</td></tr>`;
+}
+
+function renderDaemon(info) {
+  if (!info) return;
+  const set = (id, val) => {
+    const el = $(id);
+    if (el) el.textContent = val || "—";
+  };
+  set("#daemon-backend", info.backend);
+  set("#daemon-config", info.config_path);
+  set("#daemon-runtime", info.runtime_dir);
+  set("#daemon-state", info.state_dir);
+  set("#engine-interval", info.interval);
+  set("#engine-max-checks", info.max_parallel_checks);
+  set("#engine-max-ops", info.max_parallel_operations);
+  set("#engine-default-timeout", info.default_timeout);
+  set("#engine-op-timeout", info.operation_timeout);
+  set("#engine-startup-delay", info.startup_delay);
 }
 
 async function renderStatus() {
