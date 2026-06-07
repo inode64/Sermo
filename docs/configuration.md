@@ -443,6 +443,33 @@ receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`conntrack`), `SERMO_VALUE` (the fir
 predicate's reading), `SERMO_MESSAGE`, plus `SERMO_COUNT`, `SERMO_MAX`,
 `SERMO_USED_PCT` and `SERMO_FREE`.
 
+### `entropy` — kernel entropy pool
+
+An `entropy` watch checks the available kernel entropy (bits) from
+`/proc/sys/kernel/random/entropy_avail` against a threshold. Low entropy makes
+reads from `/dev/random` block and slows crypto and TLS handshakes — most visible
+on VMs and headless/embedded hosts without a hardware RNG. Like `disk` it is a
+level check with one hook.
+
+```yaml
+watches:
+  entropy:
+    enabled: false
+    interval: 1m
+    check:
+      type: entropy
+      avail: { op: "<", value: 200 }    # fire when available entropy drops below 200 bits
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-entropy-alert.sh]
+```
+
+The single `avail: {op, value}` predicate (disk operator set) is required; the
+usual form is `avail < N`. An entropy hook receives `SERMO_WATCH`,
+`SERMO_CHECK_TYPE` (`entropy`), `SERMO_AVAIL`/`SERMO_VALUE` (bits available) and
+`SERMO_MESSAGE`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,
