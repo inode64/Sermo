@@ -59,6 +59,22 @@ type Notifier struct {
 	Type string `json:"type"`
 }
 
+// DaemonInfo provides a summary of the running daemon configuration
+// (engine settings and paths). Useful for operators to see effective
+// behavior without reading the config file.
+type DaemonInfo struct {
+	Backend               string `json:"backend,omitempty"`
+	ConfigPath            string `json:"config_path,omitempty"`
+	RuntimeDir            string `json:"runtime_dir,omitempty"`
+	StateDir              string `json:"state_dir,omitempty"`
+	Interval              string `json:"interval"`
+	MaxParallelChecks     int    `json:"max_parallel_checks"`
+	MaxParallelOperations int    `json:"max_parallel_operations"`
+	DefaultTimeout        string `json:"default_timeout"`
+	OperationTimeout      string `json:"operation_timeout"`
+	StartupDelay          string `json:"startup_delay"`
+}
+
 // ActionResult is the outcome of an operation (start/stop/restart).
 type ActionResult struct {
 	OK      bool   `json:"ok"`
@@ -275,6 +291,8 @@ type Backend interface {
 	Preflight(ctx context.Context, name string) (PreflightResult, bool)
 	// SetMonitored pauses (false) or resumes (true) monitoring of a service.
 	SetMonitored(ctx context.Context, name string, monitored bool) error
+	// DaemonInfo returns engine settings and basic daemon configuration.
+	DaemonInfo(ctx context.Context) DaemonInfo
 }
 
 // operateActions and monitorActions are the action verbs the API accepts.
@@ -332,6 +350,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/watches", s.handleWatches)
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
+	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -436,6 +455,10 @@ func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Notifiers(r.Context()))
+}
+
+func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.DaemonInfo(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
