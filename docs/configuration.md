@@ -125,15 +125,20 @@ web:
 
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
 monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
-checks with the latest result, and its SLA over the rolling windows), and
-`POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
-`start`, `stop` or `restart`. Clicking a service in the dashboard opens its
-detail. The dashboard auto-refreshes every 5s.
+checks with the latest result, and its SLA over the rolling windows),
+`GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
+for the window; `since` is a duration, default 24h, capped at the ~1-year
+retention), and `POST /api/services/{name}/{action}` where action is `monitor`,
+`unmonitor`, `start`, `stop` or `restart`. Clicking a service in the dashboard
+opens its detail. The dashboard auto-refreshes every 5s.
 
 The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
 (see [per-check interval](#per-check-interval)); a check not run yet shows "not
-run yet". The SLA windows come from the same data as `sermoctl sla`.
+run yet". The SLA windows and the history chart come from the same data as
+`sermoctl sla` — the chart bins the per-minute samples into columns (green ≥99%,
+amber ≥95%, red below) with a selectable window (24h/7d/30d) and gaps where the
+service was unmonitored.
 
 Web-triggered monitor changes are recorded with source `web` in the state store,
 and operations take the per-service operation lock, so they never overlap a
