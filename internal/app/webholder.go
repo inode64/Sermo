@@ -70,6 +70,13 @@ func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	return web.DaemonInfo{}
 }
 
+func (h *WebBackendHolder) HostMetrics(ctx context.Context) []web.HostMetric {
+	if b := h.backend(); b != nil {
+		return b.HostMetrics(ctx)
+	}
+	return nil
+}
+
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)
