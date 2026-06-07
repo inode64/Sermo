@@ -2,9 +2,10 @@ package config
 
 import (
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
 // archMarker is the built-in ${arch} reference, substituted with the machine
@@ -20,9 +21,11 @@ func detectArch() string {
 	if v := strings.TrimSpace(os.Getenv("SERMO_ARCH")); v != "" {
 		return v
 	}
-	if out, err := exec.Command("uname", "-m").Output(); err == nil {
-		if s := strings.TrimSpace(string(out)); s != "" {
-			return s
+	// Native uname(2) via x/sys/unix — no external `uname` process.
+	var u unix.Utsname
+	if err := unix.Uname(&u); err == nil {
+		if m := strings.TrimSpace(unix.ByteSliceToString(u.Machine[:])); m != "" {
+			return m
 		}
 	}
 	return goarchToUname(runtime.GOARCH)
