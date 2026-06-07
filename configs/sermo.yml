@@ -126,6 +126,7 @@ watches:
       cpu: { op: ">", value: 80 }
       memory: { op: ">", value: 524288000 }
       io: { op: ">", value: 10485760 }
+      gone: true                          # also fire when a tracked PID disappears
     then:
       hook:
         command: [/usr/local/bin/sermo-proc-alert.sh]

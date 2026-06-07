@@ -127,6 +127,20 @@ func TestValidateProcessWatchGood(t *testing.T) {
 	}
 }
 
+func TestValidateProcessWatchGoneOnly(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"liveness": map[string]any{
+				"check": map[string]any{"type": "process", "name": "nginx", "gone": true},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/down.sh"}}},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("a gone-only process watch should be valid, got %v", w)
+	}
+}
+
 func TestValidateProcessWatchErrors(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
