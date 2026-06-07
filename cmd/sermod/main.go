@@ -149,6 +149,7 @@ func run(args []string) int {
 	if deps.SystemFreshness > 0 {
 		collector.SystemFreshness = deps.SystemFreshness
 	}
+	deps.Collector = collector
 
 	workers, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {

@@ -101,6 +101,15 @@
   </div>
 </section>
 
+<section id="host-section" style="margin-top:1rem;">
+  <h2 style="font-size:1.05rem">Host metrics (current)</h2>
+  <table style="width:auto; font-size:.9rem;">
+    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+    <tbody id="host-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Live system readings (memory, cpu rate, load). Updated on refresh.</p>
+</section>
+
 <div id="detail"></div>
 
 <section>
@@ -185,6 +194,14 @@ async function load() {
     const dr = await fetch("api/daemon");
     if (dr.ok) {
       renderDaemon(await dr.json());
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Current host metrics (memory, cpu, load).
+  try {
+    const hr = await fetch("api/host");
+    if (hr.ok) {
+      renderHostMetrics(await hr.json());
     }
   } catch (_) { /* non-fatal */ }
 
@@ -411,6 +428,27 @@ function renderDaemon(info) {
   set("#engine-default-timeout", info.default_timeout);
   set("#engine-op-timeout", info.operation_timeout);
   set("#engine-startup-delay", info.startup_delay);
+}
+
+function renderHostMetrics(metrics) {
+  const tbody = $("#host-rows");
+  if (!tbody) return;
+  if (!metrics || metrics.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="2" class="muted">no metrics</td></tr>`;
+    return;
+  }
+  const rows = metrics.map((m) => {
+    let val = "—";
+    if (m.percent != null) {
+      val = m.percent.toFixed(1) + "%";
+    } else if (m.absolute != null) {
+      val = m.absolute.toFixed(2);
+      if (m.unit) val += " " + m.unit;
+    }
+    const ready = m.ready ? "" : " (stale)";
+    return `<tr><td>${esc(m.name)}</td><td><b>${esc(val)}</b>${ready}</td></tr>`;
+  });
+  tbody.innerHTML = rows.join("");
 }
 
 async function renderStatus() {

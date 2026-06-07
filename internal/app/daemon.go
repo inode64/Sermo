@@ -104,6 +104,9 @@ type Deps struct {
 	// OpGate bounds concurrent operations across workers and the web UI. sermoctl
 	// uses the same slot pool under <paths.runtime>/op-slots.
 	OpGate *OpGate
+	// Collector provides live system and per-service metrics (cpu, memory, load).
+	// Made available to the web UI for host overview.
+	Collector *metrics.Collector
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check

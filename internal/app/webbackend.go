@@ -11,6 +11,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/diag"
 	"sermo/internal/locks"
+	"sermo/internal/metrics"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -105,6 +106,7 @@ type WebBackend struct {
 	diagStore    diag.Store
 	host         diag.Host
 	measure      MeasurementReader
+	collector    *metrics.Collector
 	emit         func(Event)
 	opGate       *OpGate
 	defaultTimeout time.Duration
@@ -123,6 +125,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		store: deps.Monitor, snapshots: deps.Snapshots,
 		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
 		cfg: cfg, host: diag.OSHost{},
+		collector: deps.Collector,
 		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
@@ -421,6 +424,52 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	}
 
 	return info
+}
+
+func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
+	if b.collector == nil {
+		return nil
+	}
+	snap := b.collector.SampleSystem()
+	if len(snap) == 0 {
+		return nil
+	}
+
+	out := make([]web.HostMetric, 0, len(snap))
+	// Nice display order
+	order := []string{"load1", "load5", "load15", "total_cpu", "total_memory"}
+	seen := map[string]bool{}
+	for _, k := range order {
+		if r, ok := snap[k]; ok {
+			m := web.HostMetric{Name: k, Ready: r.Ready}
+			if r.HasPercent {
+				m.Percent = r.Percent
+			}
+			if r.HasAbsolute {
+				m.Absolute = r.Absolute
+			}
+			if k == "total_memory" {
+				m.Unit = "bytes"
+			}
+			out = append(out, m)
+			seen[k] = true
+		}
+	}
+	// Add any others
+	for k, r := range snap {
+		if seen[k] {
+			continue
+		}
+		m := web.HostMetric{Name: k, Ready: r.Ready}
+		if r.HasPercent {
+			m.Percent = r.Percent
+		}
+		if r.HasAbsolute {
+			m.Absolute = r.Absolute
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool) {
