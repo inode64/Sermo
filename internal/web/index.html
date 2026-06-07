@@ -582,6 +582,20 @@ async function renderStatus() {
       parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
     }
     bar.innerHTML = parts.join(" &middot; ");
+
+    // Also populate the runtime part of the Daemon info panel
+    const set = (id, val) => { const el = $(id); if (el) el.textContent = val || "—"; };
+    if (live.started_at) set("#daemon-started", live.started_at);
+    if (live.uptime) set("#daemon-uptime", live.uptime);
+    if (live.go) set("#daemon-go", live.go);
+    if (ready.status) {
+      const cls = ready.ready ? "ok" : "inactive";
+      const el = $("#daemon-ready");
+      if (el) {
+        el.textContent = ready.status;
+        el.className = cls;
+      }
+    }
   } catch (e) {
     bar.textContent = "status unavailable";
   }
