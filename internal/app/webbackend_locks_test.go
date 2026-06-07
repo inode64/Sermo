@@ -84,6 +84,40 @@ func TestWebBackendDetailLocks(t *testing.T) {
 	}
 }
 
+func TestWebBackendViewActiveLocks(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	expires := time.Now().Add(time.Hour).UTC()
+
+	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+		"service":           "mysql",
+		"name":              "backup",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": webLockStartTicks(t),
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "mysql.lock", map[string]any{
+		"service":    "mysql",
+		"owner_pid":  os.Getpid(),
+		"expires_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+	})
+
+	cfg := &config.Config{Global: config.Global{Runtime: runtime}}
+	b := &WebBackend{
+		order: []string{"mysql"},
+		entries: map[string]*webEntry{
+			"mysql": {displayName: "mysql"},
+		},
+		cfg: cfg,
+	}
+
+	svc := b.view(context.Background(), "mysql", b.entries["mysql"])
+	if len(svc.ActiveLocks) != 1 || svc.ActiveLocks[0] != "backup" {
+		t.Fatalf("ActiveLocks = %+v, want [backup]", svc.ActiveLocks)
+	}
+}
+
 func TestWebBackendDetailLocksNone(t *testing.T) {
 	root := t.TempDir()
 	cfg := &config.Config{Global: config.Global{Runtime: filepath.Join(root, "run")}}
