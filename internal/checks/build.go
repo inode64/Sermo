@@ -125,6 +125,39 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}
 		return tcpCheck{base: b, host: host, port: port}, ""
 
+	case "ports":
+		host := asString(entry["host"])
+		if host == "" {
+			host = "127.0.0.1"
+		}
+		ports, err := parsePortSpec(asString(entry["ports"]))
+		if err != nil {
+			return nil, "ports check: " + err.Error()
+		}
+		expect := asString(entry["expect"])
+		if expect == "" {
+			expect = "open"
+		}
+		if expect != "open" && expect != "closed" && expect != "any" {
+			return nil, "ports check: expect must be open, closed or any"
+		}
+		match := asString(entry["match"])
+		if match == "" {
+			match = "all"
+		}
+		if match != "all" && match != "any" && match != "none" {
+			return nil, "ports check: match must be all, any or none"
+		}
+		return &portsCheck{
+			base:           b,
+			host:           host,
+			ports:          ports,
+			expect:         expect,
+			match:          match,
+			onChange:       asBool(entry["on_change"]),
+			connectTimeout: durationOr(entry["connect_timeout"], 0),
+		}, ""
+
 	case "http":
 		url := asString(entry["url"])
 		if url == "" {

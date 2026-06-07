@@ -360,6 +360,32 @@ func TestValidateZombiesWatch(t *testing.T) {
 	}
 }
 
+func TestValidatePortsWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"scan": map[string]any{
+				"check": map[string]any{"type": "ports", "host": "10.0.0.1", "ports": "22,80,443", "match": "all"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("a ports watch should be valid, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"scan": map[string]any{
+				"check": map[string]any{"type": "ports", "ports": "bad"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, `watches.scan.check.ports has an invalid port`) {
+		t.Fatalf("expected invalid-ports issue, got %v", bad)
+	}
+}
+
 func TestValidateCertWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
