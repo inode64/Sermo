@@ -55,11 +55,19 @@ logging:
 
 # Web dashboard (view services; monitor/unmonitor and start/stop/restart; per-
 # service detail with checks, SLA history and events). Binds to loopback by
-# default. Uncomment `port` to enable (9797 recommended). Set `password` for admin
-# access; `guest`/`guest_password` give read-only access.
+# default.
+#
+# IMPORTANT: the web UI is NOT activated unless `port` is defined.
+# - If the `web:` block is omitted, or
+# - If `web:` exists but `port` is missing (e.g. only `address:` is set),
+# then sermod will not start the HTTP server and will log a warning
+# ("web ui disabled; no port will be opened").
+#
+# Uncomment `port` (9797 recommended) to activate the web UI.
+# Set `password` for admin access; `guest`/`guest_password` give read-only access.
 web:
   address: 127.0.0.1
-  # port: 9797
+  port: 9797
   # password: "change-me"        # admin: read + actions
   # guest_password: "read-only"  # optional read-only login
   # guest: false                 # set true to allow anonymous read-only access
