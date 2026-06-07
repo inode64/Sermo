@@ -22,7 +22,7 @@ import (
 // web backend: a process discoverer, the check deps (with a backend-status
 // closure), and the safe operation engine. The engine's per-service operation
 // lock serializes start/stop/restart across the worker and the web.
-func serviceRuntime(name, unit string, tree map[string]any, deps Deps) (operation.Engine, checks.Deps, process.Discoverer) {
+func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	discoverer := process.NewDiscoverer()
 	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(deps.Backend, unit)
 	checkDeps := checks.Deps{
@@ -50,6 +50,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps) (operatio
 		CheckDeps:        checkDeps,
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
+		Emit:             recordOperation,
 	})
 	return engine, checkDeps, discoverer
 }
@@ -80,13 +81,14 @@ type WebBackend struct {
 	diagStore diag.Store
 	host      diag.Host
 	measure   MeasurementReader
+	emit      func(Event)
 }
 
 // NewWebBackend resolves every enabled service once and wires its status, engine
 // and metadata for the web UI. Services that fail to resolve are skipped with a
 // warning (like BuildWorkers).
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
-	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events, cfg: cfg, host: diag.OSHost{}}
+	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events, cfg: cfg, host: diag.OSHost{}, emit: deps.Emit}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
 	wb.diagStore, _ = deps.Monitor.(diag.Store)
@@ -109,7 +111,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		if err != nil {
 			unit = base
 		}
-		engine, checkDeps, _ := serviceRuntime(name, unit, resolved.Tree, deps)
+		engine, checkDeps, _ := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
 		names, types := checkCatalog(resolved.Tree)
 		wb.entries[name] = &webEntry{
 			displayName: config.DisplayName(resolved.Tree, name),
@@ -309,7 +311,11 @@ func toWebEvents(events []LoggedEvent) []web.Event {
 func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
-		return web.ActionResult{OK: false, Message: "unknown service " + name}
+		msg := "unknown service " + name
+		if b.emit != nil {
+			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
+		}
+		return web.ActionResult{OK: false, Message: msg}
 	}
 	var r operation.Result
 	switch action {

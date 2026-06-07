@@ -3,7 +3,11 @@
 // remediation through the shared operation engine (section 24).
 package app
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"sermo/internal/operation"
+)
 
 // Event records what a worker cycle did, for the operator-visible log.
 type Event struct {
@@ -14,6 +18,28 @@ type Event struct {
 	Action  string
 	Status  string
 	Message string
+}
+
+// operationEventEmitter adapts the daemon event log to the operation engine's
+// per-operation emit hook. Web-initiated actions use this path; worker
+// remediation keeps its own emit so it can attach the firing rule name.
+func operationEventEmitter(emit func(Event)) func(operation.Result) {
+	if emit == nil {
+		return nil
+	}
+	return func(r operation.Result) {
+		kind := "action"
+		if r.Status == operation.ResultBlocked {
+			kind = "suppressed"
+		}
+		emit(Event{
+			Service: r.Service,
+			Kind:    kind,
+			Action:  r.Action,
+			Status:  string(r.Status),
+			Message: r.Message,
+		})
+	}
 }
 
 // SlogEmitter logs events through slog.
