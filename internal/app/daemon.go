@@ -109,12 +109,14 @@ type Deps struct {
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
 // cache producer and an operation-engine Operate closure (section 24). Services
 // that are disabled or fail to resolve are skipped with a warning.
-func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
+func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []string) {
 	var workers []*Worker
 	var warnings []string
-	collector := metrics.New(metrics.OSReader{})
-	if deps.SystemFreshness > 0 {
-		collector.SystemFreshness = deps.SystemFreshness
+	if collector == nil {
+		collector = metrics.New(metrics.OSReader{})
+		if deps.SystemFreshness > 0 {
+			collector.SystemFreshness = deps.SystemFreshness
+		}
 	}
 	resolver := servicemgr.NewUnitResolver()
 

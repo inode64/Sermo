@@ -15,6 +15,7 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/config"
+	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
@@ -66,16 +67,6 @@ func run(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 
-	// SIGHUP is reserved for config reload (post-MVP); log it instead of letting
-	// its default disposition terminate the daemon (section 24).
-	hup := make(chan os.Signal, 1)
-	signal.Notify(hup, syscall.SIGHUP)
-	go func() {
-		for range hup {
-			logger.Warn("SIGHUP received; config reload is not supported in the MVP")
-		}
-	}()
-
 	detector := servicemgr.NewDetector()
 	backend, err := servicemgr.ParseBackend(engineString(cfg, "backend"))
 	if err != nil {
@@ -107,16 +98,16 @@ func run(args []string) int {
 
 	eventLog := app.NewEventLog(1000)
 
-	interval := engineDuration(cfg, "interval", 30*time.Second)
-	opGate := app.NewOpGate(engineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
+	interval := app.EngineInterval(cfg, 30*time.Second)
+	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
 	deps := app.Deps{
 		Backend:        detection.Backend,
 		Manager:        manager,
 		Runtime:        cfg.Global.RuntimeDir(),
 		Interval:       interval,
-		DefaultTimeout:   engineDuration(cfg, "default_timeout", 10*time.Second),
-		OperationTimeout: engineDuration(cfg, "operation_timeout", 90*time.Second),
-		MaxParallel:    engineInt(cfg, "max_parallel_checks", 8),
+		DefaultTimeout:   app.EngineDuration(cfg, "default_timeout", 10*time.Second),
+		OperationTimeout: app.EngineDuration(cfg, "operation_timeout", 90*time.Second),
+		MaxParallel:    app.EngineInt(cfg, "max_parallel_checks", 8),
 		Sleep:          time.Sleep,
 		Now:            time.Now,
 		// Events go to slog and to the in-memory log the web UI reads.
@@ -145,7 +136,12 @@ func run(args []string) int {
 		logger.Info("pruned old measurements", "rows", n)
 	}
 
-	workers, warnings := app.BuildWorkers(cfg, deps)
+	collector := metrics.New(metrics.OSReader{})
+	if deps.SystemFreshness > 0 {
+		collector.SystemFreshness = deps.SystemFreshness
+	}
+
+	workers, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {
 		logger.Warn("build workers", "warning", w)
 	}
@@ -160,21 +156,23 @@ func run(args []string) int {
 		return 2
 	}
 
-	startupDelay := engineDuration(cfg, "startup_delay", 0)
+	startupDelay := app.EngineDuration(cfg, "startup_delay", 0)
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
 	readiness := app.NewReadiness(string(detection.Backend), len(workers), len(watches))
 
+	var webHolder *app.WebBackendHolder
 	if addr := webListenAddr(cfg); addr != "" {
-		backend, webWarnings := app.NewWebBackend(cfg, deps)
+		var webWarnings []string
+		webHolder, webWarnings = app.NewWebBackendHolder(cfg, deps)
 		for _, w := range webWarnings {
 			logger.Warn("build web backend", "warning", w)
 		}
 		auth := webAuth(cfg)
 		server := &web.Server{
 			Addr:             addr,
-			Backend:          backend,
+			Backend:          webHolder,
 			Auth:             auth,
 			Logger:           logger,
 			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
@@ -193,12 +191,25 @@ func run(args []string) int {
 	}
 
 	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers), "watches", len(watches))
-	scheduler := app.Scheduler{
+
+	monitor := app.NewMonitor(cfg, deps, app.Scheduler{
 		Interval:     interval,
-		OpSlots:      engineInt(cfg, "max_parallel_operations", 2),
+		OpSlots:      app.EngineInt(cfg, "max_parallel_operations", 2),
 		StartupDelay: startupDelay,
-	}
-	scheduler.Run(ctx, workers, watches, opGate, readiness)
+	}, readiness, collector, webHolder)
+	monitor.ConfigPath = globalPath
+	monitor.Logger = logger
+	monitor.Init(workers, watches)
+
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			monitor.Reload()
+		}
+	}()
+
+	monitor.Run(ctx)
 	logger.Info("sermod stopped")
 	return 0
 }
@@ -285,31 +296,4 @@ func engineMap(cfg *config.Config) map[string]any {
 func engineString(cfg *config.Config, key string) string {
 	s, _ := engineMap(cfg)[key].(string)
 	return s
-}
-
-func engineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
-	s, _ := engineMap(cfg)[key].(string)
-	if s == "" {
-		return fallback
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil || d <= 0 {
-		return fallback
-	}
-	return d
-}
-
-func engineInt(cfg *config.Config, key string, fallback int) int {
-	switch v := engineMap(cfg)[key].(type) {
-	case int:
-		return v
-	case int64:
-		return int(v)
-	case uint64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return fallback
-	}
 }

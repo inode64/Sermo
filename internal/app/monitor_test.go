@@ -1,136 +1,182 @@
 package app
 
 import (
-	"errors"
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"sermo/internal/config"
-	"sermo/internal/state"
+	"sermo/internal/metrics"
+	"sermo/internal/rules"
 )
 
-// fakeStore is an in-memory MonitorStore for testing the startup reconciliation
-// and the live pause check without a real database.
-type fakeStore struct {
-	active  map[string]bool
-	source  map[string]string
-	updated map[string]time.Time
-	failGet bool
-	failSet bool
-	now     func() time.Time
-}
+func TestMonitorReloadPreservesWorkerState(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"profiles", "enabled", "run"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enabled := filepath.Join(dir, "enabled")
 
-func newFakeStore() *fakeStore {
-	return &fakeStore{
-		active:  map[string]bool{},
-		source:  map[string]string{},
-		updated: map[string]time.Time{},
-		now:     time.Now,
-	}
-}
+	baseCfg := fmt.Sprintf(`engine:
+  interval: 100ms
+paths:
+  profiles: [%[1]q]
+  enabled: [%[2]q]
+  runtime: %[3]q
+defaults:
+  policy: { cooldown: 1m }
+`, filepath.Join(dir, "profiles"), enabled, filepath.Join(dir, "run"))
 
-func (f *fakeStore) Active(service string) (bool, bool, error) {
-	if f.failGet {
-		return false, false, errors.New("boom")
+	global := filepath.Join(dir, "sermo.yml")
+	service := func(name string) string {
+		return fmt.Sprintf(`kind: service
+name: %s
+checks:
+  ping:
+    type: command
+    command: ["/bin/true"]
+`, name)
 	}
-	a, ok := f.active[service]
-	return a, ok, nil
-}
+	if err := os.WriteFile(global, []byte(baseCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(service("web")), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
-func (f *fakeStore) SetActive(service string, active bool, source string) error {
-	if f.failSet {
-		return errors.New("boom")
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
 	}
-	f.active[service] = active
-	f.source[service] = source
-	now := f.now
-	if now == nil {
-		now = time.Now
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}}
+	collector := metrics.New(metrics.OSReader{})
+	workers, _ := BuildWorkers(cfg, deps, collector)
+	if len(workers) != 1 {
+		t.Fatalf("workers = %d, want 1", len(workers))
 	}
-	f.updated[service] = now()
-	return nil
-}
+	workers[0].cycle = 11
+	workers[0].State = &rules.RemediationState{LastActionAt: time.Now()}
 
-func (f *fakeStore) MonitorState(service string) (state.MonitorRecord, bool, error) {
-	if f.failGet {
-		return state.MonitorRecord{}, false, errors.New("boom")
-	}
-	a, ok := f.active[service]
-	if !ok {
-		return state.MonitorRecord{}, false, nil
-	}
-	return state.MonitorRecord{
-		Active: a, Source: f.source[service], UpdatedAt: f.updated[service],
-	}, true, nil
-}
+	ready := NewReadiness("systemd", 1, 0)
+	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
+	mon.ConfigPath = global
+	mon.Logger = slog.Default()
+	mon.Init(workers, nil)
 
-func TestApplyMonitorMode(t *testing.T) {
-	cases := []struct {
-		name       string
-		mode       string
-		seed       *bool // prior persisted state, nil = no row
-		wantActive bool
-		wantFound  bool
-	}{
-		{"enabled forces on", config.MonitorEnabled, boolPtr(false), true, true},
-		{"disabled forces off", config.MonitorDisabled, boolPtr(true), false, true},
-		{"previous keeps paused", config.MonitorPrevious, boolPtr(false), false, true},
-		{"previous keeps active", config.MonitorPrevious, boolPtr(true), true, true},
-		{"previous first run defaults on", config.MonitorPrevious, nil, true, true},
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go mon.Run(ctx)
+	waitReady(t, ready)
+
+	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(service("web")), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			store := newFakeStore()
-			if tc.seed != nil {
-				store.active["svc"] = *tc.seed
-			}
-			if w := applyMonitorMode(store, "svc", tc.mode); w != "" {
-				t.Fatalf("unexpected warning: %s", w)
-			}
-			active, found, _ := store.Active("svc")
-			if found != tc.wantFound || active != tc.wantActive {
-				t.Errorf("got found=%v active=%v, want found=%v active=%v", found, active, tc.wantFound, tc.wantActive)
-			}
-		})
+	mon.Reload()
+
+	mon.mu.Lock()
+	cycle := mon.workers[0].cycle
+	mon.mu.Unlock()
+	if cycle < 11 {
+		t.Fatalf("cycle after reload = %d, want preserved >= 11", cycle)
 	}
 }
 
-func TestApplyMonitorModeNilStore(t *testing.T) {
-	if w := applyMonitorMode(nil, "svc", config.MonitorEnabled); w != "" {
-		t.Errorf("nil store must be a no-op, got warning %q", w)
+func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"profiles", "enabled", "run"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enabled := filepath.Join(dir, "enabled")
+	global := filepath.Join(dir, "sermo.yml")
+	valid := fmt.Sprintf(`engine:
+  interval: 100ms
+paths:
+  profiles: [%q]
+  enabled: [%q]
+  runtime: %q
+defaults:
+  policy: { cooldown: 1m }
+`, filepath.Join(dir, "profiles"), enabled, filepath.Join(dir, "run"))
+	if err := os.WriteFile(global, []byte(valid), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`kind: service
+name: web
+checks:
+  ping:
+    type: command
+    command: ["/bin/true"]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}}
+	collector := metrics.New(metrics.OSReader{})
+	workers, _ := BuildWorkers(cfg, deps, collector)
+	workers[0].cycle = 5
+
+	ready := NewReadiness("systemd", 1, 0)
+	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
+	mon.ConfigPath = global
+	mon.Logger = slog.Default()
+	mon.Init(workers, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go mon.Run(ctx)
+	waitReady(t, ready)
+
+	invalid := fmt.Sprintf(`engine:
+  interval: notaduration
+paths:
+  profiles: [%q]
+  enabled: [%q]
+  runtime: %q
+defaults:
+  policy: { cooldown: 1m }
+`, filepath.Join(dir, "profiles"), enabled, filepath.Join(dir, "run"))
+	if err := os.WriteFile(global, []byte(invalid), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mon.mu.Lock()
+	before := mon.workers[0].cycle
+	mon.mu.Unlock()
+
+	mon.Reload()
+
+	mon.mu.Lock()
+	after := mon.workers[0].cycle
+	mon.mu.Unlock()
+	if after < before {
+		t.Fatalf("cycle after rejected reload = %d, want preserved >= %d", after, before)
+	}
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+		t.Fatalf("readiness = %+v, want ready during rejected reload", rep)
 	}
 }
 
-func TestApplyMonitorModeReportsStoreError(t *testing.T) {
-	store := newFakeStore()
-	store.failSet = true
-	if w := applyMonitorMode(store, "svc", config.MonitorEnabled); w == "" {
-		t.Error("a store write failure must surface a warning")
+func waitReady(t *testing.T, ready *Readiness) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if rep := ready.Report(context.Background()); rep.Ready {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("readiness not ready in time")
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
-
-func TestMonitorPaused(t *testing.T) {
-	store := newFakeStore()
-	store.active["paused"] = false
-	store.active["live"] = true
-
-	if monitorPaused(nil, "x")() {
-		t.Error("nil store must never report paused")
-	}
-	if !monitorPaused(store, "paused")() {
-		t.Error("inactive service must report paused")
-	}
-	if monitorPaused(store, "live")() {
-		t.Error("active service must not report paused")
-	}
-	// Unknown service and store errors both fail open (monitor, don't drop).
-	if monitorPaused(store, "ghost")() {
-		t.Error("unknown service must fail open (not paused)")
-	}
-	store.failGet = true
-	if monitorPaused(store, "paused")() {
-		t.Error("store error must fail open (not paused)")
-	}
-}
-
-func boolPtr(b bool) *bool { return &b }
