@@ -1,0 +1,97 @@
+package checks
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// ZombieSamplerFunc counts the zombie (defunct) processes, reporting ok = false
+// when /proc cannot be read. Injected for tests; the default scans /proc.
+type ZombieSamplerFunc func() (uint64, bool)
+
+// zombieCheck watches the number of zombie processes against a threshold. A few
+// zombies are transient and normal; a growing count means a parent is not
+// reaping its children, which eventually exhausts the PID table. Like disk it is
+// a level check: OK==true means the threshold holds.
+type zombieCheck struct {
+	base
+	op      string
+	value   float64
+	sampler ZombieSamplerFunc
+}
+
+func (c zombieCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	sampler := c.sampler
+	if sampler == nil {
+		sampler = defaultZombieSampler
+	}
+	count, ok := sampler()
+	if !ok {
+		return c.result(false, "zombies: cannot read /proc", start)
+	}
+	met := compareFloat(float64(count), c.op, c.value)
+	res := c.result(met, fmt.Sprintf("%d zombie processes", count), start)
+	res.Data = map[string]any{"zombies": count, "value": count}
+	return res
+}
+
+// defaultZombieSampler counts processes whose /proc/<pid>/stat run state is "Z".
+func defaultZombieSampler() (uint64, bool) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0, false
+	}
+	var n uint64
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid <= 0 {
+			continue
+		}
+		if procRunState(pid) == "Z" {
+			n++
+		}
+	}
+	return n, true
+}
+
+// procRunState returns the run-state field of /proc/<pid>/stat (R, S, D, Z, ...),
+// or "" if it cannot be read. The comm field may contain spaces and parentheses,
+// so the state is the first token after the final ')'.
+func procRunState(pid int) string {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return ""
+	}
+	s := string(data)
+	paren := strings.LastIndex(s, ")")
+	if paren < 0 {
+		return ""
+	}
+	fields := strings.Fields(s[paren+1:])
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+// parseZombieThreshold reads the required count {op, value} of a zombies check.
+func parseZombieThreshold(entry map[string]any) (op string, value float64, err error) {
+	m, ok := entry["count"].(map[string]any)
+	if !ok {
+		return "", 0, fmt.Errorf("requires count {op, value}")
+	}
+	op = asString(m["op"])
+	if !validDiskOp(op) {
+		return "", 0, fmt.Errorf("count has invalid op %q", op)
+	}
+	value, perr := strconv.ParseFloat(scalarString(m["value"]), 64)
+	if perr != nil {
+		return "", 0, fmt.Errorf("count value %q is not numeric", scalarString(m["value"]))
+	}
+	return op, value, nil
+}
