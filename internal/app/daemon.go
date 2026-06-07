@@ -94,6 +94,9 @@ type Deps struct {
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration
+	// OpGate bounds concurrent operations across workers and the web UI. sermoctl
+	// uses the same slot pool under <paths.runtime>/op-slots.
+	OpGate *OpGate
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check

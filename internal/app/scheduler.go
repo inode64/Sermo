@@ -4,8 +4,6 @@ import (
 	"context"
 	"sync"
 	"time"
-
-	"sermo/internal/operation"
 )
 
 // Scheduler runs each worker on its own goroutine with an independent interval
@@ -32,12 +30,10 @@ type cycler interface {
 // them have returned (graceful shutdown, section 24). Each worker's Operate is
 // wrapped so it waits for a global operation slot, pausing only that service's
 // monitoring. Watches run on their own goroutines using their own interval.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch) {
-	slots := s.OpSlots
-	if slots <= 0 {
-		slots = 2
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, opGate *OpGate) {
+	if opGate == nil {
+		opGate = NewOpGate(s.OpSlots, "")
 	}
-	sem := make(chan struct{}, slots)
 
 	interval := s.Interval
 	if interval <= 0 {
@@ -54,7 +50,7 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch)
 
 	var wg sync.WaitGroup
 	for i, w := range workers {
-		gateOperate(w, sem)
+		gateOperate(w, opGate)
 		// Each worker runs at its own `interval` when set, falling back to the
 		// global engine interval. Starts are still spread across one global
 		// interval so a fleet of services does not all probe on the same tick.
@@ -100,22 +96,6 @@ func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 		if !sleepCtx(ctx, interval) {
 			return
 		}
-	}
-}
-
-// gateOperate wraps a worker's Operate so it acquires a global operation slot
-// first, serializing mass restarts. While waiting, only this service's
-// monitoring pauses.
-func gateOperate(w *Worker, sem chan struct{}) {
-	inner := w.Operate
-	w.Operate = func(ctx context.Context, action string) operation.Result {
-		select {
-		case sem <- struct{}{}:
-			defer func() { <-sem }()
-		case <-ctx.Done():
-			return operation.Result{Service: w.Service, Action: action, Status: operation.ResultFailed, Message: "shutting down"}
-		}
-		return inner(ctx, action)
 	}
 }
 
