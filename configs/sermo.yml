@@ -110,6 +110,17 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-load-alert.sh]
+  # Watch system file descriptors against the kernel fs.file-max limit.
+  fds:
+    enabled: false
+    interval: 30s
+    check:
+      type: fds
+      used_pct: { op: ">=", value: 85 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-fds-alert.sh]
   # Watch kernel OOM kills: fire whenever the out-of-memory killer reaps a process.
   oom:
     enabled: false

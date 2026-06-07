@@ -383,6 +383,35 @@ kernel does not expose the `oom_kill` counter never fires. An oom hook receives
 `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`oom`), `SERMO_VALUE` (kills this cycle),
 `SERMO_TOTAL` (cumulative), and `SERMO_MESSAGE`.
 
+### `fds` — system file descriptors
+
+An `fds` watch checks the system-wide open file descriptors against the kernel
+maximum (`fs.file-max`), read from `/proc/sys/fs/file-nr`. Like `disk` it is a
+level check with one hook. Fd exhaustion makes every `open()`/`socket()`/
+`accept()` on the host fail with `EMFILE`/`ENFILE`, so it is worth catching early.
+
+```yaml
+watches:
+  fds:
+    enabled: false
+    interval: 30s
+    check:
+      type: fds
+      used_pct: { op: ">=", value: 85 }    # allocated / file-max
+      # free: { op: "<", value: 10000 }    # absolute headroom, alternatively
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-fds-alert.sh]
+```
+
+Predicates are `used_pct` (allocated as a percent of the limit), `free`
+(`file-max − allocated`) and `allocated` (absolute), each `{op, value}` with the
+disk operator set; declare at least one. An fds hook receives `SERMO_WATCH`,
+`SERMO_CHECK_TYPE` (`fds`), `SERMO_VALUE` (the first predicate's reading),
+`SERMO_MESSAGE`, plus `SERMO_ALLOCATED`, `SERMO_MAX`, `SERMO_USED_PCT` and
+`SERMO_FREE`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,

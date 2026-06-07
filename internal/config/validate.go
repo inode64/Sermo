@@ -149,6 +149,9 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "oom":
 			validateOomCheck(name, check, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "fds":
+			validateFieldPreds(name, check, []string{"used_pct", "free", "allocated"}, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -284,6 +287,34 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		}
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateFieldPreds validates a watch check whose body is a set of named
+// threshold predicates (each {op, value}), requiring at least one of fields to be
+// present. Used by simple level checks like fds.
+func validateFieldPreds(name string, check map[string]any, fields []string, add func(string, ...any)) {
+	preds := 0
+	for _, field := range fields {
+		raw, present := check[field]
+		if !present {
+			continue
+		}
+		preds++
+		m, ok := raw.(map[string]any)
+		if !ok {
+			add("watches.%s.check.%s must be a mapping {op, value}", name, field)
+			continue
+		}
+		if !isValidDiskOp(scalarString(m["op"])) {
+			add("watches.%s.check.%s has an invalid op %q", name, field, scalarString(m["op"]))
+		}
+		if !isNumeric(scalarString(m["value"])) {
+			add("watches.%s.check.%s value %q must be numeric", name, field, scalarString(m["value"]))
+		}
+	}
+	if preds == 0 {
+		add("watches.%s.check requires at least one of %s", name, strings.Join(fields, "/"))
 	}
 }
 
