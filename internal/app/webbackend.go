@@ -78,6 +78,12 @@ type webWatch struct {
 	disabled  bool
 }
 
+// webNotifier is a configured notification target (used by watches).
+type webNotifier struct {
+	name string
+	typ  string
+}
+
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
 // the shared snapshots, and start/stop/restart through the same safe operation
@@ -87,6 +93,8 @@ type WebBackend struct {
 	entries      map[string]*webEntry
 	watchOrder   []string
 	watches      map[string]*webWatch
+	notifierOrder []string
+	notifiers    map[string]*webNotifier
 	store        MonitorStore
 	snapshots    *Snapshots
 	sla          SLAReader
@@ -109,8 +117,9 @@ type WebBackend struct {
 // get a full runtime engine, checks, and operation support.
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{
-		entries: map[string]*webEntry{},
-		watches: map[string]*webWatch{},
+		entries:   map[string]*webEntry{},
+		watches:   map[string]*webWatch{},
+		notifiers: map[string]*webNotifier{},
 		store: deps.Monitor, snapshots: deps.Snapshots,
 		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
 		cfg: cfg, host: diag.OSHost{},
@@ -185,6 +194,17 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			}
 			wb.watches[name] = ww
 			wb.watchOrder = append(wb.watchOrder, name)
+		}
+	}
+
+	// Surface configured notifiers (useful to know what watches can notify to).
+	if raw, ok := cfg.Global.Raw["notifiers"].(map[string]any); ok && len(raw) > 0 {
+		for _, name := range sortedKeys(raw) {
+			entry, _ := raw[name].(map[string]any)
+			typ := stringField(entry["type"])
+			wn := &webNotifier{name: name, typ: typ}
+			wb.notifiers[name] = wn
+			wb.notifierOrder = append(wb.notifierOrder, name)
 		}
 	}
 
@@ -350,6 +370,24 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			CheckType: w.checkType,
 			Interval:  iv,
 			Enabled:   !w.disabled,
+		})
+	}
+	return out
+}
+
+func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
+	if len(b.notifierOrder) == 0 {
+		return nil
+	}
+	out := make([]web.Notifier, 0, len(b.notifierOrder))
+	for _, name := range b.notifierOrder {
+		n := b.notifiers[name]
+		if n == nil {
+			continue
+		}
+		out = append(out, web.Notifier{
+			Name: n.name,
+			Type: n.typ,
 		})
 	}
 	return out
