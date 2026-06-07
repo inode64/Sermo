@@ -261,6 +261,20 @@ function renderDetail(d) {
       <td class="muted">${esc(l.reason || "")}${exp}</td></tr>`;
   }).join("") || `<tr><td colspan="4" class="muted">No named runtime locks.</td></tr>`;
 
+  const procExe = (p) => {
+    if (p.exe_resolved && p.exe) return esc(p.exe);
+    if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
+    return '<span class="muted">unknown</span>';
+  };
+  const procRows = (d.processes || []).map((p) => {
+    const cmd = (p.cmdline || []).join(" ");
+    const exeCell = cmd ? `${procExe(p)} <span class="muted" title="${esc(cmd)}">…</span>` : procExe(p);
+    const user = p.user ? esc(p.user) : '<span class="muted">unknown</span>';
+    const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
+    return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
+      <td>${exeCell}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">No processes found.</td></tr>`;
+
   const wins = winButtons([["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
   // Latency graph: only checks whose type records a measurement (like icmp).
@@ -290,6 +304,9 @@ function renderDetail(d) {
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
       <tbody>${lockRows}</tbody></table>
+    <h2>Processes</h2>
+    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Role</th><th>Source</th></tr></thead>
+      <tbody>${procRows}</tbody></table>
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Availability</h2>

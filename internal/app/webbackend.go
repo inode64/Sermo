@@ -64,6 +64,8 @@ type webEntry struct {
 	status      func(context.Context) (servicemgr.Status, error)
 	checkNames  []string          // sorted
 	checkTypes  map[string]string // check name -> type
+	discoverer  process.Discoverer
+	selectors   []process.Selector
 }
 
 // WebBackend implements web.Backend over the daemon's services: status from the
@@ -115,7 +117,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		if err != nil {
 			unit = base
 		}
-		engine, checkDeps, _ := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
+		engine, checkDeps, discoverer := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
+		selectors, _ := process.ParseSelectors(resolved.Tree)
 		names, types := checkCatalog(resolved.Tree)
 		wb.entries[name] = &webEntry{
 			displayName: config.DisplayName(resolved.Tree, name),
@@ -125,6 +128,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			status:      checkDeps.Status,
 			checkNames:  names,
 			checkTypes:  types,
+			discoverer:  discoverer,
+			selectors:   selectors,
 		}
 		wb.order = append(wb.order, name)
 	}
@@ -234,7 +239,25 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			}
 		}
 	}
+
+	procs, _ := e.discoverer.Discover(e.selectors)
+	for _, p := range procs {
+		d.Processes = append(d.Processes, processToWeb(p))
+	}
 	return d, true
+}
+
+func processToWeb(p process.Process) web.Process {
+	return web.Process{
+		PID:         p.PID,
+		PPID:        p.PPID,
+		User:        p.User,
+		Exe:         p.Exe,
+		ExeResolved: p.ExeOK,
+		Role:        p.Role,
+		Source:      p.Source,
+		Cmdline:     p.Cmdline,
+	}
 }
 
 func lockToWeb(lk locks.Lock) web.Lock {
