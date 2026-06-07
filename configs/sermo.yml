@@ -135,6 +135,16 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-fds-alert.sh]
+  # Watch a mount point: alert if /data is not mounted (or not as expected).
+  data-mount:
+    enabled: false
+    interval: 30s
+    check:
+      type: mount
+      path: /data
+      fstype: ext4          # optional; also: options: [rw], device: /dev/sdb1
+    then:
+      notify: [ops-email]
   # Watch for accumulating zombie processes (a parent not reaping its children).
   zombies:
     enabled: false

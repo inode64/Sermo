@@ -387,6 +387,32 @@ rules:
 	}
 }
 
+func TestValidateMountCheck(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  data: { type: mount, path: /data, fstype: ext4, options: [rw, noatime], mounted: true }
+`)
+	if hasIssue(good, "mount") || hasIssue(good, "checks.data") {
+		t.Fatalf("valid mount check flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-path: { type: mount }
+  bad-mounted: { type: mount, path: /data, mounted: "yes" }
+`)
+	mustHave(t, bad, "checks.no-path.path is required for a mount check")
+	mustHave(t, bad, "checks.bad-mounted.mounted must be a boolean")
+}
+
 func TestValidateResourceServiceCheckErrors(t *testing.T) {
 	issues := validateService(t, `
 kind: service

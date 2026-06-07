@@ -50,6 +50,8 @@ type Deps struct {
 	// FdsSampler reads system file-descriptor usage for `fds` checks. Nil reads
 	// /proc/sys/fs/file-nr.
 	FdsSampler FdsSamplerFunc
+	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
+	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
 	// Nil reads /proc/sys/net/netfilter.
 	ConntrackSampler ConntrackSamplerFunc
@@ -309,6 +311,25 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "conntrack check: " + err.Error()
 		}
 		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
+
+	case "mount":
+		path := asString(entry["path"])
+		if path == "" {
+			return nil, "mount check requires a path"
+		}
+		expectMount := true
+		if v, ok := entry["mounted"].(bool); ok {
+			expectMount = v
+		}
+		return mountCheck{
+			base:        b,
+			path:        path,
+			expectMount: expectMount,
+			fstype:      asString(entry["fstype"]),
+			device:      asString(entry["device"]),
+			options:     stringArray(entry["options"]),
+			sampler:     deps.MountSampler,
+		}, ""
 
 	case "entropy":
 		op, value, err := parseEntropyThreshold(entry)

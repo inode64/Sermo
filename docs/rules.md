@@ -24,8 +24,31 @@ which reuse the same schema). MVP types:
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
+| `mount`       | a path is mounted (optionally with the expected fstype/options/device)|
 
 Each check has an optional `timeout` (else `engine.default_timeout`).
+
+### Mount
+
+A `mount` check verifies a mount point. The base condition is "is it mounted";
+optional conditions refine what counts as healthy (and more can be added):
+
+```yaml
+checks:
+  data-mount:
+    type: mount
+    path: /data            # required: the mount point
+    mounted: true          # optional, default true (set false to assert it is NOT mounted)
+    fstype: ext4           # optional: expected filesystem type
+    options: [rw, noatime] # optional: these mount options must all be present
+    device: /dev/sdb1      # optional: expected source device
+```
+
+It reads `/proc/mounts`. It is health-style — `OK == true` means the mount matches
+expectations — so in rules `failed: {check: data-mount}` is true when it is not
+mounted (or the fstype/options/device don't match), and as a watch the hook/notify
+fires on that failure. Result data exposes `mounted`, `fstype`, `device` and
+`options`.
 
 ### Checks and host watches are the same types
 
@@ -39,8 +62,8 @@ The host-resource checks (`disk`, `load`, `fds`, `conntrack`, `entropy`, `zombie
 `oom`) are condition-style — `OK == true` means the threshold is crossed — so in
 rules `active: {check: x}` fires on breach, and as a watch the hook fires on breach.
 The health checks (`tcp`, `http`, `command`, `service`, `file_exists`, `binary`,
-`libraries`) are the opposite (`OK == true` is healthy), so as a watch they fire the
-hook on **failure**.
+`libraries`, `mount`) are the opposite (`OK == true` is healthy), so as a watch
+they fire the hook on **failure**.
 
 Two watch families stay watch-only because they are not single-shot: the
 multi-metric watches (`net`, `icmp`, `swap`, with a `metrics:` map and one hook per
