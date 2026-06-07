@@ -407,11 +407,12 @@ func (s *Store) IntegrityCheck() error {
 }
 
 // TrackedServices returns the distinct service names that have stored data
-// (monitoring state or SLA samples), so diagnostics can flag rows for services no
-// longer in the configuration.
+// (monitoring state, SLA samples, or check measurements), so diagnostics can
+// flag rows for services no longer in the configuration.
 func (s *Store) TrackedServices() ([]string, error) {
 	rows, err := s.db.Query(`SELECT service FROM monitor_state
-		UNION SELECT service FROM sla_sample ORDER BY service;`)
+		UNION SELECT service FROM sla_sample
+		UNION SELECT service FROM measurement ORDER BY service;`)
 	if err != nil {
 		return nil, err
 	}
