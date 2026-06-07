@@ -227,8 +227,9 @@ Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
 `monitor_source`, `monitor_changed_at`, backend, unit),
 `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, its SLA over the rolling windows, its named
-runtime locks (`sermoctl locks SERVICE`), and its discovered processes
-(`sermoctl processes SERVICE`)),
+runtime locks (`sermoctl locks SERVICE`), its discovered processes
+(`sermoctl processes SERVICE`), and its automatic remediation policy state
+(cooldown, backoff and rate-limit gating)),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
 for the window; `since` is a duration, default 24h, capped at the ~1-year
 retention),

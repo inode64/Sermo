@@ -89,6 +89,9 @@ type Deps struct {
 	// Snapshots collects each service's latest check results for the web detail
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
+	// Remediation collects each service's remediation policy view for the web
+	// detail. Optional: nil disables publishing.
+	Remediation *RemediationRegistry
 	// Events is the recent-event log the web UI reads (global and per-service).
 	// Optional: nil disables it. Wire it into Emit via MultiEmit to populate it.
 	Events *EventLog
@@ -167,11 +170,12 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	recordMeasurement := measurementRecorder(deps, name, tree)
 
 	worker := &Worker{
-		Service:   name,
-		Rules:     ruleSet,
-		Policy:    rules.ParsePolicy(tree),
-		State:     &rules.RemediationState{},
-		CheckDeps: checkDeps,
+		Service:     name,
+		Rules:       ruleSet,
+		Policy:      rules.ParsePolicy(tree),
+		State:       &rules.RemediationState{},
+		Remediation: deps.Remediation,
+		CheckDeps:   checkDeps,
 		Interval:  durationField(tree["interval"]),
 		Gates:     parseCheckGates(tree),
 		Sample:    sampleMetrics,

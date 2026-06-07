@@ -125,6 +125,7 @@ func run(args []string) int {
 		SLA:             store,
 		Notifiers:       notifiers,
 		Snapshots:       app.NewSnapshots(),
+		Remediation:     app.NewRemediationRegistry(),
 		Events:          eventLog,
 		SystemFreshness: interval / 2,
 		OpGate:          opGate,

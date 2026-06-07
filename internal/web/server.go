@@ -80,6 +80,20 @@ type Process struct {
 	Cmdline     []string `json:"cmdline,omitempty"`
 }
 
+// Remediation is the automatic remediation policy gating view for one service.
+type Remediation struct {
+	Allowed           bool   `json:"allowed"`
+	Reason            string `json:"reason,omitempty"` // cooldown | rate limit
+	Cooldown          string `json:"cooldown,omitempty"`
+	EffectiveCooldown string `json:"effective_cooldown,omitempty"`
+	CurrentBackoff    string `json:"current_backoff,omitempty"`
+	LastActionAt      string `json:"last_action_at,omitempty"`  // RFC3339
+	CooldownUntil     string `json:"cooldown_until,omitempty"`  // RFC3339
+	MaxActions        int    `json:"max_actions,omitempty"`
+	MaxActionsWindow  string `json:"max_actions_window,omitempty"`
+	RecentActions     int    `json:"recent_actions,omitempty"`
+}
+
 // Lock is a named runtime lock for one service (parity with `sermoctl locks`).
 type Lock struct {
 	Name        string `json:"name,omitempty"`
@@ -94,10 +108,11 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks and SLA.
 type Detail struct {
 	Service
-	Checks    []Check   `json:"checks"`
-	SLA       []SLAWindow `json:"sla"`
-	Locks     []Lock    `json:"locks,omitempty"`
-	Processes []Process `json:"processes,omitempty"`
+	Checks      []Check      `json:"checks"`
+	SLA         []SLAWindow  `json:"sla"`
+	Locks       []Lock       `json:"locks,omitempty"`
+	Processes   []Process    `json:"processes,omitempty"`
+	Remediation *Remediation `json:"remediation,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
