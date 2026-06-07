@@ -28,6 +28,52 @@ type RemediationState struct {
 	CurrentBackoff time.Duration // 0 when backoff is disabled or has decayed
 }
 
+// RemediationReport is a read-only operator view of policy gating (section 16).
+type RemediationReport struct {
+	Allowed           bool
+	Reason            string // cooldown | rate limit
+	Cooldown          time.Duration
+	EffectiveCooldown time.Duration
+	CurrentBackoff    time.Duration
+	LastActionAt      time.Time
+	CooldownUntil     time.Time // zero when not in cooldown/backoff
+	MaxActions        int
+	MaxActionsWindow  time.Duration
+	RecentActions     int
+}
+
+// Report returns whether an automatic remediation may run now and the timing
+// fields that explain a suppression.
+func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport {
+	if state == nil {
+		state = &RemediationState{}
+	}
+	allowed, reason := p.Allow(state, now)
+	effective := p.Cooldown
+	if state.CurrentBackoff > effective {
+		effective = state.CurrentBackoff
+	}
+	var until time.Time
+	if effective > 0 && !state.LastActionAt.IsZero() {
+		until = state.LastActionAt.Add(effective)
+		if !now.Before(until) {
+			until = time.Time{}
+		}
+	}
+	return RemediationReport{
+		Allowed:           allowed,
+		Reason:            reason,
+		Cooldown:          p.Cooldown,
+		EffectiveCooldown: effective,
+		CurrentBackoff:    state.CurrentBackoff,
+		LastActionAt:      state.LastActionAt,
+		CooldownUntil:     until,
+		MaxActions:        p.MaxActions,
+		MaxActionsWindow:  p.MaxActionsWindow,
+		RecentActions:     state.countWithin(now, p.MaxActionsWindow),
+	}
+}
+
 // Allow decides whether an automatic action may run now, returning a reason when
 // suppressed (section 16):
 //

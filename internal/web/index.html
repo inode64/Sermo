@@ -315,6 +315,8 @@ function renderDetail(d) {
     <button class="close" onclick="closeDetail()">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
+    <h2>Remediation</h2>
+    <p>${renderRemediation(d.remediation)}</p>
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
       <tbody>${lockRows}</tbody></table>
@@ -463,6 +465,39 @@ function closeDetail() { current = null; $("#detail").style.display = "none"; }
 function fmtTime(t) {
   const d = new Date(t);
   return isNaN(d) ? (t || "") : d.toLocaleString();
+}
+
+function fmtRemain(until) {
+  const d = new Date(until);
+  if (isNaN(d)) return "";
+  const sec = Math.floor((d - Date.now()) / 1000);
+  if (sec <= 0) return "elapsed";
+  if (sec < 60) return sec + "s remaining";
+  if (sec < 3600) return Math.floor(sec / 60) + "m remaining";
+  return Math.floor(sec / 3600) + "h remaining · until " + fmtTime(until);
+}
+
+function renderRemediation(r) {
+  if (!r) return '<span class="muted">not observed yet</span>';
+  const parts = [];
+  if (!r.allowed) {
+    if (r.reason === "cooldown") {
+      const rem = r.cooldown_until ? fmtRemain(r.cooldown_until) : "";
+      parts.push(`<span class="inactive">cooldown</span>${rem ? " · " + esc(rem) : ""}`);
+      if (r.effective_cooldown) parts.push(`<span class="muted">effective ${esc(r.effective_cooldown)}</span>`);
+    } else if (r.reason === "rate limit") {
+      const lim = r.max_actions ? `${r.recent_actions || 0}/${r.max_actions}` : String(r.recent_actions || 0);
+      parts.push(`<span class="inactive">rate limit</span> · ${esc(lim)}`);
+      if (r.max_actions_window) parts.push(`<span class="muted">in ${esc(r.max_actions_window)}</span>`);
+    } else if (r.reason) {
+      parts.push(`<span class="inactive">${esc(r.reason)}</span>`);
+    }
+  } else {
+    parts.push('<span class="ok">ready</span>');
+  }
+  if (r.current_backoff) parts.push(`<span class="muted">backoff ${esc(r.current_backoff)}</span>`);
+  if (r.last_action_at) parts.push(`<span class="muted">last action ${esc(fmtAge(r.last_action_at))}</span>`);
+  return parts.join(" · ");
 }
 
 function fmtAge(t) {

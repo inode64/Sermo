@@ -87,6 +87,33 @@ func TestBackoffExtendsEffectiveCooldown(t *testing.T) {
 	}
 }
 
+func TestPolicyReportCooldownUntil(t *testing.T) {
+	p := Policy{Cooldown: time.Minute}
+	st := &RemediationState{LastActionAt: t0}
+	rep := p.Report(st, t0.Add(30*time.Second))
+	if rep.Allowed || rep.Reason != "cooldown" {
+		t.Fatalf("Report = %+v, want suppressed cooldown", rep)
+	}
+	wantUntil := t0.Add(time.Minute)
+	if !rep.CooldownUntil.Equal(wantUntil) {
+		t.Fatalf("CooldownUntil = %v, want %v", rep.CooldownUntil, wantUntil)
+	}
+	if rep.EffectiveCooldown != time.Minute {
+		t.Fatalf("EffectiveCooldown = %v", rep.EffectiveCooldown)
+	}
+}
+
+func TestPolicyReportRateLimit(t *testing.T) {
+	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
+	st := &RemediationState{}
+	st.Record(t0, Policy{MaxActionsWindow: time.Hour})
+	st.Record(t0.Add(time.Minute), Policy{MaxActionsWindow: time.Hour})
+	rep := p.Report(st, t0.Add(2*time.Minute))
+	if rep.Allowed || rep.Reason != "rate limit" || rep.RecentActions != 2 {
+		t.Fatalf("Report = %+v", rep)
+	}
+}
+
 func TestRecoverResetsBackoff(t *testing.T) {
 	st := &RemediationState{CurrentBackoff: 8 * time.Minute}
 	st.Recover()
