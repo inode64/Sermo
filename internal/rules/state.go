@@ -50,8 +50,9 @@ func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
 	return true, ""
 }
 
-// Record updates the state after an action runs: stamps the time, trims the
-// rate-limit window, and grows the backoff if enabled (section 16).
+// Record updates the state after an executed automatic remediation: stamps the
+// time, trims the rate-limit window, and grows the backoff if enabled
+// (section 16). Blocked and preflight-failed operations must not call Record.
 func (s *RemediationState) Record(now time.Time, p Policy) {
 	s.LastActionAt = now
 	s.RecentActions = append(s.RecentActions, now)
