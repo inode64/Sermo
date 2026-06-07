@@ -175,6 +175,24 @@ func run(args []string) int {
 	}
 	readiness := app.NewReadiness(string(detection.Backend), len(workers), len(watches))
 
+	// Write a pidfile under the runtime directory so sermoctl reload (and
+	// operators) can reliably signal the running daemon for config reload.
+	// This augments the pidfile managed by OpenRC (/run/sermod.pid) and
+	// systemd's $MAINPID. Best-effort; failure is only logged.
+	{
+		pidDir := cfg.Global.RuntimeDir()
+		if pidDir == "" {
+			pidDir = "/run/sermo"
+		}
+		pidPath := filepath.Join(pidDir, "sermod.pid")
+		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil {
+			logger.Warn("write pidfile failed (reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
+		} else {
+			// Best effort cleanup on normal exit (init systems may manage their own).
+			defer func(p string) { _ = os.Remove(p) }(pidPath)
+		}
+	}
+
 	var webHolder *app.WebBackendHolder
 	addr, webDisabledReason := webListenAddr(cfg)
 	if addr != "" {
@@ -191,6 +209,12 @@ func run(args []string) int {
 			Logger:           logger,
 			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
 			Readiness:        readiness,
+			// Trigger reload by signalling ourself with SIGHUP. This re-uses the
+			// exact same Monitor.Reload path as external SIGHUP, systemd
+			// ExecReload, or sermoctl (when it finds the pid).
+			Reload: func() error {
+				return syscall.Kill(os.Getpid(), syscall.SIGHUP)
+			},
 		}
 		logger.Debug("starting web ui server", "address", addr, "auth", auth.Enabled())
 		go func() {

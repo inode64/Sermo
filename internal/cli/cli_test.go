@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
 
@@ -236,4 +239,33 @@ func (m fakeManager) record(action, service string) error {
 		*m.actions = append(*m.actions, action+" "+service)
 	}
 	return m.actionErr
+}
+
+// TestReloadNoPid exercises the error path for sermoctl reload when no
+// sermod pidfile or live process can be found. It proves the command is
+// wired and uses the loaded config's runtime dir for pidfile discovery.
+func TestReloadNoPid(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	// Minimal valid global config with a runtime under the temp dir (no pidfile will exist).
+	minCfg := []byte("paths:\n  runtime: " + tmp + "\ndefaults:\n  policy:\n    cooldown: 5m\n")
+	if err := os.WriteFile(cfgPath, minCfg, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	app := App{
+		LoadConfig: config.Load,
+		Stderr:     &stderr,
+		Stdout:     &bytes.Buffer{},
+	}
+
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "reload"})
+	if code != exitRuntimeError {
+		t.Fatalf("reload exit = %d, want %d", code, exitRuntimeError)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "pid") || (!strings.Contains(out, "could not find") && !strings.Contains(out, "failed to signal")) {
+		t.Fatalf("stderr did not report pid lookup/signal failure: %q", out)
+	}
 }

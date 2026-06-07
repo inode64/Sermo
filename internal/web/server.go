@@ -287,6 +287,12 @@ type Server struct {
 	// Readiness is optional; nil makes /readyz report ready (tests).
 	Readiness ReadinessChecker
 
+	// Reload, if set, is called for admin POST /api/reload requests. It should
+	// trigger a configuration reload (equivalent to SIGHUP on the daemon).
+	// Used by both the web UI button and (indirectly) sermoctl reload when the
+	// web UI is reachable.
+	Reload func() error
+
 	started  time.Time         // when the server began serving; for /livez uptime
 	shutdown context.Context // daemon lifetime; set in Run
 }
@@ -313,6 +319,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
 	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
+	mux.HandleFunc("POST /api/reload", s.handleReload)
 	return s.withAuth(mux)
 }
 
@@ -552,6 +559,18 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "unknown action " + action})
 	}
+}
+
+func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
+	if s.Reload == nil {
+		writeJSON(w, http.StatusServiceUnavailable, ActionResult{OK: false, Message: "reload is not available for this daemon"})
+		return
+	}
+	if err := s.Reload(); err != nil {
+		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, ActionResult{OK: true, Message: "reload requested"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
