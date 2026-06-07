@@ -169,6 +169,19 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-zombies-alert.sh]
+  # Watch a TLS certificate: alert before expiry, on invalid chain, or on an
+  # algorithm/issuer change.
+  api-cert:
+    enabled: false
+    interval: 1h
+    check:
+      type: cert
+      host: api.example.com
+      expires_in_days: 14
+      on_algorithm_change: true
+      on_issuer_change: true
+    then:
+      notify: [ops-email]
   # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
   entropy:
     enabled: false

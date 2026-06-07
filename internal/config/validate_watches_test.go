@@ -360,6 +360,33 @@ func TestValidateZombiesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateCertWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"api-cert": map[string]any{
+				"check": map[string]any{"type": "cert", "host": "api.example.com", "expires_in_days": 14, "on_issuer_change": true},
+				"then":  map[string]any{"notify": []any{"x"}},
+			},
+		},
+		"notifiers": map[string]any{"x": map[string]any{"type": "slack", "webhook": "https://h/x"}},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("a cert watch should be valid, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"c": map[string]any{
+				"check": map[string]any{"type": "cert"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, "watches.c.check.host is required for a cert check") {
+		t.Fatalf("expected missing-host issue, got %v", bad)
+	}
+}
+
 func TestValidateEntropyWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

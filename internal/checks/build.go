@@ -60,6 +60,9 @@ type Deps struct {
 	EntropySampler EntropySamplerFunc
 	// ZombieSampler counts zombie processes for `zombies` checks. Nil scans /proc.
 	ZombieSampler ZombieSamplerFunc
+	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil dials
+	// the host.
+	CertSampler CertSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -345,6 +348,40 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			value = v
 		}
 		return &oomCheck{base: b, op: op, value: value, sampler: deps.OomSampler}, ""
+
+	case "cert":
+		host := asString(entry["host"])
+		if host == "" {
+			return nil, "cert check requires a host"
+		}
+		port := "443"
+		if p, ok := intField(entry["port"]); ok {
+			port = strconv.Itoa(p)
+		}
+		serverName := asString(entry["server_name"])
+		if serverName == "" {
+			serverName = host
+		}
+		days := 0
+		if v, ok := intField(entry["expires_in_days"]); ok {
+			days = v
+		}
+		verify := true
+		if v, ok := entry["verify"].(bool); ok {
+			verify = v
+		}
+		return &certCheck{
+			base:           b,
+			host:           host,
+			port:           port,
+			serverName:     serverName,
+			expiresInDays:  days,
+			onAlgoChange:   asBool(entry["on_algorithm_change"]),
+			onIssuerChange: asBool(entry["on_issuer_change"]),
+			onChange:       asBool(entry["on_change"]),
+			verify:         verify,
+			sampler:        deps.CertSampler,
+		}, ""
 
 	case "swap":
 		metric := asString(entry["metric"])
