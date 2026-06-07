@@ -100,6 +100,7 @@ func run(args []string) int {
 	eventLog := app.NewEventLog(1000)
 
 	interval := engineDuration(cfg, "interval", 30*time.Second)
+	opGate := app.NewOpGate(engineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
 	deps := app.Deps{
 		Backend:        detection.Backend,
 		Manager:        manager,
@@ -118,6 +119,7 @@ func run(args []string) int {
 		Snapshots:       app.NewSnapshots(),
 		Events:          eventLog,
 		SystemFreshness: interval / 2,
+		OpGate:          opGate,
 	}
 
 	// Bound the SLA and measurement tables to roughly a year of per-minute data.
@@ -183,7 +185,7 @@ func run(args []string) int {
 		OpSlots:      engineInt(cfg, "max_parallel_operations", 2),
 		StartupDelay: startupDelay,
 	}
-	scheduler.Run(ctx, workers, watches)
+	scheduler.Run(ctx, workers, watches, opGate)
 	logger.Info("sermod stopped")
 	return 0
 }

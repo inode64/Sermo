@@ -82,13 +82,17 @@ type WebBackend struct {
 	host      diag.Host
 	measure   MeasurementReader
 	emit      func(Event)
+	opGate    *OpGate
 }
 
 // NewWebBackend resolves every enabled service once and wires its status, engine
 // and metadata for the web UI. Services that fail to resolve are skipped with a
 // warning (like BuildWorkers).
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
-	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events, cfg: cfg, host: diag.OSHost{}, emit: deps.Emit}
+	wb := &WebBackend{
+		entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots,
+		events: deps.Events, cfg: cfg, host: diag.OSHost{}, emit: deps.Emit, opGate: deps.OpGate,
+	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
 	wb.diagStore, _ = deps.Monitor.(diag.Store)
@@ -322,16 +326,29 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
+	run := func(ctx context.Context) operation.Result {
+		switch action {
+		case "start":
+			return e.engine.Start(ctx)
+		case "stop":
+			return e.engine.Stop(ctx)
+		case "restart":
+			return e.engine.Restart(ctx)
+		default:
+			return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action " + action}
+		}
+	}
 	var r operation.Result
-	switch action {
-	case "start":
-		r = e.engine.Start(ctx)
-	case "stop":
-		r = e.engine.Stop(ctx)
-	case "restart":
-		r = e.engine.Restart(ctx)
-	default:
-		return web.ActionResult{OK: false, Message: "unknown action " + action}
+	if b.opGate != nil {
+		r = b.opGate.Run(ctx, name, action, run)
+	} else {
+		r = run(ctx)
+	}
+	if r.Action == "" && action != "" {
+		r.Action = action
+	}
+	if r.Service == "" {
+		r.Service = name
 	}
 	msg := r.Message
 	if msg == "" {

@@ -29,7 +29,7 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil, nil)
 		close(done)
 	}()
 
@@ -62,7 +62,7 @@ func TestSchedulerHonorsPerWorkerInterval(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil)
+		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil, nil)
 		close(done)
 	}()
 
@@ -93,7 +93,7 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil)
 		close(done)
 	}()
 
@@ -128,7 +128,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil)
 		close(done)
 	}()
 
@@ -161,7 +161,7 @@ func TestSchedulerRunsWatches(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w})
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil)
 		close(done)
 	}()
 
@@ -176,7 +176,7 @@ func TestSchedulerRunsWatches(t *testing.T) {
 }
 
 func TestGateOperateSerializesAcrossWorkers(t *testing.T) {
-	sem := make(chan struct{}, 1) // one global operation slot
+	gate := NewOpGate(1, "")
 
 	var mu sync.Mutex
 	var inFlight, maxInFlight int
@@ -197,7 +197,7 @@ func TestGateOperateSerializesAcrossWorkers(t *testing.T) {
 	workers := make([]*Worker, 4)
 	for i := range workers {
 		w := &Worker{Service: "w", Operate: body}
-		gateOperate(w, sem)
+		gateOperate(w, gate)
 		workers[i] = w
 	}
 
@@ -217,14 +217,14 @@ func TestGateOperateSerializesAcrossWorkers(t *testing.T) {
 }
 
 func TestGateOperateReturnsOnShutdown(t *testing.T) {
-	sem := make(chan struct{}, 1)
-	sem <- struct{}{} // pre-fill: no slot available
+	gate := NewOpGate(1, "")
+	gate.mem <- struct{}{} // pre-fill: no slot available
 
 	w := &Worker{Service: "w", Operate: func(context.Context, string) operation.Result {
 		t.Fatal("inner Operate must not run when no slot and ctx is cancelled")
 		return operation.Result{}
 	}}
-	gateOperate(w, sem)
+	gateOperate(w, gate)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
