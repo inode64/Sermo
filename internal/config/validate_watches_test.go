@@ -206,6 +206,41 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateOomWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"oom-bare": map[string]any{ // no delta: defaults to any kill
+				"check": map[string]any{"type": "oom"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"oom-burst": map[string]any{
+				"check": map[string]any{"type": "oom", "delta": map[string]any{"op": ">", "value": 3}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/y"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"oom": map[string]any{
+				"check": map[string]any{"type": "oom", "delta": map[string]any{"op": "=>", "value": "many"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.oom.check.delta has an invalid op",
+		"watches.oom.check.delta value \"many\" must be numeric",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
 func TestValidateLoadWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
