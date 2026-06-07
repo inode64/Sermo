@@ -323,10 +323,6 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		return exitConfigInvalid
 	}
 
-	opTimeout := operation.ResolveTimeout(opts.timeout, resolved.Tree)
-	ctx, cancel := context.WithTimeout(ctx, opTimeout)
-	defer cancel()
-
 	result, err := a.Operate(ctx, opts, cfg, resolved, service, action)
 	if err != nil {
 		a.reportError(opts, err.Error())
@@ -380,8 +376,12 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 
+	opTimeout := operation.ResolveTimeout(opts.timeout, resolved.Tree)
+	opCtx, cancel := context.WithTimeout(ctx, opTimeout)
+	defer cancel()
+
 	gate := app.NewOpGate(app.OpSlotsFromConfig(cfg), cfg.Global.RuntimeDir())
-	result := gate.Run(ctx, service, action, func(ctx context.Context) operation.Result {
+	result := gate.Run(opCtx, service, action, func(ctx context.Context) operation.Result {
 		switch action {
 		case "start":
 			return engine.Start(ctx)

@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/operation"
+	"sermo/internal/servicemgr"
 )
 
 func writeActionConfig(t *testing.T) string {
@@ -20,6 +22,7 @@ func writeActionConfig(t *testing.T) string {
 	mustWrite(t, global, `
 paths:
   enabled: [ `+root+`/enabled ]
+  runtime: `+root+`/run
 defaults:
   policy:
     cooldown: 5m
@@ -148,6 +151,73 @@ func TestActionUnknownService(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unknown service") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+type slowDetector struct {
+	delay     time.Duration
+	detection servicemgr.Detection
+}
+
+func (d slowDetector) Detect(ctx context.Context, _ servicemgr.Backend) (servicemgr.Detection, error) {
+	timer := time.NewTimer(d.delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return d.detection, nil
+	case <-ctx.Done():
+		return servicemgr.Detection{}, ctx.Err()
+	}
+}
+
+type deadlineManager struct {
+	fakeManager
+	remaining *time.Duration
+}
+
+func (m deadlineManager) Start(ctx context.Context, service string) error {
+	if d, ok := ctx.Deadline(); ok {
+		*m.remaining = time.Until(d)
+	}
+	return m.fakeManager.Start(ctx, service)
+}
+
+func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
+	global := writeActionConfig(t)
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) > 0 {
+		t.Fatalf("resolve: %v", errs)
+	}
+
+	detectDelay := 80 * time.Millisecond
+	opTimeout := 200 * time.Millisecond
+	var remaining time.Duration
+
+	app := App{
+		LoadConfig: config.Load,
+		Detector: slowDetector{
+			delay:     detectDelay,
+			detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd},
+		},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return deadlineManager{fakeManager: fakeManager{}, remaining: &remaining}, nil
+		},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+	}
+
+	_, err = app.defaultOperate(context.Background(), options{timeout: opTimeout, config: global}, cfg, resolved, "web", "start")
+	if err != nil {
+		t.Fatalf("defaultOperate: %v", err)
+	}
+
+	// The engine must receive the full operation budget, not detectDelay less.
+	if remaining < 150*time.Millisecond {
+		t.Fatalf("engine context had %v remaining, want ~%v after %v detect delay", remaining, opTimeout, detectDelay)
 	}
 }
 
