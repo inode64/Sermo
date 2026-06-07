@@ -134,6 +134,35 @@ func (s *Store) migrate() error {
 	return nil
 }
 
+// MonitorRecord is one service's persisted monitoring state.
+type MonitorRecord struct {
+	Active    bool
+	Source    string
+	UpdatedAt time.Time
+}
+
+// MonitorState returns a service's persisted monitoring row. found is false when
+// the service has no recorded state yet.
+func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
+	var active int
+	var source, updated string
+	err := s.db.QueryRow(
+		`SELECT active, source, updated_at FROM monitor_state WHERE service = ?;`,
+		service,
+	).Scan(&active, &source, &updated)
+	switch {
+	case err == sql.ErrNoRows:
+		return MonitorRecord{}, false, nil
+	case err != nil:
+		return MonitorRecord{}, false, err
+	default:
+		at, _ := time.Parse(time.RFC3339, updated)
+		return MonitorRecord{
+			Active: active != 0, Source: source, UpdatedAt: at,
+		}, true, nil
+	}
+}
+
 // Active reports whether monitoring is currently active for a service. found is
 // false when the service has no recorded state yet (the caller decides the
 // default — typically "monitor on").

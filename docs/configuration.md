@@ -223,7 +223,8 @@ Notes:
 - Never publish port `9797` directly; only the proxy should connect to it.
 
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
-monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
+monitored, `monitor_source`, `monitor_changed_at`, backend, unit),
+`GET /api/services/{name}` (a service's detail: its
 checks with the latest result, and its SLA over the rolling windows),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
 for the window; `since` is a duration, default 24h, capped at the ~1-year
@@ -284,9 +285,11 @@ per minute for roughly a year (pruned like the SLA samples); a check that only
 runs every N cycles ([per-check interval](#per-check-interval)) records a sample
 only when it actually runs, so the average is not skewed.
 
-Web-triggered monitor changes are recorded with source `web` in the state store,
-and operations take the per-service operation lock, so they never overlap a
-worker's action on the same service.
+Web-triggered monitor changes are recorded with source `web` in the state store
+(`cli`, `config` and `daemon` are the other values). The dashboard and
+`GET /api/services` expose `monitor_source` and `monitor_changed_at` so a paused
+service shows who paused it and when. Operations take the per-service operation
+lock, so they never overlap a worker's action on the same service.
 
 Because the daemon runs as root, the UI is hardened: it binds to loopback by
 default, supports auth (above), sets HTTP timeouts, and requires an

@@ -3,19 +3,31 @@ package app
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/state"
 )
 
 // fakeStore is an in-memory MonitorStore for testing the startup reconciliation
 // and the live pause check without a real database.
 type fakeStore struct {
 	active  map[string]bool
+	source  map[string]string
+	updated map[string]time.Time
 	failGet bool
 	failSet bool
+	now     func() time.Time
 }
 
-func newFakeStore() *fakeStore { return &fakeStore{active: map[string]bool{}} }
+func newFakeStore() *fakeStore {
+	return &fakeStore{
+		active:  map[string]bool{},
+		source:  map[string]string{},
+		updated: map[string]time.Time{},
+		now:     time.Now,
+	}
+}
 
 func (f *fakeStore) Active(service string) (bool, bool, error) {
 	if f.failGet {
@@ -25,12 +37,31 @@ func (f *fakeStore) Active(service string) (bool, bool, error) {
 	return a, ok, nil
 }
 
-func (f *fakeStore) SetActive(service string, active bool, _ string) error {
+func (f *fakeStore) SetActive(service string, active bool, source string) error {
 	if f.failSet {
 		return errors.New("boom")
 	}
 	f.active[service] = active
+	f.source[service] = source
+	now := f.now
+	if now == nil {
+		now = time.Now
+	}
+	f.updated[service] = now()
 	return nil
+}
+
+func (f *fakeStore) MonitorState(service string) (state.MonitorRecord, bool, error) {
+	if f.failGet {
+		return state.MonitorRecord{}, false, errors.New("boom")
+	}
+	a, ok := f.active[service]
+	if !ok {
+		return state.MonitorRecord{}, false, nil
+	}
+	return state.MonitorRecord{
+		Active: a, Source: f.source[service], UpdatedAt: f.updated[service],
+	}, true, nil
 }
 
 func TestApplyMonitorMode(t *testing.T) {

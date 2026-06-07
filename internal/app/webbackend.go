@@ -161,20 +161,24 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 			status = string(st)
 		}
 	}
-	monitored := true // no recorded state defaults to monitored
-	if b.store != nil {
-		if active, found, err := b.store.Active(name); err == nil && found {
-			monitored = active
-		}
-	}
-	return web.Service{
+	svc := web.Service{
 		Name:        name,
 		DisplayName: e.displayName,
 		Backend:     e.backend,
 		Unit:        e.unit,
 		Status:      status,
-		Monitored:   monitored,
+		Monitored:   true, // no recorded state defaults to monitored
 	}
+	if b.store != nil {
+		if rec, found, err := b.store.MonitorState(name); err == nil && found {
+			svc.Monitored = rec.Active
+			svc.MonitorSource = rec.Source
+			if !rec.UpdatedAt.IsZero() {
+				svc.MonitorChangedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
+			}
+		}
+	}
+	return svc
 }
 
 func (b *WebBackend) Services(ctx context.Context) []web.Service {

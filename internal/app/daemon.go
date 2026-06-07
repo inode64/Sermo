@@ -25,6 +25,7 @@ import (
 type MonitorStore interface {
 	Active(service string) (active, found bool, err error)
 	SetActive(service string, active bool, source string) error
+	MonitorState(service string) (state.MonitorRecord, bool, error)
 }
 
 // SLARecorder persists one availability sample per observed monitoring cycle, so
