@@ -387,17 +387,20 @@ rules:
 	}
 }
 
-func TestValidateMountCheck(t *testing.T) {
+func TestValidateDiskMountIntegration(t *testing.T) {
+	// A disk check carries space/inode predicates and/or mount conditions in one
+	// entry (no separate mount type) — including a mount-only disk check.
 	good := validateService(t, `
 kind: service
 name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  data: { type: mount, path: /data, fstype: ext4, options: [rw, noatime], mounted: true }
+  data: { type: disk, path: /data, used_pct: { op: ">=", value: 90 }, fstype: ext4, options: [rw], mounted: true }
+  mountonly: { type: disk, path: /srv, mounted: true }
 `)
-	if hasIssue(good, "mount") || hasIssue(good, "checks.data") {
-		t.Fatalf("valid mount check flagged: %v", good)
+	if hasIssue(good, "checks.data") || hasIssue(good, "checks.mountonly") {
+		t.Fatalf("valid disk+mount checks flagged: %v", good)
 	}
 
 	bad := validateService(t, `
@@ -406,10 +409,10 @@ name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  no-path: { type: mount }
-  bad-mounted: { type: mount, path: /data, mounted: "yes" }
+  empty: { type: disk, path: /data }
+  bad-mounted: { type: disk, path: /data, mounted: "yes" }
 `)
-	mustHave(t, bad, "checks.no-path.path is required for a mount check")
+	mustHave(t, bad, "checks.empty requires a space/inode predicate")
 	mustHave(t, bad, "checks.bad-mounted.mounted must be a boolean")
 }
 

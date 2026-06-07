@@ -242,7 +242,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if err != nil {
 			return nil, "disk check: " + err.Error()
 		}
-		return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage}, ""
+		mount := parseMountCond(entry)
+		if len(preds) == 0 && !mount.active {
+			return nil, "disk check requires a space/inode predicate and/or a mount condition (mounted/fstype/options/device)"
+		}
+		return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
 
 	case "net":
 		iface := asString(entry["interface"])
@@ -311,25 +315,6 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "conntrack check: " + err.Error()
 		}
 		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
-
-	case "mount":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "mount check requires a path"
-		}
-		expectMount := true
-		if v, ok := entry["mounted"].(bool); ok {
-			expectMount = v
-		}
-		return mountCheck{
-			base:        b,
-			path:        path,
-			expectMount: expectMount,
-			fstype:      asString(entry["fstype"]),
-			device:      asString(entry["device"]),
-			options:     stringArray(entry["options"]),
-			sampler:     deps.MountSampler,
-		}, ""
 
 	case "entropy":
 		op, value, err := parseEntropyThreshold(entry)

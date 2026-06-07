@@ -1,11 +1,9 @@
 package checks
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 )
 
 // Mount is one entry of the mount table.
@@ -20,81 +18,72 @@ type Mount struct {
 // default reads /proc/mounts.
 type MountSamplerFunc func() ([]Mount, error)
 
-// mountCheck verifies a mount point. The base condition is "is it mounted"
-// (expectMount); further conditions (fstype, options, device) refine what counts
-// as healthy and are easy to extend. It is health-style: OK==true means the mount
-// matches expectations, so as a watch it fires its hook on failure.
-type mountCheck struct {
-	base
-	path        string
-	expectMount bool
+// mountCond are the optional mount expectations folded into a disk check, so a
+// filesystem's mount and its space are checked from one entry (no duplicated
+// path). active is true when any condition was configured.
+type mountCond struct {
+	active      bool
+	expectMount bool // require mounted; when false, require NOT mounted
 	fstype      string
 	device      string
 	options     []string
-	sampler     MountSamplerFunc
 }
 
-func (c mountCheck) Run(_ context.Context) Result {
-	start := time.Now()
-	sampler := c.sampler
-	if sampler == nil {
-		sampler = defaultMountSampler
+// parseMountCond reads the mount expectations from a disk check entry. Any of
+// mounted/fstype/options/device activates mount verification; `mounted` defaults
+// to true when a condition is present.
+func parseMountCond(entry map[string]any) mountCond {
+	m := mountCond{expectMount: true}
+	if v, ok := entry["mounted"].(bool); ok {
+		m.active, m.expectMount = true, v
 	}
-	mounts, err := sampler()
-	if err != nil {
-		return c.result(false, "mount: "+err.Error(), start)
+	m.fstype = asString(entry["fstype"])
+	m.device = asString(entry["device"])
+	m.options = stringArray(entry["options"])
+	if m.fstype != "" || m.device != "" || len(m.options) > 0 {
+		m.active = true
 	}
+	return m
+}
 
-	var found *Mount
+// evaluate checks the mount table for path against the expectations. problem is
+// true when the expectation is violated; info is the matching mount entry (nil
+// when not mounted).
+func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool, reason string, info *Mount) {
 	for i := range mounts {
-		if mounts[i].MountPoint == c.path {
-			found = &mounts[i]
+		if mounts[i].MountPoint == path {
+			info = &mounts[i]
 			break
 		}
 	}
-	mounted := found != nil
-	data := map[string]any{"path": c.path, "mounted": mounted}
+	mounted = info != nil
 
-	// expectMount=false: assert the path is NOT a mount point.
-	if !c.expectMount {
-		res := c.result(!mounted, fmt.Sprintf("%s mounted=%t (want unmounted)", c.path, mounted), start)
-		res.Data = data
-		return res
+	if !m.expectMount {
+		if mounted {
+			return mounted, true, "is mounted (want unmounted)", info
+		}
+		return mounted, false, "", info
 	}
 	if !mounted {
-		res := c.result(false, c.path+" is not mounted", start)
-		res.Data = data
-		return res
+		return mounted, true, "is not mounted", info
 	}
 
-	data["fstype"] = found.FSType
-	data["device"] = found.Device
-	data["options"] = strings.Join(found.Options, ",")
-
-	ok := true
 	var problems []string
-	if c.fstype != "" && found.FSType != c.fstype {
-		ok = false
-		problems = append(problems, fmt.Sprintf("fstype %s (want %s)", found.FSType, c.fstype))
+	if m.fstype != "" && info.FSType != m.fstype {
+		problems = append(problems, fmt.Sprintf("fstype %s (want %s)", info.FSType, m.fstype))
 	}
-	if c.device != "" && found.Device != c.device {
-		ok = false
-		problems = append(problems, fmt.Sprintf("device %s (want %s)", found.Device, c.device))
+	if m.device != "" && info.Device != m.device {
+		problems = append(problems, fmt.Sprintf("device %s (want %s)", info.Device, m.device))
 	}
-	for _, opt := range c.options {
-		if !containsString(found.Options, opt) {
-			ok = false
+	for _, opt := range m.options {
+		if !containsString(info.Options, opt) {
 			problems = append(problems, "missing option "+opt)
 		}
 	}
-
-	msg := fmt.Sprintf("%s mounted (%s on %s)", c.path, found.FSType, found.Device)
-	if !ok {
-		msg = c.path + ": " + strings.Join(problems, ", ")
+	if len(problems) > 0 {
+		return mounted, true, strings.Join(problems, ", "), info
 	}
-	res := c.result(ok, msg, start)
-	res.Data = data
-	return res
+	return mounted, false, "", info
 }
 
 // defaultMountSampler reads the mount table from /proc/mounts.

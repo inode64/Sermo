@@ -230,9 +230,6 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		case "conntrack":
 			validateThresholdPreds(cp, check, []string{"used_pct", "free", "count"}, add)
 			validateHookBlock("watches."+name, entry, add)
-		case "mount":
-			validateMountFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
 		case "entropy":
 			validateEntropyFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
@@ -287,12 +284,44 @@ func validateWatchWindow(name string, entry map[string]any, add func(string, ...
 
 // validateDiskFields validates a disk check's fields at prefix (the dotted path
 // to the fields container, e.g. "watches.disk-root.check" or "checks.root").
-// Shared by host watches and service checks so disk works identically in both.
+// Shared by host watches and service checks. A disk check verifies space/inodes
+// and/or the mount (mounted/fstype/options/device), so at least one of the two
+// must be present.
 func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	if scalarString(fields["path"]) == "" {
 		add("%s.path is required for a disk check", prefix)
 	}
-	validateThresholdPreds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
+	preds := validatePresentThresholds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
+	hasMount := validateMountConditions(prefix, fields, add)
+	if preds == 0 && !hasMount {
+		add("%s requires a space/inode predicate (used_pct/free_pct/inodes_*) and/or a mount condition (mounted/fstype/options/device)", prefix)
+	}
+}
+
+// validateMountConditions validates the optional mount fields of a disk check and
+// reports whether any was present (a boolean mounted, string fstype/device, or a
+// string-list options).
+func validateMountConditions(prefix string, fields map[string]any, add addFunc) bool {
+	active := false
+	if v, present := fields["mounted"]; present {
+		active = true
+		if _, ok := v.(bool); !ok {
+			add("%s.mounted must be a boolean", prefix)
+		}
+	}
+	if scalarString(fields["fstype"]) != "" {
+		active = true
+	}
+	if scalarString(fields["device"]) != "" {
+		active = true
+	}
+	if v, present := fields["options"]; present {
+		active = true
+		if !isStringArray(v) {
+			add("%s.options must be a non-empty list of strings", prefix)
+		}
+	}
+	return active
 }
 
 // validateHookBlock validates a `then` action block: a hook and/or a notify list
@@ -400,10 +429,9 @@ func validateThresholdMap(prefix, field string, raw any, suffix string, add addF
 	}
 }
 
-// validateThresholdPreds validates a check whose body is a set of named threshold
-// predicates (each {op, value}), requiring at least one of fields to be present.
-// Shared by disk, fds, conntrack and load.
-func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) {
+// validatePresentThresholds validates the present {op, value} predicates among
+// fields and returns how many were present (it does not require any).
+func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) int {
 	preds := 0
 	for _, field := range fields {
 		raw, present := fieldsMap[field]
@@ -423,7 +451,14 @@ func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []st
 			add("%s.%s value %q must be numeric", prefix, field, scalarString(m["value"]))
 		}
 	}
-	if preds == 0 {
+	return preds
+}
+
+// validateThresholdPreds validates a check whose body is a set of named threshold
+// predicates (each {op, value}), requiring at least one of fields to be present.
+// Shared by fds, conntrack and load.
+func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) {
+	if validatePresentThresholds(prefix, fieldsMap, fields, add) == 0 {
 		add("%s requires at least one of %s", prefix, strings.Join(fields, "/"))
 	}
 }
@@ -878,7 +913,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "mount")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -979,26 +1014,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateZombieFields(path, entry, add)
 		case "oom":
 			validateOomFields(path, entry, add)
-		case "mount":
-			validateMountFields(path, entry, add)
 		}
-	}
-}
-
-// validateMountFields validates a mount check at prefix: a required path, an
-// optional boolean `mounted`, and an optional `options` string list. fstype and
-// device are free-form strings (no constraint). New mount conditions add here.
-func validateMountFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["path"]) == "" {
-		add("%s.path is required for a mount check", prefix)
-	}
-	if v, present := fields["mounted"]; present {
-		if _, ok := v.(bool); !ok {
-			add("%s.mounted must be a boolean", prefix)
-		}
-	}
-	if v, present := fields["options"]; present && !isStringArray(v) {
-		add("%s.options must be a non-empty list of strings", prefix)
 	}
 }
 
