@@ -96,6 +96,14 @@ type ActivitySummary struct {
 	LastEventWatch   string `json:"last_event_watch,omitempty"`
 }
 
+// MonitoringStatus summarizes how many services are currently being monitored
+// vs paused. Useful for a quick header summary.
+type MonitoringStatus struct {
+	Total     int `json:"total"`
+	Monitored int `json:"monitored"`
+	Paused    int `json:"paused"`
+}
+
 // HostMetric is a single current host-level reading (from the metrics collector).
 type HostMetric struct {
 	Name     string  `json:"name"`
@@ -331,6 +339,8 @@ type Backend interface {
 	// ActivitySummary returns a quick overview of recent daemon activity
 	// (useful for the dashboard header when you have mostly watches).
 	ActivitySummary(ctx context.Context) ActivitySummary
+	// MonitoringStatus returns counts of monitored vs paused services.
+	MonitoringStatus(ctx context.Context) MonitoringStatus
 }
 
 // operateActions and monitorActions are the action verbs the API accepts.
@@ -392,6 +402,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/host", s.handleHost)
 	mux.HandleFunc("GET /api/locks", s.handleLocks)
 	mux.HandleFunc("GET /api/activity", s.handleActivity)
+	mux.HandleFunc("GET /api/monitoring", s.handleMonitoring)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -512,6 +523,10 @@ func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.ActivitySummary(r.Context()))
+}
+
+func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.MonitoringStatus(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
