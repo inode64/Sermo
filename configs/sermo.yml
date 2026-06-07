@@ -121,6 +121,17 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-fds-alert.sh]
+  # Watch for accumulating zombie processes (a parent not reaping its children).
+  zombies:
+    enabled: false
+    interval: 1m
+    check:
+      type: zombies
+      count: { op: ">", value: 20 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-zombies-alert.sh]
   # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
   entropy:
     enabled: false

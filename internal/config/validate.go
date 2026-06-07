@@ -158,6 +158,9 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "entropy":
 			validateEntropyCheck(name, check, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "zombies":
+			validateZombieCheck(name, check, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -309,6 +312,22 @@ func validateEntropyCheck(name string, check map[string]any, add func(string, ..
 	}
 	if !isNumeric(scalarString(m["value"])) {
 		add("watches.%s.check.avail value %q must be numeric", name, scalarString(m["value"]))
+	}
+}
+
+// validateZombieCheck validates a zombies watch: a required count {op, value}
+// threshold.
+func validateZombieCheck(name string, check map[string]any, add func(string, ...any)) {
+	m, ok := check["count"].(map[string]any)
+	if !ok {
+		add("watches.%s.check.count {op, value} is required for a zombies check", name)
+		return
+	}
+	if !isValidDiskOp(scalarString(m["op"])) {
+		add("watches.%s.check.count has an invalid op %q", name, scalarString(m["op"]))
+	}
+	if !isNumeric(scalarString(m["value"])) {
+		add("watches.%s.check.count value %q must be numeric", name, scalarString(m["value"]))
 	}
 }
 

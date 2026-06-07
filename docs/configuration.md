@@ -470,6 +470,33 @@ usual form is `avail < N`. An entropy hook receives `SERMO_WATCH`,
 `SERMO_CHECK_TYPE` (`entropy`), `SERMO_AVAIL`/`SERMO_VALUE` (bits available) and
 `SERMO_MESSAGE`.
 
+### `zombies` — defunct processes
+
+A `zombies` watch counts processes in the zombie (defunct) run state — those that
+have exited but whose parent has not reaped them — against a threshold. A few are
+transient and normal; a growing count means a parent is leaking child slots and
+will eventually exhaust the PID table. Like `disk` it is a level check with one
+hook.
+
+```yaml
+watches:
+  zombies:
+    enabled: false
+    interval: 1m
+    check:
+      type: zombies
+      count: { op: ">", value: 20 }    # fire when more than 20 zombies persist
+    for: { cycles: 3 }                 # for a few cycles, to ignore brief spikes
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-zombies-alert.sh]
+```
+
+The single `count: {op, value}` predicate (disk operator set) is required; pair it
+with a `for` window so a momentary burst of exiting children does not fire. A
+zombies hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`zombies`),
+`SERMO_ZOMBIES`/`SERMO_VALUE` (the count) and `SERMO_MESSAGE`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,
