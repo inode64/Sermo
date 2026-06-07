@@ -264,7 +264,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		if result.OK() && (action == "restart" || action == "start") {
 			w.acknowledgeChanges()
 		}
-		w.emit(Event{Kind: "action", Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
+		w.emit(Event{Kind: eventKindForResult(result), Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
 		return // at most one remediation action per cycle
 	}
 }
