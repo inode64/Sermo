@@ -117,9 +117,10 @@ type Detail struct {
 	Service
 	Checks      []Check      `json:"checks"`
 	SLA         []SLAWindow  `json:"sla"`
-	Locks       []Lock       `json:"locks,omitempty"`
-	Processes   []Process    `json:"processes,omitempty"`
-	Remediation *Remediation `json:"remediation,omitempty"`
+	Locks        []Lock       `json:"locks,omitempty"`
+	LockWarnings []string     `json:"lock_warnings,omitempty"`
+	Processes    []Process    `json:"processes,omitempty"`
+	Remediation  *Remediation `json:"remediation,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is

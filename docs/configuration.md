@@ -228,7 +228,8 @@ named runtime locks are blocking, monitored,
 `monitor_source`, `monitor_changed_at`, backend, unit),
 `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, its SLA over the rolling windows, its named
-runtime locks (`sermoctl locks SERVICE`), its discovered processes
+runtime locks (`sermoctl locks SERVICE`, including parse warnings for malformed
+lock files), its discovered processes
 (`sermoctl processes SERVICE`), and its automatic remediation policy state
 (cooldown, backoff and rate-limit gating)),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
@@ -237,7 +238,8 @@ retention),
 `GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
 history + summary, see below), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
-`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings),
+`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
+malformed lock files under `<paths.runtime>/locks`),
 `GET /api/ops` (global operation slot usage: `{in_use, total}` for
 `engine.max_parallel_operations`),
 `GET /livez` (liveness, see below), `GET /readyz` (readiness, see below), and

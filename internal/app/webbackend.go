@@ -198,14 +198,21 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 	return svc
 }
 
+func locksScanner(cfg *config.Config) locks.Scanner {
+	return locks.NewScanner(filepath.Join(cfg.Global.RuntimeDir(), "locks"))
+}
+
+func serviceLocksReport(cfg *config.Config, service string) (locks.Report, error) {
+	if cfg == nil {
+		return locks.Report{Service: service}, nil
+	}
+	return locksScanner(cfg).Scan(service)
+}
+
 // activeLockNames returns the names of named runtime locks currently blocking
 // actions for service (parity with `sermoctl locks SERVICE`, active only).
 func activeLockNames(cfg *config.Config, service string) []string {
-	if cfg == nil {
-		return nil
-	}
-	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
-	report, err := locks.NewScanner(dir).Scan(service)
+	report, err := serviceLocksReport(cfg, service)
 	if err != nil {
 		return nil
 	}
@@ -303,12 +310,12 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		}
 	}
 
-	if b.cfg != nil {
-		dir := filepath.Join(b.cfg.Global.RuntimeDir(), "locks")
-		if report, err := locks.NewScanner(dir).Scan(name); err == nil {
-			for _, lk := range report.Locks {
-				d.Locks = append(d.Locks, lockToWeb(lk))
-			}
+	if report, err := serviceLocksReport(b.cfg, name); err == nil {
+		for _, lk := range report.Locks {
+			d.Locks = append(d.Locks, lockToWeb(lk))
+		}
+		if len(report.Warnings) > 0 {
+			d.LockWarnings = append([]string(nil), report.Warnings...)
 		}
 	}
 
@@ -418,6 +425,22 @@ func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 	if b.opGate != nil {
 		inUse, total := b.opGate.Usage()
 		out = append(out, operationSlotFindings(inUse, total)...)
+	}
+	out = append(out, lockScanFindings(b.cfg)...)
+	return out
+}
+
+func lockScanFindings(cfg *config.Config) []web.Finding {
+	if cfg == nil {
+		return nil
+	}
+	warnings, err := locksScanner(cfg).ScanDir()
+	var out []web.Finding
+	if err != nil {
+		out = append(out, web.Finding{Level: "error", Scope: "locks", Message: err.Error()})
+	}
+	for _, w := range warnings {
+		out = append(out, web.Finding{Level: "warning", Scope: "locks", Message: w})
 	}
 	return out
 }
