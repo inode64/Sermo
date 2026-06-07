@@ -49,6 +49,13 @@ func (h *WebBackendHolder) Services(ctx context.Context) []web.Service {
 	return nil
 }
 
+func (h *WebBackendHolder) Watches(ctx context.Context) []web.Watch {
+	if b := h.backend(); b != nil {
+		return b.Watches(ctx)
+	}
+	return nil
+}
+
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)
