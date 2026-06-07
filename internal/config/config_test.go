@@ -195,6 +195,40 @@ security:
 	}
 }
 
+func TestValidateWebBlock(t *testing.T) {
+	goodGlobal := writeConfig(t, map[string]string{"sermo.yml": `
+web: { address: 127.0.0.1, port: 9797 }
+paths: { enabled: [ @ROOT@/enabled ] }
+defaults: { policy: { cooldown: 5m } }
+`})
+	cfg, err := Load(goodGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, i := range Validate(cfg) {
+		if strings.Contains(i.Msg, "web.") {
+			t.Fatalf("valid web block flagged: %v", i)
+		}
+	}
+
+	badGlobal := writeConfig(t, map[string]string{"sermo.yml": `
+web: { port: 70000, address: 5 }
+paths: { enabled: [ @ROOT@/enabled ] }
+defaults: { policy: { cooldown: 5m } }
+`})
+	cfg, err = Load(badGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := Validate(cfg)
+	if !hasIssue(issues, "web.port must be an integer in 1..65535") {
+		t.Fatalf("missing web.port issue in %v", issues)
+	}
+	if !hasIssue(issues, "web.address must be a string") {
+		t.Fatalf("missing web.address issue in %v", issues)
+	}
+}
+
 func TestValidateMissingVariableAndPort(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

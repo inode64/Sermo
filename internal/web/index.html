@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sermo</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem; }
+  h1 { font-size: 1.3rem; margin: 0 0 1rem; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #8884; }
+  th { font-weight: 600; }
+  .status { font-weight: 600; }
+  .active { color: #1a7f37; }
+  .inactive, .unknown { color: #9a6700; }
+  .failed, .error { color: #cf222e; }
+  .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid #8886; }
+  .actions button { margin-right: .25rem; cursor: pointer; }
+  button { font: inherit; padding: .2rem .55rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; }
+  button:hover { background: #8883; }
+  #err { color: #cf222e; min-height: 1.2rem; }
+  .muted { color: #8888; font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1>Sermo &middot; services</h1>
+<div id="err"></div>
+<table>
+  <thead>
+    <tr><th>Service</th><th>Status</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+<p class="muted">Auto-refreshes every 5s.</p>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+async function load() {
+  try {
+    const res = await fetch("api/services");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    render(await res.json());
+    $("#err").textContent = "";
+  } catch (e) {
+    $("#err").textContent = "Failed to load services: " + e.message;
+  }
+}
+
+function render(services) {
+  const rows = (services || []).map((s) => {
+    const st = (s.status || "unknown").toLowerCase();
+    const mon = s.monitored
+      ? '<span class="pill">monitored</span>'
+      : '<span class="pill">paused</span>';
+    const name = s.display_name && s.display_name !== s.name
+      ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
+      : esc(s.name);
+    return `<tr>
+      <td>${name}<div class="muted">${esc(s.unit || "")}</div></td>
+      <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
+      <td>${mon}</td>
+      <td>${esc(s.backend || "")}</td>
+      <td class="actions">
+        <button onclick="act('${esc(s.name)}','start')">start</button>
+        <button onclick="act('${esc(s.name)}','stop')">stop</button>
+        <button onclick="act('${esc(s.name)}','restart')">restart</button>
+        ${s.monitored
+          ? `<button onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
+          : `<button onclick="act('${esc(s.name)}','monitor')">monitor</button>`}
+      </td>
+    </tr>`;
+  });
+  $("#rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">No services.</td></tr>`;
+}
+
+async function act(name, action) {
+  $("#err").textContent = "";
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      throw new Error(body.message || ("HTTP " + res.status));
+    }
+  } catch (e) {
+    $("#err").textContent = `${action} ${name}: ${e.message}`;
+  }
+  load();
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

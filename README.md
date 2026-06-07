@@ -19,7 +19,9 @@ It ships two binaries:
   — size, permissions, owner and deletion — and processes by name — age,
   CPU/memory/IO and disappearance) that fire a hook command and/or send
   **notifications** (email and Slack, pluggable for Teams/…) when a threshold is
-  crossed or an attribute changes.
+  crossed or an attribute changes. It can also serve a small **web dashboard**
+  (`web.port`, recommended `9797`) to view services and monitor/start/stop/restart
+  them.
 
 ## Build
 
