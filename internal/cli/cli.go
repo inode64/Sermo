@@ -322,7 +322,8 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		return exitConfigInvalid
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
+	opTimeout := operation.ResolveTimeout(opts.timeout, resolved.Tree)
+	ctx, cancel := context.WithTimeout(ctx, opTimeout)
 	defer cancel()
 
 	result, err := a.Operate(ctx, opts, cfg, resolved, service, action)
@@ -372,7 +373,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Scanner:    locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer: discoverer,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
-		OperationTimeout: defaultTimeout(action),
+		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 
 	switch action {

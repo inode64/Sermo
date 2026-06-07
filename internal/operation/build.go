@@ -100,7 +100,7 @@ func New(c Config) Engine {
 		Reaper:     reaper,
 		KillPolicy:       killPolicy,
 		Sleep:            sleep,
-		OperationTimeout: c.OperationTimeout,
+		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),
 		Emit:             c.Emit,
 	}
 }
