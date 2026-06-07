@@ -567,6 +567,22 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 	return summary
 }
 
+func (b *WebBackend) MonitoringStatus(ctx context.Context) web.MonitoringStatus {
+	svcs := b.Services(ctx) // this already includes the live Monitored flag from store
+	total := len(svcs)
+	monitored := 0
+	for _, s := range svcs {
+		if s.Monitored {
+			monitored++
+		}
+	}
+	return web.MonitoringStatus{
+		Total:     total,
+		Monitored: monitored,
+		Paused:    total - monitored,
+	}
+}
+
 func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	e := b.entries[name]
 	if e == nil {

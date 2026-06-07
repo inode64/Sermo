@@ -91,6 +91,13 @@ func (h *WebBackendHolder) ActivitySummary(ctx context.Context) web.ActivitySumm
 	return web.ActivitySummary{}
 }
 
+func (h *WebBackendHolder) MonitoringStatus(ctx context.Context) web.MonitoringStatus {
+	if b := h.backend(); b != nil {
+		return b.MonitoringStatus(ctx)
+	}
+	return web.MonitoringStatus{}
+}
+
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)

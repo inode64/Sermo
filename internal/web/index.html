@@ -98,6 +98,13 @@
       <div>Operation timeout: <b id="engine-op-timeout"></b></div>
       <div>Startup delay: <b id="engine-startup-delay"></b></div>
     </div>
+    <div>
+      <div style="font-weight:600; margin-bottom:.25rem;">Runtime</div>
+      <div>Started: <b id="daemon-started"></b></div>
+      <div>Uptime: <b id="daemon-uptime"></b></div>
+      <div>Go: <span id="daemon-go" class="muted"></span></div>
+      <div>Ready: <span id="daemon-ready"></span></div>
+    </div>
   </div>
 </section>
 
@@ -552,16 +559,23 @@ async function renderStatus() {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const [readyRes, liveRes] = await Promise.all([
+    const [readyRes, liveRes, monRes] = await Promise.all([
       fetch("readyz?verbose"),
-      fetch("livez?verbose")
+      fetch("livez?verbose"),
+      fetch("api/monitoring")
     ]);
     const ready = readyRes.ok ? await readyRes.json() : {};
     const live = liveRes.ok ? await liveRes.json() : {};
+    const mon = monRes.ok ? await monRes.json() : {};
     const parts = [];
     if (ready.backend) parts.push(`backend: <b>${esc(ready.backend)}</b>`);
     parts.push(`services: <b>${ready.services || 0}</b>`);
     parts.push(`watches: <b>${ready.watches || 0}</b>`);
+    if (mon.total != null) {
+      let monStr = `monitored: <b>${mon.monitored || 0}/${mon.total || 0}</b>`;
+      if (mon.paused > 0) monStr += ` <span class="muted">(${mon.paused} paused)</span>`;
+      parts.push(monStr);
+    }
     if (live.uptime) parts.push(`uptime: <b>${esc(live.uptime)}</b>`);
     if (ready.status) {
       const cls = ready.ready ? "ok" : "inactive";
