@@ -72,6 +72,7 @@ sermoctl --config /etc/sermo/sermo.yml monitor apache-main     # resume
 # Availability (SLA) per service over rolling windows (hour..year)
 sermoctl --config /etc/sermo/sermo.yml sla                     # all services
 sermoctl --config /etc/sermo/sermo.yml sla apache-main         # one service
+sermoctl --config /etc/sermo/sermo.yml sla --series apache-main --since 168h  # per-minute series (graph data)
 
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml

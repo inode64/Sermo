@@ -113,6 +113,43 @@ func TestPruneSLARemovesOldBuckets(t *testing.T) {
 	}
 }
 
+func TestSLASeriesReturnsOrderedBucketsWithGaps(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+
+	// Two adjacent monitored minutes, then a gap (service paused / Sermo down: no
+	// samples), then another monitored minute. The gap must not appear as a row.
+	mustRecord(t, s, "web", true, now.Add(-10*time.Minute))
+	mustRecord(t, s, "web", false, now.Add(-9*time.Minute))
+	mustRecord(t, s, "web", true, now.Add(-2*time.Minute))
+
+	points, err := s.SLASeries("web", now.Add(-time.Hour), now)
+	if err != nil {
+		t.Fatalf("SLASeries: %v", err)
+	}
+	if len(points) != 3 {
+		t.Fatalf("got %d points, want 3 (gap minutes excluded, not zero-filled)", len(points))
+	}
+	// Ordered oldest first, and buckets aligned to the minute.
+	for i := 1; i < len(points); i++ {
+		if !points[i].Start.After(points[i-1].Start) {
+			t.Fatalf("points not strictly ordered: %v then %v", points[i-1].Start, points[i].Start)
+		}
+	}
+	if points[1].Up != 0 || points[1].Total != 1 {
+		t.Fatalf("middle point = %+v, want the down sample (up=0 total=1)", points[1])
+	}
+
+	// A range before any sample is empty (the excluded/unmonitored period).
+	before, err := s.SLASeries("web", now.Add(-2*time.Hour), now.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("SLASeries before: %v", err)
+	}
+	if len(before) != 0 {
+		t.Fatalf("expected no points before monitoring began, got %d", len(before))
+	}
+}
+
 func mustRecord(t *testing.T, s *Store, service string, up bool, at time.Time) {
 	t.Helper()
 	if err := s.RecordSLA(service, up, at); err != nil {

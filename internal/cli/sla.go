@@ -6,17 +6,30 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/config"
 	"sermo/internal/state"
 )
+
+// defaultSLASeriesWindow is the series lookback used when --since is omitted.
+const defaultSLASeriesWindow = 24 * time.Hour
 
 // runSLA reports per-service availability over rolling windows (hour..year),
 // computed from the per-cycle samples the daemon records. `sla` reports every
 // configured service; `sla SERVICE` reports a single one. A window with no
 // observed cycles reads "n/a" rather than 0%.
+//
+// With --series it instead emits SERVICE's stored per-minute availability series
+// over --since (default 24h) — the raw time series a graph is built from. Minutes
+// where the service was not monitored (Sermo down, or the service paused or
+// disabled) are absent from the series, never counted as downtime.
 func (a App) runSLA(opts options) int {
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
 		return code
+	}
+
+	if opts.series {
+		return a.runSLASeries(opts, cfg)
 	}
 
 	var services []string
@@ -52,6 +65,46 @@ func (a App) runSLA(opts options) int {
 		a.writeSLAJSON(reports)
 	} else {
 		a.writeSLATable(reports)
+	}
+	return exitSuccess
+}
+
+// runSLASeries emits one service's stored per-minute availability series, the
+// data a future graph plots.
+func (a App) runSLASeries(opts options, cfg *config.Config) int {
+	service := opts.service()
+	if service == "" {
+		fmt.Fprintln(a.Stderr, "usage error: sla --series requires a service name")
+		return exitUsage
+	}
+	if _, ok := cfg.Services[service]; !ok {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
+		return exitRuntimeError
+	}
+
+	window := opts.since
+	if window <= 0 {
+		window = defaultSLASeriesWindow
+	}
+
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("sla failed: %v", err))
+		return exitRuntimeError
+	}
+	defer store.Close()
+
+	now := time.Now()
+	points, err := store.SLASeries(service, now.Add(-window), now)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("sla %s failed: %v", service, err))
+		return exitRuntimeError
+	}
+
+	if opts.json {
+		a.writeSLASeriesJSON(service, window, points)
+	} else {
+		a.writeSLASeriesTable(service, points)
 	}
 	return exitSuccess
 }
@@ -106,4 +159,35 @@ func formatSLA(v state.SLAValue) string {
 		return "n/a"
 	}
 	return fmt.Sprintf("%.2f%%", ratio*100)
+}
+
+func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
+	if len(points) == 0 {
+		fmt.Fprintf(a.Stdout, "no samples for %s in range (service unmonitored or Sermo not running)\n", service)
+		return
+	}
+	fmt.Fprintln(a.Stdout, "TIME\tUP\tTOTAL\tSLA")
+	for _, p := range points {
+		sla := "n/a"
+		if p.Total > 0 {
+			sla = fmt.Sprintf("%.2f%%", float64(p.Up)/float64(p.Total)*100)
+		}
+		fmt.Fprintf(a.Stdout, "%s\t%d\t%d\t%s\n", p.Start.Format(time.RFC3339), p.Up, p.Total, sla)
+	}
+}
+
+func (a App) writeSLASeriesJSON(service string, window time.Duration, points []state.SLAPoint) {
+	series := make([]map[string]any, 0, len(points))
+	for _, p := range points {
+		entry := map[string]any{"start": p.Start.Format(time.RFC3339), "up": p.Up, "total": p.Total, "ratio": nil}
+		if p.Total > 0 {
+			entry["ratio"] = float64(p.Up) / float64(p.Total)
+		}
+		series = append(series, entry)
+	}
+	writeJSON(a.Stdout, map[string]any{
+		"service": service,
+		"since":   window.String(),
+		"series":  series,
+	})
 }

@@ -98,6 +98,83 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestSLASeriesCommand(t *testing.T) {
+	root := t.TempDir()
+	profilesDir := filepath.Join(root, "profiles")
+	enabledDir := filepath.Join(root, "enabled")
+	stateDir := filepath.Join(root, "state")
+	for _, d := range []string{profilesDir, enabledDir, stateDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path, body string) {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(profilesDir, "nginx.yml"), "kind: profile\nname: nginx\nservice: { name: nginx }\n")
+	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
+	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
+engine: { backend: auto }
+paths: { profiles: [ %s ], enabled: [ %s ], state: %s }
+defaults: { policy: { cooldown: 5m } }
+`, profilesDir, enabledDir, stateDir))
+	global := filepath.Join(root, "sermo.yml")
+
+	store, err := state.Open(filepath.Join(stateDir, state.Filename))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := store.RecordSLA("web", true, now.Add(-3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.RecordSLA("web", false, now.Add(-2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+
+	run := func(args ...string) (string, int) {
+		var out bytes.Buffer
+		app := App{Env: func(string) string { return "" }, Stdout: &out, Stderr: &bytes.Buffer{}}
+		code := app.Run(context.Background(), append([]string{"--config", global}, args...))
+		return out.String(), code
+	}
+
+	jsonOut, code := run("--json", "sla", "--series", "web", "--since", "1h")
+	if code != exitSuccess {
+		t.Fatalf("sla --series exit = %d, output: %s", code, jsonOut)
+	}
+	var payload struct {
+		Service string `json:"service"`
+		Since   string `json:"since"`
+		Series  []struct {
+			Start string   `json:"start"`
+			Up    int64    `json:"up"`
+			Total int64    `json:"total"`
+			Ratio *float64 `json:"ratio"`
+		} `json:"series"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &payload); err != nil {
+		t.Fatalf("decode json: %v\n%s", err, jsonOut)
+	}
+	if payload.Service != "web" || payload.Since != "1h0m0s" {
+		t.Fatalf("unexpected header: service=%q since=%q", payload.Service, payload.Since)
+	}
+	if len(payload.Series) != 2 {
+		t.Fatalf("series has %d points, want 2", len(payload.Series))
+	}
+	if payload.Series[0].Total != 1 || payload.Series[0].Ratio == nil || *payload.Series[0].Ratio != 1 {
+		t.Fatalf("first point = %+v, want up sample ratio 1.0", payload.Series[0])
+	}
+
+	// --series with no service is a usage error.
+	if _, code := run("sla", "--series"); code != exitUsage {
+		t.Fatalf("sla --series without service exit = %d, want %d", code, exitUsage)
+	}
+}
+
 func TestSLACommandUnknownService(t *testing.T) {
 	root := t.TempDir()
 	enabledDir := filepath.Join(root, "enabled")
