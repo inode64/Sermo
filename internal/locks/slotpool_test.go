@@ -21,10 +21,14 @@ func TestSlotPoolAcquireAndRelease(t *testing.T) {
 		t.Fatalf("second acquire: %v", err)
 	}
 
-	thirdDone := make(chan error, 1)
+	thirdDone := make(chan *SlotHandle, 1)
 	go func() {
-		_, err := pool.Acquire(context.Background())
-		thirdDone <- err
+		h, err := pool.Acquire(context.Background())
+		if err != nil {
+			thirdDone <- nil
+			return
+		}
+		thirdDone <- h
 	}()
 
 	deadline := time.After(100 * time.Millisecond)
@@ -37,13 +41,23 @@ func TestSlotPoolAcquireAndRelease(t *testing.T) {
 			break
 		}
 		select {
-		case err := <-thirdDone:
-			t.Fatalf("third acquire finished early: %v", err)
+		case h := <-thirdDone:
+			if h != nil {
+				t.Fatalf("third acquire finished early")
+			}
 		case <-deadline:
 			t.Fatal("timed out waiting for two slot files while third acquire blocks")
 		default:
 			time.Sleep(5 * time.Millisecond)
 		}
+	}
+
+	inUse, err := pool.InUse()
+	if err != nil {
+		t.Fatalf("InUse while held: %v", err)
+	}
+	if inUse != 2 {
+		t.Fatalf("InUse = %d, want 2", inUse)
 	}
 
 	if err := h1.Release(); err != nil {
@@ -52,13 +66,25 @@ func TestSlotPoolAcquireAndRelease(t *testing.T) {
 	if err := h2.Release(); err != nil {
 		t.Fatalf("release h2: %v", err)
 	}
+	var h3 *SlotHandle
 	select {
-	case err := <-thirdDone:
-		if err != nil {
-			t.Fatalf("third acquire after release: %v", err)
+	case h3 = <-thirdDone:
+		if h3 == nil {
+			t.Fatal("third acquire after release failed")
 		}
 	case <-time.After(time.Second):
 		t.Fatal("third acquire did not complete after releasing slots")
+	}
+	if err := h3.Release(); err != nil {
+		t.Fatalf("release h3: %v", err)
+	}
+
+	inUse, err = pool.InUse()
+	if err != nil {
+		t.Fatalf("InUse after release: %v", err)
+	}
+	if inUse != 0 {
+		t.Fatalf("InUse after release = %d, want 0", inUse)
 	}
 }
 

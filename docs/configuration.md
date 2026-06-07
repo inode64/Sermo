@@ -232,6 +232,8 @@ retention),
 history + summary, see below), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings),
+`GET /api/ops` (global operation slot usage: `{in_use, total}` for
+`engine.max_parallel_operations`),
 `GET /livez` (liveness, see below), and
 `POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
 `start`, `stop` or `restart`. Clicking a service in the dashboard opens its

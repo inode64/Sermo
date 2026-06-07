@@ -113,6 +113,12 @@ type Finding struct {
 	Message string `json:"message"`
 }
 
+// OperationSlots is the global start/stop/restart concurrency pool (section 24).
+type OperationSlots struct {
+	InUse int `json:"in_use"`
+	Total int `json:"total"`
+}
+
 // Event is one recorded daemon event for the activity log.
 type Event struct {
 	Time    string `json:"time"` // RFC3339
@@ -152,6 +158,8 @@ type Backend interface {
 	// Diagnostics runs config/host/database consistency checks and returns the
 	// findings (ordered by severity).
 	Diagnostics(ctx context.Context) []Finding
+	// Operations reports how many global operation slots are in use.
+	Operations(ctx context.Context) OperationSlots
 	// ServiceEvents returns up to limit recent events for one service, newest
 	// first; ok is false for unknown names.
 	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
@@ -211,6 +219,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
+	mux.HandleFunc("GET /api/ops", s.handleOperations)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	return s.withAuth(mux)
 }
@@ -353,6 +362,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Diagnostics(r.Context()))
+}
+
+func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Operations(r.Context()))
 }
 
 // handleLivez is the liveness probe: if the daemon's web server can answer, the

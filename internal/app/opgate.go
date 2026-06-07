@@ -55,6 +55,25 @@ func OpSlotsFromConfig(cfg *config.Config) int {
 	return 2
 }
 
+// Usage reports how many global operation slots are in use and the pool capacity.
+func (g *OpGate) Usage() (inUse, total int) {
+	if g == nil {
+		return 0, 0
+	}
+	if g.mem != nil {
+		return len(g.mem), cap(g.mem)
+	}
+	total = g.pool.Slots
+	if total <= 0 {
+		total = 2
+	}
+	n, err := g.pool.InUse()
+	if err != nil {
+		return 0, total
+	}
+	return n, total
+}
+
 // Run acquires a global operation slot, then invokes fn.
 func (g *OpGate) Run(ctx context.Context, service, action string, fn func(context.Context) operation.Result) operation.Result {
 	if g == nil {
