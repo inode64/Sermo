@@ -195,7 +195,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
 		cs, seen := snap[cn]
-		d.Checks = append(d.Checks, web.Check{
+		ch := web.Check{
 			Name:     cn,
 			Type:     e.checkTypes[cn],
 			OK:       cs.OK,
@@ -203,7 +203,11 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			Skipped:  cs.Skipped,
 			Message:  cs.Message,
 			Ran:      seen && cs.Ran,
-		})
+		}
+		if seen && !cs.At.IsZero() {
+			ch.At = cs.At.UTC().Format(time.RFC3339)
+		}
+		d.Checks = append(d.Checks, ch)
 	}
 
 	if b.sla != nil {

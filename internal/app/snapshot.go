@@ -43,14 +43,21 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 		now = time.Now
 	}
 	at := now()
+	s.mu.Lock()
+	prior := s.byService[service]
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
-		m[name] = CheckSnapshot{
+		cs := CheckSnapshot{
 			OK: r.OK, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
-			Ran: ran[name], At: at,
+			Ran: ran[name],
 		}
+		if ran[name] {
+			cs.At = at
+		} else if prev, ok := prior[name]; ok && !prev.At.IsZero() {
+			cs.At = prev.At
+		}
+		m[name] = cs
 	}
-	s.mu.Lock()
 	s.byService[service] = m
 	s.mu.Unlock()
 }
