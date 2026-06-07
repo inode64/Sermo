@@ -316,6 +316,52 @@ changed path), `SERMO_CHANGE` (`size` | `size_threshold` | `permissions` | `owne
 | `deleted`), `SERMO_MESSAGE`, and, depending on the change, `SERMO_OLD`/`SERMO_NEW`
 (old/new value) plus `SERMO_SIZE`, `SERMO_OP`, `SERMO_VALUE` for size conditions.
 
+### `process` — process by name
+
+A `process` watch tracks the processes whose **name** matches (the resolved exe
+basename or its full path), optionally filtered by owning `user`, and fires the
+hook **once per matching PID** when that process has been alive at least `for`
+and/or its CPU/memory/IO crosses a threshold. (This is the daemon's host watch; it
+is distinct from the per-service `process` check, which reports running/zombie/
+absent state.)
+
+```yaml
+watches:
+  hot-workers:
+    enabled: false
+    interval: 30s
+    check:
+      type: process
+      name: myworker                  # exe basename (e.g. myworker) or full path
+      user: www-data                  # optional: also match the owning user
+      for: 5m                         # optional: observed alive at least this long
+      cpu: { op: ">", value: 80 }     # optional: CPU % (rate)
+      memory: { op: ">", value: 524288000 }   # optional: RSS bytes
+      io: { op: ">", value: 10485760 }         # optional: read+write bytes/sec
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-proc-alert.sh]
+        timeout: 10s
+```
+
+Declare at least one of `for`, `cpu`, `memory`, `io`. **All** present conditions
+must hold for a PID to fire (AND), and firing is **edge-triggered per PID**: the
+hook runs once when the conditions become true and re-arms only after they stop
+holding — not every cycle. `cpu` and `io` are rates, so they need two samples: a
+just-discovered PID never fires on them in its first cycle. Each matching PID is
+tracked and fired independently — **one event and one hook per PID** — so a worker
+pool produces one hook per offending worker.
+
+A process hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`process`), `SERMO_PID`
+(the matching pid), `SERMO_PROCESS` (the configured name), `SERMO_USER` (if set),
+`SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS bytes), and — once a rate is available —
+`SERMO_CPU` (percent) and `SERMO_IO` (bytes/sec).
+
+`for` is measured from when the daemon **first observed** the process, so a daemon
+restart resets it (the real elapsed-since-start is not tracked across restarts).
+`io` reads `/proc/<pid>/io`, which requires the daemon to have permission to read
+it (typically running as root); when it is unreadable the IO condition never fires.
+
 Other resource types will be added as new check `type` values using the same
 watch/hook structure.
 
