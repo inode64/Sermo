@@ -2,9 +2,12 @@
 // (sections 12 and 19). Each check is single-shot and stateless; the runner
 // executes a set concurrently and returns one Result per check.
 //
-// MVP check types: tcp, http, command, service, file_exists, binary. The
-// process and metric types (the latter needs the daemon's stateful collector)
-// and the libraries preflight type are not yet implemented.
+// Service checks/preflight/postflight support tcp, ports, http, command, service,
+// file_exists, binary, process, metric (via the daemon's stateful collector),
+// libraries, count, and host-resource probes (disk, load, fds, conntrack,
+// entropy, zombies, oom, cert). Multi-target watch types (net, icmp, swap, file)
+// are built for host watches, not single-shot service checks — see buildCheck and
+// config validation's knownCheckTypes.
 package checks
 
 import (
