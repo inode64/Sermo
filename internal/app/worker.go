@@ -62,6 +62,9 @@ type Worker struct {
 	Now     func() time.Time
 	Emit    func(Event)
 
+	// Remediation publishes the policy gating view for the web detail. Optional.
+	Remediation *RemediationRegistry
+
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
@@ -76,6 +79,7 @@ type Worker struct {
 // prevents overlapping operations, so cycles never run concurrently per service.
 func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
+	defer w.publishRemediation()
 	if w.IsPaused != nil && w.IsPaused() {
 		return // monitoring paused for this service
 	}
@@ -343,6 +347,17 @@ func (w *Worker) windowState(name string) *rules.WindowState {
 		w.windows[name] = s
 	}
 	return s
+}
+
+func (w *Worker) publishRemediation() {
+	if w.Remediation == nil {
+		return
+	}
+	now := w.Now
+	if now == nil {
+		now = time.Now
+	}
+	w.Remediation.Publish(w.Service, w.Policy, w.State, now())
 }
 
 func (w *Worker) emit(e Event) {

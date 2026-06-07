@@ -13,6 +13,7 @@ import (
 	"sermo/internal/locks"
 	"sermo/internal/operation"
 	"sermo/internal/process"
+	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
@@ -77,9 +78,10 @@ type WebBackend struct {
 	entries   map[string]*webEntry
 	store     MonitorStore
 	snapshots *Snapshots
-	sla       SLAReader
-	events    *EventLog
-	cfg       *config.Config
+	sla           SLAReader
+	events        *EventLog
+	remediation   *RemediationRegistry
+	cfg           *config.Config
 	diagStore diag.Store
 	host      diag.Host
 	measure   MeasurementReader
@@ -93,7 +95,8 @@ type WebBackend struct {
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{
 		entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots,
-		events: deps.Events, cfg: cfg, host: diag.OSHost{}, emit: deps.Emit, opGate: deps.OpGate,
+		events: deps.Events, remediation: deps.Remediation, cfg: cfg, host: diag.OSHost{},
+		emit: deps.Emit, opGate: deps.OpGate,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
@@ -284,7 +287,42 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	for _, p := range procs {
 		d.Processes = append(d.Processes, processToWeb(p))
 	}
+
+	if b.remediation != nil {
+		if rep, ok := b.remediation.Get(name); ok {
+			r := remediationToWeb(rep)
+			d.Remediation = &r
+		}
+	}
 	return d, true
+}
+
+func remediationToWeb(rep rules.RemediationReport) web.Remediation {
+	r := web.Remediation{
+		Allowed:       rep.Allowed,
+		Reason:        rep.Reason,
+		MaxActions:    rep.MaxActions,
+		RecentActions: rep.RecentActions,
+	}
+	if rep.Cooldown > 0 {
+		r.Cooldown = rep.Cooldown.String()
+	}
+	if rep.EffectiveCooldown > 0 {
+		r.EffectiveCooldown = rep.EffectiveCooldown.String()
+	}
+	if rep.CurrentBackoff > 0 {
+		r.CurrentBackoff = rep.CurrentBackoff.String()
+	}
+	if !rep.LastActionAt.IsZero() {
+		r.LastActionAt = rep.LastActionAt.UTC().Format(time.RFC3339)
+	}
+	if !rep.CooldownUntil.IsZero() {
+		r.CooldownUntil = rep.CooldownUntil.UTC().Format(time.RFC3339)
+	}
+	if rep.MaxActionsWindow > 0 {
+		r.MaxActionsWindow = rep.MaxActionsWindow.String()
+	}
+	return r
 }
 
 func processToWeb(p process.Process) web.Process {
