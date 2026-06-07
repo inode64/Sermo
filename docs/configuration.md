@@ -223,7 +223,8 @@ Notes:
 - Never publish port `9797` directly; only the proxy should connect to it.
 
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
-monitored, `monitor_source`, `monitor_changed_at`, backend, unit),
+`check_health` and `checks_failing` for required checks, monitored,
+`monitor_source`, `monitor_changed_at`, backend, unit),
 `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, its SLA over the rolling windows, its named
 runtime locks (`sermoctl locks SERVICE`), and its discovered processes
