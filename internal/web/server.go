@@ -81,6 +81,21 @@ type DaemonInfo struct {
 	StartupDelay          string `json:"startup_delay"`
 }
 
+// ActivitySummary is a lightweight rollup of recent events for the dashboard.
+// It helps operators get a quick sense of what's been happening (especially
+// useful when services=0 and you are mostly watching host resources).
+type ActivitySummary struct {
+	TotalEvents      int    `json:"total_events"`
+	ServiceActions   int    `json:"service_actions"`   // start/stop/restart
+	WatchHooks       int    `json:"watch_hooks"`
+	WatchNotifies    int    `json:"watch_notifies"`
+	Errors           int    `json:"errors"`
+	LastEventTime    string `json:"last_event_time,omitempty"` // RFC3339
+	LastEventKind    string `json:"last_event_kind,omitempty"`
+	LastEventService string `json:"last_event_service,omitempty"`
+	LastEventWatch   string `json:"last_event_watch,omitempty"`
+}
+
 // HostMetric is a single current host-level reading (from the metrics collector).
 type HostMetric struct {
 	Name     string  `json:"name"`
@@ -313,6 +328,9 @@ type Backend interface {
 	HostMetrics(ctx context.Context) []HostMetric
 	// Locks returns runtime locks (active, expired, stale) across all services.
 	Locks(ctx context.Context) []Lock
+	// ActivitySummary returns a quick overview of recent daemon activity
+	// (useful for the dashboard header when you have mostly watches).
+	ActivitySummary(ctx context.Context) ActivitySummary
 }
 
 // operateActions and monitorActions are the action verbs the API accepts.
@@ -373,6 +391,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/host", s.handleHost)
 	mux.HandleFunc("GET /api/locks", s.handleLocks)
+	mux.HandleFunc("GET /api/activity", s.handleActivity)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -489,6 +508,10 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Locks(r.Context()))
+}
+
+func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.ActivitySummary(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {

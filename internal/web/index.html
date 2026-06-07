@@ -110,6 +110,17 @@
   <p class="muted" style="font-size:.8rem">Live system readings (memory, cpu rate, load). Updated on refresh.</p>
 </section>
 
+<section id="activity-section" style="margin-top:1rem;">
+  <h2 style="font-size:1.05rem">Recent activity <span class="muted">(last 500 events)</span></h2>
+  <div style="display:flex; gap:1.25rem; flex-wrap:wrap; font-size:.9rem;">
+    <div>Service actions: <b id="act-service"></b></div>
+    <div>Watch hooks: <b id="act-hooks"></b></div>
+    <div>Watch notifies: <b id="act-notify"></b></div>
+    <div>Errors: <b id="act-errors" style="color:#cf222e"></b></div>
+    <div id="act-last" class="muted" style="flex:1; min-width:180px;"></div>
+  </div>
+</section>
+
 <section id="locks-section" style="margin-top:1rem; display:none">
   <h2 style="font-size:1.05rem">Runtime Locks <span id="locks-count" class="muted"></span></h2>
   <table>
@@ -219,6 +230,14 @@ async function load() {
     const lr = await fetch("api/locks");
     if (lr.ok) {
       renderLocks(await lr.json());
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Quick activity summary (from recent events).
+  try {
+    const ar = await fetch("api/activity");
+    if (ar.ok) {
+      renderActivity(await ar.json());
     }
   } catch (_) { /* non-fatal */ }
 
@@ -505,6 +524,28 @@ function renderLocks(locks) {
     </tr>`;
   });
   tbody.innerHTML = rows.join("");
+}
+
+function renderActivity(sum) {
+  if (!sum) return;
+  const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+
+  set("#act-service", sum.service_actions || 0);
+  set("#act-hooks", sum.watch_hooks || 0);
+  set("#act-notify", sum.watch_notifies || 0);
+  set("#act-errors", sum.errors || 0);
+
+  const lastEl = $("#act-last");
+  if (lastEl) {
+    if (sum.last_event_time) {
+      let who = "";
+      if (sum.last_event_service) who = `service ${esc(sum.last_event_service)}`;
+      if (sum.last_event_watch) who = `watch ${esc(sum.last_event_watch)}`;
+      lastEl.innerHTML = `Last: <b>${esc(sum.last_event_kind || "")}</b> ${who} <span class="muted">(${esc(sum.last_event_time)})</span>`;
+    } else {
+      lastEl.textContent = "No recent events";
+    }
+  }
 }
 
 async function renderStatus() {

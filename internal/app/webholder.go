@@ -84,6 +84,13 @@ func (h *WebBackendHolder) Locks(ctx context.Context) []web.Lock {
 	return nil
 }
 
+func (h *WebBackendHolder) ActivitySummary(ctx context.Context) web.ActivitySummary {
+	if b := h.backend(); b != nil {
+		return b.ActivitySummary(ctx)
+	}
+	return web.ActivitySummary{}
+}
+
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)

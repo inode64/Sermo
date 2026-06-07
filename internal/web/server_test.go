@@ -29,6 +29,7 @@ func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo { return DaemonInfo{} }
 func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
 func (f *fakeBackend) Locks(context.Context) []Lock { return nil }
+func (f *fakeBackend) ActivitySummary(context.Context) ActivitySummary { return ActivitySummary{} }
 func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	for _, s := range f.services {
 		if s.Name == name {

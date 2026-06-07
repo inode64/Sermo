@@ -532,6 +532,41 @@ func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
 	return out
 }
 
+func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
+	summary := web.ActivitySummary{}
+
+	if b.events == nil {
+		return summary
+	}
+
+	// Scan a reasonable number of recent events (cheap for the UI)
+	events := b.events.Recent("", 500)
+	summary.TotalEvents = len(events)
+
+	if len(events) > 0 {
+		latest := events[0]
+		summary.LastEventTime = latest.Time.Format(time.RFC3339)
+		summary.LastEventKind = latest.Kind
+		summary.LastEventService = latest.Service
+		summary.LastEventWatch = latest.Watch
+	}
+
+	for _, e := range events {
+		switch {
+		case e.Kind == "action" && (e.Action == "start" || e.Action == "stop" || e.Action == "restart"):
+			summary.ServiceActions++
+		case e.Kind == "hook" || e.Kind == "hook-failed":
+			summary.WatchHooks++
+		case e.Kind == "notify" || e.Kind == "notify-failed":
+			summary.WatchNotifies++
+		case e.Kind == "error":
+			summary.Errors++
+		}
+	}
+
+	return summary
+}
+
 func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	e := b.entries[name]
 	if e == nil {
