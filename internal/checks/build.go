@@ -47,6 +47,9 @@ type Deps struct {
 	// OomSampler reads the cumulative OOM-kill counter for `oom` checks. Nil reads
 	// /proc/vmstat.
 	OomSampler OomSamplerFunc
+	// FdsSampler reads system file-descriptor usage for `fds` checks. Nil reads
+	// /proc/sys/fs/file-nr.
+	FdsSampler FdsSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -284,6 +287,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "load check: " + err.Error()
 		}
 		return loadCheck{base: b, preds: preds, perCPU: asBool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
+
+	case "fds":
+		preds, err := parseFdsPreds(entry)
+		if err != nil {
+			return nil, "fds check: " + err.Error()
+		}
+		return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
 
 	case "oom":
 		// delta is optional; the default fires on any OOM kill (> 0).
