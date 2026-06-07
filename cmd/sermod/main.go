@@ -158,7 +158,13 @@ func run(args []string) int {
 			logger.Warn("build web backend", "warning", w)
 		}
 		auth := webAuth(cfg)
-		server := &web.Server{Addr: addr, Backend: backend, Auth: auth, Logger: logger}
+		server := &web.Server{
+			Addr:             addr,
+			Backend:          backend,
+			Auth:             auth,
+			Logger:           logger,
+			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
+		}
 		go func() {
 			if err := server.Run(ctx); err != nil {
 				logger.Error("web server", "error", err)
