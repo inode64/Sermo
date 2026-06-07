@@ -7,6 +7,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/servicemgr"
+	"sermo/internal/state"
 )
 
 func TestWebBackendEventsNilLog(t *testing.T) {
@@ -61,6 +62,32 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 	}
 	if byName["slow"] {
 		t.Fatal("interval-cached slow check should show ran=false in web detail")
+	}
+}
+
+func TestWebBackendViewMonitorSource(t *testing.T) {
+	at := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
+	store := newFakeStore()
+	store.now = func() time.Time { return at }
+	if err := store.SetActive("web", false, state.SourceCLI); err != nil {
+		t.Fatalf("SetActive: %v", err)
+	}
+
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {unit: "nginx", backend: "systemd"},
+		},
+		store: store,
+	}
+
+	svc := b.view(context.Background(), "web", b.entries["web"])
+	if svc.Monitored || svc.MonitorSource != state.SourceCLI {
+		t.Fatalf("service = %+v", svc)
+	}
+	wantAt := at.UTC().Format(time.RFC3339)
+	if svc.MonitorChangedAt != wantAt {
+		t.Fatalf("MonitorChangedAt = %q, want %q", svc.MonitorChangedAt, wantAt)
 	}
 }
 
