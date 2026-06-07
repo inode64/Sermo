@@ -355,6 +355,34 @@ saturation (`load1` is spiky). A load hook receives `SERMO_WATCH`,
 per-core when `per_cpu`), `SERMO_MESSAGE`, plus `SERMO_LOAD1`/`SERMO_LOAD5`/
 `SERMO_LOAD15` (raw) and `SERMO_NUM_CPU`.
 
+### `oom` — kernel OOM kills
+
+An `oom` watch fires when the kernel out-of-memory killer has reaped processes
+since the last cycle. It tracks the cumulative `oom_kill` counter from
+`/proc/vmstat` and compares the **per-cycle delta** to a threshold — the same
+stateful pattern as swap `io` / net `errors`.
+
+```yaml
+watches:
+  oom:
+    enabled: false
+    interval: 30s
+    check:
+      type: oom
+      # delta is optional; the default fires on any kill (> 0).
+      delta: { op: ">", value: 0 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-oom-alert.sh]
+```
+
+The common case is "alert on any OOM kill", so `delta` may be omitted entirely
+(`check: { type: oom }` defaults to `> 0`); set a higher threshold to alert only
+on a burst. The first cycle primes the baseline and never fires; a host whose
+kernel does not expose the `oom_kill` counter never fires. An oom hook receives
+`SERMO_WATCH`, `SERMO_CHECK_TYPE` (`oom`), `SERMO_VALUE` (kills this cycle),
+`SERMO_TOTAL` (cumulative), and `SERMO_MESSAGE`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,

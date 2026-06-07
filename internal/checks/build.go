@@ -44,6 +44,9 @@ type Deps struct {
 	SwapSampler SwapSamplerFunc
 	// LoadSampler reads load averages for `load` checks. Nil reads /proc.
 	LoadSampler LoadSamplerFunc
+	// OomSampler reads the cumulative OOM-kill counter for `oom` checks. Nil reads
+	// /proc/vmstat.
+	OomSampler OomSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -281,6 +284,22 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "load check: " + err.Error()
 		}
 		return loadCheck{base: b, preds: preds, perCPU: asBool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
+
+	case "oom":
+		// delta is optional; the default fires on any OOM kill (> 0).
+		op, value := ">", 0.0
+		if d, ok := entry["delta"].(map[string]any); ok {
+			op = asString(d["op"])
+			if !validDiskOp(op) {
+				return nil, "oom delta has an invalid op"
+			}
+			v, err := strconv.ParseFloat(scalarString(d["value"]), 64)
+			if err != nil {
+				return nil, "oom delta value must be numeric"
+			}
+			value = v
+		}
+		return &oomCheck{base: b, op: op, value: value, sampler: deps.OomSampler}, ""
 
 	case "swap":
 		metric := asString(entry["metric"])

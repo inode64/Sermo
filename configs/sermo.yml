@@ -110,6 +110,14 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-load-alert.sh]
+  # Watch kernel OOM kills: fire whenever the out-of-memory killer reaps a process.
+  oom:
+    enabled: false
+    interval: 30s
+    check: { type: oom }          # no delta -> fires on any kill (> 0)
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-oom-alert.sh]
   # Watch system swap: usage filling up and/or heavy paging (thrashing).
   swap:
     enabled: false
