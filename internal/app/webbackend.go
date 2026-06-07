@@ -251,7 +251,12 @@ func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 }
 
 func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {
-	if _, ok := b.entries[name]; !ok {
+	e := b.entries[name]
+	if e == nil {
+		return web.MetricSeries{}, false
+	}
+	typ, ok := e.checkTypes[check]
+	if !ok || !measuredCheckTypes[typ] {
 		return web.MetricSeries{}, false
 	}
 	out := web.MetricSeries{Check: check, Since: since.String(), Unit: "ms"}

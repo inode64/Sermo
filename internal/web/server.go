@@ -299,7 +299,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, seriesSince(r))
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service or check"})
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
