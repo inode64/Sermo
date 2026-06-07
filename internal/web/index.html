@@ -45,6 +45,7 @@
 </head>
 <body>
 <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
+<p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
 <table>
   <thead>
@@ -82,6 +83,28 @@ async function loadMe() {
   else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
 }
 
+async function loadReady() {
+  const el = $("#ready");
+  try {
+    const res = await fetch("readyz?verbose");
+    const body = await res.json();
+    if (body.ready) {
+      el.style.display = "none";
+      el.textContent = "";
+      return;
+    }
+    const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
+    const msg = body.message ? " — " + esc(body.message) : "";
+    const counts = (body.services != null)
+      ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
+      : "";
+    el.style.display = "block";
+    el.innerHTML = `<span class="inactive">${esc(label)}</span>${msg}${counts}`;
+  } catch (e) {
+    el.style.display = "none";
+  }
+}
+
 async function load() {
   try {
     const res = await fetch("api/services");
@@ -91,6 +114,7 @@ async function load() {
   } catch (e) {
     $("#err").textContent = "Failed to load services: " + e.message;
   }
+  loadReady();
   loadEvents();
   loadOps();
 }

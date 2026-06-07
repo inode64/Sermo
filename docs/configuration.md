@@ -247,7 +247,8 @@ malformed lock files under `<paths.runtime>/locks`),
 checks as `sermoctl preflight SERVICE`, without starting or stopping anything),
 `POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
 `start`, `stop` or `restart`. Clicking a service in the dashboard opens its
-detail. The dashboard auto-refreshes every 5s.
+detail. The dashboard auto-refreshes every 5s and polls `/readyz?verbose` to show
+a **Starting** or **Shutting down** banner while monitoring is not active yet.
 
 ### Liveness (`/livez`)
 
