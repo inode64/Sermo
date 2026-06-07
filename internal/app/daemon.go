@@ -171,18 +171,6 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Interval:  durationField(tree["interval"]),
 		Gates:     parseCheckGates(tree),
 		Sample:    sampleMetrics,
-		Checks: func(ctx context.Context, d checks.Deps) map[string]checks.Result {
-			cycle++
-			section, _ := tree["checks"].(map[string]any)
-			built, _ := checks.Build(section, d)
-			for _, r := range checks.Run(ctx, dueChecks(cycle, built, every), maxParallel) {
-				cache[r.Check] = r
-				if recordMeasurement != nil {
-					recordMeasurement(r)
-				}
-			}
-			return cache
-		},
 		Operate: func(ctx context.Context, action string) operation.Result {
 			switch action {
 			case "start":
@@ -200,6 +188,24 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Publish:      publishSnapshots(deps.Snapshots, name),
 		Now:          deps.Now,
 		Emit:         deps.Emit,
+	}
+	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
+		cycle++
+		section, _ := tree["checks"].(map[string]any)
+		built, _ := checks.Build(section, d)
+		due := dueChecks(cycle, built, every)
+		ran := make(map[string]bool, len(due))
+		for _, b := range due {
+			ran[b.Check.Name()] = true
+		}
+		worker.cycleRan = ran
+		for _, r := range checks.Run(ctx, due, maxParallel) {
+			cache[r.Check] = r
+			if recordMeasurement != nil {
+				recordMeasurement(r)
+			}
+		}
+		return cache
 	}
 	return worker, warnings
 }
