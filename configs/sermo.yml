@@ -96,3 +96,20 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
+  # Watch a file or directory tree for attribute changes (size, permissions,
+  # owner, deletion). Fires the hook once per change; recursive walks the subtree.
+  app-data:
+    enabled: false
+    interval: 30s
+    check:
+      type: file
+      path: /var/lib/myapp
+      recursive: true
+      size: { op: ">", value: 1048576 }   # edge-triggered; or { on: change }
+      permissions: { on: change }
+      owner: { on: change }
+      existence: { on: delete }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-file-change.sh]
+        timeout: 10s

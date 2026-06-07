@@ -42,6 +42,49 @@ func TestBuildWatchesBuildsDisk(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesBuildsFile(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"app-data": map[string]any{
+			"check": map[string]any{
+				"type":        "file",
+				"path":        "/var/lib/app",
+				"recursive":   true,
+				"size":        map[string]any{"op": ">", "value": 1024},
+				"permissions": map[string]any{"on": "change"},
+				"existence":   map[string]any{"on": "delete"},
+			},
+			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/file.sh"}}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	w := watches[0]
+	if w.Name != "app-data" || w.CheckType != "file" || w.Interval != 30*time.Second {
+		t.Fatalf("unexpected watch: %+v", w)
+	}
+	if w.Cycle == nil {
+		t.Fatal("file watch must wire a Cycle override")
+	}
+}
+
+func TestBuildWatchesFileWarnsOnNoCondition(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"bad": map[string]any{
+			"check": map[string]any{"type": "file", "path": "/x"},
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{}, time.Second)
+	if len(watches) != 0 || len(warns) == 0 {
+		t.Fatalf("expected a warning and no watch, got %d watches, warns %v", len(watches), warns)
+	}
+}
+
 func TestBuildWatchesSkipsDisabled(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "disk", "path": "/"}},
