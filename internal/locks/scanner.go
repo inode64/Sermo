@@ -93,6 +93,35 @@ func (s Scanner) Scan(service string) (Report, error) {
 	return report, nil
 }
 
+// ScanDir returns a warning for every lock file under Dir that cannot be read or
+// parsed. A missing directory yields no warnings.
+func (s Scanner) ScanDir() ([]string, error) {
+	entries, err := os.ReadDir(s.Dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read locks dir %s: %w", s.Dir, err)
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), lockSuffix) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+
+	var warnings []string
+	for _, fileName := range names {
+		path := filepath.Join(s.Dir, fileName)
+		if _, err := readLockFile(path); err != nil {
+			warnings = append(warnings, err.Error())
+		}
+	}
+	return warnings, nil
+}
+
 // matchService reports whether fileName is a lock for service, returning the
 // derived lock name ("" for the bare <service>.lock). Naming is
 // <service>[.<name>].lock (section 20).

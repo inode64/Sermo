@@ -280,6 +280,9 @@ function renderDetail(d) {
       <td class="muted">${l.owner_pid || ""}</td>
       <td class="muted">${esc(l.reason || "")}${exp}</td></tr>`;
   }).join("") || `<tr><td colspan="4" class="muted">No named runtime locks.</td></tr>`;
+  const lockWarns = (d.lock_warnings || []).map((w) =>
+    `<div class="inactive" style="margin-top:.25rem">warning: ${esc(w)}</div>`
+  ).join("");
 
   const procExe = (p) => {
     if (p.exe_resolved && p.exe) return esc(p.exe);
@@ -327,7 +330,7 @@ function renderDetail(d) {
     <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
-      <tbody>${lockRows}</tbody></table>
+      <tbody>${lockRows}</tbody></table>${lockWarns}
     <h2>Processes</h2>
     <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Role</th><th>Source</th></tr></thead>
       <tbody>${procRows}</tbody></table>
