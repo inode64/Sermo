@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -104,11 +105,45 @@ type CheckGate struct {
 	SkipWhenChanged []string
 }
 
+// gatedChecksDue returns gated checks that were skipped in a prior cycle but are
+// no longer gated off this cycle, so they should run even when their per-check
+// interval would otherwise defer them.
+func (w *Worker) gatedChecksDue(built []checks.Built, cache map[string]checks.Result) []checks.Built {
+	if len(w.Gates) == 0 {
+		return nil
+	}
+	byName := make(map[string]checks.Built, len(built))
+	for _, b := range built {
+		byName[b.Check.Name()] = b
+	}
+	var extra []checks.Built
+	for name, gate := range w.Gates {
+		if w.cycleRan != nil && w.cycleRan[name] {
+			continue
+		}
+		r, ok := cache[name]
+		if !ok || !r.Skipped {
+			continue
+		}
+		if w.gateReason(gate, cache) != "" {
+			continue
+		}
+		if b, ok := byName[name]; ok {
+			extra = append(extra, b)
+		}
+	}
+	sort.Slice(extra, func(i, j int) bool {
+		return extra[i].Check.Name() < extra[j].Check.Name()
+	})
+	return extra
+}
+
 // applyGates rewrites a gated-off check's result to a Skipped result so it does
 // not alert, fail the service or count toward SLA. Gates are evaluated after the
 // cycle's checks ran, so Requires sees this cycle's results; SkipWhenChanged uses
 // the shared change baseline (acknowledged on a successful (re)start). A skipped
-// check keeps its optional flag and is marked Skipped/OK.
+// check keeps its optional flag and is marked Skipped/OK. Checks that regain
+// their gate this cycle are run via gatedChecksDue before applyGates is called.
 func (w *Worker) applyGates(cache map[string]checks.Result) {
 	for name, gate := range w.Gates {
 		r, ok := cache[name]
