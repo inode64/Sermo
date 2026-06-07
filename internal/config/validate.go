@@ -143,6 +143,9 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			validateICMPCheck(name, check, entry, add)
 		case "swap":
 			validateSwapCheck(name, entry, add)
+		case "load":
+			validateLoadCheck(name, check, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -278,6 +281,38 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		}
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateLoadCheck validates a load watch: an optional boolean per_cpu and at
+// least one load1/load5/load15 threshold.
+func validateLoadCheck(name string, check map[string]any, add func(string, ...any)) {
+	if v, present := check["per_cpu"]; present {
+		if _, ok := v.(bool); !ok {
+			add("watches.%s.check.per_cpu must be a boolean", name)
+		}
+	}
+	preds := 0
+	for _, field := range []string{"load1", "load5", "load15"} {
+		raw, present := check[field]
+		if !present {
+			continue
+		}
+		preds++
+		m, ok := raw.(map[string]any)
+		if !ok {
+			add("watches.%s.check.%s must be a mapping {op, value}", name, field)
+			continue
+		}
+		if !isValidDiskOp(scalarString(m["op"])) {
+			add("watches.%s.check.%s has an invalid op %q", name, field, scalarString(m["op"]))
+		}
+		if !isNumeric(scalarString(m["value"])) {
+			add("watches.%s.check.%s value %q must be numeric", name, field, scalarString(m["value"]))
+		}
+	}
+	if preds == 0 {
+		add("watches.%s.check requires at least one of load1/load5/load15", name)
 	}
 }
 
