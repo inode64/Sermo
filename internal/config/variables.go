@@ -25,10 +25,12 @@ func collectVariables(tree map[string]any) map[string]string {
 	vars := make(map[string]string, len(raw))
 	for k, v := range raw {
 		if list, ok := v.([]any); ok {
-			vars[k] = firstExistingPath(list)
+			vars[k] = expandEnvString(firstExistingPath(list))
 			continue
 		}
-		vars[k] = scalarString(v)
+		// Resolve ${env:...} in a variable value here (before nested-variable
+		// validation) so a variable can hold a secret from the environment.
+		vars[k] = expandEnvString(scalarString(v))
 	}
 	return vars
 }
@@ -115,6 +117,9 @@ var runtimeVars = map[string]bool{"date": true, "event": true, "action": true}
 func expandString(s string, vars map[string]string, path string, errs *[]string) string {
 	return varRef.ReplaceAllStringFunc(s, func(match string) string {
 		name := strings.TrimSpace(varRef.FindStringSubmatch(match)[1])
+		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+			return resolveEnvRef(rest) // ${env:NAME} -> environment, never an error
+		}
 		if val, ok := vars[name]; ok {
 			return val
 		}
@@ -124,6 +129,59 @@ func expandString(s string, vars map[string]string, path string, errs *[]string)
 		*errs = append(*errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
 		return match
 	})
+}
+
+// resolveEnvRef resolves the body of an ${env:...} reference (the text after
+// "env:") from the process environment, with an optional shell-style default:
+// ${env:NAME} or ${env:NAME:-fallback}. An unset or empty variable yields the
+// default ("" when none), never an error — secrets need not be present when the
+// config is merely validated.
+func resolveEnvRef(ref string) string {
+	name, def := ref, ""
+	if i := strings.Index(ref, ":-"); i >= 0 {
+		name, def = ref[:i], ref[i+2:]
+	}
+	if v := os.Getenv(strings.TrimSpace(name)); v != "" {
+		return v
+	}
+	return def
+}
+
+// expandEnvString replaces only ${env:...} references in s, leaving every other
+// ${...} untouched. Used to resolve secrets in the global config (which has no
+// per-service variables) and inside variable values.
+func expandEnvString(s string) string {
+	if !strings.Contains(s, "${env:") {
+		return s
+	}
+	return varRef.ReplaceAllStringFunc(s, func(match string) string {
+		name := strings.TrimSpace(varRef.FindStringSubmatch(match)[1])
+		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+			return resolveEnvRef(rest)
+		}
+		return match
+	})
+}
+
+// expandEnvTree resolves ${env:...} references across every string in a tree,
+// recursively and in place, returning the same tree. Used for the global config.
+func expandEnvTree(v any) any {
+	switch t := v.(type) {
+	case string:
+		return expandEnvString(t)
+	case map[string]any:
+		for k, e := range t {
+			t[k] = expandEnvTree(e)
+		}
+		return t
+	case []any:
+		for i, e := range t {
+			t[i] = expandEnvTree(e)
+		}
+		return t
+	default:
+		return t
+	}
 }
 
 // scalarString renders a YAML scalar as the string Sermo uses for variables and
