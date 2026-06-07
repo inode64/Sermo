@@ -18,7 +18,7 @@ It ships two binaries:
   errors — external hosts via ICMP — reachability and latency — files/directories
   — size, permissions, owner and deletion — and processes by name — age,
   CPU/memory/IO and disappearance) that fire a hook command and/or send
-  **notifications** (email now, pluggable for Slack/Teams/…) when a threshold is
+  **notifications** (email and Slack, pluggable for Teams/…) when a threshold is
   crossed or an attribute changes.
 
 ## Build
