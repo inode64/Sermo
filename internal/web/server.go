@@ -53,6 +53,12 @@ type Watch struct {
 	Enabled   bool   `json:"enabled"`
 }
 
+// Notifier is a configured notification target referenced by watches.
+type Notifier struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 // ActionResult is the outcome of an operation (start/stop/restart).
 type ActionResult struct {
 	OK      bool   `json:"ok"`
@@ -242,6 +248,8 @@ type Backend interface {
 	// Watches returns configured host watches (including those with `enabled: false`
 	// so they remain visible even when services=0).
 	Watches(ctx context.Context) []Watch
+	// Notifiers returns the named notifiers configured for use by watches.
+	Notifiers(ctx context.Context) []Notifier
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
 	// Series returns a service's per-minute availability history over since; ok is
@@ -323,6 +331,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/watches", s.handleWatches)
+	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -423,6 +432,10 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Watches(r.Context()))
+}
+
+func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Notifiers(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
