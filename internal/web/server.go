@@ -72,6 +72,13 @@ type SeriesPoint struct {
 	Total int64    `json:"total"`
 }
 
+// Finding is one diagnostic result (level: error|warning|info).
+type Finding struct {
+	Level   string `json:"level"`
+	Scope   string `json:"scope"`
+	Message string `json:"message"`
+}
+
 // Event is one recorded daemon event for the activity log.
 type Event struct {
 	Time    string `json:"time"` // RFC3339
@@ -105,6 +112,9 @@ type Backend interface {
 	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
 	// Events returns up to limit recent events, newest first (the global feed).
 	Events(ctx context.Context, limit int) []Event
+	// Diagnostics runs config/host/database consistency checks and returns the
+	// findings (ordered by severity).
+	Diagnostics(ctx context.Context) []Finding
 	// ServiceEvents returns up to limit recent events for one service, newest
 	// first; ok is false for unknown names.
 	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
@@ -139,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	return s.withAuth(mux)
 }
@@ -233,6 +244,10 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Events(r.Context(), eventLimit(r)))
+}
+
+func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Diagnostics(r.Context()))
 }
 
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {

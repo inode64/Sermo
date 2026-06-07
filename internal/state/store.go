@@ -281,6 +281,40 @@ func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
 	return out, nil
 }
 
+// IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when
+// the database is not "ok" (corruption), for diagnostics.
+func (s *Store) IntegrityCheck() error {
+	var result string
+	if err := s.db.QueryRow("PRAGMA integrity_check;").Scan(&result); err != nil {
+		return err
+	}
+	if result != "ok" {
+		return fmt.Errorf("integrity_check: %s", result)
+	}
+	return nil
+}
+
+// TrackedServices returns the distinct service names that have stored data
+// (monitoring state or SLA samples), so diagnostics can flag rows for services no
+// longer in the configuration.
+func (s *Store) TrackedServices() ([]string, error) {
+	rows, err := s.db.Query(`SELECT service FROM monitor_state
+		UNION SELECT service FROM sla_sample ORDER BY service;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
 // one year of per-minute samples per service. Returns the rows removed.
 func (s *Store) PruneSLA(before time.Time) (int64, error) {

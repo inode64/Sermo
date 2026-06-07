@@ -181,6 +181,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runMonitor(opts, false)
 	case "sla":
 		return a.runSLA(opts)
+	case "diagnose":
+		return a.runDiagnose(opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -1018,6 +1020,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
+	fmt.Fprintln(w, "          diagnose")
 	fmt.Fprintln(w, "          apps [all] | libs [all] | services [all] | profile list | profile show PROFILE | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
