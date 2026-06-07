@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -98,6 +99,33 @@ func TestPortsOnChange(t *testing.T) {
 	// stable closed -> OK again
 	if !c.Run(context.Background()).OK {
 		t.Fatalf("a stable state must not keep firing: %s", c.Run(context.Background()).Message)
+	}
+}
+
+func TestPortsCheckRespectsTimeout(t *testing.T) {
+	ports := make([]int, 200)
+	for i := range ports {
+		ports[i] = 10000 + i
+	}
+	c := &portsCheck{
+		base:           base{name: "p", timeout: 50 * time.Millisecond},
+		host:           "192.0.2.1", // TEST-NET; dials hang until connect_timeout
+		ports:          ports,
+		expect:         "closed",
+		match:          "all",
+		connectTimeout: 30 * time.Second,
+	}
+	start := time.Now()
+	res := c.Run(context.Background())
+	elapsed := time.Since(start)
+	if res.OK {
+		t.Fatal("a timed-out ports scan must fail")
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("check should honor the global timeout, took %v", elapsed)
+	}
+	if !strings.Contains(res.Message, "timed out") {
+		t.Fatalf("timeout message = %q", res.Message)
 	}
 }
 
