@@ -35,7 +35,8 @@ var rejectedSecurityToggles = []string{
 //
 // Covered: document kind/name presence and uniqueness, uses/clone resolution and
 // cycles, variable existence/nesting/expansion, backend values, engine durations
-// (including the non-negative startup_delay) and max_parallel_checks, paths.locks
+// (including operation_timeout, the non-negative startup_delay) and
+// max_parallel_checks/max_parallel_operations, paths.locks
 // rejection, paths.runtime absoluteness,
 // security toggles, policy.cooldown/max_actions/backoff, port/expect_status range,
 // check/preflight/postflight entry schemas (type, optional, command array form,
@@ -65,7 +66,7 @@ func validateGlobal(cfg *Config) []Issue {
 		if backend := scalarString(engine["backend"]); !isValidBackend(backend) {
 			add("engine.backend %q is not one of auto, systemd, openrc", backend)
 		}
-		for _, field := range []string{"interval", "default_timeout"} {
+		for _, field := range []string{"interval", "default_timeout", "operation_timeout"} {
 			if v, present := engine[field]; present && !isPositiveDuration(scalarString(v)) {
 				add("engine.%s %q must be a valid positive duration", field, scalarString(v))
 			}
@@ -76,6 +77,11 @@ func validateGlobal(cfg *Config) []Issue {
 		if v, present := engine["max_parallel_checks"]; present {
 			if n, ok := scalarInt(v); !ok || n <= 0 {
 				add("engine.max_parallel_checks must be an integer > 0")
+			}
+		}
+		if v, present := engine["max_parallel_operations"]; present {
+			if n, ok := scalarInt(v); !ok || n <= 0 {
+				add("engine.max_parallel_operations must be an integer > 0")
 			}
 		}
 	}
