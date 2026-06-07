@@ -159,7 +159,6 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	}
 	every, warnings := checkIntervals(tree, resolution)
 
-	cycle := 0
 	cache := map[string]checks.Result{}
 	recordMeasurement := measurementRecorder(deps, name, tree)
 
@@ -191,10 +190,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Emit:         deps.Emit,
 	}
 	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
-		cycle++
 		section, _ := tree["checks"].(map[string]any)
 		built, _ := checks.Build(section, d)
-		due := dueChecks(cycle, built, every)
+		due := dueChecks(worker.cycle, built, every)
 		ran := make(map[string]bool, len(due))
 		for _, b := range due {
 			ran[b.Check.Name()] = true

@@ -143,6 +143,26 @@ func TestCyclePausedDoesNothing(t *testing.T) {
 	}
 }
 
+func TestPausedCycleAdvancesWithoutChecks(t *testing.T) {
+	checksCalled := 0
+	w := &Worker{
+		IsPaused: func() bool { return true },
+		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			checksCalled++
+			return nil
+		},
+	}
+	for i := 0; i < 3; i++ {
+		w.RunCycle(context.Background())
+	}
+	if checksCalled != 0 {
+		t.Fatalf("paused cycles must not run checks, called %d times", checksCalled)
+	}
+	if w.cycle != 3 {
+		t.Fatalf("cycle = %d, want 3 after three paused ticks", w.cycle)
+	}
+}
+
 func TestRuntimeVarsSubstitutedInMessage(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	tree := map[string]any{"rules": map[string]any{

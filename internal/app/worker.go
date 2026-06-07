@@ -32,6 +32,10 @@ type Worker struct {
 	// this cycle when a required check is failing or a watched file has changed.
 	Gates map[string]CheckGate
 
+	// cycle counts scheduler ticks for this worker, including paused cycles, so a
+	// long `unmonitor` does not desynchronize per-check `interval` scheduling.
+	cycle int
+
 	// cycleRan lists the check names that actually ran this cycle (not reused from
 	// the cache because of a per-check interval). Requires gates consult only deps
 	// present here so a stale cached failure cannot skip a dependent check.
@@ -45,7 +49,8 @@ type Worker struct {
 	// Operate runs an action through the operation engine.
 	Operate func(ctx context.Context, action string) operation.Result
 	// IsPaused reports whether monitoring is paused for this service (operator ran
-	// `unmonitor`). A paused cycle does nothing — no checks, rules or remediation.
+	// `unmonitor`). A paused cycle still advances cycle but runs no checks, rules
+	// or remediation.
 	IsPaused func() bool
 	// RecordHealth persists this cycle's availability sample for SLA tracking:
 	// up is true when no required check failed. Nil disables recording (tests, or
@@ -70,6 +75,7 @@ type Worker struct {
 // fire any alert rules. The internal operation lock (section 18) already
 // prevents overlapping operations, so cycles never run concurrently per service.
 func (w *Worker) RunCycle(ctx context.Context) {
+	w.cycle++
 	if w.IsPaused != nil && w.IsPaused() {
 		return // monitoring paused for this service
 	}
