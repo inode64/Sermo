@@ -29,10 +29,10 @@ func main() {
 }
 
 func run(args []string) int {
-	command, globalPath, err := parseArgs(args)
+	command, globalPath, verbose, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml]")
+		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--verbose|-v]")
 		return 64
 	}
 	if command != "run" {
@@ -40,7 +40,14 @@ func run(args []string) int {
 		return 64
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	if verbose {
+		logger.Debug("verbose logging enabled", "config", globalPath)
+	}
 
 	// Sermo is designed to run as root: it inspects and signals processes owned by
 	// other users, controls the service manager, opens raw ICMP sockets and reads
@@ -63,6 +70,7 @@ func run(args []string) int {
 		}
 		return exitConfigInvalid
 	}
+	logger.Debug("config loaded", "path", globalPath, "services", len(cfg.Services))
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -83,6 +91,7 @@ func run(args []string) int {
 		logger.Error("service manager", "error", err)
 		return 2
 	}
+	logger.Debug("service backend detected", "backend", detection.Backend)
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
@@ -150,6 +159,7 @@ func run(args []string) int {
 	for _, w := range watchWarnings {
 		logger.Warn("build watches", "warning", w)
 	}
+	logger.Debug("built monitor targets", "enabled_services", len(workers), "enabled_watches", len(watches), "configured", app.HasConfiguredTargets(cfg))
 
 	if len(workers) == 0 && len(watches) == 0 {
 		if !app.HasConfiguredTargets(cfg) {
@@ -166,7 +176,8 @@ func run(args []string) int {
 	readiness := app.NewReadiness(string(detection.Backend), len(workers), len(watches))
 
 	var webHolder *app.WebBackendHolder
-	if addr := webListenAddr(cfg); addr != "" {
+	addr, webDisabledReason := webListenAddr(cfg)
+	if addr != "" {
 		var webWarnings []string
 		webHolder, webWarnings = app.NewWebBackendHolder(cfg, deps)
 		for _, w := range webWarnings {
@@ -181,6 +192,7 @@ func run(args []string) int {
 			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
 			Readiness:        readiness,
 		}
+		logger.Debug("starting web ui server", "address", addr, "auth", auth.Enabled())
 		go func() {
 			if err := server.Run(ctx); err != nil {
 				logger.Error("web server", "error", err)
@@ -191,6 +203,8 @@ func run(args []string) int {
 		} else {
 			logger.Warn("sermod web ui listening with NO authentication", "address", addr)
 		}
+	} else {
+		logger.Warn("web ui disabled; no port will be opened", "reason", webDisabledReason)
 	}
 
 	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers), "watches", len(watches))
@@ -217,7 +231,7 @@ func run(args []string) int {
 	return 0
 }
 
-func parseArgs(args []string) (command, globalPath string, err error) {
+func parseArgs(args []string) (command, globalPath string, verbose bool, err error) {
 	globalPath = config.DefaultGlobalPath
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -227,21 +241,23 @@ func parseArgs(args []string) (command, globalPath string, err error) {
 		case arg == "--config":
 			i++
 			if i >= len(args) {
-				return "", "", fmt.Errorf("--config requires a value")
+				return "", "", false, fmt.Errorf("--config requires a value")
 			}
 			globalPath = args[i]
+		case arg == "--verbose" || arg == "-v":
+			verbose = true
 		case strings.HasPrefix(arg, "-"):
-			return "", "", fmt.Errorf("unknown flag %s", arg)
+			return "", "", false, fmt.Errorf("unknown flag %s", arg)
 		case command == "":
 			command = arg
 		default:
-			return "", "", fmt.Errorf("unexpected argument %q", arg)
+			return "", "", false, fmt.Errorf("unexpected argument %q", arg)
 		}
 	}
 	if command == "" {
-		return "", "", fmt.Errorf("missing command")
+		return "", "", false, fmt.Errorf("missing command")
 	}
-	return command, globalPath, nil
+	return command, globalPath, verbose, nil
 }
 
 func notifiersRaw(cfg *config.Config) map[string]any {
@@ -249,12 +265,17 @@ func notifiersRaw(cfg *config.Config) map[string]any {
 	return m
 }
 
-// webListenAddr returns the host:port the web UI should bind to, or "" when no
-// web.port is configured (web disabled). Address defaults to loopback.
-func webListenAddr(cfg *config.Config) string {
+// webListenAddr returns the host:port the web UI should bind to, or "" when the
+// web UI is disabled. The second return value explains the decision (a non-empty
+// reason when disabled) so `--verbose` can surface why no port was opened.
+// Address defaults to loopback.
+func webListenAddr(cfg *config.Config) (addr, reason string) {
 	m, _ := cfg.Global.Raw["web"].(map[string]any)
 	if m == nil {
-		return ""
+		return "", "no [web] section in config"
+	}
+	if _, present := m["port"]; !present {
+		return "", "web.port is not set"
 	}
 	port := 0
 	switch v := m["port"].(type) {
@@ -266,15 +287,17 @@ func webListenAddr(cfg *config.Config) string {
 		port = int(v)
 	case float64:
 		port = int(v)
+	default:
+		return "", fmt.Sprintf("web.port is not a number (%T)", m["port"])
 	}
 	if port <= 0 {
-		return ""
+		return "", fmt.Sprintf("web.port must be positive (got %d)", port)
 	}
 	address, _ := m["address"].(string)
 	if address == "" {
 		address = "127.0.0.1"
 	}
-	return net.JoinHostPort(address, strconv.Itoa(port))
+	return net.JoinHostPort(address, strconv.Itoa(port)), ""
 }
 
 // webAuth builds the web access control from the `web` block (admin password,
