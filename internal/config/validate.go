@@ -136,6 +136,18 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 			add("web.address must be a string")
 		}
 	}
+	for _, key := range []string{"password", "guest_password"} {
+		if v, present := webCfg[key]; present {
+			if _, isStr := v.(string); !isStr {
+				add("web.%s must be a string", key)
+			}
+		}
+	}
+	if v, present := webCfg["guest"]; present {
+		if _, isBool := v.(bool); !isBool {
+			add("web.guest must be a boolean (allow anonymous read-only access)")
+		}
+	}
 }
 
 // validateNotifiers checks the global `notifiers` section: each entry is a known

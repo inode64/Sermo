@@ -119,9 +119,33 @@ web:
 - **Recommended port: `9797`.** It is easy to remember and avoids the common
   monitoring ports (`9090` Prometheus, `9093` Alertmanager, `9100` node-exporter,
   `3000` Grafana, `8080`).
-- **No authentication.** The UI can stop/restart services, so it binds to
-  **loopback (`127.0.0.1`) by default**. Only change `address` if you front it
-  with an authenticating reverse proxy (or a private network you trust).
+- **Authentication** is optional but recommended before exposing it. Without it,
+  the UI binds to **loopback (`127.0.0.1`) by default** and is fully open.
+
+### Authentication
+
+Set passwords on the `web` block for HTTP Basic auth with two roles:
+
+```yaml
+web:
+  port: 9797
+  password: "s3cret"           # admin: read + actions (start/stop/restart, monitor)
+  guest_password: "lookonly"   # optional: a read-only login
+  guest: true                  # optional: allow anonymous read-only access
+```
+
+- **admin** — full access. Granted by `password`.
+- **guest** — **read-only**: can view everything but every action (a `POST`) is
+  refused with `403`. Granted by `guest_password`, and/or to anyone when
+  `guest: true` (anonymous read-only).
+
+The **password**, not the username, selects the role — at the browser prompt enter
+any username and the admin or guest password; passwords are compared in constant
+time. With `guest: true` the dashboard loads read-only without a prompt, and a
+**"log in"** link (`GET /login`) triggers the prompt to escalate to admin. The UI
+hides the action buttons for guests; the API enforces it regardless. When no
+password/guest is set, auth is disabled (open) and the daemon **logs a warning**
+at startup. `GET /api/whoami` reports the caller's role.
 
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
 monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its

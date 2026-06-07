@@ -22,7 +22,8 @@ It ships two binaries:
   crossed or an attribute changes. It can also serve a small **web dashboard**
   (`web.port`, recommended `9797`) to view services and monitor/start/stop/restart
   them, with a per-service detail showing its checks and SLA history, and a global
-  and per-service event feed.
+  and per-service event feed. Optional Basic auth with an admin role and a
+  read-only guest mode.
 
 ## Build
 

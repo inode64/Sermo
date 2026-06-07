@@ -140,13 +140,18 @@ func run(args []string) int {
 		for _, w := range webWarnings {
 			logger.Warn("build web backend", "warning", w)
 		}
-		server := &web.Server{Addr: addr, Backend: backend, Logger: logger}
+		auth := webAuth(cfg)
+		server := &web.Server{Addr: addr, Backend: backend, Auth: auth, Logger: logger}
 		go func() {
 			if err := server.Run(ctx); err != nil {
 				logger.Error("web server", "error", err)
 			}
 		}()
-		logger.Info("sermod web ui listening", "address", addr)
+		if auth.Enabled() {
+			logger.Info("sermod web ui listening", "address", addr, "auth", "enabled")
+		} else {
+			logger.Warn("sermod web ui listening with NO authentication", "address", addr)
+		}
 	}
 
 	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers), "watches", len(watches))
@@ -218,6 +223,20 @@ func webListenAddr(cfg *config.Config) string {
 		address = "127.0.0.1"
 	}
 	return net.JoinHostPort(address, strconv.Itoa(port))
+}
+
+// webAuth builds the web access control from the `web` block (admin password,
+// optional guest password, optional anonymous guest read access).
+func webAuth(cfg *config.Config) web.Auth {
+	m, _ := cfg.Global.Raw["web"].(map[string]any)
+	if m == nil {
+		return web.Auth{}
+	}
+	auth := web.Auth{}
+	auth.AdminPassword, _ = m["password"].(string)
+	auth.GuestPassword, _ = m["guest_password"].(string)
+	auth.AnonymousGuest, _ = m["guest"].(bool)
+	return auth
 }
 
 func engineMap(cfg *config.Config) map[string]any {
