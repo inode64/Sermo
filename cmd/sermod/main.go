@@ -126,6 +126,7 @@ func run(args []string) int {
 		Notifiers:       notifiers,
 		Snapshots:       app.NewSnapshots(),
 		Remediation:     app.NewRemediationRegistry(),
+		RuleWindows:     app.NewRuleWindowRegistry(),
 		Events:          eventLog,
 		SystemFreshness: interval / 2,
 		OpGate:          opGate,

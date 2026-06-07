@@ -87,6 +87,18 @@ type Process struct {
 	Cmdline     []string `json:"cmdline,omitempty"`
 }
 
+// RuleWindow is one rule's window progress in a service detail.
+type RuleWindow struct {
+	Name          string `json:"name"`
+	Type          string `json:"type"` // remediation | alert
+	Action        string `json:"action,omitempty"`
+	Condition     string `json:"condition"`
+	ConditionTrue bool   `json:"condition_true"`
+	Window        string `json:"window"`
+	Progress      string `json:"progress"`
+	Firing        bool   `json:"firing"`
+}
+
 // Remediation is the automatic remediation policy gating view for one service.
 type Remediation struct {
 	Allowed           bool   `json:"allowed"`
@@ -120,7 +132,8 @@ type Detail struct {
 	Locks        []Lock       `json:"locks,omitempty"`
 	LockWarnings []string     `json:"lock_warnings,omitempty"`
 	Processes    []Process    `json:"processes,omitempty"`
-	Remediation  *Remediation `json:"remediation,omitempty"`
+	Remediation  *Remediation  `json:"remediation,omitempty"`
+	Rules        []RuleWindow  `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is

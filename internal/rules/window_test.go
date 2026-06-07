@@ -62,6 +62,47 @@ func TestWithinSlidingWindow(t *testing.T) {
 	}
 }
 
+func TestWindowProgressAndIsFiring(t *testing.T) {
+	forRule := Rule{For: &ForWindow{Cycles: 3}}
+	s := &WindowState{}
+	if s.IsFiring(forRule) || s.Progress(forRule) != "0/3" {
+		t.Fatalf("empty state: firing=%v progress=%q", s.IsFiring(forRule), s.Progress(forRule))
+	}
+	s.Fires(forRule, true)
+	s.Fires(forRule, true)
+	if s.IsFiring(forRule) || s.Progress(forRule) != "2/3" {
+		t.Fatalf("after 2 trues: firing=%v progress=%q", s.IsFiring(forRule), s.Progress(forRule))
+	}
+	s.Fires(forRule, true)
+	if !s.IsFiring(forRule) || s.Progress(forRule) != "3/3" {
+		t.Fatalf("after 3 trues: firing=%v progress=%q", s.IsFiring(forRule), s.Progress(forRule))
+	}
+
+	withinRule := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
+	s2 := &WindowState{}
+	s2.Fires(withinRule, true)
+	s2.Fires(withinRule, false)
+	if s2.IsFiring(withinRule) || s2.Progress(withinRule) != "1/2 in 4 cycles" {
+		t.Fatalf("within partial: firing=%v progress=%q", s2.IsFiring(withinRule), s2.Progress(withinRule))
+	}
+	s2.Fires(withinRule, true)
+	if !s2.IsFiring(withinRule) || s2.Progress(withinRule) != "2/2 in 4 cycles" {
+		t.Fatalf("within fire: firing=%v progress=%q", s2.IsFiring(withinRule), s2.Progress(withinRule))
+	}
+}
+
+func TestWindowDescription(t *testing.T) {
+	if got := WindowDescription(Rule{}); got != "immediate" {
+		t.Fatalf("default = %q", got)
+	}
+	if got := WindowDescription(Rule{For: &ForWindow{Cycles: 3}}); got != "for 3 consecutive" {
+		t.Fatalf("for = %q", got)
+	}
+	if got := WindowDescription(Rule{Within: &WithinWindow{Cycles: 15, MinMatches: 5}}); got != "within 15 cycles (min 5)" {
+		t.Fatalf("within = %q", got)
+	}
+}
+
 func TestParseWindows(t *testing.T) {
 	tree := map[string]any{"rules": map[string]any{
 		"a": map[string]any{
