@@ -50,7 +50,8 @@ type Check struct {
 	Optional bool   `json:"optional"`
 	Skipped  bool   `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
 	Message  string `json:"message,omitempty"`
-	Ran      bool   `json:"ran"` // false if not observed yet
+	Ran      bool   `json:"ran"`           // false if not observed yet
+	At       string `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)
 }
 
 // SLAWindow is a service's availability over one rolling window. Ratio is nil

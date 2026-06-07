@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"testing"
+	"time"
 
 	"sermo/internal/checks"
 )
@@ -38,6 +39,35 @@ func TestSnapshotsPublishRanFlag(t *testing.T) {
 	}
 	if got["slow"].Ran {
 		t.Fatal("interval-deferred slow check should show ran=false")
+	}
+}
+
+func TestSnapshotsPublishAtOnlyWhenRan(t *testing.T) {
+	t0 := time.Date(2026, 6, 7, 10, 0, 0, 0, time.UTC)
+	t1 := t0.Add(30 * time.Second)
+	s := NewSnapshots()
+	s.now = func() time.Time { return t0 }
+
+	s.Publish("web", map[string]checks.Result{
+		"fast": {Check: "fast", OK: true},
+		"slow": {Check: "slow", OK: true},
+	}, map[string]bool{"fast": true, "slow": true})
+
+	s.now = func() time.Time { return t1 }
+	s.Publish("web", map[string]checks.Result{
+		"fast": {Check: "fast", OK: true},
+		"slow": {Check: "slow", OK: true, Message: "cached"},
+	}, map[string]bool{"fast": true})
+
+	got := s.Get("web")
+	if got["fast"].At != t1 {
+		t.Fatalf("fast At = %v, want %v", got["fast"].At, t1)
+	}
+	if got["slow"].At != t0 {
+		t.Fatalf("cached slow At = %v, want prior %v", got["slow"].At, t0)
+	}
+	if got["slow"].Ran {
+		t.Fatal("slow should not show ran on second cycle")
 	}
 }
 

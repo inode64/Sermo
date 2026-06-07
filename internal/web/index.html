@@ -198,9 +198,11 @@ async function detail(name) {
 
 function renderDetail(d) {
   const checks = (d.checks || []).map((c) => {
-    const state = !c.ran ? '<span class="muted">not run yet</span>'
-      : c.skipped ? '<span class="muted">skipped</span>'
-      : c.ok ? '<span class="ok">ok</span>' : '<span class="bad">fail</span>';
+    const age = c.at ? ` <span class="muted">· ${esc(fmtAge(c.at))}</span>` : "";
+    const state = !c.ran
+      ? (c.at ? `<span class="muted">cached</span>${age}` : '<span class="muted">not run yet</span>')
+      : c.skipped ? `<span class="muted">skipped</span>${age}`
+      : c.ok ? `<span class="ok">ok</span>${age}` : `<span class="bad">fail</span>${age}`;
     return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
       <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
       <td class="muted">${esc(c.message || "")}</td></tr>`;
@@ -374,6 +376,17 @@ function closeDetail() { current = null; $("#detail").style.display = "none"; }
 function fmtTime(t) {
   const d = new Date(t);
   return isNaN(d) ? (t || "") : d.toLocaleString();
+}
+
+function fmtAge(t) {
+  const d = new Date(t);
+  if (isNaN(d)) return "";
+  const sec = Math.floor((Date.now() - d) / 1000);
+  if (sec < 0) return "just now";
+  if (sec < 60) return sec + "s ago";
+  if (sec < 3600) return Math.floor(sec / 60) + "m ago";
+  if (sec < 86400) return Math.floor(sec / 3600) + "h ago";
+  return fmtTime(t);
 }
 
 function esc(s) {
