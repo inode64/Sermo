@@ -17,8 +17,37 @@ which reuse the same schema). MVP types:
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
+| `disk`        | a filesystem's space/inode predicates hold (used_pct/free_pct/inodes_*)|
+| `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
+| `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
+| `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
+| `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
+| `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
+| `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 
 Each check has an optional `timeout` (else `engine.default_timeout`).
+
+### Checks and host watches are the same types
+
+Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
+**both** places:
+
+- a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
+- a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
+
+The host-resource checks (`disk`, `load`, `fds`, `conntrack`, `entropy`, `zombies`,
+`oom`) are condition-style — `OK == true` means the threshold is crossed — so in
+rules `active: {check: x}` fires on breach, and as a watch the hook fires on breach.
+The health checks (`tcp`, `http`, `command`, `service`, `file_exists`, `binary`,
+`libraries`) are the opposite (`OK == true` is healthy), so as a watch they fire the
+hook on **failure**.
+
+Two watch families stay watch-only because they are not single-shot: the
+multi-metric watches (`net`, `icmp`, `swap`, with a `metrics:` map and one hook per
+metric) and the multi-target watches (`file`, `process`, one event/hook per
+changed path or matching pid). `service`/`metric`/`process` checks need per-service
+context (backend status, a metric sampler, process discovery) and so are not
+available as standalone watches.
 
 ### Count
 

@@ -101,7 +101,7 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	if watches, ok := raw["watches"].(map[string]any); ok {
-		validateWatches(watches, add)
+		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), add)
 	}
 
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
@@ -117,7 +117,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a non-empty hook command (spec 2026-06-06-host-watches-disk).
-func validateWatches(watches map[string]any, add func(string, ...any)) {
+func validateWatches(watches map[string]any, locksDir string, add func(string, ...any)) {
 	for _, name := range sortedKeys(watches) {
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
@@ -133,9 +133,10 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			add("watches.%s.check is required", name)
 			continue
 		}
+		cp := "watches." + name + ".check"
 		switch scalarString(check["type"]) {
 		case "disk":
-			validateDiskCheck(name, check, add)
+			validateDiskFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "net":
 			validateNetCheck(name, check, entry, add)
@@ -144,22 +145,22 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "swap":
 			validateSwapCheck(name, entry, add)
 		case "load":
-			validateLoadCheck(name, check, add)
+			validateLoadFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "oom":
-			validateOomCheck(name, check, add)
+			validateOomFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "fds":
-			validateFieldPreds(name, check, []string{"used_pct", "free", "allocated"}, add)
+			validateThresholdPreds(cp, check, []string{"used_pct", "free", "allocated"}, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "conntrack":
-			validateFieldPreds(name, check, []string{"used_pct", "free", "count"}, add)
+			validateThresholdPreds(cp, check, []string{"used_pct", "free", "count"}, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "entropy":
-			validateEntropyCheck(name, check, add)
+			validateEntropyFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "zombies":
-			validateZombieCheck(name, check, add)
+			validateZombieFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
@@ -168,7 +169,13 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "":
 			add("watches.%s.check.type is required", name)
 		default:
-			add("watches.%s.check.type %q is not supported", name, scalarString(check["type"]))
+			// Any single-shot service check (tcp, http, command, …) can be a host
+			// watch: validate its fields and require a hook (section: unified checks).
+			if validateWatchableCheck(cp, scalarString(check["type"]), check, locksDir, add) {
+				validateHookBlock("watches."+name, entry, add)
+			} else {
+				add("watches.%s.check.type %q is not supported", name, scalarString(check["type"]))
+			}
 		}
 
 		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
@@ -200,32 +207,14 @@ func validateWatchWindow(name string, entry map[string]any, add func(string, ...
 	}
 }
 
-func validateDiskCheck(name string, check map[string]any, add func(string, ...any)) {
-	if scalarString(check["path"]) == "" {
-		add("watches.%s.check.path is required for a disk check", name)
+// validateDiskFields validates a disk check's fields at prefix (the dotted path
+// to the fields container, e.g. "watches.disk-root.check" or "checks.root").
+// Shared by host watches and service checks so disk works identically in both.
+func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["path"]) == "" {
+		add("%s.path is required for a disk check", prefix)
 	}
-	preds := 0
-	for _, field := range []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
-		raw, present := check[field]
-		if !present {
-			continue
-		}
-		preds++
-		m, ok := raw.(map[string]any)
-		if !ok {
-			add("watches.%s.check.%s must be a mapping {op, value}", name, field)
-			continue
-		}
-		if !isValidDiskOp(scalarString(m["op"])) {
-			add("watches.%s.check.%s has an invalid op %q", name, field, scalarString(m["op"]))
-		}
-		if !isNumeric(scalarString(m["value"])) {
-			add("watches.%s.check.%s value %q must be numeric", name, field, scalarString(m["value"]))
-		}
-	}
-	if preds == 0 {
-		add("watches.%s.check requires at least one of used_pct/free_pct/inodes_used_pct/inodes_free_pct/inodes_free", name)
-	}
+	validateThresholdPreds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
 }
 
 func validateHookBlock(prefix string, block map[string]any, add func(string, ...any)) {
@@ -299,116 +288,131 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 	}
 }
 
-// validateEntropyCheck validates an entropy watch: a required avail {op, value}
-// threshold.
-func validateEntropyCheck(name string, check map[string]any, add func(string, ...any)) {
-	m, ok := check["avail"].(map[string]any)
+// validateEntropyFields validates an entropy check's required avail {op, value}
+// threshold at prefix.
+func validateEntropyFields(prefix string, fields map[string]any, add addFunc) {
+	validateThresholdMap(prefix, "avail", fields["avail"], "for an entropy check", add)
+}
+
+// validateZombieFields validates a zombies check's required count {op, value}
+// threshold at prefix.
+func validateZombieFields(prefix string, fields map[string]any, add addFunc) {
+	validateThresholdMap(prefix, "count", fields["count"], "for a zombies check", add)
+}
+
+// validateThresholdMap validates a single required {op, value} threshold field.
+func validateThresholdMap(prefix, field string, raw any, suffix string, add addFunc) {
+	m, ok := raw.(map[string]any)
 	if !ok {
-		add("watches.%s.check.avail {op, value} is required for an entropy check", name)
+		add("%s.%s {op, value} is required %s", prefix, field, suffix)
 		return
 	}
 	if !isValidDiskOp(scalarString(m["op"])) {
-		add("watches.%s.check.avail has an invalid op %q", name, scalarString(m["op"]))
+		add("%s.%s has an invalid op %q", prefix, field, scalarString(m["op"]))
 	}
 	if !isNumeric(scalarString(m["value"])) {
-		add("watches.%s.check.avail value %q must be numeric", name, scalarString(m["value"]))
+		add("%s.%s value %q must be numeric", prefix, field, scalarString(m["value"]))
 	}
 }
 
-// validateZombieCheck validates a zombies watch: a required count {op, value}
-// threshold.
-func validateZombieCheck(name string, check map[string]any, add func(string, ...any)) {
-	m, ok := check["count"].(map[string]any)
-	if !ok {
-		add("watches.%s.check.count {op, value} is required for a zombies check", name)
-		return
-	}
-	if !isValidDiskOp(scalarString(m["op"])) {
-		add("watches.%s.check.count has an invalid op %q", name, scalarString(m["op"]))
-	}
-	if !isNumeric(scalarString(m["value"])) {
-		add("watches.%s.check.count value %q must be numeric", name, scalarString(m["value"]))
-	}
-}
-
-// validateFieldPreds validates a watch check whose body is a set of named
-// threshold predicates (each {op, value}), requiring at least one of fields to be
-// present. Used by simple level checks like fds.
-func validateFieldPreds(name string, check map[string]any, fields []string, add func(string, ...any)) {
+// validateThresholdPreds validates a check whose body is a set of named threshold
+// predicates (each {op, value}), requiring at least one of fields to be present.
+// Shared by disk, fds, conntrack and load.
+func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) {
 	preds := 0
 	for _, field := range fields {
-		raw, present := check[field]
+		raw, present := fieldsMap[field]
 		if !present {
 			continue
 		}
 		preds++
 		m, ok := raw.(map[string]any)
 		if !ok {
-			add("watches.%s.check.%s must be a mapping {op, value}", name, field)
+			add("%s.%s must be a mapping {op, value}", prefix, field)
 			continue
 		}
 		if !isValidDiskOp(scalarString(m["op"])) {
-			add("watches.%s.check.%s has an invalid op %q", name, field, scalarString(m["op"]))
+			add("%s.%s has an invalid op %q", prefix, field, scalarString(m["op"]))
 		}
 		if !isNumeric(scalarString(m["value"])) {
-			add("watches.%s.check.%s value %q must be numeric", name, field, scalarString(m["value"]))
+			add("%s.%s value %q must be numeric", prefix, field, scalarString(m["value"]))
 		}
 	}
 	if preds == 0 {
-		add("watches.%s.check requires at least one of %s", name, strings.Join(fields, "/"))
+		add("%s requires at least one of %s", prefix, strings.Join(fields, "/"))
 	}
 }
 
-// validateOomCheck validates an oom watch: an optional delta {op, value} (the
-// default fires on any OOM kill, so a bare `check: {type: oom}` is valid).
-func validateOomCheck(name string, check map[string]any, add func(string, ...any)) {
-	delta, present := check["delta"]
+// validateOomFields validates an oom check's optional delta {op, value} (the
+// default fires on any OOM kill, so a bare oom check is valid).
+func validateOomFields(prefix string, fields map[string]any, add addFunc) {
+	delta, present := fields["delta"]
 	if !present {
 		return
 	}
 	m, ok := delta.(map[string]any)
 	if !ok {
-		add("watches.%s.check.delta must be a mapping {op, value}", name)
+		add("%s.delta must be a mapping {op, value}", prefix)
 		return
 	}
 	if !isValidDiskOp(scalarString(m["op"])) {
-		add("watches.%s.check.delta has an invalid op %q", name, scalarString(m["op"]))
+		add("%s.delta has an invalid op %q", prefix, scalarString(m["op"]))
 	}
 	if !isNumeric(scalarString(m["value"])) {
-		add("watches.%s.check.delta value %q must be numeric", name, scalarString(m["value"]))
+		add("%s.delta value %q must be numeric", prefix, scalarString(m["value"]))
 	}
 }
 
-// validateLoadCheck validates a load watch: an optional boolean per_cpu and at
-// least one load1/load5/load15 threshold.
-func validateLoadCheck(name string, check map[string]any, add func(string, ...any)) {
-	if v, present := check["per_cpu"]; present {
+// validateWatchableCheck validates the fields of a single-shot service check used
+// as a host watch and reports whether the type is watchable. service/metric/
+// process are excluded: they need per-service context (backend status, a metric
+// sampler, process discovery) that the watch builder does not provide.
+func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
+	switch typ {
+	case "tcp":
+		if _, ok := scalarInt(fields["port"]); !ok {
+			add("%s.port is required and must be numeric for a tcp check", prefix)
+		}
+	case "http":
+		if scalarString(fields["url"]) == "" {
+			add("%s.url is required for an http check", prefix)
+		}
+	case "command":
+		if !isStringArray(fields["command"]) {
+			add("%s.command must be an array, not a shell string", prefix)
+		}
+	case "binary":
+		if scalarString(fields["path"]) == "" {
+			add("%s.path is required for a binary check", prefix)
+		}
+	case "libraries":
+		if scalarString(fields["binary"]) == "" {
+			add("%s.binary is required for a libraries check", prefix)
+		}
+	case "file_exists":
+		p := scalarString(fields["path"])
+		if p == "" {
+			add("%s.path is required for a file_exists check", prefix)
+		} else if underDir(p, locksDir) {
+			add("%s.path must not point under the runtime lock dir %s", prefix, locksDir)
+		}
+	case "count":
+		validateCount(fields, prefix, add)
+	default:
+		return false
+	}
+	return true
+}
+
+// validateLoadFields validates a load check at prefix: an optional boolean
+// per_cpu and at least one load1/load5/load15 threshold.
+func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
+	if v, present := fields["per_cpu"]; present {
 		if _, ok := v.(bool); !ok {
-			add("watches.%s.check.per_cpu must be a boolean", name)
+			add("%s.per_cpu must be a boolean", prefix)
 		}
 	}
-	preds := 0
-	for _, field := range []string{"load1", "load5", "load15"} {
-		raw, present := check[field]
-		if !present {
-			continue
-		}
-		preds++
-		m, ok := raw.(map[string]any)
-		if !ok {
-			add("watches.%s.check.%s must be a mapping {op, value}", name, field)
-			continue
-		}
-		if !isValidDiskOp(scalarString(m["op"])) {
-			add("watches.%s.check.%s has an invalid op %q", name, field, scalarString(m["op"]))
-		}
-		if !isNumeric(scalarString(m["value"])) {
-			add("watches.%s.check.%s value %q must be numeric", name, field, scalarString(m["value"]))
-		}
-	}
-	if preds == 0 {
-		add("watches.%s.check requires at least one of load1/load5/load15", name)
-	}
+	validateThresholdPreds(prefix, fields, []string{"load1", "load5", "load15"}, add)
 }
 
 // validateSwapCheck validates a swap watch: a non-empty metrics map of usage
@@ -781,7 +785,15 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 // ---- section 30: checks, stop_policy, policy, aliases, rules ----
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
-var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count")
+
+// knownCheckTypes are the single-shot check types valid in a service's
+// checks:/preflight:/postflight: sections (and referenceable from rules). The
+// host-resource checks (disk…oom) are shared with host watches; the multi-target
+// watch types (net, icmp, swap, file, process) stay watch-only because they fire
+// per-metric/per-target rather than producing one Result. Keep this in step with
+// internal/checks buildCheck and the watch validation (section: unified checks).
+var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -868,6 +880,20 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateMetric(entry, path, true, add)
 		case "count":
 			validateCount(entry, path, add)
+		case "disk":
+			validateDiskFields(path, entry, add)
+		case "load":
+			validateLoadFields(path, entry, add)
+		case "fds":
+			validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
+		case "conntrack":
+			validateThresholdPreds(path, entry, []string{"used_pct", "free", "count"}, add)
+		case "entropy":
+			validateEntropyFields(path, entry, add)
+		case "zombies":
+			validateZombieFields(path, entry, add)
+		case "oom":
+			validateOomFields(path, entry, add)
 		}
 	}
 }

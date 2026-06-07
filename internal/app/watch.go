@@ -28,6 +28,11 @@ type Watch struct {
 	// Stateful multi-target watches (e.g. the file watch) use it to fire one hook
 	// per detected change within a cycle, which the one-Result model cannot express.
 	Cycle func(ctx context.Context)
+	// FireOnFail inverts the trigger: the hook fires when the check is NOT OK,
+	// instead of when it is. Health checks (tcp/http/…) are healthy at OK==true, so
+	// as a watch they alert on failure; condition checks (disk/load/…) alert at
+	// OK==true (threshold crossed) and leave this false.
+	FireOnFail bool
 
 	state rules.WindowState
 }
@@ -40,7 +45,11 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		return
 	}
 	res := w.Check.Run(ctx)
-	if !w.state.Fires(w.Window, res.OK) {
+	fired := res.OK
+	if w.FireOnFail {
+		fired = !res.OK
+	}
+	if !w.state.Fires(w.Window, fired) {
 		return
 	}
 	runner := w.Runner

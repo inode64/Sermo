@@ -364,6 +364,43 @@ checks:
 	}
 }
 
+func TestValidateResourceChecksAsServiceChecks(t *testing.T) {
+	// Host-resource checks (disk/load/…) are usable in a service's checks: and
+	// referenceable from rules, just like tcp/http/metric.
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  rootfs: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+  sysload: { type: load, per_cpu: true, load5: { op: ">", value: 2 } }
+  oomkills: { type: oom }
+rules:
+  alert-load:
+    type: alert
+    if: { active: { check: sysload } }
+    then: { action: alert, message: "load high" }
+`)
+	if len(issues) != 0 {
+		t.Fatalf("resource checks should be valid service checks, got: %v", issues)
+	}
+}
+
+func TestValidateResourceServiceCheckErrors(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  rootfs: { type: disk }
+  sysload: { type: load }
+`)
+	mustHave(t, issues, "checks.rootfs.path is required for a disk check")
+	mustHave(t, issues, "checks.sysload requires at least one of load1/load5/load15")
+}
+
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service
