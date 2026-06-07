@@ -38,13 +38,19 @@ func operationEventEmitter(emit func(Event)) func(operation.Result) {
 	}
 }
 
-// eventKindForResult maps an operation result to the event-log kind. Blocked
-// operations are suppressed (same as guard/cooldown), not a completed action.
+// eventKindForResult maps an operation result to the event-log kind. Successful
+// operations are action; blocked ones are suppressed (guard/lock/cooldown); every
+// other outcome (preflight/postflight failure, backend error, orphan processes)
+// is error so the UI does not show a failed restart as green.
 func eventKindForResult(r operation.Result) string {
-	if r.Status == operation.ResultBlocked {
+	switch r.Status {
+	case operation.ResultOK:
+		return "action"
+	case operation.ResultBlocked:
 		return "suppressed"
+	default:
+		return "error"
 	}
-	return "action"
 }
 
 // SlogEmitter logs events through slog.
