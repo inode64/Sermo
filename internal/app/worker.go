@@ -31,6 +31,11 @@ type Worker struct {
 	// this cycle when a required check is failing or a watched file has changed.
 	Gates map[string]CheckGate
 
+	// cycleRan lists the check names that actually ran this cycle (not reused from
+	// the cache because of a per-check interval). Requires gates consult only deps
+	// present here so a stale cached failure cannot skip a dependent check.
+	cycleRan map[string]bool
+
 	// Checks produces this cycle's named-check cache (section 14).
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// Sample produces this cycle's metric reader (section 12). Nil when the
@@ -130,9 +135,12 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 		}
 	}
 	for _, dep := range gate.Requires {
+		if w.cycleRan != nil && !w.cycleRan[dep] {
+			continue // dependency not evaluated this cycle — do not skip
+		}
 		d, ok := cache[dep]
 		if !ok {
-			continue // dependency not run yet (e.g. its own interval) — do not skip
+			continue
 		}
 		if !d.OK {
 			return "requires check " + dep
