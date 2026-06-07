@@ -206,6 +206,17 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 				recordMeasurement(r)
 			}
 		}
+		extra := worker.gatedChecksDue(built, cache)
+		for _, b := range extra {
+			ran[b.Check.Name()] = true
+		}
+		worker.cycleRan = ran
+		for _, r := range checks.Run(ctx, extra, maxParallel) {
+			cache[r.Check] = r
+			if recordMeasurement != nil {
+				recordMeasurement(r)
+			}
+		}
 		return cache
 	}
 	return worker, warnings
