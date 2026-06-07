@@ -155,6 +155,9 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "conntrack":
 			validateFieldPreds(name, check, []string{"used_pct", "free", "count"}, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "entropy":
+			validateEntropyCheck(name, check, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -290,6 +293,22 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		}
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateEntropyCheck validates an entropy watch: a required avail {op, value}
+// threshold.
+func validateEntropyCheck(name string, check map[string]any, add func(string, ...any)) {
+	m, ok := check["avail"].(map[string]any)
+	if !ok {
+		add("watches.%s.check.avail {op, value} is required for an entropy check", name)
+		return
+	}
+	if !isValidDiskOp(scalarString(m["op"])) {
+		add("watches.%s.check.avail has an invalid op %q", name, scalarString(m["op"]))
+	}
+	if !isNumeric(scalarString(m["value"])) {
+		add("watches.%s.check.avail value %q must be numeric", name, scalarString(m["value"]))
 	}
 }
 

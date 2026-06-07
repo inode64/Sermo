@@ -13,8 +13,8 @@ It ships two binaries:
   checks, evaluates rules, and drives remediation through the same safe
   operation engine `sermoctl` uses. It also runs **host watches** (disk space and
   inodes, load average, swap — usage and paging IO — kernel OOM kills, file
-  descriptors, the netfilter conntrack table, network interfaces — state, speed
-  and rx/tx
+  descriptors, the netfilter conntrack table, kernel entropy, network interfaces
+  — state, speed and rx/tx
   errors — external hosts via ICMP — reachability and latency — files/directories
   — size, permissions, owner and deletion — and processes by name — age,
   CPU/memory/IO and disappearance) that fire a hook command when a threshold is
