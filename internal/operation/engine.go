@@ -39,8 +39,9 @@ type Engine struct {
 	Discover    func() []process.Process
 	Reaper      process.Reaper
 	KillPolicy  process.KillPolicy
-	Sleep       func(time.Duration)
-	Emit        func(Result)
+	Sleep             func(time.Duration)
+	OperationTimeout  time.Duration
+	Emit              func(Result)
 }
 
 type plan struct {
@@ -70,6 +71,9 @@ func (e Engine) Stop(ctx context.Context) Result {
 
 func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	result = Result{Service: e.Service, Action: p.action, Backend: e.Backend, Status: ResultOK}
+
+	ctx, cancel := boundContext(ctx, e.OperationTimeout)
+	defer cancel()
 
 	// Step 2: exactly one event per operation, on every exit path including a
 	// failed lock acquisition. Registered first.
@@ -134,13 +138,25 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if p.stop {
 		if err := e.Manager.Stop(ctx, e.Unit); err != nil {
 			result.Status = ResultFailed
-			result.Message = "stop: " + err.Error()
+			if timedOut(ctx) {
+				result.Message = "operation timed out during stop"
+			} else {
+				result.Message = "stop: " + err.Error()
+			}
 			return result
 		}
-		if e.Sleep != nil && e.KillPolicy.GracefulTimeout > 0 {
-			e.Sleep(e.KillPolicy.GracefulTimeout)
+		if err := wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
+			result.Status = ResultFailed
+			result.Message = "operation timed out during graceful stop wait"
+			return result
 		}
-		if remaining := e.clearResiduals(); len(remaining) > 0 {
+		if remaining := e.clearResiduals(ctx); len(remaining) > 0 {
+			if timedOut(ctx) {
+				result.Status = ResultFailed
+				result.Message = "operation timed out during residual process handling"
+				result.Processes = remaining
+				return result
+			}
 			result.Status = ResultOrphanProcesses
 			result.Processes = remaining
 			result.Message = fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
@@ -152,7 +168,11 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if p.start {
 		if err := e.Manager.Start(ctx, e.Unit); err != nil {
 			result.Status = ResultFailed
-			result.Message = "start: " + err.Error()
+			if timedOut(ctx) {
+				result.Message = "operation timed out during start"
+			} else {
+				result.Message = "start: " + err.Error()
+			}
 			return result
 		}
 		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
@@ -179,7 +199,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 
 // clearResiduals discovers residual processes after a stop and applies signal
 // escalation (section 22), returning whatever remains.
-func (e Engine) clearResiduals() []process.Process {
+func (e Engine) clearResiduals(ctx context.Context) []process.Process {
 	if e.Discover == nil {
 		return nil
 	}
@@ -189,7 +209,8 @@ func (e Engine) clearResiduals() []process.Process {
 	}
 	reaper := e.Reaper
 	reaper.Rediscover = e.Discover // re-evaluate identity each round
-	return reaper.Reap(residuals, e.KillPolicy).Remaining
+	reaper.Sleep = e.Sleep
+	return reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
 }
 
 func applyLockError(r *Result, err error) {

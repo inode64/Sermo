@@ -1,6 +1,7 @@
 package process
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"syscall"
@@ -55,7 +56,7 @@ type Reaper struct {
 //
 // Only processes that exactly match kill_only_if are ever signalled; a residual
 // that does not match is reported, never touched.
-func (r Reaper) Reap(residuals []Process, policy KillPolicy) ReapResult {
+func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy) ReapResult {
 	if len(residuals) == 0 {
 		return ReapResult{}
 	}
@@ -93,17 +94,44 @@ func (r Reaper) Reap(residuals []Process, policy KillPolicy) ReapResult {
 	}
 
 	round(residuals, syscall.SIGTERM)
-	sleep(policy.TermTimeout)
+	if err := wait(ctx, sleep, policy.TermTimeout); err != nil {
+		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled)}
+	}
 	residuals = r.Rediscover()
 	if len(residuals) == 0 {
 		return ReapResult{Signalled: sortedInts(signalled)}
 	}
 
 	round(residuals, syscall.SIGKILL)
-	sleep(policy.KillTimeout)
+	if err := wait(ctx, sleep, policy.KillTimeout); err != nil {
+		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled)}
+	}
 	residuals = r.Rediscover()
 
 	return ReapResult{Remaining: residuals, Signalled: sortedInts(signalled)}
+}
+
+func wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
+	if d <= 0 {
+		return ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if sleep == nil {
+		sleep = time.Sleep
+	}
+	done := make(chan struct{})
+	go func() {
+		sleep(d)
+		close(done)
+	}()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-done:
+		return ctx.Err()
+	}
 }
 
 func sortedInts(set map[int]bool) []int {

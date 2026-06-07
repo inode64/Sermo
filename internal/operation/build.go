@@ -23,9 +23,10 @@ type Config struct {
 	Scanner    locks.Scanner
 	Discoverer process.Discoverer
 	CheckDeps  checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
-	LockTTL    time.Duration
-	Sleep      func(time.Duration)
-	Emit       func(Result)
+	LockTTL           time.Duration
+	Sleep             func(time.Duration)
+	OperationTimeout  time.Duration
+	Emit              func(Result)
 }
 
 // New builds an Engine from real components, deriving preflight/postflight/guard
@@ -97,9 +98,10 @@ func New(c Config) Engine {
 		Postflight: sectionRunner(tree, "postflight", deps),
 		Discover:   discover,
 		Reaper:     reaper,
-		KillPolicy: killPolicy,
-		Sleep:      sleep,
-		Emit:       c.Emit,
+		KillPolicy:       killPolicy,
+		Sleep:            sleep,
+		OperationTimeout: c.OperationTimeout,
+		Emit:             c.Emit,
 	}
 }
 

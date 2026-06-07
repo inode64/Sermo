@@ -371,7 +371,8 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer: discoverer,
-		CheckDeps:  checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
+		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
+		OperationTimeout: defaultTimeout(action),
 	})
 
 	switch action {
