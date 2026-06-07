@@ -16,6 +16,7 @@ type fakeBackend struct {
 	monitored   map[string]bool
 	failOp      bool
 	seriesSince time.Duration
+	eventLimit  int
 }
 
 func (f *fakeBackend) Services(context.Context) []Service { return f.services }
@@ -38,6 +39,18 @@ func (f *fakeBackend) Series(_ context.Context, name string, since time.Duration
 			f.seriesSince = since
 			r := 1.0
 			return []SeriesPoint{{Start: "2026-06-07T10:00:00Z", Ratio: &r, Up: 2, Total: 2}}, true
+		}
+	}
+	return nil, false
+}
+func (f *fakeBackend) Events(_ context.Context, limit int) []Event {
+	f.eventLimit = limit
+	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: "action", Action: "restart", Message: "restarted"}}
+}
+func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) ([]Event, bool) {
+	for _, s := range f.services {
+		if s.Name == name {
+			return []Event{{Time: "2026-06-07T10:00:00Z", Service: name, Kind: "alert", Message: "down"}}, true
 		}
 	}
 	return nil, false
@@ -155,6 +168,60 @@ func TestSLASeriesUnknown(t *testing.T) {
 	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/sla", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown series = %d, want 404", rec.Code)
+	}
+}
+
+func TestGlobalEvents(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/events?limit=50", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("events status %d", rec.Code)
+	}
+	if b.eventLimit != 50 {
+		t.Fatalf("limit not parsed: %d", b.eventLimit)
+	}
+	var got []Event
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Kind != "action" {
+		t.Fatalf("unexpected events: %+v", got)
+	}
+}
+
+func TestEventLimitCapAndDefault(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/events", nil))
+	if b.eventLimit != defaultEventLimit {
+		t.Fatalf("default limit = %d, want %d", b.eventLimit, defaultEventLimit)
+	}
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/events?limit=99999", nil))
+	if b.eventLimit != maxEventLimit {
+		t.Fatalf("limit not capped: %d", b.eventLimit)
+	}
+}
+
+func TestServiceEvents(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/events", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("service events status %d", rec.Code)
+	}
+	var got []Event
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Service != "web" {
+		t.Fatalf("unexpected service events: %+v", got)
+	}
+
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/events", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown service events = %d, want 404", rec.Code)
 	}
 }
 

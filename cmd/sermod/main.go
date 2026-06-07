@@ -87,21 +87,25 @@ func run(args []string) int {
 		logger.Warn("build notifiers", "warning", w)
 	}
 
+	eventLog := app.NewEventLog(1000)
+
 	interval := engineDuration(cfg, "interval", 30*time.Second)
 	deps := app.Deps{
-		Backend:         detection.Backend,
-		Manager:         manager,
-		Runtime:         cfg.Global.RuntimeDir(),
-		Interval:        interval,
-		DefaultTimeout:  engineDuration(cfg, "default_timeout", 10*time.Second),
-		MaxParallel:     engineInt(cfg, "max_parallel_checks", 8),
-		Sleep:           time.Sleep,
-		Now:             time.Now,
-		Emit:            app.SlogEmitter(logger),
+		Backend:        detection.Backend,
+		Manager:        manager,
+		Runtime:        cfg.Global.RuntimeDir(),
+		Interval:       interval,
+		DefaultTimeout: engineDuration(cfg, "default_timeout", 10*time.Second),
+		MaxParallel:    engineInt(cfg, "max_parallel_checks", 8),
+		Sleep:          time.Sleep,
+		Now:            time.Now,
+		// Events go to slog and to the in-memory log the web UI reads.
+		Emit:            app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
 		Monitor:         store,
 		SLA:             store,
 		Notifiers:       notifiers,
 		Snapshots:       app.NewSnapshots(),
+		Events:          eventLog,
 		SystemFreshness: interval / 2,
 	}
 

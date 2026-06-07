@@ -73,13 +73,14 @@ type WebBackend struct {
 	store     MonitorStore
 	snapshots *Snapshots
 	sla       SLAReader
+	events    *EventLog
 }
 
 // NewWebBackend resolves every enabled service once and wires its status, engine
 // and metadata for the web UI. Services that fail to resolve are skipped with a
 // warning (like BuildWorkers).
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
-	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots}
+	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	var warnings []string
 	resolver := servicemgr.NewUnitResolver()
@@ -227,6 +228,34 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 		out = append(out, sp)
 	}
 	return out, true
+}
+
+func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {
+	return toWebEvents(b.events.Recent("", limit))
+}
+
+func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
+	if _, ok := b.entries[name]; !ok {
+		return nil, false
+	}
+	return toWebEvents(b.events.Recent(name, limit)), true
+}
+
+func toWebEvents(events []LoggedEvent) []web.Event {
+	out := make([]web.Event, 0, len(events))
+	for _, e := range events {
+		out = append(out, web.Event{
+			Time:    e.Time.Format(time.RFC3339),
+			Service: e.Service,
+			Watch:   e.Watch,
+			Kind:    e.Kind,
+			Rule:    e.Rule,
+			Action:  e.Action,
+			Status:  e.Status,
+			Message: e.Message,
+		})
+	}
+	return out
 }
 
 func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {

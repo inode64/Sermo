@@ -30,6 +30,14 @@
   .sla div { text-align: center; }
   .sla .v { font-size: 1.3rem; font-weight: 600; }
   .close { float: right; }
+  .events { width: 100%; font-size: .9rem; }
+  .events td { vertical-align: top; }
+  .events .t { white-space: nowrap; color: #888; }
+  .kind { font-weight: 600; }
+  .kind-error, .kind-hook-failed, .kind-notify-failed { color: #cf222e; }
+  .kind-alert, .kind-suppressed { color: #9a6700; }
+  .kind-action, .kind-hook, .kind-notify { color: #1a7f37; }
+  section { margin-top: 2rem; }
 </style>
 </head>
 <body>
@@ -45,6 +53,11 @@
 
 <div id="detail"></div>
 
+<section>
+  <h2 style="font-size:1.05rem">Events</h2>
+  <table class="events"><tbody id="events"></tbody></table>
+</section>
+
 <script>
 const $ = (s) => document.querySelector(s);
 
@@ -57,6 +70,30 @@ async function load() {
   } catch (e) {
     $("#err").textContent = "Failed to load services: " + e.message;
   }
+  loadEvents();
+}
+
+async function loadEvents() {
+  try {
+    const res = await fetch("api/events?limit=100");
+    if (!res.ok) return;
+    $("#events").innerHTML = eventRows(await res.json(), true);
+  } catch (e) { /* keep the last feed on a transient error */ }
+}
+
+function eventRows(events, withService) {
+  if (!events || !events.length) return `<tr><td class="muted">No events yet.</td></tr>`;
+  return events.map((e) => {
+    const who = e.service || e.watch || "";
+    const subject = withService && who ? `<td>${esc(who)}</td>` : "";
+    const detail = [e.rule, e.action, e.status].filter(Boolean).map(esc).join(" ");
+    return `<tr>
+      <td class="t">${esc(fmtTime(e.time))}</td>
+      ${subject}
+      <td class="kind kind-${esc(e.kind)}">${esc(e.kind)}</td>
+      <td>${detail ? `<span class="muted">${detail}</span> ` : ""}${esc(e.message || "")}</td>
+    </tr>`;
+  }).join("");
 }
 
 function render(services) {
@@ -142,8 +179,21 @@ function renderDetail(d) {
     <h2>Availability</h2>
     <div class="sla">${sla}</div>
     <h2>History <span class="muted">${wins}</span></h2>
-    <div id="chart" class="muted">loading…</div>`;
+    <div id="chart" class="muted">loading…</div>
+    <h2>Recent events</h2>
+    <table class="events"><tbody id="svc-events"><tr><td class="muted">loading…</td></tr></tbody></table>`;
   loadSeries(d.name);
+  loadServiceEvents(d.name);
+}
+
+async function loadServiceEvents(name) {
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/events?limit=50`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    $("#svc-events").innerHTML = eventRows(await res.json(), false);
+  } catch (e) {
+    $("#svc-events").innerHTML = `<tr><td class="muted">Failed to load events: ${esc(e.message)}</td></tr>`;
+  }
 }
 
 let seriesWindow = "24h";
@@ -196,6 +246,11 @@ function drawChart(points) {
 }
 
 function closeDetail() { current = null; $("#detail").style.display = "none"; }
+
+function fmtTime(t) {
+  const d = new Date(t);
+  return isNaN(d) ? (t || "") : d.toLocaleString();
+}
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
