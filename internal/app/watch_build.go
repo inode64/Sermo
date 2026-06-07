@@ -3,6 +3,8 @@ package app
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -46,6 +48,13 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 			watches = append(watches, expanded...)
 			warnings = append(warnings, warns...)
+		case "file":
+			w, warn := buildFileWatch(name, entry, checkEntry, deps, interval)
+			if warn != "" {
+				warnings = append(warnings, warn)
+				continue
+			}
+			watches = append(watches, w)
 		default:
 			w, warn := buildSingleWatch(name, entry, checkEntry, deps, interval)
 			if warn != "" {
@@ -141,6 +150,83 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 	return out, warns
 }
 
+// buildFileWatch builds a stateful file watch: a fileWatcher (its own per-path
+// baseline, conditions and hook) wired into a Watch through Watch.Cycle so it can
+// fire one hook per change. The Watch's check/window fields are unused.
+func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
+	if stringField(checkEntry["path"]) == "" {
+		return nil, "watch " + name + ": file check requires a path"
+	}
+	cond, err := parseFileCond(checkEntry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	hook, err := parseHook(entry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	fw := &fileWatcher{
+		name:      name,
+		path:      stringField(checkEntry["path"]),
+		recursive: boolField(checkEntry["recursive"]),
+		cond:      cond,
+		hook:      hook,
+		runner:    OSHookRunner{},
+		emit:      deps.Emit,
+	}
+	return &Watch{
+		Name:      name,
+		CheckType: "file",
+		Interval:  interval,
+		Now:       deps.Now,
+		Emit:      deps.Emit,
+		Cycle:     fw.runCycle,
+	}, ""
+}
+
+// parseFileCond reads the size/permissions/owner/existence conditions from a file
+// check entry. At least one must be present.
+func parseFileCond(check map[string]any) (fileCond, error) {
+	var c fileCond
+	if sz, ok := check["size"].(map[string]any); ok {
+		if stringField(sz["on"]) == "change" {
+			c.sizeChange = true
+		} else {
+			op := stringField(sz["op"])
+			if !validThresholdOp(op) {
+				return c, fmt.Errorf("file size requires on: change or {op, value}")
+			}
+			v, ok := floatField(sz["value"])
+			if !ok {
+				return c, fmt.Errorf("file size value must be numeric")
+			}
+			c.sizeOp, c.sizeValue = op, v
+		}
+	}
+	if p, ok := check["permissions"].(map[string]any); ok {
+		if stringField(p["on"]) != "change" {
+			return c, fmt.Errorf("file permissions requires on: change")
+		}
+		c.permChange = true
+	}
+	if o, ok := check["owner"].(map[string]any); ok {
+		if stringField(o["on"]) != "change" {
+			return c, fmt.Errorf("file owner requires on: change")
+		}
+		c.ownerChange = true
+	}
+	if e, ok := check["existence"].(map[string]any); ok {
+		if stringField(e["on"]) != "delete" {
+			return c, fmt.Errorf("file existence requires on: delete")
+		}
+		c.onDelete = true
+	}
+	if !c.any() {
+		return c, fmt.Errorf("file check requires at least one of size, permissions, owner, existence")
+	}
+	return c, nil
+}
+
 func parseHook(entry map[string]any) (HookSpec, error) {
 	then, ok := entry["then"].(map[string]any)
 	if !ok {
@@ -220,6 +306,31 @@ func intField(v any) int {
 		return int(t)
 	default:
 		return 0
+	}
+}
+
+func boolField(v any) bool {
+	b, _ := v.(bool)
+	return b
+}
+
+// floatField reads a numeric field that may decode as a YAML int, float or
+// string, reporting whether it parsed.
+func floatField(v any) (float64, bool) {
+	switch t := v.(type) {
+	case int:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case uint64:
+		return float64(t), true
+	case float64:
+		return t, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(t), 64)
+		return f, err == nil
+	default:
+		return 0, false
 	}
 }
 

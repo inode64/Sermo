@@ -24,6 +24,10 @@ type Watch struct {
 	Interval  time.Duration
 	Now       func() time.Time
 	Emit      func(Event)
+	// Cycle, when set, replaces the default single-check/single-hook behavior.
+	// Stateful multi-target watches (e.g. the file watch) use it to fire one hook
+	// per detected change within a cycle, which the one-Result model cannot express.
+	Cycle func(ctx context.Context)
 
 	state rules.WindowState
 }
@@ -31,6 +35,10 @@ type Watch struct {
 // RunCycle runs the check, advances the window, and fires the hook on a firing
 // cycle. An evaluation/hook error is emitted, never fatal.
 func (w *Watch) RunCycle(ctx context.Context) {
+	if w.Cycle != nil {
+		w.Cycle(ctx)
+		return
+	}
 	res := w.Check.Run(ctx)
 	if !w.state.Fires(w.Window, res.OK) {
 		return

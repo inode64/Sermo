@@ -265,8 +265,59 @@ ICMP requires elevated privileges: the daemon needs the `CAP_NET_RAW` capability
 (or the host's `net.ipv4.ping_group_range` sysctl must include the daemon's gid)
 to open a raw ICMP socket. This iteration is **IPv4-only**.
 
-Other resource types (file counts, …) will be added as new check `type` values
-using the same watch/hook structure.
+### `file` — file/directory attributes
+
+A `file` watch monitors a file or directory for attribute changes — size,
+permissions, owner, and deletion — and runs the entry's hook **once per change**.
+It is stateful: it remembers each path's attributes across cycles and reports only
+transitions, adopting the baseline silently on the first cycle (a daemon start
+never fires). With `recursive: true` it watches the whole subtree, so a hook fires
+per changed entry.
+
+```yaml
+watches:
+  app-data:
+    enabled: false
+    interval: 30s
+    check:
+      type: file
+      path: /var/lib/myapp            # file or directory
+      recursive: true                 # optional, default false (whole subtree)
+      size: { op: ">", value: 1048576 }   # edge threshold; or `size: { on: change }`
+      permissions: { on: change }     # mode bits (perm + setuid/setgid/sticky)
+      owner: { on: change }           # owning uid/gid
+      existence: { on: delete }       # a previously-seen path is gone
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-file-change.sh]
+        timeout: 10s
+```
+
+The conditions (declare at least one):
+
+- **`size`** — either `{ on: change }` (fire whenever the byte size differs from
+  the last cycle) or a threshold `{op, value}` (same operator set as disk). The
+  threshold is **edge-triggered**: it fires once when the size crosses into the
+  condition and re-arms only after it drops back out — not every cycle while
+  breached.
+- **`permissions`** — `on: change`; fires when the permission bits change.
+- **`owner`** — `on: change`; fires when the owning uid or gid changes.
+- **`existence`** — `on: delete`; fires when a path that existed stops existing
+  (re-creation is then adopted silently). Deletion is the only transition reported.
+
+When `recursive: true` and the path is a directory, every entry in the subtree is
+tracked independently (symlinks are watched as links, never followed). New entries
+are adopted silently; deleted entries fire `existence` if configured. Each detected
+change is **one event and one hook run**, so a cycle that finds several changes
+fires several times.
+
+A file hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`file`), `SERMO_PATH` (the
+changed path), `SERMO_CHANGE` (`size` | `size_threshold` | `permissions` | `owner`
+| `deleted`), `SERMO_MESSAGE`, and, depending on the change, `SERMO_OLD`/`SERMO_NEW`
+(old/new value) plus `SERMO_SIZE`, `SERMO_OP`, `SERMO_VALUE` for size conditions.
+
+Other resource types will be added as new check `type` values using the same
+watch/hook structure.
 
 ## Global defaults
 

@@ -141,6 +141,8 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			validateNetCheck(name, check, entry, add)
 		case "icmp":
 			validateICMPCheck(name, check, entry, add)
+		case "file":
+			validateFileCheck(name, check, entry, add)
 		case "":
 			add("watches.%s.check.type is required", name)
 		default:
@@ -342,6 +344,49 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
 	}
+}
+
+// validateFileCheck validates a file watch: a path, an optional boolean
+// recursive, and at least one attribute condition (size threshold/change,
+// permissions/owner on change, existence on delete), plus the entry's hook.
+func validateFileCheck(name string, check, entry map[string]any, add func(string, ...any)) {
+	if scalarString(check["path"]) == "" {
+		add("watches.%s.check.path is required for a file check", name)
+	}
+	if v, present := check["recursive"]; present {
+		if _, ok := v.(bool); !ok {
+			add("watches.%s.check.recursive must be a boolean", name)
+		}
+	}
+
+	conds := 0
+	if sz, ok := check["size"].(map[string]any); ok {
+		conds++
+		if scalarString(sz["on"]) != "change" {
+			if !isValidDiskOp(scalarString(sz["op"])) || !isNumeric(scalarString(sz["value"])) {
+				add("watches.%s.check.size requires on: change or {op, value} with a numeric value", name)
+			}
+		}
+	}
+	for _, attr := range []string{"permissions", "owner"} {
+		if m, ok := check[attr].(map[string]any); ok {
+			conds++
+			if scalarString(m["on"]) != "change" {
+				add("watches.%s.check.%s requires on: change", name, attr)
+			}
+		}
+	}
+	if e, ok := check["existence"].(map[string]any); ok {
+		conds++
+		if scalarString(e["on"]) != "delete" {
+			add("watches.%s.check.existence requires on: delete", name)
+		}
+	}
+	if conds == 0 {
+		add("watches.%s.check requires at least one of size, permissions, owner, existence", name)
+	}
+
+	validateHookBlock("watches."+name, entry, add)
 }
 
 // validateMetricWindow validates a per-metric for/within window using the same
