@@ -42,6 +42,8 @@ type Deps struct {
 	PingSampler PingSamplerFunc
 	// SwapSampler reads system swap for `swap` checks. Nil reads /proc.
 	SwapSampler SwapSamplerFunc
+	// LoadSampler reads load averages for `load` checks. Nil reads /proc.
+	LoadSampler LoadSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -272,6 +274,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "net check metric must be state, speed or errors"
 		}
 		return c, ""
+
+	case "load":
+		preds, err := parseLoadPreds(entry)
+		if err != nil {
+			return nil, "load check: " + err.Error()
+		}
+		return loadCheck{base: b, preds: preds, perCPU: asBool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
 
 	case "swap":
 		metric := asString(entry["metric"])

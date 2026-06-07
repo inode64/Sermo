@@ -206,6 +206,42 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateLoadWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"load": map[string]any{
+				"check": map[string]any{
+					"type":    "load",
+					"per_cpu": true,
+					"load5":   map[string]any{"op": ">", "value": 1.0},
+					"load15":  map[string]any{"op": ">", "value": 0.8},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-pred": map[string]any{
+				"check": map[string]any{"type": "load", "per_cpu": "yes"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.no-pred.check.per_cpu must be a boolean",
+		"watches.no-pred.check requires at least one of load1/load5/load15",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
 func TestValidateSwapWatchGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
