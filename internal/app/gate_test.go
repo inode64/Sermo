@@ -94,6 +94,53 @@ func TestApplyGatesRequiresIgnoresStaleDependency(t *testing.T) {
 	}
 }
 
+func TestGatedChecksDueWhenSkipClears(t *testing.T) {
+	w := &Worker{
+		Gates:    map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
+		cycleRan: ranChecks("tcp"),
+	}
+	cache := map[string]checks.Result{
+		"tcp":   {Check: "tcp", OK: true},
+		"query": {Check: "query", OK: true, Skipped: true, Message: "skipped: requires check tcp"},
+	}
+	built := []checks.Built{{Check: stubCheck{name: "query", ok: false}}}
+	extra := w.gatedChecksDue(built, cache)
+	if len(extra) != 1 || extra[0].Check.Name() != "query" {
+		t.Fatalf("extra = %+v, want query re-run", extra)
+	}
+}
+
+func TestGatedChecksDueWhenStillSkipped(t *testing.T) {
+	w := &Worker{
+		Gates:    map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
+		cycleRan: ranChecks("tcp"),
+	}
+	cache := map[string]checks.Result{
+		"tcp":   {Check: "tcp", OK: false},
+		"query": {Check: "query", OK: true, Skipped: true, Message: "skipped: requires check tcp"},
+	}
+	built := []checks.Built{{Check: stubCheck{name: "query"}}}
+	if len(w.gatedChecksDue(built, cache)) != 0 {
+		t.Fatal("dependency still failing — query must stay deferred")
+	}
+}
+
+func TestApplyGatesAfterStaleSkipCleared(t *testing.T) {
+	w := &Worker{
+		Gates: map[string]CheckGate{"query": {Requires: []string{"tcp"}}},
+	}
+	// query was re-run after tcp recovered; applyGates must not re-skip.
+	cache := map[string]checks.Result{
+		"tcp":   {Check: "tcp", OK: true},
+		"query": {Check: "query", OK: false, Message: "down"},
+	}
+	w.cycleRan = ranChecks("tcp", "query")
+	w.applyGates(cache)
+	if cache["query"].Skipped {
+		t.Fatalf("query should expose its real result after skip cleared: %+v", cache["query"])
+	}
+}
+
 func TestParseCheckGates(t *testing.T) {
 	tree := map[string]any{"checks": map[string]any{
 		"tcp":   map[string]any{"type": "tcp"},
