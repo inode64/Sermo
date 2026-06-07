@@ -261,15 +261,27 @@ func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 	}
 	if b.opGate != nil {
 		inUse, total := b.opGate.Usage()
-		if total > 0 && inUse >= total {
-			out = append(out, web.Finding{
-				Level:   "warning",
-				Scope:   "operations",
-				Message: fmt.Sprintf("operation slots saturated (%d/%d in use)", inUse, total),
-			})
-		}
+		out = append(out, operationSlotFindings(inUse, total)...)
 	}
 	return out
+}
+
+func operationSlotFindings(inUse, total int) []web.Finding {
+	if total <= 0 || inUse <= 0 {
+		return nil
+	}
+	if inUse >= total {
+		return []web.Finding{{
+			Level:   "warning",
+			Scope:   "operations",
+			Message: fmt.Sprintf("operation slots saturated (%d/%d in use)", inUse, total),
+		}}
+	}
+	return []web.Finding{{
+		Level:   "info",
+		Scope:   "operations",
+		Message: fmt.Sprintf("operation slots %d/%d in use", inUse, total),
+	}}
 }
 
 func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {

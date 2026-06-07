@@ -1068,4 +1068,6 @@ It reports, as `error` / `warning` / `info` findings:
 
 `diagnose` exits `78` when any **error** finding is present; warnings alone exit
 `0`. The same report is available in the web UI's **Diagnostics** panel and at
-`GET /api/diagnostics`.
+`GET /api/diagnostics`. When the web UI is enabled, that feed also includes
+**operation slot** usage from the running daemon (`info` when some slots are in
+use, `warning` when saturated); see also `GET /api/ops`.
