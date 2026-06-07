@@ -175,6 +175,37 @@ func TestValidateProcessWatchErrors(t *testing.T) {
 	}
 }
 
+func TestValidateDiskInodesWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-inodes": map[string]any{
+				"check": map[string]any{
+					"type":            "disk",
+					"path":            "/",
+					"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
+					"inodes_free":     map[string]any{"op": "<", "value": 10000},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("inode predicates should be valid, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-inodes": map[string]any{
+				"check": map[string]any{"type": "disk", "path": "/", "inodes_used_pct": map[string]any{"op": "=>", "value": "lots"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, "watches.disk-inodes.check.inodes_used_pct has an invalid op") {
+		t.Fatalf("expected invalid inode op issue, got %v", bad)
+	}
+}
+
 func TestValidateSwapWatchGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

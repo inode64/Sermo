@@ -91,6 +91,54 @@ func TestBuildDiskCheckRejectsMissing(t *testing.T) {
 	}
 }
 
+func fakeDiskStats(s DiskStats) func(string) (DiskStats, error) {
+	return func(string) (DiskStats, error) { return s, nil }
+}
+
+func TestDiskCheckInodesUsedPct(t *testing.T) {
+	// 9500/10000 inodes used = 95%.
+	stats := DiskStats{TotalBytes: 1000, FreeBytes: 900, InodesTotal: 10000, InodesFree: 500, InodesUsedPct: 95, InodesFreePct: 5}
+	breach := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"inodes_used_pct", ">=", 90}}, usage: fakeDiskStats(stats)}
+	if res := breach.Run(context.Background()); !res.OK {
+		t.Fatalf("95%% inodes used should breach >= 90, got %q", res.Message)
+	}
+	if breach.Run(context.Background()).Data["value"] != 95.0 {
+		t.Fatal("value should be the inodes_used_pct reading")
+	}
+	// Plenty of block space free, but inodes exhausted -> the inode predicate fires.
+	ok := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"inodes_free", "<", 1000}}, usage: fakeDiskStats(stats)}
+	if !ok.Run(context.Background()).OK {
+		t.Fatal("500 inodes free < 1000 should fire")
+	}
+}
+
+func TestDiskCheckInodesUnavailableNeverFires(t *testing.T) {
+	// A filesystem that reports no inodes (InodesTotal == 0) must not misfire an
+	// inode predicate (e.g. inodes_free < N would otherwise see 0 < N and fire).
+	stats := DiskStats{TotalBytes: 1000, FreeBytes: 900, InodesTotal: 0}
+	c := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"inodes_free", "<", 1000}}, usage: fakeDiskStats(stats)}
+	if c.Run(context.Background()).OK {
+		t.Fatal("inode predicate must not fire on a 0-inode filesystem")
+	}
+}
+
+func TestBuildDiskInodeCheck(t *testing.T) {
+	section := map[string]any{
+		"d": map[string]any{
+			"type":            "disk",
+			"path":            "/",
+			"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
+		},
+	}
+	built, warns := Build(section, Deps{DiskUsage: fakeDiskStats(DiskStats{TotalBytes: 1000, InodesTotal: 100, InodesFree: 5, InodesUsedPct: 95})})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
+		t.Fatal("inode disk check should build and fire above threshold")
+	}
+}
+
 func TestDiskCheckDataHasValueKey(t *testing.T) {
 	// used_pct predicate -> value is used_pct.
 	c := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"used_pct", ">=", 90}}, usage: fakeDisk(92, 8, 80, 1000)}
