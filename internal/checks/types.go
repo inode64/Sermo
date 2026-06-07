@@ -53,7 +53,15 @@ type httpCheck struct {
 	contentType string // set when the body is JSON, unless headers override it
 	expect      statusMatcher
 	expectBody  string
-	expectJSON  map[string]string
+	expectJSON  []jsonAssertion
+}
+
+// jsonAssertion is one response-JSON check: the value at a dotted path compared to
+// value with op (== by default; also != > >= < <= contains).
+type jsonAssertion struct {
+	path  string
+	op    string
+	value string
 }
 
 // maxHTTPBody bounds how much of the response is read for body/JSON assertions.
@@ -101,17 +109,50 @@ func (c httpCheck) Run(ctx context.Context) Result {
 		if err := json.Unmarshal(data, &doc); err != nil {
 			return c.result(false, fmt.Sprintf("status %d; response is not JSON", resp.StatusCode), start)
 		}
-		for path, want := range c.expectJSON {
-			got, ok := jsonPath(doc, path)
+		for _, a := range c.expectJSON {
+			got, ok := jsonPath(doc, a.path)
 			if !ok {
-				return c.result(false, fmt.Sprintf("status %d; json %q missing", resp.StatusCode, path), start)
+				return c.result(false, fmt.Sprintf("status %d; json %q missing", resp.StatusCode, a.path), start)
 			}
-			if jsonValueString(got) != want {
-				return c.result(false, fmt.Sprintf("status %d; json %q = %q (want %q)", resp.StatusCode, path, jsonValueString(got), want), start)
+			if !jsonAssert(got, a.op, a.value) {
+				return c.result(false, fmt.Sprintf("status %d; json %q %s %q (got %q)", resp.StatusCode, a.path, a.op, a.value, jsonValueString(got)), start)
 			}
 		}
 	}
 	return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start)
+}
+
+// jsonAssert compares a decoded JSON value against want under op. Numeric
+// comparisons require both sides to parse as numbers; ==/!=/contains compare the
+// stringified value.
+func jsonAssert(got any, op, want string) bool {
+	gotStr := jsonValueString(got)
+	switch op {
+	case "", "==":
+		return gotStr == want
+	case "!=":
+		return gotStr != want
+	case "contains":
+		return strings.Contains(gotStr, want)
+	case ">", ">=", "<", "<=":
+		gf, err1 := strconv.ParseFloat(gotStr, 64)
+		wf, err2 := strconv.ParseFloat(want, 64)
+		if err1 != nil || err2 != nil {
+			return false
+		}
+		switch op {
+		case ">":
+			return gf > wf
+		case ">=":
+			return gf >= wf
+		case "<":
+			return gf < wf
+		default:
+			return gf <= wf
+		}
+	default:
+		return false
+	}
 }
 
 // jsonPath looks up a dotted path (e.g. "data.status") in a decoded JSON document
