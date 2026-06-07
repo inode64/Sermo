@@ -522,6 +522,38 @@ checks:
 	mustHave(t, bad, "checks.bad-op.expect_json.n op \"=>\" is not one of")
 }
 
+func TestValidatePortsCheck(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  scan: { type: ports, host: 127.0.0.1, ports: "80,443,1024-4000", expect: open, match: any, on_change: true }
+`)
+	if hasIssue(good, "checks.scan") {
+		t.Fatalf("a valid ports check was flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-ports:   { type: ports, host: x }
+  bad-range:  { type: ports, ports: "100-50" }
+  bad-port:   { type: ports, ports: "70000" }
+  bad-expect: { type: ports, ports: "80", expect: weird }
+  bad-match:  { type: ports, ports: "80", match: most }
+`)
+	mustHave(t, bad, "checks.no-ports.ports is required")
+	mustHave(t, bad, `checks.bad-range.ports range "100-50" is out of 1..65535`)
+	mustHave(t, bad, `checks.bad-port.ports range "70000" is out of 1..65535`)
+	mustHave(t, bad, "checks.bad-expect.expect must be open, closed or any")
+	mustHave(t, bad, "checks.bad-match.match must be all, any or none")
+}
+
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service
