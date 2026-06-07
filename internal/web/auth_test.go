@@ -22,6 +22,46 @@ func req(method, path, user, pass string) *http.Request {
 	return r
 }
 
+func TestLivezPublicEvenWithAuth(t *testing.T) {
+	// auth required for everything else, but /livez must answer without credentials
+	h := authServer(Auth{AdminPassword: "secret"})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/livez", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/livez = %d, want 200", rec.Code)
+	}
+	if got := rec.Body.String(); got != "ok\n" {
+		t.Fatalf("/livez body = %q, want \"ok\\n\"", got)
+	}
+	// a normal endpoint still challenges
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("/api/services without auth = %d, want 401", rec.Code)
+	}
+}
+
+func TestLivezVerbose(t *testing.T) {
+	h := authServer(Auth{}) // open
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/livez?verbose", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/livez?verbose = %d, want 200", rec.Code)
+	}
+	var got struct {
+		Status   string `json:"status"`
+		Uptime   string `json:"uptime"`
+		Services int    `json:"services"`
+		Go       string `json:"go"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != "ok" || got.Uptime == "" || got.Services != 1 || got.Go == "" {
+		t.Fatalf("unexpected livez verbose: %+v", got)
+	}
+}
+
 func TestCSRFGuardOnPost(t *testing.T) {
 	h := authServer(Auth{}) // open mode: even without auth, a forged POST is blocked
 	// no CSRF header -> rejected
