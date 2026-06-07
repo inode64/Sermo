@@ -358,11 +358,56 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 }
 
 func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool) error {
+	action := "monitor"
+	if !monitored {
+		action = "unmonitor"
+	}
 	if _, ok := b.entries[name]; !ok {
-		return fmt.Errorf("unknown service %q", name)
+		msg := fmt.Sprintf("unknown service %q", name)
+		b.emitMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
 	}
 	if b.store == nil {
-		return fmt.Errorf("monitoring state is unavailable")
+		msg := "monitoring state is unavailable"
+		b.emitMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
 	}
-	return b.store.SetActive(name, monitored, state.SourceWeb)
+	priorActive, found, err := b.store.Active(name)
+	if err != nil {
+		msg := fmt.Sprintf("%s failed: %v", action, err)
+		b.emitMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	if err := b.store.SetActive(name, monitored, state.SourceWeb); err != nil {
+		msg := fmt.Sprintf("%s failed: %v", action, err)
+		b.emitMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	if found && priorActive == monitored {
+		msg := "already monitored"
+		if !monitored {
+			msg = "already paused"
+		}
+		b.emitMonitorEvent(name, action, "suppressed", "", msg)
+		return nil
+	}
+	msg := "monitoring resumed"
+	if !monitored {
+		msg = "monitoring paused"
+	}
+	b.emitMonitorEvent(name, action, "action", "ok", msg)
+	return nil
+}
+
+func (b *WebBackend) emitMonitorEvent(service, action, kind, status, message string) {
+	if b.emit == nil {
+		return
+	}
+	b.emit(Event{
+		Service: service,
+		Kind:    kind,
+		Action:  action,
+		Status:  status,
+		Message: message,
+	})
 }
