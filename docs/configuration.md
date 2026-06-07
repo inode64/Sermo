@@ -124,11 +124,20 @@ web:
   with an authenticating reverse proxy (or a private network you trust).
 
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
-monitored, backend, unit), and `POST /api/services/{name}/{action}` where action
-is `monitor`, `unmonitor`, `start`, `stop` or `restart`. The dashboard
-auto-refreshes every 5s. Web-triggered monitor changes are recorded with source
-`web` in the state store, and operations take the per-service operation lock, so
-they never overlap a worker's action on the same service.
+monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
+checks with the latest result, and its SLA over the rolling windows), and
+`POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
+`start`, `stop` or `restart`. Clicking a service in the dashboard opens its
+detail. The dashboard auto-refreshes every 5s.
+
+The detail's check results are the **latest observed** by the worker (published
+each cycle), so they cost nothing to view and reflect each check's own cadence
+(see [per-check interval](#per-check-interval)); a check not run yet shows "not
+run yet". The SLA windows come from the same data as `sermoctl sla`.
+
+Web-triggered monitor changes are recorded with source `web` in the state store,
+and operations take the per-service operation lock, so they never overlap a
+worker's action on the same service.
 
 ## Availability (SLA)
 

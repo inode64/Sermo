@@ -21,6 +21,15 @@
   button:hover { background: #8883; }
   #err { color: #cf222e; min-height: 1.2rem; }
   .muted { color: #8888; font-size: .85rem; }
+  a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted #8888; color: inherit; }
+  #detail { margin-top: 1.5rem; padding: 1rem; border: 1px solid #8884; border-radius: .5rem; display: none; }
+  #detail h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
+  #detail table { margin-bottom: 1rem; }
+  .ok { color: #1a7f37; } .bad { color: #cf222e; }
+  .sla { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+  .sla div { text-align: center; }
+  .sla .v { font-size: 1.3rem; font-weight: 600; }
+  .close { float: right; }
 </style>
 </head>
 <body>
@@ -33,6 +42,8 @@
   <tbody id="rows"></tbody>
 </table>
 <p class="muted">Auto-refreshes every 5s.</p>
+
+<div id="detail"></div>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -54,9 +65,10 @@ function render(services) {
     const mon = s.monitored
       ? '<span class="pill">monitored</span>'
       : '<span class="pill">paused</span>';
-    const name = s.display_name && s.display_name !== s.name
+    const label = s.display_name && s.display_name !== s.name
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
+    const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
     return `<tr>
       <td>${name}<div class="muted">${esc(s.unit || "")}</div></td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
@@ -87,14 +99,54 @@ async function act(name, action) {
     $("#err").textContent = `${action} ${name}: ${e.message}`;
   }
   load();
+  if (current) detail(current);
 }
+
+let current = null;
+
+async function detail(name) {
+  current = name;
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    renderDetail(await res.json());
+  } catch (e) {
+    $("#err").textContent = "Failed to load detail: " + e.message;
+  }
+}
+
+function renderDetail(d) {
+  const checks = (d.checks || []).map((c) => {
+    const state = !c.ran ? '<span class="muted">not run yet</span>'
+      : c.ok ? '<span class="ok">ok</span>' : '<span class="bad">fail</span>';
+    return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
+      <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
+      <td class="muted">${esc(c.message || "")}</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="muted">No checks.</td></tr>`;
+
+  const sla = (d.sla || []).map((w) => {
+    const v = w.ratio == null ? "n/a" : (w.ratio * 100).toFixed(2) + "%";
+    return `<div><div class="v">${v}</div><div class="muted">${esc(w.window)}</div></div>`;
+  }).join("") || '<span class="muted">No SLA data.</span>';
+
+  $("#detail").style.display = "block";
+  $("#detail").innerHTML = `
+    <button class="close" onclick="closeDetail()">close</button>
+    <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
+    <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
+      <tbody>${checks}</tbody></table>
+    <h2>Availability</h2>
+    <div class="sla">${sla}</div>`;
+}
+
+function closeDetail() { current = null; $("#detail").style.display = "none"; }
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 load();
-setInterval(load, 5000);
+setInterval(() => { load(); if (current) detail(current); }, 5000);
 </script>
 </body>
 </html>

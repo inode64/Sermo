@@ -41,8 +41,11 @@ type Worker struct {
 	// up is true when no required check failed. Nil disables recording (tests, or
 	// when no store is wired). Only observed (non-paused) cycles are recorded.
 	RecordHealth func(up bool)
-	Now          func() time.Time
-	Emit         func(Event)
+	// Publish records this cycle's check cache for the web detail view. Nil
+	// disables publishing.
+	Publish func(cache map[string]checks.Result)
+	Now     func() time.Time
+	Emit    func(Event)
 
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
@@ -73,6 +76,9 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	cache := w.Checks(ctx, deps)
 	if w.RecordHealth != nil {
 		w.RecordHealth(requiredChecksOK(cache))
+	}
+	if w.Publish != nil {
+		w.Publish(cache)
 	}
 	ev := &rules.Evaluator{Cache: cache, Deps: deps, Changed: w.changed}
 

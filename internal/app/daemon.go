@@ -34,6 +34,12 @@ type SLARecorder interface {
 	RecordSLA(service string, up bool, at time.Time) error
 }
 
+// SLAReader reports a service's availability over the rolling windows, for the web
+// detail view. Implemented by internal/state.Store.
+type SLAReader interface {
+	SLAReport(service string, now time.Time) ([]state.SLAValue, error)
+}
+
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
 	Backend        servicemgr.Backend
@@ -60,6 +66,9 @@ type Deps struct {
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier
+	// Snapshots collects each service's latest check results for the web detail
+	// view. Optional: nil disables publishing.
+	Snapshots *Snapshots
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration
@@ -162,10 +171,20 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		},
 		IsPaused:     monitorPaused(deps.Monitor, name),
 		RecordHealth: healthRecorder(deps, name),
+		Publish:      publishSnapshots(deps.Snapshots, name),
 		Now:          deps.Now,
 		Emit:         deps.Emit,
 	}
 	return worker, warnings
+}
+
+// publishSnapshots returns the worker's per-cycle check-cache publisher, or nil
+// when no snapshot registry is wired.
+func publishSnapshots(s *Snapshots, name string) func(map[string]checks.Result) {
+	if s == nil {
+		return nil
+	}
+	return func(cache map[string]checks.Result) { s.Publish(name, cache) }
 }
 
 // checkIntervals computes, per check in the `checks` section that sets an
