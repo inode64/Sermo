@@ -18,11 +18,18 @@ type Result struct {
 }
 
 // Runner executes external commands. Callers must pass a context with a timeout.
+//
+// Sermo prefers native Go (stdlib, x/sys, x/net) over spawning processes (see
+// AGENTS.md "Native Go, not external processes"). This runner exists only for the
+// few justified cases: the service-manager backends (systemctl/rc-service, which
+// have no native API), user-configured `command` checks and watch hooks, and the
+// `libraries` check's `ldd`. It always invokes an argv directly — never a shell —
+// so check/hook commands cannot be subject to shell injection.
 type Runner interface {
 	Run(ctx context.Context, name string, args ...string) (Result, error)
 }
 
-// CommandRunner executes commands through os/exec.
+// CommandRunner executes commands through os/exec (argv only, no shell).
 type CommandRunner struct{}
 
 // Run executes name with args and captures stdout/stderr.
