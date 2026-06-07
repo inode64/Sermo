@@ -363,6 +363,11 @@ func (c processCheck) Run(_ context.Context) Result {
 
 // librariesCheck runs ldd on a binary and fails if any shared library does not
 // resolve (section 19). It is typically an optional preflight entry.
+//
+// This is the one internal use of an external tool: ldd consults the dynamic
+// loader (search paths, ld.so.cache, transitive deps), which cannot be faithfully
+// reimplemented from debug/elf alone, so per the native-Go policy it stays a
+// documented exception (AGENTS.md).
 type librariesCheck struct {
 	base
 	runner execx.Runner

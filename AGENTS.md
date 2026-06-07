@@ -221,6 +221,31 @@ Follow these rules:
 9. Avoid global mutable state.
 10. Avoid package names that conflict with standard concepts, such as `init`.
 
+## Native Go, not external processes
+
+**Always implement functionality with native Go — the standard library, or
+`golang.org/x/sys` / `golang.org/x/net` — and avoid spawning external processes or
+scripts wherever possible.** Reading `/proc`/`/sys`, syscalls (statfs, uname),
+TLS/x509, SMTP, HTTP, ELF, etc. are all native; reach for `os/exec` only when
+there is genuinely no native equivalent.
+
+- **Never use a shell.** All process execution goes through an explicit argv
+  (`execx.Runner` / `os/exec` with name+args); no `sh -c`, no string command
+  lines, so check/hook commands can't be shell-injected. Every external command
+  carries a timeout (rule 3).
+- **Justified external-process exceptions** (do not add more without a clear
+  reason, and document them here):
+  - The **service-manager backends** (`systemctl`, `rc-service`): systemd/OpenRC
+    have no native Go API in scope, and pulling in D-Bus is a heavier dependency.
+  - **User-configured commands**: `command` checks, watch `hook`s, and the
+    `sermoctl lock -- COMMAND` wrapper — running an external program is their
+    whole purpose. Argv only.
+  - The **`libraries` check's `ldd`**: it queries the dynamic loader; reimplementing
+    that from `debug/elf` would be unreliable. The one internal tool dependency.
+- When you need OS information, prefer a syscall over a tool: e.g. architecture is
+  read with `unix.Uname` (not `uname -m`), filesystem usage with `syscall.Statfs`
+  (not `df`), process data from `/proc` (not `ps`).
+
 ## Security and safety invariants
 
 These rules are mandatory.
