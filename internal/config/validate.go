@@ -516,6 +516,54 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
+// validateCheckGate validates a check's interdependency fields: `requires` is a
+// list of other check names in the same section (a check may not require itself or
+// an unknown check), and `skip_when_changed` is a list of file paths.
+func validateCheckGate(path, name string, entry, section map[string]any, add addFunc) {
+	if v, present := entry["requires"]; present {
+		reqs, ok := gateStrings(v)
+		if !ok {
+			add("%s.requires must be a check name or a list of check names", path)
+		}
+		for _, dep := range reqs {
+			if dep == name {
+				add("%s.requires cannot reference itself", path)
+			} else if _, ok := section[dep]; !ok {
+				add("%s.requires references unknown check %q", path, dep)
+			}
+		}
+	}
+	if v, present := entry["skip_when_changed"]; present {
+		if _, ok := gateStrings(v); !ok {
+			add("%s.skip_when_changed must be a file path or a list of file paths", path)
+		}
+	}
+}
+
+// gateStrings accepts a scalar string or a list of strings, returning the values
+// and whether the shape is valid.
+func gateStrings(v any) ([]string, bool) {
+	switch t := v.(type) {
+	case nil:
+		return nil, true
+	case string:
+		if t == "" {
+			return nil, true
+		}
+		return []string{t}, true
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s := scalarString(e); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
 // validateHTTPFields validates an http check at prefix: a required url, and the
 // optional request (method/headers/body/json) and response-assertion fields
 // (expect_body/expect_json) shapes.
@@ -1106,6 +1154,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
 			add("%s.interval %q must be a valid positive duration", path, scalarString(v))
 		}
+		validateCheckGate(path, name, entry, entries, add)
 		typ := scalarString(entry["type"])
 		if typ == "" {
 			add("%s has no type", path)

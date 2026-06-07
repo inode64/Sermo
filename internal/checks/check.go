@@ -19,6 +19,7 @@ type Result struct {
 	Check    string         `json:"check"`
 	OK       bool           `json:"ok"`
 	Optional bool           `json:"optional,omitempty"`
+	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
 	Message  string         `json:"message,omitempty"`
 	Latency  time.Duration  `json:"latency_ns,omitempty"`
 	Data     map[string]any `json:"data,omitempty"`

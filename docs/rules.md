@@ -30,6 +30,48 @@ which reuse the same schema). MVP types:
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
 
+### Check interdependencies (`requires` / `skip_when_changed`)
+
+Any check may declare interdependencies so it is **skipped** (not counted, no
+alert, shown as `skipped`) on a cycle where it should not apply:
+
+```yaml
+checks:
+  port:
+    type: tcp
+    host: 127.0.0.1
+    port: 3306
+  query:
+    type: command
+    command: ["/usr/bin/mysqladmin", "ping"]
+    requires: [port]                              # skip while `port` is failing
+    skip_when_changed: ["/etc/my.cnf", "/etc/pam.d/mysql"]  # skip while these changed
+```
+
+- **`requires: [check, …]`** — skip this check while any listed check **failed**
+  this cycle. This avoids cascading alerts: if MySQL's `port` is down, the deeper
+  `query` check is skipped rather than also reported as failing.
+- **`skip_when_changed: [path, …]`** — skip this check while any listed file
+  differs from its acknowledged baseline (e.g. a config file or library was just
+  updated). The baseline is re-acknowledged after a successful (re)start, so the
+  check resumes once the service is reconciled.
+
+Both accept a single value or a list. Gates are evaluated **after** the cycle's
+checks run, so the probe still executes but its result is suppressed; use a check's
+`interval` or remove it to avoid running it at all.
+
+To **restart** a service when a library or file is updated (the other half of the
+example — "if the pam library was updated, restart"), use a remediation rule with
+a [`changed:`](#rules) condition (or `restart_on_change: {libraries: […]}`):
+
+```yaml
+rules:
+  restart-on-pam:
+    type: remediation
+    if: { changed: { library: pam } }   # or { path: /lib64/security/pam_unix.so }
+    then: { action: restart }
+```
+
 ### Ports
 
 A `ports` check probes several TCP ports on a host at once and evaluates a
