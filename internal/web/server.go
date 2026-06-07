@@ -62,12 +62,30 @@ type Detail struct {
 	SLA    []SLAWindow `json:"sla"`
 }
 
+// SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
+// nil for a minute with no observed cycle.
+type SeriesPoint struct {
+	Start string   `json:"start"` // RFC3339, minute-aligned
+	Ratio *float64 `json:"ratio"`
+	Up    int64    `json:"up"`
+	Total int64    `json:"total"`
+}
+
+// maxSeriesWindow bounds the history a single request may ask for (the retention).
+const maxSeriesWindow = 366 * 24 * time.Hour
+
+// defaultSeriesWindow is used when no (or an invalid) `since` is given.
+const defaultSeriesWindow = 24 * time.Hour
+
 // Backend is what the web server needs from the daemon.
 type Backend interface {
 	// Services returns the current view of every monitored service.
 	Services(ctx context.Context) []Service
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
+	// Series returns a service's per-minute availability history over since; ok is
+	// false for unknown names.
+	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
 	// Operate runs start|stop|restart on a service through the safe engine.
 	Operate(ctx context.Context, name, action string) ActionResult
 	// SetMonitored pauses (false) or resumes (true) monitoring of a service.
@@ -92,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
+	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	return mux
 }
@@ -136,6 +155,24 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
+	since := defaultSeriesWindow
+	if q := r.URL.Query().Get("since"); q != "" {
+		if d, err := time.ParseDuration(q); err == nil && d > 0 {
+			since = d
+		}
+	}
+	if since > maxSeriesWindow {
+		since = maxSeriesWindow
+	}
+	points, ok := s.Backend.Series(r.Context(), r.PathValue("name"), since)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"since": since.String(), "points": points})
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
