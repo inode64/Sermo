@@ -32,7 +32,9 @@ func TestValidateEngineDurations(t *testing.T) {
 engine:
   interval: notaduration
   default_timeout: 0s
+  operation_timeout: bad
   max_parallel_checks: 0
+  max_parallel_operations: -1
 paths:
   enabled: [ @ROOT@/enabled ]
 defaults:
@@ -43,8 +45,34 @@ defaults:
 		t.Fatal(err)
 	}
 	issues := Validate(cfg)
-	for _, want := range []string{"engine.interval", "engine.default_timeout", "engine.max_parallel_checks"} {
+	for _, want := range []string{
+		"engine.interval",
+		"engine.default_timeout",
+		"engine.operation_timeout",
+		"engine.max_parallel_checks",
+		"engine.max_parallel_operations",
+	} {
 		mustHave(t, issues, want)
+	}
+}
+
+func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
+	global := writeConfig(t, map[string]string{"sermo.yml": `
+engine:
+  operation_timeout: 90s
+paths:
+  enabled: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+`})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, is := range Validate(cfg) {
+		if strings.Contains(is.Msg, "operation_timeout") {
+			t.Fatalf("unexpected issue: %v", is)
+		}
 	}
 }
 
