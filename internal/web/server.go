@@ -65,6 +65,19 @@ type SLAWindow struct {
 	Total  int64    `json:"total"`
 }
 
+// Process is a discovered process belonging to a service (parity with
+// `sermoctl processes`).
+type Process struct {
+	PID         int      `json:"pid"`
+	PPID        int      `json:"ppid"`
+	User        string   `json:"user,omitempty"`
+	Exe         string   `json:"exe,omitempty"`
+	ExeResolved bool     `json:"exe_resolved"`
+	Role        string   `json:"role,omitempty"`
+	Source      string   `json:"source"`
+	Cmdline     []string `json:"cmdline,omitempty"`
+}
+
 // Lock is a named runtime lock for one service (parity with `sermoctl locks`).
 type Lock struct {
 	Name        string `json:"name,omitempty"`
@@ -79,9 +92,10 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks and SLA.
 type Detail struct {
 	Service
-	Checks []Check     `json:"checks"`
-	SLA    []SLAWindow `json:"sla"`
-	Locks  []Lock      `json:"locks,omitempty"`
+	Checks    []Check   `json:"checks"`
+	SLA       []SLAWindow `json:"sla"`
+	Locks     []Lock    `json:"locks,omitempty"`
+	Processes []Process `json:"processes,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
