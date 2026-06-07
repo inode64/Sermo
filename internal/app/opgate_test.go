@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -72,6 +73,79 @@ func TestOpGateUsage(t *testing.T) {
 		}
 	}
 	close(done)
+}
+
+func TestOpGateAcquireFailureShuttingDown(t *testing.T) {
+	gate := NewOpGate(1, "")
+	gate.mem <- struct{}{} // slot held
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	res := gate.Run(ctx, "web", "restart", func(context.Context) operation.Result {
+		t.Fatal("inner fn must not run")
+		return operation.Result{}
+	})
+	if res.Status != operation.ResultFailed || res.Message != "shutting down" {
+		t.Fatalf("result = %+v, want failed/shutting down", res)
+	}
+}
+
+func TestOpGateAcquireFailureSlotsBusyTimeout(t *testing.T) {
+	gate := NewOpGate(1, "")
+	hold := make(chan struct{})
+	go func() {
+		gate.Run(context.Background(), "a", "restart", func(context.Context) operation.Result {
+			<-hold
+			return operation.Result{Status: operation.ResultOK}
+		})
+	}()
+	deadline := time.After(time.Second)
+	for {
+		if in, _ := gate.Usage(); in == 1 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for slot to be held")
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	res := gate.Run(ctx, "b", "restart", func(context.Context) operation.Result {
+		t.Fatal("inner fn must not run")
+		return operation.Result{}
+	})
+	close(hold)
+
+	if res.Status != operation.ResultFailed {
+		t.Fatalf("status = %s, want failed", res.Status)
+	}
+	want := "operation slots busy (1/1); operation timeout exceeded"
+	if res.Message != want {
+		t.Fatalf("message = %q, want %q", res.Message, want)
+	}
+}
+
+func TestOpGateAcquireFailureMessage(t *testing.T) {
+	gate := NewOpGate(2, "")
+	gate.mem <- struct{}{}
+	gate.mem <- struct{}{}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	msg := gate.acquireFailureMessage(ctx)
+	if !strings.Contains(msg, "operation slots busy (2/2)") || !strings.Contains(msg, "timeout") {
+		t.Fatalf("deadline+busy = %q", msg)
+	}
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	cancel2()
+	if got := gate.acquireFailureMessage(ctx2); got != "shutting down" {
+		t.Fatalf("canceled = %q", got)
+	}
 }
 
 func TestOpGateNilPassesThrough(t *testing.T) {
