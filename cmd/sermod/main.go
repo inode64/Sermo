@@ -21,6 +21,8 @@ import (
 	"sermo/internal/web"
 )
 
+const exitConfigInvalid = 78
+
 func main() {
 	os.Exit(run(os.Args[1:]))
 }
@@ -53,6 +55,12 @@ func run(args []string) int {
 	if err != nil {
 		logger.Error("load config", "error", err)
 		return 2
+	}
+	if issues := config.Validate(cfg); len(issues) > 0 {
+		for _, is := range issues {
+			logger.Error("config invalid", "scope", is.Scope, "message", is.Msg)
+		}
+		return exitConfigInvalid
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
