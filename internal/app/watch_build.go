@@ -262,8 +262,15 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		}
 		*t.op, *t.val = op, v
 	}
+	if v, present := check["gone"]; present {
+		b, ok := v.(bool)
+		if !ok {
+			return c, fmt.Errorf("process gone must be a boolean")
+		}
+		c.onGone = b
+	}
 	if !c.any() {
-		return c, fmt.Errorf("process check requires at least one of for, cpu, memory, io")
+		return c, fmt.Errorf("process check requires at least one of for, cpu, memory, io, gone")
 	}
 	return c, nil
 }

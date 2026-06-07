@@ -161,6 +161,41 @@ func TestProcWatchCombinedConditionsAND(t *testing.T) {
 	}
 }
 
+func TestProcWatchGone(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 11}}, // present, adopt
+		{},          // gone -> fire once
+		{},          // still gone (state dropped) -> no re-fire
+		{{PID: 11}}, // reappears, adopt -> no fire
+		{},          // gone again -> fire
+	}}
+	w := h.watcher(procCond{onGone: true}, s)
+	for i := 0; i < 5; i++ {
+		h.tick(w, time.Second)
+	}
+	if len(h.fired) != 2 {
+		t.Fatalf("gone fired %d times, want 2", len(h.fired))
+	}
+	if h.fired[0]["SERMO_CHANGE"] != "gone" || h.fired[0]["SERMO_PID"] != "11" {
+		t.Fatalf("unexpected gone env: %v", h.fired[0])
+	}
+}
+
+func TestProcWatchGoneOnlyDoesNotFireOnPresence(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 1, RSS: 9_000_000}}, // present with high RSS, but only `gone` is set
+		{{PID: 1, RSS: 9_000_000}},
+	}}
+	w := h.watcher(procCond{onGone: true}, s)
+	h.tick(w, time.Second)
+	h.tick(w, time.Second)
+	if len(h.fired) != 0 {
+		t.Fatalf("gone-only watch fired on presence: %d", len(h.fired))
+	}
+}
+
 func TestProcWatchReusedPIDReArms(t *testing.T) {
 	h := &procHarness{clock: time.Unix(1_000_000, 0)}
 	s := &fakeProcSampler{cycles: [][]ProcInfo{

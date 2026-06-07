@@ -415,8 +415,15 @@ func validateProcessWatch(name string, check, entry map[string]any, add func(str
 			add("watches.%s.check.%s requires {op, value} with a numeric value", name, attr)
 		}
 	}
+	if v, present := check["gone"]; present {
+		if b, ok := v.(bool); !ok {
+			add("watches.%s.check.gone must be a boolean", name)
+		} else if b {
+			conds++
+		}
+	}
 	if conds == 0 {
-		add("watches.%s.check requires at least one of for, cpu, memory, io", name)
+		add("watches.%s.check requires at least one of for, cpu, memory, io, gone", name)
 	}
 
 	validateHookBlock("watches."+name, entry, add)

@@ -338,24 +338,33 @@ watches:
       cpu: { op: ">", value: 80 }     # optional: CPU % (rate)
       memory: { op: ">", value: 524288000 }   # optional: RSS bytes
       io: { op: ">", value: 10485760 }         # optional: read+write bytes/sec
+      gone: true                      # optional: fire when a tracked PID disappears
     then:
       hook:
         command: [/usr/local/bin/sermo-proc-alert.sh]
         timeout: 10s
 ```
 
-Declare at least one of `for`, `cpu`, `memory`, `io`. **All** present conditions
-must hold for a PID to fire (AND), and firing is **edge-triggered per PID**: the
-hook runs once when the conditions become true and re-arms only after they stop
-holding — not every cycle. `cpu` and `io` are rates, so they need two samples: a
-just-discovered PID never fires on them in its first cycle. Each matching PID is
-tracked and fired independently — **one event and one hook per PID** — so a worker
-pool produces one hook per offending worker.
+Declare at least one of `for`, `cpu`, `memory`, `io`, `gone`. The presence
+conditions (`for`/`cpu`/`memory`/`io`) **all** must hold for a PID to fire (AND),
+and firing is **edge-triggered per PID**: the hook runs once when the conditions
+become true and re-arms only after they stop holding — not every cycle. `cpu` and
+`io` are rates, so they need two samples: a just-discovered PID never fires on them
+in its first cycle. Each matching PID is tracked and fired independently — **one
+event and one hook per PID** — so a worker pool produces one hook per offending
+worker.
+
+`gone: true` is the inverse — it fires once when a previously-seen matching PID
+**disappears** (and re-arms if it returns), so it never fires merely because the
+process is present. Set it alone for a pure liveness alert ("nginx is gone"), or
+alongside the presence conditions. With multiple matching PIDs it fires per exited
+PID, mirroring the per-PID model.
 
 A process hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`process`), `SERMO_PID`
-(the matching pid), `SERMO_PROCESS` (the configured name), `SERMO_USER` (if set),
-`SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS bytes), and — once a rate is available —
-`SERMO_CPU` (percent) and `SERMO_IO` (bytes/sec).
+(the matching pid), `SERMO_PROCESS` (the configured name), `SERMO_CHANGE`
+(`threshold` for a presence fire, `gone` for a disappearance), `SERMO_USER` (if
+set), `SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS bytes), and — once a rate is
+available — `SERMO_CPU` (percent) and `SERMO_IO` (bytes/sec).
 
 `for` is measured from when the daemon **first observed** the process, so a daemon
 restart resets it (the real elapsed-since-start is not tracked across restarts).
