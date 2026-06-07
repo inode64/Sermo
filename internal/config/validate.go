@@ -146,6 +146,9 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "load":
 			validateLoadCheck(name, check, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "oom":
+			validateOomCheck(name, check, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -281,6 +284,26 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		}
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateOomCheck validates an oom watch: an optional delta {op, value} (the
+// default fires on any OOM kill, so a bare `check: {type: oom}` is valid).
+func validateOomCheck(name string, check map[string]any, add func(string, ...any)) {
+	delta, present := check["delta"]
+	if !present {
+		return
+	}
+	m, ok := delta.(map[string]any)
+	if !ok {
+		add("watches.%s.check.delta must be a mapping {op, value}", name)
+		return
+	}
+	if !isValidDiskOp(scalarString(m["op"])) {
+		add("watches.%s.check.delta has an invalid op %q", name, scalarString(m["op"]))
+	}
+	if !isNumeric(scalarString(m["value"])) {
+		add("watches.%s.check.delta value %q must be numeric", name, scalarString(m["value"]))
 	}
 }
 
