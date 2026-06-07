@@ -62,6 +62,20 @@ func TestMeasurementSummaryNoData(t *testing.T) {
 	}
 }
 
+func TestTrackedServicesIncludesMeasurement(t *testing.T) {
+	s := openTemp(t)
+	if err := s.RecordMeasurement("ghost", "http", 10, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	tracked, err := s.TrackedServices()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tracked) != 1 || tracked[0] != "ghost" {
+		t.Fatalf("tracked = %v, want [ghost]", tracked)
+	}
+}
+
 func TestPruneMeasurements(t *testing.T) {
 	s := openTemp(t)
 	old := time.Now().Add(-48 * time.Hour)
