@@ -164,15 +164,32 @@ type Backend interface {
 var operateActions = map[string]bool{"start": true, "stop": true, "restart": true}
 var monitorActions = map[string]bool{"monitor": true, "unmonitor": true}
 
+// defaultOperationTimeout matches operation.DefaultOperationTimeout when sermod
+// does not set OperationTimeout on the server.
+const defaultOperationTimeout = 90 * time.Second
+
+// writeTimeoutMargin is added to OperationTimeout so the handler can finish
+// writing the JSON response after a long operation completes.
+const writeTimeoutMargin = 5 * time.Second
+
+// minWriteTimeout keeps short read-only requests bounded when OperationTimeout
+// is unusually small.
+const minWriteTimeout = 30 * time.Second
+
 // Server is the HTTP dashboard. Addr is a host:port; Backend is required. Auth is
-// optional (zero value = open).
+// optional (zero value = open). OperationTimeout bounds how long start/stop/restart
+// may run and sizes the HTTP write deadline; it should be the maximum per-service
+// deadline (app.MaxOperationTimeout).
 type Server struct {
 	Addr    string
 	Backend Backend
 	Auth    Auth
 	Logger  *slog.Logger
 
-	started time.Time // when the server began serving; for /livez uptime
+	OperationTimeout time.Duration
+
+	started  time.Time         // when the server began serving; for /livez uptime
+	shutdown context.Context // daemon lifetime; set in Run
 }
 
 // Handler returns the router behind the auth middleware: the dashboard at /, the
@@ -217,15 +234,39 @@ func eventLimit(r *http.Request) int {
 // the (root-privileged) action endpoints, in both authenticated and open modes.
 const csrfHeader = "X-Sermo-CSRF"
 
+// serverWriteTimeout returns the HTTP write deadline for action handlers that may
+// block until a safe operation finishes.
+func serverWriteTimeout(maxOp time.Duration) time.Duration {
+	if maxOp <= 0 {
+		maxOp = defaultOperationTimeout
+	}
+	wt := maxOp + writeTimeoutMargin
+	if wt < minWriteTimeout {
+		return minWriteTimeout
+	}
+	return wt
+}
+
+// operateContext returns a context for start/stop/restart that is not tied to the
+// HTTP request. Client disconnect and the generic write deadline must not abort
+// an in-flight safe operation; the operation engine applies its own timeout.
+func (s *Server) operateContext() context.Context {
+	if s.shutdown != nil {
+		return s.shutdown
+	}
+	return context.Background()
+}
+
 // Run serves until ctx is cancelled, then shuts down gracefully. Timeouts bound
 // slow clients (the server runs as root, so it is hardened by default).
 func (s *Server) Run(ctx context.Context) error {
+	s.shutdown = ctx
 	srv := &http.Server{
 		Addr:              s.Addr,
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      serverWriteTimeout(s.OperationTimeout),
 		IdleTimeout:       60 * time.Second,
 	}
 	go func() {
@@ -350,7 +391,7 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue("action")
 	switch {
 	case operateActions[action]:
-		res := s.Backend.Operate(r.Context(), name, action)
+		res := s.Backend.Operate(s.operateContext(), name, action)
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict

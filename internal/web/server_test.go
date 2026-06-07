@@ -344,6 +344,61 @@ func TestFailedOperateIsConflict(t *testing.T) {
 	}
 }
 
+func TestServerWriteTimeoutCoversOperationTimeout(t *testing.T) {
+	got := serverWriteTimeout(90 * time.Second)
+	if got < 90*time.Second {
+		t.Fatalf("write timeout %v shorter than operation timeout", got)
+	}
+	if got := serverWriteTimeout(0); got < defaultOperationTimeout {
+		t.Fatalf("zero operation timeout should default write timeout, got %v", got)
+	}
+}
+
+type ctxCapturingBackend struct {
+	fakeBackend
+	delay   time.Duration
+	operCtx context.Context
+}
+
+func (b *ctxCapturingBackend) Operate(ctx context.Context, name, action string) ActionResult {
+	b.operCtx = ctx
+	timer := time.NewTimer(b.delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return ActionResult{OK: true, Message: "ok"}
+	case <-ctx.Done():
+		return ActionResult{OK: false, Message: ctx.Err().Error()}
+	}
+}
+
+func TestOperateContextIgnoresRequestCancel(t *testing.T) {
+	b := &ctxCapturingBackend{delay: 40 * time.Millisecond}
+	srv := &Server{
+		Backend:          b,
+		OperationTimeout: 200 * time.Millisecond,
+	}
+	srv.shutdown = context.Background()
+	h := srv.Handler()
+
+	req := postReq("/api/services/web/restart")
+	reqCtx, cancel := context.WithCancel(req.Context())
+	cancel() // simulate client disconnect / HTTP deadline
+	req = req.WithContext(reqCtx)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("operate status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if b.operCtx == reqCtx {
+		t.Fatal("operate must not use the request context")
+	}
+	if b.operCtx.Err() != nil {
+		t.Fatalf("operate context cancelled early: %v", b.operCtx.Err())
+	}
+}
+
 func TestGetOnActionRouteNotAllowed(t *testing.T) {
 	// Only POST is registered for the action route; GET must not operate.
 	b := &fakeBackend{}
