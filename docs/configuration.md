@@ -198,7 +198,7 @@ receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`disk`, `load`, `fds`, `conntrack`, `entropy`,
-`zombies`, `oom`, `mount`) *and* the service checks (`tcp`, `http`, `command`,
+`zombies`, `oom`) *and* the service checks (`tcp`, `http`, `command`,
 `file_exists`, `binary`, `libraries`, `count`) — can be used as a watch here, and
 the host-resource ones can equally be used in a service's `checks:`/rules (see
 [Checks](rules.md#checks)). A watch fires its hook on the check's **alert**
@@ -243,11 +243,41 @@ watches:
 ```
 
 A filesystem that does not report inodes (`inodes_total == 0`, e.g. btrfs) never
-fires an inode predicate, so it cannot misread `0/0`. When the condition holds for
-the `for`/`within` window, the hook command runs (argv only, never a shell) with
-these environment variables: `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_PATH`,
-`SERMO_VALUE` (the first predicate's reading), `SERMO_MESSAGE`, plus the rest of
-the check's data (`SERMO_USED_PCT`, `SERMO_INODES_USED_PCT`, `SERMO_INODES_FREE`, …).
+fires an inode predicate, so it cannot misread `0/0`.
+
+#### Mount conditions
+
+The `disk` check also verifies the **mount** of its `path`, so a filesystem's
+mount and its space are configured in one entry (no duplicated `path`). This also
+makes a space check trustworthy: a path that should be a mount but isn't would
+otherwise make `statfs` silently report the *parent* filesystem. Add any of:
+
+```yaml
+watches:
+  data:
+    check:
+      type: disk
+      path: /data
+      mounted: true            # require it to be a mount point (set false to require NOT mounted)
+      fstype: ext4             # optional: expected filesystem type
+      options: [rw, noatime]   # optional: these mount options must all be present
+      device: /dev/sdb1        # optional: expected source device
+      used_pct: { op: ">=", value: 90 }   # space predicate(s), optional alongside mount
+    then:
+      hook: { command: [/usr/local/bin/alert-disk.sh, "/data"] }
+```
+
+A disk check needs **at least one** of a space/inode predicate or a mount
+condition (mount-only is fine). The mount is checked first from `/proc/mounts`: if
+it is missing or doesn't match, the check alerts on that and the space predicates
+are skipped (their numbers would be meaningless). The result data adds `mounted`,
+`fstype`, `device` and `options`.
+
+When the condition holds for the `for`/`within` window, the hook runs (argv only,
+never a shell) and/or the notifiers fire, with these environment variables:
+`SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_PATH`, `SERMO_VALUE` (the first
+predicate's reading), `SERMO_MESSAGE`, plus the rest of the check's data
+(`SERMO_USED_PCT`, `SERMO_INODES_USED_PCT`, `SERMO_MOUNTED`, `SERMO_FSTYPE`, …).
 
 ### `net` — network interface
 

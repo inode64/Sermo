@@ -82,9 +82,9 @@ func TestICMPLatencyChange(t *testing.T) {
 func TestICMPLatencyChangeUnreachableNoCorrupt(t *testing.T) {
 	c := &icmpCheck{base: base{name: "p"}, host: "h", metric: "latency", hasChange: true, delta: 50,
 		sampler: pinger(
-			PingSample{Reachable: true, RTTms: 20, RTTKnown: true},  // prime baseline 20
-			PingSample{Reachable: false, RTTKnown: false},           // no fire, no baseline update
-			PingSample{Reachable: true, RTTms: 25, RTTKnown: true},  // |25-20|=5 < 50 -> no fire
+			PingSample{Reachable: true, RTTms: 20, RTTKnown: true}, // prime baseline 20
+			PingSample{Reachable: false, RTTKnown: false},          // no fire, no baseline update
+			PingSample{Reachable: true, RTTms: 25, RTTKnown: true}, // |25-20|=5 < 50 -> no fire
 		)}
 	c.Run(context.Background()) // prime
 	if c.Run(context.Background()).OK {
