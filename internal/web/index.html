@@ -140,7 +140,10 @@ function render(services) {
 async function act(name, action) {
   $("#err").textContent = "";
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, { method: "POST" });
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));

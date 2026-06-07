@@ -74,6 +74,13 @@ func newServer(b Backend) http.Handler {
 	return (&Server{Backend: b}).Handler()
 }
 
+// postReq is a POST request carrying the CSRF header (as the dashboard sends).
+func postReq(path string) *http.Request {
+	r := httptest.NewRequest(http.MethodPost, path, nil)
+	r.Header.Set(csrfHeader, "1")
+	return r
+}
+
 func TestServesDashboard(t *testing.T) {
 	h := newServer(&fakeBackend{})
 	rec := httptest.NewRecorder()
@@ -230,7 +237,7 @@ func TestOperateActions(t *testing.T) {
 	h := newServer(b)
 	for _, action := range []string{"start", "stop", "restart"} {
 		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/services/web/"+action, nil))
+		h.ServeHTTP(rec, postReq("/api/services/web/"+action))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s = %d", action, rec.Code)
 		}
@@ -245,12 +252,12 @@ func TestMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/services/web/unmonitor", nil))
+	h.ServeHTTP(rec, postReq("/api/services/web/unmonitor"))
 	if rec.Code != http.StatusOK || b.monitored["web"] != false {
 		t.Fatalf("unmonitor: code=%d monitored=%v", rec.Code, b.monitored)
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/services/web/monitor", nil))
+	h.ServeHTTP(rec, postReq("/api/services/web/monitor"))
 	if rec.Code != http.StatusOK || b.monitored["web"] != true {
 		t.Fatalf("monitor: code=%d monitored=%v", rec.Code, b.monitored)
 	}
@@ -258,7 +265,7 @@ func TestMonitorActions(t *testing.T) {
 
 func TestUnknownActionIsBadRequest(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/services/web/destroy", nil))
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/services/web/destroy"))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown action = %d, want 400", rec.Code)
 	}
@@ -266,7 +273,7 @@ func TestUnknownActionIsBadRequest(t *testing.T) {
 
 func TestFailedOperateIsConflict(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/services/web/restart", nil))
+	newServer(&fakeBackend{failOp: true}).ServeHTTP(rec, postReq("/api/services/web/restart"))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("failed operate = %d, want 409", rec.Code)
 	}

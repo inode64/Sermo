@@ -175,6 +175,13 @@ Web-triggered monitor changes are recorded with source `web` in the state store,
 and operations take the per-service operation lock, so they never overlap a
 worker's action on the same service.
 
+Because the daemon runs as root, the UI is hardened: it binds to loopback by
+default, supports auth (above), sets HTTP timeouts, and requires an
+**`X-Sermo-CSRF`** header on every action (POST) request — the dashboard sends it;
+an API client must too (e.g. `curl -H 'X-Sermo-CSRF: 1' -X POST …`). This blocks
+cross-site request forgery from a browser. See
+[safety](safety.md#trust-model).
+
 ## Availability (SLA)
 
 The daemon records one availability sample per monitoring cycle per service, so

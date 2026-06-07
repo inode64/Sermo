@@ -70,6 +70,13 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			}
 			return
 		}
+		// CSRF: state-changing requests must carry the custom header (set by the
+		// dashboard's fetch). Checked before auth so a forged cross-site POST is
+		// rejected even when the browser would attach cached credentials.
+		if r.Method == http.MethodPost && r.Header.Get(csrfHeader) == "" {
+			writeJSON(w, http.StatusForbidden, ActionResult{OK: false, Message: "missing " + csrfHeader + " header (CSRF protection)"})
+			return
+		}
 		if role == "" {
 			s.challenge(w)
 			return

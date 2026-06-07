@@ -1,5 +1,10 @@
 #!/sbin/openrc-run
 # OpenRC init script for the Sermo service supervisor.
+#
+# Sermo runs as root (OpenRC's default for a service with no command_user): it
+# inspects and signals other users' processes, controls the service manager and
+# opens raw ICMP sockets. The operation engine only ever signals processes that
+# exactly match a service's kill_only_if selector (resolved exe + real UID).
 
 name="sermod"
 description="Sermo service supervisor"
