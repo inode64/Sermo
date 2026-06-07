@@ -143,6 +143,8 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			validateICMPCheck(name, check, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
+		case "process":
+			validateProcessWatch(name, check, entry, add)
 		case "":
 			add("watches.%s.check.type is required", name)
 		default:
@@ -384,6 +386,37 @@ func validateFileCheck(name string, check, entry map[string]any, add func(string
 	}
 	if conds == 0 {
 		add("watches.%s.check requires at least one of size, permissions, owner, existence", name)
+	}
+
+	validateHookBlock("watches."+name, entry, add)
+}
+
+// validateProcessWatch validates a process watch: a name, an optional user, and
+// at least one condition (for duration, or cpu/memory/io {op, value}), plus the
+// entry's hook.
+func validateProcessWatch(name string, check, entry map[string]any, add func(string, ...any)) {
+	if scalarString(check["name"]) == "" {
+		add("watches.%s.check.name is required for a process check", name)
+	}
+	conds := 0
+	if v, present := check["for"]; present {
+		conds++
+		if !isPositiveDuration(scalarString(v)) {
+			add("watches.%s.check.for %q must be a valid positive duration", name, scalarString(v))
+		}
+	}
+	for _, attr := range []string{"cpu", "memory", "io"} {
+		m, ok := check[attr].(map[string]any)
+		if !ok {
+			continue
+		}
+		conds++
+		if !isValidDiskOp(scalarString(m["op"])) || !isNumeric(scalarString(m["value"])) {
+			add("watches.%s.check.%s requires {op, value} with a numeric value", name, attr)
+		}
+	}
+	if conds == 0 {
+		add("watches.%s.check requires at least one of for, cpu, memory, io", name)
 	}
 
 	validateHookBlock("watches."+name, entry, add)

@@ -49,6 +49,9 @@ type Deps struct {
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder
+	// ProcSampler lists matching processes and their counters for `process`
+	// watches. Optional: nil uses the host /proc.
+	ProcSampler ProcSampler
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration

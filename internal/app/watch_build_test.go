@@ -85,6 +85,47 @@ func TestBuildWatchesFileWarnsOnNoCondition(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesBuildsProcess(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"hot-workers": map[string]any{
+			"check": map[string]any{
+				"type":   "process",
+				"name":   "myworker",
+				"user":   "www-data",
+				"for":    "5m",
+				"cpu":    map[string]any{"op": ">", "value": 80},
+				"memory": map[string]any{"op": ">", "value": 524288000},
+				"io":     map[string]any{"op": ">", "value": 10485760},
+			},
+			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/proc.sh"}}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	w := watches[0]
+	if w.Name != "hot-workers" || w.CheckType != "process" || w.Cycle == nil {
+		t.Fatalf("unexpected watch: %+v", w)
+	}
+}
+
+func TestBuildWatchesProcessWarnsOnNoCondition(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"bad": map[string]any{
+			"check": map[string]any{"type": "process", "name": "x"},
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{}, time.Second)
+	if len(watches) != 0 || len(warns) == 0 {
+		t.Fatalf("expected a warning and no watch, got %d watches, warns %v", len(watches), warns)
+	}
+}
+
 func TestBuildWatchesSkipsDisabled(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "disk", "path": "/"}},

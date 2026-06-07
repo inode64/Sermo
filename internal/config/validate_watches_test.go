@@ -105,6 +105,62 @@ func TestValidateFileWatchErrors(t *testing.T) {
 	}
 }
 
+func TestValidateProcessWatchGood(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"hot-workers": map[string]any{
+				"check": map[string]any{
+					"type":   "process",
+					"name":   "myworker",
+					"user":   "www-data",
+					"for":    "5m",
+					"cpu":    map[string]any{"op": ">", "value": 80},
+					"memory": map[string]any{"op": ">", "value": 524288000},
+					"io":     map[string]any{"op": ">", "value": 10485760},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/proc.sh"}}},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
+func TestValidateProcessWatchErrors(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-name": map[string]any{
+				"check": map[string]any{"type": "process", "cpu": map[string]any{"op": ">", "value": 1}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"no-cond": map[string]any{
+				"check": map[string]any{"type": "process", "name": "x"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"bad-for": map[string]any{
+				"check": map[string]any{"type": "process", "name": "x", "for": "soon"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"bad-cpu": map[string]any{
+				"check": map[string]any{"type": "process", "name": "x", "cpu": map[string]any{"op": "=>", "value": "lots"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+		},
+	})
+	want := []string{
+		"watches.no-name.check.name is required for a process check",
+		"watches.no-cond.check requires at least one of for, cpu, memory, io",
+		"watches.bad-for.check.for \"soon\" must be a valid positive duration",
+		"watches.bad-cpu.check.cpu requires {op, value} with a numeric value",
+	}
+	for _, w := range want {
+		if !hasIssue(issues, w) {
+			t.Fatalf("missing issue %q in %v", w, issues)
+		}
+	}
+}
+
 func TestValidateWatchesGoodForWindow(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
