@@ -83,6 +83,7 @@ sermoctl --config /etc/sermo/sermo.yml libs          # shared libraries (restart
 # Validate and render the resolved configuration
 sermoctl --config /etc/sermo/sermo.yml config validate
 sermoctl --config /etc/sermo/sermo.yml config render apache-main
+sermoctl --config /etc/sermo/sermo.yml config diff redis-main redis-cache
 
 # Operate a configured service through the safe engine
 sermoctl --config /etc/sermo/sermo.yml restart apache-main

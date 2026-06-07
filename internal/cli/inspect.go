@@ -138,7 +138,18 @@ func (a App) runConfigDiff(globalPath string, rest []string, opts options) int {
 	}
 
 	removed, added := lineDiff(base, other)
-	if len(removed) == 0 && len(added) == 0 {
+	identical := len(removed) == 0 && len(added) == 0
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{
+			"base":      rest[0],
+			"service":   rest[1],
+			"identical": identical,
+			"removed":   removed,
+			"added":     added,
+		})
+		return exitSuccess
+	}
+	if identical {
 		fmt.Fprintf(a.Stdout, "%s and %s resolve identically\n", rest[0], rest[1])
 		return exitSuccess
 	}
@@ -248,7 +259,7 @@ func sortedUnique[V any](m map[string]V) []string {
 
 // lineDiff returns the lines present only in base and only in other. Both
 // renders are deterministic key-sorted YAML, so this is a readable approximation
-// of a structural diff (post-MVP).
+// of a structural diff.
 func lineDiff(base, other string) (removed, added []string) {
 	baseSet := lineCount(base)
 	otherSet := lineCount(other)

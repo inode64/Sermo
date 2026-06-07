@@ -125,6 +125,45 @@ func TestConfigDiff(t *testing.T) {
 	}
 }
 
+func TestConfigDiffIdentical(t *testing.T) {
+	global, _ := writePostMVPConfig(t)
+
+	code, out, _ := runCLI(t, "--config", global, "config", "diff", "redis-main", "redis-main")
+	if code != exitSuccess {
+		t.Fatalf("config diff identical code=%d", code)
+	}
+	if !strings.Contains(out, "resolve identically") {
+		t.Fatalf("identical diff out=%q", out)
+	}
+}
+
+func TestConfigDiffJSON(t *testing.T) {
+	global, _ := writePostMVPConfig(t)
+
+	code, out, _ := runCLI(t, "--config", global, "--json", "config", "diff", "redis-main", "redis-alt")
+	if code != exitSuccess {
+		t.Fatalf("config diff json code=%d", code)
+	}
+	if !strings.Contains(out, `"identical":false`) {
+		t.Fatalf("json should report not identical:\n%s", out)
+	}
+	if !strings.Contains(out, `"removed"`) || !strings.Contains(out, `"added"`) {
+		t.Fatalf("json should include removed and added:\n%s", out)
+	}
+	if !strings.Contains(out, "6379") || !strings.Contains(out, "6380") {
+		t.Fatalf("json should mention both ports:\n%s", out)
+	}
+}
+
+func TestConfigDiffUsage(t *testing.T) {
+	global, _ := writePostMVPConfig(t)
+
+	code, _, stderr := runCLI(t, "--config", global, "config", "diff", "redis-main")
+	if code != exitUsage || !strings.Contains(stderr, "requires BASE and SERVICE") {
+		t.Fatalf("diff usage: code=%d stderr=%q", code, stderr)
+	}
+}
+
 func TestLockAcquireListRelease(t *testing.T) {
 	global, _ := writePostMVPConfig(t)
 
