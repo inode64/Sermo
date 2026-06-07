@@ -73,10 +73,13 @@ type webEntry struct {
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
 type webWatch struct {
-	name      string
-	checkType string
-	interval  time.Duration
-	disabled  bool
+	name        string
+	checkType   string
+	interval    time.Duration
+	disabled    bool
+	fireOnFail  bool
+	hasHook     bool
+	notifierCount int
 }
 
 // webNotifier is a configured notification target (used by watches).
@@ -182,18 +185,43 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry, _ := raw[name].(map[string]any)
 			disabled := isDisabled(entry)
 			ctype := ""
+			fireOnFail := false
 			if ce, ok := entry["check"].(map[string]any); ok {
 				ctype = stringField(ce["type"])
+			}
+			// Determine polarity from check type (same logic as watch_build.go isHealthCheckType / FireOnFail)
+			switch ctype {
+			case "tcp", "http", "command", "service", "file_exists":
+				fireOnFail = true // health-style: fire when NOT ok
+			default:
+				fireOnFail = false // condition-style: fire when ok (threshold crossed)
 			}
 			iv := durationField(entry["interval"])
 			if iv <= 0 {
 				iv = 30 * time.Second
 			}
+			hasHook := false
+			if then, ok := entry["then"].(map[string]any); ok {
+				if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
+					if cmd := h["command"]; cmd != nil {
+						hasHook = true
+					}
+				}
+			}
+			notifierCount := 0
+			if then, ok := entry["then"].(map[string]any); ok {
+				if ns, ok := then["notify"].([]any); ok {
+					notifierCount = len(ns)
+				}
+			}
 			ww := &webWatch{
-				name:      name,
-				checkType: ctype,
-				interval:  iv,
-				disabled:  disabled,
+				name:          name,
+				checkType:     ctype,
+				interval:      iv,
+				disabled:      disabled,
+				fireOnFail:    fireOnFail,
+				hasHook:       hasHook,
+				notifierCount: notifierCount,
 			}
 			wb.watches[name] = ww
 			wb.watchOrder = append(wb.watchOrder, name)
@@ -368,12 +396,26 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w.interval > 0 {
 			iv = w.interval.String()
 		}
-		out = append(out, web.Watch{
-			Name:      w.name,
-			CheckType: w.checkType,
-			Interval:  iv,
-			Enabled:   !w.disabled,
-		})
+		ww := web.Watch{
+			Name:          w.name,
+			CheckType:     w.checkType,
+			Interval:      iv,
+			Enabled:       !w.disabled,
+			FireOnFail:    w.fireOnFail,
+			HasHook:       w.hasHook,
+			NotifierCount: w.notifierCount,
+		}
+		// Compute last activity for this watch from the event log (best effort)
+		if b.events != nil {
+			for _, e := range b.events.Recent("", 200) { // small scan is fine for UI
+				if e.Watch == name && (e.Kind == "hook" || e.Kind == "notify" || e.Kind == "hook-failed" || e.Kind == "notify-failed") {
+					ww.LastActivity = e.Time.Format(time.RFC3339)
+					ww.LastActivityKind = e.Kind
+					break
+				}
+			}
+		}
+		out = append(out, ww)
 	}
 	return out
 }

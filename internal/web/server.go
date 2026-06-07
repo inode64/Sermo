@@ -44,13 +44,19 @@ type Service struct {
 	ActiveLocks        []string `json:"active_locks,omitempty"`   // named runtime locks blocking actions
 }
 
-// Watch is a minimal view of a host watch for the dashboard (when services=0
-// the watches section is the main thing to show).
+// Watch is a view of a host watch for the dashboard (when services=0
+// the watches section is the main thing to show). Enriched with useful
+// runtime/config info for operators.
 type Watch struct {
-	Name      string `json:"name"`
-	CheckType string `json:"check_type,omitempty"`
-	Interval  string `json:"interval,omitempty"`
-	Enabled   bool   `json:"enabled"`
+	Name           string `json:"name"`
+	CheckType      string `json:"check_type,omitempty"`
+	Interval       string `json:"interval,omitempty"`
+	Enabled        bool   `json:"enabled"`
+	FireOnFail     bool   `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
+	HasHook        bool   `json:"has_hook"`
+	NotifierCount  int    `json:"notifier_count"`
+	LastActivity   string `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
+	LastActivityKind string `json:"last_activity_kind,omitempty"`
 }
 
 // Notifier is a configured notification target referenced by watches.
