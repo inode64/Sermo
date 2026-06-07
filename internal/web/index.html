@@ -64,7 +64,7 @@
 <section id="watches-section" style="margin-top:1rem; display:none">
   <h2 style="font-size:1.05rem">Host watches <span id="watches-count" class="muted"></span></h2>
   <table>
-    <thead><tr><th>Name</th><th>Type</th><th>Interval</th><th>State</th></tr></thead>
+    <thead><tr><th>Name</th><th>Type</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th></tr></thead>
     <tbody id="watch-rows"></tbody>
   </table>
   <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
@@ -403,14 +403,28 @@ function renderWatches(watches) {
     const state = w.enabled
       ? '<span class="pill">enabled</span>'
       : '<span class="pill">disabled</span>';
+    const polarity = w.fire_on_fail
+      ? '<span class="muted">on fail</span>'
+      : '<span class="muted">on threshold</span>';
+    const hook = w.has_hook ? '✓' : '—';
+    const notif = w.notifier_count > 0 ? w.notifier_count : '—';
+    let last = '—';
+    if (w.last_activity) {
+      const kind = w.last_activity_kind ? ` (${esc(w.last_activity_kind)})` : '';
+      last = `<span title="${esc(w.last_activity)}">${esc(w.last_activity.substring(11,19))}${kind}</span>`;
+    }
     return `<tr>
       <td>${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
       <td>${esc(w.interval || "")}</td>
+      <td>${polarity}</td>
+      <td>${hook}</td>
+      <td>${notif}</td>
+      <td>${last}</td>
       <td>${state}</td>
     </tr>`;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="4" class="muted">No watches.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="8" class="muted">No watches.</td></tr>`;
 }
 
 function renderNotifiers(notifiers) {
