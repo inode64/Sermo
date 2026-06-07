@@ -191,6 +191,28 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}
 		return processCheck{base: b, exe: exe, user: user, expect: expect, observe: deps.Processes}, ""
 
+	case "count":
+		path := asString(entry["path"])
+		if path == "" {
+			return nil, "count check requires a path"
+		}
+		kind := asString(entry["of"])
+		if kind == "" {
+			kind = countAny
+		}
+		if !validCountKind(kind) {
+			return nil, "count check `of` must be file, dir, symlink or any"
+		}
+		op := asString(entry["op"])
+		if !validDiskOp(op) {
+			return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
+		}
+		val, err := strconv.ParseFloat(scalarString(entry["value"]), 64)
+		if err != nil {
+			return nil, "count check value must be numeric"
+		}
+		return countCheck{base: b, path: path, kind: kind, recursive: asBool(entry["recursive"]), op: op, value: val}, ""
+
 	case "disk":
 		path := asString(entry["path"])
 		if path == "" {

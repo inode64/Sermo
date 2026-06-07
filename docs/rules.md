@@ -16,8 +16,36 @@ which reuse the same schema). MVP types:
 | `libraries`   | `ldd <binary>` resolves all shared libraries                       |
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
+| `count`       | the number of entries in a directory satisfies `op value` (see Count)|
 
 Each check has an optional `timeout` (else `engine.default_timeout`).
+
+### Count
+
+A `count` check tallies the entries in a directory and compares the total to a
+threshold. Like `metric`, it is condition-style: it passes (so `active`/`failed`
+on it is true) when `op value` holds — useful for "too many queued files",
+"backlog not draining", "spool directory empty", etc.
+
+```yaml
+checks:
+  spool-backlog:
+    type: count
+    path: /var/spool/myapp        # required: directory to scan
+    of: file                      # any (default) | file | dir | symlink
+    recursive: false              # optional, default false
+    op: ">"                       # >=, >, <=, <, ==, !=
+    value: 1000                   # numeric threshold
+```
+
+- **`of`** selects which entries are counted. Entries are classified by their own
+  type without following symlinks, so a symlink counts as `symlink` (never as the
+  file or directory it points to); `any` counts every entry.
+- **`recursive: true`** descends the whole subtree (the directory itself is never
+  counted); unreadable subdirectories are skipped. Default counts only the
+  immediate entries.
+- A missing or unreadable `path` makes the check fail. The observed total is
+  exposed in the check's result data as `count`.
 
 ## Metrics
 

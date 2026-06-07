@@ -332,6 +332,38 @@ preflight:
 	mustHave(t, issues, "must not point under the runtime lock dir")
 }
 
+func TestValidateCountCheck(t *testing.T) {
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-path: { type: count, op: ">", value: 1 }
+  bad-kind: { type: count, path: /var/log, of: pipe, op: ">", value: 1 }
+  bad-op:   { type: count, path: /var/log, op: "=>", value: 1 }
+  bad-val:  { type: count, path: /var/log, op: ">", value: lots }
+  bad-rec:  { type: count, path: /var/log, recursive: "yes", op: ">", value: 1 }
+`)
+	mustHave(t, bad, "count check requires a path")
+	mustHave(t, bad, `count `+"`of`"+` "pipe" is not one of`)
+	mustHave(t, bad, "count check requires a valid op")
+	mustHave(t, bad, `count check value "lots" must be numeric`)
+	mustHave(t, bad, "count recursive must be a boolean")
+
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  tmp-files: { type: count, path: /tmp, of: file, recursive: true, op: "<=", value: 100 }
+`)
+	if hasIssue(good, "count") {
+		t.Fatalf("valid count check flagged: %v", good)
+	}
+}
+
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service

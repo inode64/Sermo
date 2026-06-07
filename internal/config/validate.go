@@ -504,7 +504,8 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 // ---- section 30: checks, stop_policy, policy, aliases, rules ----
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
-var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries")
+var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count")
+var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
 var validActions = set("restart", "start", "stop", "alert", "block")
@@ -588,7 +589,33 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			}
 		case "metric":
 			validateMetric(entry, path, true, add)
+		case "count":
+			validateCount(entry, path, add)
 		}
+	}
+}
+
+// validateCount checks a count entry: a path, an optional `of` kind, an optional
+// boolean `recursive`, and a required numeric threshold (op + value).
+func validateCount(entry map[string]any, path string, add addFunc) {
+	if scalarString(entry["path"]) == "" {
+		add("%s count check requires a path", path)
+	}
+	if of := scalarString(entry["of"]); of != "" {
+		if _, ok := countKinds[of]; !ok {
+			add("%s count `of` %q is not one of any, file, dir, symlink", path, of)
+		}
+	}
+	if v, present := entry["recursive"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s count recursive must be a boolean", path)
+		}
+	}
+	if op := scalarString(entry["op"]); !isValidDiskOp(op) {
+		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
+	}
+	if !isNumeric(scalarString(entry["value"])) {
+		add("%s count check value %q must be numeric", path, scalarString(entry["value"]))
 	}
 }
 
