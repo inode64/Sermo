@@ -852,11 +852,42 @@ checks:
     url: "http://${host}:${port}/health"
 ```
 
-- Variables are flat literal strings; a value must not itself contain `${...}`.
+- Variables are flat literal strings; a value must not itself contain another
+  `${var}` (but `${env:...}` is allowed — see below).
 - Expansion is a single pass: any `${...}` left afterward is an undefined
   variable and a validation error.
 - Numeric fields (`port`, `expect_status`) accept an int, a quoted string, or a
   `${var}`, and are parsed after expansion.
+
+### Secrets from the environment
+
+`${env:NAME}` resolves to the environment variable `NAME` **anywhere** in the
+config — service fields *and* the global blocks (notifier DSNs/webhooks, the web
+password, …) — so secrets are never written in the file:
+
+```yaml
+checks:
+  api:
+    type: http
+    url: "https://api.example.com/health"
+    headers:
+      Authorization: "Bearer ${env:API_TOKEN}"   # read from the daemon's env
+
+notifiers:
+  ops:
+    type: email
+    dsn: "${env:SMTP_DSN}"
+```
+
+- A shell-style default is supported: `${env:NAME:-fallback}` uses `fallback` when
+  `NAME` is unset or empty.
+- An unset variable expands to its default (or empty) and is **never** a
+  validation error — but if it feeds a required field (a notifier `dsn`, the web
+  `password`), that field then reads as missing. Run `config validate` with the
+  same environment as the daemon (e.g. systemd's `EnvironmentFile`) to check the
+  secrets resolve.
+- Unlike `${var}`, `${env:...}` is resolved separately, so it also works in the
+  global config (which has no `variables` section) and inside a variable's value.
 
 ## Validating
 
