@@ -44,6 +44,67 @@ func TestValidateWatchesGood(t *testing.T) {
 	}
 }
 
+func TestValidateFileWatchGood(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"app-data": map[string]any{
+				"check": map[string]any{
+					"type":        "file",
+					"path":        "/var/lib/app",
+					"recursive":   true,
+					"size":        map[string]any{"op": ">", "value": 1048576},
+					"permissions": map[string]any{"on": "change"},
+					"owner":       map[string]any{"on": "change"},
+					"existence":   map[string]any{"on": "delete"},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/file.sh"}}},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
+func TestValidateFileWatchErrors(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-cond": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"bad-size": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x", "size": map[string]any{"op": "><", "value": "big"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"bad-perm": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x", "permissions": map[string]any{"on": "touch"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"bad-exist": map[string]any{
+				"check": map[string]any{"type": "file", "path": "/x", "existence": map[string]any{"on": "create"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+			"no-path": map[string]any{
+				"check": map[string]any{"type": "file", "size": map[string]any{"on": "change"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+			},
+		},
+	})
+	want := []string{
+		"watches.no-cond.check requires at least one of size, permissions, owner, existence",
+		"watches.bad-size.check.size requires on: change or {op, value}",
+		"watches.bad-perm.check.permissions requires on: change",
+		"watches.bad-exist.check.existence requires on: delete",
+		"watches.no-path.check.path is required for a file check",
+	}
+	for _, w := range want {
+		if !hasIssue(issues, w) {
+			t.Fatalf("missing issue %q in %v", w, issues)
+		}
+	}
+}
+
 func TestValidateWatchesGoodForWindow(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
@@ -61,11 +122,11 @@ func TestValidateWatchesGoodForWindow(t *testing.T) {
 
 func TestValidateWatchesBad(t *testing.T) {
 	cases := map[string]map[string]any{
-		"unknown type": {"check": map[string]any{"type": "bogus"}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"disk no path": {"check": map[string]any{"type": "disk", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"bad op":       {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"empty cmd":    {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
-		"for cycles 0": {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 0}},
+		"unknown type":     {"check": map[string]any{"type": "bogus"}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+		"disk no path":     {"check": map[string]any{"type": "disk", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+		"bad op":           {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+		"empty cmd":        {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
+		"for cycles 0":     {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 0}},
 		"within cycles -1": {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": -1}},
 	}
 	for name, w := range cases {
