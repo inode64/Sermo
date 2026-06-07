@@ -74,6 +74,55 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	}
 }
 
+func TestParseArgsVerbose(t *testing.T) {
+	for _, flag := range []string{"--verbose", "-v"} {
+		cmd, path, verbose, err := parseArgs([]string{"run", flag, "--config", "/etc/sermo/sermo.yml"})
+		if err != nil {
+			t.Fatalf("parseArgs(%q): %v", flag, err)
+		}
+		if cmd != "run" || path != "/etc/sermo/sermo.yml" || !verbose {
+			t.Fatalf("parseArgs(%q) = (%q, %q, %v), want (run, /etc/sermo/sermo.yml, true)", flag, cmd, path, verbose)
+		}
+	}
+
+	// Verbose defaults off.
+	if _, _, verbose, err := parseArgs([]string{"run"}); err != nil || verbose {
+		t.Fatalf("parseArgs(run) verbose = %v, err = %v; want false, nil", verbose, err)
+	}
+}
+
+func TestWebListenAddr(t *testing.T) {
+	cases := []struct {
+		name       string
+		web        any
+		wantAddr   string
+		wantReason bool // expect a non-empty disabled reason
+	}{
+		{"no web section", nil, "", true},
+		{"port missing", map[string]any{}, "", true},
+		{"port zero", map[string]any{"port": 0}, "", true},
+		{"port not a number", map[string]any{"port": "8080"}, "", true},
+		{"default address", map[string]any{"port": 8080}, "127.0.0.1:8080", false},
+		{"explicit address", map[string]any{"port": 9000, "address": "0.0.0.0"}, "0.0.0.0:9000", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := map[string]any{}
+			if tc.web != nil {
+				raw["web"] = tc.web
+			}
+			cfg := &config.Config{Global: config.Global{Raw: raw}}
+			addr, reason := webListenAddr(cfg)
+			if addr != tc.wantAddr {
+				t.Fatalf("addr = %q, want %q", addr, tc.wantAddr)
+			}
+			if (reason != "") != tc.wantReason {
+				t.Fatalf("reason = %q, wantReason = %v", reason, tc.wantReason)
+			}
+		})
+	}
+}
+
 func repoConfigPath(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
