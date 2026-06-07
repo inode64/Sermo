@@ -128,6 +128,23 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	}
 }
 
+func TestBlockedOperationEmitsSuppressedEvent(t *testing.T) {
+	h := &workerHarness{
+		cache:    failedCache("http"),
+		opResult: operation.Result{Status: operation.ResultBlocked, Message: "lock held"},
+	}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if e, ok := h.eventOf("suppressed"); !ok || e.Action != "restart" || e.Status != "blocked" {
+		t.Fatalf("blocked remediation event = %+v, want kind=suppressed status=blocked", h.events)
+	}
+	if _, ok := h.eventOf("action"); ok {
+		t.Fatalf("blocked operation must not emit kind=action: %+v", h.events)
+	}
+}
+
 func TestBlockedOperationDoesNotRecordCooldown(t *testing.T) {
 	h := &workerHarness{
 		cache:    failedCache("http"),
