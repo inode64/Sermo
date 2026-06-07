@@ -412,6 +412,37 @@ disk operator set; declare at least one. An fds hook receives `SERMO_WATCH`,
 `SERMO_MESSAGE`, plus `SERMO_ALLOCATED`, `SERMO_MAX`, `SERMO_USED_PCT` and
 `SERMO_FREE`.
 
+### `conntrack` — netfilter connection table
+
+A `conntrack` watch checks the netfilter connection-tracking table against its
+maximum (`nf_conntrack_max`), read from `/proc/sys/net/netfilter`. Like `disk` it
+is a level check with one hook. A full table silently **drops new connections**
+(and logs `nf_conntrack: table full, dropping packet`), so it is worth catching
+on busy gateways, proxies and NAT boxes before it saturates.
+
+```yaml
+watches:
+  conntrack:
+    enabled: false
+    interval: 30s
+    check:
+      type: conntrack
+      used_pct: { op: ">=", value: 90 }    # count / nf_conntrack_max
+      # free: { op: "<", value: 20000 }    # absolute headroom, alternatively
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-conntrack-alert.sh]
+```
+
+Predicates are `used_pct` (count as a percent of the max), `free`
+(`nf_conntrack_max − count`) and `count` (absolute), each `{op, value}` with the
+disk operator set; declare at least one. It needs the `nf_conntrack` module
+loaded; on a host without it the check simply never fires. A conntrack hook
+receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`conntrack`), `SERMO_VALUE` (the first
+predicate's reading), `SERMO_MESSAGE`, plus `SERMO_COUNT`, `SERMO_MAX`,
+`SERMO_USED_PCT` and `SERMO_FREE`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,
