@@ -175,6 +175,70 @@ func TestValidateProcessWatchErrors(t *testing.T) {
 	}
 }
 
+func TestValidateSwapWatchGood(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"swap": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"usage": map[string]any{
+						"used_pct": map[string]any{"op": ">=", "value": 80},
+						"free_pct": map[string]any{"op": "<", "value": 10},
+						"then":     map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+					"io": map[string]any{
+						"delta": map[string]any{"op": ">", "value": 1000},
+						"then":  map[string]any{"hook": map[string]any{"command": []any{"/y"}}},
+					},
+				},
+			},
+		},
+	})
+	if w := watchIssues(issues); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+}
+
+func TestValidateSwapWatchErrors(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-metrics": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"empty-usage": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"usage": map[string]any{"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+				},
+			},
+			"bad-io": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"io": map[string]any{"delta": map[string]any{"op": "=>", "value": "lots"}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+				},
+			},
+			"bad-metric": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"bogus": map[string]any{"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+				},
+			},
+		},
+	})
+	want := []string{
+		"watches.no-metrics.metrics is required and must be non-empty for a swap check",
+		"watches.empty-usage.metrics.usage requires at least one of used_pct/free_pct/free_bytes",
+		"watches.bad-io.metrics.io.delta has an invalid op",
+		"watches.bad-metric.metrics.bogus is not a supported swap metric (usage, io)",
+	}
+	for _, w := range want {
+		if !hasIssue(issues, w) {
+			t.Fatalf("missing issue %q in %v", w, issues)
+		}
+	}
+}
+
 func TestValidateWatchesGoodForWindow(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

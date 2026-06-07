@@ -44,7 +44,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 		}
 
 		switch stringField(checkEntry["type"]) {
-		case "net", "icmp":
+		case "net", "icmp", "swap":
 			expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 			watches = append(watches, expanded...)
 			warnings = append(warnings, warns...)
