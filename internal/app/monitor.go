@@ -101,10 +101,10 @@ func (m *Monitor) Reload() {
 
 	workers, warnings := BuildWorkers(newCfg, m.deps, m.collector)
 	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
-	if len(workers) == 0 && len(watches) == 0 {
+	if len(workers) == 0 && len(watches) == 0 && !HasConfiguredTargets(newCfg) {
 		m.cfg = prevCfg
 		m.deps = prevDeps
-		m.emitReloadError("no enabled services or watches")
+		m.emitReloadError("no services or watches configured")
 		return
 	}
 

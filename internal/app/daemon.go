@@ -565,6 +565,18 @@ func serviceNames(cfg *config.Config) []string {
 	return names
 }
 
+// HasConfiguredTargets reports whether the config declares any services or
+// watches at all, regardless of whether they are enabled. The daemon uses this
+// to distinguish "everything is disabled" (still worth starting, so the fleet
+// can be enabled later via reload or the web UI) from "nothing is configured".
+func HasConfiguredTargets(cfg *config.Config) bool {
+	if len(cfg.Services) > 0 {
+		return true
+	}
+	raw, ok := cfg.Global.Raw["watches"].(map[string]any)
+	return ok && len(raw) > 0
+}
+
 func isDisabled(body map[string]any) bool {
 	v, ok := body["enabled"]
 	if !ok {
