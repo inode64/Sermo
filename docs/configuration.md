@@ -88,9 +88,21 @@ generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down. Service
 CPU metric history is reset only for services removed from the config.
 
+You can trigger a reload with any of:
+
 ```sh
+sermoctl reload
+# or (when the web UI is enabled)
+#   - click "reload config" in the dashboard (admin only)
+#   - POST /api/reload with X-Sermo-CSRF:1 (admin)
 kill -HUP "$(pidof sermod)"
+systemctl reload sermod     # uses ExecReload in the unit
+rc-service sermod reload
 ```
+
+The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
+at startup to make `sermoctl reload` reliable (it also checks the legacy
+`/run/sermod.pid` used by the OpenRC packaging).
 
 ### Per-service interval
 

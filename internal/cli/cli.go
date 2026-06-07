@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"sermo/internal/app"
@@ -184,6 +187,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runSLA(opts)
 	case "diagnose":
 		return a.runDiagnose(opts)
+	case "reload":
+		return a.runReload(ctx, opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -942,6 +947,80 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 	return out
 }
 
+// runReload asks the running sermod to reload its configuration (SIGHUP
+// equivalent). It prefers a pidfile written by the daemon under the configured
+// runtime dir (or the legacy OpenRC location). If no pidfile is found it falls
+// back to pidof/pgrep discovery. This works whether or not the web UI is enabled.
+func (a App) runReload(ctx context.Context, opts options) int {
+	globalPath := opts.config
+	if globalPath == "" {
+		globalPath = config.DefaultGlobalPath
+	}
+	cfg, err := a.LoadConfig(globalPath)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
+		return exitRuntimeError
+	}
+
+	runtimeDir := cfg.Global.RuntimeDir()
+	if runtimeDir == "" {
+		runtimeDir = "/run/sermo"
+	}
+
+	candidates := []string{
+		filepath.Join(runtimeDir, "sermod.pid"),
+		"/run/sermo/sermod.pid",
+		"/run/sermod.pid", // legacy from OpenRC packaging
+	}
+
+	var pid int
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if n, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && n > 0 {
+			pid = n
+			break
+		}
+	}
+
+	if pid == 0 {
+		// Fallback: ask the system for a sermod pid (best effort, one pid).
+		// We try pidof first (common on systemd systems), then pgrep.
+		for _, probe := range [][]string{
+			{"pidof", "-s", "sermod"},
+			{"pgrep", "-x", "-n", "sermod"},
+		} {
+			out, err := exec.Command(probe[0], probe[1:]...).Output()
+			if err == nil {
+				if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n > 0 {
+					pid = n
+					break
+				}
+			}
+		}
+	}
+
+	if pid <= 0 {
+		a.reportError(opts, "could not find running sermod pid (no pidfile and pidof/pgrep failed)")
+		return exitRuntimeError
+	}
+
+	// Send SIGHUP. On Linux this is reliable for the daemon's signal handler.
+	if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
+		a.reportError(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
+		return exitRuntimeError
+	}
+
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{"ok": true, "pid": pid})
+	} else {
+		fmt.Fprintf(a.Stdout, "reload signal (HUP) sent to sermod pid %d\n", pid)
+	}
+	return exitSuccess
+}
+
 func parseArgs(args []string) (options, error) {
 	opts := options{backend: ""}
 	for i := 0; i < len(args); i++ {
@@ -1060,7 +1139,7 @@ func parseArgs(args []string) (options, error) {
 
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
+	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE | reload")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
