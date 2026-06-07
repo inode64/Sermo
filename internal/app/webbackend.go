@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/diag"
 	"sermo/internal/locks"
 	"sermo/internal/operation"
 	"sermo/internal/process"
@@ -74,14 +75,18 @@ type WebBackend struct {
 	snapshots *Snapshots
 	sla       SLAReader
 	events    *EventLog
+	cfg       *config.Config
+	diagStore diag.Store
+	host      diag.Host
 }
 
 // NewWebBackend resolves every enabled service once and wires its status, engine
 // and metadata for the web UI. Services that fail to resolve are skipped with a
 // warning (like BuildWorkers).
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
-	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events}
+	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events, cfg: cfg, host: diag.OSHost{}}
 	wb.sla, _ = deps.SLA.(SLAReader)
+	wb.diagStore, _ = deps.Monitor.(diag.Store)
 	var warnings []string
 	resolver := servicemgr.NewUnitResolver()
 
@@ -228,6 +233,15 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 		out = append(out, sp)
 	}
 	return out, true
+}
+
+func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
+	r := diag.Diagnose(b.cfg, b.diagStore, b.host)
+	out := make([]web.Finding, 0, len(r.Findings))
+	for _, f := range r.Findings {
+		out = append(out, web.Finding{Level: string(f.Level), Scope: f.Scope, Message: f.Message})
+	}
+	return out
 }
 
 func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {

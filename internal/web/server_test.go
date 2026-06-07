@@ -55,6 +55,9 @@ func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) (
 	}
 	return nil, false
 }
+func (f *fakeBackend) Diagnostics(context.Context) []Finding {
+	return []Finding{{Level: "warning", Scope: "database", Message: `stored data for service "ghost"`}}
+}
 func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
 	f.operated = append(f.operated, name+"/"+action)
 	if f.failOp {
@@ -229,6 +232,21 @@ func TestServiceEvents(t *testing.T) {
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/events", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service events = %d, want 404", rec.Code)
+	}
+}
+
+func TestDiagnostics(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/diagnostics", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("diagnostics status %d", rec.Code)
+	}
+	var got []Finding
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Level != "warning" || got[0].Scope != "database" {
+		t.Fatalf("unexpected findings: %+v", got)
 	}
 }
 
