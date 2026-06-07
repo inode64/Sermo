@@ -119,11 +119,17 @@ func run(args []string) int {
 		SystemFreshness: interval / 2,
 	}
 
-	// Bound the SLA table to roughly a year of per-minute samples per service.
-	if n, err := store.PruneSLA(time.Now().Add(-366 * 24 * time.Hour)); err != nil {
+	// Bound the SLA and measurement tables to roughly a year of per-minute data.
+	cutoff := time.Now().Add(-366 * 24 * time.Hour)
+	if n, err := store.PruneSLA(cutoff); err != nil {
 		logger.Warn("prune sla samples", "error", err)
 	} else if n > 0 {
 		logger.Info("pruned old sla samples", "rows", n)
+	}
+	if n, err := store.PruneMeasurements(cutoff); err != nil {
+		logger.Warn("prune measurements", "error", err)
+	} else if n > 0 {
+		logger.Info("pruned old measurements", "rows", n)
 	}
 
 	workers, warnings := app.BuildWorkers(cfg, deps)

@@ -209,7 +209,9 @@ monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, and its SLA over the rolling windows),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
 for the window; `since` is a duration, default 24h, capped at the ~1-year
-retention), `GET /api/events?limit=N` (the **global event feed**, newest first),
+retention),
+`GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
+history + summary, see below), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings),
 `GET /livez` (liveness, see below), and
@@ -247,6 +249,20 @@ run yet". The SLA windows and the history chart come from the same data as
 `sermoctl sla` — the chart bins the per-minute samples into columns (green ≥99%,
 amber ≥95%, red below) with a selectable window (24h/7d/30d) and gaps where the
 service was unmonitored.
+
+### Latency graph
+
+For each `tcp`, `ports`, `http` and `service` check, the daemon records the
+check's **latency** (milliseconds) every observed cycle — the same idea as the
+`icmp` latency metric — and the service detail draws a **latency graph** for the
+selected check. A window selector covers the **last hour, day, week, month and
+year**, and for the chosen period the panel shows the **average, minimum and
+maximum** plus a line (average over time) with a min–max band. The data is at
+`GET /api/services/{name}/metrics?check=NAME&since=DURATION` as `{summary:{count,
+avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Measurements are kept
+per minute for roughly a year (pruned like the SLA samples); a check that only
+runs every N cycles ([per-check interval](#per-check-interval)) records a sample
+only when it actually runs, so the average is not skewed.
 
 Web-triggered monitor changes are recorded with source `web` in the state store,
 and operations take the per-service operation lock, so they never overlap a

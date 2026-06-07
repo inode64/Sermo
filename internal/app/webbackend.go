@@ -78,6 +78,7 @@ type WebBackend struct {
 	cfg       *config.Config
 	diagStore diag.Store
 	host      diag.Host
+	measure   MeasurementReader
 }
 
 // NewWebBackend resolves every enabled service once and wires its status, engine
@@ -86,6 +87,7 @@ type WebBackend struct {
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots, events: deps.Events, cfg: cfg, host: diag.OSHost{}}
 	wb.sla, _ = deps.SLA.(SLAReader)
+	wb.measure, _ = deps.SLA.(MeasurementReader)
 	wb.diagStore, _ = deps.Monitor.(diag.Store)
 	var warnings []string
 	resolver := servicemgr.NewUnitResolver()
@@ -242,6 +244,30 @@ func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 		out = append(out, web.Finding{Level: string(f.Level), Scope: f.Scope, Message: f.Message})
 	}
 	return out
+}
+
+func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {
+	if _, ok := b.entries[name]; !ok {
+		return web.MetricSeries{}, false
+	}
+	out := web.MetricSeries{Check: check, Since: since.String(), Unit: "ms"}
+	if b.measure == nil {
+		return out, true
+	}
+	now := time.Now()
+	if stat, err := b.measure.MeasurementSummary(name, check, since, now); err == nil {
+		out.Summary = web.MetricSummary{Count: stat.Count, Avg: stat.Avg, Min: stat.Min, Max: stat.Max}
+	}
+	points, err := b.measure.MeasurementSeries(name, check, now.Add(-since), now)
+	if err == nil {
+		out.Points = make([]web.MetricPoint, 0, len(points))
+		for _, p := range points {
+			out.Points = append(out.Points, web.MetricPoint{
+				Start: p.Start.Format(time.RFC3339), N: p.N, Avg: p.Avg, Min: p.Min, Max: p.Max,
+			})
+		}
+	}
+	return out, true
 }
 
 func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {

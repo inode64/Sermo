@@ -41,6 +41,23 @@ type SLAReader interface {
 	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
 }
 
+// MeasurementRecorder persists one numeric per-check observation (latency, ms) per
+// observed cycle, for the latency graph. Implemented by internal/state.Store.
+type MeasurementRecorder interface {
+	RecordMeasurement(service, check string, valueMs float64, at time.Time) error
+}
+
+// MeasurementReader reads a check's measurement summary and history for the web.
+// Implemented by internal/state.Store.
+type MeasurementReader interface {
+	MeasurementSummary(service, check string, span time.Duration, now time.Time) (state.MeasurementStat, error)
+	MeasurementSeries(service, check string, from, to time.Time) ([]state.MeasurementPoint, error)
+}
+
+// measuredCheckTypes are the check types whose latency is recorded as a time
+// series (and graphed in the web), mirroring icmp's latency metric.
+var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": true, "service": true}
+
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
 	Backend        servicemgr.Backend
@@ -143,6 +160,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 
 	cycle := 0
 	cache := map[string]checks.Result{}
+	recordMeasurement := measurementRecorder(deps, name, tree)
 
 	worker := &Worker{
 		Service:   name,
@@ -158,6 +176,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 			built, _ := checks.Build(section, d)
 			for _, r := range checks.Run(ctx, dueChecks(cycle, built, every), maxParallel) {
 				cache[r.Check] = r
+				if recordMeasurement != nil {
+					recordMeasurement(r)
+				}
 			}
 			return cache
 		},
@@ -248,6 +269,49 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// measurementRecorder returns a hook that records a freshly-run check's latency
+// (ms) for tcp/ports/http/service checks, or nil when no measurement store is
+// wired or the service has no measured checks. Called only for checks that
+// actually ran this cycle (respecting per-check intervals), on observed cycles.
+func measurementRecorder(deps Deps, name string, tree map[string]any) func(checks.Result) {
+	store, ok := deps.SLA.(MeasurementRecorder)
+	if !ok || store == nil {
+		return nil
+	}
+	measured := measuredCheckNames(tree)
+	if len(measured) == 0 {
+		return nil
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+	return func(r checks.Result) {
+		if !measured[r.Check] {
+			return
+		}
+		ms := float64(r.Latency) / float64(time.Millisecond)
+		if err := store.RecordMeasurement(name, r.Check, ms, now()); err != nil && deps.Emit != nil {
+			deps.Emit(Event{Service: name, Kind: "error", Message: "record measurement: " + err.Error()})
+		}
+	}
+}
+
+// measuredCheckNames returns the names of a service's checks whose type is graphed
+// (measuredCheckTypes).
+func measuredCheckNames(tree map[string]any) map[string]bool {
+	section, _ := tree["checks"].(map[string]any)
+	out := map[string]bool{}
+	for cn, raw := range section {
+		if m, ok := raw.(map[string]any); ok {
+			if t, _ := m["type"].(string); measuredCheckTypes[t] {
+				out[cn] = true
+			}
+		}
+	}
+	return out
 }
 
 // healthRecorder returns the worker's per-cycle SLA recording hook, or nil when

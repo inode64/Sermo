@@ -53,6 +53,20 @@ var migrations = []string{
 		total_count INTEGER NOT NULL,
 		PRIMARY KEY (service, bucket)
 	);`,
+	// measurement accumulates a numeric per-check observation (currently the check
+	// latency in milliseconds for tcp/ports/http/service checks) into one row per
+	// service+check per UTC minute: n samples whose sum/min/max let any rolling
+	// window report an average, minimum and maximum.
+	`CREATE TABLE measurement (
+		service    TEXT NOT NULL,
+		check_name TEXT NOT NULL,
+		bucket     INTEGER NOT NULL,
+		n          INTEGER NOT NULL,
+		sum_ms     REAL NOT NULL,
+		min_ms     REAL NOT NULL,
+		max_ms     REAL NOT NULL,
+		PRIMARY KEY (service, check_name, bucket)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -279,6 +293,104 @@ func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
 		out = append(out, SLAValue{Window: w.Name, Up: up, Total: total})
 	}
 	return out, nil
+}
+
+// MeasurementPoint is one time bucket of a check's measurement series: the sample
+// count and the average/minimum/maximum value (milliseconds) in that UTC minute.
+type MeasurementPoint struct {
+	Start time.Time `json:"start"`
+	N     int64     `json:"n"`
+	Avg   float64   `json:"avg"`
+	Min   float64   `json:"min"`
+	Max   float64   `json:"max"`
+}
+
+// MeasurementStat summarizes a check's measurements over a window: the sample
+// count and the average/minimum/maximum (milliseconds). Count==0 means no data.
+type MeasurementStat struct {
+	Count int64   `json:"count"`
+	Avg   float64 `json:"avg"`
+	Min   float64 `json:"min"`
+	Max   float64 `json:"max"`
+}
+
+// RecordMeasurement accumulates one numeric observation (milliseconds) for a
+// service+check into its current UTC-minute bucket: n+1, sum+value, and the
+// running min/max.
+func (s *Store) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO measurement (service, check_name, bucket, n, sum_ms, min_ms, max_ms)
+		 VALUES (?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
+		   n      = n + 1,
+		   sum_ms = sum_ms + excluded.sum_ms,
+		   min_ms = min(min_ms, excluded.min_ms),
+		   max_ms = max(max_ms, excluded.max_ms);`,
+		service, check, minuteBucket(at), valueMs, valueMs, valueMs,
+	)
+	return err
+}
+
+// MeasurementSummary returns the average/min/max and sample count for a check over
+// the rolling window ending at now (buckets with start >= now-span).
+func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	var count sql.NullInt64
+	var sum, min, max sql.NullFloat64
+	err := s.db.QueryRow(
+		`SELECT COALESCE(SUM(n),0), SUM(sum_ms), MIN(min_ms), MAX(max_ms)
+		   FROM measurement WHERE service = ? AND check_name = ? AND bucket >= ?;`,
+		service, check, minuteBucket(now.Add(-span)),
+	).Scan(&count, &sum, &min, &max)
+	if err != nil {
+		return MeasurementStat{}, err
+	}
+	stat := MeasurementStat{Count: count.Int64}
+	if count.Int64 > 0 && sum.Valid {
+		stat.Avg = sum.Float64 / float64(count.Int64)
+		stat.Min = min.Float64
+		stat.Max = max.Float64
+	}
+	return stat, nil
+}
+
+// MeasurementSeries returns a check's per-minute points in [from, to), oldest
+// first. Minutes with no observation are absent (gaps), as in SLASeries.
+func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]MeasurementPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT bucket, n, sum_ms, min_ms, max_ms
+		   FROM measurement
+		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+		service, check, minuteBucket(from), minuteBucket(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MeasurementPoint
+	for rows.Next() {
+		var bucket, n int64
+		var sum, min, max float64
+		if err := rows.Scan(&bucket, &n, &sum, &min, &max); err != nil {
+			return nil, err
+		}
+		avg := 0.0
+		if n > 0 {
+			avg = sum / float64(n)
+		}
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: min, Max: max})
+	}
+	return out, rows.Err()
+}
+
+// PruneMeasurements deletes measurement buckets older than before. Returns rows removed.
+func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM measurement WHERE bucket < ?;`, minuteBucket(before))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when
