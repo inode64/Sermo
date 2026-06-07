@@ -514,10 +514,12 @@ checks:
   no-url: { type: http, method: POST }
   bad-headers: { type: http, url: "http://x", headers: "nope" }
   bad-json: { type: http, url: "http://x", expect_json: "nope" }
+  bad-op: { type: http, url: "http://x", expect_json: { n: { op: "=>", value: 1 } } }
 `)
 	mustHave(t, bad, "checks.no-url.url is required for an http check")
 	mustHave(t, bad, "checks.bad-headers.headers must be a mapping")
 	mustHave(t, bad, "checks.bad-json.expect_json must be a mapping")
+	mustHave(t, bad, "checks.bad-op.expect_json.n op \"=>\" is not one of")
 }
 
 func TestValidatePolicyMaxActions(t *testing.T) {

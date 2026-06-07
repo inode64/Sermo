@@ -533,17 +533,38 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.body must be a string", prefix)
 		}
 	}
-	for _, key := range []string{"headers", "expect_json"} {
-		if v, present := fields[key]; present {
-			if _, ok := v.(map[string]any); !ok {
-				add("%s.%s must be a mapping", prefix, key)
-			}
+	if v, present := fields["headers"]; present {
+		if _, ok := v.(map[string]any); !ok {
+			add("%s.headers must be a mapping", prefix)
 		}
 	}
 	if v, present := fields["expect_body"]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.expect_body must be a string", prefix)
 		}
+	}
+	if v, present := fields["expect_json"]; present {
+		m, ok := v.(map[string]any)
+		if !ok {
+			add("%s.expect_json must be a mapping", prefix)
+		} else {
+			for _, path := range sortedKeys(m) {
+				if cond, ok := m[path].(map[string]any); ok {
+					if op := scalarString(cond["op"]); op != "" && !validJSONOp(op) {
+						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains", prefix, path, op)
+					}
+				}
+			}
+		}
+	}
+}
+
+func validJSONOp(op string) bool {
+	switch op {
+	case "==", "!=", ">", ">=", "<", "<=", "contains":
+		return true
+	default:
+		return false
 	}
 }
 
