@@ -222,11 +222,13 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 
 // publishSnapshots returns the worker's per-cycle check-cache publisher, or nil
 // when no snapshot registry is wired.
-func publishSnapshots(s *Snapshots, name string) func(map[string]checks.Result) {
+func publishSnapshots(s *Snapshots, name string) func(map[string]checks.Result, map[string]bool) {
 	if s == nil {
 		return nil
 	}
-	return func(cache map[string]checks.Result) { s.Publish(name, cache) }
+	return func(cache map[string]checks.Result, ran map[string]bool) {
+		s.Publish(name, cache, ran)
+	}
 }
 
 // checkIntervals computes, per check in the `checks` section that sets an
