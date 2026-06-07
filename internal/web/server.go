@@ -65,11 +65,23 @@ type SLAWindow struct {
 	Total  int64    `json:"total"`
 }
 
+// Lock is a named runtime lock for one service (parity with `sermoctl locks`).
+type Lock struct {
+	Name        string `json:"name,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	State       string `json:"state"` // active | expired | stale
+	OwnerPID    int    `json:"owner_pid"`
+	StaleReason string `json:"stale_reason,omitempty"`
+	CreatedAt   string `json:"created_at,omitempty"` // RFC3339
+	ExpiresAt   string `json:"expires_at,omitempty"` // RFC3339
+}
+
 // Detail is a single service's view: its summary plus its checks and SLA.
 type Detail struct {
 	Service
 	Checks []Check     `json:"checks"`
 	SLA    []SLAWindow `json:"sla"`
+	Locks  []Lock      `json:"locks,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
