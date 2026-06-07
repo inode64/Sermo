@@ -118,25 +118,29 @@ type Backend interface {
 var operateActions = map[string]bool{"start": true, "stop": true, "restart": true}
 var monitorActions = map[string]bool{"monitor": true, "unmonitor": true}
 
-// Server is the HTTP dashboard. Addr is a host:port; Backend is required.
+// Server is the HTTP dashboard. Addr is a host:port; Backend is required. Auth is
+// optional (zero value = open).
 type Server struct {
 	Addr    string
 	Backend Backend
+	Auth    Auth
 	Logger  *slog.Logger
 }
 
-// Handler returns the router: the dashboard at /, the service list at
-// /api/services, and POST /api/services/{name}/{action} for actions.
+// Handler returns the router behind the auth middleware: the dashboard at /, the
+// service list at /api/services, and POST /api/services/{name}/{action} for
+// actions.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleIndex)
+	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
-	return mux
+	return s.withAuth(mux)
 }
 
 // eventLimit reads the `limit` query param, defaulting and capping it.
