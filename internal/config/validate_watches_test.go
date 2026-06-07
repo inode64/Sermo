@@ -396,29 +396,30 @@ func TestValidateEntropyWatch(t *testing.T) {
 	}
 }
 
-func TestValidateMountWatch(t *testing.T) {
+func TestValidateDiskMountWatch(t *testing.T) {
+	// A disk watch can carry mount conditions (mount + space in one entry).
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"data-mount": map[string]any{
-				"check": map[string]any{"type": "mount", "path": "/data", "fstype": "ext4"},
+				"check": map[string]any{"type": "disk", "path": "/data", "mounted": true, "fstype": "ext4"},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
 	})
 	if w := watchIssues(good); len(w) != 0 {
-		t.Fatalf("a mount watch should be valid, got %v", w)
+		t.Fatalf("a disk+mount watch should be valid, got %v", w)
 	}
 
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"m": map[string]any{
-				"check": map[string]any{"type": "mount"},
+				"check": map[string]any{"type": "disk", "path": "/data"}, // no predicate, no mount condition
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.m.check.path is required for a mount check") {
-		t.Fatalf("expected missing-path issue, got %v", bad)
+	if !hasIssue(bad, "watches.m.check requires a space/inode predicate") {
+		t.Fatalf("expected combined-requirement issue, got %v", bad)
 	}
 }
 

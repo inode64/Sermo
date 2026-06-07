@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -36,17 +37,53 @@ type diskPred struct {
 	value float64
 }
 
-// diskCheck passes (OK=true) when every predicate is satisfied, i.e. the
-// threshold is crossed (section 12, mirrors metricCheck).
+// diskCheck verifies a filesystem at path: optionally that it is mounted as
+// expected (mount conditions), and that its space/inode predicates hold. OK=true
+// means an alert condition: a mount problem OR a crossed threshold. Folding mount
+// in here means a filesystem's mount and space are configured once, and a space
+// check is never fooled by an unmounted path reading the parent filesystem.
 type diskCheck struct {
 	base
-	path  string
-	preds []diskPred
-	usage DiskUsageFunc
+	path         string
+	preds        []diskPred
+	usage        DiskUsageFunc
+	mount        mountCond
+	mountSampler MountSamplerFunc
 }
 
 func (c diskCheck) Run(_ context.Context) Result {
 	start := time.Now()
+	data := map[string]any{"path": c.path}
+
+	// Mount verification takes precedence: a wrong/absent mount makes the space
+	// numbers meaningless (statfs would report the parent filesystem).
+	if c.mount.active {
+		sampler := c.mountSampler
+		if sampler == nil {
+			sampler = defaultMountSampler
+		}
+		mounts, err := sampler()
+		if err != nil {
+			return c.result(false, "mount "+c.path+": "+err.Error(), start)
+		}
+		mounted, problem, reason, info := c.mount.evaluate(mounts, c.path)
+		data["mounted"] = mounted
+		if info != nil {
+			data["fstype"], data["device"] = info.FSType, info.Device
+			data["options"] = strings.Join(info.Options, ",")
+		}
+		if problem {
+			res := c.result(true, c.path+" "+reason, start)
+			res.Data = data
+			return res
+		}
+		if len(c.preds) == 0 {
+			res := c.result(false, c.path+" mounted as expected", start)
+			res.Data = data
+			return res
+		}
+	}
+
 	usage := c.usage
 	if usage == nil {
 		usage = statfsUsage
@@ -72,24 +109,22 @@ func (c diskCheck) Run(_ context.Context) Result {
 		}
 	}
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
-	res.Data = map[string]any{
-		"path":            c.path,
-		"used_pct":        st.UsedPct,
-		"free_pct":        st.FreePct,
-		"free_bytes":      st.FreeBytes,
-		"total_bytes":     st.TotalBytes,
-		"inodes_used_pct": st.InodesUsedPct,
-		"inodes_free_pct": st.InodesFreePct,
-		"inodes_free":     st.InodesFree,
-		"inodes_total":    st.InodesTotal,
-	}
+	data["used_pct"] = st.UsedPct
+	data["free_pct"] = st.FreePct
+	data["free_bytes"] = st.FreeBytes
+	data["total_bytes"] = st.TotalBytes
+	data["inodes_used_pct"] = st.InodesUsedPct
+	data["inodes_free_pct"] = st.InodesFreePct
+	data["inodes_free"] = st.InodesFree
+	data["inodes_total"] = st.InodesTotal
 	// value is the first predicate's reading, so a hook sees the breaching number.
-	res.Data["value"] = st.UsedPct
+	data["value"] = st.UsedPct
 	if len(c.preds) > 0 {
 		if v, ok := values[c.preds[0].field]; ok {
-			res.Data["value"] = v
+			data["value"] = v
 		}
 	}
+	res.Data = data
 	return res
 }
 
@@ -145,8 +180,10 @@ func statfsUsage(path string) (DiskStats, error) {
 	}, nil
 }
 
-// parseDiskPreds reads the used_pct/free_pct predicates from a disk entry. At
-// least one is required; each is {op, value}.
+// parseDiskPreds reads the space/inode predicates from a disk entry (each
+// {op, value}). The set may be empty — a disk check is valid with only mount
+// conditions — so the "at least one of predicate/mount" requirement is enforced
+// by the builder and config validation, not here.
 func parseDiskPreds(entry map[string]any) ([]diskPred, error) {
 	var preds []diskPred
 	for _, field := range diskPredFields {
@@ -167,9 +204,6 @@ func parseDiskPreds(entry map[string]any) ([]diskPred, error) {
 			return nil, fmt.Errorf("%s value %q is not numeric", field, scalarString(m["value"]))
 		}
 		preds = append(preds, diskPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("requires at least one of used_pct/free_pct/inodes_used_pct/inodes_free_pct/inodes_free")
 	}
 	return preds, nil
 }
