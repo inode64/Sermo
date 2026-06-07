@@ -46,6 +46,12 @@ type ActionResult struct {
 	Message string `json:"message,omitempty"`
 }
 
+// PreflightResult is the outcome of an on-demand preflight run.
+type PreflightResult struct {
+	OK     bool    `json:"ok"`
+	Checks []Check `json:"checks"`
+}
+
 // Check is one check's latest observed result in a service detail.
 type Check struct {
 	Name     string `json:"name"`
@@ -225,6 +231,9 @@ type Backend interface {
 	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
 	// Operate runs start|stop|restart on a service through the safe engine.
 	Operate(ctx context.Context, name, action string) ActionResult
+	// Preflight runs a service's preflight checks on demand; ok is false for
+	// unknown names.
+	Preflight(ctx context.Context, name string) (PreflightResult, bool)
 	// SetMonitored pauses (false) or resumes (true) monitoring of a service.
 	SetMonitored(ctx context.Context, name string, monitored bool) error
 }
@@ -283,6 +292,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
+	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	return s.withAuth(mux)
 }
@@ -490,6 +500,16 @@ func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, events)
+}
+
+func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	res, ok := s.Backend.Preflight(r.Context(), name)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
