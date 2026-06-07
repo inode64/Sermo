@@ -43,15 +43,33 @@ merges into a service:
 
 ```yaml
 engine:
-  backend: auto          # auto | systemd | openrc
-  interval: 30s          # default cycle interval; per-service overridable
-  max_parallel_checks: 8 # bound on concurrent checks
-  default_timeout: 10s   # default per-check timeout
-  startup_delay: 0       # grace period before the first cycle (0 disables)
+  backend: auto               # auto | systemd | openrc
+  interval: 30s               # default cycle interval; per-service overridable
+  max_parallel_checks: 8        # bound on concurrent checks across all services
+  max_parallel_operations: 2  # bound on concurrent start/stop/restart operations
+  default_timeout: 10s        # default per-check timeout
+  operation_timeout: 90s        # outer deadline for safe service actions
+  startup_delay: 0            # grace period before the first cycle (0 disables)
 ```
 
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
+
+`engine.max_parallel_operations` limits how many safe service actions
+(`start`, `stop`, `restart`) may run at the same time across automatic
+remediation, the web UI and `sermoctl`. It is separate from
+`max_parallel_checks`: many checks can run while only a few restarts proceed.
+Slots are shared across processes under `<paths.runtime>/op-slots` (default
+`/run/sermo/op-slots`); when all slots are busy, another action waits until one
+is free. The default is `2`.
+
+`engine.operation_timeout` is the outer deadline for a safe
+start/stop/restart. The engine may raise it per service when the resolved
+`stop_policy` needs longer (graceful stop plus signal escalation). The same
+limit applies to daemon remediation, `sermoctl` actions and web-initiated
+operations. When the web UI is enabled, `sermod` also sets the HTTP server's
+write timeout from the longest resolved deadline so a long restart is not cut
+off mid-request. The default is `90s`.
 
 `engine.startup_delay` is a non-negative duration that holds the daemon before
 it starts its first check cycle, giving the host time to finish booting so
@@ -908,8 +926,9 @@ watch/hook structure.
 
 Only the per-service parts of `defaults` merge into a service: `stop_policy`,
 `policy`, and `rule_window`. Engine-wide settings (`interval`,
-`max_parallel_checks`, `default_timeout`, `startup_delay`, `backend`) are daemon
-configuration and never merge into a service.
+`max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
+`operation_timeout`, `startup_delay`, `backend`) are daemon configuration and
+never merge into a service.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.
