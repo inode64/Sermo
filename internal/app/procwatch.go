@@ -54,9 +54,17 @@ type procCond struct {
 	memValue float64
 	ioOp     string // IO bytes/sec threshold ("" = none)
 	ioValue  float64
+	onGone   bool // fire when a previously-seen matching PID disappears
 }
 
 func (c procCond) any() bool {
+	return c.hasPresence() || c.onGone
+}
+
+// hasPresence reports whether any condition fires while a process is present (as
+// opposed to onGone, which fires on disappearance). A watch with only onGone must
+// never fire merely because a matching process exists.
+func (c procCond) hasPresence() bool {
 	return c.minAge > 0 || c.cpuOp != "" || c.memOp != "" || c.ioOp != ""
 }
 
@@ -125,11 +133,33 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		st.prevCPU, st.prevIO, st.prevAt, st.hadIO = s.CPUTicks, s.IOBytes, t, s.HasIO
 	}
 
-	// Drop state for processes that are gone (also re-arms a reused PID).
+	// Processes that vanished: fire `gone` (if configured) once per PID, then drop
+	// their state — which also re-arms a reused PID.
+	var gone []int
 	for pid := range w.state {
 		if !seen[pid] {
-			delete(w.state, pid)
+			gone = append(gone, pid)
 		}
+	}
+	sort.Ints(gone)
+	for _, pid := range gone {
+		if ctx.Err() != nil {
+			return
+		}
+		if w.cond.onGone {
+			st := w.state[pid]
+			env := map[string]string{
+				"SERMO_PID":         strconv.Itoa(pid),
+				"SERMO_PROCESS":     w.match.Name,
+				"SERMO_CHANGE":      "gone",
+				"SERMO_AGE_SECONDS": strconv.FormatInt(int64(t.Sub(st.firstSeen).Seconds()), 10),
+			}
+			if w.match.User != "" {
+				env["SERMO_USER"] = w.match.User
+			}
+			w.fire(ctx, fmt.Sprintf("%s pid %d is gone", w.match.Name, pid), env)
+		}
+		delete(w.state, pid)
 	}
 }
 
@@ -142,6 +172,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	env := map[string]string{
 		"SERMO_PID":         strconv.Itoa(s.PID),
 		"SERMO_PROCESS":     w.match.Name,
+		"SERMO_CHANGE":      "threshold",
 		"SERMO_AGE_SECONDS": strconv.FormatInt(int64(age.Seconds()), 10),
 		"SERMO_MEMORY":      strconv.FormatUint(s.RSS, 10),
 	}
@@ -149,7 +180,8 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 		env["SERMO_USER"] = w.match.User
 	}
 
-	ok := true
+	// A watch with only `gone` never fires on presence.
+	ok := c.hasPresence()
 	if c.minAge > 0 && age < c.minAge {
 		ok = false
 	}

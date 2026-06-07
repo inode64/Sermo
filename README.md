@@ -14,8 +14,9 @@ It ships two binaries:
   operation engine `sermoctl` uses. It also runs **host watches** (disk space,
   network interfaces — state, speed and rx/tx errors — external hosts via
   ICMP — reachability and latency — files/directories — size, permissions,
-  owner and deletion — and processes by name — age and CPU/memory/IO) that fire a
-  hook command when a threshold is crossed or an attribute changes.
+  owner and deletion — and processes by name — age, CPU/memory/IO and
+  disappearance) that fire a hook command when a threshold is crossed or an
+  attribute changes.
 
 ## Build
 
