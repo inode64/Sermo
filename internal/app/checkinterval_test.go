@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -61,5 +62,46 @@ func TestDueChecks(t *testing.T) {
 	}
 	if got := dueNames(4); len(got) != 2 {
 		t.Fatalf("cycle 4 should run fast and slow again, got %v", got)
+	}
+}
+
+func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
+	built := []checks.Built{
+		{Check: stubCheck{name: "fast"}},
+		{Check: stubCheck{name: "slow"}},
+	}
+	every := map[string]int{"slow": 3}
+	cache := map[string]checks.Result{}
+
+	paused := true
+	var slowRan bool
+	w := &Worker{IsPaused: func() bool { return paused }}
+	w.Checks = func(_ context.Context, _ checks.Deps) map[string]checks.Result {
+		for _, b := range dueChecks(w.cycle, built, every) {
+			if b.Check.Name() == "slow" {
+				slowRan = true
+			}
+		}
+		return cache
+	}
+
+	for i := 0; i < 2; i++ {
+		w.RunCycle(context.Background())
+	}
+	if w.cycle != 2 {
+		t.Fatalf("after two paused ticks cycle = %d, want 2", w.cycle)
+	}
+
+	paused = false
+	slowRan = false
+	w.RunCycle(context.Background()) // cycle 3: only fast
+	if slowRan {
+		t.Fatal("slow check must not run on cycle 3 after two paused ticks")
+	}
+
+	slowRan = false
+	w.RunCycle(context.Background()) // cycle 4: fast and slow
+	if !slowRan {
+		t.Fatal("slow check must run on cycle 4 to stay aligned with the scheduler")
 	}
 }
