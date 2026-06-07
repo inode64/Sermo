@@ -141,14 +141,22 @@ A per-check `interval` **cannot be shorter than the resolution** and should be a
 
 The daemon can serve a small web dashboard to view services and act on them —
 monitor/unmonitor and start/stop/restart — over the same safe operation engine
-the CLI uses. It is enabled by setting a `port`:
+the CLI uses.
+
+**The web UI is only activated when `web.port` is explicitly defined.** If the
+`web:` block is omitted, or if a `web:` block is present without a `port` key
+(even if other keys such as `address` are set), the HTTP server is not started.
+At startup `sermod` logs a warning: "web ui disabled; no port will be opened".
 
 ```yaml
 web:
   address: 127.0.0.1     # optional, default 127.0.0.1 (loopback only)
-  port: 9797             # enables the UI; omit port (or the whole block) to disable
+  port: 9797             # REQUIRED to activate the web UI (9797 recommended)
 ```
 
+- **Activation rule:** the web UI ("servicio web") is **not started** unless
+  `web.port` is present and valid. Omitting the key (or the whole `web:` block)
+  leaves the dashboard disabled; `sermod` logs the exact reason at startup.
 - **Recommended port: `9797`.** It is easy to remember and avoids the common
   monitoring ports (`9090` Prometheus, `9093` Alertmanager, `9100` node-exporter,
   `3000` Grafana, `8080`).
