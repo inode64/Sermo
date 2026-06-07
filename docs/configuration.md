@@ -324,6 +324,37 @@ A swap hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`swap`), `SERMO_METRIC`
 (`usage`|`io`), `SERMO_VALUE` (the breaching reading: a percent/bytes for usage,
 the page delta for io), `SERMO_MESSAGE`, plus `SERMO_TOTAL_BYTES`/`SERMO_FREE_BYTES`.
 
+### `load` — system load average
+
+A `load` watch checks the system load averages (1/5/15-minute) against thresholds.
+Like `disk` it is a single level check with one hook: it fires when every present
+predicate holds. With `per_cpu: true` the loads are divided by the CPU count
+first, so a threshold means **load per core** (≈1.0 is fully utilized) and the
+same config works on any machine size.
+
+```yaml
+watches:
+  load:
+    enabled: false
+    interval: 30s
+    check:
+      type: load
+      per_cpu: true                  # optional, default false: divide by NumCPU
+      load5: { op: ">", value: 1.5 }    # any of load1 / load5 / load15
+      load15: { op: ">", value: 1.0 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-load-alert.sh]
+```
+
+Predicates are `load1`, `load5`, `load15`, each `{op, value}` with the disk
+operator set; declare at least one. Prefer `load5`/`load15` for sustained
+saturation (`load1` is spiky). A load hook receives `SERMO_WATCH`,
+`SERMO_CHECK_TYPE` (`load`), `SERMO_VALUE` (the first predicate's reading,
+per-core when `per_cpu`), `SERMO_MESSAGE`, plus `SERMO_LOAD1`/`SERMO_LOAD5`/
+`SERMO_LOAD15` (raw) and `SERMO_NUM_CPU`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,

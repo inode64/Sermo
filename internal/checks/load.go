@@ -1,0 +1,132 @@
+package checks
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+)
+
+// LoadSample is one observation of the system load averages and the CPU count
+// used to normalize them.
+type LoadSample struct {
+	Load1, Load5, Load15 float64
+	NumCPU               int
+}
+
+// LoadSamplerFunc reads the current load sample. Injected for tests; the default
+// reads /proc/loadavg and runtime.NumCPU().
+type LoadSamplerFunc func() (LoadSample, error)
+
+// loadPred is one threshold predicate on a load field.
+type loadPred struct {
+	field string // load1 | load5 | load15
+	op    string
+	value float64
+}
+
+// loadCheck watches the system load averages against thresholds (like disk, a
+// level check: OK==true means every predicate holds). With perCPU the loads are
+// divided by the CPU count first, so a threshold expresses load per core (1.0 ==
+// fully utilized) regardless of machine size.
+type loadCheck struct {
+	base
+	preds   []loadPred
+	perCPU  bool
+	sampler LoadSamplerFunc
+}
+
+func (c loadCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	sampler := c.sampler
+	if sampler == nil {
+		sampler = defaultLoadSampler
+	}
+	s, err := sampler()
+	if err != nil {
+		return c.result(false, "load: "+err.Error(), start)
+	}
+
+	values := map[string]float64{"load1": s.Load1, "load5": s.Load5, "load15": s.Load15}
+	if c.perCPU {
+		if s.NumCPU <= 0 {
+			return c.result(false, "load: cpu count unknown", start)
+		}
+		for k, v := range values {
+			values[k] = v / float64(s.NumCPU)
+		}
+	}
+
+	ok := true
+	for _, p := range c.preds {
+		if !compareFloat(values[p.field], p.op, p.value) {
+			ok = false
+		}
+	}
+
+	suffix := ""
+	if c.perCPU {
+		suffix = fmt.Sprintf(" per-cpu (/%d)", s.NumCPU)
+	}
+	res := c.result(ok, fmt.Sprintf("load %.2f %.2f %.2f%s", s.Load1, s.Load5, s.Load15, suffix), start)
+	res.Data = map[string]any{
+		"load1": s.Load1, "load5": s.Load5, "load15": s.Load15,
+		"num_cpu": s.NumCPU, "per_cpu": c.perCPU,
+	}
+	res.Data["value"] = values["load1"]
+	if len(c.preds) > 0 {
+		res.Data["value"] = values[c.preds[0].field]
+	}
+	return res
+}
+
+// defaultLoadSampler reads the three load averages from /proc/loadavg.
+func defaultLoadSampler() (LoadSample, error) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return LoadSample{}, err
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 3 {
+		return LoadSample{}, fmt.Errorf("malformed /proc/loadavg")
+	}
+	l1, e1 := strconv.ParseFloat(fields[0], 64)
+	l5, e5 := strconv.ParseFloat(fields[1], 64)
+	l15, e15 := strconv.ParseFloat(fields[2], 64)
+	if e1 != nil || e5 != nil || e15 != nil {
+		return LoadSample{}, fmt.Errorf("malformed /proc/loadavg")
+	}
+	return LoadSample{Load1: l1, Load5: l5, Load15: l15, NumCPU: runtime.NumCPU()}, nil
+}
+
+// parseLoadPreds reads the load1/load5/load15 predicates of a load check. At
+// least one is required; each is {op, value}.
+func parseLoadPreds(entry map[string]any) ([]loadPred, error) {
+	var preds []loadPred
+	for _, field := range []string{"load1", "load5", "load15"} {
+		raw, ok := entry[field]
+		if !ok {
+			continue
+		}
+		m, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
+		}
+		op := asString(m["op"])
+		if !validDiskOp(op) {
+			return nil, fmt.Errorf("%s has invalid op %q", field, op)
+		}
+		val, err := strconv.ParseFloat(scalarString(m["value"]), 64)
+		if err != nil {
+			return nil, fmt.Errorf("%s value %q is not numeric", field, scalarString(m["value"]))
+		}
+		preds = append(preds, loadPred{field: field, op: op, value: val})
+	}
+	if len(preds) == 0 {
+		return nil, fmt.Errorf("requires at least one of load1/load5/load15")
+	}
+	return preds, nil
+}

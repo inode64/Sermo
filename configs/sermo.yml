@@ -97,6 +97,19 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
+  # Watch system load average (per-core, so the thresholds are machine-agnostic).
+  load:
+    enabled: false
+    interval: 30s
+    check:
+      type: load
+      per_cpu: true
+      load5: { op: ">", value: 1.5 }
+      load15: { op: ">", value: 1.0 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-load-alert.sh]
   # Watch system swap: usage filling up and/or heavy paging (thrashing).
   swap:
     enabled: false
