@@ -230,6 +230,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		case "conntrack":
 			validateThresholdPreds(cp, check, []string{"used_pct", "free", "count"}, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "mount":
+			validateMountFields(cp, check, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "entropy":
 			validateEntropyFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
@@ -875,7 +878,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "mount")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -976,7 +979,26 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateZombieFields(path, entry, add)
 		case "oom":
 			validateOomFields(path, entry, add)
+		case "mount":
+			validateMountFields(path, entry, add)
 		}
+	}
+}
+
+// validateMountFields validates a mount check at prefix: a required path, an
+// optional boolean `mounted`, and an optional `options` string list. fstype and
+// device are free-form strings (no constraint). New mount conditions add here.
+func validateMountFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["path"]) == "" {
+		add("%s.path is required for a mount check", prefix)
+	}
+	if v, present := fields["mounted"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.mounted must be a boolean", prefix)
+		}
+	}
+	if v, present := fields["options"]; present && !isStringArray(v) {
+		add("%s.options must be a non-empty list of strings", prefix)
 	}
 }
 
