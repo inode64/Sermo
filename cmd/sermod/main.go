@@ -89,7 +89,15 @@ func run(args []string) int {
 		Now:             time.Now,
 		Emit:            app.SlogEmitter(logger),
 		Monitor:         store,
+		SLA:             store,
 		SystemFreshness: interval / 2,
+	}
+
+	// Bound the SLA table to roughly a year of per-minute samples per service.
+	if n, err := store.PruneSLA(time.Now().Add(-366 * 24 * time.Hour)); err != nil {
+		logger.Warn("prune sla samples", "error", err)
+	} else if n > 0 {
+		logger.Info("pruned old sla samples", "rows", n)
 	}
 
 	workers, warnings := app.BuildWorkers(cfg, deps)

@@ -2,6 +2,10 @@ kind: service
 name: apache-main
 uses: apache
 
+# Check this service more often than the engine default (engine.interval). The
+# for/within window below counts these faster cycles.
+interval: 15s
+
 variables:
   health_path: /health
 

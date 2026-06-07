@@ -26,6 +26,13 @@ type MonitorStore interface {
 	SetActive(service string, active bool, source string) error
 }
 
+// SLARecorder persists one availability sample per observed monitoring cycle, so
+// availability can be reported over rolling windows. Implemented by
+// internal/state.Store; nil disables SLA tracking.
+type SLARecorder interface {
+	RecordSLA(service string, up bool, at time.Time) error
+}
+
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
 	Backend        servicemgr.Backend
@@ -39,6 +46,9 @@ type Deps struct {
 	// Monitor persists per-service monitoring state (active/paused) across daemon
 	// restarts and reboots. Optional: nil means every service is always monitored.
 	Monitor MonitorStore
+	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
+	// disables SLA tracking.
+	SLA SLARecorder
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration
@@ -125,6 +135,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Policy:    rules.ParsePolicy(tree),
 		State:     &rules.RemediationState{},
 		CheckDeps: checkDeps,
+		Interval:  durationField(tree["interval"]),
 		Sample:    sampleMetrics,
 		Checks: func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 			section, _ := tree["checks"].(map[string]any)
@@ -147,9 +158,28 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 				return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
 			}
 		},
-		IsPaused: monitorPaused(deps.Monitor, name),
-		Now:      deps.Now,
-		Emit:     deps.Emit,
+		IsPaused:     monitorPaused(deps.Monitor, name),
+		RecordHealth: healthRecorder(deps, name),
+		Now:          deps.Now,
+		Emit:         deps.Emit,
+	}
+}
+
+// healthRecorder returns the worker's per-cycle SLA recording hook, or nil when
+// no store is wired. A write error is logged through Emit but never blocks the
+// cycle — SLA accounting is best-effort and must not affect remediation.
+func healthRecorder(deps Deps, name string) func(up bool) {
+	if deps.SLA == nil {
+		return nil
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+	return func(up bool) {
+		if err := deps.SLA.RecordSLA(name, up, now()); err != nil && deps.Emit != nil {
+			deps.Emit(Event{Service: name, Kind: "error", Message: "record sla: " + err.Error()})
+		}
 	}
 }
 

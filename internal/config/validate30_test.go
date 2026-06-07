@@ -461,3 +461,25 @@ rules:
 		t.Fatalf("clean service should have no issues, got: %v", issues)
 	}
 }
+
+func TestValidateServiceInterval(t *testing.T) {
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+interval: notaduration
+policy: { cooldown: 5m }
+`)
+	mustHave(t, bad, "interval")
+
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+interval: 10s
+policy: { cooldown: 5m }
+`)
+	if hasIssue(good, "interval") {
+		t.Fatalf("valid service interval flagged: %v", good)
+	}
+}
