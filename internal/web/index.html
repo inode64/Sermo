@@ -45,6 +45,7 @@
 </head>
 <body>
 <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
+<div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
 <table>
@@ -67,6 +68,15 @@
     <tbody id="watch-rows"></tbody>
   </table>
   <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
+</section>
+
+<section id="notifiers-section" style="margin-top:1rem; display:none">
+  <h2 style="font-size:1.05rem">Notifiers <span id="notifiers-count" class="muted"></span></h2>
+  <table>
+    <thead><tr><th>Name</th><th>Type</th></tr></thead>
+    <tbody id="notifier-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Named targets that watches can notify (email, slack, ...).</p>
 </section>
 
 <div id="detail"></div>
@@ -139,6 +149,18 @@ async function load() {
       renderWatches(await wr.json());
     }
   } catch (_) { /* non-fatal */ }
+
+  // Notifiers (what watches can send to).
+  try {
+    const nr = await fetch("api/notifiers");
+    if (nr.ok) {
+      renderNotifiers(await nr.json());
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Always-visible status (counts, uptime, backend, ready state).
+  renderStatus();
+
   loadReady();
   loadEvents();
   loadOps();
@@ -325,6 +347,47 @@ function renderWatches(watches) {
     </tr>`;
   });
   tbody.innerHTML = rows.join("") || `<tr><td colspan="4" class="muted">No watches.</td></tr>`;
+}
+
+function renderNotifiers(notifiers) {
+  const section = $("#notifiers-section");
+  const tbody = $("#notifier-rows");
+  const cnt = $("#notifiers-count");
+  if (!section || !tbody) return;
+  if (!notifiers || notifiers.length === 0) {
+    section.style.display = "none";
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  section.style.display = "block";
+  if (cnt) cnt.textContent = `(${notifiers.length})`;
+  const rows = notifiers.map((n) => `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td></tr>`);
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="2" class="muted">No notifiers.</td></tr>`;
+}
+
+async function renderStatus() {
+  const bar = $("#statusbar");
+  if (!bar) return;
+  try {
+    const [readyRes, liveRes] = await Promise.all([
+      fetch("readyz?verbose"),
+      fetch("livez?verbose")
+    ]);
+    const ready = readyRes.ok ? await readyRes.json() : {};
+    const live = liveRes.ok ? await liveRes.json() : {};
+    const parts = [];
+    if (ready.backend) parts.push(`backend: <b>${esc(ready.backend)}</b>`);
+    parts.push(`services: <b>${ready.services || 0}</b>`);
+    parts.push(`watches: <b>${ready.watches || 0}</b>`);
+    if (live.uptime) parts.push(`uptime: <b>${esc(live.uptime)}</b>`);
+    if (ready.status) {
+      const cls = ready.ready ? "ok" : "inactive";
+      parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
+    }
+    bar.innerHTML = parts.join(" &middot; ");
+  } catch (e) {
+    bar.textContent = "status unavailable";
+  }
 }
 
 async function act(name, action) {
