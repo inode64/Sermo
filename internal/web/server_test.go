@@ -19,6 +19,7 @@ type fakeBackend struct {
 	eventLimit  int
 	metricCheck string
 	metricSince time.Duration
+	opsSlots    OperationSlots
 }
 
 func (f *fakeBackend) Services(context.Context) []Service { return f.services }
@@ -73,6 +74,7 @@ func (f *fakeBackend) Metrics(_ context.Context, name, check string, since time.
 func (f *fakeBackend) Diagnostics(context.Context) []Finding {
 	return []Finding{{Level: "warning", Scope: "database", Message: `stored data for service "ghost"`}}
 }
+func (f *fakeBackend) Operations(context.Context) OperationSlots { return f.opsSlots }
 func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
 	f.operated = append(f.operated, name+"/"+action)
 	if f.failOp {
@@ -279,6 +281,22 @@ func TestMetrics(t *testing.T) {
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/metrics?check=http", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service = %d, want 404", rec.Code)
+	}
+}
+
+func TestOperationsAPI(t *testing.T) {
+	b := &fakeBackend{opsSlots: OperationSlots{InUse: 2, Total: 2}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/ops", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ops status %d", rec.Code)
+	}
+	var got OperationSlots
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.InUse != 2 || got.Total != 2 {
+		t.Fatalf("unexpected ops: %+v", got)
 	}
 }
 
