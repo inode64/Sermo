@@ -37,7 +37,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		},
 		Processes: discoverer.ObserveState,
 	}
-	locker := locks.NewOperationLocker(filepath.Join(deps.Runtime, "ops"))
+	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{
 		Service:    name,
 		Unit:       unit,

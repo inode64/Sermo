@@ -361,6 +361,9 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 
 	runtime := cfg.Global.RuntimeDir()
 	locker := locks.NewOperationLocker(filepath.Join(runtime, "ops"))
+	locker.OnReclaim = func(service, reason string) {
+		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
+	}
 	discoverer := process.NewDiscoverer()
 	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(detection.Backend, unit)
 	engine := operation.New(operation.Config{
