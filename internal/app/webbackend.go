@@ -192,7 +192,35 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 	if failing > 0 {
 		svc.ChecksFailing = failing
 	}
+	if locks := activeLockNames(b.cfg, name); len(locks) > 0 {
+		svc.ActiveLocks = locks
+	}
 	return svc
+}
+
+// activeLockNames returns the names of named runtime locks currently blocking
+// actions for service (parity with `sermoctl locks SERVICE`, active only).
+func activeLockNames(cfg *config.Config, service string) []string {
+	if cfg == nil {
+		return nil
+	}
+	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
+	report, err := locks.NewScanner(dir).Scan(service)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, lk := range report.Locks {
+		if lk.State != locks.StateActive {
+			continue
+		}
+		n := lk.Name
+		if n == "" {
+			n = "(default)"
+		}
+		names = append(names, n)
+	}
+	return names
 }
 
 // checkHealthSummary reports required-check health for the service list. It uses
