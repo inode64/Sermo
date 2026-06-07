@@ -158,6 +158,7 @@ type Remediation struct {
 
 // Lock is a named runtime lock for one service (parity with `sermoctl locks`).
 type Lock struct {
+	Service     string `json:"service,omitempty"`
 	Name        string `json:"name,omitempty"`
 	Reason      string `json:"reason,omitempty"`
 	State       string `json:"state"` // active | expired | stale
@@ -304,6 +305,8 @@ type Backend interface {
 	DaemonInfo(ctx context.Context) DaemonInfo
 	// HostMetrics returns current system-level metrics (memory, cpu, load averages).
 	HostMetrics(ctx context.Context) []HostMetric
+	// Locks returns runtime locks (active, expired, stale) across all services.
+	Locks(ctx context.Context) []Lock
 }
 
 // operateActions and monitorActions are the action verbs the API accepts.
@@ -363,6 +366,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/host", s.handleHost)
+	mux.HandleFunc("GET /api/locks", s.handleLocks)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -475,6 +479,10 @@ func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.HostMetrics(r.Context()))
+}
+
+func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Locks(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {

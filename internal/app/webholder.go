@@ -77,6 +77,13 @@ func (h *WebBackendHolder) HostMetrics(ctx context.Context) []web.HostMetric {
 	return nil
 }
 
+func (h *WebBackendHolder) Locks(ctx context.Context) []web.Lock {
+	if b := h.backend(); b != nil {
+		return b.Locks(ctx)
+	}
+	return nil
+}
+
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)

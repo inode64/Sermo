@@ -472,6 +472,24 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 	return out
 }
 
+func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
+	var out []web.Lock
+	for _, name := range b.order {
+		e := b.entries[name]
+		if e == nil || e.disabled {
+			continue
+		}
+		report, err := serviceLocksReport(b.cfg, name)
+		if err != nil {
+			continue
+		}
+		for _, lk := range report.Locks {
+			out = append(out, lockToWeb(lk, name))
+		}
+	}
+	return out
+}
+
 func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	e := b.entries[name]
 	if e == nil {
@@ -514,7 +532,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {
 		for _, lk := range report.Locks {
-			d.Locks = append(d.Locks, lockToWeb(lk))
+			d.Locks = append(d.Locks, lockToWeb(lk, name))
 		}
 		if len(report.Warnings) > 0 {
 			d.LockWarnings = append([]string(nil), report.Warnings...)
@@ -596,8 +614,9 @@ func processToWeb(p process.Process) web.Process {
 	}
 }
 
-func lockToWeb(lk locks.Lock) web.Lock {
+func lockToWeb(lk locks.Lock, service string) web.Lock {
 	w := web.Lock{
+		Service:     service,
 		Name:        lk.Name,
 		Reason:      lk.Reason,
 		State:       string(lk.State),
