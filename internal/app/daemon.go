@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"path/filepath"
 	"sort"
 	"time"
@@ -40,10 +42,14 @@ type Deps struct {
 	Manager        servicemgr.Manager
 	Runtime        string
 	DefaultTimeout time.Duration
-	MaxParallel    int
-	Sleep          func(time.Duration)
-	Now            func() time.Time
-	Emit           func(Event)
+	// Interval is the global resolution (engine.interval). It is the base cycle
+	// rate and the unit a per-check `interval` is rounded to (a check runs every
+	// round(interval/resolution) cycles). A service's own `interval` overrides it.
+	Interval    time.Duration
+	MaxParallel int
+	Sleep       func(time.Duration)
+	Now         func() time.Time
+	Emit        func(Event)
 	// Monitor persists per-service monitoring state (active/paused) across daemon
 	// restarts and reboots. Optional: nil means every service is always monitored.
 	Monitor MonitorStore
@@ -95,12 +101,16 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 			warnings = append(warnings, "service "+name+": "+err.Error()+" (using "+base+")")
 			unit = base
 		}
-		workers = append(workers, buildWorker(name, unit, resolved.Tree, deps, collector))
+		w, warns := buildWorker(name, unit, resolved.Tree, deps, collector)
+		for _, x := range warns {
+			warnings = append(warnings, "service "+name+": "+x)
+		}
+		workers = append(workers, w)
 	}
 	return workers, warnings
 }
 
-func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) *Worker {
+func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {
 	manager := deps.Manager
 
 	discoverer := process.NewDiscoverer()
@@ -136,7 +146,23 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	ruleSet, _ := rules.ParseRules(tree)
 	sampleMetrics := metricSampler(name, tree, collector, discoverer)
 
-	return &Worker{
+	// A per-check `interval` runs that check every N cycles (N rounded from
+	// interval/resolution); skipped cycles reuse its last result so the cache and
+	// rule windows stay complete. resolution is the service's own interval, or the
+	// global one.
+	resolution := durationField(tree["interval"])
+	if resolution <= 0 {
+		resolution = deps.Interval
+	}
+	if resolution <= 0 {
+		resolution = 30 * time.Second
+	}
+	every, warnings := checkIntervals(tree, resolution)
+
+	cycle := 0
+	cache := map[string]checks.Result{}
+
+	worker := &Worker{
 		Service:   name,
 		Rules:     ruleSet,
 		Policy:    rules.ParsePolicy(tree),
@@ -145,10 +171,10 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Interval:  durationField(tree["interval"]),
 		Sample:    sampleMetrics,
 		Checks: func(ctx context.Context, d checks.Deps) map[string]checks.Result {
+			cycle++
 			section, _ := tree["checks"].(map[string]any)
 			built, _ := checks.Build(section, d)
-			cache := map[string]checks.Result{}
-			for _, r := range checks.Run(ctx, built, maxParallel) {
+			for _, r := range checks.Run(ctx, dueChecks(cycle, built, every), maxParallel) {
 				cache[r.Check] = r
 			}
 			return cache
@@ -170,6 +196,66 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Now:          deps.Now,
 		Emit:         deps.Emit,
 	}
+	return worker, warnings
+}
+
+// checkIntervals computes, per check in the `checks` section that sets an
+// `interval`, how many cycles to skip between runs: round(interval/resolution),
+// at least 1. It returns warnings (surfaced at daemon start) when an interval is
+// below the resolution or not an exact multiple of it.
+func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]int, []string) {
+	section, ok := tree["checks"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	every := map[string]int{}
+	var warnings []string
+	for _, name := range sortedKeys(section) {
+		entry, ok := section[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		d := durationField(entry["interval"])
+		if d <= 0 {
+			continue // no per-check interval: runs every cycle
+		}
+		n := int(math.Round(float64(d) / float64(resolution)))
+		switch {
+		case n < 1:
+			warnings = append(warnings, fmt.Sprintf("check %q interval %s is below the %s resolution; running every cycle", name, d, resolution))
+			n = 1
+		case time.Duration(n)*resolution != d:
+			warnings = append(warnings, fmt.Sprintf("check %q interval %s is not a multiple of the %s resolution; running every %s", name, d, resolution, time.Duration(n)*resolution))
+		}
+		every[name] = n
+	}
+	return every, warnings
+}
+
+// dueChecks selects the checks to run on a given cycle: a check with `every` N
+// runs on cycles 1, N+1, 2N+1, … Skipped checks keep their cached result.
+func dueChecks(cycle int, built []checks.Built, every map[string]int) []checks.Built {
+	due := make([]checks.Built, 0, len(built))
+	for _, b := range built {
+		n := every[b.Check.Name()]
+		if n < 1 {
+			n = 1
+		}
+		if (cycle-1)%n == 0 {
+			due = append(due, b)
+		}
+	}
+	return due
+}
+
+// sortedKeys returns the map keys sorted, for deterministic iteration.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // healthRecorder returns the worker's per-cycle SLA recording hook, or nil when

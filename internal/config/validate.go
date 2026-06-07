@@ -961,6 +961,12 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 				add("%s.optional must be a boolean", path)
 			}
 		}
+		// A per-check interval runs the check every N cycles (N rounded from
+		// interval/resolution). It must be a positive duration; the daemon warns at
+		// startup if it is below the resolution or not an exact multiple.
+		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
+			add("%s.interval %q must be a valid positive duration", path, scalarString(v))
+		}
 		typ := scalarString(entry["type"])
 		if typ == "" {
 			add("%s has no type", path)

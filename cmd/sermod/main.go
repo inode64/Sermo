@@ -89,6 +89,7 @@ func run(args []string) int {
 		Backend:         detection.Backend,
 		Manager:         manager,
 		Runtime:         cfg.Global.RuntimeDir(),
+		Interval:        interval,
 		DefaultTimeout:  engineDuration(cfg, "default_timeout", 10*time.Second),
 		MaxParallel:     engineInt(cfg, "max_parallel_checks", 8),
 		Sleep:           time.Sleep,

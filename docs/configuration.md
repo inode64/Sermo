@@ -79,6 +79,31 @@ Window counts (`for`/`within`, measured in cycles) are therefore counted in that
 service's own cycles. Worker starts are still spread across one global interval
 so a fleet of services does not all probe on the same tick.
 
+### Per-check interval
+
+An individual check may run **less often** than the worker cycle by setting its
+own `interval`. The worker keeps ticking at its resolution; a check with an
+`interval` simply runs every `round(interval / resolution)` cycles and **reuses
+its last result** on the cycles in between — so the check cache and rule windows
+stay complete, just with a value that is refreshed less often. This is ideal for
+expensive checks (a version probe, `ldd`, a slow command) next to cheap ones.
+
+```yaml
+interval: 30s            # the service resolution (or engine.interval)
+checks:
+  http:
+    type: http
+    url: "http://127.0.0.1/health"   # runs every cycle (30s)
+  version:
+    type: command
+    command: ["/usr/sbin/nginx", "-v"]
+    interval: 30m                     # runs every 60 cycles (30m / 30s)
+```
+
+A per-check `interval` **cannot be shorter than the resolution** and should be a
+**multiple** of it. If it isn't, the daemon rounds it to the nearest multiple
+(at least one cycle) and **logs a warning at startup** — it never fails to start.
+
 ## Availability (SLA)
 
 The daemon records one availability sample per monitoring cycle per service, so
