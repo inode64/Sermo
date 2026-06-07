@@ -151,12 +151,31 @@ watches:
         timeout: 10s       # optional, default engine.default_timeout
 ```
 
-The `disk` check reads filesystem usage for `path` and is true when every
-present predicate (`used_pct` and/or `free_pct`, each `{op, value}` with
-`op ∈ >=,>,<=,<,==,!=`) holds. When the condition holds for the `for`/`within`
-window, the hook command runs (argv only, never a shell) with these environment
-variables: `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_PATH`, `SERMO_VALUE`,
-`SERMO_MESSAGE`.
+The `disk` check reads filesystem usage for `path` and is true when every present
+predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
+`used_pct`, `free_pct` — and **inodes** — `inodes_used_pct`, `inodes_free_pct`,
+`inodes_free` (absolute count). Inode predicates catch the "disk full" that `df`
+hides: a filesystem out of inodes (millions of tiny files) rejects new files while
+bytes are still free.
+
+```yaml
+watches:
+  disk-root:
+    check:
+      type: disk
+      path: /
+      used_pct: { op: ">=", value: 90 }        # block space
+      inodes_used_pct: { op: ">=", value: 90 }  # inode table
+    then:
+      hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }
+```
+
+A filesystem that does not report inodes (`inodes_total == 0`, e.g. btrfs) never
+fires an inode predicate, so it cannot misread `0/0`. When the condition holds for
+the `for`/`within` window, the hook command runs (argv only, never a shell) with
+these environment variables: `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_PATH`,
+`SERMO_VALUE` (the first predicate's reading), `SERMO_MESSAGE`, plus the rest of
+the check's data (`SERMO_USED_PCT`, `SERMO_INODES_USED_PCT`, `SERMO_INODES_FREE`, …).
 
 ### `net` — network interface
 
