@@ -24,9 +24,43 @@ which reuse the same schema). MVP types:
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
+| `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
+
+### Cert
+
+A `cert` check connects to a TLS endpoint, reads its leaf certificate and alerts
+(`OK == true`) on any configured problem. It is condition-style, so as a watch the
+hook/notify fires on a problem and in rules `active: {check: api-cert}` is true.
+
+```yaml
+checks:
+  api-cert:
+    type: cert
+    host: api.example.com      # required
+    port: 443                  # optional, default 443
+    server_name: api.example.com   # optional SNI + hostname to verify (default = host)
+    expires_in_days: 14        # optional: warn this many days before expiry
+    verify: true               # optional, default true: chain + hostname + validity
+    on_algorithm_change: true  # optional: alert when the signature algorithm changes
+    on_issuer_change: true     # optional: alert when the issuer (CA) changes / re-issue
+    on_change: false           # optional: alert on any certificate rotation (fingerprint)
+```
+
+It alerts when the certificate is **expired or not yet valid**, **expires within
+`expires_in_days`**, fails chain/hostname **verification** (`verify`, on by
+default — catches self-signed, wrong host, expired chains), or — between cycles —
+its **signature algorithm**, **issuer** or **fingerprint** changes. Result data
+exposes `days_left`, `not_after`, `issuer`, `signature_algorithm`,
+`public_key_algorithm` and `fingerprint`. A network/TLS error fetching the cert is
+**not** an alert (use a `tcp`/`http` check for reachability).
+
+The change conditions are **stateful** (they remember the previous value across
+cycles), so they work as a **host watch** (built once); as a per-service check —
+where checks are rebuilt each cycle — only the level conditions (expiry, validity)
+apply.
 
 Each check has an optional `timeout` (else `engine.default_timeout`) and an
 optional `interval` to run it less often than the worker cycle — every
@@ -42,8 +76,8 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
 
 The host-resource checks (`disk`, `load`, `fds`, `conntrack`, `entropy`, `zombies`,
-`oom`) are condition-style — `OK == true` means the threshold is crossed — so in
-rules `active: {check: x}` fires on breach, and as a watch the hook fires on breach.
+`oom`, `cert`) are condition-style — `OK == true` means there is a problem — so in
+rules `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `http`, `command`, `service`, `file_exists`, `binary`,
 `libraries`) are the opposite (`OK == true` is healthy), so as a watch they fire
 the hook on **failure**.

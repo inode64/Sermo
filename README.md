@@ -14,7 +14,8 @@ It ships two binaries:
   operation engine `sermoctl` uses. It also runs **host watches** (disk space,
   inodes and mount, load average, swap — usage and paging IO — kernel OOM kills,
   file descriptors, the netfilter conntrack table, kernel entropy, zombie
-  processes, network interfaces — state, speed and rx/tx
+  processes, TLS certificates — expiry, validity and algorithm/issuer changes —
+  network interfaces — state, speed and rx/tx
   errors — external hosts via ICMP — reachability and latency — files/directories
   — size, permissions, owner and deletion — and processes by name — age,
   CPU/memory/IO and disappearance) that fire a hook command and/or send
