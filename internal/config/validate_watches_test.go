@@ -215,6 +215,10 @@ func TestValidateNotifiers(t *testing.T) {
 				"from": "sermo@example.com",
 				"to":   []any{"ops@example.com", "oncall@example.com"},
 			},
+			"team-slack": map[string]any{
+				"type":    "slack",
+				"webhook": "https://hooks.slack.com/services/T/B/x",
+			},
 		},
 	})
 	for _, i := range good {
@@ -225,18 +229,22 @@ func TestValidateNotifiers(t *testing.T) {
 
 	bad := validateRawGlobal(t, map[string]any{
 		"notifiers": map[string]any{
-			"no-dsn":   map[string]any{"type": "email", "from": "x@y", "to": []any{"a@b"}},
-			"no-to":    map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y"},
-			"bad-dsn":  map[string]any{"type": "email", "dsn": "http://x", "from": "x@y", "to": []any{"a@b"}},
-			"bad-type": map[string]any{"type": "smoke-signal"},
-			"no-type":  map[string]any{"dsn": "smtp://x"},
+			"no-dsn":      map[string]any{"type": "email", "from": "x@y", "to": []any{"a@b"}},
+			"no-to":       map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y"},
+			"bad-dsn":     map[string]any{"type": "email", "dsn": "http://x", "from": "x@y", "to": []any{"a@b"}},
+			"no-webhook":  map[string]any{"type": "slack"},
+			"bad-webhook": map[string]any{"type": "slack", "webhook": "ftp://x"},
+			"bad-type":    map[string]any{"type": "smoke-signal"},
+			"no-type":     map[string]any{"dsn": "smtp://x"},
 		},
 	})
 	for _, w := range []string{
 		"notifiers.no-dsn.dsn is required for an email notifier",
 		"notifiers.no-to.to must list at least one address",
 		"notifiers.bad-dsn.dsn must be an smtp:// or smtps:// URL",
-		"notifiers.bad-type.type \"smoke-signal\" is not supported (email)",
+		"notifiers.no-webhook.webhook is required for a slack notifier",
+		"notifiers.bad-webhook.webhook must be an http(s) URL",
+		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, slack)",
 		"notifiers.no-type.type is required",
 	} {
 		if !hasIssue(bad, w) {

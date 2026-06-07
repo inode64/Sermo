@@ -146,19 +146,30 @@ notifiers:
     to: [ops@example.com, oncall@example.com]       # one or more recipients
 ```
 
-The **`email`** notifier sends over SMTP using only the Go standard library (no
-external dependency):
+Notifier types (both use only the Go standard library — no external dependency):
 
-- **`dsn`** — `smtp://[user:pass@]host[:port]` (STARTTLS when offered; default port
-  587) or `smtps://…` (implicit TLS; default port 465). Credentials, when present,
-  are only sent over an encrypted connection.
-- **`from`** — the sender address (a bare `addr` or `Name <addr>`).
-- **`to`** — one or more recipient addresses.
+- **`email`** — sends over SMTP.
+  - **`dsn`** — `smtp://[user:pass@]host[:port]` (STARTTLS when offered; default
+    port 587) or `smtps://…` (implicit TLS; default port 465). Credentials, when
+    present, are only sent over an encrypted connection.
+  - **`from`** — the sender address (a bare `addr` or `Name <addr>`).
+  - **`to`** — one or more recipient addresses.
+- **`slack`** — posts to a Slack **incoming webhook**.
+  - **`webhook`** — the incoming-webhook URL (`https://hooks.slack.com/services/…`).
+    The notification's subject is the lead line and its detail (the `SERMO_*`
+    fields) follows in a code block.
 
-The set of notifier **types is pluggable** — `slack`, `teams`, and others can be
+```yaml
+notifiers:
+  team-slack:
+    type: slack
+    webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
+```
+
+The set of notifier **types is pluggable** — new transports (`teams`, …) are
 added without touching watches or rules (each registers a builder in
-`internal/notify`). A future transport will look the same: a `type` plus its
-own fields, addressed by name.
+`internal/notify`). A new transport looks the same: a `type` plus its own
+fields, addressed by name.
 
 ## Host watches
 

@@ -37,6 +37,7 @@ type Notifier interface {
 // here (e.g. "slack", "teams").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
 	"email": buildEmail,
+	"slack": buildSlack,
 }
 
 // Build constructs the named notifiers from the global `notifiers` section

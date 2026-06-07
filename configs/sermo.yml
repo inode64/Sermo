@@ -53,6 +53,9 @@ notifiers:
     dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com, oncall@example.com]
+  team-slack:
+    type: slack
+    webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
 
 # Host watches: monitor host resources (disk, …) independently of services and,
 # when a threshold is crossed, run a hook command and/or notify named targets.
@@ -68,7 +71,7 @@ watches:
       inodes_used_pct: { op: ">=", value: 90 }   # also catch inode exhaustion
     for: { cycles: 3 }
     then:
-      notify: [ops-email]                        # email the on-call list
+      notify: [ops-email, team-slack]            # email the on-call list and post to Slack
       hook:
         command: [/usr/local/bin/sermo-alert-disk.sh, "/"]
         timeout: 10s

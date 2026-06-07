@@ -31,7 +31,16 @@ func TestBuildEmptyIsNoop(t *testing.T) {
 
 func TestSupportedTypes(t *testing.T) {
 	got := SupportedTypes()
-	if len(got) != 1 || got[0] != "email" {
-		t.Fatalf("SupportedTypes = %v, want [email]", got)
+	if len(got) != 2 || got[0] != "email" || got[1] != "slack" {
+		t.Fatalf("SupportedTypes = %v, want [email slack]", got)
+	}
+}
+
+func TestBuildSlackRegistry(t *testing.T) {
+	notifiers, warns := Build(map[string]any{
+		"team-slack": map[string]any{"type": "slack", "webhook": "https://hooks.slack.com/services/x"},
+	})
+	if _, ok := notifiers["team-slack"]; !ok || len(warns) != 0 {
+		t.Fatalf("slack notifier should build cleanly: %v %v", notifiers, warns)
 	}
 }
