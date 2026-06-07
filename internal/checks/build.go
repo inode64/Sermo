@@ -50,6 +50,9 @@ type Deps struct {
 	// FdsSampler reads system file-descriptor usage for `fds` checks. Nil reads
 	// /proc/sys/fs/file-nr.
 	FdsSampler FdsSamplerFunc
+	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
+	// Nil reads /proc/sys/net/netfilter.
+	ConntrackSampler ConntrackSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -294,6 +297,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "fds check: " + err.Error()
 		}
 		return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
+
+	case "conntrack":
+		preds, err := parseConntrackPreds(entry)
+		if err != nil {
+			return nil, "conntrack check: " + err.Error()
+		}
+		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
 
 	case "oom":
 		// delta is optional; the default fires on any OOM kill (> 0).
