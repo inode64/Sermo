@@ -206,6 +206,45 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateServiceCheckAsWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"health": map[string]any{
+				"check": map[string]any{"type": "http", "url": "http://127.0.0.1/health", "expect_status": 200},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/down.sh"}}},
+			},
+			"port": map[string]any{
+				"check": map[string]any{"type": "tcp", "port": 5432},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("service checks should be valid as watches, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-url": map[string]any{
+				"check": map[string]any{"type": "http"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"weird": map[string]any{
+				"check": map[string]any{"type": "definitely-not-a-check"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.no-url.check.url is required for an http check",
+		"watches.weird.check.type \"definitely-not-a-check\" is not supported",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
 func TestValidateZombiesWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/rules"
 )
 
 func cfgWithWatches(raw map[string]any) *config.Config {
@@ -158,6 +161,61 @@ func TestBuildWatchesExpandsSwap(t *testing.T) {
 	}
 	if !cmds["/usr/local/bin/swap-usage.sh"] || !cmds["/usr/local/bin/swap-io.sh"] {
 		t.Fatalf("each metric should keep its own hook, got %v", cmds)
+	}
+}
+
+func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"health": map[string]any{
+			"check": map[string]any{"type": "tcp", "port": 5432, "host": "127.0.0.1"},
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x.sh"}}},
+		},
+		"backlog": map[string]any{
+			"check": map[string]any{"type": "count", "path": "/tmp", "op": ">", "value": 100},
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/y.sh"}}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	byName := map[string]*Watch{}
+	for _, w := range watches {
+		byName[w.Name] = w
+	}
+	if h := byName["health"]; h == nil || !h.FireOnFail {
+		t.Fatalf("a tcp (health) watch should fire on failure: %+v", h)
+	}
+	if b := byName["backlog"]; b == nil || b.FireOnFail {
+		t.Fatalf("a count (condition) watch should fire on OK, not failure: %+v", b)
+	}
+}
+
+func TestWatchFireOnFailInvertsTrigger(t *testing.T) {
+	var fired int32
+	runner := HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+		atomic.AddInt32(&fired, 1)
+		return nil
+	})
+	// A health check that is failing (OK=false) must fire when FireOnFail is set.
+	w := &Watch{
+		Name:       "health",
+		Check:      stubCheck{name: "tcp", ok: false},
+		FireOnFail: true,
+		Runner:     runner,
+		Hook:       HookSpec{Command: []string{"/bin/true"}},
+	}
+	w.RunCycle(context.Background())
+	if atomic.LoadInt32(&fired) != 1 {
+		t.Fatalf("FireOnFail watch should fire on a failing check, fired=%d", fired)
+	}
+	// A passing health check must NOT fire.
+	fired = 0
+	w.Check = stubCheck{name: "tcp", ok: true}
+	w.state = rules.WindowState{}
+	w.RunCycle(context.Background())
+	if atomic.LoadInt32(&fired) != 0 {
+		t.Fatalf("FireOnFail watch must not fire on a passing check, fired=%d", fired)
 	}
 }
 
