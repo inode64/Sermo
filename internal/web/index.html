@@ -317,6 +317,8 @@ function renderDetail(d) {
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
     <h2>Remediation</h2>
     <p>${renderRemediation(d.remediation)}</p>
+    <h2>Preflight ${me.can_act ? `<button onclick="runPreflight('${esc(d.name)}')">run</button>` : '<span class="muted">admin only</span>'}</h2>
+    <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
       <tbody>${lockRows}</tbody></table>
@@ -335,6 +337,36 @@ function renderDetail(d) {
   loadSeries(d.name);
   if (measured.length) loadMetrics(d.name);
   loadServiceEvents(d.name);
+}
+
+function preflightRows(checks) {
+  if (!checks || !checks.length) return '<span class="muted">No preflight checks configured.</span>';
+  return `<table><thead><tr><th>Check</th><th>State</th><th>Message</th></tr></thead><tbody>${
+    checks.map((c) => {
+      const state = c.ok
+        ? (c.optional ? '<span class="ok">ok</span> <span class="muted">(optional)</span>' : '<span class="ok">ok</span>')
+        : (c.optional ? '<span class="inactive">warn</span>' : '<span class="bad">fail</span>');
+      return `<tr><td>${esc(c.name)}</td><td>${state}</td><td class="muted">${esc(c.message || "")}</td></tr>`;
+    }).join("")
+  }</tbody></table>`;
+}
+
+async function runPreflight(name) {
+  $("#preflight-result").innerHTML = '<span class="muted">running…</span>';
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/preflight`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    const head = body.ok
+      ? '<span class="ok">OK</span>'
+      : '<span class="bad">FAIL</span>';
+    $("#preflight-result").innerHTML = `${head} ${preflightRows(body.checks || [])}`;
+  } catch (e) {
+    $("#preflight-result").innerHTML = `<span class="bad">Failed: ${esc(e.message)}</span>`;
+  }
 }
 
 async function loadServiceEvents(name) {

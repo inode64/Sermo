@@ -240,6 +240,8 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/ops` (global operation slot usage: `{in_use, total}` for
 `engine.max_parallel_operations`),
 `GET /livez` (liveness, see below), `GET /readyz` (readiness, see below), and
+`POST /api/services/{name}/preflight` (run preflight checks on demand — the same
+checks as `sermoctl preflight SERVICE`, without starting or stopping anything),
 `POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
 `start`, `stop` or `restart`. Clicking a service in the dashboard opens its
 detail. The dashboard auto-refreshes every 5s.
