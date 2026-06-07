@@ -251,11 +251,29 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 
 func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 	r := diag.Diagnose(b.cfg, b.diagStore, b.host)
-	out := make([]web.Finding, 0, len(r.Findings))
+	out := make([]web.Finding, 0, len(r.Findings)+1)
 	for _, f := range r.Findings {
 		out = append(out, web.Finding{Level: string(f.Level), Scope: f.Scope, Message: f.Message})
 	}
+	if b.opGate != nil {
+		inUse, total := b.opGate.Usage()
+		if total > 0 && inUse >= total {
+			out = append(out, web.Finding{
+				Level:   "warning",
+				Scope:   "operations",
+				Message: fmt.Sprintf("operation slots saturated (%d/%d in use)", inUse, total),
+			})
+		}
+	}
 	return out
+}
+
+func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
+	if b.opGate == nil {
+		return web.OperationSlots{}
+	}
+	inUse, total := b.opGate.Usage()
+	return web.OperationSlots{InUse: inUse, Total: total}
 }
 
 func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {

@@ -68,6 +68,39 @@ func NewSlotPool(dir string, slots int) SlotPool {
 	}
 }
 
+// InUse reports how many slots are currently held (active lock files).
+func (p SlotPool) InUse() (int, error) {
+	slots := p.Slots
+	if slots <= 0 {
+		slots = 2
+	}
+	if p.Dir == "" {
+		return 0, nil
+	}
+	proc := p.Proc
+	if proc == nil {
+		proc = OSProcessProber{}
+	}
+	now := p.Now
+	if now == nil {
+		now = time.Now
+	}
+	inUse := 0
+	for i := 0; i < slots; i++ {
+		path := filepath.Join(p.Dir, fmt.Sprintf("%d.slot", i))
+		existing, err := readLockFile(path)
+		if err != nil {
+			// A missing or unreadable slot file is not held.
+			continue
+		}
+		state, _ := classify(existing, now(), proc)
+		if state == StateActive {
+			inUse++
+		}
+	}
+	return inUse, nil
+}
+
 // Acquire waits until a slot is available or ctx is cancelled.
 func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 	slots := p.Slots

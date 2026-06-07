@@ -52,6 +52,7 @@
   </thead>
   <tbody id="rows"></tbody>
 </table>
+<p id="ops" class="muted" style="margin-top:-.5rem"></p>
 <p class="muted">Auto-refreshes every 5s.</p>
 
 <div id="detail"></div>
@@ -91,6 +92,24 @@ async function load() {
     $("#err").textContent = "Failed to load services: " + e.message;
   }
   loadEvents();
+  loadOps();
+}
+
+async function loadOps() {
+  try {
+    const res = await fetch("api/ops");
+    if (!res.ok) return;
+    const o = await res.json();
+    if (!o.total) {
+      $("#ops").textContent = "";
+      return;
+    }
+    const saturated = o.in_use >= o.total;
+    const cls = saturated ? "failed" : "";
+    $("#ops").innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
+  } catch (e) {
+    $("#ops").textContent = "";
+  }
 }
 
 async function loadEvents() {
