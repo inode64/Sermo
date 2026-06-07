@@ -130,12 +130,15 @@ func validateGlobal(cfg *Config) []Issue {
 
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a non-empty hook command (spec 2026-06-06-host-watches-disk).
-// validateWeb checks the global `web` block: a required port in 1..65535 and an
-// optional address (defaults to loopback).
+// validateWeb checks the global `web` block. The UI is enabled only when `port`
+// is set to an integer in 1..65535; a `web` block without `port` (or with port
+// omitted) is valid and leaves the dashboard disabled, matching sermod.
 func validateWeb(webCfg map[string]any, add func(string, ...any)) {
-	port, ok := scalarInt(webCfg["port"])
-	if !ok || port < 1 || port > 65535 {
-		add("web.port must be an integer in 1..65535")
+	if portRaw, present := webCfg["port"]; present {
+		port, ok := scalarInt(portRaw)
+		if !ok || port < 1 || port > 65535 {
+			add("web.port must be an integer in 1..65535")
+		}
 	}
 	if v, present := webCfg["address"]; present {
 		if _, isStr := v.(string); !isStr {

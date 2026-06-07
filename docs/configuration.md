@@ -131,7 +131,7 @@ the CLI uses. It is enabled by setting a `port`:
 ```yaml
 web:
   address: 127.0.0.1     # optional, default 127.0.0.1 (loopback only)
-  port: 9797             # enables the UI; omit the whole block to disable
+  port: 9797             # enables the UI; omit port (or the whole block) to disable
 ```
 
 - **Recommended port: `9797`.** It is easy to remember and avoids the common

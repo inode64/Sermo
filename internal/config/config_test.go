@@ -227,6 +227,21 @@ defaults: { policy: { cooldown: 5m } }
 	if !hasIssue(issues, "web.address must be a string") {
 		t.Fatalf("missing web.address issue in %v", issues)
 	}
+
+	disabledGlobal := writeConfig(t, map[string]string{"sermo.yml": `
+web: { address: 127.0.0.1 }
+paths: { enabled: [ @ROOT@/enabled ] }
+defaults: { policy: { cooldown: 5m } }
+`})
+	cfg, err = Load(disabledGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, i := range Validate(cfg) {
+		if strings.Contains(i.Msg, "web.") {
+			t.Fatalf("web block without port should validate: %v", i)
+		}
+	}
 }
 
 func TestValidateMissingVariableAndPort(t *testing.T) {
