@@ -12,8 +12,10 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -135,14 +137,20 @@ type Server struct {
 	Backend Backend
 	Auth    Auth
 	Logger  *slog.Logger
+
+	started time.Time // when the server began serving; for /livez uptime
 }
 
 // Handler returns the router behind the auth middleware: the dashboard at /, the
 // service list at /api/services, and POST /api/services/{name}/{action} for
 // actions.
 func (s *Server) Handler() http.Handler {
+	if s.started.IsZero() {
+		s.started = time.Now()
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleIndex)
+	mux.HandleFunc("GET /livez", s.handleLivez)
 	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
@@ -248,6 +256,29 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Diagnostics(r.Context()))
+}
+
+// handleLivez is the liveness probe: if the daemon's web server can answer, the
+// process is alive, so it always returns 200. Plain requests get "ok"; `?verbose`
+// returns JSON with uptime, the number of services and the runtime version. It is
+// served without authentication (see withAuth) so probes need no credentials.
+func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
+	if !r.URL.Query().Has("verbose") {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = io.WriteString(w, "ok\n")
+		return
+	}
+	now := time.Now()
+	uptime := now.Sub(s.started)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":         "ok",
+		"started_at":     s.started.Format(time.RFC3339),
+		"now":            now.Format(time.RFC3339),
+		"uptime":         uptime.Round(time.Second).String(),
+		"uptime_seconds": int64(uptime.Seconds()),
+		"services":       len(s.Backend.Services(r.Context())),
+		"go":             runtime.Version(),
+	})
 }
 
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {

@@ -60,6 +60,13 @@ func roleFrom(ctx context.Context) string {
 // anonymous guest to admin).
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Liveness is a public probe: monitors and load balancers carry no
+		// credentials, so /livez bypasses authentication entirely.
+		if r.URL.Path == "/livez" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		role := s.Auth.role(r)
 
 		if r.URL.Path == "/login" {
