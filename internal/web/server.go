@@ -3,8 +3,11 @@
 // start/stop/restart them. It is deliberately minimal and depends on the daemon
 // only through the Backend interface, so it stays decoupled and testable.
 //
-// It performs no authentication, so it must bind to a trusted interface
-// (loopback by default); expose it only behind an authenticating reverse proxy.
+// Access is optional HTTP Basic auth with admin (read+act) and guest (read-only)
+// roles; state-changing POST requests also require an X-Sermo-CSRF header. When
+// no passwords are configured the UI is open — bind to a trusted interface
+// (loopback by default) or set passwords / front it with an authenticating reverse
+// proxy. GET /livez is always public for health probes.
 package web
 
 import (
