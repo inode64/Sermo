@@ -225,7 +225,33 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			}
 		}
 	}
+
+	if b.cfg != nil {
+		dir := filepath.Join(b.cfg.Global.RuntimeDir(), "locks")
+		if report, err := locks.NewScanner(dir).Scan(name); err == nil {
+			for _, lk := range report.Locks {
+				d.Locks = append(d.Locks, lockToWeb(lk))
+			}
+		}
+	}
 	return d, true
+}
+
+func lockToWeb(lk locks.Lock) web.Lock {
+	w := web.Lock{
+		Name:        lk.Name,
+		Reason:      lk.Reason,
+		State:       string(lk.State),
+		OwnerPID:    lk.OwnerPID,
+		StaleReason: lk.StaleReason,
+	}
+	if !lk.CreatedAt.IsZero() {
+		w.CreatedAt = lk.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	if !lk.ExpiresAt.IsZero() {
+		w.ExpiresAt = lk.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+	return w
 }
 
 func (b *WebBackend) Series(_ context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
