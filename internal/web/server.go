@@ -26,17 +26,20 @@ import (
 //go:embed index.html
 var assets embed.FS
 
-// Service is the web view of one monitored service.
+// Service is the web view of one configured service. Services with `enabled: false`
+// in their configuration are still listed (with Enabled=false) so operators can
+// see the full fleet and know what to activate by editing config + reloading.
 type Service struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	Backend     string `json:"backend"`
 	Unit        string `json:"unit"`
 	Status      string `json:"status"`
+	Enabled            bool   `json:"enabled"`                    // false when service document has `enabled: false`
 	Monitored          bool   `json:"monitored"`
 	MonitorSource      string `json:"monitor_source,omitempty"`       // cli | web | config | daemon
 	MonitorChangedAt   string `json:"monitor_changed_at,omitempty"`   // RFC3339 when monitoring state last changed
-	CheckHealth        string   `json:"check_health,omitempty"`   // ok | failing | unknown | paused
+	CheckHealth        string   `json:"check_health,omitempty"`   // ok | failing | unknown | paused | disabled
 	ChecksFailing      int      `json:"checks_failing,omitempty"` // required checks currently failing
 	ActiveLocks        []string `json:"active_locks,omitempty"`   // named runtime locks blocking actions
 }
@@ -224,7 +227,8 @@ const defaultSeriesWindow = 24 * time.Hour
 
 // Backend is what the web server needs from the daemon.
 type Backend interface {
-	// Services returns the current view of every monitored service.
+	// Services returns the current view of every configured service (including those
+	// with `enabled: false` in their YAML so they remain visible for activation).
 	Services(ctx context.Context) []Service
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)

@@ -203,6 +203,7 @@ function activeLockBadges(s) {
 }
 
 function checkHealthCell(s) {
+  if (!s.enabled) return '<span class="muted">disabled</span>';
   const h = s.check_health || "";
   if (h === "failing") {
     const n = s.checks_failing || 0;
@@ -211,6 +212,7 @@ function checkHealthCell(s) {
   }
   if (h === "ok") return '<span class="ok">ok</span>';
   if (h === "paused") return '<span class="muted">paused</span>';
+  if (h === "disabled") return '<span class="muted">disabled</span>';
   if (h === "unknown") return '<span class="muted">—</span>';
   return '<span class="muted">—</span>';
 }
@@ -218,21 +220,27 @@ function checkHealthCell(s) {
 function render(services) {
   const rows = (services || []).map((s) => {
     const st = (s.status || "unknown").toLowerCase();
-    const mon = s.monitored
-      ? '<span class="pill">monitored</span>'
-      : `<span class="pill">paused</span>${monitorHint(s)}`;
+    let mon, actions;
+    if (!s.enabled) {
+      mon = '<span class="pill">disabled</span>';
+      actions = '<span class="muted">disabled in config</span>';
+    } else {
+      mon = s.monitored
+        ? '<span class="pill">monitored</span>'
+        : `<span class="pill">paused</span>${monitorHint(s)}`;
+      actions = me.can_act ? `
+          <button onclick="act('${esc(s.name)}','start')">start</button>
+          <button onclick="act('${esc(s.name)}','stop')">stop</button>
+          <button onclick="act('${esc(s.name)}','restart')">restart</button>
+          ${s.monitored
+            ? `<button onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
+            : `<button onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
+        : '<span class="muted">read-only</span>';
+    }
     const label = s.display_name && s.display_name !== s.name
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    const actions = me.can_act ? `
-        <button onclick="act('${esc(s.name)}','start')">start</button>
-        <button onclick="act('${esc(s.name)}','stop')">stop</button>
-        <button onclick="act('${esc(s.name)}','restart')">restart</button>
-        ${s.monitored
-          ? `<button onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
-          : `<button onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
-      : '<span class="muted">read-only</span>';
     return `<tr>
       <td>${name}${activeLockBadges(s)}<div class="muted">${esc(s.unit || "")}</div></td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
@@ -340,14 +348,21 @@ function renderDetail(d) {
   }
 
   $("#detail").style.display = "block";
-  const mon = d.monitored
-    ? '<span class="pill">monitored</span>'
-    : `<span class="pill">paused</span>${monitorHint(d)}`;
+  let mon, disabledNote = "";
+  if (!d.enabled) {
+    mon = '<span class="pill">disabled</span>';
+    disabledNote = `<p class="muted" style="color:#cf222e">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`;
+  } else {
+    mon = d.monitored
+      ? '<span class="pill">monitored</span>'
+      : `<span class="pill">paused</span>${monitorHint(d)}`;
+  }
 
   $("#detail").innerHTML = `
     <button class="close" onclick="closeDetail()">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
+    ${disabledNote}`
     <h2>Remediation</h2>
     <p>${renderRemediation(d.remediation)}</p>
     <h2>Rules</h2>
