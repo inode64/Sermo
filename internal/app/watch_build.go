@@ -112,7 +112,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 // for disk/load/metric/count and the other threshold checks).
 func isHealthCheckType(typ string) bool {
 	switch typ {
-	case "tcp", "http", "command", "service", "file_exists", "binary", "libraries":
+	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "libraries":
 		return true
 	default:
 		return false

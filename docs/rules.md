@@ -8,6 +8,7 @@ which reuse the same schema). MVP types:
 | type          | passes when                                                        |
 |---------------|--------------------------------------------------------------------|
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
+| `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | the command exits with `expect_exit` (default 0), array form only  |
 | `service`     | the backend status equals `expect` (active/inactive/failed/unknown)|
@@ -28,6 +29,42 @@ which reuse the same schema). MVP types:
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
+
+### Ports
+
+A `ports` check probes several TCP ports on a host at once and evaluates a
+quantified open/closed expectation. It is health-style (`OK == true` means the
+expectation holds), so a watch over it fires its hook when the expectation breaks.
+
+```yaml
+checks:
+  web-ports:
+    type: ports
+    host: 10.0.0.5             # default 127.0.0.1
+    ports: "80,443,1024-4000"  # comma-separated single ports and inclusive ranges
+    expect: open               # per-port desired state: open | closed | any (default open)
+    match: all                 # quantifier: all (AND) | any (OR) | none (NOT) (default all)
+    on_change: false           # also fail when any port flips open<->closed between cycles
+    connect_timeout: 1s        # per-port dial timeout (default 1s)
+```
+
+`expect` is each port's desired state and `match` the quantifier over the ports in
+that state: **`all`** = every port (AND), **`any`** = at least one (OR), **`none`**
+= no port (NOT). So `expect: open, match: all` passes when **every** port is open;
+`expect: closed, match: any` passes when **at least one** is closed. A port is
+*open* when it accepts a TCP connection within `connect_timeout`, else *closed*.
+
+`expect: any` skips the state expectation entirely — combine it with
+`on_change: true` to alert purely on **state transitions** (a port that was open
+becoming closed, or vice versa). Result data exposes `open`, `closed`, `total` and
+`changed`. Ports are de-duplicated; a scan is capped at 16384 ports and runs
+concurrently, but a large range of *filtered* ports (no response) is bounded only
+by `connect_timeout`, so prefer tight ranges and a short timeout.
+
+Like `cert`, the `on_change` detection is **stateful** (it remembers the previous
+states across cycles), so it works as a **host watch** (built once); as a
+per-service check, where checks are rebuilt each cycle, only the open/closed
+expectation applies.
 
 ### HTTP
 
@@ -110,9 +147,9 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 The host-resource checks (`disk`, `load`, `fds`, `conntrack`, `entropy`, `zombies`,
 `oom`, `cert`) are condition-style — `OK == true` means there is a problem — so in
 rules `active: {check: x}` fires on it, and as a watch the hook fires on it.
-The health checks (`tcp`, `http`, `command`, `service`, `file_exists`, `binary`,
-`libraries`) are the opposite (`OK == true` is healthy), so as a watch they fire
-the hook on **failure**.
+The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
+`binary`, `libraries`) are the opposite (`OK == true` is healthy), so as a watch
+they fire the hook on **failure**.
 
 Two watch families stay watch-only because they are not single-shot: the
 multi-metric watches (`net`, `icmp`, `swap`, with a `metrics:` map and one hook per

@@ -568,6 +568,60 @@ func validJSONOp(op string) bool {
 	}
 }
 
+// validatePortsFields validates a ports check at prefix: a parseable `ports` spec
+// (list + ranges) and the enumerated expect/match values.
+func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
+	if err := validatePortSpec(scalarString(fields["ports"])); err != "" {
+		add("%s.ports %s", prefix, err)
+	}
+	if v := scalarString(fields["expect"]); v != "" && v != "open" && v != "closed" && v != "any" {
+		add("%s.expect must be open, closed or any", prefix)
+	}
+	if v := scalarString(fields["match"]); v != "" && v != "all" && v != "any" && v != "none" {
+		add("%s.match must be all, any or none", prefix)
+	}
+	if v, present := fields["on_change"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.on_change must be a boolean", prefix)
+		}
+	}
+}
+
+// validatePortSpec returns "" when spec is a valid comma-separated list of ports
+// and inclusive ranges (e.g. "80,443,1024-4000"), else a short reason.
+func validatePortSpec(spec string) string {
+	if strings.TrimSpace(spec) == "" {
+		return "is required (e.g. \"80,443,1024-4000\")"
+	}
+	any := false
+	for _, tok := range strings.Split(spec, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		lo, hi, isRange := strings.Cut(tok, "-")
+		start, err := strconv.Atoi(strings.TrimSpace(lo))
+		if err != nil {
+			return fmt.Sprintf("has an invalid port %q", tok)
+		}
+		end := start
+		if isRange {
+			end, err = strconv.Atoi(strings.TrimSpace(hi))
+			if err != nil {
+				return fmt.Sprintf("has an invalid range %q", tok)
+			}
+		}
+		if start < 1 || end > 65535 || start > end {
+			return fmt.Sprintf("range %q is out of 1..65535", tok)
+		}
+		any = true
+	}
+	if !any {
+		return "is required (e.g. \"80,443,1024-4000\")"
+	}
+	return ""
+}
+
 // validateWatchableCheck validates the fields of a single-shot service check used
 // as a host watch and reports whether the type is watchable. service/metric/
 // process are excluded: they need per-service context (backend status, a metric
@@ -578,6 +632,8 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 		if _, ok := scalarInt(fields["port"]); !ok {
 			add("%s.port is required and must be numeric for a tcp check", prefix)
 		}
+	case "ports":
+		validatePortsFields(prefix, fields, add)
 	case "http":
 		validateHTTPFields(prefix, fields, add)
 	case "command":
@@ -995,7 +1051,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // watch types (net, icmp, swap, file, process) stay watch-only because they fire
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
-var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
+var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
 	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
@@ -1062,6 +1118,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		switch typ {
 		case "http":
 			validateHTTPFields(path, entry, add)
+		case "ports":
+			validatePortsFields(path, entry, add)
 		case "command":
 			if !isStringArray(entry["command"]) {
 				add("%s command must be an array, not a shell string", path)

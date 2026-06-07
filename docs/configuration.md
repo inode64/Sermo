@@ -378,8 +378,8 @@ receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`disk`, `load`, `fds`, `conntrack`, `entropy`,
-`zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `http`, `command`,
-`file_exists`, `binary`, `libraries`, `count`) — can be used as a watch here, and
+`zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
+`command`, `file_exists`, `binary`, `libraries`, `count`) — can be used as a watch here, and
 the host-resource ones can equally be used in a service's `checks:`/rules (see
 [Checks](rules.md#checks)). A watch fires its hook on the check's **alert**
 outcome: threshold crossed for condition checks, **failure** for health checks
