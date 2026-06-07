@@ -152,8 +152,11 @@ func run(args []string) int {
 	}
 
 	if len(workers) == 0 && len(watches) == 0 {
-		logger.Error("no enabled services or watches to monitor")
-		return 2
+		if !app.HasConfiguredTargets(cfg) {
+			logger.Error("no services or watches configured to monitor")
+			return 2
+		}
+		logger.Warn("all services and watches are disabled; starting with nothing to monitor")
 	}
 
 	startupDelay := app.EngineDuration(cfg, "startup_delay", 0)
