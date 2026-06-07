@@ -14,6 +14,14 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+func ranChecks(names ...string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
 func TestApplyGatesRequires(t *testing.T) {
 	w := &Worker{Gates: map[string]CheckGate{
 		"query": {Requires: []string{"tcp"}},
@@ -23,6 +31,7 @@ func TestApplyGatesRequires(t *testing.T) {
 		"tcp":   {Check: "tcp", OK: false},
 		"query": {Check: "query", OK: false, Message: "connection refused"},
 	}
+	w.cycleRan = ranChecks("tcp", "query")
 	w.applyGates(cache)
 	q := cache["query"]
 	if !q.Skipped || !q.OK {
@@ -38,6 +47,7 @@ func TestApplyGatesRequires(t *testing.T) {
 		"tcp":   {Check: "tcp", OK: true},
 		"query": {Check: "query", OK: false, Message: "boom"},
 	}
+	w.cycleRan = ranChecks("tcp", "query")
 	w.applyGates(cache2)
 	if cache2["query"].Skipped || cache2["query"].OK {
 		t.Fatalf("query must keep its real result when the dependency is OK: %+v", cache2["query"])
@@ -65,6 +75,22 @@ func TestApplyGatesSkipWhenChanged(t *testing.T) {
 	w.applyGates(cache2)
 	if !cache2["probe"].Skipped {
 		t.Fatalf("probe must be skipped after the watched file changed: %+v", cache2["probe"])
+	}
+}
+
+func TestApplyGatesRequiresIgnoresStaleDependency(t *testing.T) {
+	w := &Worker{Gates: map[string]CheckGate{
+		"query": {Requires: []string{"tcp"}},
+	}}
+	// tcp failed when last evaluated, but only query ran this cycle.
+	cache := map[string]checks.Result{
+		"tcp":   {Check: "tcp", OK: false},
+		"query": {Check: "query", OK: false, Message: "boom"},
+	}
+	w.cycleRan = ranChecks("query")
+	w.applyGates(cache)
+	if cache["query"].Skipped || cache["query"].OK {
+		t.Fatalf("query must keep its real result when the dependency was not re-evaluated: %+v", cache["query"])
 	}
 }
 
