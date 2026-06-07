@@ -206,6 +206,46 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateFdsWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"fds": map[string]any{
+				"check": map[string]any{
+					"type":     "fds",
+					"used_pct": map[string]any{"op": ">=", "value": 85},
+					"free":     map[string]any{"op": "<", "value": 10000},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-pred": map[string]any{
+				"check": map[string]any{"type": "fds"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"bad-op": map[string]any{
+				"check": map[string]any{"type": "fds", "used_pct": map[string]any{"op": "=>", "value": "lots"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.no-pred.check requires at least one of used_pct/free/allocated",
+		"watches.bad-op.check.used_pct has an invalid op",
+		"watches.bad-op.check.used_pct value \"lots\" must be numeric",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
 func TestValidateOomWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
