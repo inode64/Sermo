@@ -428,6 +428,33 @@ sermoctl config render SERVICE
 `sermoctl config diff BASE SERVICE` is planned but post-MVP; see
 `implementation-spec.md` section 23.
 
+## Check types are unified across checks and watches
+
+There is **one set of check types**, shared by a service's
+`checks:`/`preflight:`/`postflight:` (referenced from rules) and by host
+`watches:` (which fire a hook). The build path is already shared
+(`internal/checks.buildCheck`, used by both `Build` and `BuildInline`).
+
+**Standing rule — whenever you add a new check type, integrate it with the
+existing checks and keep the docs in step:**
+
+- If it is a single-shot check (`Check.Run → Result`), make it work in **both**
+  places: add it to `knownCheckTypes` (service checks/rules) *and* ensure the
+  watch path accepts it (`internal/app/watch_build.go`; service checks usable as
+  watches go through `buildSingleWatch`). Validate its fields in **one** shared
+  validator (`internal/config/validate.go`) called from both
+  `validateCheckSection` and `validateWatches`.
+- Decide its firing polarity: condition-style (`OK == true` means the alert
+  condition, e.g. disk/load/metric/count) vs health-style (`OK == true` means
+  healthy, e.g. tcp/http). `isHealthCheckType` drives whether a watch fires its
+  hook on failure. Keep that list current.
+- Multi-target / multi-hook checks (`net`, `icmp`, `swap` metric expansion;
+  `file`, `process`) are watch-only by design — they are not single-shot. Note
+  the exclusion rather than forcing them into `checks:`.
+- Always update `docs/rules.md` (the check-type table + the "shared types"
+  note) and `docs/configuration.md` (host watches), plus a `configs/sermo.yml`
+  example, in the same change.
+
 ## Rule engine
 
 Rules use a structured YAML condition tree.

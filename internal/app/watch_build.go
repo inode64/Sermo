@@ -74,9 +74,12 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 	return watches, warnings
 }
 
-// buildSingleWatch builds the standard one-Watch-per-entry shape (disk and any
-// future 1:1 check type): an inline check plus the entry's top-level then.hook.
+// buildSingleWatch builds the standard one-Watch-per-entry shape: an inline check
+// plus the entry's top-level then.hook. It serves the host-resource checks
+// (disk/load/…) and any single-shot service check (tcp/http/…) used as a watch.
+// Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
+	typ := stringField(checkEntry["type"])
 	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
 		DefaultTimeout: deps.DefaultTimeout,
 		DiskUsage:      nil, // statfs default
@@ -89,16 +92,29 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	return &Watch{
-		Name:      name,
-		CheckType: stringField(checkEntry["type"]),
-		Check:     check,
-		Window:    rules.Rule{For: parseForField(entry["for"]), Within: parseWithinField(entry["within"])},
-		Hook:      hook,
-		Runner:    OSHookRunner{},
-		Interval:  interval,
-		Now:       deps.Now,
-		Emit:      deps.Emit,
+		Name:       name,
+		CheckType:  typ,
+		Check:      check,
+		Window:     rules.Rule{For: parseForField(entry["for"]), Within: parseWithinField(entry["within"])},
+		Hook:       hook,
+		Runner:     OSHookRunner{},
+		Interval:   interval,
+		FireOnFail: isHealthCheckType(typ),
+		Now:        deps.Now,
+		Emit:       deps.Emit,
 	}, ""
+}
+
+// isHealthCheckType reports whether a check type's OK==true means "healthy", so a
+// watch over it fires its hook on failure rather than on OK (the alert condition
+// for disk/load/metric/count and the other threshold checks).
+func isHealthCheckType(typ string) bool {
+	switch typ {
+	case "tcp", "http", "command", "service", "file_exists", "binary", "libraries":
+		return true
+	default:
+		return false
+	}
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp) into one
