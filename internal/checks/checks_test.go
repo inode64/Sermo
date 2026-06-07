@@ -2,11 +2,13 @@ package checks
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +67,89 @@ func TestHTTPCheck(t *testing.T) {
 	if res := classBad.Run(context.Background()); res.OK {
 		t.Errorf("2xx class should reject 503")
 	}
+}
+
+func TestHTTPCheckPostHeadersJSON(t *testing.T) {
+	var gotMethod, gotAuth, gotCT, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotAuth = r.Header.Get("Authorization")
+		gotCT = r.Header.Get("Content-Type")
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"status":"ok","data":{"count":3,"ready":true}}`))
+	}))
+	defer srv.Close()
+
+	c, warn := buildHTTP(t, srv, map[string]any{
+		"type":   "http",
+		"url":    srv.URL + "/api",
+		"method": "post",
+		"headers": map[string]any{
+			"Authorization": "Bearer xyz",
+		},
+		"json": map[string]any{"name": "sermo", "n": 2},
+		"expect_json": map[string]any{
+			"status":     "ok",
+			"data.count": 3,    // number compared as string
+			"data.ready": true, // bool compared as string
+		},
+		"expect_body": "ready",
+	})
+	if warn != "" {
+		t.Fatalf("build warn: %s", warn)
+	}
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("expected pass, got: %s", res.Message)
+	}
+	if gotMethod != "POST" || gotAuth != "Bearer xyz" || gotCT != "application/json" {
+		t.Fatalf("request not built right: method=%s auth=%q ct=%q", gotMethod, gotAuth, gotCT)
+	}
+	if gotBody != `{"n":2,"name":"sermo"}` {
+		t.Fatalf("json body = %q", gotBody)
+	}
+}
+
+func TestHTTPCheckExpectJSONMismatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"degraded"}`))
+	}))
+	defer srv.Close()
+
+	c, _ := buildHTTP(t, srv, map[string]any{
+		"type": "http", "url": srv.URL, "expect_json": map[string]any{"status": "ok"},
+	})
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatal("a mismatched json field must fail")
+	}
+	if !strings.Contains(res.Message, `json "status"`) {
+		t.Fatalf("message should name the field: %s", res.Message)
+	}
+}
+
+func TestHTTPCheckNonJSONResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	c, _ := buildHTTP(t, srv, map[string]any{"type": "http", "url": srv.URL, "expect_json": map[string]any{"a": "b"}})
+	if c.Run(context.Background()).OK {
+		t.Fatal("expect_json against a non-JSON response must fail")
+	}
+}
+
+// buildHTTP builds an http check from a config entry, using the test server's
+// client so TLS/transport match.
+func buildHTTP(t *testing.T, srv *httptest.Server, entry map[string]any) (Check, string) {
+	t.Helper()
+	built, warns := Build(map[string]any{"h": entry}, Deps{HTTPClient: srv.Client(), DefaultTimeout: time.Second})
+	if len(warns) > 0 {
+		return nil, warns[0]
+	}
+	return built[0].Check, ""
 }
 
 func TestParseStatusMatcher(t *testing.T) {

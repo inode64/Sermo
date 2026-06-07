@@ -1,8 +1,11 @@
 package checks
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -36,33 +39,116 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 	return c.result(true, "connected to "+addr, start)
 }
 
-// httpCheck issues an HTTP request and compares the status code (section 12).
-// expect accepts a single code, a class (2xx) or a list (post-MVP).
+// httpCheck issues an HTTP request and asserts the response: the status code
+// (expect), optionally that the body contains a substring (expectBody) and that
+// the JSON response matches key/value pairs at dotted paths (expectJSON). The
+// request may carry custom headers and a raw or JSON body (section 12).
 type httpCheck struct {
 	base
-	client *http.Client
-	url    string
-	method string
-	expect statusMatcher
+	client      *http.Client
+	url         string
+	method      string
+	headers     map[string]string
+	body        []byte
+	contentType string // set when the body is JSON, unless headers override it
+	expect      statusMatcher
+	expectBody  string
+	expectJSON  map[string]string
 }
+
+// maxHTTPBody bounds how much of the response is read for body/JSON assertions.
+const maxHTTPBody = 1 << 20
 
 func (c httpCheck) Run(ctx context.Context) Result {
 	start := time.Now()
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, c.method, c.url, nil)
+	var body io.Reader
+	if len(c.body) > 0 {
+		body = bytes.NewReader(c.body)
+	}
+	req, err := http.NewRequestWithContext(ctx, c.method, c.url, body)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("build request: %v", err), start)
 	}
+	if c.contentType != "" {
+		req.Header.Set("Content-Type", c.contentType)
+	}
+	for k, v := range c.headers {
+		req.Header.Set(k, v)
+	}
+
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.method, c.url, err), start)
 	}
 	defer resp.Body.Close()
 
-	ok := c.expect.matches(resp.StatusCode)
-	return c.result(ok, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
+	if !c.expect.matches(resp.StatusCode) {
+		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
+	}
+	if c.expectBody == "" && len(c.expectJSON) == 0 {
+		return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start)
+	}
+
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
+	if c.expectBody != "" && !strings.Contains(string(data), c.expectBody) {
+		return c.result(false, fmt.Sprintf("status %d; body does not contain %q", resp.StatusCode, c.expectBody), start)
+	}
+	if len(c.expectJSON) > 0 {
+		var doc any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			return c.result(false, fmt.Sprintf("status %d; response is not JSON", resp.StatusCode), start)
+		}
+		for path, want := range c.expectJSON {
+			got, ok := jsonPath(doc, path)
+			if !ok {
+				return c.result(false, fmt.Sprintf("status %d; json %q missing", resp.StatusCode, path), start)
+			}
+			if jsonValueString(got) != want {
+				return c.result(false, fmt.Sprintf("status %d; json %q = %q (want %q)", resp.StatusCode, path, jsonValueString(got), want), start)
+			}
+		}
+	}
+	return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start)
+}
+
+// jsonPath looks up a dotted path (e.g. "data.status") in a decoded JSON document
+// of nested objects.
+func jsonPath(doc any, path string) (any, bool) {
+	cur := doc
+	for _, key := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		cur, ok = m[key]
+		if !ok {
+			return nil, false
+		}
+	}
+	return cur, true
+}
+
+// jsonValueString renders a decoded JSON scalar for comparison with the expected
+// (string) value from config.
+func jsonValueString(v any) string {
+	switch t := v.(type) {
+	case string:
+		return t
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case bool:
+		if t {
+			return "true"
+		}
+		return "false"
+	case nil:
+		return "null"
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
 
 // statusMatcher matches an HTTP status against exact codes and/or classes (the

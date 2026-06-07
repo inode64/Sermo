@@ -484,6 +484,42 @@ checks:
 	mustHave(t, bad, "checks.bad-bool.verify must be a boolean")
 }
 
+func TestValidateHTTPFields(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  api:
+    type: http
+    url: "https://api/health"
+    method: POST
+    headers: { Authorization: "Bearer t" }
+    json: { ping: true }
+    expect_status: 200
+    expect_json: { status: ok }
+    expect_body: "ok"
+`)
+	if hasIssue(good, "checks.api") {
+		t.Fatalf("a valid http check was flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-url: { type: http, method: POST }
+  bad-headers: { type: http, url: "http://x", headers: "nope" }
+  bad-json: { type: http, url: "http://x", expect_json: "nope" }
+`)
+	mustHave(t, bad, "checks.no-url.url is required for an http check")
+	mustHave(t, bad, "checks.bad-headers.headers must be a mapping")
+	mustHave(t, bad, "checks.bad-json.expect_json must be a mapping")
+}
+
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service
