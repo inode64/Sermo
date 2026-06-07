@@ -272,12 +272,18 @@ func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.D
 }
 
 func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {
+	if b.events == nil {
+		return nil
+	}
 	return toWebEvents(b.events.Recent("", limit))
 }
 
 func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
 	if _, ok := b.entries[name]; !ok {
 		return nil, false
+	}
+	if b.events == nil {
+		return nil, true
 	}
 	return toWebEvents(b.events.Recent(name, limit)), true
 }
