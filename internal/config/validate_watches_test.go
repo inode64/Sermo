@@ -206,6 +206,35 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateConntrackWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"conntrack": map[string]any{
+				"check": map[string]any{
+					"type":     "conntrack",
+					"used_pct": map[string]any{"op": ">=", "value": 90},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"ct": map[string]any{
+				"check": map[string]any{"type": "conntrack"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, "watches.ct.check requires at least one of used_pct/free/count") {
+		t.Fatalf("expected missing-predicate issue, got %v", bad)
+	}
+}
+
 func TestValidateFdsWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

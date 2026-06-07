@@ -152,6 +152,9 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 		case "fds":
 			validateFieldPreds(name, check, []string{"used_pct", "free", "allocated"}, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "conntrack":
+			validateFieldPreds(name, check, []string{"used_pct", "free", "count"}, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
