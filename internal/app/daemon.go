@@ -63,7 +63,8 @@ type Deps struct {
 	Backend        servicemgr.Backend
 	Manager        servicemgr.Manager
 	Runtime        string
-	DefaultTimeout time.Duration
+	DefaultTimeout    time.Duration
+	OperationTimeout  time.Duration
 	// Interval is the global resolution (engine.interval). It is the base cycle
 	// rate and the unit a per-check `interval` is rounded to (a check runs every
 	// round(interval/resolution) cycles). A service's own `interval` overrides it.

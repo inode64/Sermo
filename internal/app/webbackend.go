@@ -47,8 +47,9 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps) (operatio
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(deps.Runtime, "locks")),
 		Discoverer: discoverer,
-		CheckDeps:  checkDeps,
-		Sleep:      deps.Sleep,
+		CheckDeps:        checkDeps,
+		Sleep:            deps.Sleep,
+		OperationTimeout: deps.OperationTimeout,
 	})
 	return engine, checkDeps, discoverer
 }
