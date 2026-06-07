@@ -187,7 +187,7 @@ func validateDiskCheck(name string, check map[string]any, add func(string, ...an
 		add("watches.%s.check.path is required for a disk check", name)
 	}
 	preds := 0
-	for _, field := range []string{"used_pct", "free_pct"} {
+	for _, field := range []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
 		raw, present := check[field]
 		if !present {
 			continue
@@ -206,7 +206,7 @@ func validateDiskCheck(name string, check map[string]any, add func(string, ...an
 		}
 	}
 	if preds == 0 {
-		add("watches.%s.check requires at least one of used_pct/free_pct", name)
+		add("watches.%s.check requires at least one of used_pct/free_pct/inodes_used_pct/inodes_free_pct/inodes_free", name)
 	}
 }
 
