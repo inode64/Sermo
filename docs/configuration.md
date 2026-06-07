@@ -230,8 +230,10 @@ named runtime locks are blocking, monitored,
 checks with the latest result, its SLA over the rolling windows, its named
 runtime locks (`sermoctl locks SERVICE`, including parse warnings for malformed
 lock files), its discovered processes
-(`sermoctl processes SERVICE`), and its automatic remediation policy state
-(cooldown, backoff and rate-limit gating)),
+(`sermoctl processes SERVICE`), its automatic remediation policy state
+(cooldown, backoff and rate-limit gating), and rule window progress for
+remediation/alert rules (`for`/`within` counters such as `2/3` consecutive
+cycles)),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
 for the window; `since` is a duration, default 24h, capped at the ~1-year
 retention),

@@ -350,6 +350,8 @@ function renderDetail(d) {
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
     <h2>Remediation</h2>
     <p>${renderRemediation(d.remediation)}</p>
+    <h2>Rules</h2>
+    ${renderRules(d.rules)}
     <h2>Preflight ${me.can_act ? `<button onclick="runPreflight('${esc(d.name)}')">run</button>` : '<span class="muted">admin only</span>'}</h2>
     <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
@@ -540,6 +542,29 @@ function fmtRemain(until) {
   if (sec < 60) return sec + "s remaining";
   if (sec < 3600) return Math.floor(sec / 60) + "m remaining";
   return Math.floor(sec / 3600) + "h remaining · until " + fmtTime(until);
+}
+
+function ruleState(r) {
+  if (r.firing) return '<span class="bad">firing</span>';
+  if (r.condition_true) return '<span class="inactive">matching</span>';
+  return '<span class="muted">idle</span>';
+}
+
+function renderRules(rules) {
+  if (!rules || !rules.length) return '<p class="muted">No remediation or alert rules configured.</p>';
+  const rows = rules.map((r) => {
+    const cond = r.condition_true
+      ? `<span class="inactive">${esc(r.condition || "")}</span>`
+      : `<span class="muted">${esc(r.condition || "")}</span>`;
+    const action = r.action ? esc(r.action) : '<span class="muted">—</span>';
+    return `<tr>
+      <td>${esc(r.name)}</td><td class="muted">${esc(r.type || "")}</td><td>${action}</td>
+      <td>${cond}</td><td class="muted">${esc(r.window || "")}</td>
+      <td>${esc(r.progress || "")}</td><td>${ruleState(r)}</td></tr>`;
+  }).join("");
+  return `<table><thead><tr>
+    <th>Name</th><th>Type</th><th>Action</th><th>Condition</th><th>Window</th><th>Progress</th><th>State</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function renderRemediation(r) {
