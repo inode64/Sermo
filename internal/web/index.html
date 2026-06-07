@@ -48,7 +48,7 @@
 <div id="err"></div>
 <table>
   <thead>
-    <tr><th>Service</th><th>Status</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
+    <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
   </thead>
   <tbody id="rows"></tbody>
 </table>
@@ -172,6 +172,19 @@ function monitorHint(s) {
   return hint ? ` <span class="muted">${esc(hint)}</span>` : "";
 }
 
+function checkHealthCell(s) {
+  const h = s.check_health || "";
+  if (h === "failing") {
+    const n = s.checks_failing || 0;
+    const label = n === 1 ? "1 failing" : n + " failing";
+    return `<span class="bad">${esc(label)}</span>`;
+  }
+  if (h === "ok") return '<span class="ok">ok</span>';
+  if (h === "paused") return '<span class="muted">paused</span>';
+  if (h === "unknown") return '<span class="muted">—</span>';
+  return '<span class="muted">—</span>';
+}
+
 function render(services) {
   const rows = (services || []).map((s) => {
     const st = (s.status || "unknown").toLowerCase();
@@ -193,12 +206,13 @@ function render(services) {
     return `<tr>
       <td>${name}<div class="muted">${esc(s.unit || "")}</div></td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
+      <td>${checkHealthCell(s)}</td>
       <td>${mon}</td>
       <td>${esc(s.backend || "")}</td>
       <td class="actions">${actions}</td>
     </tr>`;
   });
-  $("#rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">No services.</td></tr>`;
+  $("#rows").innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No services.</td></tr>`;
 }
 
 async function act(name, action) {

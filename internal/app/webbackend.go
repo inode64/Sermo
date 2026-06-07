@@ -183,7 +183,47 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 			}
 		}
 	}
+	failing, health := checkHealthSummary(b.snapshots.Get(name), e.checkNames, svc.Monitored)
+	svc.CheckHealth = health
+	if failing > 0 {
+		svc.ChecksFailing = failing
+	}
 	return svc
+}
+
+// checkHealthSummary reports required-check health for the service list. It uses
+// the same rule as SLA availability: a required, non-skipped check with OK=false
+// counts as failing; optional failures are ignored. Paused services are "paused";
+// services with no observed checks yet are "unknown".
+func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, monitored bool) (failing int, health string) {
+	if !monitored {
+		return 0, "paused"
+	}
+	if len(checkNames) == 0 {
+		return 0, ""
+	}
+	if snap == nil {
+		return 0, "unknown"
+	}
+	observed := false
+	for _, name := range checkNames {
+		cs, seen := snap[name]
+		if !seen {
+			continue
+		}
+		observed = true
+		if cs.Skipped || cs.Optional || cs.OK {
+			continue
+		}
+		failing++
+	}
+	if !observed {
+		return 0, "unknown"
+	}
+	if failing > 0 {
+		return failing, "failing"
+	}
+	return 0, "ok"
 }
 
 func (b *WebBackend) Services(ctx context.Context) []web.Service {
