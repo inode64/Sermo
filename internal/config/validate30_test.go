@@ -430,6 +430,30 @@ checks:
 	mustHave(t, issues, "checks.sysload requires at least one of load1/load5/load15")
 }
 
+func TestValidateCheckInterval(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  http: { type: http, url: "http://x/health", interval: 30m }
+`)
+	if hasIssue(good, "interval") {
+		t.Fatalf("a valid per-check interval was flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  http: { type: http, url: "http://x/health", interval: soon }
+`)
+	mustHave(t, bad, `checks.http.interval "soon" must be a valid positive duration`)
+}
+
 func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service

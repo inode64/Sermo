@@ -28,7 +28,10 @@ which reuse the same schema). MVP types:
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
 
-Each check has an optional `timeout` (else `engine.default_timeout`).
+Each check has an optional `timeout` (else `engine.default_timeout`) and an
+optional `interval` to run it less often than the worker cycle — every
+`round(interval / resolution)` cycles, reusing its last result in between (see
+[per-check interval](configuration.md#per-check-interval)).
 
 ### Checks and host watches are the same types
 
