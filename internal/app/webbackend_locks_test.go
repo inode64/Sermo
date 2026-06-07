@@ -84,6 +84,59 @@ func TestWebBackendDetailLocks(t *testing.T) {
 	}
 }
 
+func TestWebBackendDetailLockWarnings(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	if err := os.MkdirAll(locksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locksDir, "mysql.lock"), []byte("{bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{Global: config.Global{Runtime: runtime}}
+	b := &WebBackend{
+		order:   []string{"mysql"},
+		entries: map[string]*webEntry{"mysql": {}},
+		cfg:     cfg,
+	}
+
+	detail, ok := b.Detail(context.Background(), "mysql")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	if len(detail.LockWarnings) != 1 {
+		t.Fatalf("LockWarnings = %+v, want 1 warning", detail.LockWarnings)
+	}
+}
+
+func TestWebBackendDiagnosticsLockWarnings(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	if err := os.MkdirAll(locksDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locksDir, "redis.lock"), []byte("not-json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	b := &WebBackend{cfg: &config.Config{Global: config.Global{Runtime: runtime}}}
+	findings := b.Diagnostics(context.Background())
+	var lockWarn *struct{ Level, Scope, Message string }
+	for i := range findings {
+		f := findings[i]
+		if f.Scope == "locks" && f.Level == "warning" {
+			lockWarn = &struct{ Level, Scope, Message string }{f.Level, f.Scope, f.Message}
+			break
+		}
+	}
+	if lockWarn == nil {
+		t.Fatalf("findings = %+v, want a locks warning", findings)
+	}
+}
+
 func TestWebBackendViewActiveLocks(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")

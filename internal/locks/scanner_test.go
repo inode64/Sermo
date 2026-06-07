@@ -125,6 +125,23 @@ func TestScanMissingDirIsEmpty(t *testing.T) {
 	}
 }
 
+func TestScanDirMalformedFileWarns(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mysql.lock"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	warnings, err := scannerFor(dir, fakeProc{}).ScanDir()
+	if err != nil {
+		t.Fatalf("ScanDir() error = %v", err)
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning, got %v", warnings)
+	}
+}
+
 func TestScanMalformedFileWarns(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
