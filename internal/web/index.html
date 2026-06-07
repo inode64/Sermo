@@ -41,7 +41,7 @@
 </style>
 </head>
 <body>
-<h1>Sermo &middot; services</h1>
+<h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
 <div id="err"></div>
 <table>
   <thead>
@@ -60,6 +60,18 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
+
+let me = { can_act: true, role: "admin", auth: false };
+
+async function loadMe() {
+  try {
+    const res = await fetch("api/whoami");
+    if (res.ok) me = await res.json();
+  } catch (e) { /* keep defaults */ }
+  if (!me.auth) { $("#me").innerHTML = ""; }
+  else if (me.role === "admin") { $("#me").textContent = "(admin)"; }
+  else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
+}
 
 async function load() {
   try {
@@ -106,19 +118,20 @@ function render(services) {
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    return `<tr>
-      <td>${name}<div class="muted">${esc(s.unit || "")}</div></td>
-      <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
-      <td>${mon}</td>
-      <td>${esc(s.backend || "")}</td>
-      <td class="actions">
+    const actions = me.can_act ? `
         <button onclick="act('${esc(s.name)}','start')">start</button>
         <button onclick="act('${esc(s.name)}','stop')">stop</button>
         <button onclick="act('${esc(s.name)}','restart')">restart</button>
         ${s.monitored
           ? `<button onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
-          : `<button onclick="act('${esc(s.name)}','monitor')">monitor</button>`}
-      </td>
+          : `<button onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
+      : '<span class="muted">read-only</span>';
+    return `<tr>
+      <td>${name}<div class="muted">${esc(s.unit || "")}</div></td>
+      <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
+      <td>${mon}</td>
+      <td>${esc(s.backend || "")}</td>
+      <td class="actions">${actions}</td>
     </tr>`;
   });
   $("#rows").innerHTML = rows.join("") || `<tr><td colspan="5" class="muted">No services.</td></tr>`;
@@ -256,7 +269,7 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-load();
+loadMe().then(load);
 setInterval(() => { load(); if (current) detail(current); }, 5000);
 </script>
 </body>
