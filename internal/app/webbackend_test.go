@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	web "sermo/internal/web"
 )
 
 func TestWebBackendEventsNilLog(t *testing.T) {
@@ -142,5 +144,60 @@ func TestWebBackendDetailAtTimestamp(t *testing.T) {
 	}
 	if byName["new"].ran || byName["new"].at != "" {
 		t.Fatalf("unobserved new = %+v", byName["new"])
+	}
+}
+
+func TestWebBackendIncludesDisabledServices(t *testing.T) {
+	// NewWebBackend (and thus the web list) must include services that have
+	// `enabled: false` so they are visible in the dashboard for the operator
+	// to know they exist and can be activated (by editing config + reload).
+	b := &WebBackend{
+		order: []string{"mysql", "web"},
+		entries: map[string]*webEntry{
+			"mysql": {displayName: "MySQL", unit: "mysqld", backend: "systemd", disabled: true},
+			"web":   {displayName: "Web", unit: "nginx", backend: "systemd"},
+		},
+	}
+
+	svcs := b.Services(context.Background())
+	if len(svcs) != 2 {
+		t.Fatalf("got %d services, want 2 (including the disabled one)", len(svcs))
+	}
+	byName := map[string]web.Service{}
+	for _, s := range svcs {
+		byName[s.Name] = s
+	}
+
+	dis := byName["mysql"]
+	if dis.Enabled || dis.Status != "disabled" || dis.Monitored {
+		t.Fatalf("disabled service = %+v, want Enabled=false, Status=disabled, Monitored=false", dis)
+	}
+
+	en := byName["web"]
+	if !en.Enabled || en.Status == "disabled" {
+		t.Fatalf("normal service = %+v, want Enabled=true", en)
+	}
+
+	// Detail for disabled should succeed (returns basic info) but have no checks etc.
+	d, ok := b.Detail(context.Background(), "mysql")
+	if !ok || d.Name != "mysql" || d.Enabled {
+		t.Fatalf("detail for disabled: ok=%v d=%+v", ok, d)
+	}
+	if len(d.Checks) != 0 {
+		t.Fatalf("disabled detail should not expose checks")
+	}
+
+	// Operate must be rejected for disabled
+	res := b.Operate(context.Background(), "mysql", "restart")
+	if res.OK {
+		t.Fatal("operate on disabled must fail")
+	}
+	if res.Message == "" || !strings.Contains(res.Message, "disabled") {
+		t.Fatalf("operate error message should mention disabled: %q", res.Message)
+	}
+
+	// Preflight on disabled should not be found (no engine)
+	if _, ok := b.Preflight(context.Background(), "mysql"); ok {
+		t.Fatal("preflight on disabled should not succeed")
 	}
 }

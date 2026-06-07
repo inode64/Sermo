@@ -38,6 +38,9 @@ func (b *WebBackend) Preflight(ctx context.Context, name string) (web.PreflightR
 	if e == nil {
 		return web.PreflightResult{}, false
 	}
+	if e.disabled {
+		return web.PreflightResult{}, false
+	}
 	if e.engine.Preflight == nil {
 		return web.PreflightResult{OK: true}, true
 	}

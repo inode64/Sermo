@@ -67,6 +67,7 @@ type webEntry struct {
 	checkTypes  map[string]string // check name -> type
 	discoverer  process.Discoverer
 	selectors   []process.Selector
+	disabled    bool // true when the service had `enabled: false` (still listed for visibility)
 }
 
 // WebBackend implements web.Backend over the daemon's services: status from the
@@ -91,9 +92,11 @@ type WebBackend struct {
 	defaultTimeout time.Duration
 }
 
-// NewWebBackend resolves every enabled service once and wires its status, engine
-// and metadata for the web UI. Services that fail to resolve are skipped with a
-// warning (like BuildWorkers).
+// NewWebBackend resolves services for the web UI. All services present in the
+// loaded configuration are included in the listing (even those with `enabled: false`)
+// so that the dashboard can show the full fleet and let operators see what can be
+// activated (by editing the service file and reloading). Only non-disabled services
+// get a full runtime engine, checks, and operation support.
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{
 		entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots,
@@ -109,7 +112,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 
 	for _, name := range serviceNames(cfg) {
 		doc := cfg.Services[name]
-		if doc == nil || isDisabled(doc.Body) {
+		if doc == nil {
 			continue
 		}
 		resolved, errs := cfg.Resolve(name)
@@ -117,26 +120,32 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			warnings = append(warnings, "skip service "+name+": "+errs[0])
 			continue
 		}
+		disabled := isDisabled(doc.Body)
 		base := config.ServiceUnit(resolved.Tree, name)
 		aliases := config.UnitAliases(resolved.Tree, string(deps.Backend))
 		unit, err := resolver.Resolve(context.Background(), deps.Backend, base, aliases)
 		if err != nil {
 			unit = base
 		}
-		engine, checkDeps, discoverer := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
-		selectors, _ := process.ParseSelectors(resolved.Tree)
-		names, types := checkCatalog(resolved.Tree)
-		wb.entries[name] = &webEntry{
+		entry := &webEntry{
 			displayName: config.DisplayName(resolved.Tree, name),
 			unit:        unit,
 			backend:     string(deps.Backend),
-			engine:      engine,
-			status:      checkDeps.Status,
-			checkNames:  names,
-			checkTypes:  types,
-			discoverer:  discoverer,
-			selectors:   selectors,
 		}
+		if disabled {
+			entry.disabled = true
+		} else {
+			engine, checkDeps, discoverer := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
+			selectors, _ := process.ParseSelectors(resolved.Tree)
+			names, types := checkCatalog(resolved.Tree)
+			entry.engine = engine
+			entry.status = checkDeps.Status
+			entry.checkNames = names
+			entry.checkTypes = types
+			entry.discoverer = discoverer
+			entry.selectors = selectors
+		}
+		wb.entries[name] = entry
 		wb.order = append(wb.order, name)
 	}
 	return wb, warnings
@@ -164,6 +173,20 @@ func checkCatalog(tree map[string]any) ([]string, map[string]string) {
 }
 
 func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
+	svc := web.Service{
+		Name:        name,
+		DisplayName: e.displayName,
+		Backend:     e.backend,
+		Unit:        e.unit,
+		Enabled:     !e.disabled,
+		Monitored:   true, // no recorded state defaults to monitored
+	}
+	if e.disabled {
+		svc.Status = "disabled"
+		svc.Monitored = false
+		svc.CheckHealth = ""
+		return svc
+	}
 	status := "unknown"
 	if e.status != nil {
 		if st, err := e.status(ctx); err != nil {
@@ -172,14 +195,7 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 			status = string(st)
 		}
 	}
-	svc := web.Service{
-		Name:        name,
-		DisplayName: e.displayName,
-		Backend:     e.backend,
-		Unit:        e.unit,
-		Status:      status,
-		Monitored:   true, // no recorded state defaults to monitored
-	}
+	svc.Status = status
 	if b.store != nil {
 		if rec, found, err := b.store.MonitorState(name); err == nil && found {
 			svc.Monitored = rec.Active
@@ -279,6 +295,9 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	e := b.entries[name]
 	if e == nil {
 		return web.Detail{}, false
+	}
+	if e.disabled {
+		return web.Detail{Service: b.view(ctx, name, e)}, true
 	}
 	d := web.Detail{Service: b.view(ctx, name, e)}
 
@@ -498,6 +517,9 @@ func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.D
 	if e == nil {
 		return web.MetricSeries{}, false
 	}
+	if e.disabled {
+		return web.MetricSeries{}, false
+	}
 	typ, ok := e.checkTypes[check]
 	if !ok || !measuredCheckTypes[typ] {
 		return web.MetricSeries{}, false
@@ -560,6 +582,13 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 	e := b.entries[name]
 	if e == nil {
 		msg := "unknown service " + name
+		if b.emit != nil {
+			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
+		}
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if e.disabled {
+		msg := "service " + name + " is disabled in configuration"
 		if b.emit != nil {
 			b.emit(Event{Service: name, Kind: "error", Action: action, Message: msg})
 		}
