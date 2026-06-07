@@ -62,7 +62,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Liveness is a public probe: monitors and load balancers carry no
 		// credentials, so /livez bypasses authentication entirely.
-		if r.URL.Path == "/livez" {
+		if r.URL.Path == "/livez" || r.URL.Path == "/readyz" {
 			next.ServeHTTP(w, r)
 			return
 		}

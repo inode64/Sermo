@@ -235,7 +235,7 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings),
 `GET /api/ops` (global operation slot usage: `{in_use, total}` for
 `engine.max_parallel_operations`),
-`GET /livez` (liveness, see below), and
+`GET /livez` (liveness, see below), `GET /readyz` (readiness, see below), and
 `POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
 `start`, `stop` or `restart`. Clicking a service in the dashboard opens its
 detail. The dashboard auto-refreshes every 5s.
@@ -257,6 +257,24 @@ curl -fsS http://127.0.0.1:9797/livez?verbose    # -> {"status":"ok","uptime":"3
 
 It reports process liveness only; for configuration/host/database health use
 [diagnostics](#diagnostics).
+
+### Readiness (`/readyz`)
+
+`GET /readyz` is a readiness probe: it returns **200** only after `sermod` has
+finished `engine.startup_delay` (if any) and started its service workers and host
+watches. During the startup grace period, or while the daemon is shutting down, it
+returns **503**. A plain request returns `ok` or `starting` / `shutting_down` as
+`text/plain`; `GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`,
+`services`, `watches` and an optional `message`. Like `/livez`, it is served
+**without authentication**:
+
+```sh
+curl -fsS http://127.0.0.1:9797/readyz                 # -> ok (when monitoring)
+curl -fsS http://127.0.0.1:9797/readyz?verbose         # -> {"ready":true,"status":"ok",...}
+```
+
+Use `/livez` to know the process is alive; use `/readyz` before sending traffic or
+to gate a reverse proxy until monitoring has actually begun.
 
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
 results and errors — kept in an in-memory ring (the last 1000); they also go to

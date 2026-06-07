@@ -162,6 +162,8 @@ func run(args []string) int {
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
+	readiness := app.NewReadiness(string(detection.Backend), len(workers), len(watches))
+
 	if addr := webListenAddr(cfg); addr != "" {
 		backend, webWarnings := app.NewWebBackend(cfg, deps)
 		for _, w := range webWarnings {
@@ -174,6 +176,7 @@ func run(args []string) int {
 			Auth:             auth,
 			Logger:           logger,
 			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
+			Readiness:        readiness,
 		}
 		go func() {
 			if err := server.Run(ctx); err != nil {
@@ -193,7 +196,7 @@ func run(args []string) int {
 		OpSlots:      engineInt(cfg, "max_parallel_operations", 2),
 		StartupDelay: startupDelay,
 	}
-	scheduler.Run(ctx, workers, watches, opGate)
+	scheduler.Run(ctx, workers, watches, opGate, readiness)
 	logger.Info("sermod stopped")
 	return 0
 }

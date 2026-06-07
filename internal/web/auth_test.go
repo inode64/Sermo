@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,10 @@ func req(method, path, user, pass string) *http.Request {
 	return r
 }
 
+type fakeReadiness struct{ rep ReadyReport }
+
+func (f fakeReadiness) Report(_ context.Context) ReadyReport { return f.rep }
+
 func TestLivezPublicEvenWithAuth(t *testing.T) {
 	// auth required for everything else, but /livez must answer without credentials
 	h := authServer(Auth{AdminPassword: "secret"})
@@ -38,6 +43,43 @@ func TestLivezPublicEvenWithAuth(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("/api/services without auth = %d, want 401", rec.Code)
+	}
+}
+
+func TestReadyzPublicEvenWithAuth(t *testing.T) {
+	h := (&Server{
+		Backend:   &fakeBackend{services: []Service{{Name: "web"}}},
+		Auth:      Auth{AdminPassword: "secret"},
+		Readiness: fakeReadiness{rep: ReadyReport{Ready: true, Status: "ok", Services: 1}},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/readyz = %d, want 200", rec.Code)
+	}
+	if got := rec.Body.String(); got != "ok\n" {
+		t.Fatalf("/readyz body = %q", got)
+	}
+}
+
+func TestReadyzStartingReturns503(t *testing.T) {
+	h := (&Server{
+		Backend: &fakeBackend{services: []Service{{Name: "web"}}},
+		Readiness: fakeReadiness{rep: ReadyReport{
+			Status: "starting", Message: "monitoring has not started yet", Services: 1,
+		}},
+	}).Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz?verbose", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/readyz starting = %d, want 503", rec.Code)
+	}
+	var got ReadyReport
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Ready || got.Status != "starting" {
+		t.Fatalf("report = %+v", got)
 	}
 }
 

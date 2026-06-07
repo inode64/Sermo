@@ -29,7 +29,7 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil, nil)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, workers, nil, nil, nil)
 		close(done)
 	}()
 
@@ -62,7 +62,7 @@ func TestSchedulerHonorsPerWorkerInterval(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil, nil)
+		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil, nil, nil)
 		close(done)
 	}()
 
@@ -93,7 +93,7 @@ func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 60 * time.Millisecond}.Run(ctx, workers, nil, nil, nil)
 		close(done)
 	}()
 
@@ -128,7 +128,7 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: time.Hour}.Run(ctx, workers, nil, nil, nil)
 		close(done)
 	}()
 
@@ -161,7 +161,7 @@ func TestSchedulerRunsWatches(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil)
+		Scheduler{Interval: 15 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil)
 		close(done)
 	}()
 

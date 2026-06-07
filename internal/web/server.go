@@ -7,7 +7,7 @@
 // roles; state-changing POST requests also require an X-Sermo-CSRF header. When
 // no passwords are configured the UI is open — bind to a trusted interface
 // (loopback by default) or set passwords / front it with an authenticating reverse
-// proxy. GET /livez is always public for health probes.
+// proxy. GET /livez and GET /readyz are always public for health probes.
 package web
 
 import (
@@ -121,6 +121,21 @@ type OperationSlots struct {
 	Total int `json:"total"`
 }
 
+// ReadyReport is the /readyz readiness probe payload.
+type ReadyReport struct {
+	Ready    bool   `json:"ready"`
+	Status   string `json:"status"` // ok | starting | shutting_down
+	Backend  string `json:"backend,omitempty"`
+	Services int    `json:"services"`
+	Watches  int    `json:"watches"`
+	Message  string `json:"message,omitempty"`
+}
+
+// ReadinessChecker reports whether the daemon has begun monitoring.
+type ReadinessChecker interface {
+	Report(ctx context.Context) ReadyReport
+}
+
 // Event is one recorded daemon event for the activity log.
 type Event struct {
 	Time    string `json:"time"` // RFC3339
@@ -198,6 +213,8 @@ type Server struct {
 	Logger  *slog.Logger
 
 	OperationTimeout time.Duration
+	// Readiness is optional; nil makes /readyz report ready (tests).
+	Readiness ReadinessChecker
 
 	started  time.Time         // when the server began serving; for /livez uptime
 	shutdown context.Context // daemon lifetime; set in Run
@@ -213,6 +230,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("GET /livez", s.handleLivez)
+	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
@@ -374,6 +392,35 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 // process is alive, so it always returns 200. Plain requests get "ok"; `?verbose`
 // returns JSON with uptime, the number of services and the runtime version. It is
 // served without authentication (see withAuth) so probes need no credentials.
+func (s *Server) readyReport(ctx context.Context) ReadyReport {
+	if s.Readiness != nil {
+		return s.Readiness.Report(ctx)
+	}
+	return ReadyReport{
+		Ready: true, Status: "ok",
+		Services: len(s.Backend.Services(ctx)),
+	}
+}
+
+func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
+	rep := s.readyReport(r.Context())
+	status := http.StatusOK
+	if !rep.Ready {
+		status = http.StatusServiceUnavailable
+	}
+	if !r.URL.Query().Has("verbose") {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(status)
+		if rep.Ready {
+			_, _ = io.WriteString(w, "ok\n")
+		} else {
+			_, _ = io.WriteString(w, rep.Status+"\n")
+		}
+		return
+	}
+	writeJSON(w, status, rep)
+}
+
 func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	if !r.URL.Query().Has("verbose") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
