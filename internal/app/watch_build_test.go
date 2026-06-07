@@ -328,3 +328,36 @@ func TestBuildWatchesNetWarnsOnBadMetric(t *testing.T) {
 		t.Fatalf("expected 0 watches and a warning, got %d / %v", len(watches), warns)
 	}
 }
+
+func TestHasConfiguredTargets(t *testing.T) {
+	// No services and no watches: nothing configured.
+	empty := &config.Config{Global: config.Global{Raw: map[string]any{}}}
+	if HasConfiguredTargets(empty) {
+		t.Fatalf("empty config should report no configured targets")
+	}
+
+	// A watch present but disabled still counts as configured, so the daemon
+	// starts (and can enable it later via reload/web UI) instead of erroring.
+	disabledWatch := cfgWithWatches(map[string]any{
+		"disk-root": map[string]any{
+			"enabled": false,
+			"check":   map[string]any{"type": "disk", "path": "/"},
+		},
+	})
+	watches, _ := BuildWatches(disabledWatch, Deps{DefaultTimeout: time.Second}, time.Second)
+	if len(watches) != 0 {
+		t.Fatalf("disabled watch should not build, got %d", len(watches))
+	}
+	if !HasConfiguredTargets(disabledWatch) {
+		t.Fatalf("disabled watch should still count as a configured target")
+	}
+
+	// A disabled service also counts as configured.
+	disabledSvc := &config.Config{
+		Global:   config.Global{Raw: map[string]any{}},
+		Services: map[string]*config.Document{"web": {Body: map[string]any{"enabled": false}}},
+	}
+	if !HasConfiguredTargets(disabledSvc) {
+		t.Fatalf("disabled service should still count as a configured target")
+	}
+}
