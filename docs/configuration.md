@@ -147,6 +147,63 @@ hides the action buttons for guests; the API enforces it regardless. When no
 password/guest is set, auth is disabled (open) and the daemon **logs a warning**
 at startup. `GET /api/whoami` reports the caller's role.
 
+### Behind a reverse proxy (required to expose it)
+
+The web server speaks **plain HTTP only** and binds to loopback by default. To
+reach it from anything but the local host, **put it behind a reverse proxy**
+(nginx, Apache, …) that terminates **TLS** — do **not** widen `web.address` to a
+public interface. Keep Sermo on `127.0.0.1` and let the proxy be the only client:
+
+```yaml
+web:
+  address: 127.0.0.1   # leave on loopback
+  port: 9797
+  password: "${env:SERMO_WEB_PASSWORD}"
+```
+
+**nginx** (TLS in front, proxy to loopback):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name sermo.example.com;
+    ssl_certificate     /etc/ssl/certs/sermo.crt;
+    ssl_certificate_key /etc/ssl/private/sermo.key;
+
+    location / {
+        proxy_pass         http://127.0.0.1:9797;
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   X-Forwarded-For $remote_addr;
+    }
+}
+```
+
+**Apache** (`mod_ssl` + `mod_proxy` + `mod_proxy_http`):
+
+```apache
+<VirtualHost *:443>
+    ServerName sermo.example.com
+    SSLEngine on
+    SSLCertificateFile    /etc/ssl/certs/sermo.crt
+    SSLCertificateKeyFile /etc/ssl/private/sermo.key
+
+    ProxyPreserveHost On
+    ProxyPass        / http://127.0.0.1:9797/
+    ProxyPassReverse / http://127.0.0.1:9797/
+</VirtualHost>
+```
+
+Notes:
+
+- The proxy and the dashboard share an **origin**, so the `X-Sermo-CSRF` header and
+  Sermo's own admin/guest auth keep working through it — the browser forwards the
+  `Authorization` header. You can rely on Sermo's roles, add the proxy's own auth
+  (basic/OIDC/mTLS) on top, or both.
+- Redirect HTTP→HTTPS at the proxy and let it handle certificates (Sermo has no
+  native TLS). Restrict access there too (allow-lists, SSO) if needed.
+- Never publish port `9797` directly; only the proxy should connect to it.
+
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
 monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, and its SLA over the rolling windows),
