@@ -3,6 +3,7 @@ package state
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestStoreActiveDefaultsToNotFound(t *testing.T) {
@@ -14,6 +15,22 @@ func TestStoreActiveDefaultsToNotFound(t *testing.T) {
 	}
 	if found {
 		t.Errorf("a service with no recorded state must report found=false (got active=%v)", active)
+	}
+}
+
+func TestStoreMonitorStateRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	s.now = func() time.Time { return time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC) }
+
+	if err := s.SetActive("web", false, SourceWeb); err != nil {
+		t.Fatalf("SetActive: %v", err)
+	}
+	rec, found, err := s.MonitorState("web")
+	if err != nil || !found {
+		t.Fatalf("MonitorState: found=%v err=%v", found, err)
+	}
+	if rec.Active || rec.Source != SourceWeb || !rec.UpdatedAt.Equal(s.now()) {
+		t.Fatalf("record = %+v", rec)
 	}
 }
 

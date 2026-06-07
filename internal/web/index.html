@@ -155,12 +155,29 @@ function eventRows(events, withService) {
   }).join("");
 }
 
+function fmtMonitorSource(src) {
+  switch (src) {
+    case "cli": return "via sermoctl";
+    case "web": return "via web UI";
+    case "config": return "via config";
+    case "daemon": return "via daemon";
+    default: return src ? "via " + src : "";
+  }
+}
+
+function monitorHint(s) {
+  if (!s.monitor_source) return "";
+  let hint = fmtMonitorSource(s.monitor_source);
+  if (s.monitor_changed_at) hint += " · " + fmtAge(s.monitor_changed_at);
+  return hint ? ` <span class="muted">${esc(hint)}</span>` : "";
+}
+
 function render(services) {
   const rows = (services || []).map((s) => {
     const st = (s.status || "unknown").toLowerCase();
     const mon = s.monitored
       ? '<span class="pill">monitored</span>'
-      : '<span class="pill">paused</span>';
+      : `<span class="pill">paused</span>${monitorHint(s)}`;
     const label = s.display_name && s.display_name !== s.name
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
@@ -250,9 +267,14 @@ function renderDetail(d) {
   }
 
   $("#detail").style.display = "block";
+  const mon = d.monitored
+    ? '<span class="pill">monitored</span>'
+    : `<span class="pill">paused</span>${monitorHint(d)}`;
+
   $("#detail").innerHTML = `
     <button class="close" onclick="closeDetail()">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
+    <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Availability</h2>

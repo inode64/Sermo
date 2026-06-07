@@ -33,7 +33,9 @@ type Service struct {
 	Backend     string `json:"backend"`
 	Unit        string `json:"unit"`
 	Status      string `json:"status"`
-	Monitored   bool   `json:"monitored"`
+	Monitored          bool   `json:"monitored"`
+	MonitorSource      string `json:"monitor_source,omitempty"`       // cli | web | config | daemon
+	MonitorChangedAt   string `json:"monitor_changed_at,omitempty"`   // RFC3339 when monitoring state last changed
 }
 
 // ActionResult is the outcome of an operation (start/stop/restart).
