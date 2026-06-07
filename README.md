@@ -24,7 +24,9 @@ It ships two binaries:
   (`web.port`, recommended `9797`) to view services and monitor/start/stop/restart
   them, with a per-service detail showing its checks and SLA history, and a global
   and per-service event feed. Optional Basic auth with an admin role and a
-  read-only guest mode.
+  read-only guest mode. It serves plain HTTP on loopback — put it behind a
+  **TLS-terminating reverse proxy** (nginx/Apache) to expose it
+  ([how](docs/configuration.md#behind-a-reverse-proxy-required-to-expose-it)).
 
 ## Build
 
