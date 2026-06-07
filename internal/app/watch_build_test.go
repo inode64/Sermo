@@ -126,6 +126,41 @@ func TestBuildWatchesProcessWarnsOnNoCondition(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesExpandsSwap(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"swap": map[string]any{
+			"check": map[string]any{"type": "swap"},
+			"metrics": map[string]any{
+				"usage": map[string]any{
+					"used_pct": map[string]any{"op": ">=", "value": 80},
+					"then":     map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/swap-usage.sh"}}},
+				},
+				"io": map[string]any{
+					"delta": map[string]any{"op": ">", "value": 1000},
+					"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/swap-io.sh"}}},
+				},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 2 {
+		t.Fatalf("expected 2 expanded watches (usage, io), got %d", len(watches))
+	}
+	cmds := map[string]bool{}
+	for _, w := range watches {
+		if w.CheckType != "swap" || w.Name != "swap" {
+			t.Fatalf("unexpected watch: %+v", w)
+		}
+		cmds[w.Hook.Command[0]] = true
+	}
+	if !cmds["/usr/local/bin/swap-usage.sh"] || !cmds["/usr/local/bin/swap-io.sh"] {
+		t.Fatalf("each metric should keep its own hook, got %v", cmds)
+	}
+}
+
 func TestBuildWatchesSkipsDisabled(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "disk", "path": "/"}},

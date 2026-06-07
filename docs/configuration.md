@@ -265,6 +265,46 @@ ICMP requires elevated privileges: the daemon needs the `CAP_NET_RAW` capability
 (or the host's `net.ipv4.ping_group_range` sysctl must include the daemon's gid)
 to open a raw ICMP socket. This iteration is **IPv4-only**.
 
+### `swap` — system swap
+
+A `swap` watch monitors system swap, grouped like `net`/`icmp`: two independent
+metrics, each with its own condition **and its own hook**. `usage` catches swap
+filling up; `io` catches swap thrashing (heavy paging in/out, a classic sign of
+memory pressure).
+
+```yaml
+watches:
+  swap:
+    enabled: false
+    interval: 30s
+    check: { type: swap }
+    metrics:
+      usage:                                   # how full swap is (a level check)
+        used_pct: { op: ">=", value: 80 }      # any of used_pct / free_pct / free_bytes
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-swap-usage.sh]
+      io:                                      # paging activity (thrashing)
+        delta: { op: ">", value: 1000 }        # pages swapped in+out per cycle
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-swap-io.sh]
+```
+
+- **`usage`** — like `disk`, fires when every present predicate holds. Predicates
+  are `used_pct`, `free_pct` (percent of total swap) and `free_bytes`, each
+  `{op, value}` with the disk operator set. A host with **no swap configured**
+  never fires (so a `free_bytes` predicate does not misfire on a swapless box).
+- **`io`** — sums the pages swapped **in and out** (`pswpin`+`pswpout` from
+  `/proc/vmstat`) and fires when the **per-cycle delta** satisfies `delta: {op,
+  value}` (like `net` errors). The threshold is pages per interval, so it scales
+  with `interval`. The first cycle primes a baseline and never fires; counter
+  resets clamp the delta to zero.
+
+A swap hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`swap`), `SERMO_METRIC`
+(`usage`|`io`), `SERMO_VALUE` (the breaching reading: a percent/bytes for usage,
+the page delta for io), `SERMO_MESSAGE`, plus `SERMO_TOTAL_BYTES`/`SERMO_FREE_BYTES`.
+
 ### `file` — file/directory attributes
 
 A `file` watch monitors a file or directory for attribute changes — size,

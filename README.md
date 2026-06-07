@@ -12,11 +12,11 @@ It ships two binaries:
 - **`sermod`** — the daemon: one independent worker per service that runs
   checks, evaluates rules, and drives remediation through the same safe
   operation engine `sermoctl` uses. It also runs **host watches** (disk space,
-  network interfaces — state, speed and rx/tx errors — external hosts via
-  ICMP — reachability and latency — files/directories — size, permissions,
-  owner and deletion — and processes by name — age, CPU/memory/IO and
-  disappearance) that fire a hook command when a threshold is crossed or an
-  attribute changes.
+  swap — usage and paging IO — network interfaces — state, speed and rx/tx
+  errors — external hosts via ICMP — reachability and latency — files/directories
+  — size, permissions, owner and deletion — and processes by name — age,
+  CPU/memory/IO and disappearance) that fire a hook command when a threshold is
+  crossed or an attribute changes.
 
 ## Build
 
