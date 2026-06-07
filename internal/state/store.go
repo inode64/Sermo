@@ -228,6 +228,44 @@ func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, tota
 	return up, total, nil
 }
 
+// SLAPoint is one time bucket of a service's availability series: the up and
+// total observed cycles in that UTC minute. It is the unit a future availability
+// graph plots. A minute with no point means the service was not monitored then
+// (Sermo down, or the service paused/disabled) — excluded, not counted as down.
+type SLAPoint struct {
+	Start time.Time `json:"start"`
+	Up    int64     `json:"up"`
+	Total int64     `json:"total"`
+}
+
+// SLASeries returns a service's per-minute availability points in [from, to),
+// oldest first. Unmonitored minutes are absent (gaps) rather than zero rows, so a
+// caller can render excluded periods distinctly from downtime. This is the stored
+// "control" a graph is built from later.
+func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT bucket, up_count, total_count
+		   FROM sla_sample
+		  WHERE service = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+		service, minuteBucket(from), minuteBucket(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SLAPoint
+	for rows.Next() {
+		var bucket, up, total int64
+		if err := rows.Scan(&bucket, &up, &total); err != nil {
+			return nil, err
+		}
+		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
+	}
+	return out, rows.Err()
+}
+
 // SLAReport returns a service's availability across every SLAWindow, ordered as
 // SLAWindows (hour..year).
 func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {

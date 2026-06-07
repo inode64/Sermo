@@ -91,10 +91,17 @@ required checks is always available. Samples are accumulated into per-minute
 buckets in the state DB (`/var/lib/sermo/sermo.db`); the daemon prunes buckets
 older than a year on startup.
 
-Only **observed** cycles count. A paused service (`unmonitor`) records nothing,
-and a window in which the daemon was down simply has fewer samples — neither is
-counted as downtime, so maintenance and outages of Sermo itself do not depress a
-service's SLA.
+Only **observed** cycles count, so these periods are **excluded** from the SLA
+rather than counted as downtime:
+
+- **Sermo itself is stopped** — no cycles run, so those minutes have no samples.
+- **The service is paused** (`unmonitor`, or `monitor: disabled`) — the cycle
+  returns before any check, recording nothing.
+- **The service is disabled** (`enabled: false`) — no worker is built for it.
+- **A check is disabled/removed** — it is absent from the cycle, so it neither
+  passes nor fails; availability reflects only the checks that actually ran.
+
+So maintenance windows and outages of Sermo itself never depress a service's SLA.
 
 Report availability over rolling windows (the last hour, day, week, month and
 year) with `sermoctl sla`:
@@ -106,6 +113,21 @@ sermoctl --json sla          # machine-readable: up/total/ratio per window
 ```
 
 A window with no samples reads `n/a` (availability unknown), not `0%`.
+
+### Availability time series
+
+Samples are kept as per-minute buckets, which is also the raw **time series** a
+graph is built from. Export one service's series (oldest first) with `--series`:
+
+```sh
+sermoctl sla --series apache-main                  # last 24h (default)
+sermoctl sla --series apache-main --since 168h     # last 7 days
+sermoctl --json sla --series apache-main           # points: start, up, total, ratio
+```
+
+Each point is one monitored minute; **unmonitored minutes are simply absent**
+(gaps), so a graph can render an excluded period (Sermo down, or the service
+paused/disabled) distinctly from real downtime.
 
 ## Host watches
 
