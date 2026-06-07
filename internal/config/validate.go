@@ -100,8 +100,11 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 
+	notifiers, _ := raw["notifiers"].(map[string]any)
+	validateNotifiers(notifiers, add)
+
 	if watches, ok := raw["watches"].(map[string]any); ok {
-		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), add)
+		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), add)
 	}
 
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)
@@ -117,7 +120,71 @@ func validateGlobal(cfg *Config) []Issue {
 
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a non-empty hook command (spec 2026-06-06-host-watches-disk).
-func validateWatches(watches map[string]any, locksDir string, add func(string, ...any)) {
+// validateNotifiers checks the global `notifiers` section: each entry is a known
+// type with the fields that type needs. New transports validate here too.
+func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
+	for _, name := range sortedKeys(notifiers) {
+		entry, ok := notifiers[name].(map[string]any)
+		if !ok {
+			add("notifiers.%s must be a mapping", name)
+			continue
+		}
+		switch scalarString(entry["type"]) {
+		case "email":
+			dsn := scalarString(entry["dsn"])
+			if dsn == "" {
+				add("notifiers.%s.dsn is required for an email notifier", name)
+			} else if !strings.HasPrefix(dsn, "smtp://") && !strings.HasPrefix(dsn, "smtps://") {
+				add("notifiers.%s.dsn must be an smtp:// or smtps:// URL", name)
+			}
+			if scalarString(entry["from"]) == "" {
+				add("notifiers.%s.from is required for an email notifier", name)
+			}
+			if len(stringSlice(entry["to"])) == 0 {
+				add("notifiers.%s.to must list at least one address", name)
+			}
+		case "":
+			add("notifiers.%s.type is required", name)
+		default:
+			add("notifiers.%s.type %q is not supported (email)", name, scalarString(entry["type"]))
+		}
+	}
+}
+
+// notifierNames returns the set of defined notifier names, for reference checks.
+func notifierNames(notifiers map[string]any) map[string]struct{} {
+	names := make(map[string]struct{}, len(notifiers))
+	for name := range notifiers {
+		names[name] = struct{}{}
+	}
+	return names
+}
+
+// validateNotifyRefs checks that every `then.notify` name in a watch (entry-level
+// and per-metric) refers to a defined notifier.
+func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]struct{}, add func(string, ...any)) {
+	check := func(prefix string, then any) {
+		t, ok := then.(map[string]any)
+		if !ok {
+			return
+		}
+		for _, ref := range stringSlice(t["notify"]) {
+			if _, ok := notifiers[ref]; !ok {
+				add("%s.then.notify references unknown notifier %q", prefix, ref)
+			}
+		}
+	}
+	check("watches."+name, entry["then"])
+	if metrics, ok := entry["metrics"].(map[string]any); ok {
+		for _, key := range sortedKeys(metrics) {
+			if m, ok := metrics[key].(map[string]any); ok {
+				check(fmt.Sprintf("watches.%s.metrics.%s", name, key), m["then"])
+			}
+		}
+	}
+}
+
+func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, add func(string, ...any)) {
 	for _, name := range sortedKeys(watches) {
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
@@ -182,6 +249,7 @@ func validateWatches(watches map[string]any, locksDir string, add func(string, .
 			add("watches.%s.interval %q must be a valid positive duration", name, scalarString(v))
 		}
 
+		validateNotifyRefs(name, entry, notifiers, add)
 		validateWatchWindow(name, entry, add)
 	}
 }
@@ -217,23 +285,30 @@ func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	validateThresholdPreds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
 }
 
+// validateHookBlock validates a `then` action block: a hook and/or a notify list
+// (at least one). The hook command (when present) must be a non-empty array with
+// a valid optional timeout. Notifier-name references are checked separately by
+// validateNotifyRefs (which has the configured notifier set).
 func validateHookBlock(prefix string, block map[string]any, add func(string, ...any)) {
 	then, ok := block["then"].(map[string]any)
 	if !ok {
 		add("%s.then is required", prefix)
 		return
 	}
-	hook, ok := then["hook"].(map[string]any)
-	if !ok {
-		add("%s.then.hook is required", prefix)
+	hook, hasHook := then["hook"].(map[string]any)
+	notify := stringSlice(then["notify"])
+	if !hasHook && len(notify) == 0 {
+		add("%s.then requires a hook and/or notify", prefix)
 		return
 	}
-	list, ok := hook["command"].([]any)
-	if !ok || len(list) == 0 {
-		add("%s.then.hook.command must be a non-empty array", prefix)
-	}
-	if v, present := hook["timeout"]; present && !isPositiveDuration(scalarString(v)) {
-		add("%s.then.hook.timeout %q must be a valid positive duration", prefix, scalarString(v))
+	if hasHook {
+		list, ok := hook["command"].([]any)
+		if !ok || len(list) == 0 {
+			add("%s.then.hook.command must be a non-empty array", prefix)
+		}
+		if v, present := hook["timeout"]; present && !isPositiveDuration(scalarString(v)) {
+			add("%s.then.hook.timeout %q must be a valid positive duration", prefix, scalarString(v))
+		}
 	}
 }
 

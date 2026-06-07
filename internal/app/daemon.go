@@ -10,6 +10,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
+	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -52,6 +53,9 @@ type Deps struct {
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler
+	// Notifiers are the configured delivery targets (email, …) addressable by name
+	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
+	Notifiers map[string]notify.Notifier
 	// SystemFreshness caches system metrics so concurrent workers in one cycle
 	// share a computation; it must be below the scheduler interval.
 	SystemFreshness time.Duration

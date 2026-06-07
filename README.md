@@ -17,7 +17,8 @@ It ships two binaries:
   network interfaces — state, speed and rx/tx
   errors — external hosts via ICMP — reachability and latency — files/directories
   — size, permissions, owner and deletion — and processes by name — age,
-  CPU/memory/IO and disappearance) that fire a hook command when a threshold is
+  CPU/memory/IO and disappearance) that fire a hook command and/or send
+  **notifications** (email now, pluggable for Slack/Teams/…) when a threshold is
   crossed or an attribute changes.
 
 ## Build

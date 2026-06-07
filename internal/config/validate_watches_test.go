@@ -206,6 +206,87 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateNotifiers(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"notifiers": map[string]any{
+			"ops-email": map[string]any{
+				"type": "email",
+				"dsn":  "smtp://user:pass@smtp.example.com:587",
+				"from": "sermo@example.com",
+				"to":   []any{"ops@example.com", "oncall@example.com"},
+			},
+		},
+	})
+	for _, i := range good {
+		if strings.Contains(i.Msg, "notifiers.") {
+			t.Fatalf("valid notifier flagged: %v", good)
+		}
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"notifiers": map[string]any{
+			"no-dsn":   map[string]any{"type": "email", "from": "x@y", "to": []any{"a@b"}},
+			"no-to":    map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y"},
+			"bad-dsn":  map[string]any{"type": "email", "dsn": "http://x", "from": "x@y", "to": []any{"a@b"}},
+			"bad-type": map[string]any{"type": "smoke-signal"},
+			"no-type":  map[string]any{"dsn": "smtp://x"},
+		},
+	})
+	for _, w := range []string{
+		"notifiers.no-dsn.dsn is required for an email notifier",
+		"notifiers.no-to.to must list at least one address",
+		"notifiers.bad-dsn.dsn must be an smtp:// or smtps:// URL",
+		"notifiers.bad-type.type \"smoke-signal\" is not supported (email)",
+		"notifiers.no-type.type is required",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
+func TestValidateNotifyReferences(t *testing.T) {
+	notifiers := map[string]any{
+		"ops-email": map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y", "to": []any{"a@b"}},
+	}
+	diskCheck := map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}
+
+	good := validateRawGlobal(t, map[string]any{
+		"notifiers": notifiers,
+		"watches": map[string]any{
+			"disk-root": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"notify": []any{"ops-email"}}, // notify-only, no hook
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("a notify-only watch with a valid reference should pass, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"notifiers": notifiers,
+		"watches": map[string]any{
+			"disk-root": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"notify": []any{"ops-email", "ghost"}},
+			},
+			"no-action": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.disk-root.then.notify references unknown notifier \"ghost\"",
+		"watches.no-action.then requires a hook and/or notify",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
 func TestValidateServiceCheckAsWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

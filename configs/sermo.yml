@@ -45,8 +45,18 @@ logging:
   level: info
   format: text
 
-# Host watches: monitor host resources (disk, …) independently of services and
-# run a hook command when a threshold is crossed. Disabled by default.
+# Named notification targets, referenced by name from a watch's then.notify.
+# Pluggable by type (email now; slack/teams/… can be added). Disabled until used.
+notifiers:
+  ops-email:
+    type: email
+    dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
+    from: "Sermo <sermo@example.com>"
+    to: [ops@example.com, oncall@example.com]
+
+# Host watches: monitor host resources (disk, …) independently of services and,
+# when a threshold is crossed, run a hook command and/or notify named targets.
+# Disabled by default.
 watches:
   disk-root:
     enabled: false
@@ -58,6 +68,7 @@ watches:
       inodes_used_pct: { op: ">=", value: 90 }   # also catch inode exhaustion
     for: { cycles: 3 }
     then:
+      notify: [ops-email]                        # email the on-call list
       hook:
         command: [/usr/local/bin/sermo-alert-disk.sh, "/"]
         timeout: 10s
