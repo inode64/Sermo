@@ -460,10 +460,10 @@ existing checks and keep the docs in step:**
 Notifications go to named, typed **notifiers** under the global `notifiers`
 section (`internal/notify`), referenced by name from a watch's `then.notify`
 list. A watch's `then` block may have a `hook`, a `notify` list, or both (at least
-one). `email` is the first transport.
+one). Implemented transports: `email` (SMTP) and `slack` (incoming webhook).
 
-**Standing rule — keep notifiers extensible; adding a transport (slack, teams, …)
-must not require changes outside `internal/notify` and the docs:**
+**Standing rule — keep notifiers extensible; adding a transport (teams, …) must
+not require changes outside `internal/notify` and the docs:**
 
 - Register the new type's constructor in `internal/notify` (the `builders` map)
   and implement the `Notifier` interface (`Name`/`Type`/`Send`). Use only the Go

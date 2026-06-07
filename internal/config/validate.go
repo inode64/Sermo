@@ -143,10 +143,17 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 			if len(stringSlice(entry["to"])) == 0 {
 				add("notifiers.%s.to must list at least one address", name)
 			}
+		case "slack":
+			wh := scalarString(entry["webhook"])
+			if wh == "" {
+				add("notifiers.%s.webhook is required for a slack notifier", name)
+			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
+				add("notifiers.%s.webhook must be an http(s) URL", name)
+			}
 		case "":
 			add("notifiers.%s.type is required", name)
 		default:
-			add("notifiers.%s.type %q is not supported (email)", name, scalarString(entry["type"]))
+			add("notifiers.%s.type %q is not supported (email, slack)", name, scalarString(entry["type"]))
 		}
 	}
 }
