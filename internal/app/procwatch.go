@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"sermo/internal/metrics"
+	"sermo/internal/notify"
 	"sermo/internal/process"
 )
 
@@ -83,14 +84,15 @@ type procState struct {
 // CPU/memory/IO thresholds, firing the hook once per matching PID when its
 // conditions are newly met (edge-triggered) — one event and one hook per PID.
 type procWatcher struct {
-	name    string
-	match   ProcMatch
-	cond    procCond
-	hook    HookSpec
-	runner  HookRunner
-	now     func() time.Time
-	emit    func(Event)
-	sampler ProcSampler
+	name      string
+	match     ProcMatch
+	cond      procCond
+	hook      HookSpec
+	notifiers []notify.Notifier
+	runner    HookRunner
+	now       func() time.Time
+	emit      func(Event)
+	sampler   ProcSampler
 
 	state map[int]*procState
 }
@@ -216,15 +218,18 @@ func (w *procWatcher) fire(ctx context.Context, msg string, env map[string]strin
 	env["SERMO_CHECK_TYPE"] = "process"
 	env["SERMO_MESSAGE"] = msg
 
-	runner := w.runner
-	if runner == nil {
-		runner = OSHookRunner{}
+	if len(w.hook.Command) > 0 {
+		runner := w.runner
+		if runner == nil {
+			runner = OSHookRunner{}
+		}
+		if err := w.hook.Run(ctx, runner, env); err != nil {
+			w.emitEvent(Event{Watch: w.name, Kind: "hook-failed", Message: msg + ": " + err.Error()})
+		} else {
+			w.emitEvent(Event{Watch: w.name, Kind: "hook", Message: msg})
+		}
 	}
-	if err := w.hook.Run(ctx, runner, env); err != nil {
-		w.emitEvent(Event{Watch: w.name, Kind: "hook-failed", Message: msg + ": " + err.Error()})
-		return
-	}
-	w.emitEvent(Event{Watch: w.name, Kind: "hook", Message: msg})
+	dispatchNotify(ctx, w.notifiers, watchMessage(w.name, msg, env), w.name, w.emitEvent)
 }
 
 func (w *procWatcher) emitEvent(e Event) {

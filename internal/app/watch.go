@@ -3,11 +3,13 @@ package app
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
 
@@ -21,6 +23,9 @@ type Watch struct {
 	Window    rules.Rule // carries only For/Within; used by rules.WindowState.Fires
 	Hook      HookSpec
 	Runner    HookRunner
+	// Notifiers receive a notification when the watch fires (the resolved
+	// `then.notify` targets). A watch must have a hook and/or at least one notifier.
+	Notifiers []notify.Notifier
 	Interval  time.Duration
 	Now       func() time.Time
 	Emit      func(Event)
@@ -52,21 +57,57 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if !w.state.Fires(w.Window, fired) {
 		return
 	}
-	runner := w.Runner
-	if runner == nil {
-		runner = OSHookRunner{}
-	}
 	env := hookEnv(w.Name, w.CheckType, res)
-	if err := w.Hook.Run(ctx, runner, env); err != nil {
-		w.emit(Event{Watch: w.Name, Kind: "hook-failed", Message: err.Error()})
-		return
+	if len(w.Hook.Command) > 0 {
+		runner := w.Runner
+		if runner == nil {
+			runner = OSHookRunner{}
+		}
+		if err := w.Hook.Run(ctx, runner, env); err != nil {
+			w.emit(Event{Watch: w.Name, Kind: "hook-failed", Message: err.Error()})
+		} else {
+			w.emit(Event{Watch: w.Name, Kind: "hook", Message: res.Message})
+		}
 	}
-	w.emit(Event{Watch: w.Name, Kind: "hook", Message: res.Message})
+	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 }
 
 func (w *Watch) emit(e Event) {
 	if w.Emit != nil {
 		w.Emit(e)
+	}
+}
+
+// dispatchNotify delivers msg to each notifier, emitting one event per result. A
+// failed delivery is reported but never aborts the cycle (other targets and the
+// hook still run) — notifications are best-effort.
+func dispatchNotify(ctx context.Context, notifiers []notify.Notifier, msg notify.Message, watch string, emit func(Event)) {
+	for _, n := range notifiers {
+		if err := n.Send(ctx, msg); err != nil {
+			emit(Event{Watch: watch, Kind: "notify-failed", Message: n.Name() + ": " + err.Error()})
+		} else {
+			emit(Event{Watch: watch, Kind: "notify", Message: "notified " + n.Name()})
+		}
+	}
+}
+
+// watchMessage builds a notification from a fired watch's message and hook env.
+func watchMessage(name, message string, env map[string]string) notify.Message {
+	var body strings.Builder
+	body.WriteString(message)
+	body.WriteString("\n\n")
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		body.WriteString(k + "=" + env[k] + "\n")
+	}
+	return notify.Message{
+		Subject: fmt.Sprintf("[sermo] %s: %s", name, message),
+		Body:    body.String(),
+		Fields:  env,
 	}
 }
 

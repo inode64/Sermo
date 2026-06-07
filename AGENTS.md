@@ -455,6 +455,26 @@ existing checks and keep the docs in step:**
   note) and `docs/configuration.md` (host watches), plus a `configs/sermo.yml`
   example, in the same change.
 
+## Notifications are pluggable
+
+Notifications go to named, typed **notifiers** under the global `notifiers`
+section (`internal/notify`), referenced by name from a watch's `then.notify`
+list. A watch's `then` block may have a `hook`, a `notify` list, or both (at least
+one). `email` is the first transport.
+
+**Standing rule — keep notifiers extensible; adding a transport (slack, teams, …)
+must not require changes outside `internal/notify` and the docs:**
+
+- Register the new type's constructor in `internal/notify` (the `builders` map)
+  and implement the `Notifier` interface (`Name`/`Type`/`Send`). Use only the Go
+  standard library where feasible (the project avoids new dependencies).
+- Add its config validation to `validateNotifiers` (internal/config/validate.go)
+  and keep `notify.SupportedTypes()` in step.
+- The watch/dispatch side is transport-agnostic (it addresses every notifier
+  through the interface) — do not special-case a transport there.
+- Update `docs/configuration.md` (Notifications) and a `configs/sermo.yml`
+  example in the same change.
+
 ## Rule engine
 
 Rules use a structured YAML condition tree.

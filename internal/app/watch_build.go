@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
 
@@ -87,7 +88,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, err := parseHook(entry)
+	hook, names, err := parseThen(entry)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
@@ -97,6 +98,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Check:      check,
 		Window:     rules.Rule{For: parseForField(entry["for"]), Within: parseWithinField(entry["within"])},
 		Hook:       hook,
+		Notifiers:  resolveNotifiers(names, deps.Notifiers),
 		Runner:     OSHookRunner{},
 		Interval:   interval,
 		FireOnFail: isHealthCheckType(typ),
@@ -153,7 +155,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
 		}
-		hook, err := parseHook(mEntry)
+		hook, names, err := parseThen(mEntry)
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
@@ -164,6 +166,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Check:     check,
 			Window:    rules.Rule{For: parseForField(mEntry["for"]), Within: parseWithinField(mEntry["within"])},
 			Hook:      hook,
+			Notifiers: resolveNotifiers(names, deps.Notifiers),
 			Runner:    OSHookRunner{},
 			Interval:  interval,
 			Now:       deps.Now,
@@ -184,7 +187,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, err := parseHook(entry)
+	hook, names, err := parseThen(entry)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
@@ -194,6 +197,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		recursive: boolField(checkEntry["recursive"]),
 		cond:      cond,
 		hook:      hook,
+		notifiers: resolveNotifiers(names, deps.Notifiers),
 		runner:    OSHookRunner{},
 		emit:      deps.Emit,
 	}
@@ -219,19 +223,20 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, err := parseHook(entry)
+	hook, names, err := parseThen(entry)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	pw := &procWatcher{
-		name:    name,
-		match:   ProcMatch{Name: pname, User: stringField(checkEntry["user"])},
-		cond:    cond,
-		hook:    hook,
-		runner:  OSHookRunner{},
-		now:     deps.Now,
-		emit:    deps.Emit,
-		sampler: deps.ProcSampler, // nil -> osProcSampler at run time
+		name:      name,
+		match:     ProcMatch{Name: pname, User: stringField(checkEntry["user"])},
+		cond:      cond,
+		hook:      hook,
+		notifiers: resolveNotifiers(names, deps.Notifiers),
+		runner:    OSHookRunner{},
+		now:       deps.Now,
+		emit:      deps.Emit,
+		sampler:   deps.ProcSampler, // nil -> osProcSampler at run time
 	}
 	return &Watch{
 		Name:      name,
@@ -334,20 +339,39 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 	return c, nil
 }
 
-func parseHook(entry map[string]any) (HookSpec, error) {
+// parseThen reads a `then` block into an optional hook and an optional list of
+// notifier names. A then block must declare a hook and/or at least one notifier.
+func parseThen(entry map[string]any) (HookSpec, []string, error) {
 	then, ok := entry["then"].(map[string]any)
 	if !ok {
-		return HookSpec{}, fmt.Errorf("missing then")
+		return HookSpec{}, nil, fmt.Errorf("missing then")
 	}
-	hook, ok := then["hook"].(map[string]any)
-	if !ok {
-		return HookSpec{}, fmt.Errorf("then has no hook")
+	var hook HookSpec
+	if h, ok := then["hook"].(map[string]any); ok {
+		cmd := stringArray(h["command"])
+		if len(cmd) == 0 {
+			return HookSpec{}, nil, fmt.Errorf("hook requires a non-empty command")
+		}
+		hook = HookSpec{Command: cmd, Timeout: durationField(h["timeout"])}
 	}
-	cmd := stringArray(hook["command"])
-	if len(cmd) == 0 {
-		return HookSpec{}, fmt.Errorf("hook requires a non-empty command")
+	names := stringArray(then["notify"])
+	if len(hook.Command) == 0 && len(names) == 0 {
+		return HookSpec{}, nil, fmt.Errorf("then requires a hook and/or notify")
 	}
-	return HookSpec{Command: cmd, Timeout: durationField(hook["timeout"])}, nil
+	return hook, names, nil
+}
+
+// resolveNotifiers maps notifier names to the configured notifiers, skipping
+// unknown names (config validation reports those; a build-time miss means the
+// notifier itself failed to build, already warned by notify.Build).
+func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.Notifier {
+	out := make([]notify.Notifier, 0, len(names))
+	for _, n := range names {
+		if nt, ok := reg[n]; ok {
+			out = append(out, nt)
+		}
+	}
+	return out
 }
 
 func parseForField(v any) *rules.ForWindow {
