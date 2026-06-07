@@ -27,6 +27,7 @@ func (f *fakeBackend) Services(context.Context) []Service { return f.services }
 func (f *fakeBackend) Watches(context.Context) []Watch { return nil }
 func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo { return DaemonInfo{} }
+func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
 func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	for _, s := range f.services {
 		if s.Name == name {

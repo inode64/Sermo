@@ -75,6 +75,15 @@ type DaemonInfo struct {
 	StartupDelay          string `json:"startup_delay"`
 }
 
+// HostMetric is a single current host-level reading (from the metrics collector).
+type HostMetric struct {
+	Name     string  `json:"name"`
+	Percent  float64 `json:"percent,omitempty"`
+	Absolute float64 `json:"absolute,omitempty"`
+	Unit     string  `json:"unit,omitempty"`
+	Ready    bool    `json:"ready"`
+}
+
 // ActionResult is the outcome of an operation (start/stop/restart).
 type ActionResult struct {
 	OK      bool   `json:"ok"`
@@ -293,6 +302,8 @@ type Backend interface {
 	SetMonitored(ctx context.Context, name string, monitored bool) error
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
+	// HostMetrics returns current system-level metrics (memory, cpu, load averages).
+	HostMetrics(ctx context.Context) []HostMetric
 }
 
 // operateActions and monitorActions are the action verbs the API accepts.
@@ -351,6 +362,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/watches", s.handleWatches)
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
+	mux.HandleFunc("GET /api/host", s.handleHost)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -459,6 +471,10 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.DaemonInfo(r.Context()))
+}
+
+func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.HostMetrics(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
