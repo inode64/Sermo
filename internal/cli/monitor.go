@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"sermo/internal/state"
 )
@@ -45,7 +46,7 @@ func (a App) runMonitor(opts options, pause bool) int {
 			a.reportError(opts, fmt.Sprintf("unmonitor failed: %v", err))
 			return exitRuntimeError
 		}
-		a.reportMonitor(opts, service, "paused")
+		a.reportMonitor(opts, store, service, "paused")
 		return exitSuccess
 	}
 
@@ -62,21 +63,45 @@ func (a App) runMonitor(opts options, pause bool) int {
 	if !found || active {
 		status = "not-paused"
 	}
-	a.reportMonitor(opts, service, status)
+	a.reportMonitor(opts, store, service, status)
 	return exitSuccess
 }
 
-func (a App) reportMonitor(opts options, service, status string) {
+func (a App) reportMonitor(opts options, store *state.Store, service, status string) {
+	rec, found, _ := store.MonitorState(service)
+	payload := map[string]any{"service": service, "monitoring": status}
+	if found {
+		if rec.Source != "" {
+			payload["monitor_source"] = rec.Source
+		}
+		if !rec.UpdatedAt.IsZero() {
+			payload["monitor_changed_at"] = rec.UpdatedAt.UTC().Format(time.RFC3339)
+		}
+	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{"service": service, "monitoring": status})
+		writeJSON(a.Stdout, payload)
 		return
 	}
 	switch status {
 	case "paused":
-		fmt.Fprintf(a.Stdout, "monitoring paused for %s\n", service)
+		fmt.Fprintf(a.Stdout, "monitoring paused for %s%s\n", service, monitorMetaSuffix(rec, found))
 	case "resumed":
-		fmt.Fprintf(a.Stdout, "monitoring resumed for %s\n", service)
+		fmt.Fprintf(a.Stdout, "monitoring resumed for %s%s\n", service, monitorMetaSuffix(rec, found))
 	default:
 		fmt.Fprintf(a.Stdout, "%s was not paused\n", service)
 	}
+}
+
+func monitorMetaSuffix(rec state.MonitorRecord, found bool) string {
+	if !found {
+		return ""
+	}
+	suffix := ""
+	if rec.Source != "" {
+		suffix += " source=" + rec.Source
+	}
+	if !rec.UpdatedAt.IsZero() {
+		suffix += " changed=" + rec.UpdatedAt.UTC().Format(time.RFC3339)
+	}
+	return suffix
 }
