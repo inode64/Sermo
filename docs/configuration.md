@@ -211,10 +211,29 @@ checks with the latest result, and its SLA over the rolling windows),
 for the window; `since` is a duration, default 24h, capped at the ~1-year
 retention), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
-`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings), and
+`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings),
+`GET /livez` (liveness, see below), and
 `POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
 `start`, `stop` or `restart`. Clicking a service in the dashboard opens its
 detail. The dashboard auto-refreshes every 5s.
+
+### Liveness (`/livez`)
+
+`GET /livez` is a liveness probe for the daemon: if its web server answers, the
+process is alive, so it always returns **200**. A plain request returns
+`text/plain` body `ok`; `GET /livez?verbose` returns JSON with `status`, `uptime`
+(and `uptime_seconds`), `started_at`, `now`, the number of `services`, and the Go
+runtime version. Unlike every other endpoint it is served **without
+authentication** (and is exempt from CSRF), so a monitor, load balancer, container
+orchestrator or the reverse proxy can probe it with no credentials:
+
+```sh
+curl -fsS http://127.0.0.1:9797/livez            # -> ok
+curl -fsS http://127.0.0.1:9797/livez?verbose    # -> {"status":"ok","uptime":"3h12m0s",...}
+```
+
+It reports process liveness only; for configuration/host/database health use
+[diagnostics](#diagnostics).
 
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
 results and errors — kept in an in-memory ring (the last 1000); they also go to
