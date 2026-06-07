@@ -199,6 +199,7 @@ async function detail(name) {
 function renderDetail(d) {
   const checks = (d.checks || []).map((c) => {
     const state = !c.ran ? '<span class="muted">not run yet</span>'
+      : c.skipped ? '<span class="muted">skipped</span>'
       : c.ok ? '<span class="ok">ok</span>' : '<span class="bad">fail</span>';
     return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
       <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>

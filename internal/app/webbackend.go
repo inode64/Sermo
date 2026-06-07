@@ -193,6 +193,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			Type:     e.checkTypes[cn],
 			OK:       cs.OK,
 			Optional: cs.Optional,
+			Skipped:  cs.Skipped,
 			Message:  cs.Message,
 			Ran:      ran,
 		})
