@@ -255,7 +255,9 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		// All actions of this rule run together: alerts notify, then the operation.
 		w.emitAlerts(r)
 		result := w.Operate(ctx, action)
-		w.State.Record(now(), w.Policy)
+		if result.RecordsRemediation() {
+			w.State.Record(now(), w.Policy)
+		}
 		// A successful (re)launch now runs against the current files, so refresh
 		// the watched baselines — otherwise a `changed:`-driven restart would fire
 		// again every cycle.

@@ -128,6 +128,71 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	}
 }
 
+func TestBlockedOperationDoesNotRecordCooldown(t *testing.T) {
+	h := &workerHarness{
+		cache:    failedCache("http"),
+		opResult: operation.Result{Status: operation.ResultBlocked, Message: "lock held"},
+	}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 1 {
+		t.Fatalf("ops = %v, want [restart]", h.ops)
+	}
+	if !w.State.LastActionAt.IsZero() {
+		t.Fatalf("blocked operation must not record cooldown, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
+
+func TestPreflightFailedOperationDoesNotRecordCooldown(t *testing.T) {
+	h := &workerHarness{
+		cache:    failedCache("http"),
+		opResult: operation.Result{Status: operation.ResultPreflightFailed, Message: "disk check failed"},
+	}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if !w.State.LastActionAt.IsZero() {
+		t.Fatalf("preflight failure must not record cooldown, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
+
+func TestFailedOperationRecordsCooldown(t *testing.T) {
+	h := &workerHarness{
+		cache:    failedCache("http"),
+		opResult: operation.Result{Status: operation.ResultFailed, Message: "systemctl failed"},
+	}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if !w.State.LastActionAt.Equal(t0) {
+		t.Fatalf("executed-but-failed remediation should record cooldown, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
+
+func TestBlockedOperationAllowsImmediateRetry(t *testing.T) {
+	h := &workerHarness{
+		cache: failedCache("http"),
+		opResult: operation.Result{Status: operation.ResultBlocked, Message: "lock held"},
+	}
+	policy := rules.Policy{Cooldown: time.Minute}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), policy, nil)
+
+	w.RunCycle(context.Background())
+	h.opResult = operation.Result{Status: operation.ResultOK}
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 2 {
+		t.Fatalf("ops = %v, want two restart attempts", h.ops)
+	}
+	if !w.State.LastActionAt.Equal(t0) {
+		t.Fatalf("only the successful attempt should record cooldown, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
+
 func TestCyclePausedDoesNothing(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
