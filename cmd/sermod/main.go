@@ -39,6 +39,16 @@ func run(args []string) int {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
+	// Sermo is designed to run as root: it inspects and signals processes owned by
+	// other users, controls the service manager, opens raw ICMP sockets and reads
+	// privileged /proc entries. It still starts unprivileged, but those features
+	// degrade — so warn loudly rather than fail silently.
+	if os.Geteuid() != 0 {
+		logger.Warn("sermod is not running as root; features that need privileges will be unavailable",
+			"euid", os.Geteuid(),
+			"affected", "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
+	}
+
 	cfg, err := config.Load(globalPath)
 	if err != nil {
 		logger.Error("load config", "error", err)

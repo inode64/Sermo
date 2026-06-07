@@ -33,8 +33,16 @@ make build      # produces bin/sermoctl and bin/sermod
 make test       # run the test suite
 ```
 
-Requires Go 1.26+. Runtime dependencies: `systemctl` or `rc-service` on the
-host; no root needed for read-only commands.
+Requires Go 1.26+. Runtime dependencies: `systemctl` or `rc-service` on the host.
+
+**`sermod` runs as root.** It manages services owned by different users and
+accesses privileged areas (service control, signalling other users' processes,
+cross-user `/proc` inspection including per-process IO, raw ICMP sockets), so the
+packaged units run it as root; it warns at startup if it is not. The config is
+therefore trusted, root-owned input — `command` checks and `hook`s run as root
+(never via a shell), so keep `/etc/sermo` root-only and put secrets in the
+environment (`${env:NAME}`). See [safety](docs/safety.md#privileges-the-daemon-runs-as-root).
+Read-only `sermoctl` commands (status, config, etc.) do not need root.
 
 ## Install
 

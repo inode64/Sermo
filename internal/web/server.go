@@ -157,9 +157,23 @@ func eventLimit(r *http.Request) int {
 	return limit
 }
 
-// Run serves until ctx is cancelled, then shuts down gracefully.
+// csrfHeader must be present on every state-changing (POST) request. A cross-site
+// HTML form cannot set a custom header, and a cross-site fetch that tries to would
+// trigger a CORS preflight we never answer — so requiring it blocks CSRF against
+// the (root-privileged) action endpoints, in both authenticated and open modes.
+const csrfHeader = "X-Sermo-CSRF"
+
+// Run serves until ctx is cancelled, then shuts down gracefully. Timeouts bound
+// slow clients (the server runs as root, so it is hardened by default).
 func (s *Server) Run(ctx context.Context) error {
-	srv := &http.Server{Addr: s.Addr, Handler: s.Handler()}
+	srv := &http.Server{
+		Addr:              s.Addr,
+		Handler:           s.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

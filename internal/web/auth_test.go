@@ -13,10 +13,30 @@ func authServer(a Auth) http.Handler {
 
 func req(method, path, user, pass string) *http.Request {
 	r := httptest.NewRequest(method, path, nil)
+	if method == http.MethodPost {
+		r.Header.Set(csrfHeader, "1")
+	}
 	if user != "" || pass != "" {
 		r.SetBasicAuth(user, pass)
 	}
 	return r
+}
+
+func TestCSRFGuardOnPost(t *testing.T) {
+	h := authServer(Auth{}) // open mode: even without auth, a forged POST is blocked
+	// no CSRF header -> rejected
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/api/services/web/restart", nil)
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST without CSRF header = %d, want 403", rec.Code)
+	}
+	// with the header -> allowed
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req(http.MethodPost, "/api/services/web/restart", "", ""))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST with CSRF header = %d, want 200", rec.Code)
+	}
 }
 
 func TestAuthDisabledIsOpen(t *testing.T) {
