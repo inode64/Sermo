@@ -466,10 +466,10 @@ func operationExit(status operation.ResultStatus) int {
 	}
 }
 
-// runConfig dispatches the `config` subcommands (validate, render).
+// runConfig dispatches the `config` subcommands (validate, render, diff).
 func (a App) runConfig(opts options) int {
 	if len(opts.args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: config requires a subcommand (validate|render)")
+		fmt.Fprintln(a.Stderr, "usage error: config requires a subcommand (validate|render|diff)")
 		writeUsage(a.Stderr)
 		return exitUsage
 	}
