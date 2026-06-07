@@ -70,3 +70,26 @@ func TestWebBackendOperateEmitsEvent(t *testing.T) {
 
 // Ensure fakeManager satisfies the interface at compile time.
 var _ servicemgr.Manager = fakeManager{}
+
+func TestWebBackendMetricsRejectsUnknownCheck(t *testing.T) {
+	b := &WebBackend{
+		entries: map[string]*webEntry{
+			"web": {
+				checkNames: []string{"http", "cmd"},
+				checkTypes: map[string]string{"http": "http", "cmd": "command"},
+			},
+		},
+	}
+	if _, ok := b.Metrics(context.Background(), "web", "ghost", time.Hour); ok {
+		t.Fatal("unknown check name must not be accepted")
+	}
+	if _, ok := b.Metrics(context.Background(), "web", "cmd", time.Hour); ok {
+		t.Fatal("non-measured check type must not be accepted")
+	}
+	if _, ok := b.Metrics(context.Background(), "missing", "http", time.Hour); ok {
+		t.Fatal("unknown service must not be accepted")
+	}
+	if _, ok := b.Metrics(context.Background(), "web", "http", time.Hour); !ok {
+		t.Fatal("configured measured check must be accepted")
+	}
+}
