@@ -249,6 +249,18 @@ function renderDetail(d) {
     return `<div><div class="v">${v}</div><div class="muted">${esc(w.window)}</div></div>`;
   }).join("") || '<span class="muted">No SLA data.</span>';
 
+  const lockState = (s) => s === "active" ? '<span class="bad">active</span>'
+    : s === "stale" ? '<span class="inactive">stale</span>'
+    : `<span class="muted">${esc(s || "")}</span>`;
+  const lockRows = (d.locks || []).map((l) => {
+    const id = l.name ? esc(l.name) : '<span class="muted">(default)</span>';
+    const extra = l.stale_reason ? ` <span class="muted">(${esc(l.stale_reason)})</span>` : "";
+    const exp = l.expires_at ? ` <span class="muted">expires ${esc(fmtTime(l.expires_at))}</span>` : "";
+    return `<tr><td>${id}</td><td>${lockState(l.state)}${extra}</td>
+      <td class="muted">${l.owner_pid || ""}</td>
+      <td class="muted">${esc(l.reason || "")}${exp}</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="muted">No named runtime locks.</td></tr>`;
+
   const wins = winButtons([["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
   // Latency graph: only checks whose type records a measurement (like icmp).
@@ -275,6 +287,9 @@ function renderDetail(d) {
     <button class="close" onclick="closeDetail()">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
+    <h2>Named locks</h2>
+    <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
+      <tbody>${lockRows}</tbody></table>
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Availability</h2>
