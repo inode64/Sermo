@@ -1,6 +1,7 @@
 package process
 
 import (
+	"context"
 	"os/exec"
 	"os/user"
 	"syscall"
@@ -70,7 +71,7 @@ func newReaper(sig Signaler, steps [][]Process) Reaper {
 }
 
 func TestReapNoResidualsIsOK(t *testing.T) {
-	res := Reaper{}.Reap(nil, killPolicy)
+	res := Reaper{}.Reap(context.Background(), nil, killPolicy)
 	if !res.OK() || len(res.Signalled) != 0 {
 		t.Fatalf("empty residuals: %+v", res)
 	}
@@ -79,7 +80,7 @@ func TestReapNoResidualsIsOK(t *testing.T) {
 func TestReapForceKillFalseSignalsNothing(t *testing.T) {
 	sig := &recSignaler{}
 	r := newReaper(sig, nil)
-	res := r.Reap([]Process{killableProc(100)}, KillPolicy{ForceKill: false})
+	res := r.Reap(context.Background(), []Process{killableProc(100)}, KillPolicy{ForceKill: false})
 	if res.OK() {
 		t.Fatal("residuals present must not be OK")
 	}
@@ -95,7 +96,7 @@ func TestReapTermSucceeds(t *testing.T) {
 	sig := &recSignaler{}
 	// After SIGTERM, the process is gone.
 	r := newReaper(sig, [][]Process{{}})
-	res := r.Reap([]Process{killableProc(100)}, killPolicy)
+	res := r.Reap(context.Background(), []Process{killableProc(100)}, killPolicy)
 	if !res.OK() {
 		t.Fatalf("expected OK, remaining=%+v", res.Remaining)
 	}
@@ -108,7 +109,7 @@ func TestReapEscalatesToKill(t *testing.T) {
 	sig := &recSignaler{}
 	// Survives SIGTERM (still present), gone after SIGKILL.
 	r := newReaper(sig, [][]Process{{killableProc(100)}, {}})
-	res := r.Reap([]Process{killableProc(100)}, killPolicy)
+	res := r.Reap(context.Background(), []Process{killableProc(100)}, killPolicy)
 	if !res.OK() {
 		t.Fatalf("expected OK, remaining=%+v", res.Remaining)
 	}
@@ -121,7 +122,7 @@ func TestReapEscalatesToKill(t *testing.T) {
 func TestReapSurvivesKillIsOrphan(t *testing.T) {
 	sig := &recSignaler{}
 	r := newReaper(sig, [][]Process{{killableProc(100)}, {killableProc(100)}})
-	res := r.Reap([]Process{killableProc(100)}, killPolicy)
+	res := r.Reap(context.Background(), []Process{killableProc(100)}, killPolicy)
 	if res.OK() {
 		t.Fatal("survivor of SIGKILL must be reported as orphan")
 	}
@@ -135,7 +136,7 @@ func TestReapNeverSignalsNonKillable(t *testing.T) {
 	// A residual that does not match kill_only_if (wrong user) stays forever.
 	orphan := Process{PID: 200, UID: 999, Exe: testExe, ExeOK: true}
 	r := newReaper(sig, [][]Process{{orphan}, {orphan}})
-	res := r.Reap([]Process{orphan}, killPolicy)
+	res := r.Reap(context.Background(), []Process{orphan}, killPolicy)
 	if len(sig.calls) != 0 {
 		t.Fatalf("non-killable residual must never be signalled, got %v", sig.calls)
 	}
@@ -151,7 +152,7 @@ func TestReapMixedKillableAndOrphan(t *testing.T) {
 	// SIGTERM round sees both; only killable is signalled. After TERM the
 	// killable is gone, the orphan remains.
 	r := newReaper(sig, [][]Process{{orphan}})
-	res := r.Reap([]Process{killable, orphan}, killPolicy)
+	res := r.Reap(context.Background(), []Process{killable, orphan}, killPolicy)
 
 	if got := sig.sigsFor(100); len(got) != 1 || got[0] != syscall.SIGTERM {
 		t.Fatalf("killable signals = %v, want [SIGTERM]", got)
@@ -208,7 +209,7 @@ func TestReapRealSignalKillsChild(t *testing.T) {
 	}
 	r := Reaper{Rediscover: rediscover, Signaler: OSSignaler{}, ResolveUser: OSUserResolver, Sleep: time.Sleep}
 
-	res := r.Reap([]Process{p}, policy)
+	res := r.Reap(context.Background(), []Process{p}, policy)
 	if !res.OK() {
 		t.Fatalf("child not reaped, remaining = %+v", res.Remaining)
 	}
