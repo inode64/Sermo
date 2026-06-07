@@ -35,7 +35,7 @@ func TestSchedulerMarksReadiness(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 40 * time.Millisecond}.Run(ctx, workers, nil, nil, ready)
+		Scheduler{Interval: 10 * time.Millisecond, StartupDelay: 40 * time.Millisecond}.Run(ctx, workers, nil, nil, ready, true)
 		close(done)
 	}()
 

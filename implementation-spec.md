@@ -2462,7 +2462,9 @@ Shutdown:
 - Never start a new operation during shutdown.
 ```
 
-SIGHUP: reload config later; the MVP may log it as unsupported.
+SIGHUP: reload config from disk (validate, then swap workers/watches while
+preserving per-service runtime state). Invalid config is rejected and the running
+generation is left unchanged.
 
 Initial `sermod` command:
 

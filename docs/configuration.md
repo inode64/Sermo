@@ -77,6 +77,21 @@ services that are still coming up are not flagged or remediated prematurely. The
 wait applies once, on startup, before any worker runs; a shutdown signal during
 the wait aborts cleanly without starting any worker. The default `0` disables it.
 
+`SIGHUP` reloads the configuration from the path passed to `sermod run
+--config` (the same file `sermoctl` uses). `sermod` validates the new config,
+rebuilds its service workers and host watches, and swaps them in without
+restarting the process. Per-service runtime state is preserved across reload:
+monitoring cycle counters, remediation cooldown/backoff, rule `for`/`within`
+windows and watched-file baselines for `changed:` conditions. Invalid config, or
+a config with no enabled services or watches, is rejected and the current
+generation keeps running; a `reload` or `error` event is recorded. Reload does
+not repeat `startup_delay` and does not mark `/readyz` as shutting down. Service
+CPU metric history is reset only for services removed from the config.
+
+```sh
+kill -HUP "$(pidof sermod)"
+```
+
 ### Per-service interval
 
 `engine.interval` sets the default for every service. A service may override it

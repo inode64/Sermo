@@ -30,7 +30,8 @@ type cycler interface {
 // them have returned (graceful shutdown, section 24). Each worker's Operate is
 // wrapped so it waits for a global operation slot, pausing only that service's
 // monitoring. Watches run on their own goroutines using their own interval.
-func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, opGate *OpGate, ready *Readiness) {
+// When finalShutdown is false (config reload), readiness is left unchanged.
+func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch, opGate *OpGate, ready *Readiness, finalShutdown bool) {
 	if opGate == nil {
 		opGate = NewOpGate(s.OpSlots, "")
 	}
@@ -83,7 +84,7 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		}(wt, wi)
 	}
 	wg.Wait()
-	if ready != nil {
+	if finalShutdown && ready != nil {
 		ready.MarkShuttingDown()
 	}
 }
