@@ -29,6 +29,38 @@ func TestRestartTimesOutDuringGracefulWait(t *testing.T) {
 	}
 }
 
+func TestResolveTimeoutHonorsStopPolicy(t *testing.T) {
+	tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": "120s"}}
+	got := ResolveTimeout(90*time.Second, tree)
+	want := 120*time.Second + backendMargin
+	if got != want {
+		t.Fatalf("ResolveTimeout = %v, want %v", got, want)
+	}
+}
+
+func TestResolveTimeoutKeepsLargerConfigured(t *testing.T) {
+	tree := map[string]any{"stop_policy": map[string]any{"graceful_timeout": "120s"}}
+	got := ResolveTimeout(5*time.Minute, tree)
+	if got != 5*time.Minute {
+		t.Fatalf("configured override = %v, want 5m", got)
+	}
+}
+
+func TestResolveTimeoutForceKillEscalation(t *testing.T) {
+	tree := map[string]any{"stop_policy": map[string]any{
+		"graceful_timeout": "10s",
+		"term_timeout":     "20s",
+		"kill_timeout":     "5s",
+		"force_kill":       true,
+		"kill_only_if":     map[string]any{"users": []any{"mysql"}},
+	}}
+	got := ResolveTimeout(30*time.Second, tree)
+	want := 10*time.Second + 20*time.Second + 5*time.Second + backendMargin
+	if got != want {
+		t.Fatalf("ResolveTimeout = %v, want %v", got, want)
+	}
+}
+
 func TestBoundContextRespectsShorterParent(t *testing.T) {
 	parent, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
