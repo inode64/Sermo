@@ -55,6 +55,13 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 				continue
 			}
 			watches = append(watches, w)
+		case "process":
+			w, warn := buildProcWatch(name, entry, checkEntry, deps, interval)
+			if warn != "" {
+				warnings = append(warnings, warn)
+				continue
+			}
+			watches = append(watches, w)
 		default:
 			w, warn := buildSingleWatch(name, entry, checkEntry, deps, interval)
 			if warn != "" {
@@ -182,6 +189,83 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		Emit:      deps.Emit,
 		Cycle:     fw.runCycle,
 	}, ""
+}
+
+// buildProcWatch builds a stateful process watch: a procWatcher (its own per-PID
+// state, conditions and hook) wired into a Watch through Watch.Cycle so it can
+// fire one hook per matching PID.
+func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
+	pname := stringField(checkEntry["name"])
+	if pname == "" {
+		return nil, "watch " + name + ": process check requires a name"
+	}
+	cond, err := parseProcCond(checkEntry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	hook, err := parseHook(entry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	pw := &procWatcher{
+		name:    name,
+		match:   ProcMatch{Name: pname, User: stringField(checkEntry["user"])},
+		cond:    cond,
+		hook:    hook,
+		runner:  OSHookRunner{},
+		now:     deps.Now,
+		emit:    deps.Emit,
+		sampler: deps.ProcSampler, // nil -> osProcSampler at run time
+	}
+	return &Watch{
+		Name:      name,
+		CheckType: "process",
+		Interval:  interval,
+		Now:       deps.Now,
+		Emit:      deps.Emit,
+		Cycle:     pw.runCycle,
+	}, ""
+}
+
+// parseProcCond reads the for/cpu/memory/io conditions from a process check
+// entry. At least one must be present.
+func parseProcCond(check map[string]any) (procCond, error) {
+	var c procCond
+	if _, present := check["for"]; present {
+		d := durationField(check["for"])
+		if d <= 0 {
+			return c, fmt.Errorf("process for must be a positive duration")
+		}
+		c.minAge = d
+	}
+	type thr struct {
+		key string
+		op  *string
+		val *float64
+	}
+	for _, t := range []thr{
+		{"cpu", &c.cpuOp, &c.cpuValue},
+		{"memory", &c.memOp, &c.memValue},
+		{"io", &c.ioOp, &c.ioValue},
+	} {
+		m, ok := check[t.key].(map[string]any)
+		if !ok {
+			continue
+		}
+		op := stringField(m["op"])
+		if !validThresholdOp(op) {
+			return c, fmt.Errorf("process %s requires a valid op (>=, >, <=, <, ==, !=)", t.key)
+		}
+		v, ok := floatField(m["value"])
+		if !ok {
+			return c, fmt.Errorf("process %s value must be numeric", t.key)
+		}
+		*t.op, *t.val = op, v
+	}
+	if !c.any() {
+		return c, fmt.Errorf("process check requires at least one of for, cpu, memory, io")
+	}
+	return c, nil
 }
 
 // parseFileCond reads the size/permissions/owner/existence conditions from a file

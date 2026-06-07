@@ -13,9 +13,9 @@ It ships two binaries:
   checks, evaluates rules, and drives remediation through the same safe
   operation engine `sermoctl` uses. It also runs **host watches** (disk space,
   network interfaces — state, speed and rx/tx errors — external hosts via
-  ICMP — reachability and latency — and files/directories — size, permissions,
-  owner and deletion) that fire a hook command when a threshold is crossed or an
-  attribute changes.
+  ICMP — reachability and latency — files/directories — size, permissions,
+  owner and deletion — and processes by name — age and CPU/memory/IO) that fire a
+  hook command when a threshold is crossed or an attribute changes.
 
 ## Build
 

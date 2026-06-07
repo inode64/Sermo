@@ -113,3 +113,20 @@ watches:
       hook:
         command: [/usr/local/bin/sermo-file-change.sh]
         timeout: 10s
+  # Watch processes by name: fire a hook per matching PID that has been alive at
+  # least `for` and/or crosses a CPU/memory/IO threshold (edge-triggered per PID).
+  hot-workers:
+    enabled: false
+    interval: 30s
+    check:
+      type: process
+      name: myworker
+      user: www-data
+      for: 5m
+      cpu: { op: ">", value: 80 }
+      memory: { op: ">", value: 524288000 }
+      io: { op: ">", value: 10485760 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-proc-alert.sh]
+        timeout: 10s
