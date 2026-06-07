@@ -41,3 +41,15 @@ type Result struct {
 
 // OK reports whether the operation completed successfully.
 func (r Result) OK() bool { return r.Status == ResultOK }
+
+// RecordsRemediation reports whether an automatic remediation attempt ran far
+// enough through the engine to count against cooldown, rate limits and backoff.
+// Blocked and preflight-failed operations never execute the service action.
+func (r Result) RecordsRemediation() bool {
+	switch r.Status {
+	case ResultOK, ResultFailed, ResultPostflightFailed, ResultOrphanProcesses:
+		return true
+	default:
+		return false
+	}
+}
