@@ -53,6 +53,9 @@ type Deps struct {
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
 	// Nil reads /proc/sys/net/netfilter.
 	ConntrackSampler ConntrackSamplerFunc
+	// EntropySampler reads the kernel entropy pool for `entropy` checks. Nil reads
+	// /proc/sys/kernel/random/entropy_avail.
+	EntropySampler EntropySamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -304,6 +307,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			return nil, "conntrack check: " + err.Error()
 		}
 		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
+
+	case "entropy":
+		op, value, err := parseEntropyThreshold(entry)
+		if err != nil {
+			return nil, "entropy check: " + err.Error()
+		}
+		return entropyCheck{base: b, op: op, value: value, sampler: deps.EntropySampler}, ""
 
 	case "oom":
 		// delta is optional; the default fires on any OOM kill (> 0).

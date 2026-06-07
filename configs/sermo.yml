@@ -121,6 +121,17 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-fds-alert.sh]
+  # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
+  entropy:
+    enabled: false
+    interval: 1m
+    check:
+      type: entropy
+      avail: { op: "<", value: 200 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-entropy-alert.sh]
   # Watch the netfilter conntrack table (drops new connections when full).
   conntrack:
     enabled: false

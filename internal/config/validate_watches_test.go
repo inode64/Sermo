@@ -206,6 +206,42 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateEntropyWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"entropy": map[string]any{
+				"check": map[string]any{"type": "entropy", "avail": map[string]any{"op": "<", "value": 200}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-avail": map[string]any{
+				"check": map[string]any{"type": "entropy"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"bad-op": map[string]any{
+				"check": map[string]any{"type": "entropy", "avail": map[string]any{"op": "=<", "value": "x"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.no-avail.check.avail {op, value} is required for an entropy check",
+		"watches.bad-op.check.avail has an invalid op",
+		"watches.bad-op.check.avail value \"x\" must be numeric",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
 func TestValidateConntrackWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
