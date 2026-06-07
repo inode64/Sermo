@@ -210,9 +210,22 @@ function renderDetail(d) {
     return `<div><div class="v">${v}</div><div class="muted">${esc(w.window)}</div></div>`;
   }).join("") || '<span class="muted">No SLA data.</span>';
 
-  const wins = [["24h", "24h"], ["7d", "168h"], ["30d", "720h"]]
-    .map(([label, val]) => `<button onclick="setWin('${val}')"${val === seriesWindow ? ' style="background:#8883"' : ''}>${label}</button>`)
-    .join(" ");
+  const wins = winButtons([["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
+
+  // Latency graph: only checks whose type records a measurement (like icmp).
+  const measured = (d.checks || []).filter((c) => metricTypes.includes(c.type));
+  if (measured.length && !measured.some((c) => c.name === metricCheck)) {
+    metricCheck = measured[0].name;
+  }
+  let latency = "";
+  if (measured.length) {
+    const checkBtns = measured.map((c) =>
+      `<button onclick="setMetricCheck('${esc(c.name)}')"${c.name === metricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ");
+    latency = `
+    <h2>Latency <span class="muted">${checkBtns} &middot; ${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
+    <div id="lat-summary" class="muted">loading…</div>
+    <div id="lat-chart" class="muted"></div>`;
+  }
 
   $("#detail").style.display = "block";
   $("#detail").innerHTML = `
@@ -224,9 +237,11 @@ function renderDetail(d) {
     <div class="sla">${sla}</div>
     <h2>History <span class="muted">${wins}</span></h2>
     <div id="chart" class="muted">loading…</div>
+    ${latency}
     <h2>Recent events</h2>
     <table class="events"><tbody id="svc-events"><tr><td class="muted">loading…</td></tr></tbody></table>`;
   loadSeries(d.name);
+  if (measured.length) loadMetrics(d.name);
   loadServiceEvents(d.name);
 }
 
@@ -241,9 +256,73 @@ async function loadServiceEvents(name) {
 }
 
 let seriesWindow = "24h";
-const windowMs = { "24h": 864e5, "168h": 6048e5, "720h": 2592e6 };
+const windowMs = { "1h": 36e5, "24h": 864e5, "168h": 6048e5, "720h": 2592e6, "8760h": 3.1536e10 };
 
 function setWin(win) { seriesWindow = win; if (current) detail(current); }
+
+// Latency graph state: the selected measured check and its window.
+let metricCheck = "";
+let metricWindow = "24h";
+const metricTypes = ["tcp", "http", "ports", "service"];
+const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
+
+function setMetricCheck(name) { metricCheck = name; if (current) detail(current); }
+function setMetricWin(win) { metricWindow = win; if (current) detail(current); }
+
+function winButtons(list, selected, fn) {
+  return list.map(([label, val]) =>
+    `<button onclick="${fn}('${val}')"${val === selected ? ' style="background:#8883"' : ''}>${label}</button>`).join(" ");
+}
+
+async function loadMetrics(name) {
+  if (!metricCheck) return;
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(metricCheck)}&since=${metricWindow}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    const s = body.summary || {};
+    $("#lat-summary").innerHTML = s.count
+      ? `avg <b>${s.avg.toFixed(1)}</b> ms &middot; min ${s.min.toFixed(1)} &middot; max ${s.max.toFixed(1)} <span class="muted">(${s.count} samples)</span>`
+      : '<span class="muted">No latency data yet for this window.</span>';
+    $("#lat-chart").innerHTML = drawMetricChart(body.points || []);
+  } catch (e) {
+    $("#lat-chart").textContent = "Failed to load latency: " + e.message;
+  }
+}
+
+function drawMetricChart(points) {
+  const W = 640, H = 160, pad = 34, cols = 120;
+  const span = windowMs[metricWindow] || 864e5;
+  const startMs = Date.now() - span;
+  const buckets = Array.from({ length: cols }, () => ({ n: 0, sum: 0, min: Infinity, max: -Infinity }));
+  for (const p of points) {
+    const t = Date.parse(p.start);
+    if (isNaN(t)) continue;
+    const i = Math.floor((t - startMs) / (span / cols));
+    if (i < 0 || i >= cols) continue;
+    const b = buckets[i];
+    b.n += p.n; b.sum += p.avg * p.n;
+    b.min = Math.min(b.min, p.min); b.max = Math.max(b.max, p.max);
+  }
+  let maxV = 0;
+  buckets.forEach((b) => { if (b.n) maxV = Math.max(maxV, b.max); });
+  if (maxV <= 0) return '<span class="muted">No latency data yet for this window.</span>';
+  const x = (i) => pad + (i + 0.5) * ((W - 2 * pad) / cols);
+  const y = (v) => H - pad - (v / maxV) * (H - 2 * pad);
+  const pts = buckets.map((b, i) => ({ i, b })).filter((o) => o.b.n > 0);
+  const upper = pts.map((o) => `${x(o.i).toFixed(1)},${y(o.b.max).toFixed(1)}`);
+  const lower = pts.slice().reverse().map((o) => `${x(o.i).toFixed(1)},${y(o.b.min).toFixed(1)}`);
+  const band = `<polygon points="${upper.concat(lower).join(" ")}" fill="#1f6feb33"></polygon>`;
+  const line = `<polyline points="${pts.map((o) => `${x(o.i).toFixed(1)},${y(o.b.sum / o.b.n).toFixed(1)}`).join(" ")}" fill="none" stroke="#1f6feb" stroke-width="1.5"></polyline>`;
+  const axis = `
+    <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H - pad}" stroke="#8886"></line>
+    <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#8886"></line>
+    <text x="2" y="${pad + 4}" font-size="10" fill="#888">${maxV.toFixed(0)}ms</text>
+    <text x="2" y="${H - pad}" font-size="10" fill="#888">0</text>
+    <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${new Date(startMs).toLocaleString()}</text>
+    <text x="${W - pad}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${band}${line}</svg>`;
+}
 
 async function loadSeries(name) {
   try {

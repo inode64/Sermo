@@ -74,6 +74,33 @@ type SeriesPoint struct {
 	Total int64    `json:"total"`
 }
 
+// MetricPoint is one time bucket of a check's latency series (milliseconds).
+type MetricPoint struct {
+	Start string  `json:"start"` // RFC3339, minute-aligned
+	N     int64   `json:"n"`
+	Avg   float64 `json:"avg"`
+	Min   float64 `json:"min"`
+	Max   float64 `json:"max"`
+}
+
+// MetricSummary is a check's latency over the window: sample count and
+// average/min/max in milliseconds (Count==0 means no data).
+type MetricSummary struct {
+	Count int64   `json:"count"`
+	Avg   float64 `json:"avg"`
+	Min   float64 `json:"min"`
+	Max   float64 `json:"max"`
+}
+
+// MetricSeries is a check's latency history plus its summary for one window.
+type MetricSeries struct {
+	Check   string        `json:"check"`
+	Since   string        `json:"since"`
+	Unit    string        `json:"unit"`
+	Summary MetricSummary `json:"summary"`
+	Points  []MetricPoint `json:"points"`
+}
+
 // Finding is one diagnostic result (level: error|warning|info).
 type Finding struct {
 	Level   string `json:"level"`
@@ -112,6 +139,9 @@ type Backend interface {
 	// Series returns a service's per-minute availability history over since; ok is
 	// false for unknown names.
 	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
+	// Metrics returns a check's latency summary and per-minute history over since;
+	// ok is false for unknown service names.
+	Metrics(ctx context.Context, name, check string, since time.Duration) (MetricSeries, bool)
 	// Events returns up to limit recent events, newest first (the global feed).
 	Events(ctx context.Context, limit int) []Event
 	// Diagnostics runs config/host/database consistency checks and returns the
@@ -155,6 +185,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
+	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
@@ -232,7 +263,8 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, detail)
 }
 
-func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
+// seriesSince reads the `since` query param, defaulting and capping it.
+func seriesSince(r *http.Request) time.Duration {
 	since := defaultSeriesWindow
 	if q := r.URL.Query().Get("since"); q != "" {
 		if d, err := time.ParseDuration(q); err == nil && d > 0 {
@@ -242,12 +274,31 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	if since > maxSeriesWindow {
 		since = maxSeriesWindow
 	}
+	return since
+}
+
+func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
+	since := seriesSince(r)
 	points, ok := s.Backend.Series(r.Context(), r.PathValue("name"), since)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"since": since.String(), "points": points})
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	check := r.URL.Query().Get("check")
+	if check == "" {
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "check query parameter is required"})
+		return
+	}
+	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, seriesSince(r))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

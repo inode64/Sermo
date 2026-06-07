@@ -17,6 +17,8 @@ type fakeBackend struct {
 	failOp      bool
 	seriesSince time.Duration
 	eventLimit  int
+	metricCheck string
+	metricSince time.Duration
 }
 
 func (f *fakeBackend) Services(context.Context) []Service { return f.services }
@@ -54,6 +56,19 @@ func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) (
 		}
 	}
 	return nil, false
+}
+func (f *fakeBackend) Metrics(_ context.Context, name, check string, since time.Duration) (MetricSeries, bool) {
+	for _, s := range f.services {
+		if s.Name == name {
+			f.metricCheck, f.metricSince = check, since
+			return MetricSeries{
+				Check: check, Since: since.String(), Unit: "ms",
+				Summary: MetricSummary{Count: 10, Avg: 12.5, Min: 3, Max: 40},
+				Points:  []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 2, Avg: 12.5, Min: 3, Max: 40}},
+			}, true
+		}
+	}
+	return MetricSeries{}, false
 }
 func (f *fakeBackend) Diagnostics(context.Context) []Finding {
 	return []Finding{{Level: "warning", Scope: "database", Message: `stored data for service "ghost"`}}
@@ -232,6 +247,38 @@ func TestServiceEvents(t *testing.T) {
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/events", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service events = %d, want 404", rec.Code)
+	}
+}
+
+func TestMetrics(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/metrics?check=http&since=168h", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics status %d", rec.Code)
+	}
+	if b.metricCheck != "http" || b.metricSince != 168*time.Hour {
+		t.Fatalf("params not parsed: check=%q since=%v", b.metricCheck, b.metricSince)
+	}
+	var got MetricSeries
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Summary.Avg != 12.5 || got.Summary.Max != 40 || got.Unit != "ms" || len(got.Points) != 1 {
+		t.Fatalf("unexpected metrics: %+v", got)
+	}
+
+	// missing check -> 400
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/metrics", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing check = %d, want 400", rec.Code)
+	}
+	// unknown service -> 404
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/metrics?check=http", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown service = %d, want 404", rec.Code)
 	}
 }
 
