@@ -91,6 +91,21 @@ func TestWindowProgressAndIsFiring(t *testing.T) {
 	}
 }
 
+func TestWindowStateClone(t *testing.T) {
+	r := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
+	s := &WindowState{}
+	s.Fires(r, true)
+	s.Fires(r, false)
+	cp := s.Clone()
+	if cp == s || cp.Progress(r) != s.Progress(r) {
+		t.Fatalf("clone progress = %q, want %q", cp.Progress(r), s.Progress(r))
+	}
+	s.Fires(r, true)
+	if cp.Progress(r) == s.Progress(r) {
+		t.Fatal("clone should not alias live state")
+	}
+}
+
 func TestWindowDescription(t *testing.T) {
 	if got := WindowDescription(Rule{}); got != "immediate" {
 		t.Fatalf("default = %q", got)

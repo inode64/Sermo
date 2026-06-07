@@ -79,6 +79,18 @@ func (s *WindowState) Progress(r Rule) string {
 	return fmt.Sprintf("%d/%d", s.consecutive, need)
 }
 
+// Clone returns a deep copy of the window state for config reload.
+func (s *WindowState) Clone() *WindowState {
+	if s == nil {
+		return nil
+	}
+	cp := &WindowState{consecutive: s.consecutive}
+	if len(s.history) > 0 {
+		cp.history = append([]bool(nil), s.history...)
+	}
+	return cp
+}
+
 // WindowDescription summarizes the configured for/within window.
 func WindowDescription(r Rule) string {
 	if r.Within != nil && r.Within.Cycles > 0 {

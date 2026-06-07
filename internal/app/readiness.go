@@ -41,6 +41,17 @@ func (r *Readiness) MarkReady() {
 	r.mu.Unlock()
 }
 
+// UpdateCounts refreshes the service and watch totals after a config reload.
+func (r *Readiness) UpdateCounts(services, watches int) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.services = services
+	r.watches = watches
+	r.mu.Unlock()
+}
+
 // MarkShuttingDown records that the daemon is stopping.
 func (r *Readiness) MarkShuttingDown() {
 	if r == nil {
