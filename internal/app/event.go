@@ -28,18 +28,23 @@ func operationEventEmitter(emit func(Event)) func(operation.Result) {
 		return nil
 	}
 	return func(r operation.Result) {
-		kind := "action"
-		if r.Status == operation.ResultBlocked {
-			kind = "suppressed"
-		}
 		emit(Event{
 			Service: r.Service,
-			Kind:    kind,
+			Kind:    eventKindForResult(r),
 			Action:  r.Action,
 			Status:  string(r.Status),
 			Message: r.Message,
 		})
 	}
+}
+
+// eventKindForResult maps an operation result to the event-log kind. Blocked
+// operations are suppressed (same as guard/cooldown), not a completed action.
+func eventKindForResult(r operation.Result) string {
+	if r.Status == operation.ResultBlocked {
+		return "suppressed"
+	}
+	return "action"
 }
 
 // SlogEmitter logs events through slog.
