@@ -66,6 +66,9 @@ type options struct {
 	reason      string
 	ttl         time.Duration
 	commandArgs []string // tokens after `--`
+	// sla command flags
+	series bool          // emit the per-minute availability series instead of a summary
+	since  time.Duration // series lookback window (0 means the command's default)
 }
 
 // service returns the first positional argument after the command.
@@ -904,6 +907,24 @@ func parseArgs(args []string) (options, error) {
 			opts.json = true
 		case arg == "--quiet" || arg == "-q":
 			opts.quiet = true
+		case arg == "--series":
+			opts.series = true
+		case strings.HasPrefix(arg, "--since="):
+			d, err := time.ParseDuration(strings.TrimPrefix(arg, "--since="))
+			if err != nil {
+				return opts, fmt.Errorf("--since: %w", err)
+			}
+			opts.since = d
+		case arg == "--since":
+			i++
+			if i >= len(args) {
+				return opts, fmt.Errorf("--since requires a value")
+			}
+			d, err := time.ParseDuration(args[i])
+			if err != nil {
+				return opts, fmt.Errorf("--since: %w", err)
+			}
+			opts.since = d
 		case strings.HasPrefix(arg, "--backend="):
 			backend, err := servicemgr.ParseBackend(strings.TrimPrefix(arg, "--backend="))
 			if err != nil {
@@ -995,7 +1016,8 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
-	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE | sla [SERVICE]")
+	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
+	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
 	fmt.Fprintln(w, "          apps [all] | libs [all] | services [all] | profile list | profile show PROFILE | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
