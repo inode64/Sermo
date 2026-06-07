@@ -28,7 +28,7 @@ INSTALL ?= install
 # locations baked into the packaging templates.
 unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
 # Rewrite the profile/config paths in the sample config to the chosen dirs.
-config_subst = sed -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
+config_subst = sed -e 's|\.\./profiles|$(SERMO_DATADIR)/profiles|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check tidy clean \
         install install-bin install-profiles install-config install-state install-systemd install-openrc \

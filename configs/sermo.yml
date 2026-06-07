@@ -21,11 +21,12 @@ engine:
   startup_delay: 0
 
 paths:
+  # Relative to this file's directory (configs/). `make install` rewrites
+  # ../profiles to the packaged profile dir under /usr/share/sermo.
   profiles:
-    - /usr/share/sermo/profiles
-    - /etc/sermo/apps-available
+    - ../profiles
   enabled:
-    - /etc/sermo/apps-enabled
+    - apps-enabled
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
   # Persistent state database (monitoring state, future history/metrics). Lives
