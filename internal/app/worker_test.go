@@ -128,6 +128,23 @@ func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	}
 }
 
+func TestFailedOperationEmitsErrorEvent(t *testing.T) {
+	h := &workerHarness{
+		cache:    failedCache("http"),
+		opResult: operation.Result{Status: operation.ResultFailed, Message: "systemctl failed"},
+	}
+	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
+
+	w.RunCycle(context.Background())
+
+	if e, ok := h.eventOf("error"); !ok || e.Action != "restart" || e.Status != "failed" {
+		t.Fatalf("failed remediation event = %+v, want kind=error status=failed", h.events)
+	}
+	if _, ok := h.eventOf("action"); ok {
+		t.Fatalf("failed operation must not emit kind=action: %+v", h.events)
+	}
+}
+
 func TestBlockedOperationEmitsSuppressedEvent(t *testing.T) {
 	h := &workerHarness{
 		cache:    failedCache("http"),

@@ -26,8 +26,42 @@ func TestOperationEventEmitter(t *testing.T) {
 		t.Fatalf("blocked = %+v, want kind=suppressed", events[1])
 	}
 
+	emit(operation.Result{Service: "web", Action: "restart", Status: operation.ResultFailed, Message: "systemctl failed"})
+	emit(operation.Result{Service: "web", Action: "start", Status: operation.ResultPreflightFailed, Message: "disk check failed"})
+	emit(operation.Result{Service: "web", Action: "restart", Status: operation.ResultPostflightFailed, Message: "tcp check failed"})
+	emit(operation.Result{Service: "web", Action: "stop", Status: operation.ResultOrphanProcesses, Message: "residual remains"})
+	for i, status := range []operation.ResultStatus{
+		operation.ResultFailed,
+		operation.ResultPreflightFailed,
+		operation.ResultPostflightFailed,
+		operation.ResultOrphanProcesses,
+	} {
+		if events[2+i].Kind != "error" || events[2+i].Status != string(status) {
+			t.Fatalf("status %q event = %+v, want kind=error", status, events[2+i])
+		}
+	}
+
 	if operationEventEmitter(nil) != nil {
 		t.Fatal("nil emit should yield nil adapter")
+	}
+}
+
+func TestEventKindForResult(t *testing.T) {
+	cases := []struct {
+		status operation.ResultStatus
+		want   string
+	}{
+		{operation.ResultOK, "action"},
+		{operation.ResultBlocked, "suppressed"},
+		{operation.ResultFailed, "error"},
+		{operation.ResultPreflightFailed, "error"},
+		{operation.ResultPostflightFailed, "error"},
+		{operation.ResultOrphanProcesses, "error"},
+	}
+	for _, tc := range cases {
+		if got := eventKindForResult(operation.Result{Status: tc.status}); got != tc.want {
+			t.Errorf("status %q: got kind %q, want %q", tc.status, got, tc.want)
+		}
 	}
 }
 
