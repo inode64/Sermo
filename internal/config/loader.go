@@ -82,7 +82,42 @@ func loadGlobal(path string) (Global, error) {
 		g.Runtime = scalarString(paths["runtime"])
 		g.State = scalarString(paths["state"])
 	}
+	resolveConfigPaths(path, &g)
 	return g, nil
+}
+
+// resolveConfigPaths makes profiles/enabled/runtime/state paths absolute. Relative
+// entries are resolved against the global config file's directory so a tree like
+// configs/sermo.yml with `enabled: [apps-enabled]` loads configs/apps-enabled
+// when run from the repository.
+func resolveConfigPaths(globalPath string, g *Global) {
+	base := filepath.Dir(filepath.Clean(globalPath))
+	g.Profiles = resolvePathList(base, g.Profiles)
+	g.Enabled = resolvePathList(base, g.Enabled)
+	if g.Runtime != "" {
+		g.Runtime = resolveConfigPath(base, g.Runtime)
+	}
+	if g.State != "" {
+		g.State = resolveConfigPath(base, g.State)
+	}
+}
+
+func resolvePathList(base string, dirs []string) []string {
+	if len(dirs) == 0 {
+		return dirs
+	}
+	out := make([]string, len(dirs))
+	for i, dir := range dirs {
+		out[i] = resolveConfigPath(base, dir)
+	}
+	return out
+}
+
+func resolveConfigPath(base, p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Clean(filepath.Join(base, p))
 }
 
 // loadDir reads every *.yml/*.yaml document in dir, recursing into

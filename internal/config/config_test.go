@@ -159,6 +159,68 @@ service: { name: redis }
 	}
 }
 
+func TestLoadResolvesRelativePaths(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "configs")
+	enabledDir := filepath.Join(configDir, "apps-enabled")
+	profilesDir := filepath.Join(root, "profiles")
+	for _, d := range []string{enabledDir, profilesDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(profilesDir, "redis.yml"), []byte(`
+kind: profile
+name: redis
+variables: { port: 6379 }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabledDir, "redis-main.yml"), []byte(`
+kind: service
+name: redis-main
+uses: redis
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(configDir, "sermo.yml")
+	if err := os.WriteFile(global, []byte(`
+engine: { backend: auto }
+paths:
+  profiles: [../profiles]
+  enabled: [apps-enabled]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+watches:
+  disk:
+    enabled: false
+    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+    then:
+      hook: { command: [/bin/true] }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := cfg.Global.Enabled[0]; got != enabledDir {
+		t.Fatalf("Enabled[0] = %q, want %q", got, enabledDir)
+	}
+	if got := cfg.Global.Profiles[0]; got != profilesDir {
+		t.Fatalf("Profiles[0] = %q, want %q", got, profilesDir)
+	}
+	if len(cfg.Services) != 1 {
+		t.Fatalf("Services = %d, want 1", len(cfg.Services))
+	}
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	if len(watches) != 1 {
+		t.Fatalf("watches in global config = %d, want 1", len(watches))
+	}
+}
+
 func TestValidateGlobalErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
