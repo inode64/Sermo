@@ -40,6 +40,8 @@ type Deps struct {
 	NetSampler NetSamplerFunc
 	// PingSampler probes a host via ICMP for `icmp` checks. Nil uses native ICMP.
 	PingSampler PingSamplerFunc
+	// SwapSampler reads system swap for `swap` checks. Nil reads /proc.
+	SwapSampler SwapSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -268,6 +270,35 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			c.op, c.value = op, v
 		default:
 			return nil, "net check metric must be state, speed or errors"
+		}
+		return c, ""
+
+	case "swap":
+		metric := asString(entry["metric"])
+		c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
+		switch metric {
+		case "usage":
+			preds, err := parseSwapPreds(entry)
+			if err != nil {
+				return nil, "swap usage: " + err.Error()
+			}
+			c.preds = preds
+		case "io":
+			delta, ok := entry["delta"].(map[string]any)
+			if !ok {
+				return nil, "swap io requires a delta {op, value}"
+			}
+			op := asString(delta["op"])
+			if !validDiskOp(op) {
+				return nil, "swap io delta has an invalid op"
+			}
+			v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
+			if err != nil {
+				return nil, "swap io delta value must be numeric"
+			}
+			c.op, c.value = op, v
+		default:
+			return nil, "swap check metric must be usage or io"
 		}
 		return c, ""
 

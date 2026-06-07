@@ -96,6 +96,22 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
+  # Watch system swap: usage filling up and/or heavy paging (thrashing).
+  swap:
+    enabled: false
+    interval: 30s
+    check: { type: swap }
+    metrics:
+      usage:
+        used_pct: { op: ">=", value: 80 }
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-swap-usage.sh]
+      io:
+        delta: { op: ">", value: 1000 }   # pages swapped in+out per cycle
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-swap-io.sh]
   # Watch a file or directory tree for attribute changes (size, permissions,
   # owner, deletion). Fires the hook once per change; recursive walks the subtree.
   app-data:

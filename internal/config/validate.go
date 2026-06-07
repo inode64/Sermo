@@ -141,6 +141,8 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			validateNetCheck(name, check, entry, add)
 		case "icmp":
 			validateICMPCheck(name, check, entry, add)
+		case "swap":
+			validateSwapCheck(name, entry, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -273,6 +275,66 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 			}
 		default:
 			add("%s is not a supported net metric (state, speed, errors)", prefix)
+		}
+		validateHookBlock(prefix, m, add)
+		validateMetricWindow(prefix, m, add)
+	}
+}
+
+// validateSwapCheck validates a swap watch: a non-empty metrics map of usage
+// (used_pct/free_pct/free_bytes thresholds) and/or io (per-cycle delta), each
+// with its own hook (mirrors validateNetCheck).
+func validateSwapCheck(name string, entry map[string]any, add func(string, ...any)) {
+	metrics, ok := entry["metrics"].(map[string]any)
+	if !ok || len(metrics) == 0 {
+		add("watches.%s.metrics is required and must be non-empty for a swap check", name)
+		return
+	}
+	for _, key := range sortedKeys(metrics) {
+		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
+		m, ok := metrics[key].(map[string]any)
+		if !ok {
+			add("%s must be a mapping", prefix)
+			continue
+		}
+		switch key {
+		case "usage":
+			preds := 0
+			for _, field := range []string{"used_pct", "free_pct", "free_bytes"} {
+				raw, present := m[field]
+				if !present {
+					continue
+				}
+				preds++
+				mm, ok := raw.(map[string]any)
+				if !ok {
+					add("%s.%s must be a mapping {op, value}", prefix, field)
+					continue
+				}
+				if !isValidDiskOp(scalarString(mm["op"])) {
+					add("%s.%s has an invalid op %q", prefix, field, scalarString(mm["op"]))
+				}
+				if !isNumeric(scalarString(mm["value"])) {
+					add("%s.%s value %q must be numeric", prefix, field, scalarString(mm["value"]))
+				}
+			}
+			if preds == 0 {
+				add("%s requires at least one of used_pct/free_pct/free_bytes", prefix)
+			}
+		case "io":
+			delta, ok := m["delta"].(map[string]any)
+			if !ok {
+				add("%s.delta {op, value} is required", prefix)
+			} else {
+				if !isValidDiskOp(scalarString(delta["op"])) {
+					add("%s.delta has an invalid op %q", prefix, scalarString(delta["op"]))
+				}
+				if !isNumeric(scalarString(delta["value"])) {
+					add("%s.delta value %q must be numeric", prefix, scalarString(delta["value"]))
+				}
+			}
+		default:
+			add("%s is not a supported swap metric (usage, io)", prefix)
 		}
 		validateHookBlock(prefix, m, add)
 		validateMetricWindow(prefix, m, add)
