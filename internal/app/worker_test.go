@@ -193,6 +193,36 @@ func TestCycleCooldownSuppresses(t *testing.T) {
 	}
 }
 
+func TestCycleCooldownSkipsToNextFiringRule(t *testing.T) {
+	// restart is in cooldown; a later alert-only remediation rule still notifies.
+	tree := map[string]any{"rules": map[string]any{
+		"a-restart": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "restart"},
+		},
+		"b-notify": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "alert", "message": "http still down"},
+		},
+	}}
+	h := &workerHarness{cache: failedCache("http")}
+	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("cooldown must suppress restart, ops=%v", h.ops)
+	}
+	if e, ok := h.eventOf("suppressed"); !ok || e.Rule != "a-restart" {
+		t.Fatalf("expected restart suppressed-by-cooldown: %+v", h.events)
+	}
+	if e, ok := h.eventOf("alert"); !ok || e.Rule != "b-notify" || e.Message != "http still down" {
+		t.Fatalf("later firing rule must still alert: %+v", h.events)
+	}
+}
+
 func TestCycleGuardBlocksThenNextRuleWins(t *testing.T) {
 	// restart is guard-blocked; a second remediation rule (stop) is not -> stop wins.
 	tree := map[string]any{"rules": map[string]any{

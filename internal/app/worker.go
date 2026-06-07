@@ -204,10 +204,11 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			continue
 		}
 
-		// Cooldown/rate limit gate the decision to act (section 16).
+		// Cooldown/rate limit gate the decision to act (section 16). Like guards,
+		// a suppressed rule does not prevent a later firing rule from acting.
 		if ok, why := w.Policy.Allow(w.State, now()); !ok {
 			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: why})
-			return
+			continue
 		}
 
 		// All actions of this rule run together: alerts notify, then the operation.
