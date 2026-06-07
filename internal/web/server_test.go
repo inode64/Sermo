@@ -17,6 +17,19 @@ type fakeBackend struct {
 }
 
 func (f *fakeBackend) Services(context.Context) []Service { return f.services }
+func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
+	for _, s := range f.services {
+		if s.Name == name {
+			ratio := 0.99
+			return Detail{
+				Service: s,
+				Checks:  []Check{{Name: "http", Type: "http", OK: true, Ran: true, Message: "status 200"}},
+				SLA:     []SLAWindow{{Window: "day", Ratio: &ratio, Up: 99, Total: 100}},
+			}, true
+		}
+	}
+	return Detail{}, false
+}
 func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
 	f.operated = append(f.operated, name+"/"+action)
 	if f.failOp {
@@ -61,6 +74,30 @@ func TestListServices(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "web" || !got[0].Monitored {
 		t.Fatalf("unexpected services: %+v", got)
+	}
+}
+
+func TestServiceDetail(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web", Status: "active", Monitored: true}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detail status %d", rec.Code)
+	}
+	var d Detail
+	if err := json.Unmarshal(rec.Body.Bytes(), &d); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if d.Name != "web" || len(d.Checks) != 1 || d.Checks[0].Name != "http" || len(d.SLA) != 1 {
+		t.Fatalf("unexpected detail: %+v", d)
+	}
+}
+
+func TestServiceDetailUnknown(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown detail = %d, want 404", rec.Code)
 	}
 }
 
