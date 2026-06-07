@@ -54,6 +54,10 @@
   <tbody id="rows"></tbody>
 </table>
 <p id="ops" class="muted" style="margin-top:-.5rem"></p>
+<div id="controls" style="margin:.25rem 0 .5rem">
+  <button id="reload-btn" onclick="reloadConfig()" style="display:none">reload config</button>
+  <span class="muted" style="margin-left:.75rem">SIGHUP or systemctl reload sermod</span>
+</div>
 <p class="muted">Auto-refreshes every 5s.</p>
 
 <div id="detail"></div>
@@ -81,6 +85,11 @@ async function loadMe() {
   if (!me.auth) { $("#me").innerHTML = ""; }
   else if (me.role === "admin") { $("#me").textContent = "(admin)"; }
   else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
+  // Show admin-only controls (reload config button).
+  const reloadBtn = $("#reload-btn");
+  if (reloadBtn) {
+    reloadBtn.style.display = (me.can_act ? "inline-block" : "none");
+  }
 }
 
 async function loadReady() {
@@ -117,6 +126,29 @@ async function load() {
   loadReady();
   loadEvents();
   loadOps();
+}
+
+async function reloadConfig() {
+  $("#err").textContent = "";
+  const btn = $("#reload-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("api/reload", {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      throw new Error(body.message || ("HTTP " + res.status));
+    }
+    $("#err").textContent = "config reload requested";
+    // next auto-refresh (or manual load) will pick up any service changes
+    setTimeout(load, 800);
+  } catch (e) {
+    $("#err").textContent = "reload failed: " + e.message;
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function loadOps() {

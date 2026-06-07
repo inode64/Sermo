@@ -92,6 +92,7 @@ sermoctl --config /etc/sermo/sermo.yml restart apache-main
 # Pause / resume monitoring of a service (e.g. for maintenance)
 sermoctl --config /etc/sermo/sermo.yml unmonitor apache-main   # daemon stops checking it
 sermoctl --config /etc/sermo/sermo.yml monitor apache-main     # resume
+sermoctl --config /etc/sermo/sermo.yml reload                  # ask daemon to re-read its config (SIGHUP)
 
 # Availability (SLA) per service over rolling windows (hour..year)
 sermoctl --config /etc/sermo/sermo.yml sla                     # all services
