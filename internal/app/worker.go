@@ -22,6 +22,11 @@ type Worker struct {
 	State     *rules.RemediationState
 	CheckDeps checks.Deps
 
+	// Interval overrides how often this worker runs a cycle. <=0 means the
+	// scheduler's global interval (engine.interval). A per-service `interval`
+	// lets cheap checks run often and expensive ones run rarely (section 24).
+	Interval time.Duration
+
 	// Checks produces this cycle's named-check cache (section 14).
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// Sample produces this cycle's metric reader (section 12). Nil when the
@@ -32,8 +37,12 @@ type Worker struct {
 	// IsPaused reports whether monitoring is paused for this service (operator ran
 	// `unmonitor`). A paused cycle does nothing — no checks, rules or remediation.
 	IsPaused func() bool
-	Now      func() time.Time
-	Emit     func(Event)
+	// RecordHealth persists this cycle's availability sample for SLA tracking:
+	// up is true when no required check failed. Nil disables recording (tests, or
+	// when no store is wired). Only observed (non-paused) cycles are recorded.
+	RecordHealth func(up bool)
+	Now          func() time.Time
+	Emit         func(Event)
 
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
@@ -62,10 +71,25 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		deps.Metrics = w.Sample(ctx)
 	}
 	cache := w.Checks(ctx, deps)
+	if w.RecordHealth != nil {
+		w.RecordHealth(requiredChecksOK(cache))
+	}
 	ev := &rules.Evaluator{Cache: cache, Deps: deps, Changed: w.changed}
 
 	w.runRemediation(ctx, ev, now)
 	w.runAlerts(ctx, ev)
+}
+
+// requiredChecksOK reports the service's availability this cycle: true unless a
+// required (non-optional) check failed. Optional checks are warnings and do not
+// affect SLA. A service with no required checks is vacuously available.
+func requiredChecksOK(cache map[string]checks.Result) bool {
+	for _, r := range cache {
+		if !r.Optional && !r.OK {
+			return false
+		}
+	}
+	return true
 }
 
 func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time) {

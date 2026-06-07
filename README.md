@@ -8,7 +8,7 @@ and applies **guarded** remediation rules — never restarting blindly.
 It ships two binaries:
 
 - **`sermoctl`** — the operator CLI (status, safe start/stop/restart, config
-  validate/render, locks, processes, preflight).
+  validate/render, locks, processes, preflight, per-service availability/SLA).
 - **`sermod`** — the daemon: one independent worker per service that runs
   checks, evaluates rules, and drives remediation through the same safe
   operation engine `sermoctl` uses. It also runs **host watches** (disk space,
@@ -69,6 +69,10 @@ sermoctl --config /etc/sermo/sermo.yml restart apache-main
 sermoctl --config /etc/sermo/sermo.yml unmonitor apache-main   # daemon stops checking it
 sermoctl --config /etc/sermo/sermo.yml monitor apache-main     # resume
 
+# Availability (SLA) per service over rolling windows (hour..year)
+sermoctl --config /etc/sermo/sermo.yml sla                     # all services
+sermoctl --config /etc/sermo/sermo.yml sla apache-main         # one service
+
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml
 ```
@@ -82,7 +86,7 @@ sermod run --config /etc/sermo/sermo.yml
 /etc/sermo/apps-enabled/*.yml     enabled services
 /run/sermo/locks/*.lock           named runtime locks (tmpfs, wiped on reboot)
 /run/sermo/ops/*.lock             internal operation locks
-/var/lib/sermo/sermo.db           persistent state DB (monitoring state; survives reboot)
+/var/lib/sermo/sermo.db           persistent state DB (monitoring state, SLA samples; survives reboot)
 ```
 
 Example profiles and configs are under [`profiles/`](profiles/) and

@@ -41,6 +41,17 @@ var migrations = []string{
 		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
+	// sla_sample accumulates one row per service per UTC minute: total_count is
+	// the observed monitoring cycles in that minute and up_count the subset where
+	// the service was healthy. Availability over any rolling window is the ratio
+	// of the two summed across that window's buckets (SLA tracking).
+	`CREATE TABLE sla_sample (
+		service     TEXT NOT NULL,
+		bucket      INTEGER NOT NULL,
+		up_count    INTEGER NOT NULL,
+		total_count INTEGER NOT NULL,
+		PRIMARY KEY (service, bucket)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -141,4 +152,102 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 		service, v, source, s.now().UTC().Format(time.RFC3339),
 	)
 	return err
+}
+
+// SLAWindow names a rolling availability window and its length. The windows are
+// rolling (ending "now"), so week/month/year use fixed 7/30/365-day spans rather
+// than calendar boundaries.
+type SLAWindow struct {
+	Name string
+	Span time.Duration
+}
+
+// SLAWindows are the reported rolling windows, shortest first.
+var SLAWindows = []SLAWindow{
+	{"hour", time.Hour},
+	{"day", 24 * time.Hour},
+	{"week", 7 * 24 * time.Hour},
+	{"month", 30 * 24 * time.Hour},
+	{"year", 365 * 24 * time.Hour},
+}
+
+// SLAValue is the availability of one service over one window: the up and total
+// observed cycle counts. Ratio derives the fraction (and whether any data exists).
+type SLAValue struct {
+	Window string `json:"window"`
+	Up     int64  `json:"up"`
+	Total  int64  `json:"total"`
+}
+
+// Ratio returns the availability fraction in [0,1] and whether the window has any
+// observed cycles. With no data (total==0) availability is unknown, not 0%.
+func (v SLAValue) Ratio() (float64, bool) {
+	if v.Total <= 0 {
+		return 0, false
+	}
+	return float64(v.Up) / float64(v.Total), true
+}
+
+// minuteBucket truncates t to the start of its UTC minute as a unix epoch — the
+// bucket key shared by every cycle observed in that minute.
+func minuteBucket(t time.Time) int64 {
+	return t.UTC().Truncate(time.Minute).Unix()
+}
+
+// RecordSLA accumulates one observed monitoring cycle into a service's current
+// UTC-minute bucket: total_count +1, and up_count +1 when up. Paused or
+// unobserved cycles are simply never recorded, so they do not count as downtime.
+func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
+	u := 0
+	if up {
+		u = 1
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO sla_sample (service, bucket, up_count, total_count)
+		 VALUES (?, ?, ?, 1)
+		 ON CONFLICT(service, bucket) DO UPDATE SET
+		   up_count    = up_count + excluded.up_count,
+		   total_count = total_count + excluded.total_count;`,
+		service, minuteBucket(at), u,
+	)
+	return err
+}
+
+// SLA sums a service's up and total observed cycles over the rolling window
+// ending at now (buckets with start >= now-span). total==0 means no data.
+func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, total int64, err error) {
+	from := minuteBucket(now.Add(-span))
+	err = s.db.QueryRow(
+		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+		 FROM sla_sample WHERE service = ? AND bucket >= ?;`,
+		service, from,
+	).Scan(&up, &total)
+	if err != nil {
+		return 0, 0, err
+	}
+	return up, total, nil
+}
+
+// SLAReport returns a service's availability across every SLAWindow, ordered as
+// SLAWindows (hour..year).
+func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
+	out := make([]SLAValue, 0, len(SLAWindows))
+	for _, w := range SLAWindows {
+		up, total, err := s.SLA(service, w.Span, now)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SLAValue{Window: w.Name, Up: up, Total: total})
+	}
+	return out, nil
+}
+
+// PruneSLA deletes SLA buckets older than before, bounding the table to roughly
+// one year of per-minute samples per service. Returns the rows removed.
+func (s *Store) PruneSLA(before time.Time) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM sla_sample WHERE bucket < ?;`, minuteBucket(before))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
