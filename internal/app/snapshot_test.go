@@ -15,13 +15,29 @@ func TestSnapshotsRoundTrip(t *testing.T) {
 	s.Publish("web", map[string]checks.Result{
 		"http": {Check: "http", OK: true, Message: "status 200"},
 		"warn": {Check: "warn", OK: false, Optional: true},
-	})
+	}, map[string]bool{"http": true, "warn": true})
 	got := s.Get("web")
 	if len(got) != 2 || !got["http"].OK || got["http"].Message != "status 200" {
 		t.Fatalf("unexpected snapshot: %+v", got)
 	}
 	if got["warn"].OK || !got["warn"].Optional {
 		t.Fatalf("optional/failed not preserved: %+v", got["warn"])
+	}
+}
+
+func TestSnapshotsPublishRanFlag(t *testing.T) {
+	s := NewSnapshots()
+	s.Publish("web", map[string]checks.Result{
+		"fast": {Check: "fast", OK: true},
+		"slow": {Check: "slow", OK: true, Message: "cached"},
+	}, map[string]bool{"fast": true})
+
+	got := s.Get("web")
+	if !got["fast"].Ran {
+		t.Fatal("fast check should show ran=true")
+	}
+	if got["slow"].Ran {
+		t.Fatal("interval-deferred slow check should show ran=false")
 	}
 }
 
@@ -32,7 +48,7 @@ func TestWorkerPublishesCache(t *testing.T) {
 		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
 			return map[string]checks.Result{"http": {Check: "http", OK: true}}
 		},
-		Publish: func(c map[string]checks.Result) { published = c },
+		Publish: func(c map[string]checks.Result, _ map[string]bool) { published = c },
 	}
 	w.RunCycle(context.Background())
 	if published == nil || !published["http"].OK {
@@ -46,7 +62,7 @@ func TestWorkerPausedDoesNotPublish(t *testing.T) {
 		Service:  "web",
 		IsPaused: func() bool { return true },
 		Checks:   func(context.Context, checks.Deps) map[string]checks.Result { return nil },
-		Publish:  func(map[string]checks.Result) { called = true },
+		Publish:  func(map[string]checks.Result, map[string]bool) { called = true },
 	}
 	w.RunCycle(context.Background())
 	if called {

@@ -13,6 +13,7 @@ type CheckSnapshot struct {
 	Optional bool
 	Skipped  bool
 	Message  string
+	Ran      bool // true when the check actually executed this cycle (not interval cache)
 	At       time.Time
 }
 
@@ -30,8 +31,10 @@ func NewSnapshots() *Snapshots {
 	return &Snapshots{now: time.Now, byService: map[string]map[string]CheckSnapshot{}}
 }
 
-// Publish replaces a service's snapshot with the given cycle's check cache.
-func (s *Snapshots) Publish(service string, cache map[string]checks.Result) {
+// Publish replaces a service's snapshot with the given cycle's check cache. ran
+// lists the checks that actually executed this cycle (from the worker's cycleRan
+// map); interval-deferred checks keep their cached result with Ran false.
+func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran map[string]bool) {
 	if s == nil {
 		return
 	}
@@ -42,7 +45,10 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result) {
 	at := now()
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
-		m[name] = CheckSnapshot{OK: r.OK, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message, At: at}
+		m[name] = CheckSnapshot{
+			OK: r.OK, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
+			Ran: ran[name], At: at,
+		}
 	}
 	s.mu.Lock()
 	s.byService[service] = m
