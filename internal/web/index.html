@@ -37,6 +37,9 @@
   .kind-error, .kind-hook-failed, .kind-notify-failed { color: #cf222e; }
   .kind-alert, .kind-suppressed { color: #9a6700; }
   .kind-action, .kind-hook, .kind-notify { color: #1a7f37; }
+  .lvl-error { color: #cf222e; font-weight: 600; }
+  .lvl-warning { color: #9a6700; font-weight: 600; }
+  .lvl-info { color: #888; }
   section { margin-top: 2rem; }
 </style>
 </head>
@@ -52,6 +55,11 @@
 <p class="muted">Auto-refreshes every 5s.</p>
 
 <div id="detail"></div>
+
+<section>
+  <h2 style="font-size:1.05rem">Diagnostics <button onclick="loadDiag()">refresh</button></h2>
+  <table class="events"><tbody id="diag"></tbody></table>
+</section>
 
 <section>
   <h2 style="font-size:1.05rem">Events</h2>
@@ -91,6 +99,26 @@ async function loadEvents() {
     if (!res.ok) return;
     $("#events").innerHTML = eventRows(await res.json(), true);
   } catch (e) { /* keep the last feed on a transient error */ }
+}
+
+async function loadDiag() {
+  $("#diag").innerHTML = `<tr><td class="muted">checking…</td></tr>`;
+  try {
+    const res = await fetch("api/diagnostics");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const findings = await res.json();
+    if (!findings || !findings.length) {
+      $("#diag").innerHTML = `<tr><td style="color:#1a7f37">ok — no problems found</td></tr>`;
+      return;
+    }
+    $("#diag").innerHTML = findings.map((f) => `<tr>
+      <td class="lvl-${esc(f.level)}">${esc(f.level)}</td>
+      <td>${esc(f.scope)}</td>
+      <td>${esc(f.message)}</td>
+    </tr>`).join("");
+  } catch (e) {
+    $("#diag").innerHTML = `<tr><td class="muted">Failed to run diagnostics: ${esc(e.message)}</td></tr>`;
+  }
 }
 
 function eventRows(events, withService) {
@@ -273,6 +301,7 @@ function esc(s) {
 }
 
 loadMe().then(load);
+loadDiag();
 setInterval(() => { load(); if (current) detail(current); }, 5000);
 </script>
 </body>

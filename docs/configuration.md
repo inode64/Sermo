@@ -209,8 +209,9 @@ monitored, backend, unit), `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, and its SLA over the rolling windows),
 `GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
 for the window; `since` is a duration, default 24h, capped at the ~1-year
-retention), `GET /api/events?limit=N` (the **global event feed**, newest first)
-and `GET /api/services/{name}/events?limit=N` (a service's events), and
+retention), `GET /api/events?limit=N` (the **global event feed**, newest first),
+`GET /api/services/{name}/events?limit=N` (a service's events),
+`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings), and
 `POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
 `start`, `stop` or `restart`. Clicking a service in the dashboard opens its
 detail. The dashboard auto-refreshes every 5s.
@@ -963,3 +964,31 @@ sermoctl --config /etc/sermo/sermo.yml config render mysql-main # resolved form
 
 `config validate` exits `78` on a configuration error. See
 [rules](rules.md) for what each section may contain.
+
+## Diagnostics
+
+`config validate` checks that the configuration is *well-formed*. `diagnose` goes
+further and checks it against the **live host and state database**:
+
+```sh
+sermoctl --config /etc/sermo/sermo.yml diagnose          # text report
+sermoctl --config /etc/sermo/sermo.yml diagnose --json   # machine-readable
+```
+
+It reports, as `error` / `warning` / `info` findings:
+
+- **Configuration** — every `config validate` issue (errors).
+- **State database** — that the SQLite store passes `PRAGMA integrity_check`, and
+  flags **stored data (monitoring state / SLA) for services no longer in the
+  config** (orphaned rows you may want to prune).
+- **Interval alignment** — per-check `interval`s that are **not a multiple of the
+  global resolution** (`engine.interval`) or below it, so they will be rounded
+  (see [per-check interval](#per-check-interval)).
+- **Host resources** — referenced things that **do not exist on this host**:
+  network interfaces (`net` watches), files/directories (`disk`/`count` checks,
+  `file` watches) and **mount points** (a `disk` check with mount conditions whose
+  path is not currently mounted).
+
+`diagnose` exits `78` when any **error** finding is present; warnings alone exit
+`0`. The same report is available in the web UI's **Diagnostics** panel and at
+`GET /api/diagnostics`.
