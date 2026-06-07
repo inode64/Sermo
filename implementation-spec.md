@@ -2311,7 +2311,7 @@ sermoctl locks SERVICE
 
 sermoctl config validate [SERVICE]
 sermoctl config render SERVICE
-sermoctl config diff BASE SERVICE      # post-MVP
+sermoctl config diff BASE SERVICE
 
 sermoctl profile list                 # post-MVP
 sermoctl profile show PROFILE         # post-MVP
@@ -2327,10 +2327,9 @@ sermoctl lock release SERVICE                                       # post-MVP
 
 This is the full planned command surface. Commands marked `# post-MVP` are not
 required for the first implementation; the authoritative MVP subset is listed
-just below. `config diff` in particular is planned but out of scope for the MVP
-and is not covered by the section 30 validation requirements. Lock creation and
-release commands are also post-MVP; the MVP only needs `sermoctl locks SERVICE`
-for reporting named runtime locks and the operation engine's lock-blocking path.
+just below. Lock creation and release commands are also post-MVP; the MVP only
+needs `sermoctl locks SERVICE` for reporting named runtime locks and the
+operation engine's lock-blocking path.
 
 MVP commands:
 
@@ -2346,6 +2345,7 @@ sermoctl processes SERVICE
 sermoctl locks SERVICE
 sermoctl config validate [SERVICE]
 sermoctl config render SERVICE
+sermoctl config diff BASE SERVICE
 ```
 
 Exit codes:
@@ -3145,6 +3145,7 @@ Integration tests:
 - Temporary config tree.
 - sermoctl config validate.
 - sermoctl config render.
+- sermoctl config diff.
 - sermoctl locks SERVICE with active, expired and stale lock fixtures.
 - sermoctl restart with guard blocking.
 ```
@@ -3210,6 +3211,7 @@ Implement:
 - variable expansion
 - config validate
 - config render
+- config diff
 ```
 
 Acceptance:
@@ -3217,6 +3219,7 @@ Acceptance:
 ```bash
 sermoctl config validate --config ./configs/sermo.yml
 sermoctl config render apache-main --config ./configs/sermo.yml
+sermoctl config diff redis-main redis-cache --config ./configs/sermo.yml
 ```
 
 ### Phase 4: Check runner

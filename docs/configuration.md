@@ -1064,10 +1064,18 @@ notifiers:
 sermoctl --config /etc/sermo/sermo.yml config validate          # all services
 sermoctl --config /etc/sermo/sermo.yml config validate mysql    # one service
 sermoctl --config /etc/sermo/sermo.yml config render mysql-main # resolved form
+sermoctl --config /etc/sermo/sermo.yml config diff redis-main redis-cache
 ```
 
 `config validate` exits `78` on a configuration error. See
 [rules](rules.md) for what each section may contain.
+
+`config diff BASE SERVICE` resolves both services and prints a line-oriented diff
+of their flattened YAML (`-` removed from BASE, `+` added in SERVICE). Use it to
+review overrides before deploying a clone or a variant. When the resolved trees
+are identical, the command prints a short message and exits `0`. Add `--json` for
+machine-readable output with `base`, `service`, `identical`, `removed`, and
+`added` fields.
 
 ## Diagnostics
 
