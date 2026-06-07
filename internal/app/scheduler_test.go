@@ -44,6 +44,41 @@ func TestSchedulerRunsCyclesAndShutsDown(t *testing.T) {
 	}
 }
 
+func TestSchedulerHonorsPerWorkerInterval(t *testing.T) {
+	var fast, slow int32
+	counter := func(n *int32) func(context.Context, checks.Deps) map[string]checks.Result {
+		return func(context.Context, checks.Deps) map[string]checks.Result {
+			atomic.AddInt32(n, 1)
+			return nil
+		}
+	}
+	workers := []*Worker{
+		{Service: "fast", Interval: 10 * time.Millisecond, Checks: counter(&fast)},
+		{Service: "slow", Checks: counter(&slow)}, // no override: uses the global interval
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 100 * time.Millisecond}.Run(ctx, workers, nil)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduler did not return after context cancellation")
+	}
+
+	// The fast worker (10ms) must cycle several times more than the slow one,
+	// which falls back to the 100ms global interval.
+	if f, s := atomic.LoadInt32(&fast), atomic.LoadInt32(&slow); f <= s {
+		t.Fatalf("per-worker interval ignored: fast=%d slow=%d (want fast > slow)", f, s)
+	}
+}
+
 func TestSchedulerStartupDelayHoldsBeforeFirstCycle(t *testing.T) {
 	var n int32
 	workers := []*Worker{

@@ -44,17 +44,68 @@ merges into a service:
 ```yaml
 engine:
   backend: auto          # auto | systemd | openrc
-  interval: 30s          # base cycle interval per worker
+  interval: 30s          # default cycle interval; per-service overridable
   max_parallel_checks: 8 # bound on concurrent checks
   default_timeout: 10s   # default per-check timeout
   startup_delay: 0       # grace period before the first cycle (0 disables)
 ```
+
+`engine.interval` is the default cadence at which every service's checks are
+run. Each service runs all of its checks once per cycle.
 
 `engine.startup_delay` is a non-negative duration that holds the daemon before
 it starts its first check cycle, giving the host time to finish booting so
 services that are still coming up are not flagged or remediated prematurely. The
 wait applies once, on startup, before any worker runs; a shutdown signal during
 the wait aborts cleanly without starting any worker. The default `0` disables it.
+
+### Per-service interval
+
+`engine.interval` sets the default for every service. A service may override it
+with its own top-level `interval`, so cheap services can be checked often and
+expensive ones rarely without changing the global default:
+
+```yaml
+kind: service
+name: nginx
+interval: 10s            # optional, default engine.interval; positive duration
+checks:
+  http: { type: http, url: "http://127.0.0.1/health", expect_status: 200 }
+```
+
+The override governs the whole worker cycle for that service (its checks, rules
+and remediation), exactly like the global interval — only its cadence differs.
+Window counts (`for`/`within`, measured in cycles) are therefore counted in that
+service's own cycles. Worker starts are still spread across one global interval
+so a fleet of services does not all probe on the same tick.
+
+## Availability (SLA)
+
+The daemon records one availability sample per monitoring cycle per service, so
+you can see how often each service has been healthy over time. No configuration
+is needed — it is on for every monitored service.
+
+A service is **available** in a cycle when none of its **required** checks
+failed. Optional checks (warnings) do not affect it, and a service with no
+required checks is always available. Samples are accumulated into per-minute
+buckets in the state DB (`/var/lib/sermo/sermo.db`); the daemon prunes buckets
+older than a year on startup.
+
+Only **observed** cycles count. A paused service (`unmonitor`) records nothing,
+and a window in which the daemon was down simply has fewer samples — neither is
+counted as downtime, so maintenance and outages of Sermo itself do not depress a
+service's SLA.
+
+Report availability over rolling windows (the last hour, day, week, month and
+year) with `sermoctl sla`:
+
+```sh
+sermoctl sla                 # every configured service
+sermoctl sla apache-main     # one service
+sermoctl --json sla          # machine-readable: up/total/ratio per window
+```
+
+A window with no samples reads `n/a` (availability unknown), not `0%`.
 
 ## Host watches
 

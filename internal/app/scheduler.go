@@ -13,6 +13,8 @@ import (
 // them), spreads worker starts with jitter, and bounds concurrent operations
 // across all services with a global semaphore (section 24).
 type Scheduler struct {
+	// Interval is the global default cycle interval (engine.interval) used by
+	// every worker and watch that does not set its own. <=0 means 30s.
 	Interval time.Duration
 	OpSlots  int // global operation semaphore; <=0 means a default of 2
 	// StartupDelay holds the daemon for this long before starting any worker,
@@ -53,12 +55,19 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch)
 	var wg sync.WaitGroup
 	for i, w := range workers {
 		gateOperate(w, sem)
+		// Each worker runs at its own `interval` when set, falling back to the
+		// global engine interval. Starts are still spread across one global
+		// interval so a fleet of services does not all probe on the same tick.
+		wi := w.Interval
+		if wi <= 0 {
+			wi = interval
+		}
 		offset := time.Duration(int64(interval) * int64(i) / int64(len(workers)))
 		wg.Add(1)
-		go func(w *Worker, offset time.Duration) {
+		go func(w *Worker, wi, offset time.Duration) {
 			defer wg.Done()
-			runCycler(ctx, w, interval, offset)
-		}(w, offset)
+			runCycler(ctx, w, wi, offset)
+		}(w, wi, offset)
 	}
 	for _, wt := range watches {
 		wi := wt.Interval

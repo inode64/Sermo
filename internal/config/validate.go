@@ -456,6 +456,10 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 		add("backend %q is not one of auto, systemd, openrc", backend)
 	}
 
+	if v, present := tree["interval"]; present && !isPositiveDuration(scalarString(v)) {
+		add("interval %q must be a valid positive duration", scalarString(v))
+	}
+
 	if mode, present := tree["monitor"]; present {
 		s, isStr := mode.(string)
 		if _, ok := validMonitorModes[s]; !isStr || !ok {
