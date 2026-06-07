@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 
 	"sermo/internal/config"
@@ -81,10 +83,34 @@ func (g *OpGate) Run(ctx context.Context, service, action string, fn func(contex
 	}
 	release, ok := g.acquire(ctx)
 	if !ok {
-		return operation.Result{Service: service, Action: action, Status: operation.ResultFailed, Message: "shutting down"}
+		return operation.Result{
+			Service: service, Action: action, Status: operation.ResultFailed,
+			Message: g.acquireFailureMessage(ctx),
+		}
 	}
 	defer release()
 	return fn(ctx)
+}
+
+// acquireFailureMessage explains why a global operation slot could not be taken
+// before the caller's context ended.
+func (g *OpGate) acquireFailureMessage(ctx context.Context) string {
+	inUse, total := g.Usage()
+	busy := total > 0 && inUse >= total
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		if busy {
+			return fmt.Sprintf("operation slots busy (%d/%d); operation timeout exceeded", inUse, total)
+		}
+		return "operation timeout exceeded waiting for operation slot"
+	case errors.Is(ctx.Err(), context.Canceled):
+		return "shutting down"
+	default:
+		if busy {
+			return fmt.Sprintf("operation slots busy (%d/%d)", inUse, total)
+		}
+		return "operation slot unavailable"
+	}
 }
 
 func (g *OpGate) acquire(ctx context.Context) (func(), bool) {
