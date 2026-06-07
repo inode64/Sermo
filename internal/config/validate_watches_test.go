@@ -206,6 +206,32 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateZombiesWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"zombies": map[string]any{
+				"check": map[string]any{"type": "zombies", "count": map[string]any{"op": ">", "value": 20}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("expected no watch issues, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"z": map[string]any{
+				"check": map[string]any{"type": "zombies"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, "watches.z.check.count {op, value} is required for a zombies check") {
+		t.Fatalf("expected missing-count issue, got %v", bad)
+	}
+}
+
 func TestValidateEntropyWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
