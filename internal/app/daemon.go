@@ -92,6 +92,9 @@ type Deps struct {
 	// Remediation collects each service's remediation policy view for the web
 	// detail. Optional: nil disables publishing.
 	Remediation *RemediationRegistry
+	// RuleWindows collects each service's rule window progress for the web detail.
+	// Optional: nil disables publishing.
+	RuleWindows *RuleWindowRegistry
 	// Events is the recent-event log the web UI reads (global and per-service).
 	// Optional: nil disables it. Wire it into Emit via MultiEmit to populate it.
 	Events *EventLog
@@ -175,6 +178,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Policy:      rules.ParsePolicy(tree),
 		State:       &rules.RemediationState{},
 		Remediation: deps.Remediation,
+		RuleWindows: deps.RuleWindows,
 		CheckDeps:   checkDeps,
 		Interval:  durationField(tree["interval"]),
 		Gates:     parseCheckGates(tree),

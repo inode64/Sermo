@@ -64,6 +64,8 @@ type Worker struct {
 
 	// Remediation publishes the policy gating view for the web detail. Optional.
 	Remediation *RemediationRegistry
+	// RuleWindows publishes rule window progress for the web detail. Optional.
+	RuleWindows *RuleWindowRegistry
 
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
@@ -105,6 +107,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 
 	w.runRemediation(ctx, ev, now)
 	w.runAlerts(ctx, ev)
+	w.publishRuleWindows(ctx, ev)
 }
 
 // CheckGate is one check's interdependencies: it is skipped this cycle when any
@@ -358,6 +361,16 @@ func (w *Worker) publishRemediation() {
 		now = time.Now
 	}
 	w.Remediation.Publish(w.Service, w.Policy, w.State, now())
+}
+
+func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator) {
+	if w.RuleWindows == nil || ev == nil {
+		return
+	}
+	reports := rules.BuildRuleWindowReports(w.Rules, w.windows, func(ctx context.Context, r rules.Rule) (bool, error) {
+		return ev.Eval(ctx, r.If)
+	})
+	w.RuleWindows.Publish(w.Service, reports)
 }
 
 func (w *Worker) emit(e Event) {

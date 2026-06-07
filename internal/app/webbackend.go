@@ -81,6 +81,7 @@ type WebBackend struct {
 	sla           SLAReader
 	events        *EventLog
 	remediation   *RemediationRegistry
+	ruleWindows   *RuleWindowRegistry
 	cfg           *config.Config
 	diagStore diag.Store
 	host      diag.Host
@@ -96,7 +97,8 @@ type WebBackend struct {
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{
 		entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots,
-		events: deps.Events, remediation: deps.Remediation, cfg: cfg, host: diag.OSHost{},
+		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
+		cfg: cfg, host: diag.OSHost{},
 		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
@@ -330,7 +332,27 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			d.Remediation = &r
 		}
 	}
+	if b.ruleWindows != nil {
+		if reps, ok := b.ruleWindows.Get(name); ok {
+			for _, rep := range reps {
+				d.Rules = append(d.Rules, ruleWindowToWeb(rep))
+			}
+		}
+	}
 	return d, true
+}
+
+func ruleWindowToWeb(rep rules.RuleWindowReport) web.RuleWindow {
+	return web.RuleWindow{
+		Name:          rep.Name,
+		Type:          rep.Type,
+		Action:        rep.Action,
+		Condition:     rep.Condition,
+		ConditionTrue: rep.ConditionTrue,
+		Window:        rep.Window,
+		Progress:      rep.Progress,
+		Firing:        rep.Firing,
+	}
 }
 
 func remediationToWeb(rep rules.RemediationReport) web.Remediation {
