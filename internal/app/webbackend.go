@@ -70,25 +70,35 @@ type webEntry struct {
 	disabled    bool // true when the service had `enabled: false` (still listed for visibility)
 }
 
+// webWatch is a configured host watch for UI visibility (services may be 0).
+type webWatch struct {
+	name      string
+	checkType string
+	interval  time.Duration
+	disabled  bool
+}
+
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
 // the shared snapshots, and start/stop/restart through the same safe operation
 // engine the workers use.
 type WebBackend struct {
-	order     []string
-	entries   map[string]*webEntry
-	store     MonitorStore
-	snapshots *Snapshots
-	sla           SLAReader
-	events        *EventLog
-	remediation   *RemediationRegistry
-	ruleWindows   *RuleWindowRegistry
-	cfg           *config.Config
-	diagStore diag.Store
-	host      diag.Host
-	measure   MeasurementReader
-	emit           func(Event)
-	opGate         *OpGate
+	order        []string
+	entries      map[string]*webEntry
+	watchOrder   []string
+	watches      map[string]*webWatch
+	store        MonitorStore
+	snapshots    *Snapshots
+	sla          SLAReader
+	events       *EventLog
+	remediation  *RemediationRegistry
+	ruleWindows  *RuleWindowRegistry
+	cfg          *config.Config
+	diagStore    diag.Store
+	host         diag.Host
+	measure      MeasurementReader
+	emit         func(Event)
+	opGate       *OpGate
 	defaultTimeout time.Duration
 }
 
@@ -99,7 +109,9 @@ type WebBackend struct {
 // get a full runtime engine, checks, and operation support.
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb := &WebBackend{
-		entries: map[string]*webEntry{}, store: deps.Monitor, snapshots: deps.Snapshots,
+		entries: map[string]*webEntry{},
+		watches: map[string]*webWatch{},
+		store: deps.Monitor, snapshots: deps.Snapshots,
 		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
 		cfg: cfg, host: diag.OSHost{},
 		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
@@ -148,6 +160,34 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		wb.entries[name] = entry
 		wb.order = append(wb.order, name)
 	}
+
+	// Also surface host watches in the web UI (including disabled ones). This is
+	// important when services=0 but watches=N (the main dashboard would otherwise
+	// be empty). We read the raw global watches section (same source BuildWatches
+	// uses) so listing is independent of whether the watch runner is active.
+	if raw, ok := cfg.Global.Raw["watches"].(map[string]any); ok && len(raw) > 0 {
+		for _, name := range sortedKeys(raw) {
+			entry, _ := raw[name].(map[string]any)
+			disabled := isDisabled(entry)
+			ctype := ""
+			if ce, ok := entry["check"].(map[string]any); ok {
+				ctype = stringField(ce["type"])
+			}
+			iv := durationField(entry["interval"])
+			if iv <= 0 {
+				iv = 30 * time.Second
+			}
+			ww := &webWatch{
+				name:      name,
+				checkType: ctype,
+				interval:  iv,
+				disabled:  disabled,
+			}
+			wb.watches[name] = ww
+			wb.watchOrder = append(wb.watchOrder, name)
+		}
+	}
+
 	return wb, warnings
 }
 
@@ -287,6 +327,30 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
 	for _, name := range b.order {
 		out = append(out, b.view(ctx, name, b.entries[name]))
+	}
+	return out
+}
+
+func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
+	if len(b.watchOrder) == 0 {
+		return nil
+	}
+	out := make([]web.Watch, 0, len(b.watchOrder))
+	for _, name := range b.watchOrder {
+		w := b.watches[name]
+		if w == nil {
+			continue
+		}
+		iv := ""
+		if w.interval > 0 {
+			iv = w.interval.String()
+		}
+		out = append(out, web.Watch{
+			Name:      w.name,
+			CheckType: w.checkType,
+			Interval:  iv,
+			Enabled:   !w.disabled,
+		})
 	}
 	return out
 }

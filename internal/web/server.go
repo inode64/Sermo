@@ -44,6 +44,15 @@ type Service struct {
 	ActiveLocks        []string `json:"active_locks,omitempty"`   // named runtime locks blocking actions
 }
 
+// Watch is a minimal view of a host watch for the dashboard (when services=0
+// the watches section is the main thing to show).
+type Watch struct {
+	Name      string `json:"name"`
+	CheckType string `json:"check_type,omitempty"`
+	Interval  string `json:"interval,omitempty"`
+	Enabled   bool   `json:"enabled"`
+}
+
 // ActionResult is the outcome of an operation (start/stop/restart).
 type ActionResult struct {
 	OK      bool   `json:"ok"`
@@ -230,6 +239,9 @@ type Backend interface {
 	// Services returns the current view of every configured service (including those
 	// with `enabled: false` in their YAML so they remain visible for activation).
 	Services(ctx context.Context) []Service
+	// Watches returns configured host watches (including those with `enabled: false`
+	// so they remain visible even when services=0).
+	Watches(ctx context.Context) []Watch
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
 	// Series returns a service's per-minute availability history over since; ok is
@@ -310,6 +322,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /readyz", s.handleReadyz)
 	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
 	mux.HandleFunc("GET /api/services", s.handleServices)
+	mux.HandleFunc("GET /api/watches", s.handleWatches)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
@@ -406,6 +419,10 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Services(r.Context()))
+}
+
+func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Watches(r.Context()))
 }
 
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {

@@ -60,6 +60,15 @@
 </div>
 <p class="muted">Auto-refreshes every 5s.</p>
 
+<section id="watches-section" style="margin-top:1rem; display:none">
+  <h2 style="font-size:1.05rem">Host watches <span id="watches-count" class="muted"></span></h2>
+  <table>
+    <thead><tr><th>Name</th><th>Type</th><th>Interval</th><th>State</th></tr></thead>
+    <tbody id="watch-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
+</section>
+
 <div id="detail"></div>
 
 <section>
@@ -123,6 +132,13 @@ async function load() {
   } catch (e) {
     $("#err").textContent = "Failed to load services: " + e.message;
   }
+  // Also load host watches so they are visible when services=0 (e.g. services=0, watches=2).
+  try {
+    const wr = await fetch("api/watches");
+    if (wr.ok) {
+      renderWatches(await wr.json());
+    }
+  } catch (_) { /* non-fatal */ }
   loadReady();
   loadEvents();
   loadOps();
@@ -283,6 +299,32 @@ function render(services) {
     </tr>`;
   });
   $("#rows").innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No services.</td></tr>`;
+}
+
+function renderWatches(watches) {
+  const section = $("#watches-section");
+  const tbody = $("#watch-rows");
+  const cnt = $("#watches-count");
+  if (!section || !tbody) return;
+  if (!watches || watches.length === 0) {
+    section.style.display = "none";
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  section.style.display = "block";
+  if (cnt) cnt.textContent = `(${watches.length})`;
+  const rows = watches.map((w) => {
+    const state = w.enabled
+      ? '<span class="pill">enabled</span>'
+      : '<span class="pill">disabled</span>';
+    return `<tr>
+      <td>${esc(w.name)}</td>
+      <td>${esc(w.check_type || "")}</td>
+      <td>${esc(w.interval || "")}</td>
+      <td>${state}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="4" class="muted">No watches.</td></tr>`;
 }
 
 async function act(name, action) {
