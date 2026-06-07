@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"path/filepath"
 	"sort"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
-	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -111,36 +109,7 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 }
 
 func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {
-	manager := deps.Manager
-
-	discoverer := process.NewDiscoverer()
-	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(deps.Backend, unit)
-	checkDeps := checks.Deps{
-		Service:        name,
-		DefaultTimeout: deps.DefaultTimeout,
-		Status: func(ctx context.Context) (servicemgr.Status, error) {
-			st, err := manager.Status(ctx, unit)
-			if err != nil {
-				return "", err
-			}
-			return st.Status, nil
-		},
-		Processes: discoverer.ObserveState,
-	}
-
-	locker := locks.NewOperationLocker(filepath.Join(deps.Runtime, "ops"))
-	engine := operation.New(operation.Config{
-		Service:    name,
-		Unit:       unit,
-		Backend:    string(deps.Backend),
-		Tree:       tree,
-		Manager:    manager,
-		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(deps.Runtime, "locks")),
-		Discoverer: discoverer,
-		CheckDeps:  checkDeps,
-		Sleep:      deps.Sleep,
-	})
+	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps)
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)

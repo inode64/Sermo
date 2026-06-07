@@ -30,6 +30,7 @@ const (
 	SourceConfig = "config" // daemon applied the service's `monitor` flag
 	SourceCLI    = "cli"    // operator ran monitor/unmonitor
 	SourceDaemon = "daemon" // daemon changed it autonomously
+	SourceWeb    = "web"    // operator used the web UI
 )
 
 // migrations are applied in order; index i upgrades the schema from version i to

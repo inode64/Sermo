@@ -45,6 +45,13 @@ logging:
   level: info
   format: text
 
+# Web dashboard (view services; monitor/unmonitor and start/stop/restart). It has
+# no authentication, so it binds to loopback by default — only expose it behind an
+# authenticating reverse proxy. Uncomment `port` to enable (9797 recommended).
+web:
+  address: 127.0.0.1
+  # port: 9797
+
 # Named notification targets, referenced by name from a watch's then.notify.
 # Pluggable by type (email now; slack/teams/… can be added). Disabled until used.
 notifiers:

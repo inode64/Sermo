@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/web"
 )
 
 func main() {
@@ -127,6 +130,20 @@ func run(args []string) int {
 	if startupDelay > 0 {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
+	if addr := webListenAddr(cfg); addr != "" {
+		backend, webWarnings := app.NewWebBackend(cfg, deps)
+		for _, w := range webWarnings {
+			logger.Warn("build web backend", "warning", w)
+		}
+		server := &web.Server{Addr: addr, Backend: backend, Logger: logger}
+		go func() {
+			if err := server.Run(ctx); err != nil {
+				logger.Error("web server", "error", err)
+			}
+		}()
+		logger.Info("sermod web ui listening", "address", addr)
+	}
+
 	logger.Info("sermod starting", "backend", detection.Backend, "services", len(workers), "watches", len(watches))
 	scheduler := app.Scheduler{
 		Interval:     interval,
@@ -168,6 +185,34 @@ func parseArgs(args []string) (command, globalPath string, err error) {
 func notifiersRaw(cfg *config.Config) map[string]any {
 	m, _ := cfg.Global.Raw["notifiers"].(map[string]any)
 	return m
+}
+
+// webListenAddr returns the host:port the web UI should bind to, or "" when no
+// web.port is configured (web disabled). Address defaults to loopback.
+func webListenAddr(cfg *config.Config) string {
+	m, _ := cfg.Global.Raw["web"].(map[string]any)
+	if m == nil {
+		return ""
+	}
+	port := 0
+	switch v := m["port"].(type) {
+	case int:
+		port = v
+	case int64:
+		port = int(v)
+	case uint64:
+		port = int(v)
+	case float64:
+		port = int(v)
+	}
+	if port <= 0 {
+		return ""
+	}
+	address, _ := m["address"].(string)
+	if address == "" {
+		address = "127.0.0.1"
+	}
+	return net.JoinHostPort(address, strconv.Itoa(port))
 }
 
 func engineMap(cfg *config.Config) map[string]any {

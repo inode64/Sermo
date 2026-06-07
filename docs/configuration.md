@@ -104,6 +104,32 @@ A per-check `interval` **cannot be shorter than the resolution** and should be a
 **multiple** of it. If it isn't, the daemon rounds it to the nearest multiple
 (at least one cycle) and **logs a warning at startup** — it never fails to start.
 
+## Web UI
+
+The daemon can serve a small web dashboard to view services and act on them —
+monitor/unmonitor and start/stop/restart — over the same safe operation engine
+the CLI uses. It is enabled by setting a `port`:
+
+```yaml
+web:
+  address: 127.0.0.1     # optional, default 127.0.0.1 (loopback only)
+  port: 9797             # enables the UI; omit the whole block to disable
+```
+
+- **Recommended port: `9797`.** It is easy to remember and avoids the common
+  monitoring ports (`9090` Prometheus, `9093` Alertmanager, `9100` node-exporter,
+  `3000` Grafana, `8080`).
+- **No authentication.** The UI can stop/restart services, so it binds to
+  **loopback (`127.0.0.1`) by default**. Only change `address` if you front it
+  with an authenticating reverse proxy (or a private network you trust).
+
+Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
+monitored, backend, unit), and `POST /api/services/{name}/{action}` where action
+is `monitor`, `unmonitor`, `start`, `stop` or `restart`. The dashboard
+auto-refreshes every 5s. Web-triggered monitor changes are recorded with source
+`web` in the state store, and operations take the per-service operation lock, so
+they never overlap a worker's action on the same service.
+
 ## Availability (SLA)
 
 The daemon records one availability sample per monitoring cycle per service, so

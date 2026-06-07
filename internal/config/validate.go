@@ -100,6 +100,10 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 	}
 
+	if webCfg, ok := raw["web"].(map[string]any); ok {
+		validateWeb(webCfg, add)
+	}
+
 	notifiers, _ := raw["notifiers"].(map[string]any)
 	validateNotifiers(notifiers, add)
 
@@ -120,6 +124,20 @@ func validateGlobal(cfg *Config) []Issue {
 
 // validateWatches checks each host-watch entry: a known check type with valid
 // thresholds and a non-empty hook command (spec 2026-06-06-host-watches-disk).
+// validateWeb checks the global `web` block: a required port in 1..65535 and an
+// optional address (defaults to loopback).
+func validateWeb(webCfg map[string]any, add func(string, ...any)) {
+	port, ok := scalarInt(webCfg["port"])
+	if !ok || port < 1 || port > 65535 {
+		add("web.port must be an integer in 1..65535")
+	}
+	if v, present := webCfg["address"]; present {
+		if _, isStr := v.(string); !isStr {
+			add("web.address must be a string")
+		}
+	}
+}
+
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
 func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
