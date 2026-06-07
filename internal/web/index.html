@@ -110,6 +110,15 @@
   <p class="muted" style="font-size:.8rem">Live system readings (memory, cpu rate, load). Updated on refresh.</p>
 </section>
 
+<section id="locks-section" style="margin-top:1rem; display:none">
+  <h2 style="font-size:1.05rem">Runtime Locks <span id="locks-count" class="muted"></span></h2>
+  <table>
+    <thead><tr><th>Service</th><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
+    <tbody id="locks-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Named runtime locks that can block start/stop/restart (manual or automatic). Stale/expired locks are shown for awareness.</p>
+</section>
+
 <div id="detail"></div>
 
 <section>
@@ -202,6 +211,14 @@ async function load() {
     const hr = await fetch("api/host");
     if (hr.ok) {
       renderHostMetrics(await hr.json());
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Global runtime locks (active and stale).
+  try {
+    const lr = await fetch("api/locks");
+    if (lr.ok) {
+      renderLocks(await lr.json());
     }
   } catch (_) { /* non-fatal */ }
 
@@ -447,6 +464,31 @@ function renderHostMetrics(metrics) {
     }
     const ready = m.ready ? "" : " (stale)";
     return `<tr><td>${esc(m.name)}</td><td><b>${esc(val)}</b>${ready}</td></tr>`;
+  });
+  tbody.innerHTML = rows.join("");
+}
+
+function renderLocks(locks) {
+  const section = $("#locks-section");
+  const tbody = $("#locks-rows");
+  const cnt = $("#locks-count");
+  if (!section || !tbody) return;
+  if (!locks || locks.length === 0) {
+    section.style.display = "none";
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  section.style.display = "block";
+  if (cnt) cnt.textContent = `(${locks.length})`;
+  const rows = locks.map((l) => {
+    const stateCls = l.state === "active" ? "" : "muted";
+    return `<tr>
+      <td>${esc(l.service || "")}</td>
+      <td>${esc(l.name)}</td>
+      <td class="${stateCls}">${esc(l.state)}</td>
+      <td>${l.owner_pid || ""}</td>
+      <td>${esc(l.reason || l.stale_reason || "")}</td>
+    </tr>`;
   });
   tbody.innerHTML = rows.join("");
 }
