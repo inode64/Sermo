@@ -66,6 +66,9 @@ func loadGlobal(path string) (Global, error) {
 	if raw == nil {
 		raw = map[string]any{}
 	}
+	// Resolve ${env:...} across the global config so secrets (notifier DSNs/
+	// webhooks, web passwords, …) come from the environment, never the file.
+	expandEnvTree(raw)
 
 	g := Global{Path: path, Raw: raw}
 	if defaults, ok := raw["defaults"].(map[string]any); ok {
