@@ -61,3 +61,41 @@ actions still work.
 A `scope: system` metric ("is the machine under pressure?") is **not** a sound
 trigger to restart one service, so it is allowed only in `alert` rules — never in
 remediation rules, directly or via a check reference.
+
+## Privileges: the daemon runs as root
+
+`sermod` is designed to **run as root** (the packaged systemd unit and OpenRC
+service do). It manages services owned by different users and touches privileged
+areas, so several features need it:
+
+- **Service control** — start/stop/restart via systemd/OpenRC.
+- **Signalling other users' processes** — the stop policy reaps residual
+  processes that match the `kill_only_if` selector, across UIDs.
+- **Cross-user `/proc` inspection** — resolving a process's `/proc/<pid>/exe`,
+  status and the per-process IO (`/proc/<pid>/io`) of another user's process.
+- **`icmp` checks** — opening a raw ICMP socket needs `CAP_NET_RAW` (root, or that
+  capability granted to the binary).
+
+It still **starts unprivileged**, but those features silently degrade, so it
+**logs a warning at startup** when it is not root (`euid != 0`). Run it as root,
+or grant the specific capabilities you need (e.g. `CAP_NET_RAW` for ICMP,
+`CAP_KILL`/`CAP_SYS_PTRACE` for cross-user signalling/inspection) if you prefer a
+least-privilege setup.
+
+## Trust model
+
+Because the daemon runs as root:
+
+- **The config is trusted, root-owned input.** `command` checks and watch `hook`s
+  run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
+  only by root; anyone who can edit it can run code as root. Secrets belong in the
+  environment (`${env:NAME}`), not in the file.
+- **The web UI** (when enabled) can stop/restart services as root, so it is
+  hardened by default: it **binds to loopback** (`127.0.0.1`), supports
+  **authentication** with a read-only guest role, requires the **`X-Sermo-CSRF`
+  header** on every state-changing request (blocking cross-site forgery from a
+  browser), and sets HTTP timeouts. Expose it only behind an authenticating,
+  TLS-terminating reverse proxy. The daemon logs a warning if the UI runs without
+  authentication.
+- **No shell, no name-based kills, no SIGKILL by default** — see the hard
+  invariants above; these bound what even a misconfiguration can do.
