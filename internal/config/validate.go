@@ -263,6 +263,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		case "entropy":
 			validateEntropyFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
+		case "cert":
+			validateCertFields(cp, check, add)
+			validateHookBlock("watches."+name, entry, add)
 		case "zombies":
 			validateZombieFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
@@ -943,7 +946,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1050,6 +1053,34 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateZombieFields(path, entry, add)
 		case "oom":
 			validateOomFields(path, entry, add)
+		case "cert":
+			validateCertFields(path, entry, add)
+		}
+	}
+}
+
+// validateCertFields validates a cert check at prefix: a required host, optional
+// port (1..65535), optional positive expires_in_days, and boolean toggles. New
+// certificate conditions add here.
+func validateCertFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["host"]) == "" {
+		add("%s.host is required for a cert check", prefix)
+	}
+	if v, present := fields["port"]; present {
+		if n, ok := scalarInt(v); !ok || n < 1 || n > 65535 {
+			add("%s.port must be an integer in 1..65535", prefix)
+		}
+	}
+	if v, present := fields["expires_in_days"]; present {
+		if n, ok := scalarInt(v); !ok || n < 1 {
+			add("%s.expires_in_days must be a positive integer", prefix)
+		}
+	}
+	for _, key := range []string{"on_algorithm_change", "on_issuer_change", "on_change", "verify"} {
+		if v, present := fields[key]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.%s must be a boolean", prefix, key)
+			}
 		}
 	}
 }
