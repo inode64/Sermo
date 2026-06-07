@@ -8,7 +8,7 @@ which reuse the same schema). MVP types:
 | type          | passes when                                                        |
 |---------------|--------------------------------------------------------------------|
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
-| `http`        | the response status equals `expect_status` (default 200)           |
+| `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | the command exits with `expect_exit` (default 0), array form only  |
 | `service`     | the backend status equals `expect` (active/inactive/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
@@ -28,6 +28,35 @@ which reuse the same schema). MVP types:
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
+
+### HTTP
+
+Beyond the status code, an `http` check can send a method, headers and a body
+(raw or JSON) and assert the response:
+
+```yaml
+checks:
+  api:
+    type: http
+    url: "https://api.example.com/v1/health"
+    method: POST                       # default GET
+    headers:
+      Authorization: "Bearer ${token}" # any request headers
+    json:                              # request body as JSON (sets Content-Type
+      probe: true                      # automatically; or use `body:` for raw text)
+    expect_status: 200                 # code, class (2xx) or list (default 200)
+    expect_body: "ready"               # optional: response must contain this substring
+    expect_json:                       # optional: response JSON must match (dotted paths)
+      status: ok
+      data.replicas: 3                 # numbers/booleans are compared as strings
+```
+
+It passes (health-style, `OK == true`) when the status matches **and** every
+assertion holds. `json:` marshals the value and sets `Content-Type:
+application/json` (override it via `headers`); `body:` sends a raw string. The
+response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
+`expect_json` looks up **dotted paths** into nested objects, comparing the value
+as a string — handy for asserting a JSON health endpoint's fields without parsing.
 
 ### Cert
 

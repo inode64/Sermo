@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -137,7 +138,29 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if err != nil {
 			return nil, "http check: " + err.Error()
 		}
-		return httpCheck{base: b, client: client, url: url, method: method, expect: expect}, ""
+		var body []byte
+		contentType := ""
+		if j, ok := entry["json"]; ok && j != nil {
+			raw, err := json.Marshal(j)
+			if err != nil {
+				return nil, "http check: invalid json body: " + err.Error()
+			}
+			body, contentType = raw, "application/json"
+		} else if s := asString(entry["body"]); s != "" {
+			body = []byte(s)
+		}
+		return httpCheck{
+			base:        b,
+			client:      client,
+			url:         url,
+			method:      method,
+			headers:     stringMap(entry["headers"]),
+			body:        body,
+			contentType: contentType,
+			expect:      expect,
+			expectBody:  asString(entry["expect_body"]),
+			expectJSON:  stringMap(entry["expect_json"]),
+		}, ""
 
 	case "command":
 		argv := stringArray(entry["command"])
@@ -560,6 +583,20 @@ func scalarString(v any) string {
 func asBool(v any) bool {
 	b, _ := v.(bool)
 	return b
+}
+
+// stringMap converts a YAML mapping to map[string]string, stringifying scalar
+// values (so header/JSON-assertion values may be written as numbers or booleans).
+func stringMap(v any) map[string]string {
+	m, ok := v.(map[string]any)
+	if !ok || len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(m))
+	for k, val := range m {
+		out[k] = scalarString(val)
+	}
+	return out
 }
 
 func stringArray(v any) []string {

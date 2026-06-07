@@ -516,6 +516,37 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
+// validateHTTPFields validates an http check at prefix: a required url, and the
+// optional request (method/headers/body/json) and response-assertion fields
+// (expect_body/expect_json) shapes.
+func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["url"]) == "" {
+		add("%s.url is required for an http check", prefix)
+	}
+	if v, present := fields["method"]; present {
+		if _, ok := v.(string); !ok {
+			add("%s.method must be a string", prefix)
+		}
+	}
+	if v, present := fields["body"]; present {
+		if _, ok := v.(string); !ok {
+			add("%s.body must be a string", prefix)
+		}
+	}
+	for _, key := range []string{"headers", "expect_json"} {
+		if v, present := fields[key]; present {
+			if _, ok := v.(map[string]any); !ok {
+				add("%s.%s must be a mapping", prefix, key)
+			}
+		}
+	}
+	if v, present := fields["expect_body"]; present {
+		if _, ok := v.(string); !ok {
+			add("%s.expect_body must be a string", prefix)
+		}
+	}
+}
+
 // validateWatchableCheck validates the fields of a single-shot service check used
 // as a host watch and reports whether the type is watchable. service/metric/
 // process are excluded: they need per-service context (backend status, a metric
@@ -527,9 +558,7 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 			add("%s.port is required and must be numeric for a tcp check", prefix)
 		}
 	case "http":
-		if scalarString(fields["url"]) == "" {
-			add("%s.url is required for an http check", prefix)
-		}
+		validateHTTPFields(prefix, fields, add)
 	case "command":
 		if !isStringArray(fields["command"]) {
 			add("%s.command must be an array, not a shell string", prefix)
@@ -1010,6 +1039,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			continue
 		}
 		switch typ {
+		case "http":
+			validateHTTPFields(path, entry, add)
 		case "command":
 			if !isStringArray(entry["command"]) {
 				add("%s command must be an array, not a shell string", path)
