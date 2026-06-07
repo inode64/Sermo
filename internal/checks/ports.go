@@ -43,8 +43,13 @@ type portsCheck struct {
 
 func (c *portsCheck) Run(ctx context.Context) Result {
 	start := time.Now()
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
 
 	states := c.scan(ctx)
+	if err := ctx.Err(); err != nil {
+		return c.result(false, fmt.Sprintf("%s: scan timed out: %v", c.host, err), start)
+	}
 	matchHolds := c.evaluateMatch(states)
 
 	var changes []string
@@ -115,7 +120,9 @@ func (c *portsCheck) evaluateMatch(states map[int]bool) bool {
 	}
 }
 
-// scan probes every port concurrently and returns port -> open.
+// scan probes every port concurrently and returns port -> open. Unprobed ports
+// are false (closed). When the check timeout fires, scan stops launching new
+// probes; in-flight dials cancel promptly via the shared context.
 func (c *portsCheck) scan(ctx context.Context) map[int]bool {
 	out := make(map[int]bool, len(c.ports))
 	var mu sync.Mutex
@@ -123,6 +130,9 @@ func (c *portsCheck) scan(ctx context.Context) map[int]bool {
 	sem := make(chan struct{}, portsScanConcurrency)
 
 	for _, p := range c.ports {
+		if err := ctx.Err(); err != nil {
+			break
+		}
 		wg.Add(1)
 		sem <- struct{}{}
 		go func(port int) {
