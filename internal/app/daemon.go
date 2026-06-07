@@ -140,7 +140,7 @@ func BuildWorkers(cfg *config.Config, deps Deps) ([]*Worker, []string) {
 }
 
 func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {
-	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps)
+	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps, nil)
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
