@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/config"
+	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 )
@@ -78,6 +79,11 @@ func run(args []string) int {
 	}
 	defer store.Close()
 
+	notifiers, notifyWarnings := notify.Build(notifiersRaw(cfg))
+	for _, w := range notifyWarnings {
+		logger.Warn("build notifiers", "warning", w)
+	}
+
 	interval := engineDuration(cfg, "interval", 30*time.Second)
 	deps := app.Deps{
 		Backend:         detection.Backend,
@@ -90,6 +96,7 @@ func run(args []string) int {
 		Emit:            app.SlogEmitter(logger),
 		Monitor:         store,
 		SLA:             store,
+		Notifiers:       notifiers,
 		SystemFreshness: interval / 2,
 	}
 
@@ -155,6 +162,11 @@ func parseArgs(args []string) (command, globalPath string, err error) {
 		return "", "", fmt.Errorf("missing command")
 	}
 	return command, globalPath, nil
+}
+
+func notifiersRaw(cfg *config.Config) map[string]any {
+	m, _ := cfg.Global.Raw["notifiers"].(map[string]any)
+	return m
 }
 
 func engineMap(cfg *config.Config) map[string]any {

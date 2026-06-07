@@ -129,11 +129,61 @@ Each point is one monitored minute; **unmonitored minutes are simply absent**
 (gaps), so a graph can render an excluded period (Sermo down, or the service
 paused/disabled) distinctly from real downtime.
 
+## Notifications
+
+`notifiers` are named, typed delivery targets that a watch can send to when it
+fires, as an alternative or complement to running a local hook. They are global
+daemon configuration; they never merge into a service. Each notifier has a
+**name** (the map key) referenced from a watch's `then.notify` list, so different
+watches can notify different targets.
+
+```yaml
+notifiers:
+  ops-email:                 # the name referenced by then.notify
+    type: email
+    dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
+    from: "Sermo <sermo@example.com>"
+    to: [ops@example.com, oncall@example.com]       # one or more recipients
+```
+
+The **`email`** notifier sends over SMTP using only the Go standard library (no
+external dependency):
+
+- **`dsn`** — `smtp://[user:pass@]host[:port]` (STARTTLS when offered; default port
+  587) or `smtps://…` (implicit TLS; default port 465). Credentials, when present,
+  are only sent over an encrypted connection.
+- **`from`** — the sender address (a bare `addr` or `Name <addr>`).
+- **`to`** — one or more recipient addresses.
+
+The set of notifier **types is pluggable** — `slack`, `teams`, and others can be
+added without touching watches or rules (each registers a builder in
+`internal/notify`). A future transport will look the same: a `type` plus its
+own fields, addressed by name.
+
 ## Host watches
 
 `watches` monitor host-level resources independently of any service and run a
-**hook** (a local command) when a threshold is crossed. They are daemon
-configuration; they never merge into a service.
+**hook** (a local command) and/or send **notifications** (to named `notifiers`)
+when a threshold is crossed. They are daemon configuration; they never merge into
+a service.
+
+A watch's `then` block declares the actions taken when it fires — a `hook`, a
+`notify` list, or both (at least one is required):
+
+```yaml
+watches:
+  disk-root:
+    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+    then:
+      notify: [ops-email]                # send to these notifiers
+      hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }   # optional
+```
+
+`then.notify` lists notifier names (each must be defined under `notifiers`). For
+the multi-metric watches (`net`, `icmp`, `swap`) the `notify`/`hook` live in each
+metric's own `then`, so a metric can have its own targets. The notification's
+subject/body carry the watch's message and the same `SERMO_*` fields a hook
+receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`disk`, `load`, `fds`, `conntrack`, `entropy`,

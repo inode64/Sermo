@@ -9,7 +9,7 @@ import "log/slog"
 type Event struct {
 	Service string
 	Watch   string // set for host-watch events (instead of Service)
-	Kind    string // cycle | action | suppressed | alert | error | hook | hook-failed
+	Kind    string // cycle | action | suppressed | alert | error | hook | hook-failed | notify | notify-failed
 	Rule    string
 	Action  string
 	Status  string
@@ -39,9 +39,9 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 			attrs = append(attrs, "message", e.Message)
 		}
 		switch e.Kind {
-		case "error", "hook-failed":
+		case "error", "hook-failed", "notify-failed":
 			logger.Error("sermod", attrs...)
-		case "action", "alert", "suppressed", "hook":
+		case "action", "alert", "suppressed", "hook", "notify":
 			logger.Info("sermod", attrs...)
 		default:
 			logger.Debug("sermod", attrs...)
