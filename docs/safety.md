@@ -94,8 +94,11 @@ Because the daemon runs as root:
   hardened by default: it **binds to loopback** (`127.0.0.1`), supports
   **authentication** with a read-only guest role, requires the **`X-Sermo-CSRF`
   header** on every state-changing request (blocking cross-site forgery from a
-  browser), and sets HTTP timeouts. Expose it only behind an authenticating,
-  TLS-terminating reverse proxy. The daemon logs a warning if the UI runs without
-  authentication.
+  browser), and sets HTTP timeouts. It speaks plain HTTP, so to reach it from off
+  the host you **must** put it behind a TLS-terminating reverse proxy
+  (nginx/Apache) — see
+  [behind a reverse proxy](configuration.md#behind-a-reverse-proxy-required-to-expose-it).
+  Keep `web.address` on loopback; never publish the port directly. The daemon logs
+  a warning if the UI runs without authentication.
 - **No shell, no name-based kills, no SIGKILL by default** — see the hard
   invariants above; these bound what even a misconfiguration can do.
