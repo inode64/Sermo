@@ -707,6 +707,23 @@ service:
 	mustHave(t, mixed, "service must not mix name with systemd/openrc")
 }
 
+func TestValidateProcessSelectorsRequireExeAndUser(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+processes:
+  main: { type: command_match, user: mysql }
+  worker: { type: command_match, exe: /usr/sbin/mysqld }
+  pid: { type: pidfile }
+  bad: { type: by_name, name: mysqld }
+`)
+	mustHave(t, issues, "processes.main command_match requires both exe and user")
+	mustHave(t, issues, "processes.worker command_match requires both exe and user")
+	mustHave(t, issues, "processes.pid.path is required for a pidfile selector")
+	mustHave(t, issues, `processes.bad.type "by_name" is not one of pidfile, command_match`)
+}
+
 func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
 kind: service

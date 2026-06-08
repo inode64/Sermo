@@ -1085,6 +1085,7 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 	validateCheckSection(tree, "checks", locksDir, add)
 	validateCheckSection(tree, "preflight", locksDir, add)
 	validateCheckSection(tree, "postflight", locksDir, add)
+	validateProcesses(tree, add)
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
 	validateServiceField(tree, add)
@@ -1286,6 +1287,35 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	if hasKoi {
 		if len(stringSlice(koi["users"])) == 0 || len(stringSlice(koi["exe_any"])) == 0 {
 			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
+		}
+	}
+}
+
+func validateProcesses(tree map[string]any, add addFunc) {
+	processes, ok := tree["processes"].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, name := range sortedKeys(processes) {
+		path := "processes." + name
+		entry, ok := processes[name].(map[string]any)
+		if !ok {
+			add("%s must be a mapping", path)
+			continue
+		}
+		switch typ := scalarString(entry["type"]); typ {
+		case "pidfile":
+			if scalarString(entry["path"]) == "" {
+				add("%s.path is required for a pidfile selector", path)
+			}
+		case "command_match":
+			if scalarString(entry["exe"]) == "" || scalarString(entry["user"]) == "" {
+				add("%s command_match requires both exe and user", path)
+			}
+		case "":
+			add("%s.type is required", path)
+		default:
+			add("%s.type %q is not one of pidfile, command_match", path, typ)
 		}
 	}
 }
