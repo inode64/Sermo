@@ -59,6 +59,29 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 	return pages * pageSize, true
 }
 
+// ProcessIO reads read_bytes and write_bytes (actual block-layer I/O) from
+// /proc/<pid>/io. Reading another user's io requires privilege, so ok is false
+// when the file cannot be read.
+func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/io")
+	if err != nil {
+		return 0, 0, false
+	}
+	var haveR, haveW bool
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, found := strings.CutPrefix(line, "read_bytes:"); found {
+			if n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64); err == nil {
+				read, haveR = n, true
+			}
+		} else if v, found := strings.CutPrefix(line, "write_bytes:"); found {
+			if n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64); err == nil {
+				write, haveW = n, true
+			}
+		}
+	}
+	return read, write, haveR && haveW
+}
+
 // TotalMemory reads MemTotal and MemAvailable from /proc/meminfo.
 func (OSReader) TotalMemory() (total, used uint64, ok bool) {
 	data, err := os.ReadFile("/proc/meminfo")
