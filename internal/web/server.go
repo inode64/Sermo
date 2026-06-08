@@ -30,32 +30,32 @@ var assets embed.FS
 // in their configuration are still listed (with Enabled=false) so operators can
 // see the full fleet and know what to activate by editing config + reloading.
 type Service struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Backend     string `json:"backend"`
-	Unit        string `json:"unit"`
-	Status      string `json:"status"`
-	Enabled            bool   `json:"enabled"`                    // false when service document has `enabled: false`
-	Monitored          bool   `json:"monitored"`
-	MonitorSource      string `json:"monitor_source,omitempty"`       // cli | web | config | daemon
-	MonitorChangedAt   string `json:"monitor_changed_at,omitempty"`   // RFC3339 when monitoring state last changed
-	CheckHealth        string   `json:"check_health,omitempty"`   // ok | failing | unknown | paused | disabled
-	ChecksFailing      int      `json:"checks_failing,omitempty"` // required checks currently failing
-	ActiveLocks        []string `json:"active_locks,omitempty"`   // named runtime locks blocking actions
+	Name             string   `json:"name"`
+	DisplayName      string   `json:"display_name"`
+	Backend          string   `json:"backend"`
+	Unit             string   `json:"unit"`
+	Status           string   `json:"status"`
+	Enabled          bool     `json:"enabled"` // false when service document has `enabled: false`
+	Monitored        bool     `json:"monitored"`
+	MonitorSource    string   `json:"monitor_source,omitempty"`     // cli | web | config | daemon
+	MonitorChangedAt string   `json:"monitor_changed_at,omitempty"` // RFC3339 when monitoring state last changed
+	CheckHealth      string   `json:"check_health,omitempty"`       // ok | failing | unknown | paused | disabled
+	ChecksFailing    int      `json:"checks_failing,omitempty"`     // required checks currently failing
+	ActiveLocks      []string `json:"active_locks,omitempty"`       // named runtime locks blocking actions
 }
 
 // Watch is a view of a host watch for the dashboard (when services=0
 // the watches section is the main thing to show). Enriched with useful
 // runtime/config info for operators.
 type Watch struct {
-	Name           string `json:"name"`
-	CheckType      string `json:"check_type,omitempty"`
-	Interval       string `json:"interval,omitempty"`
-	Enabled        bool   `json:"enabled"`
-	FireOnFail     bool   `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
-	HasHook        bool   `json:"has_hook"`
-	NotifierCount  int    `json:"notifier_count"`
-	LastActivity   string `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
+	Name             string `json:"name"`
+	CheckType        string `json:"check_type,omitempty"`
+	Interval         string `json:"interval,omitempty"`
+	Enabled          bool   `json:"enabled"`
+	FireOnFail       bool   `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
+	HasHook          bool   `json:"has_hook"`
+	NotifierCount    int    `json:"notifier_count"`
+	LastActivity     string `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
 	LastActivityKind string `json:"last_activity_kind,omitempty"`
 }
 
@@ -88,7 +88,7 @@ type DaemonInfo struct {
 // useful when services=0 and you are mostly watching host resources).
 type ActivitySummary struct {
 	TotalEvents      int    `json:"total_events"`
-	ServiceActions   int    `json:"service_actions"`   // start/stop/restart
+	ServiceActions   int    `json:"service_actions"` // start/stop/restart
 	WatchHooks       int    `json:"watch_hooks"`
 	WatchNotifies    int    `json:"watch_notifies"`
 	Errors           int    `json:"errors"`
@@ -135,7 +135,7 @@ type Check struct {
 	Optional bool   `json:"optional"`
 	Skipped  bool   `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
 	Message  string `json:"message,omitempty"`
-	Ran      bool   `json:"ran"`           // false if not observed yet
+	Ran      bool   `json:"ran"`          // false if not observed yet
 	At       string `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)
 }
 
@@ -180,8 +180,8 @@ type Remediation struct {
 	Cooldown          string `json:"cooldown,omitempty"`
 	EffectiveCooldown string `json:"effective_cooldown,omitempty"`
 	CurrentBackoff    string `json:"current_backoff,omitempty"`
-	LastActionAt      string `json:"last_action_at,omitempty"`  // RFC3339
-	CooldownUntil     string `json:"cooldown_until,omitempty"`  // RFC3339
+	LastActionAt      string `json:"last_action_at,omitempty"` // RFC3339
+	CooldownUntil     string `json:"cooldown_until,omitempty"` // RFC3339
 	MaxActions        int    `json:"max_actions,omitempty"`
 	MaxActionsWindow  string `json:"max_actions_window,omitempty"`
 	RecentActions     int    `json:"recent_actions,omitempty"`
@@ -202,13 +202,13 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks and SLA.
 type Detail struct {
 	Service
-	Checks      []Check      `json:"checks"`
-	SLA         []SLAWindow  `json:"sla"`
+	Checks       []Check      `json:"checks"`
+	SLA          []SLAWindow  `json:"sla"`
 	Locks        []Lock       `json:"locks,omitempty"`
 	LockWarnings []string     `json:"lock_warnings,omitempty"`
 	Processes    []Process    `json:"processes,omitempty"`
-	Remediation  *Remediation  `json:"remediation,omitempty"`
-	Rules        []RuleWindow  `json:"rules,omitempty"`
+	Remediation  *Remediation `json:"remediation,omitempty"`
+	Rules        []RuleWindow `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
@@ -381,7 +381,7 @@ type Server struct {
 	// web UI is reachable.
 	Reload func() error
 
-	started  time.Time         // when the server began serving; for /livez uptime
+	started  time.Time       // when the server began serving; for /livez uptime
 	shutdown context.Context // daemon lifetime; set in Run
 }
 
