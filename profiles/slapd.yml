@@ -1,7 +1,7 @@
 kind: profile
 name: slapd
 display_name: "OpenLDAP (slapd)"
-service: { name: "slapd" }
+service: slapd
 variables:
   binary: "/usr/bin/openldap/slapd"
 preflight:

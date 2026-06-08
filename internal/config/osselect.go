@@ -50,7 +50,7 @@ func (c *Config) bakeOS() {
 // applyOSSelectors collapses every `os:` selector block in every loaded document.
 // An `os:` key holding a map of os-id -> block selects the branch for the detected
 // OS (or a `default` branch), merges it into the surrounding map, and discards the
-// rest. It works at any depth — aliases, checks, processes, policy, ... — and runs
+// rest. It works at any depth — service, checks, processes, policy, ... — and runs
 // at load, before resolution.
 func (c *Config) applyOSSelectors() {
 	for _, doc := range c.docs {

@@ -2,7 +2,7 @@ kind: profile
 name: guacd
 display_name: "Apache Guacamole"
 description: "Guacamole daemon"
-service: { name: "guacd" }
+service: guacd
 variables:
   binary: "/usr/sbin/guacd"
 preflight:

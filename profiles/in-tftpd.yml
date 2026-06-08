@@ -2,7 +2,7 @@ kind: profile
 name: in.tftpd
 display_name: "TFTP Server"
 description: "In.tftpd"
-service: { name: "in-tftpd" }
+service: in-tftpd
 variables:
   binary: "/usr/sbin/in.tftpd"
 preflight:

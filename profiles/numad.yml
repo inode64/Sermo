@@ -2,7 +2,7 @@ kind: profile
 name: numad
 display_name: "NUMA Daemon"
 description: "Gestor NUMA"
-service: { name: "numad" }
+service: numad
 variables:
   binary: "/usr/bin/numad"
 preflight:

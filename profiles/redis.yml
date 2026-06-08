@@ -4,14 +4,8 @@ display_name: "Redis"
 type: cache
 
 service:
-  name: redis
-
-aliases:
-  systemd:
-    - redis.service
-    - redis-server.service
-  openrc:
-    - redis
+  systemd: [redis, redis-server]
+  openrc: [redis]
 
 variables:
   binary: /usr/bin/redis-server

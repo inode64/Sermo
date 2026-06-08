@@ -1,7 +1,7 @@
 kind: profile
 name: upsd
 display_name: "NUT UPS Daemon"
-service: { name: "upsd" }
+service: upsd
 variables:
   binary: "/usr/sbin/upsd"
 preflight:

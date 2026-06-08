@@ -2,7 +2,7 @@ kind: profile
 name: nmbd
 display_name: "Samba NMB"
 description: "Servidor de ficheros Windows - NMB"
-service: { name: "nmbd" }
+service: nmbd
 variables:
   binary: "/usr/sbin/nmbd"
 preflight:

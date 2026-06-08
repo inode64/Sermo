@@ -4,15 +4,8 @@ display_name: "Apache HTTP Server"
 type: webserver
 
 service:
-  name: apache2
-
-aliases:
-  systemd:
-    - apache2.service
-    - httpd.service
-  openrc:
-    - apache2
-    - apache
+  systemd: [apache2, httpd]
+  openrc: [apache2, apache]
 
 variables:
   binary: /usr/sbin/apache2

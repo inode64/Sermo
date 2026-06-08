@@ -1,7 +1,7 @@
 kind: profile
 name: named
 display_name: "BIND (named)"
-service: { name: "named" }
+service: named
 variables:
   binary: "/usr/sbin/named"
 preflight:

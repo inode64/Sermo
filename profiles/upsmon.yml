@@ -1,7 +1,7 @@
 kind: profile
 name: upsmon
 display_name: "NUT UPS Monitor"
-service: { name: "upsmon" }
+service: upsmon
 variables:
   binary: "/usr/sbin/upsmon"
 preflight:

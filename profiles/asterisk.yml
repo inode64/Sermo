@@ -1,7 +1,7 @@
 kind: profile
 name: asterisk
 display_name: "Asterisk PBX"
-service: { name: "asterisk" }
+service: asterisk
 variables:
   binary: "/usr/sbin/asterisk"
 preflight:

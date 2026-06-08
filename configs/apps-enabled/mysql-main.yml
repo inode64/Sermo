@@ -1,6 +1,4 @@
 kind: service
 name: mysql-main
 uses: mysql
-
-service:
-  name: mysql
+# Inherits the unit candidates from the `mysql` profile (service: systemd/openrc).

@@ -1,7 +1,7 @@
 kind: profile
 name: openvpn
 display_name: "OpenVPN"
-service: { name: "openvpn" }
+service: openvpn
 variables:
   binary: "/usr/sbin/openvpn"
 preflight:

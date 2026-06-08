@@ -117,35 +117,55 @@ func (g Global) StateDir() string {
 	return g.State
 }
 
-// ServiceUnit returns a resolved service's backend unit name (its service.name),
-// falling back to the given name.
+// ServiceUnit returns a service's primary (display/seed) unit name: the scalar
+// `service`, the first candidate of a per-init `service` map, or the legacy
+// `service.name`; falling back to the given name.
 func ServiceUnit(tree map[string]any, fallback string) string {
-	if svc, ok := tree["service"].(map[string]any); ok {
-		if name, _ := svc["name"].(string); name != "" {
+	switch s := tree["service"].(type) {
+	case string:
+		if s != "" {
+			return s
+		}
+	case map[string]any:
+		if name, _ := s["name"].(string); name != "" { // legacy form
 			return name
+		}
+		for _, backend := range []string{"systemd", "openrc"} {
+			if list := stringList(s[backend]); len(list) > 0 {
+				return list[0]
+			}
 		}
 	}
 	return fallback
 }
 
-// UnitAliases returns the per-backend alias candidates of a resolved service
-// (section 11).
-func UnitAliases(tree map[string]any, backend string) []string {
-	aliases, ok := tree["aliases"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	list, ok := aliases[backend].([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(list))
-	for _, e := range list {
-		if s, ok := e.(string); ok && s != "" {
-			out = append(out, s)
+// ServiceCandidates returns the unit-name candidates to try for backend, and
+// whether to trust the first candidate when none can be probed.
+//
+//   - `service: name` (scalar) or legacy `service: { name: ... }` →
+//     a single trusted candidate (units the probe cannot surface, e.g.
+//     sysv-generated, are not rejected). trust = true.
+//   - `service: { systemd: [...], openrc: [...] }` (per-init) → the list for
+//     backend, requiring a match (trust = false). A backend with no entry is
+//     not available: the candidate list is empty.
+func ServiceCandidates(tree map[string]any, backend, fallback string) (candidates []string, trust bool) {
+	switch s := tree["service"].(type) {
+	case string:
+		if s != "" {
+			return []string{s}, true
+		}
+	case map[string]any:
+		if _, ok := s["systemd"]; ok {
+			return stringList(s[backend]), false
+		}
+		if _, ok := s["openrc"]; ok {
+			return stringList(s[backend]), false
+		}
+		if name, _ := s["name"].(string); name != "" { // legacy form
+			return []string{name}, true
 		}
 	}
-	return out
+	return []string{fallback}, true
 }
 
 // Config is the full loaded configuration set.

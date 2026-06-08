@@ -41,7 +41,7 @@ var rejectedSecurityToggles = []string{
 // security toggles, policy.cooldown/max_actions/backoff, port/expect_status range,
 // check/preflight/postflight entry schemas (type, optional, command array form,
 // service/process states, metric grammar, file_exists not under the lock dir),
-// stop_policy.force_kill/kill_only_if, aliases, and rules (type, if/then, action,
+// stop_policy.force_kill/kill_only_if, service, and rules (type, if/then, action,
 // guard/block constraints, for/within windows, and the condition tree: exactly
 // one operator per node, check references, states, and metric scope/catalog with
 // system metrics confined to alert rules — directly and indirectly through a
@@ -1087,14 +1087,14 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 	validateCheckSection(tree, "postflight", locksDir, add)
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
-	validateAliases(tree, add)
+	validateServiceField(tree, add)
 	validateCommands(tree, add)
 	validateRules(tree, add)
 
 	return issues
 }
 
-// ---- section 30: checks, stop_policy, policy, aliases, rules ----
+// ---- section 30: checks, stop_policy, policy, service, rules ----
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 
@@ -1342,19 +1342,41 @@ func validateCommands(tree map[string]any, add addFunc) {
 	}
 }
 
-func validateAliases(tree map[string]any, add addFunc) {
-	aliases, ok := tree["aliases"].(map[string]any)
-	if !ok {
+// validateServiceField checks the `service` field: a scalar unit name, a per-init
+// map of systemd/openrc candidate lists, or the legacy { name: ... } shorthand.
+func validateServiceField(tree map[string]any, add addFunc) {
+	s, present := tree["service"]
+	if !present {
 		return
 	}
-	for _, k := range sortedKeys(aliases) {
-		if k != "systemd" && k != "openrc" {
-			add("aliases key %q is not a valid backend (systemd, openrc)", k)
-			continue
+	switch v := s.(type) {
+	case string:
+		if strings.TrimSpace(v) == "" {
+			add("service must not be empty")
 		}
-		if len(stringSlice(aliases[k])) == 0 {
-			add("aliases.%s must be a non-empty list", k)
+	case map[string]any:
+		hasInit, hasName := false, false
+		for _, k := range sortedKeys(v) {
+			switch k {
+			case "systemd", "openrc":
+				hasInit = true
+				if len(stringSlice(v[k])) == 0 {
+					add("service.%s must be a non-empty list", k)
+				}
+			case "name":
+				hasName = true
+				if scalarString(v["name"]) == "" {
+					add("service.name must not be empty")
+				}
+			default:
+				add("service key %q is not one of systemd, openrc, name", k)
+			}
 		}
+		if hasInit && hasName {
+			add("service must not mix name with systemd/openrc")
+		}
+	default:
+		add("service must be a unit name or a per-init map (systemd/openrc)")
 	}
 }
 

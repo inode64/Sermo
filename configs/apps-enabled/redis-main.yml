@@ -1,6 +1,4 @@
 kind: service
 name: redis-main
 uses: redis
-
-service:
-  name: redis
+# Inherits the unit candidates from the `redis` profile (service: systemd/openrc).

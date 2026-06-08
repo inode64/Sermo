@@ -699,8 +699,7 @@ func TestOSSelectorCollapses(t *testing.T) {
 		"profiles/apache.yml": `
 kind: profile
 name: apache
-service: { name: apache }
-aliases:
+service:
   os:
     gentoo:
       systemd: [apache.service]
@@ -727,13 +726,13 @@ policy:
 	}
 	body := cfg.Profiles["apache"].Body
 
-	// aliases: the os: block is replaced by the gentoo branch.
-	aliases := body["aliases"].(map[string]any)
-	if _, present := aliases["os"]; present {
-		t.Errorf("os selector not collapsed: %v", aliases)
+	// service: the os: block is replaced by the gentoo branch.
+	svc := body["service"].(map[string]any)
+	if _, present := svc["os"]; present {
+		t.Errorf("os selector not collapsed: %v", svc)
 	}
-	if sysd, _ := aliases["systemd"].([]any); len(sysd) != 1 || sysd[0] != "apache.service" {
-		t.Errorf("aliases.systemd = %v, want [apache.service]", aliases["systemd"])
+	if sysd, _ := svc["systemd"].([]any); len(sysd) != 1 || sysd[0] != "apache.service" {
+		t.Errorf("service.systemd = %v, want [apache.service]", svc["systemd"])
 	}
 
 	// checks.http: branch merged with its siblings (timeout kept, url added).
@@ -1016,12 +1015,10 @@ func TestVersionTemplateDiscoverFrom(t *testing.T) {
 kind: profile
 name: php-fpm%%v
 display_name: "PHP-FPM ${version}"
-service: { name: php-fpm }
+service:
+  systemd: ["php${version}-fpm"]
 versions:
   from: "%s/php${version}/bin/php-fpm"
-aliases:
-  systemd:
-    - php${version}-fpm.service
 variables:
   binary: /usr/sbin/php-fpm
 `, slots)
@@ -1050,10 +1047,10 @@ defaults: { policy: { cooldown: 5m } }
 		if got := profileBinary(doc.Body); got != "/usr/sbin/php-fpm" {
 			t.Errorf("php-fpm%s binary = %q, want /usr/sbin/php-fpm", v, got)
 		}
-		// ${version} baked into the alias.
-		sysd := nested(t, doc.Body, "aliases")["systemd"].([]any)
-		if got := sysd[0].(string); got != "php"+v+"-fpm.service" {
-			t.Errorf("php-fpm%s alias = %q, want php%s-fpm.service", v, got, v)
+		// ${version} baked into the service unit candidate.
+		sysd := nested(t, doc.Body, "service")["systemd"].([]any)
+		if got := sysd[0].(string); got != "php"+v+"-fpm" {
+			t.Errorf("php-fpm%s service unit = %q, want php%s-fpm", v, got, v)
 		}
 		// Discovery metadata stripped from the concrete profile.
 		if _, present := doc.Body["versions"]; present {

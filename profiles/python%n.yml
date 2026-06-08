@@ -1,7 +1,7 @@
 kind: profile
 name: python%n
 display_name: "Python ${n}"
-service: { name: "python${n}" }
+service: python${n}
 variables:
   binary: "/usr/bin/python${n}"
 preflight:

@@ -2,7 +2,7 @@ kind: profile
 name: bacula-dir
 display_name: "Bacula Director"
 description: "Backup director Server"
-service: { name: "bacula-dir" }
+service: bacula-dir
 variables:
   binary: "/usr/sbin/bacula-dir"
 preflight:

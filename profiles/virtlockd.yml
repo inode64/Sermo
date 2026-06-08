@@ -1,7 +1,7 @@
 kind: profile
 name: virtlockd
 display_name: "libvirt Lock Daemon"
-service: { name: "virtlockd" }
+service: virtlockd
 variables:
   binary: "/usr/sbin/virtlockd"
 preflight:
