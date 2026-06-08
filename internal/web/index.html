@@ -49,7 +49,8 @@
   summary > button { font-weight: 400; }
   #rows tr:hover td { background: #8881; }
   #rows tr.row-failing td { background: #cf222e1f; }
-  #rows .exp { cursor: pointer; color: #888; margin-right: .35rem; user-select: none; font-size: .9em; }
+  tr.clickable { cursor: pointer; }
+  .exp { color: #888; margin-right: .35rem; user-select: none; font-size: .9em; }
   #rows tr.exp-row td { background: #8881; padding-left: 1.6rem; }
   .slabar { display: inline-block; width: 9rem; height: .55rem; background: #8883; border-radius: .3rem; overflow: hidden; vertical-align: middle; }
   .slabar > span { display: block; height: 100%; }
@@ -485,9 +486,9 @@ function renderServices() {
       : esc(s.name);
     const key = "svc:" + s.name;
     const open = expanded.has(key);
-    const chev = `<span class="exp" onclick="toggleExpand('${esc(key)}')" title="show processes">${open ? '▾' : '▸'}</span>`;
+    const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    const row = `<tr class="${isFailing(s) ? 'row-failing' : ''}">
+    const row = `<tr class="clickable ${isFailing(s) ? 'row-failing' : ''}" onclick="rowClick(event, '${esc(key)}')">
       <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div></td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
@@ -514,6 +515,13 @@ function toggleExpand(key) {
   else { expanded.add(key); }
   renderServices();
   renderWatches();
+}
+
+// rowClick expands a row from a click anywhere on it, except on interactive
+// elements (action buttons, the detail link) which keep their own behaviour.
+function rowClick(event, key) {
+  if (event.target.closest("button, a, input, select")) return;
+  toggleExpand(key);
 }
 
 async function loadExpansionFor(key) {
@@ -619,8 +627,8 @@ function renderWatches(watches) {
     }
     const key = "wat:" + w.name;
     const open = expanded.has(key);
-    const chev = `<span class="exp" onclick="toggleExpand('${esc(key)}')" title="show activity">${open ? '▾' : '▸'}</span>`;
-    const row = `<tr>
+    const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
+    const row = `<tr class="clickable" onclick="rowClick(event, '${esc(key)}')">
       <td>${chev}${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
       <td>${esc(w.interval || "")}</td>
