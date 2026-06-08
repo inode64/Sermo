@@ -417,8 +417,9 @@ function checkHealthCell(s) {
 let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
-let expanded = new Set();  // service names whose inline process detail is open
-let expCache = {};         // last rendered expansion HTML per service (avoids flicker)
+let allWatches = [];
+let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
+let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
 
 function isFailing(s) { return s.enabled && s.check_health === "failing"; }
 
@@ -482,8 +483,9 @@ function renderServices() {
     const label = s.display_name && s.display_name !== s.name
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
-    const open = expanded.has(s.name);
-    const chev = `<span class="exp" onclick="toggleExpand('${esc(s.name)}')" title="show processes">${open ? '▾' : '▸'}</span>`;
+    const key = "svc:" + s.name;
+    const open = expanded.has(key);
+    const chev = `<span class="exp" onclick="toggleExpand('${esc(key)}')" title="show processes">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
     const row = `<tr class="${isFailing(s) ? 'row-failing' : ''}">
       <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div></td>
@@ -493,7 +495,7 @@ function renderServices() {
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(s.name)}"><td colspan="5">${expCache[s.name] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="5">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
@@ -501,24 +503,37 @@ function renderServices() {
     ? `<tr><td colspan="5" class="muted">No services match the filter.</td></tr>`
     : `<tr><td colspan="5" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows.join("") || empty;
-  expanded.forEach((n) => loadExpansion(n));
+  expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
 }
 
-// toggleExpand / loadExpansion / renderExpansion drive the inline per-service
-// detail: process table with per-process memory and disk I/O, plus totals.
-function toggleExpand(name) {
-  if (expanded.has(name)) { expanded.delete(name); delete expCache[name]; }
-  else { expanded.add(name); }
+// toggleExpand / loadExpansionFor drive inline expansion, shared by services and
+// host watches. Keys are "svc:<name>" (process table + memory/IO + SLA) or
+// "wat:<name>" (watch config + recent activity).
+function toggleExpand(key) {
+  if (expanded.has(key)) { expanded.delete(key); delete expCache[key]; }
+  else { expanded.add(key); }
   renderServices();
+  renderWatches();
 }
 
-async function loadExpansion(name) {
+async function loadExpansionFor(key) {
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
-    if (!res.ok) return;
-    const html = renderExpansion(await res.json());
-    expCache[name] = html;
-    const tr = [...document.querySelectorAll("#rows tr.exp-row")].find((r) => r.dataset.exp === name);
+    let html;
+    if (key.startsWith("svc:")) {
+      const res = await fetch(`api/services/${encodeURIComponent(key.slice(4))}`);
+      if (!res.ok) return;
+      html = renderExpansion(await res.json());
+    } else if (key.startsWith("wat:")) {
+      const name = key.slice(4);
+      const res = await fetch("api/events?limit=200");
+      const events = res.ok ? await res.json() : [];
+      html = renderWatchExpansion((allWatches || []).find((x) => x.name === name),
+        (events || []).filter((e) => e.watch === name));
+    } else {
+      return;
+    }
+    expCache[key] = html;
+    const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
     if (tr) tr.querySelector("td").innerHTML = html;
   } catch (_) { /* keep the last content on a transient error */ }
 }
@@ -575,18 +590,20 @@ function fmtBytes(n) {
 }
 
 function renderWatches(watches) {
+  if (watches) allWatches = watches;
   const section = $("#watches-section");
   const tbody = $("#watch-rows");
   const cnt = $("#watches-count");
   if (!section || !tbody) return;
-  if (!watches || watches.length === 0) {
+  const list = allWatches || [];
+  if (list.length === 0) {
     section.style.display = "none";
     if (cnt) cnt.textContent = "";
     return;
   }
   section.style.display = "block";
-  if (cnt) cnt.textContent = `(${watches.length})`;
-  const rows = watches.map((w) => {
+  if (cnt) cnt.textContent = `(${list.length})`;
+  const rows = list.map((w) => {
     const state = w.enabled
       ? '<span class="pill">enabled</span>'
       : '<span class="pill">disabled</span>';
@@ -600,8 +617,11 @@ function renderWatches(watches) {
       const kind = w.last_activity_kind ? ` (${esc(w.last_activity_kind)})` : '';
       last = `<span title="${esc(w.last_activity)}">${esc(w.last_activity.substring(11,19))}${kind}</span>`;
     }
-    return `<tr>
-      <td>${esc(w.name)}</td>
+    const key = "wat:" + w.name;
+    const open = expanded.has(key);
+    const chev = `<span class="exp" onclick="toggleExpand('${esc(key)}')" title="show activity">${open ? '▾' : '▸'}</span>`;
+    const row = `<tr>
+      <td>${chev}${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
       <td>${esc(w.interval || "")}</td>
       <td>${polarity}</td>
@@ -610,8 +630,31 @@ function renderWatches(watches) {
       <td>${last}</td>
       <td>${state}</td>
     </tr>`;
+    const expRow = open
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      : "";
+    return row + expRow;
   });
   tbody.innerHTML = rows.join("") || `<tr><td colspan="8" class="muted">No watches.</td></tr>`;
+  expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
+}
+
+// renderWatchExpansion shows a host watch's config summary and its recent
+// activity (hooks/notifies fired), reusing the inline expansion mechanism.
+function renderWatchExpansion(w, events) {
+  w = w || {};
+  const polarity = w.fire_on_fail ? "on fail" : "on threshold";
+  const cfg = `<div class="muted" style="margin:.15rem 0 .4rem">type <b>${esc(w.check_type || "")}</b> · interval <b>${esc(w.interval || "")}</b> · fires <b>${polarity}</b> · hook ${w.has_hook ? '✓' : '—'} · notifiers <b>${w.notifier_count || 0}</b> · ${w.enabled ? 'enabled' : 'disabled'}</div>`;
+  if (!events || !events.length) return cfg + '<div class="muted">No recent activity.</div>';
+  const rows = events.slice(0, 50).map((e) => {
+    const detail = [e.action, e.status].filter(Boolean).map(esc).join(" ");
+    return `<tr>
+      <td class="t">${esc(fmtTime(e.time))}</td>
+      <td class="kind kind-${esc(e.kind)}">${esc(e.kind)}</td>
+      <td>${detail ? `<span class="muted">${detail}</span> ` : ""}${esc(e.message || "")}</td>
+    </tr>`;
+  }).join("");
+  return cfg + `<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
 }
 
 function renderNotifiers(notifiers) {
