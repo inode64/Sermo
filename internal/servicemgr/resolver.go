@@ -10,7 +10,7 @@ import (
 )
 
 // UnitResolver resolves a service to the concrete unit name the active backend
-// knows, trying service.name then the per-backend aliases in order (section 11).
+// knows, trying the per-backend candidate names in order (section 11).
 type UnitResolver struct {
 	Runner  execx.Runner
 	Probe   Probe
@@ -22,12 +22,13 @@ func NewUnitResolver() UnitResolver {
 	return UnitResolver{Runner: execx.CommandRunner{}, Probe: OSProbe{}, Timeout: defaultDetectTimeout}
 }
 
-// Resolve picks the first candidate (service.name, then aliases) the backend
-// actually knows, normalizing systemd unit names (section 11). When aliases are
-// given but none resolve, it fails listing the candidates tried. When no aliases
-// are given, it trusts service.name as-is, so units the probe cannot surface
-// (e.g. sysv-generated) are not wrongly rejected.
-func (r UnitResolver) Resolve(ctx context.Context, backend Backend, name string, aliases []string) (string, error) {
+// Resolve picks the first candidate the backend actually knows, normalizing
+// systemd unit names (section 11). With trust=true (a scalar/shorthand service)
+// the first candidate is returned as-is when none can be probed, so units the
+// probe cannot surface (e.g. sysv-generated) are not wrongly rejected. With
+// trust=false (an explicit per-init list) it requires a match and otherwise
+// fails; an empty candidate list means the service is not available on backend.
+func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates []string, trust bool) (string, error) {
 	runner := r.Runner
 	if runner == nil {
 		runner = execx.CommandRunner{}
@@ -37,8 +38,9 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, name string,
 		probe = OSProbe{}
 	}
 
+	candidates = dedupe(candidates)
 	var tried []string
-	for _, candidate := range dedupeCandidates(name, aliases) {
+	for _, candidate := range candidates {
 		unit := candidate
 		if backend == BackendSystemd {
 			unit = systemdUnit(candidate)
@@ -49,13 +51,16 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, name string,
 		}
 	}
 
-	if len(aliases) == 0 {
+	if trust && len(candidates) > 0 {
 		if backend == BackendSystemd {
-			return systemdUnit(name), nil
+			return systemdUnit(candidates[0]), nil
 		}
-		return name, nil
+		return candidates[0], nil
 	}
-	return "", fmt.Errorf("no unit resolved for %q on %s; tried: %s", name, backend, strings.Join(tried, ", "))
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("service is not available on %s", backend)
+	}
+	return "", fmt.Errorf("no unit resolved on %s; tried: %s", backend, strings.Join(tried, ", "))
 }
 
 // knows reports whether the backend recognizes a candidate: systemd via
@@ -81,22 +86,18 @@ func (r UnitResolver) timeout() time.Duration {
 	return r.Timeout
 }
 
-func dedupeCandidates(name string, aliases []string) []string {
+func dedupe(in []string) []string {
 	seen := map[string]struct{}{}
 	var out []string
-	add := func(c string) {
+	for _, c := range in {
 		if c == "" {
-			return
+			continue
 		}
 		if _, ok := seen[c]; ok {
-			return
+			continue
 		}
 		seen[c] = struct{}{}
 		out = append(out, c)
-	}
-	add(name)
-	for _, a := range aliases {
-		add(a)
 	}
 	return out
 }

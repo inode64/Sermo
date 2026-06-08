@@ -4,14 +4,8 @@ display_name: "PHP-FPM ${version}"
 type: appserver
 
 service:
-  name: php-fpm
-
-aliases:
-  systemd:
-    - php${version}-fpm.service
-    - php-fpm${version}.service
-  openrc:
-    - php-fpm${version}
+  systemd: ["php-fpm", "php${version}-fpm", "php-fpm${version}"]
+  openrc: ["php-fpm", "php-fpm${version}"]
 
 variables:
   binary: /usr/sbin/php-fpm${version}

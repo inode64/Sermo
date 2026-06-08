@@ -142,7 +142,7 @@ environment variables (useful for testing or building config off-host).
 |-------------------|-----------------------------------------|-----------------|
 | `${name}`         | the resolved service/profile name       | resolution      |
 | `${display_name}` | the display name (falls back to name)   | resolution      |
-| `${service}`      | the backend unit name (`service.name`)  | resolution      |
+| `${service}`      | the service's primary unit name         | resolution      |
 | `${host}`         | hostname (`SERMO_HOST` override)        | resolution¹     |
 | `${arch}`         | machine architecture (`SERMO_ARCH`)     | load (baked)    |
 | `${os}`           | os-release id (`SERMO_OS`)              | load (baked)    |
@@ -163,13 +163,13 @@ stay literal.
 Beyond the `${os}` string, an `os:` key anywhere in a document selects a whole
 sub-block by OS. The block for the detected OS (or a `default` block) is merged
 into its parent and the rest discarded — at load, before resolution. It is not
-limited to init/aliases; use it in checks, processes, policy, variables, anywhere:
+limited to the service block; use it in checks, processes, policy, variables, anywhere:
 
 ```yaml
-aliases:
+service:
   os:
-    gentoo: { systemd: [apache.service],  openrc: [apache]  }
-    debian: { systemd: [apache2.service], openrc: [apache2] }
+    gentoo: { systemd: [apache],  openrc: [apache]  }
+    debian: { systemd: [apache2], openrc: [apache2] }
 
 checks:
   http:
@@ -199,7 +199,7 @@ contains `%v`, with `${version}` in the binary path.
 kind: profile
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-service: { name: postgres }
+service: postgres
 variables:
   binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 preflight:
@@ -209,12 +209,12 @@ preflight:
 On load, Sermo discovers installed versions by globbing the `binary` path with
 `${version}` wildcarded (here `/usr/lib64/postgresql-*/bin/postgres`) and
 extracting what filled it. Each match becomes a concrete profile with `%v` and
-`${version}` substituted everywhere (name, binary, display_name, aliases, ...) —
+`${version}` substituted everywhere (name, binary, display_name, service, ...) —
 `postgres-14`, `postgres-16`, ... — and the template itself is dropped. If nothing
 is installed the template yields nothing. The filename mirrors the name
 (`postgres-%v.yml`); only that one file is needed. `%v` may sit anywhere in the
 name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
-the body always use `${version}` (e.g. in `aliases`).
+the body always use `${version}` (e.g. in `service`).
 
 When the monitored `binary` is generic (no version in its path), point discovery
 at a version-specific path with `versions.from`:
@@ -222,11 +222,10 @@ at a version-specific path with `versions.from`:
 ```yaml
 kind: profile
 name: php-fpm%v
-service: { name: php-fpm }
+service:
+  systemd: [ "php${version}-fpm" ]
 versions:
   from: "/usr/lib64/php${version}/bin/php-fpm"   # globbed to find versions
-aliases:
-  systemd: [ "php${version}-fpm.service" ]
 variables:
   binary: /usr/sbin/php-fpm                       # the actual binary, version-agnostic
 ```
@@ -250,7 +249,7 @@ rejects siblings like `python3.11`. Otherwise it works exactly like `%v`.
 kind: profile
 name: python%n
 display_name: "Python ${n}"
-service: { name: python${n} }
+service: python${n}
 variables:
   binary: "/usr/bin/python${n}"
 ```
@@ -291,22 +290,35 @@ variables:
 
 A service then targets a concrete version, e.g. `uses: php-fpm-8.3`.
 
-## Unit aliases
+## Service unit
 
-The unit name differs across distributions. A profile lists per-backend
-candidates; Sermo resolves the first one the active backend actually knows
-(systemd via `systemctl cat`, OpenRC via the init script):
+The service's identity is the profile `name`; `service` declares the init-unit
+name(s) to operate on. The simplest form is a single name that works on both
+init systems:
+
+```yaml
+service: apache2
+```
+
+When the unit name differs across init systems, list per-init candidates; Sermo
+resolves the first one the active backend actually knows (systemd via
+`systemctl cat`, OpenRC via the init script):
 
 ```yaml
 service:
-  name: apache2
-aliases:
-  systemd: [apache2.service, httpd.service]
+  systemd: [apache2, httpd]
   openrc:  [apache2, apache]
 ```
 
-The candidate list is `service.name` first, then the aliases for the active
-backend, deduplicated. All later operations use the resolved name.
+Candidates are bare names — systemd appends `.service` automatically. They are
+tried in order and deduplicated, and the resolved name is used for all later
+operations. A **scalar** `service` is trusted even when the probe cannot surface
+it (e.g. sysv-generated units); a **per-init list** requires a match, and an
+init system with no entry means the service is *not available* there.
+
+An enabled instance can override the unit with a scalar (e.g.
+`service: redis-cache`) to run as its own unit, or omit `service` entirely to
+inherit the profile's candidates.
 
 ## Cloning
 

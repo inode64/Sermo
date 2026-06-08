@@ -2,7 +2,7 @@ kind: profile
 name: bareos-sd
 display_name: "Bareos Storage Daemon"
 description: "Backup storage Server"
-service: { name: "bareos-sd" }
+service: bareos-sd
 variables:
   binary: "/usr/sbin/bareos-sd"
 preflight:

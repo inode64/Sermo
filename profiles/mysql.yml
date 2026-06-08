@@ -4,15 +4,8 @@ display_name: "MySQL"
 type: database
 
 service:
-  name: mysql
-
-aliases:
-  systemd:
-    - mysql.service
-    - mysqld.service
-  openrc:
-    - mysql
-    - mysqld
+  systemd: [mysql, mysqld]
+  openrc: [mysql, mysqld]
 
 variables:
   binary: /usr/sbin/mysqld

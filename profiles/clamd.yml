@@ -1,7 +1,7 @@
 kind: profile
 name: clamd
 display_name: "ClamAV Daemon"
-service: { name: "clamd" }
+service: clamd
 variables:
   binary: "/usr/sbin/clamd"
 preflight:

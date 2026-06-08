@@ -2,7 +2,7 @@ kind: profile
 name: ovs-vswitchd
 display_name: "Open vSwitch"
 description: "OpenVsiwtch Server"
-service: { name: "ovs-vswitchd" }
+service: ovs-vswitchd
 variables:
   binary: "/usr/sbin/ovs-vswitchd"
 preflight:

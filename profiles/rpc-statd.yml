@@ -2,7 +2,7 @@ kind: profile
 name: rpc-statd
 display_name: "NFS Status Monitor"
 description: "RPC"
-service: { name: "rpc-statd" }
+service: rpc-statd
 variables:
   binary: "/sbin/rpc.statd"
 preflight:

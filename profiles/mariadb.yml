@@ -4,15 +4,8 @@ display_name: "MariaDB"
 type: database
 
 service:
-  name: mariadb
-
-aliases:
-  systemd:
-    - mariadb.service
-    - mysql.service
-  openrc:
-    - mariadb
-    - mysql
+  systemd: [mariadb, mysql]
+  openrc: [mariadb, mysql]
 
 variables:
   binary: /usr/sbin/mariadbd

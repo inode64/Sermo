@@ -1,7 +1,7 @@
 kind: profile
 name: pppd
 display_name: "PPP Daemon"
-service: { name: "pppd" }
+service: pppd
 variables:
   binary: "/usr/sbin/pppd"
 preflight:

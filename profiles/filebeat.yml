@@ -2,7 +2,7 @@ kind: profile
 name: filebeat
 display_name: "Filebeat"
 description: "Lightweight log shipper for Logstash and Elasticsearch"
-service: { name: "filebeat" }
+service: filebeat
 variables:
   binary: "/usr/bin/filebeat"
 preflight:

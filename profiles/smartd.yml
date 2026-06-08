@@ -2,7 +2,7 @@ kind: profile
 name: smartd
 display_name: "S.M.A.R.T. Daemon"
 description: "Estado de los discos SMART"
-service: { name: "smartd" }
+service: smartd
 variables:
   binary: "/usr/sbin/smartd"
 preflight:

@@ -2,7 +2,7 @@ kind: profile
 name: node
 display_name: "Node.js"
 description: "A JavaScript runtime built on Chrome's V8 JavaScript engine"
-service: { name: "node" }
+service: node
 variables:
   binary: "/usr/bin/node"
 preflight:

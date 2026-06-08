@@ -1,6 +1,6 @@
 kind: profile
 name: xinetd
-service: { name: "xinetd" }
+service: xinetd
 variables:
   binary: "/usr/sbin/xinetd"
 preflight:

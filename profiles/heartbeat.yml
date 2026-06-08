@@ -1,7 +1,7 @@
 kind: profile
 name: heartbeat
 display_name: "Heartbeat"
-service: { name: "heartbeat" }
+service: heartbeat
 variables:
   binary: "/usr/lib64/heartbeat/heartbeat"
 preflight:

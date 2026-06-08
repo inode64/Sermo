@@ -152,8 +152,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		}
 		disabled := isDisabled(doc.Body)
 		base := config.ServiceUnit(resolved.Tree, name)
-		aliases := config.UnitAliases(resolved.Tree, string(deps.Backend))
-		unit, err := resolver.Resolve(context.Background(), deps.Backend, base, aliases)
+		candidates, trust := config.ServiceCandidates(resolved.Tree, string(deps.Backend), name)
+		unit, err := resolver.Resolve(context.Background(), deps.Backend, candidates, trust)
 		if err != nil {
 			unit = base
 		}

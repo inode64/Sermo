@@ -140,7 +140,7 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 
 // instantiateVersion bakes a concrete value into a copy of the template body: the
 // token placeholder in the name becomes the value, and every `${...}` reference
-// for that token in the body (binary path, display_name, aliases, ...) is
+// for that token in the body (binary path, display_name, service, ...) is
 // substituted. Other `${var}` references are left for normal resolution.
 func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path string) *Document {
 	name := strings.ReplaceAll(templateName, tok.placeholder, value)

@@ -1,7 +1,7 @@
 kind: profile
 name: dspam
 display_name: "DSPAM"
-service: { name: "dspam" }
+service: dspam
 variables:
   binary: "/usr/bin/dspam"
 preflight:

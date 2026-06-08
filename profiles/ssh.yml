@@ -1,7 +1,7 @@
 kind: profile
 name: ssh
 display_name: "OpenSSH"
-service: { name: "ssh" }
+service: ssh
 variables:
   binary: "/usr/bin/ssh"
 preflight:
