@@ -95,3 +95,76 @@ func TestOSLookup(t *testing.T) {
 		t.Errorf("error = %v, want it to wrap exec.ErrNotFound", err)
 	}
 }
+
+func TestWithTimeout(t *testing.T) {
+	t.Run("adds deadline when parent has none", func(t *testing.T) {
+		ctx, cancel := WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		if _, ok := ctx.Deadline(); !ok {
+			t.Fatal("expected deadline to be set")
+		}
+	})
+
+	t.Run("zero timeout yields cancellable ctx without hard deadline", func(t *testing.T) {
+		ctx, cancel := WithTimeout(context.Background(), 0)
+		defer cancel()
+		if _, ok := ctx.Deadline(); ok {
+			t.Error("expected no deadline when timeout <= 0")
+		}
+	})
+
+	t.Run("parent deadline is respected (earlier wins)", func(t *testing.T) {
+		parent, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+		defer cancel()
+		child, cancel2 := WithTimeout(parent, 1*time.Hour)
+		defer cancel2()
+
+		dl, ok := child.Deadline()
+		if !ok {
+			t.Fatal("child should have a deadline")
+		}
+		if dl.Sub(time.Now()) > 10*time.Millisecond {
+			t.Errorf("child deadline too far in future; parent short deadline should win")
+		}
+	})
+}
+
+func TestPackageRun(t *testing.T) {
+	t.Run("applies timeout when given", func(t *testing.T) {
+		start := time.Now()
+		_, err := Run(context.Background(), CommandRunner{}, 30*time.Millisecond, "sleep", "2")
+		if err == nil {
+			t.Fatal("expected timeout error")
+		}
+		if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+			t.Errorf("took too long (%v); timeout was not effective", elapsed)
+		}
+	})
+
+	t.Run("timeout=0 uses parent ctx as-is (no extra deadline added)", func(t *testing.T) {
+		// We can't easily assert "no deadline was added" from outside without
+		// inspecting the child, but we can at least prove it doesn't blow up
+		// and that a very quick command succeeds.
+		res, err := Run(context.Background(), CommandRunner{}, 0, "sh", "-c", "printf ok")
+		if err != nil {
+			t.Fatalf("unexpected error with timeout=0: %v", err)
+		}
+		if res.Stdout != "ok" {
+			t.Errorf("stdout = %q, want ok", res.Stdout)
+		}
+	})
+
+	t.Run("respects already-deadlined parent even with long timeout arg", func(t *testing.T) {
+		parent, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		_, err := Run(parent, CommandRunner{}, 5*time.Second, "sleep", "2")
+		if err == nil {
+			t.Fatal("expected deadline from parent to win")
+		}
+		if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+			t.Errorf("parent deadline was not effective (took %v)", elapsed)
+		}
+	})
+}
