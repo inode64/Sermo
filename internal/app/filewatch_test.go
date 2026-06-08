@@ -177,3 +177,39 @@ func TestFileWatchRecursiveOneEventPerChange(t *testing.T) {
 		t.Fatalf("expected a fire per changed file, got paths %v", paths)
 	}
 }
+
+// TestFileWatchWithRealOSHookRunner exercises the real OSHookRunner (execx-backed)
+// inside a fileWatcher, using /bin/true so the hook "succeeds" and emits "hook" event.
+func TestFileWatchWithRealOSHookRunner(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "size.txt")
+	writeSize(t, f, 10)
+
+	var hookEvents []Event
+	w := &fileWatcher{
+		name: "fw-real",
+		path: f,
+		cond: fileCond{sizeChange: true},
+		hook: HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
+		// Use real OSHookRunner (not the test Func) to cover default path + execx.
+		runner: OSHookRunner{},
+		emit: func(e Event) {
+			if e.Kind == "hook" || e.Kind == "hook-failed" {
+				hookEvents = append(hookEvents, e)
+			}
+		},
+	}
+
+	// first cycle adopts silently
+	w.runCycle(context.Background())
+	if len(hookEvents) != 0 {
+		t.Fatalf("first cycle should be silent, got events %v", hookEvents)
+	}
+
+	// change size -> should fire hook via real runner
+	writeSize(t, f, 20)
+	w.runCycle(context.Background())
+
+	if len(hookEvents) != 1 || hookEvents[0].Kind != "hook" {
+		t.Fatalf("expected one successful hook event, got %d: %v", len(hookEvents), hookEvents)
+	}
+}

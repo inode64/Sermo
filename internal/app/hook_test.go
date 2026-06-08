@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"sermo/internal/execx"
 )
 
 func TestHookRunnerPassesArgvEnvTimeout(t *testing.T) {
@@ -67,4 +69,72 @@ func TestOSHookRunnerRespectsTimeout(t *testing.T) {
 	if elapsed > 500*time.Millisecond {
 		t.Fatalf("hook did not respect timeout (took %v)", elapsed)
 	}
+}
+
+// fakeEnvRunner is a test double for execx that records RunEnv calls (for env/argv/timeout verification)
+// without performing real execution. It implements execx.EnvRunner.
+type fakeEnvRunner struct {
+	calls []struct {
+		env  []string
+		name string
+		args []string
+	}
+	result execx.Result
+	err    error
+}
+
+func (f *fakeEnvRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
+	return f.result, f.err
+}
+
+func (f *fakeEnvRunner) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
+	f.calls = append(f.calls, struct {
+		env  []string
+		name string
+		args []string
+	}{env, name, args})
+	return f.result, f.err
+}
+
+func TestOSHookRunnerWithInjectedExecxRunner(t *testing.T) {
+	fake := &fakeEnvRunner{
+		result: execx.Result{ExitCode: 0},
+	}
+	spec := HookSpec{Command: []string{"/bin/echo", "hello"}, Timeout: 123 * time.Second}
+	injectedEnv := map[string]string{
+		"SERMO_WATCH": "my-watch",
+		"SERMO_FOO":   "bar",
+	}
+	err := spec.Run(context.Background(), OSHookRunner{Runner: fake}, injectedEnv)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("expected 1 call to execx, got %d", len(fake.calls))
+	}
+	call := fake.calls[0]
+	if call.name != "/bin/echo" || len(call.args) != 1 || call.args[0] != "hello" {
+		t.Fatalf("bad argv passed to execx: name=%s args=%v", call.name, call.args)
+	}
+	// Verify that the full env passed to execx contains both os.Environ() base + injected SERMO_ vars
+	hasWatch := false
+	hasFoo := false
+	for _, e := range call.env {
+		if e == "SERMO_WATCH=my-watch" {
+			hasWatch = true
+		}
+		if e == "SERMO_FOO=bar" {
+			hasFoo = true
+		}
+	}
+	if !hasWatch || !hasFoo {
+		t.Fatalf("injected SERMO_ vars not found in env passed to execx; env had %d entries, sample: %v", len(call.env), call.env[:min(5, len(call.env))])
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

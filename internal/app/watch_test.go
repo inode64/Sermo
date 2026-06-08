@@ -115,3 +115,28 @@ func TestWatchForWindowRequiresConsecutive(t *testing.T) {
 		t.Fatalf("expected fire on 3rd cycle, got %d", calls)
 	}
 }
+
+func TestWatchWithRealOSHookRunner(t *testing.T) {
+	var hookEvents []Event
+	w := &Watch{
+		Name:      "disk-root",
+		CheckType: "disk",
+		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/"}},
+		Hook:      HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
+		// Use the real OSHookRunner (which now goes through execx) instead of mock Func.
+		// This exercises defaultHookRunner path + real execution in a Watch context.
+		Runner: OSHookRunner{},
+		Emit: func(e Event) {
+			if e.Kind == "hook" || e.Kind == "hook-failed" {
+				hookEvents = append(hookEvents, e)
+			}
+		},
+	}
+	w.RunCycle(context.Background())
+	if len(hookEvents) != 1 {
+		t.Fatalf("expected 1 hook event, got %d: %v", len(hookEvents), hookEvents)
+	}
+	if hookEvents[0].Kind != "hook" {
+		t.Fatalf("expected hook success event, got %s", hookEvents[0].Kind)
+	}
+}
