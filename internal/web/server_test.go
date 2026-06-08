@@ -131,6 +131,11 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "<html") {
 		t.Fatalf("dashboard is not HTML: %s", rec.Body.String()[:64])
 	}
+	// The dashboard must not be cached, or an upgraded binary's new sections
+	// (e.g. host watches) stay invisible behind a stale browser copy.
+	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
+		t.Fatalf("dashboard Cache-Control = %q, want no-cache", cc)
+	}
 }
 
 func TestListServices(t *testing.T) {

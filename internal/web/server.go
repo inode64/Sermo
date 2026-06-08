@@ -494,6 +494,12 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// The dashboard markup/JS is embedded in the binary and changes across
+	// versions (new sections like host watches are added over time). Without a
+	// cache directive a browser may keep serving a stale copy after an upgrade,
+	// so newly added sections never appear even though the API returns their
+	// data. no-cache forces a revalidation on every load.
+	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(page)
 }
 
