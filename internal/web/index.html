@@ -41,6 +41,12 @@
   .lvl-warning { color: #9a6700; font-weight: 600; }
   .lvl-info { color: #888; }
   section { margin-top: 2rem; }
+  details { margin-top: 1.5rem; }
+  summary { cursor: pointer; font-size: 1.05rem; font-weight: 600; list-style: none; user-select: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "\25B8"; color: #888; margin-right: .4rem; font-size: .9em; }
+  details[open] > summary::before { content: "\25BE"; }
+  summary > button { font-weight: 400; }
 </style>
 </head>
 <body>
@@ -61,34 +67,42 @@
 <div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
-<table>
-  <thead>
-    <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
-  </thead>
-  <tbody id="rows"></tbody>
-</table>
-<p id="ops" class="muted" style="margin:.6rem 0 0"></p>
+<details id="services-section" open>
+  <summary>Services</summary>
+  <table>
+    <thead>
+      <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p id="ops" class="muted" style="margin:.6rem 0 0"></p>
+</details>
 
-<section id="watches-section" style="margin-top:1rem; display:none">
-  <h2 style="font-size:1.05rem">Host watches <span id="watches-count" class="muted"></span></h2>
+<details id="watches-section" open style="display:none">
+  <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <table>
     <thead><tr><th>Name</th><th>Type</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th></tr></thead>
     <tbody id="watch-rows"></tbody>
   </table>
   <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
-</section>
+</details>
 
-<section id="notifiers-section" style="margin-top:1rem; display:none">
-  <h2 style="font-size:1.05rem">Notifiers <span id="notifiers-count" class="muted"></span></h2>
+<details id="events-section" open>
+  <summary>Events</summary>
+  <table class="events"><tbody id="events"></tbody></table>
+</details>
+
+<details id="notifiers-section" style="display:none">
+  <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
   <table>
     <thead><tr><th>Name</th><th>Type</th></tr></thead>
     <tbody id="notifier-rows"></tbody>
   </table>
   <p class="muted" style="font-size:.8rem">Named targets that watches can notify (email, slack, ...).</p>
-</section>
+</details>
 
-<section id="daemon-section" style="margin-top:1rem;">
-  <h2 style="font-size:1.05rem">Daemon / Engine settings</h2>
+<details id="daemon-section">
+  <summary>Daemon / Engine settings</summary>
   <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem;">
     <div>
       <div style="font-weight:600; margin-bottom:.25rem;">Daemon</div>
@@ -114,10 +128,10 @@
       <div>Ready: <span id="daemon-ready"></span></div>
     </div>
   </div>
-</section>
+</details>
 
-<section id="activity-section" style="margin-top:1rem;">
-  <h2 style="font-size:1.05rem">Recent activity <span class="muted">(last 500 events)</span></h2>
+<details id="activity-section">
+  <summary>Recent activity <span class="muted">(last 500 events)</span></summary>
   <div style="display:flex; gap:1.25rem; flex-wrap:wrap; font-size:.9rem;">
     <div>Service actions: <b id="act-service"></b></div>
     <div>Watch hooks: <b id="act-hooks"></b></div>
@@ -125,7 +139,7 @@
     <div>Errors: <b id="act-errors" style="color:#cf222e"></b></div>
     <div id="act-last" class="muted" style="flex:1; min-width:180px;"></div>
   </div>
-</section>
+</details>
 
 <section id="locks-section" style="margin-top:1rem; display:none">
   <h2 style="font-size:1.05rem">Runtime Locks <span id="locks-count" class="muted"></span></h2>
@@ -138,18 +152,14 @@
 
 <div id="detail"></div>
 
-<section>
-  <h2 style="font-size:1.05rem">Diagnostics <button onclick="loadDiag()">refresh</button>
-    <button id="reload-btn" onclick="reloadConfig()" style="display:none">reload config</button>
+<details id="diag-section">
+  <summary>Diagnostics
+    <button onclick="event.stopPropagation(); loadDiag()">refresh</button>
+    <button id="reload-btn" onclick="event.stopPropagation(); reloadConfig()" style="display:none">reload config</button>
     <span class="muted" style="font-weight:400; font-size:.8rem; margin-left:.5rem">SIGHUP or systemctl reload sermod</span>
-  </h2>
+  </summary>
   <table class="events"><tbody id="diag"></tbody></table>
-</section>
-
-<section>
-  <h2 style="font-size:1.05rem">Events</h2>
-  <table class="events"><tbody id="events"></tbody></table>
-</section>
+</details>
 
 <script>
 const $ = (s) => document.querySelector(s);
