@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"sermo/internal/app"
+	"sermo/internal/buildinfo"
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -30,10 +31,17 @@ func main() {
 }
 
 func run(args []string) int {
+	for _, a := range args {
+		if a == "version" || a == "--version" || a == "-V" {
+			fmt.Println(buildinfo.String())
+			return 0
+		}
+	}
 	command, globalPath, verbose, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
 		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--verbose|-v]")
+		fmt.Fprintln(os.Stderr, "       sermod version")
 		return 64
 	}
 	if command != "run" {

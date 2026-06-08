@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"sermo/internal/app"
+	"sermo/internal/buildinfo"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
@@ -126,6 +127,13 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.Runner == nil {
 		a.Runner = execx.CommandRunner{}
+	}
+
+	for _, arg := range args {
+		if arg == "version" || arg == "--version" || arg == "-V" {
+			fmt.Fprintln(a.Stdout, buildinfo.String())
+			return exitSuccess
+		}
 	}
 
 	opts, err := parseArgs(args)
