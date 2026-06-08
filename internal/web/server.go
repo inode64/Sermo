@@ -205,13 +205,14 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks and SLA.
 type Detail struct {
 	Service
-	Checks       []Check      `json:"checks"`
-	SLA          []SLAWindow  `json:"sla"`
-	Locks        []Lock       `json:"locks,omitempty"`
-	LockWarnings []string     `json:"lock_warnings,omitempty"`
-	Processes    []Process    `json:"processes,omitempty"`
-	Remediation  *Remediation `json:"remediation,omitempty"`
-	Rules        []RuleWindow `json:"rules,omitempty"`
+	Checks          []Check      `json:"checks"`
+	SLA             []SLAWindow  `json:"sla"`
+	Locks           []Lock       `json:"locks,omitempty"`
+	LockWarnings    []string     `json:"lock_warnings,omitempty"`
+	ProcessWarnings []string     `json:"process_warnings,omitempty"`
+	Processes       []Process    `json:"processes,omitempty"`
+	Remediation     *Remediation `json:"remediation,omitempty"`
+	Rules           []RuleWindow `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is

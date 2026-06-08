@@ -1223,6 +1223,7 @@ function renderActionConfirm() {
   const activeLocks = (d.locks || []).filter((l) => l.state === "active");
   const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
   const unresolved = (d.processes || []).filter((p) => !p.exe_resolved);
+  const procWarnings = d.process_warnings || [];
   const ev = ctx.lastEvent;
   const pre = ctx.preflight;
   const preState = ctx.action === "restart"
@@ -1234,7 +1235,7 @@ function renderActionConfirm() {
   const checksLine = failingChecks.length
     ? `<span class="bad">${failingChecks.length} required check${failingChecks.length === 1 ? "" : "s"} failing</span>`
     : '<span class="ok">no required check failures observed</span>';
-  const procLine = `${(d.processes || []).length} discovered${unresolved.length ? ` <span class="inactive">· ${unresolved.length} unresolved exe</span>` : ""}`;
+  const procLine = `${(d.processes || []).length} discovered${unresolved.length ? ` <span class="inactive">· ${unresolved.length} unresolved exe</span>` : ""}${procWarnings.length ? ` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : ""}`;
   const lastEvent = ev
     ? `${esc(fmtTime(ev.time))} · <span class="kind kind-${esc(ev.kind)}">${esc(ev.kind || "")}</span> ${esc([ev.action, ev.status].filter(Boolean).join(" "))} <span class="muted">${esc(ev.message || "")}</span>`
     : '<span class="muted">none recorded</span>';
@@ -1255,6 +1256,7 @@ function renderActionConfirm() {
       <div class="muted">Preflight</div><div>${preState}</div>
       <div class="muted">Checks</div><div>${checksLine}</div>
       <div class="muted">Processes</div><div>${procLine}</div>
+      ${procWarnings.length ? `<div class="muted">Discovery</div><div class="bad">${esc(procWarnings[0])}${procWarnings.length > 1 ? ` <span class="muted">(+${procWarnings.length - 1} more)</span>` : ""}</div>` : ""}
       <div class="muted">Last event</div><div>${lastEvent}</div>
     </div>
     ${preRows}`;
@@ -1326,6 +1328,13 @@ function renderDetail(d) {
     `<div class="inactive" style="margin-top:.25rem">warning: ${esc(w)}</div>`
   ).join("");
 
+  const unresolvedProcs = (d.processes || []).filter((p) => !p.exe_resolved);
+  const procWarnings = d.process_warnings || [];
+  const procWarns = [
+    ...procWarnings.map((w) => `<div class="bad" style="margin-top:.25rem">discovery warning: ${esc(w)}</div>`),
+    ...unresolvedProcs.map((p) => `<div class="inactive" style="margin-top:.25rem">pid ${p.pid}: exe is unresolved, so it cannot satisfy safe process matching</div>`),
+  ].join("");
+  const procSummary = `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}${unresolvedProcs.length ? ` · ${unresolvedProcs.length} unresolved exe` : ""}</p>`;
   const procExe = (p) => {
     if (p.exe_resolved && p.exe) return esc(p.exe);
     if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
@@ -1337,8 +1346,8 @@ function renderDetail(d) {
     const user = p.user ? esc(p.user) : '<span class="muted">unknown</span>';
     const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
     return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
-      <td>${exeCell}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td></tr>`;
-  }).join("") || `<tr><td colspan="6" class="muted">No processes found.</td></tr>`;
+      <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td></tr>`;
+  }).join("") || `<tr><td colspan="7" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
 
   const wins = winButtons([["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
@@ -1383,7 +1392,8 @@ function renderDetail(d) {
     <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
       <tbody>${lockRows}</tbody></table>${lockWarns}
     <h2>Processes</h2>
-    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Role</th><th>Source</th></tr></thead>
+    ${procSummary}${procWarns}
+    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th></tr></thead>
       <tbody>${procRows}</tbody></table>
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
