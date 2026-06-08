@@ -44,6 +44,34 @@ func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	}
 	return Detail{}, false
 }
+func (f *fakeBackend) ConfigRender(_ context.Context, name, format string) (ConfigRender, bool, error) {
+	for _, s := range f.services {
+		if s.Name == name {
+			return ConfigRender{
+				Name:        name,
+				Format:      format,
+				Content:     "service: " + name + "\n",
+				SourceFiles: []string{"/etc/sermo/sermo.yml", "/etc/sermo/apps-enabled/" + name + ".yml"},
+			}, true, nil
+		}
+	}
+	return ConfigRender{}, false, nil
+}
+func (f *fakeBackend) ConfigDiff(_ context.Context, base, service string) (ConfigDiff, bool, error) {
+	baseOK, svcOK := false, false
+	for _, s := range f.services {
+		if s.Name == base {
+			baseOK = true
+		}
+		if s.Name == service {
+			svcOK = true
+		}
+	}
+	if !baseOK || !svcOK {
+		return ConfigDiff{}, false, nil
+	}
+	return ConfigDiff{Base: base, Service: service, Removed: []string{"service: " + base}, Added: []string{"service: " + service}}, true, nil
+}
 func (f *fakeBackend) Series(_ context.Context, name string, since time.Duration) ([]SeriesPoint, bool) {
 	for _, s := range f.services {
 		if s.Name == name {
@@ -194,6 +222,50 @@ func TestServiceDetailUnknown(t *testing.T) {
 	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown detail = %d, want 404", rec.Code)
+	}
+}
+
+func TestConfigRenderEndpoint(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/config?format=json", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("config render status %d", rec.Code)
+	}
+	var got ConfigRender
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Name != "web" || got.Format != "json" || !strings.Contains(got.Content, "web") || len(got.SourceFiles) != 2 {
+		t.Fatalf("unexpected render: %+v", got)
+	}
+
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/config?format=toml", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad format = %d, want 400", rec.Code)
+	}
+}
+
+func TestConfigDiffEndpoint(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "base"}, {Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/config/diff?base=base", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("config diff status %d", rec.Code)
+	}
+	var got ConfigDiff
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Base != "base" || got.Service != "web" || len(got.Removed) != 1 || len(got.Added) != 1 {
+		t.Fatalf("unexpected diff: %+v", got)
+	}
+
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/config/diff", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing base = %d, want 400", rec.Code)
 	}
 }
 

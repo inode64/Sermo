@@ -740,6 +740,53 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	return d, true
 }
 
+// ConfigRender returns a fully resolved service config for operator review.
+func (b *WebBackend) ConfigRender(ctx context.Context, name, format string) (web.ConfigRender, bool, error) {
+	if _, ok := b.entries[name]; !ok {
+		return web.ConfigRender{}, false, nil
+	}
+	resolved, errs := b.cfg.Resolve(name)
+	if len(errs) > 0 {
+		return web.ConfigRender{}, true, fmt.Errorf("resolve %s: %s", name, strings.Join(errs, "; "))
+	}
+	data, err := renderResolvedConfig(resolved, format)
+	if err != nil {
+		return web.ConfigRender{}, true, err
+	}
+	return web.ConfigRender{
+		Name:        name,
+		Format:      format,
+		Content:     string(data),
+		SourceFiles: b.configSources(name),
+	}, true, nil
+}
+
+// ConfigDiff compares two fully resolved service configs line-by-line.
+func (b *WebBackend) ConfigDiff(ctx context.Context, base, service string) (web.ConfigDiff, bool, error) {
+	if _, ok := b.entries[base]; !ok {
+		return web.ConfigDiff{}, false, nil
+	}
+	if _, ok := b.entries[service]; !ok {
+		return web.ConfigDiff{}, false, nil
+	}
+	baseRender, ok, err := b.ConfigRender(ctx, base, "yaml")
+	if !ok || err != nil {
+		return web.ConfigDiff{}, ok, err
+	}
+	serviceRender, ok, err := b.ConfigRender(ctx, service, "yaml")
+	if !ok || err != nil {
+		return web.ConfigDiff{}, ok, err
+	}
+	removed, added := lineDiff(baseRender.Content, serviceRender.Content)
+	return web.ConfigDiff{
+		Base:      base,
+		Service:   service,
+		Identical: len(removed) == 0 && len(added) == 0,
+		Removed:   removed,
+		Added:     added,
+	}, true, nil
+}
+
 func ruleWindowToWeb(rep rules.RuleWindowReport) web.RuleWindow {
 	return web.RuleWindow{
 		Name:          rep.Name,
@@ -1066,4 +1113,100 @@ func (b *WebBackend) emitMonitorEvent(service, action, kind, status, message str
 		Status:  status,
 		Message: message,
 	})
+}
+
+func renderResolvedConfig(resolved config.Resolved, format string) ([]byte, error) {
+	switch format {
+	case "json":
+		data, err := config.RenderJSON(resolved)
+		if err != nil {
+			return nil, fmt.Errorf("render %s as json: %w", resolved.Name, err)
+		}
+		return data, nil
+	default:
+		data, err := config.RenderYAML(resolved)
+		if err != nil {
+			return nil, fmt.Errorf("render %s as yaml: %w", resolved.Name, err)
+		}
+		return data, nil
+	}
+}
+
+func (b *WebBackend) configSources(name string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(path string) {
+		if path == "" || seen[path] {
+			return
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
+	add(b.cfg.Global.Path)
+	var addService func(string)
+	addService = func(service string) {
+		doc := b.cfg.Services[service]
+		if doc == nil {
+			return
+		}
+		if clone := webScalarString(doc.Body["clone"]); clone != "" {
+			addService(clone)
+		}
+		if uses := webScalarString(doc.Body["uses"]); uses != "" {
+			if profile := b.cfg.Profiles[uses]; profile != nil {
+				add(profile.Path)
+			}
+		}
+		add(doc.Path)
+	}
+	addService(name)
+	return out
+}
+
+func lineDiff(base, other string) (removed, added []string) {
+	baseSet := lineCount(base)
+	otherSet := lineCount(other)
+	for _, l := range strings.Split(strings.TrimRight(base, "\n"), "\n") {
+		if otherSet[l] == 0 && !containsLine(removed, l) {
+			removed = append(removed, l)
+		}
+	}
+	for _, l := range strings.Split(strings.TrimRight(other, "\n"), "\n") {
+		if baseSet[l] == 0 && !containsLine(added, l) {
+			added = append(added, l)
+		}
+	}
+	return removed, added
+}
+
+func lineCount(s string) map[string]int {
+	out := map[string]int{}
+	for _, l := range strings.Split(s, "\n") {
+		out[l]++
+	}
+	return out
+}
+
+func containsLine(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+func webScalarString(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case int:
+		return fmt.Sprint(x)
+	case int64:
+		return fmt.Sprint(x)
+	case float64:
+		return fmt.Sprint(x)
+	default:
+		return ""
+	}
 }
