@@ -1,6 +1,6 @@
 kind: profile
 name: systemd-udevd
-service: { name: "systemd-udevd", backend: auto }
+service: { name: "systemd-udevd" }
 variables:
   binary:
     - "/lib/systemd/systemd-udevd"

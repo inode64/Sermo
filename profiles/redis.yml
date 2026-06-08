@@ -5,7 +5,6 @@ type: cache
 
 service:
   name: redis
-  backend: auto
 
 aliases:
   systemd:

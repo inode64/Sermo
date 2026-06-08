@@ -1,7 +1,7 @@
 kind: profile
 name: proftpd
 display_name: "ProFTPD"
-service: { name: "proftpd", backend: auto }
+service: { name: "proftpd" }
 variables:
   binary: "/usr/sbin/proftpd"
 preflight:

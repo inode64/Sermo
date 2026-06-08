@@ -1049,10 +1049,6 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	if backend := scalarString(tree["backend"]); !isValidBackend(backend) {
-		add("backend %q is not one of auto, systemd, openrc", backend)
-	}
-
 	if v, present := tree["interval"]; present && !isPositiveDuration(scalarString(v)) {
 		add("interval %q must be a valid positive duration", scalarString(v))
 	}

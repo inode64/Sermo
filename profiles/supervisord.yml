@@ -1,7 +1,7 @@
 kind: profile
 name: supervisord
 display_name: "Supervisor"
-service: { name: "supervisord", backend: auto }
+service: { name: "supervisord" }
 variables:
   binary: "/usr/bin/supervisord"
 preflight:

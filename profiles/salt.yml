@@ -1,7 +1,7 @@
 kind: profile
 name: salt
 display_name: "Salt"
-service: { name: "salt", backend: auto }
+service: { name: "salt" }
 variables:
   binary: "/usr/bin/salt"
 preflight:

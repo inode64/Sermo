@@ -1,6 +1,6 @@
 kind: profile
 name: mdadm
-service: { name: "mdadm", backend: auto }
+service: { name: "mdadm" }
 variables:
   binary: "/sbin/mdadm"
 preflight:

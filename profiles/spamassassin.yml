@@ -2,7 +2,7 @@ kind: profile
 name: spamassassin
 display_name: "SpamAssassin"
 description: "Antispam"
-service: { name: "spamassassin", backend: auto }
+service: { name: "spamassassin" }
 variables:
   binary: "/usr/bin/spamassassin"
 preflight:

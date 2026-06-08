@@ -2,7 +2,7 @@ kind: profile
 name: mongod
 display_name: "MongoDB"
 description: "Mongo DB"
-service: { name: "mongod", backend: auto }
+service: { name: "mongod" }
 variables:
   binary: "/usr/bin/mongod"
 preflight:

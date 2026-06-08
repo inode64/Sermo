@@ -5,7 +5,6 @@ type: database
 
 service:
   name: mariadb
-  backend: auto
 
 aliases:
   systemd:

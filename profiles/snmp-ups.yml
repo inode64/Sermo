@@ -1,7 +1,7 @@
 kind: profile
 name: snmp-ups
 display_name: "SNMP UPS Driver"
-service: { name: "snmp-ups", backend: auto }
+service: { name: "snmp-ups" }
 variables:
   binary: "/lib/nut/snmp-ups"
 preflight:

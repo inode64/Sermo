@@ -1,7 +1,7 @@
 kind: profile
 name: catalina-sh-%v
 display_name: "Apache Tomcat ${version}"
-service: { name: "catalina-sh", backend: auto }
+service: { name: "catalina-sh" }
 variables:
   binary: "/usr/share/tomcat-${version}/bin/catalina.sh"
 preflight:
