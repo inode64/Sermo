@@ -51,9 +51,11 @@
   #rows tr.row-failing td { background: #cf222e1f; }
   #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
   #svc-filters button.f-active { background: #8883; font-weight: 600; }
+  #topbar { position: sticky; top: 0; z-index: 5; background: Canvas; padding: 1.5rem 1.5rem .35rem; margin: -1.5rem -1.5rem .5rem; border-bottom: 1px solid #8884; }
 </style>
 </head>
 <body>
+<div id="topbar">
 <div style="display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
   <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
   <label class="muted" style="font-size:.85rem; white-space:nowrap;">Auto-refresh
