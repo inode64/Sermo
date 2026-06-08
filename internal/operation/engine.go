@@ -36,7 +36,7 @@ type Engine struct {
 	Guard            func(ctx context.Context, action string) (blocked bool, reason string, err error)
 	Preflight        func(ctx context.Context) checks.Outcome
 	Postflight       func(ctx context.Context) checks.Outcome
-	Discover         func() []process.Process
+	Discover         func() ([]process.Process, error)
 	Reaper           process.Reaper
 	KillPolicy       process.KillPolicy
 	Sleep            func(time.Duration)
@@ -150,7 +150,14 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 			result.Message = "operation timed out during graceful stop wait"
 			return result
 		}
-		if remaining := e.clearResiduals(ctx); len(remaining) > 0 {
+		remaining, err := e.clearResiduals(ctx)
+		if err != nil {
+			result.Status = ResultFailed
+			result.Message = "process discovery: " + err.Error()
+			result.Processes = remaining
+			return result
+		}
+		if len(remaining) > 0 {
 			if timedOut(ctx) {
 				result.Status = ResultFailed
 				result.Message = "operation timed out during residual process handling"
@@ -199,18 +206,33 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 
 // clearResiduals discovers residual processes after a stop and applies signal
 // escalation (section 22), returning whatever remains.
-func (e Engine) clearResiduals(ctx context.Context) []process.Process {
+func (e Engine) clearResiduals(ctx context.Context) ([]process.Process, error) {
 	if e.Discover == nil {
-		return nil
+		return nil, nil
 	}
-	residuals := e.Discover()
+	var discoverErr error
+	discover := func() []process.Process {
+		procs, err := e.Discover()
+		if err != nil && discoverErr == nil {
+			discoverErr = err
+		}
+		return procs
+	}
+	residuals := discover()
+	if discoverErr != nil {
+		return residuals, discoverErr
+	}
 	if len(residuals) == 0 {
-		return nil
+		return nil, nil
 	}
 	reaper := e.Reaper
-	reaper.Rediscover = e.Discover // re-evaluate identity each round
+	reaper.Rediscover = discover // re-evaluate identity each round
 	reaper.Sleep = e.Sleep
-	return reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
+	remaining := reaper.Reap(ctx, residuals, e.KillPolicy).Remaining
+	if discoverErr != nil {
+		return remaining, discoverErr
+	}
+	return remaining, nil
 }
 
 func applyLockError(r *Result, err error) {
