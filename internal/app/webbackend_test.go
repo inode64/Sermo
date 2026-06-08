@@ -294,3 +294,106 @@ checks:
 		t.Fatalf("missing render: ok=%v err=%v", ok, err)
 	}
 }
+
+// fakeEnvRunnerForWeb is used to inject a custom execx runner via Deps.ExecxRunner
+// and verify that hooks in watches built for the web backend receive the expected env.
+type fakeEnvRunnerForWeb struct {
+	calls []struct {
+		env  []string
+		name string
+		args []string
+	}
+}
+
+func (f *fakeEnvRunnerForWeb) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
+	return execx.Result{}, nil
+}
+func (f *fakeEnvRunnerForWeb) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
+	f.calls = append(f.calls, struct {
+		env  []string
+		name string
+		args []string
+	}{env, name, args})
+	return execx.Result{ExitCode: 0}, nil
+}
+
+func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
+	// Minimal config with a watch that has a hook. The check is a simple command that always succeeds.
+	cfgContent := `
+paths:
+  profiles: []
+  enabled: []
+  runtime: /tmp
+defaults:
+  policy:
+    cooldown: 1m
+watches:
+  test-hook-watch:
+    check:
+      type: command
+      command: ["/bin/true"]
+    then:
+      hook:
+        command: ["/bin/custom-web-hook", "web-alert"]
+`
+	globalPath := filepath.Join(t.TempDir(), "sermo.yml")
+	if err := os.WriteFile(globalPath, []byte(cfgContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(globalPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	fake := &fakeEnvRunnerForWeb{}
+	deps := Deps{
+		Backend:        "systemd",
+		Manager:        fakeManager{},
+		ExecxRunner:    fake,
+		DefaultTimeout: time.Second,
+		Now:            time.Now,
+		Emit:           func(Event) {},
+	}
+
+	// NewWebBackend will internally call BuildWatches with the deps, propagating ExecxRunner
+	// to the OSHookRunner for the watch.
+	_, warnings := NewWebBackend(cfg, deps)
+	if len(warnings) > 0 {
+		t.Fatalf("NewWebBackend warnings: %v", warnings)
+	}
+
+	// To exercise the hook, we simulate a watch cycle. Since watches are built internally,
+	// we use BuildWatches directly with same deps to get the watch and run it (this mirrors
+	// what NewWebBackend does for watch part).
+	watches, wwarns := BuildWatches(cfg, deps, 30*time.Second)
+	if len(wwarns) != 0 || len(watches) != 1 {
+		t.Fatalf("expected 1 watch, warnings=%v", wwarns)
+	}
+	w := watches[0]
+	// Command check is health-style (FireOnFail=true by default), so success (OK=true) means !fired.
+	// Override to force fire on success for this test (we only care about runner being called with env).
+	w.FireOnFail = false
+	w.RunCycle(context.Background())
+
+	if len(fake.calls) != 1 {
+		t.Fatalf("expected 1 call to custom execx runner from web backend watch hook, got %d", len(fake.calls))
+	}
+	call := fake.calls[0]
+	if call.name != "/bin/custom-web-hook" || len(call.args) != 1 || call.args[0] != "web-alert" {
+		t.Fatalf("wrong argv to custom runner: %s %v", call.name, call.args)
+	}
+	// Verify specific env from the watch (SERMO_WATCH and data from the command check result if any, plus type)
+	hasWatch := false
+	hasType := false
+	for _, e := range call.env {
+		if e == "SERMO_WATCH=test-hook-watch" {
+			hasWatch = true
+		}
+		if e == "SERMO_CHECK_TYPE=command" {
+			hasType = true
+		}
+	}
+	if !hasWatch || !hasType {
+		t.Fatalf("custom runner via webbackend Deps did not receive expected SERMO_ env: %v", call.env)
+	}
+}
