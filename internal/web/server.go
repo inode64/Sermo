@@ -127,6 +127,23 @@ type PreflightResult struct {
 	Checks []Check `json:"checks"`
 }
 
+// ConfigRender is a resolved service configuration as rendered for review.
+type ConfigRender struct {
+	Name        string   `json:"name"`
+	Format      string   `json:"format"`
+	Content     string   `json:"content"`
+	SourceFiles []string `json:"source_files,omitempty"`
+}
+
+// ConfigDiff is a line-level comparison between two resolved services.
+type ConfigDiff struct {
+	Base      string   `json:"base"`
+	Service   string   `json:"service"`
+	Identical bool     `json:"identical"`
+	Removed   []string `json:"removed,omitempty"`
+	Added     []string `json:"added,omitempty"`
+}
+
 // Check is one check's latest observed result in a service detail.
 type Check struct {
 	Name     string `json:"name"`
@@ -313,6 +330,10 @@ type Backend interface {
 	Notifiers(ctx context.Context) []Notifier
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
+	// ConfigRender returns a fully resolved service config for operator review.
+	ConfigRender(ctx context.Context, name, format string) (ConfigRender, bool, error)
+	// ConfigDiff compares two fully resolved service configs line-by-line.
+	ConfigDiff(ctx context.Context, base, service string) (ConfigDiff, bool, error)
 	// Series returns a service's per-minute availability history over since; ok is
 	// false for unknown names.
 	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
@@ -410,6 +431,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/activity", s.handleActivity)
 	mux.HandleFunc("GET /api/monitoring", s.handleMonitoring)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
+	mux.HandleFunc("GET /api/services/{name}/config", s.handleConfigRender)
+	mux.HandleFunc("GET /api/services/{name}/config/diff", s.handleConfigDiff)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
@@ -566,6 +589,45 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
+}
+
+func (s *Server) handleConfigRender(w http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "yaml"
+	}
+	if format != "yaml" && format != "json" {
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "format must be yaml or json"})
+		return
+	}
+	res, ok, err := s.Backend.ConfigRender(r.Context(), r.PathValue("name"), format)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleConfigDiff(w http.ResponseWriter, r *http.Request) {
+	base := r.URL.Query().Get("base")
+	if base == "" {
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "base query parameter is required"})
+		return
+	}
+	res, ok, err := s.Backend.ConfigDiff(r.Context(), base, r.PathValue("name"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // seriesSince reads the `since` query param, defaulting and capping it.
