@@ -58,16 +58,20 @@
 <div id="topbar">
 <div style="display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
   <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
-  <label class="muted" style="font-size:.85rem; white-space:nowrap;">Auto-refresh
-    <select id="refresh-select" onchange="setRefresh(this.value)" style="font: inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">
-      <option value="5000">5s</option>
-      <option value="10000">10s</option>
-      <option value="30000">30s</option>
-      <option value="60000">1m</option>
-      <option value="120000">2m</option>
-      <option value="0">stop</option>
-    </select>
-  </label>
+  <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
+    <label class="muted" style="font-size:.85rem; white-space:nowrap;">Auto-refresh
+      <select id="refresh-select" onchange="setRefresh(this.value)" style="font: inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">
+        <option value="5000">5s</option>
+        <option value="10000">10s</option>
+        <option value="30000">30s</option>
+        <option value="60000">1m</option>
+        <option value="120000">2m</option>
+        <option value="0">stop</option>
+      </select>
+    </label>
+    <span id="last-refresh" class="muted" style="font-size:.8rem; white-space:nowrap;"></span>
+    <button onclick="refreshNow()" title="Refresh now" style="font:inherit; padding:.1rem .45rem; border-radius:.35rem; border:1px solid #8886; background:#8881; cursor:pointer;">&#x27F3;</button>
+  </div>
 </div>
 <div id="system-status" class="muted" style="margin:-.5rem 0 .35rem; font-size:.9rem; display:flex; gap:.5rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
@@ -275,6 +279,9 @@ async function load() {
   loadReady();
   loadEvents();
   loadOps();
+
+  lastRefresh = Date.now();
+  tickRefreshAge();
 }
 
 async function reloadConfig() {
@@ -716,6 +723,8 @@ async function renderStatus() {
 }
 
 async function act(name, action) {
+  // Confirm potentially disruptive actions before sending them.
+  if ((action === "stop" || action === "restart") && !confirm(`${action} "${name}"?`)) return;
   $("#err").textContent = "";
   try {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, {
@@ -1084,6 +1093,25 @@ function esc(s) {
 
 loadMe().then(load);
 loadDiag();
+
+// Manual refresh + a once-per-second "updated Xs ago" readout. The readout is
+// independent of the auto-refresh interval, so it keeps counting up even when
+// auto-refresh is set to a long interval or stopped.
+let lastRefresh = 0;
+function refreshNow() { load(); if (current) detail(current); }
+function fmtSince(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? `${m}m ${r}s` : `${m}m`;
+}
+function tickRefreshAge() {
+  const el = $("#last-refresh");
+  if (!el) return;
+  el.textContent = lastRefresh ? `updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
+}
+setInterval(tickRefreshAge, 1000);
+
 let refreshTimer = null;
 function applyRefresh(ms) {
   if (refreshTimer) clearInterval(refreshTimer);
