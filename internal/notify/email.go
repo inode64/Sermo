@@ -42,9 +42,13 @@ type Email struct {
 	send emailSender
 }
 
+// Name returns the notifier's configured name.
 func (e *Email) Name() string { return e.name }
+
+// Type returns the notifier type identifier.
 func (e *Email) Type() string { return "email" }
 
+// Send delivers the message over SMTP.
 func (e *Email) Send(ctx context.Context, msg Message) error {
 	send := e.send
 	if send == nil {
@@ -113,7 +117,7 @@ func parseEmailDSN(s string) (emailDSN, error) {
 // and delivers the message. Uses only net/smtp (no external dependency).
 func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Message) error {
 	raw := buildMessage(from, to, msg)
-	tlsCfg := &tls.Config{ServerName: d.host}
+	tlsCfg := &tls.Config{ServerName: d.host, MinVersion: tls.VersionTLS12}
 	dialer := &net.Dialer{Timeout: dialTimeout}
 
 	var conn net.Conn

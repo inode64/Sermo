@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"time"
 
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
 )
 
 // Filename is the database file name placed under the state directory.
@@ -364,20 +364,20 @@ func (s *Store) RecordMeasurement(service, check string, valueMs float64, at tim
 // the rolling window ending at now (buckets with start >= now-span).
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
 	var count sql.NullInt64
-	var sum, min, max sql.NullFloat64
+	var sum, minMs, maxMs sql.NullFloat64
 	err := s.db.QueryRow(
 		`SELECT COALESCE(SUM(n),0), SUM(sum_ms), MIN(min_ms), MAX(max_ms)
 		   FROM measurement WHERE service = ? AND check_name = ? AND bucket >= ?;`,
 		service, check, minuteBucket(now.Add(-span)),
-	).Scan(&count, &sum, &min, &max)
+	).Scan(&count, &sum, &minMs, &maxMs)
 	if err != nil {
 		return MeasurementStat{}, err
 	}
 	stat := MeasurementStat{Count: count.Int64}
 	if count.Int64 > 0 && sum.Valid {
 		stat.Avg = sum.Float64 / float64(count.Int64)
-		stat.Min = min.Float64
-		stat.Max = max.Float64
+		stat.Min = minMs.Float64
+		stat.Max = maxMs.Float64
 	}
 	return stat, nil
 }
@@ -400,15 +400,15 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 	var out []MeasurementPoint
 	for rows.Next() {
 		var bucket, n int64
-		var sum, min, max float64
-		if err := rows.Scan(&bucket, &n, &sum, &min, &max); err != nil {
+		var sum, minMs, maxMs float64
+		if err := rows.Scan(&bucket, &n, &sum, &minMs, &maxMs); err != nil {
 			return nil, err
 		}
 		avg := 0.0
 		if n > 0 {
 			avg = sum / float64(n)
 		}
-		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: min, Max: max})
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minMs, Max: maxMs})
 	}
 	return out, rows.Err()
 }

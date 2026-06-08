@@ -10,6 +10,7 @@ import "sort"
 // RuleType classifies a rule (section 16).
 type RuleType string
 
+// Rule types (section 16).
 const (
 	RuleRemediation RuleType = "remediation"
 	RuleGuard       RuleType = "guard"
@@ -19,6 +20,7 @@ const (
 // ActionType is a rule's then.action (section 16).
 type ActionType string
 
+// Rule action types (section 16).
 const (
 	ActionRestart ActionType = "restart"
 	ActionStart   ActionType = "start"

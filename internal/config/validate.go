@@ -650,7 +650,7 @@ func validatePortSpec(spec string) string {
 	if strings.TrimSpace(spec) == "" {
 		return "is required (e.g. \"80,443,1024-4000\")"
 	}
-	any := false
+	found := false
 	for _, tok := range strings.Split(spec, ",") {
 		tok = strings.TrimSpace(tok)
 		if tok == "" {
@@ -671,9 +671,9 @@ func validatePortSpec(spec string) string {
 		if start < 1 || end > 65535 || start > end {
 			return fmt.Sprintf("range %q is out of 1..65535", tok)
 		}
-		any = true
+		found = true
 	}
-	if !any {
+	if !found {
 		return "is required (e.g. \"80,443,1024-4000\")"
 	}
 	return ""

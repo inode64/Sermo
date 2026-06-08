@@ -34,8 +34,8 @@ func ResolveTimeout(configured time.Duration, tree map[string]any) time.Duration
 	if configured <= 0 {
 		configured = DefaultOperationTimeout
 	}
-	if min := MinimumTimeout(tree); min > configured {
-		return min
+	if m := MinimumTimeout(tree); m > configured {
+		return m
 	}
 	return configured
 }

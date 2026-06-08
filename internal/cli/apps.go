@@ -1,3 +1,4 @@
+// Package cli implements the sermoctl command-line interface.
 package cli
 
 import (

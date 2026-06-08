@@ -85,11 +85,11 @@ func defaultConntrackSampler() (ConntrackSample, error) {
 	if err != nil {
 		return ConntrackSample{}, err
 	}
-	max, err := readProcUint("/proc/sys/net/netfilter/nf_conntrack_max")
+	maxConn, err := readProcUint("/proc/sys/net/netfilter/nf_conntrack_max")
 	if err != nil {
 		return ConntrackSample{}, err
 	}
-	return ConntrackSample{Count: count, Max: max}, nil
+	return ConntrackSample{Count: count, Max: maxConn}, nil
 }
 
 // readProcUint reads a sysctl-style file holding a single unsigned integer.
