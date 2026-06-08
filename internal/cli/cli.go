@@ -43,7 +43,7 @@ type BackendDetector interface {
 type App struct {
 	Detector   BackendDetector
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
-	LoadConfig func(globalPath string) (*config.Config, error)
+	LoadConfig func(globalPath string, opts ...config.Option) (*config.Config, error)
 	Discover   func(selectors []process.Selector) ([]process.Process, []string)
 	// Operate runs a start/stop/restart through the operation engine for a
 	// resolved service. Injectable for testing; the error covers backend/wiring

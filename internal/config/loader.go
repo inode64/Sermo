@@ -13,13 +13,38 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
+// Option customizes Load.
+type Option func(*loadOptions)
+
+type loadOptions struct {
+	profileDirs []string
+}
+
+// WithProfilesDirs overrides the profile search directories declared in the
+// global config's paths.profiles. Relative entries are resolved against the
+// current working directory (not the config file), since the override is a
+// caller/CLI choice. It backs `sermod --profiles` and lets tests load the
+// installed config (which points at /usr/share/sermo/profiles) while keeping
+// the profiles in the source tree.
+func WithProfilesDirs(dirs ...string) Option {
+	return func(o *loadOptions) { o.profileDirs = dirs }
+}
+
 // Load reads the global configuration at globalPath and every profile and
 // service document reachable from its `paths`. Parsing/IO failures abort; the
 // returned Config carries documents in raw, unexpanded form for resolution.
-func Load(globalPath string) (*Config, error) {
+func Load(globalPath string, opts ...Option) (*Config, error) {
+	var o loadOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	global, err := loadGlobal(globalPath)
 	if err != nil {
 		return nil, err
+	}
+	if len(o.profileDirs) > 0 {
+		global.Profiles = absProfileDirs(o.profileDirs)
 	}
 
 	cfg := &Config{
@@ -84,6 +109,23 @@ func loadGlobal(path string) (Global, error) {
 	}
 	resolveConfigPaths(path, &g)
 	return g, nil
+}
+
+// absProfileDirs cleans an override list, making relative entries absolute
+// against the current working directory and dropping empty ones.
+func absProfileDirs(dirs []string) []string {
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
+		if abs, err := filepath.Abs(d); err == nil {
+			out = append(out, abs)
+			continue
+		}
+		out = append(out, filepath.Clean(d))
+	}
+	return out
 }
 
 // resolveConfigPaths makes profiles/enabled/runtime/state paths absolute. Relative
