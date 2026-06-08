@@ -562,6 +562,17 @@ function hostMetricVal(metrics, name) {
   return val;
 }
 
+// pctVal formats a percent-type host metric (cpu/mem/swap). A value of exactly
+// 0% is dropped from the JSON by omitempty, so a metric that is present but has
+// no percent is shown as 0.0% rather than hidden. Returns null only when the
+// metric is absent entirely (e.g. no swap device).
+function pctVal(metrics, name) {
+  const m = (metrics || []).find((x) => x.name === name);
+  if (!m) return null;
+  const v = (m.percent != null ? m.percent : 0).toFixed(1) + "%";
+  return m.ready === false ? v + " (stale)" : v;
+}
+
 function renderLocks(locks) {
   const section = $("#locks-section");
   const tbody = $("#locks-rows");
@@ -637,13 +648,13 @@ async function renderStatus() {
       if (daemon.hostname) sp.push(`host: <b>${esc(daemon.hostname)}</b>`);
       if (ready.backend) sp.push(`backend: <b>${esc(ready.backend)}</b>`);
       if (daemon.os) sp.push(`OS: <b>${esc(daemon.os)}</b>`);
-      const cpu = hostMetricVal(hostMetrics, "total_cpu");
-      const mem = hostMetricVal(hostMetrics, "total_memory");
+      // cpu/mem/swap are percent-type: show 0.0% when present-but-zero instead
+      // of hiding them (omitempty drops an exact 0 from the JSON). load is an
+      // absolute reading, so it keeps the generic formatter.
+      const cpu = pctVal(hostMetrics, "total_cpu");
+      const mem = pctVal(hostMetrics, "total_memory");
+      const swap = pctVal(hostMetrics, "total_swap");
       const load = hostMetricVal(hostMetrics, "load1");
-      // Swap: present only when a swap device exists; show 0.0% when unused
-      // (the percent is dropped from JSON at exactly 0 by omitempty).
-      const swapM = (hostMetrics || []).find((x) => x.name === "total_swap");
-      const swap = swapM ? (swapM.percent != null ? swapM.percent : 0).toFixed(1) + "%" : null;
       if (cpu != null) sp.push(`cpu: <b>${esc(cpu)}</b>`);
       if (mem != null) sp.push(`mem: <b>${esc(mem)}</b>`);
       if (swap != null) sp.push(`swap: <b>${esc(swap)}</b>`);
