@@ -415,7 +415,25 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
 	mux.HandleFunc("POST /api/reload", s.handleReload)
-	return s.withAuth(mux)
+	return securityHeaders(s.withAuth(mux))
+}
+
+// securityHeaders adds standard hardening headers to every response. The CSP
+// keeps the dashboard self-contained (no external origins); 'unsafe-inline' is
+// required because the embedded UI uses inline <script>, inline styles and
+// inline event handlers (onclick/onchange/…).
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
+				"base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // eventLimit reads the `limit` query param, defaulting and capping it.

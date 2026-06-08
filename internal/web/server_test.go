@@ -138,6 +138,25 @@ func TestServesDashboard(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders(t *testing.T) {
+	h := newServer(&fakeBackend{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	want := map[string]string{
+		"X-Content-Type-Options": "nosniff",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "no-referrer",
+	}
+	for k, v := range want {
+		if got := rec.Header().Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
+		t.Errorf("Content-Security-Policy = %q, want it to contain default-src 'self'", csp)
+	}
+}
+
 func TestListServices(t *testing.T) {
 	b := &fakeBackend{services: []Service{{Name: "web", Status: "active", Monitored: true}}}
 	rec := httptest.NewRecorder()
