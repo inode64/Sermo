@@ -18,15 +18,15 @@ type Config struct {
 	Backend string
 	Tree    map[string]any // resolved service config
 
-	Manager    Manager
-	Locker     *locks.OperationLocker
-	Scanner    locks.Scanner
-	Discoverer process.Discoverer
-	CheckDeps  checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
-	LockTTL           time.Duration
-	Sleep             func(time.Duration)
-	OperationTimeout  time.Duration
-	Emit              func(Result)
+	Manager          Manager
+	Locker           *locks.OperationLocker
+	Scanner          locks.Scanner
+	Discoverer       process.Discoverer
+	CheckDeps        checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
+	LockTTL          time.Duration
+	Sleep            func(time.Duration)
+	OperationTimeout time.Duration
+	Emit             func(Result)
 }
 
 // New builds an Engine from real components, deriving preflight/postflight/guard
@@ -93,11 +93,11 @@ func New(c Config) Engine {
 			report, err := c.Scanner.Scan(c.Service)
 			return report.Locks, err
 		},
-		Guard:      guardClosure(tree, deps),
-		Preflight:  sectionRunner(tree, "preflight", deps),
-		Postflight: sectionRunner(tree, "postflight", deps),
-		Discover:   discover,
-		Reaper:     reaper,
+		Guard:            guardClosure(tree, deps),
+		Preflight:        sectionRunner(tree, "preflight", deps),
+		Postflight:       sectionRunner(tree, "postflight", deps),
+		Discover:         discover,
+		Reaper:           reaper,
 		KillPolicy:       killPolicy,
 		Sleep:            sleep,
 		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),

@@ -8,9 +8,9 @@ import (
 )
 
 const (
-	readinessStarting      = "starting"
-	readinessReady         = "ready"
-	readinessShuttingDown  = "shutting_down"
+	readinessStarting     = "starting"
+	readinessReady        = "ready"
+	readinessShuttingDown = "shutting_down"
 )
 
 // Readiness tracks whether sermod has finished its startup delay and begun
