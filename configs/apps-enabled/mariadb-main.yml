@@ -1,0 +1,8 @@
+kind: service
+name: mariadb-main
+uses: mariadb
+# Inherits the mariadb profile's unit candidates (service: systemd/openrc),
+# checks (service/tcp/ping) and remediation rules. Override variables here when
+# the instance differs from the profile defaults, e.g. a non-standard port.
+variables:
+  port: 3306
