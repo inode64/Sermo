@@ -19,6 +19,8 @@
   .actions button { margin-right: .25rem; cursor: pointer; }
   button { font: inherit; padding: .2rem .55rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; }
   button:hover { background: #8883; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button:disabled:hover { background: #8881; }
   #err { color: #cf222e; min-height: 1.2rem; }
   .muted { color: #8888; font-size: .85rem; }
   a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted #8888; color: inherit; }
@@ -472,9 +474,10 @@ function renderServices() {
       mon = s.monitored
         ? '<span class="pill">monitored</span>'
         : `<span class="pill">paused</span>${monitorHint(s)}`;
+      const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
-          <button onclick="act('${esc(s.name)}','start')">start</button>
-          <button onclick="act('${esc(s.name)}','stop')">stop</button>
+          <button ${st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
+          <button ${stopped ? "disabled" : ""} onclick="act('${esc(s.name)}','stop')">stop</button>
           <button onclick="act('${esc(s.name)}','restart')">restart</button>
           ${s.monitored
             ? `<button onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
