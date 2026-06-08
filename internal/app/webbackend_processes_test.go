@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"sermo/internal/config"
@@ -92,6 +93,12 @@ func TestWebBackendDetailProcessesNone(t *testing.T) {
 	}
 	if detail.Processes != nil {
 		t.Fatalf("processes = %+v, want nil/empty", detail.Processes)
+	}
+	if len(detail.ProcessWarnings) != 1 {
+		t.Fatalf("ProcessWarnings = %+v, want 1 warning", detail.ProcessWarnings)
+	}
+	if !strings.Contains(detail.ProcessWarnings[0], "/nonexistent/pidfile.pid") {
+		t.Fatalf("ProcessWarnings[0] = %q, want pidfile path", detail.ProcessWarnings[0])
 	}
 }
 

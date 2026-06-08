@@ -708,7 +708,10 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		}
 	}
 
-	procs, _ := e.discoverer.Discover(e.selectors)
+	procs, procWarnings := e.discoverer.Discover(e.selectors)
+	if len(procWarnings) > 0 {
+		d.ProcessWarnings = append([]string(nil), procWarnings...)
+	}
 	reader := metrics.OSReader{}
 	for _, p := range procs {
 		wp := processToWeb(p)
