@@ -1,0 +1,33 @@
+kind: service
+name: php-fpm-www
+# Self-contained php-fpm example. The bundled php-fpm profile (php-fpm%v) is a
+# version template that materializes only when that PHP version is installed; to
+# keep this example version-agnostic it monitors a php-fpm unit directly.
+# Adjust `service` to your unit (php8.2-fpm, php-fpm8.2, ...) and `binary` to the
+# matching php-fpm path.
+service: php-fpm
+
+variables:
+  binary: /usr/sbin/php-fpm
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  master:
+    type: process
+    exe: "${binary}"
+    state: running
+
+rules:
+  restart-if-inactive:
+    type: remediation
+    if:
+      failed:
+        check: service
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
