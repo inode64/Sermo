@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	web "sermo/internal/web"
@@ -199,5 +202,94 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	// Preflight on disabled should not be found (no engine)
 	if _, ok := b.Preflight(context.Background(), "mysql"); ok {
 		t.Fatal("preflight on disabled should not succeed")
+	}
+}
+
+func TestWebBackendConfigRenderAndDiff(t *testing.T) {
+	root := t.TempDir()
+	profiles := filepath.Join(root, "profiles")
+	enabled := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(profiles, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	globalPath := filepath.Join(root, "sermo.yml")
+	profilePath := filepath.Join(profiles, "web-profile.yml")
+	basePath := filepath.Join(enabled, "base.yml")
+	webPath := filepath.Join(enabled, "web.yml")
+	if err := os.WriteFile(globalPath, []byte(`
+paths:
+  profiles: [`+profiles+`]
+  enabled: [`+enabled+`]
+defaults:
+  policy:
+    cooldown: 5m
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(profilePath, []byte(`
+kind: profile
+name: web-profile
+checks:
+  tcp:
+    type: tcp
+    host: 127.0.0.1
+    port: 80
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(basePath, []byte(`
+kind: service
+name: base
+uses: web-profile
+service: base.service
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(webPath, []byte(`
+kind: service
+name: web
+uses: web-profile
+service: web.service
+checks:
+  tcp:
+    port: 8080
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(globalPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	b, warnings := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}})
+	if len(warnings) > 0 {
+		t.Fatalf("NewWebBackend warnings: %v", warnings)
+	}
+
+	rendered, ok, err := b.ConfigRender(context.Background(), "web", "yaml")
+	if err != nil || !ok {
+		t.Fatalf("ConfigRender: ok=%v err=%v", ok, err)
+	}
+	if !strings.Contains(rendered.Content, "web.service") || !strings.Contains(rendered.Content, "8080") {
+		t.Fatalf("rendered content missing resolved values:\n%s", rendered.Content)
+	}
+	wantSources := []string{globalPath, profilePath, webPath}
+	for _, want := range wantSources {
+		if !containsLine(rendered.SourceFiles, want) {
+			t.Fatalf("source files = %v, missing %s", rendered.SourceFiles, want)
+		}
+	}
+
+	diff, ok, err := b.ConfigDiff(context.Background(), "base", "web")
+	if err != nil || !ok {
+		t.Fatalf("ConfigDiff: ok=%v err=%v", ok, err)
+	}
+	if diff.Identical || len(diff.Removed) == 0 || len(diff.Added) == 0 {
+		t.Fatalf("diff = %+v, want changed lines", diff)
+	}
+	if _, ok, err := b.ConfigRender(context.Background(), "missing", "yaml"); err != nil || ok {
+		t.Fatalf("missing render: ok=%v err=%v", ok, err)
 	}
 }

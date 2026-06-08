@@ -83,6 +83,14 @@
   .attn-item.critical { border-color:#cf222e66; }
   .attn-title { font-weight:600; }
   .attn-detail { margin-top:.1rem; font-size:.85rem; color:#888; overflow-wrap:anywhere; }
+  .config-view { max-height: 24rem; overflow:auto; padding:.65rem .75rem; border:1px solid #8884; border-radius:.45rem; background:#8881; white-space:pre; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .diff-lines { margin-top:.55rem; display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
+  .diff-lines pre { margin:0; max-height:16rem; overflow:auto; padding:.55rem; border:1px solid #8884; border-radius:.45rem; background:#8881; white-space:pre-wrap; font:.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  @media (max-width: 760px) { .diff-lines { grid-template-columns:1fr; } }
+  #event-controls { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem; }
+  #event-controls input[type="text"] { font:inherit; padding:.2rem .5rem; border-radius:.35rem; border:1px solid #8886; background:#8881; width:8.5rem; }
+  .event-group td { background:#8881; font-weight:600; }
+  .event-msg button { margin-left:.35rem; padding:.05rem .35rem; font-size:.8rem; }
 </style>
 </head>
 <body>
@@ -145,6 +153,17 @@
 
 <details id="events-section" open>
   <summary>Events</summary>
+  <div id="event-controls">
+    <input id="event-service" type="text" placeholder="service" onkeydown="eventFilterKey(event)">
+    <input id="event-watch" type="text" placeholder="watch" onkeydown="eventFilterKey(event)">
+    <input id="event-kind" type="text" placeholder="kind" onkeydown="eventFilterKey(event)">
+    <input id="event-status" type="text" placeholder="status" onkeydown="eventFilterKey(event)">
+    <label class="muted"><input id="event-errors" type="checkbox" onchange="loadEvents()"> only errors</label>
+    <label class="muted"><input id="event-group" type="checkbox" checked onchange="renderGlobalEvents()"> group actions</label>
+    <button onclick="loadEvents()">apply</button>
+    <button onclick="clearEventFilters()">clear</button>
+    <span id="event-count" class="muted"></span>
+  </div>
   <table class="events"><tbody id="events"></tbody></table>
 </details>
 
@@ -381,10 +400,37 @@ async function loadOps() {
 
 async function loadEvents() {
   try {
-    const res = await fetch("api/events?limit=100");
+    const params = new URLSearchParams({ limit: "500" });
+    const add = (id, key) => {
+      const el = $("#" + id);
+      const v = el ? el.value.trim() : "";
+      if (v) params.set(key, v);
+    };
+    add("event-service", "service");
+    add("event-watch", "watch");
+    add("event-kind", "kind");
+    add("event-status", "status");
+    if ($("#event-errors") && $("#event-errors").checked) params.set("only_errors", "1");
+    const res = await fetch("api/events?" + params.toString());
     if (!res.ok) return;
-    $("#events").innerHTML = eventRows(await res.json(), true);
+    allEvents = await res.json();
+    renderGlobalEvents();
   } catch (e) { /* keep the last feed on a transient error */ }
+}
+
+function eventFilterKey(e) {
+  if (e.key === "Enter") loadEvents();
+  if (e.key === "Escape") clearEventFilters();
+}
+
+function clearEventFilters() {
+  ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
+    const el = $("#" + id);
+    if (el) el.value = "";
+  });
+  const err = $("#event-errors");
+  if (err) err.checked = false;
+  loadEvents();
 }
 
 async function loadDiag() {
@@ -411,17 +457,88 @@ async function loadDiag() {
   }
 }
 
-function eventRows(events, withService) {
+function eventKey(prefix, e, i) {
+  return `${prefix}:${i}:${e.time || ""}:${e.service || ""}:${e.watch || ""}:${e.kind || ""}:${e.action || ""}:${e.status || ""}`;
+}
+
+function toggleEventMsg(key) {
+  if (eventExpanded.has(key)) eventExpanded.delete(key);
+  else eventExpanded.add(key);
+  renderGlobalEvents();
+  if (current) loadServiceEvents(current);
+}
+
+function eventMessageHTML(e, key) {
+  const msg = e.message || "";
+  if (msg.length <= 160 || eventExpanded.has(key)) {
+    const btn = msg.length > 160 ? ` <button onclick="toggleEventMsg('${esc(key)}')">less</button>` : "";
+    return `<span class="event-msg">${esc(msg)}${btn}</span>`;
+  }
+  return `<span class="event-msg">${esc(msg.slice(0, 160))}<span class="muted">…</span> <button onclick="toggleEventMsg('${esc(key)}')">more</button></span>`;
+}
+
+function eventSubject(e) {
+  return e.service || e.watch || "";
+}
+
+function eventGroupKey(e) {
+  const action = e.action || e.kind || "";
+  return `${eventSubject(e)}|${action}|${e.rule || ""}`;
+}
+
+function groupedEvents(events) {
+  const map = new Map();
+  for (const e of events || []) {
+    const key = eventGroupKey(e);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(e);
+  }
+  return [...map.values()];
+}
+
+function renderGlobalEvents() {
+  const tbody = $("#events");
+  if (!tbody) return;
+  const events = allEvents || [];
+  const cnt = $("#event-count");
+  if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
+  const grouped = $("#event-group") && $("#event-group").checked;
+  if (!grouped) {
+    tbody.innerHTML = eventRows(events, true, { prefix: "global" });
+    return;
+  }
+  const groups = groupedEvents(events);
+  if (!groups.length) {
+    tbody.innerHTML = `<tr><td class="muted">No events match the filter.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = groups.map((g, gi) => {
+    const head = g[0] || {};
+    const who = eventSubject(head) || "system";
+    const action = head.action || head.kind || "event";
+    const statuses = [...new Set(g.map((e) => e.status).filter(Boolean))].join(", ");
+    const groupKey = `grp:${gi}:${eventGroupKey(head)}`;
+    const open = eventExpanded.has(groupKey);
+    const row = `<tr class="event-group" onclick="toggleEventMsg('${esc(groupKey)}')">
+      <td colspan="4"><span class="exp">${open ? '▾' : '▸'}</span>${esc(who)} <span class="muted">${esc(action)} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + esc(statuses) : ""}</span></td>
+    </tr>`;
+    return row + (open ? eventRows(g, true, { prefix: "group" + gi }) : "");
+  }).join("");
+}
+
+function eventRows(events, withService, opts = {}) {
   if (!events || !events.length) return `<tr><td class="muted">No events yet.</td></tr>`;
-  return events.map((e) => {
+  const prefix = opts.prefix || "event";
+  return events.map((e, i) => {
     const who = e.service || e.watch || "";
     const subject = withService && who ? `<td>${esc(who)}</td>` : "";
     const detail = [e.rule, e.action, e.status].filter(Boolean).map(esc).join(" ");
+    const key = eventKey(prefix, e, i);
     return `<tr>
       <td class="t">${esc(fmtTime(e.time))}</td>
       ${subject}
       <td class="kind kind-${esc(e.kind)}">${esc(e.kind)}</td>
-      <td>${detail ? `<span class="muted">${detail}</span> ` : ""}${esc(e.message || "")}</td>
+      <td>${detail ? `<span class="muted">${detail}</span> ` : ""}${eventMessageHTML(e, key)}</td>
     </tr>`;
   }).join("");
 }
@@ -470,8 +587,10 @@ let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
 let allWatches = [];
+let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
+let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
 let liveOpsTimer = null;
 let liveOpsSlots = null;
@@ -1296,6 +1415,12 @@ async function detail(name) {
   }
 }
 
+function configBaseOptions(name) {
+  const names = (allServices || []).map((s) => s.name).filter((n) => n && n !== name).sort();
+  if (!names.length) return '<option value="">no other services</option>';
+  return names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+}
+
 function renderDetail(d) {
   const checks = (d.checks || []).map((c) => {
     const age = c.at ? ` <span class="muted">· ${esc(fmtAge(c.at))}</span>` : "";
@@ -1386,6 +1511,15 @@ function renderDetail(d) {
     <p>${renderRemediation(d.remediation)}</p>
     <h2>Rules</h2>
     ${renderRules(d.rules)}
+    <h2>Config Review <span class="muted">
+      <button onclick="loadConfigRender('${esc(d.name)}','yaml')">YAML</button>
+      <button onclick="loadConfigRender('${esc(d.name)}','json')">JSON</button>
+      <select id="config-base" style="font:inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">${configBaseOptions(d.name)}</select>
+      <button onclick="loadConfigDiff('${esc(d.name)}')">diff</button>
+    </span></h2>
+    <div id="config-meta" class="muted">loading resolved config…</div>
+    <pre id="config-render" class="config-view"></pre>
+    <div id="config-diff" class="muted" style="margin-top:.6rem"></div>
     <h2>Preflight ${me.can_act ? `<button onclick="runPreflight('${esc(d.name)}')">run</button>` : '<span class="muted">admin only</span>'}</h2>
     <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
@@ -1407,6 +1541,57 @@ function renderDetail(d) {
   loadSeries(d.name);
   if (measured.length) loadMetrics(d.name);
   loadServiceEvents(d.name);
+  loadConfigRender(d.name, "yaml");
+}
+
+async function loadConfigRender(name, format) {
+  const meta = $("#config-meta");
+  const pre = $("#config-render");
+  if (meta) meta.textContent = `loading ${format}…`;
+  if (pre) pre.textContent = "";
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/config?format=${encodeURIComponent(format)}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || ("HTTP " + res.status));
+    if (pre) pre.textContent = body.content || "";
+    if (meta) {
+      const sources = (body.source_files || []).map((p) => `<code>${esc(p)}</code>`).join(" ");
+      meta.innerHTML = `${esc((body.format || format).toUpperCase())} render${sources ? ` · sources ${sources}` : ""}`;
+    }
+  } catch (e) {
+    if (meta) meta.innerHTML = `<span class="bad">Failed to load config: ${esc(e.message)}</span>`;
+  }
+}
+
+async function loadConfigDiff(name) {
+  const target = $("#config-diff");
+  const sel = $("#config-base");
+  const base = sel ? sel.value : "";
+  if (!target) return;
+  if (!base) {
+    target.innerHTML = '<span class="inactive">Select another service to diff.</span>';
+    return;
+  }
+  target.innerHTML = '<span class="muted">loading diff…</span>';
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/config/diff?base=${encodeURIComponent(base)}`);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.message || ("HTTP " + res.status));
+    if (body.identical) {
+      target.innerHTML = `<span class="ok">${esc(base)} and ${esc(name)} resolve identically</span>`;
+      return;
+    }
+    const removed = (body.removed || []).map((l) => `- ${l}`).join("\n") || "(none)";
+    const added = (body.added || []).map((l) => `+ ${l}`).join("\n") || "(none)";
+    target.innerHTML = `
+      <div class="muted">Diff ${esc(base)} → ${esc(name)}</div>
+      <div class="diff-lines">
+        <div><div class="bad">Only in ${esc(base)}</div><pre>${esc(removed)}</pre></div>
+        <div><div class="ok">Only in ${esc(name)}</div><pre>${esc(added)}</pre></div>
+      </div>`;
+  } catch (e) {
+    target.innerHTML = `<span class="bad">Failed to load diff: ${esc(e.message)}</span>`;
+  }
 }
 
 function preflightRows(checks) {
