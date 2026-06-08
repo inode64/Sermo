@@ -3,6 +3,8 @@ package operation
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -55,6 +57,7 @@ type harness struct {
 	preflight     checks.Outcome
 	postflight    checks.Outcome
 	discoverSteps [][]process.Process
+	discoverErrs  []error
 	discoverCalls int
 	reaper        process.Reaper
 	killPolicy    process.KillPolicy
@@ -69,16 +72,20 @@ func defaultHarness() *harness {
 	}
 }
 
-func (h *harness) discover() []process.Process {
+func (h *harness) discover() ([]process.Process, error) {
 	i := h.discoverCalls
 	h.discoverCalls++
+	var err error
+	if i < len(h.discoverErrs) {
+		err = h.discoverErrs[i]
+	}
 	if i < len(h.discoverSteps) {
-		return h.discoverSteps[i]
+		return h.discoverSteps[i], err
 	}
 	if len(h.discoverSteps) == 0 {
-		return nil
+		return nil, err
 	}
-	return h.discoverSteps[len(h.discoverSteps)-1]
+	return h.discoverSteps[len(h.discoverSteps)-1], err
 }
 
 func (h *harness) engine() Engine {
@@ -241,6 +248,21 @@ func TestRestartOrphanProcessesDoesNotStart(t *testing.T) {
 	}
 }
 
+func TestRestartDiscoveryErrorDoesNotStart(t *testing.T) {
+	h := defaultHarness()
+	h.discoverErrs = []error{errors.New("selector config: command_match selector requires both exe and user")}
+	res := h.restart(t)
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "process discovery: selector config") {
+		t.Fatalf("message = %q, want process discovery selector error", res.Message)
+	}
+	if h.mgr.did("start mysqld") {
+		t.Error("must NOT start when residual discovery is unreliable")
+	}
+}
+
 func TestRestartResidualsClearedThenStarts(t *testing.T) {
 	h := defaultHarness()
 	killable := process.Process{PID: 100, UID: 110, Exe: "/opt/x", ExeOK: true}
@@ -262,6 +284,93 @@ func TestRestartResidualsClearedThenStarts(t *testing.T) {
 	}
 	if !h.mgr.did("start mysqld") {
 		t.Error("should start once residuals are cleared")
+	}
+}
+
+func TestRestartRediscoveryErrorDoesNotStart(t *testing.T) {
+	h := defaultHarness()
+	killable := process.Process{PID: 100, UID: 110, Exe: "/opt/x", ExeOK: true}
+	h.discoverSteps = [][]process.Process{{killable}, {}}
+	h.discoverErrs = []error{nil, errors.New("runtime discovery: pidfile missing")}
+	h.killPolicy = process.KillPolicy{
+		ForceKill:   true,
+		KillOnlyIf:  process.KillSelector{Users: []string{"mysql"}, ExeAny: []string{"/opt/x"}},
+		TermTimeout: time.Second,
+	}
+	h.reaper = process.Reaper{
+		Signaler:    noopSignaler{},
+		ResolveUser: func(string) (uint32, bool) { return 110, true },
+		Sleep:       func(time.Duration) {},
+	}
+	res := h.restart(t)
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "process discovery: runtime discovery") {
+		t.Fatalf("message = %q, want process discovery runtime error", res.Message)
+	}
+	if h.mgr.did("start mysqld") {
+		t.Error("must NOT start when rediscovery fails")
+	}
+}
+
+func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service:    "mysql-main",
+		Unit:       "mysqld",
+		Backend:    "systemd",
+		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"type": "command_match", "user": "mysql"}}},
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.NewDiscoverer(),
+		Sleep:      func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "selector config") {
+		t.Fatalf("message = %q, want selector config warning", res.Message)
+	}
+	if mgr.did("start mysqld") {
+		t.Error("must NOT start when operation.New sees an invalid process selector")
+	}
+}
+
+func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "mysql-main",
+		Unit:    "mysqld",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"processes": map[string]any{
+				"pid": map[string]any{"type": "pidfile", "path": filepath.Join(dir, "missing.pid")},
+			},
+		},
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.NewDiscoverer(),
+		Sleep:      func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "runtime discovery") {
+		t.Fatalf("message = %q, want runtime discovery warning", res.Message)
+	}
+	if mgr.did("start mysqld") {
+		t.Error("must NOT start when runtime discovery is unreliable")
 	}
 }
 

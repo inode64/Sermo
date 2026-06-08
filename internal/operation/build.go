@@ -2,6 +2,8 @@ package operation
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -57,18 +59,24 @@ func New(c Config) Engine {
 
 	tree := c.Tree
 	killPolicy, _ := process.ParseStopPolicy(tree)
+	selectors, selectorWarnings := process.ParseSelectors(tree)
+	hasCommandMatch := hasCommandMatchSelector(selectors)
 
-	discover := func() []process.Process {
-		selectors, _ := process.ParseSelectors(tree)
-		procs, _ := c.Discoverer.Discover(selectors)
-		return procs
+	discover := func() ([]process.Process, error) {
+		if len(selectorWarnings) > 0 {
+			return nil, warningError("selector config", selectorWarnings)
+		}
+		procs, warnings := c.Discoverer.Discover(selectors)
+		if len(warnings) > 0 && !hasCommandMatch {
+			return procs, warningError("runtime discovery", warnings)
+		}
+		return procs, nil
 	}
 
 	reaper := process.Reaper{
 		Signaler:    process.OSSignaler{},
 		ResolveUser: process.OSUserResolver,
 		Sleep:       sleep,
-		Rediscover:  discover,
 	}
 
 	ttl := c.LockTTL
@@ -103,6 +111,19 @@ func New(c Config) Engine {
 		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),
 		Emit:             c.Emit,
 	}
+}
+
+func hasCommandMatchSelector(selectors []process.Selector) bool {
+	for _, sel := range selectors {
+		if sel.Type == process.SelectorCommandMatch {
+			return true
+		}
+	}
+	return false
+}
+
+func warningError(prefix string, warnings []string) error {
+	return fmt.Errorf("%s: %s", prefix, strings.Join(warnings, "; "))
 }
 
 // sectionRunner builds and runs a checks/preflight/postflight section, returning
