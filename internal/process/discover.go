@@ -144,22 +144,19 @@ func (d Discoverer) ObserveState(exe, user string) string {
 	}
 }
 
-// matches reports whether a process satisfies every declared field of a
-// command_match selector (exe AND user when both are present, section 21).
+// matches reports whether a process satisfies a command_match selector. Sermo
+// requires both exact resolved exe and real UID, so a partial selector never
+// matches.
 func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) bool {
-	if sel.Exe == "" && sel.User == "" {
+	if sel.Exe == "" || sel.User == "" {
 		return false
 	}
-	if sel.Exe != "" {
-		if !id.ExeOK || canonicalizePath(sel.Exe) != id.Exe {
-			return false
-		}
+	if !id.ExeOK || canonicalizePath(sel.Exe) != id.Exe {
+		return false
 	}
-	if sel.User != "" {
-		uid, ok := resolve(sel.User)
-		if !ok || uid != id.UID {
-			return false
-		}
+	uid, ok := resolve(sel.User)
+	if !ok || uid != id.UID {
+		return false
 	}
 	return true
 }
@@ -283,8 +280,8 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		case SelectorCommandMatch:
 			sel.Exe = asString(entry["exe"])
 			sel.User = asString(entry["user"])
-			if sel.Exe == "" && sel.User == "" {
-				warnings = append(warnings, fmt.Sprintf("command_match selector %q has neither exe nor user", name))
+			if sel.Exe == "" || sel.User == "" {
+				warnings = append(warnings, fmt.Sprintf("command_match selector %q requires both exe and user", name))
 				continue
 			}
 		default:

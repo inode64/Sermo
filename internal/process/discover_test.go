@@ -76,15 +76,15 @@ func TestDiscoverUnresolvableExeNeverMatches(t *testing.T) {
 	}
 }
 
-func TestDiscoverUserOnlySelector(t *testing.T) {
+func TestDiscoverCommandMatchRequiresExeAndUser(t *testing.T) {
 	reader := fakeReader{ids: map[int]Identity{
 		100: {PID: 100, PPID: 1, UID: 110, User: "mysql", ExeOK: false},
 	}}
 	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
 
 	procs, _ := d.Discover([]Selector{{Name: "u", Type: SelectorCommandMatch, User: "mysql"}})
-	if got := pidsOf(procs); len(got) != 1 || got[0] != 100 {
-		t.Fatalf("user-only match pids = %v, want [100]", got)
+	if got := pidsOf(procs); len(got) != 0 {
+		t.Fatalf("user-only command_match pids = %v, want none", got)
 	}
 }
 
@@ -95,9 +95,9 @@ func TestDiscoverBuildsProcessTree(t *testing.T) {
 		300: {PID: 300, PPID: 200, UID: 110, Exe: "/bin/sh", ExeOK: true},
 		400: {PID: 400, PPID: 1, UID: 0, Exe: "/sbin/init", ExeOK: true},
 	}}
-	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(nil)}
+	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"mysql": 110})}
 
-	procs, _ := d.Discover([]Selector{{Name: "main", Type: SelectorCommandMatch, Exe: "/opt/sermo-test/mysqld"}})
+	procs, _ := d.Discover([]Selector{{Name: "main", Type: SelectorCommandMatch, Exe: "/opt/sermo-test/mysqld", User: "mysql"}})
 	got := pidsOf(procs)
 	want := []int{100, 200, 300}
 	if len(got) != len(want) {
@@ -191,7 +191,7 @@ func TestDiscoverMainPIDDedupedWithSelector(t *testing.T) {
 	}
 	// The same PID is found by MainPID and command_match; it appears once,
 	// keeping the backend source (found first).
-	procs, _ := d.Discover([]Selector{{Name: "m", Type: SelectorCommandMatch, Exe: testExe}})
+	procs, _ := d.Discover([]Selector{{Name: "m", Type: SelectorCommandMatch, Exe: testExe, User: "mysql"}})
 	if len(procs) != 1 || procs[0].Source != sourceBackend {
 		t.Fatalf("procs = %+v, want one process from the backend source", procs)
 	}
@@ -230,13 +230,14 @@ func TestParseSelectors(t *testing.T) {
 			"command": map[string]any{"type": "command_match", "exe": "/opt/sermo-test/mysqld", "user": "mysql"},
 			"bogus":   map[string]any{"type": "weird"},
 			"nopath":  map[string]any{"type": "pidfile"},
+			"user":    map[string]any{"type": "command_match", "user": "mysql"},
 		},
 	}
 	selectors, warnings := ParseSelectors(tree)
 	if len(selectors) != 2 {
 		t.Fatalf("selectors = %+v, want 2 valid", selectors)
 	}
-	if len(warnings) != 2 {
-		t.Fatalf("warnings = %v, want 2 (bogus type, missing path)", warnings)
+	if len(warnings) != 3 {
+		t.Fatalf("warnings = %v, want 3 (bogus type, missing path, partial command_match)", warnings)
 	}
 }
