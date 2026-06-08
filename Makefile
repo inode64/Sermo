@@ -30,7 +30,7 @@ unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(S
 # Rewrite the profile/config paths in the sample config to the chosen dirs.
 config_subst = sed -e 's|\.\./profiles|$(SERMO_DATADIR)/profiles|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check tidy clean \
+.PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
         install install-bin install-profiles install-config install-state install-systemd install-openrc \
         uninstall
 
@@ -53,11 +53,31 @@ fmt-check:
 	@out="$$(gofmt -l internal cmd)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
+# Static analysis. Requires the tools on PATH (see CLAUDE.md for install
+# commands): staticcheck, revive, golangci-lint (runs gosec via .golangci.yml),
+# and govulncheck.
+lint:
+	staticcheck ./...
+	revive -config revive.toml ./...
+	golangci-lint run
+	govulncheck ./...
+
+# Everything CI enforces: formatting, vet, static analysis, and the test suite.
+check: fmt-check vet lint test
+
+# Coverage: print the total and write a browsable HTML report.
+cover:
+	go test -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -1
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "wrote coverage.html"
+
 tidy:
 	go mod tidy
 
 clean:
 	rm -rf $(BIN)
+	rm -f coverage.out coverage.html
 
 # Full install: binaries, profiles, sample config, state dir, and both init systems.
 install: install-bin install-profiles install-config install-state install-systemd install-openrc
