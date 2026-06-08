@@ -49,6 +49,8 @@
   summary > button { font-weight: 400; }
   #rows tr:hover td { background: #8881; }
   #rows tr.row-failing td { background: #cf222e1f; }
+  #rows .exp { cursor: pointer; color: #888; margin-right: .35rem; user-select: none; font-size: .9em; }
+  #rows tr.exp-row td { background: #8881; padding-left: 1.6rem; }
   #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
   #svc-filters button.f-active { background: #8883; font-weight: 600; }
   #topbar { position: sticky; top: 0; z-index: 5; background: Canvas; padding: 1.5rem 1.5rem .35rem; margin: -1.5rem -1.5rem .5rem; border-bottom: 1px solid #8884; }
@@ -94,7 +96,7 @@
   </div>
   <table>
     <thead>
-      <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
+      <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th class="actions">Actions</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
@@ -413,6 +415,8 @@ function checkHealthCell(s) {
 let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
+let expanded = new Set();  // service names whose inline process detail is open
+let expCache = {};         // last rendered expansion HTML per service (avoids flicker)
 
 function isFailing(s) { return s.enabled && s.check_health === "failing"; }
 
@@ -476,20 +480,74 @@ function renderServices() {
     const label = s.display_name && s.display_name !== s.name
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
+    const open = expanded.has(s.name);
+    const chev = `<span class="exp" onclick="toggleExpand('${esc(s.name)}')" title="show processes">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    return `<tr class="${isFailing(s) ? 'row-failing' : ''}">
-      <td>${name}${activeLockBadges(s)}<div class="muted">${esc(s.unit || "")}</div></td>
+    const row = `<tr class="${isFailing(s) ? 'row-failing' : ''}">
+      <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div></td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
       <td>${mon}</td>
-      <td>${esc(s.backend || "")}</td>
       <td class="actions">${actions}</td>
     </tr>`;
+    const expRow = open
+      ? `<tr class="exp-row" data-exp="${esc(s.name)}"><td colspan="5">${expCache[s.name] || '<span class="muted">loading…</span>'}</td></tr>`
+      : "";
+    return row + expRow;
   });
   const empty = (allServices || []).length
-    ? `<tr><td colspan="6" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="6" class="muted">No services.</td></tr>`;
+    ? `<tr><td colspan="5" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="5" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows.join("") || empty;
+  expanded.forEach((n) => loadExpansion(n));
+}
+
+// toggleExpand / loadExpansion / renderExpansion drive the inline per-service
+// detail: process table with per-process memory and disk I/O, plus totals.
+function toggleExpand(name) {
+  if (expanded.has(name)) { expanded.delete(name); delete expCache[name]; }
+  else { expanded.add(name); }
+  renderServices();
+}
+
+async function loadExpansion(name) {
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
+    if (!res.ok) return;
+    const html = renderExpansion(await res.json());
+    expCache[name] = html;
+    const tr = [...document.querySelectorAll("#rows tr.exp-row")].find((r) => r.dataset.exp === name);
+    if (tr) tr.querySelector("td").innerHTML = html;
+  } catch (_) { /* keep the last content on a transient error */ }
+}
+
+function renderExpansion(d) {
+  const procs = d.processes || [];
+  const mem = procs.reduce((a, p) => a + (p.rss || 0), 0);
+  const rd = procs.reduce((a, p) => a + (p.io_read || 0), 0);
+  const wr = procs.reduce((a, p) => a + (p.io_write || 0), 0);
+  const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(mem)}</b> · IO read <b>${fmtBytes(rd)}</b> · IO write <b>${fmtBytes(wr)}</b> · ${procs.length} process${procs.length === 1 ? '' : 'es'}</div>`;
+  if (!procs.length) return totals + '<div class="muted">No processes found.</div>';
+  const rows = procs.map((p) => `<tr>
+    <td>${p.pid}</td>
+    <td class="muted">${p.ppid}</td>
+    <td>${p.exe ? esc(p.exe) : '<span class="muted">unknown</span>'}</td>
+    <td class="muted">${esc(p.user || "")}</td>
+    <td class="muted">${esc(p.role || "")}</td>
+    <td>${p.rss ? fmtBytes(p.rss) : '—'}</td>
+    <td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td>
+  </tr>`).join("");
+  return totals + `<table style="width:auto; font-size:.85rem;">
+    <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>Mem</th><th>IO r/w</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+function fmtBytes(n) {
+  n = Number(n) || 0;
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + " " + u[i];
 }
 
 function renderWatches(watches) {

@@ -709,8 +709,16 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	}
 
 	procs, _ := e.discoverer.Discover(e.selectors)
+	reader := metrics.OSReader{}
 	for _, p := range procs {
-		d.Processes = append(d.Processes, processToWeb(p))
+		wp := processToWeb(p)
+		if rss, ok := reader.ProcessRSS(p.PID); ok {
+			wp.RSS = int64(rss)
+		}
+		if rd, wr, ok := reader.ProcessIO(p.PID); ok {
+			wp.IORead, wp.IOWrite = int64(rd), int64(wr)
+		}
+		d.Processes = append(d.Processes, wp)
 	}
 
 	if b.remediation != nil {
