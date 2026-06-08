@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"sermo/internal/execx"
 )
 
 // fakeProcSampler returns a scripted sequence of samples, one per cycle.
@@ -209,5 +211,90 @@ func TestProcWatchReusedPIDReArms(t *testing.T) {
 	}
 	if len(h.fired) != 2 {
 		t.Fatalf("reused pid fired %d times, want 2 (re-armed after exit)", len(h.fired))
+	}
+}
+
+// TestProcWatchWithRealOSHookRunner exercises the real OSHookRunner (execx path)
+// in a procWatcher using /bin/true.
+func TestProcWatchWithRealOSHookRunner(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 42, RSS: 123}},
+	}}
+	// Use real OSHookRunner instead of harness Func to cover execx-backed default.
+	w := &procWatcher{
+		name:    "pw-real",
+		match:   ProcMatch{Name: "worker"},
+		cond:    procCond{memOp: ">", memValue: 100},
+		hook:    HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
+		runner:  OSHookRunner{},
+		now:     func() time.Time { return h.clock },
+		emit:    func(e Event) { h.events = append(h.events, e) },
+		sampler: s,
+	}
+	h.tick(w, time.Second)
+	if len(h.events) != 1 || h.events[0].Kind != "hook" {
+		t.Fatalf("expected one hook event via real OSHookRunner, got %d events: %v", len(h.events), h.events)
+	}
+}
+
+// fakeEnvRunnerForProc is a minimal test double for verifying custom runner injection + env in proc context.
+type fakeEnvRunnerForProc struct {
+	calls []struct {
+		env  []string
+		name string
+		args []string
+	}
+}
+
+func (f *fakeEnvRunnerForProc) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
+	return execx.Result{}, nil
+}
+func (f *fakeEnvRunnerForProc) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
+	f.calls = append(f.calls, struct {
+		env  []string
+		name string
+		args []string
+	}{env, name, args})
+	return execx.Result{ExitCode: 0}, nil
+}
+
+func TestProcWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
+	fake := &fakeEnvRunnerForProc{}
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 99, RSS: 1000}},
+	}}
+	w := &procWatcher{
+		name:    "pw-custom",
+		match:   ProcMatch{Name: "worker", User: "root"},
+		cond:    procCond{memOp: ">", memValue: 500},
+		hook:    HookSpec{Command: []string{"/usr/bin/notify", "alert"}, Timeout: 42 * time.Second},
+		runner:  OSHookRunner{Runner: fake},
+		now:     func() time.Time { return h.clock },
+		emit:    func(e Event) {},
+		sampler: s,
+	}
+	h.tick(w, time.Second)
+
+	if len(fake.calls) != 1 {
+		t.Fatalf("expected 1 execx call, got %d", len(fake.calls))
+	}
+	call := fake.calls[0]
+	if call.name != "/usr/bin/notify" || len(call.args) != 1 || call.args[0] != "alert" {
+		t.Fatalf("wrong argv to custom runner: %s %v", call.name, call.args)
+	}
+	hasMem := false
+	hasUser := false
+	for _, e := range call.env {
+		if e == "SERMO_MEMORY=1000" {
+			hasMem = true
+		}
+		if e == "SERMO_USER=root" {
+			hasUser = true
+		}
+	}
+	if !hasMem || !hasUser {
+		t.Fatalf("custom runner did not receive expected SERMO_ env from proc data + match: %v", call.env)
 	}
 }
