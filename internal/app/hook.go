@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"time"
+
+	"sermo/internal/execx"
 )
 
 // HookSpec is a watch's hook action: a local command (argv, never a shell) run
@@ -36,22 +37,33 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 	return runner.RunHook(ctx, h.Command, env, h.Timeout)
 }
 
-// OSHookRunner runs hooks via os/exec: argv only (no shell), the daemon's
-// environment plus the provided SERMO_* variables, bounded by timeout.
-type OSHookRunner struct{}
+// OSHookRunner runs hooks using execx (argv only, no shell). It merges the
+// current process environment with the SERMO_* variables provided by the
+// caller and respects the per-hook timeout.
+type OSHookRunner struct {
+	// Runner is the execx runner to use. If nil, CommandRunner is used.
+	Runner execx.Runner
+}
 
-// RunHook executes argv via os/exec (no shell) with the given environment,
-// bounded by timeout when positive.
-func (OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+// RunHook builds the environment (os.Environ + injected vars) and executes
+// the command through execx, applying the timeout when positive.
+func (r OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error {
+	if len(argv) == 0 {
+		return errors.New("hook command is empty")
 	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // G204: runs the operator-configured hook command, by design
-	cmd.Env = os.Environ()
+
+	fullEnv := os.Environ()
 	for k, v := range env {
-		cmd.Env = append(cmd.Env, k+"="+v)
+		fullEnv = append(fullEnv, k+"="+v)
 	}
-	return cmd.Run()
+
+	runner := r.Runner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+
+	// We use RunEnv so that the custom environment is honored.
+	// The helper also applies the timeout (if > 0).
+	_, err := execx.RunEnv(ctx, runner, fullEnv, timeout, argv[0], argv[1:]...)
+	return err
 }
