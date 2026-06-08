@@ -59,6 +59,15 @@
   #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
   #svc-filters button.f-active { background: #8883; font-weight: 600; }
   #topbar { position: sticky; top: 0; z-index: 5; background: Canvas; padding: 1.5rem 1.5rem .35rem; margin: -1.5rem -1.5rem .5rem; border-bottom: 1px solid #8884; }
+  dialog { color: CanvasText; background: Canvas; border: 1px solid #8886; border-radius: .5rem; padding: 0; max-width: min(44rem, calc(100vw - 2rem)); width: 44rem; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid #8884; }
+  .modal-foot { border-top: 1px solid #8884; border-bottom: 0; display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
+  .modal-body { padding: 1rem; }
+  .modal-grid { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: .35rem .9rem; font-size: .92rem; }
+  .modal-grid code, .modal-body code { font-size: .85rem; overflow-wrap: anywhere; }
+  .danger-btn { border-color: #cf222e88; background: #cf222e22; }
+  .danger-btn:hover { background: #cf222e33; }
 </style>
 </head>
 <body>
@@ -181,6 +190,19 @@
 </section>
 
 <div id="detail"></div>
+
+<dialog id="action-confirm">
+  <div class="modal-head">
+    <h2 id="confirm-title" style="font-size:1.05rem; margin:0"></h2>
+    <div id="confirm-subtitle" class="muted" style="font-size:.85rem; margin-top:.15rem"></div>
+  </div>
+  <div id="confirm-body" class="modal-body"></div>
+  <div class="modal-foot">
+    <button onclick="closeActionConfirm(false)">cancel</button>
+    <button id="confirm-preflight-btn" onclick="runConfirmPreflight()">run preflight</button>
+    <button id="confirm-action-btn" class="danger-btn" onclick="closeActionConfirm(true)">confirm</button>
+  </div>
+</dialog>
 
 <details id="diag-section">
   <summary>Diagnostics
@@ -887,8 +909,7 @@ async function renderStatus() {
 }
 
 async function act(name, action) {
-  // Confirm potentially disruptive actions before sending them.
-  if ((action === "stop" || action === "restart") && !confirm(`${action} "${name}"?`)) return;
+  if ((action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
   $("#err").textContent = "";
   try {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, {
@@ -904,6 +925,118 @@ async function act(name, action) {
   }
   load();
   if (current) detail(current);
+}
+
+let confirmResolve = null;
+let confirmCtx = null;
+
+async function confirmAction(name, action) {
+  const dlg = $("#action-confirm");
+  if (!dlg || typeof dlg.showModal !== "function") {
+    return confirm(`${action} "${name}"?`);
+  }
+  confirmCtx = { name, action, detail: null, lastEvent: null, preflight: null };
+  $("#confirm-title").textContent = `${action.toUpperCase()} ${name}`;
+  $("#confirm-subtitle").textContent = "Review the current service context before sending the operation.";
+  $("#confirm-body").innerHTML = '<span class="muted">loading…</span>';
+  $("#confirm-action-btn").textContent = `${action} ${name}`;
+  $("#confirm-preflight-btn").disabled = true;
+
+  try {
+    const [detailRes, eventRes] = await Promise.all([
+      fetch(`api/services/${encodeURIComponent(name)}`),
+      fetch(`api/services/${encodeURIComponent(name)}/events?limit=1`),
+    ]);
+    if (!detailRes.ok) throw new Error("HTTP " + detailRes.status);
+    confirmCtx.detail = await detailRes.json();
+    if (eventRes.ok) {
+      const events = await eventRes.json();
+      confirmCtx.lastEvent = (events || [])[0] || null;
+    }
+    $("#confirm-preflight-btn").disabled = action !== "restart";
+    renderActionConfirm();
+  } catch (e) {
+    $("#confirm-body").innerHTML = `<span class="bad">Failed to load context: ${esc(e.message)}</span>`;
+  }
+
+  return new Promise((resolve) => {
+    confirmResolve = resolve;
+    dlg.oncancel = () => closeActionConfirm(false);
+    dlg.showModal();
+  });
+}
+
+function closeActionConfirm(ok) {
+  const dlg = $("#action-confirm");
+  if (dlg && dlg.open) dlg.close();
+  const resolve = confirmResolve;
+  confirmResolve = null;
+  confirmCtx = null;
+  if (resolve) resolve(!!ok);
+}
+
+function renderActionConfirm() {
+  const ctx = confirmCtx || {};
+  const d = ctx.detail || {};
+  const activeLocks = (d.locks || []).filter((l) => l.state === "active");
+  const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
+  const unresolved = (d.processes || []).filter((p) => !p.exe_resolved);
+  const ev = ctx.lastEvent;
+  const pre = ctx.preflight;
+  const preState = ctx.action === "restart"
+    ? pre ? (pre.ok ? '<span class="ok">OK</span>' : '<span class="bad">FAIL</span>') : '<span class="inactive">not run in this dialog</span>'
+    : '<span class="muted">not required for stop</span>';
+  const lockLine = activeLocks.length
+    ? `<span class="bad">${activeLocks.length} active</span> <span class="muted">(${activeLocks.map((l) => esc(l.name || "default")).join(", ")})</span>`
+    : '<span class="ok">none active</span>';
+  const checksLine = failingChecks.length
+    ? `<span class="bad">${failingChecks.length} required check${failingChecks.length === 1 ? "" : "s"} failing</span>`
+    : '<span class="ok">no required check failures observed</span>';
+  const procLine = `${(d.processes || []).length} discovered${unresolved.length ? ` <span class="inactive">· ${unresolved.length} unresolved exe</span>` : ""}`;
+  const lastEvent = ev
+    ? `${esc(fmtTime(ev.time))} · <span class="kind kind-${esc(ev.kind)}">${esc(ev.kind || "")}</span> ${esc([ev.action, ev.status].filter(Boolean).join(" "))} <span class="muted">${esc(ev.message || "")}</span>`
+    : '<span class="muted">none recorded</span>';
+  const preRows = pre ? `<div style="margin-top:.65rem">${preflightRows(pre.checks || [])}</div>` : "";
+  const warning = ctx.action === "restart"
+    ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
+    : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
+
+  $("#confirm-body").innerHTML = `
+    <p style="margin-top:0">${esc(warning)}</p>
+    <div class="modal-grid">
+      <div class="muted">Backend</div><div>${esc(d.backend || "unknown")}</div>
+      <div class="muted">Unit</div><div><code>${esc(d.unit || "")}</code></div>
+      <div class="muted">Status</div><div class="status ${esc((d.status || "unknown").toLowerCase())}">${esc(d.status || "unknown")}</div>
+      <div class="muted">Monitoring</div><div>${d.monitored ? "monitored" : "paused"}${d.enabled === false ? ' <span class="bad">disabled</span>' : ""}</div>
+      <div class="muted">Named locks</div><div>${lockLine}</div>
+      <div class="muted">Guards</div><div><span class="muted">evaluated by the operation engine before ${esc(ctx.action || "action")}</span></div>
+      <div class="muted">Preflight</div><div>${preState}</div>
+      <div class="muted">Checks</div><div>${checksLine}</div>
+      <div class="muted">Processes</div><div>${procLine}</div>
+      <div class="muted">Last event</div><div>${lastEvent}</div>
+    </div>
+    ${preRows}`;
+}
+
+async function runConfirmPreflight() {
+  if (!confirmCtx) return;
+  $("#confirm-preflight-btn").disabled = true;
+  $("#confirm-preflight-btn").textContent = "running…";
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(confirmCtx.name)}/preflight`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    confirmCtx.preflight = await res.json();
+    renderActionConfirm();
+  } catch (e) {
+    confirmCtx.preflight = { ok: false, checks: [{ name: "preflight", ok: false, message: e.message }] };
+    renderActionConfirm();
+  } finally {
+    $("#confirm-preflight-btn").textContent = "run preflight";
+    $("#confirm-preflight-btn").disabled = confirmCtx.action !== "restart";
+  }
 }
 
 let current = null;
