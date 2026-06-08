@@ -3,6 +3,7 @@ package execx
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -167,4 +168,63 @@ func TestPackageRun(t *testing.T) {
 			t.Errorf("parent deadline was not effective (took %v)", elapsed)
 		}
 	})
+}
+
+func TestCommandRunnerRunEnv(t *testing.T) {
+	t.Run("custom env is passed to command", func(t *testing.T) {
+		res, err := CommandRunner{}.RunEnv(context.Background(),
+			[]string{"CUSTOM_VAR=from_test", "PATH=/bin"},
+			"sh", "-c", "printf %s $CUSTOM_VAR")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Stdout != "from_test" {
+			t.Errorf("stdout = %q, want from_test (custom env was not used)", res.Stdout)
+		}
+	})
+
+	t.Run("nil env inherits process environment (like normal Run)", func(t *testing.T) {
+		// We set a unique var in the test process and verify the child sees it.
+		unique := "SERMO_TEST_HOOK_ENV_" + time.Now().Format("20060102150405")
+		os.Setenv(unique, "inherited")
+		defer os.Unsetenv(unique)
+
+		res, err := CommandRunner{}.RunEnv(context.Background(), nil, "sh", "-c", "printf %s $"+unique)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.Stdout != "inherited" {
+			t.Errorf("stdout = %q, want inherited (nil env should inherit)", res.Stdout)
+		}
+	})
+}
+
+func TestPackageRunEnv(t *testing.T) {
+	t.Run("applies timeout and custom env", func(t *testing.T) {
+		env := []string{"HOOK_VAR=hook_value"}
+		start := time.Now()
+		_, err := RunEnv(context.Background(), CommandRunner{}, env, 40*time.Millisecond, "sleep", "1")
+		if err == nil {
+			t.Fatal("expected timeout")
+		}
+		if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+			t.Errorf("timeout was not effective")
+		}
+	})
+
+	t.Run("rejects runners that do not implement EnvRunner", func(t *testing.T) {
+		// A minimal runner that only implements Runner, not EnvRunner.
+		basic := basicRunner{}
+		_, err := RunEnv(context.Background(), basic, nil, 0, "echo", "hi")
+		if err == nil || !strings.Contains(err.Error(), "does not support custom environment") {
+			t.Errorf("expected error about missing EnvRunner support, got: %v", err)
+		}
+	})
+}
+
+// basicRunner is a test double that only satisfies Runner (not EnvRunner).
+type basicRunner struct{}
+
+func (basicRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
+	return Result{}, nil
 }
