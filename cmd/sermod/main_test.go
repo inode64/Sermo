@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/metrics"
 )
 
@@ -69,6 +70,7 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	deps := app.Deps{
 		DefaultTimeout: 10 * time.Second,
 		Interval:       30 * time.Second,
+		ExecxRunner:    execx.CommandRunner{},
 	}
 	workers, workerWarns := app.BuildWorkers(cfg, deps, collector)
 	watches, watchWarns := app.BuildWatches(cfg, deps, deps.Interval)
