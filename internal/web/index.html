@@ -91,6 +91,12 @@
   #event-controls input[type="text"] { font:inherit; padding:.2rem .5rem; border-radius:.35rem; border:1px solid #8886; background:#8881; width:8.5rem; }
   .event-group td { background:#8881; font-weight:600; }
   .event-msg button { margin-left:.35rem; padding:.05rem .35rem; font-size:.8rem; }
+  .spark { width:9rem; min-height:2.15rem; }
+  .spark svg { display:block; width:9rem; height:1.45rem; }
+  .spark .v { font-variant-numeric:tabular-nums; font-size:.82rem; }
+  .spark.degraded .v { color:#cf222e; font-weight:600; }
+  .spark.warn .v { color:#9a6700; font-weight:600; }
+  #sla-range button.f-active { background:#8883; font-weight:600; }
 </style>
 </head>
 <body>
@@ -131,11 +137,17 @@
       <button data-f="monitored" onclick="setSvcStatus('monitored')">monitored</button>
       <button data-f="unmonitored" onclick="setSvcStatus('unmonitored')">unmonitored</button>
     </span>
+    <span id="sla-range" class="muted">SLA
+      <button data-w="1h" onclick="setSlaRange('1h')">1h</button>
+      <button data-w="24h" class="f-active" onclick="setSlaRange('24h')">24h</button>
+      <button data-w="168h" onclick="setSlaRange('168h')">7d</button>
+      <button data-w="720h" onclick="setSlaRange('720h')">30d</button>
+    </span>
     <span id="svc-count" class="muted"></span>
   </div>
   <table>
     <thead>
-      <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th class="actions">Actions</th></tr>
+      <tr><th>Service</th><th>Status</th><th>Checks</th><th>SLA</th><th>Monitoring</th><th class="actions">Actions</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
@@ -581,11 +593,79 @@ function checkHealthCell(s) {
   return '<span class="muted">—</span>';
 }
 
+function summarizeSLA(points) {
+  const pts = (points || []).filter((p) => p && p.total > 0);
+  if (!pts.length) return { ratio: null, recent: null, previous: null, degraded: false };
+  const totals = (list) => list.reduce((a, p) => ({ up: a.up + (p.up || 0), total: a.total + (p.total || 0) }), { up: 0, total: 0 });
+  const all = totals(pts);
+  const part = Math.max(1, Math.ceil(pts.length / 4));
+  const recentTotals = totals(pts.slice(-part));
+  const prevTotals = totals(pts.slice(-part * 2, -part));
+  const ratio = all.total ? all.up / all.total : null;
+  const recent = recentTotals.total ? recentTotals.up / recentTotals.total : null;
+  const previous = prevTotals.total ? prevTotals.up / prevTotals.total : null;
+  return {
+    ratio,
+    recent,
+    previous,
+    degraded: recent != null && previous != null && previous - recent >= 0.02,
+  };
+}
+
+function drawSpark(points) {
+  const pts = (points || []).filter((p) => p && p.total > 0).slice(-48);
+  if (!pts.length) return '<span class="muted">no data</span>';
+  const W = 144, H = 24, pad = 2;
+  const bw = (W - pad * 2) / pts.length;
+  const bars = pts.map((p, i) => {
+    const ratio = p.total ? p.up / p.total : 0;
+    const h = Math.max(1, ratio * (H - pad * 2));
+    const x = pad + i * bw;
+    const y = H - pad - h;
+    const color = ratio >= 0.99 ? "#1a7f37" : ratio >= 0.95 ? "#9a6700" : "#cf222e";
+    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw - 0.5, 1).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"></rect>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${bars}</svg>`;
+}
+
+function slaCell(name) {
+  const entry = slaCache.get(name);
+  if (!entry) return `<div class="spark muted" id="sla-${esc(name)}">loading…</div>`;
+  if (entry.error) return `<div class="spark muted" id="sla-${esc(name)}">unavailable</div>`;
+  const s = summarizeSLA(entry.points || []);
+  const pct = s.ratio == null ? "n/a" : (s.ratio * 100).toFixed(2) + "%";
+  const recent = s.recent == null ? "" : ` recent ${(s.recent * 100).toFixed(1)}%`;
+  const cls = s.degraded ? "degraded" : (s.ratio != null && s.ratio < 0.99 ? "warn" : "");
+  const title = s.degraded ? `Degraded: recent ${(s.recent * 100).toFixed(1)}% vs prior ${(s.previous * 100).toFixed(1)}%` : "";
+  return `<div class="spark ${cls}" id="sla-${esc(name)}" title="${esc(title)}">${drawSpark(entry.points || [])}<div class="v">${esc(pct)}${s.degraded ? ' <span class="bad">drop</span>' : recent ? `<span class="muted">${esc(recent)}</span>` : ""}</div></div>`;
+}
+
+async function loadVisibleSLA(names) {
+  const now = Date.now();
+  const missing = names.filter((n) => {
+    const cached = slaCache.get(n);
+    return n && (!cached || (now - (cached.ts || 0)) > 60000);
+  });
+  await Promise.all(missing.slice(0, 12).map(async (name) => {
+    try {
+      const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${slaRange}`);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const body = await res.json();
+      slaCache.set(name, { points: body.points || [], ts: Date.now() });
+    } catch (e) {
+      slaCache.set(name, { error: e.message || "failed", ts: Date.now() });
+    }
+  }));
+  if (missing.length) renderServices();
+}
+
 // Service list state: latest fetched data plus the active search/status filter,
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
+let slaRange = "24h";
+let slaCache = new Map();
 let allWatches = [];
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
@@ -814,6 +894,16 @@ function setSvcStatus(v) {
   renderServices();
 }
 
+function setSlaRange(win) {
+  slaRange = win;
+  seriesWindow = win;
+  document.querySelectorAll("#sla-range button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.w === win));
+  slaCache.clear();
+  renderServices();
+  if (current) loadSeries(current);
+}
+
 // render receives fresh data on each refresh; cache it, then render through the
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
@@ -864,19 +954,21 @@ function renderServices() {
       <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div>${busyText}</td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
+      <td>${slaCell(s.name)}</td>
       <td>${mon}</td>
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="5">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="6">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
   const empty = (allServices || []).length
-    ? `<tr><td colspan="5" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="5" class="muted">No services.</td></tr>`;
+    ? `<tr><td colspan="6" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="6" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows.join("") || empty;
   renderAttention();
+  loadVisibleSLA(list.slice(0, 12).map((s) => s.name));
   expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
 }
 
@@ -1474,7 +1566,7 @@ function renderDetail(d) {
       <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td></tr>`;
   }).join("") || `<tr><td colspan="7" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
 
-  const wins = winButtons([["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
+  const wins = winButtons([["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
   // Latency graph: only checks whose type records a measurement (like icmp).
   const measured = (d.checks || []).filter((c) => metricTypes.includes(c.type));
@@ -1534,6 +1626,7 @@ function renderDetail(d) {
     <h2>Availability</h2>
     <div class="sla">${sla}</div>
     <h2>History <span class="muted">${wins}</span></h2>
+    <div id="chart-summary" class="muted">loading…</div>
     <div id="chart" class="muted">loading…</div>
     ${latency}
     <h2>Recent events</h2>
@@ -1637,7 +1730,13 @@ async function loadServiceEvents(name) {
 let seriesWindow = "24h";
 const windowMs = { "1h": 36e5, "24h": 864e5, "168h": 6048e5, "720h": 2592e6, "8760h": 3.1536e10 };
 
-function setWin(win) { seriesWindow = win; if (current) detail(current); }
+function setWin(win) {
+  seriesWindow = win;
+  slaRange = win;
+  document.querySelectorAll("#sla-range button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.w === win));
+  if (current) detail(current);
+}
 
 // Latency graph state: the selected measured check and its window.
 let metricCheck = "";
@@ -1708,9 +1807,18 @@ async function loadSeries(name) {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${seriesWindow}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
-    $("#chart").innerHTML = drawChart(body.points || []);
+    const points = body.points || [];
+    const s = summarizeSLA(points);
+    const total = s.ratio == null ? "n/a" : (s.ratio * 100).toFixed(2) + "%";
+    const recent = s.recent == null ? "n/a" : (s.recent * 100).toFixed(2) + "%";
+    const prior = s.previous == null ? "n/a" : (s.previous * 100).toFixed(2) + "%";
+    $("#chart-summary").innerHTML = s.degraded
+      ? `<span class="bad">recent degradation</span> · total <b>${esc(total)}</b> · recent ${esc(recent)} · prior ${esc(prior)}`
+      : `total <b>${esc(total)}</b> · recent ${esc(recent)} · prior ${esc(prior)}`;
+    $("#chart").innerHTML = drawChart(points);
     $("#chart").classList.remove("muted");
   } catch (e) {
+    $("#chart-summary").textContent = "";
     $("#chart").textContent = "Failed to load history: " + e.message;
   }
 }
