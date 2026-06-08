@@ -142,6 +142,23 @@ func (c *Collector) SampleSystem() Snapshot {
 		snap["load15"] = Reading{Absolute: l15, HasAbsolute: true, Ready: true}
 	}
 
+	// Swap is optional: only readers that implement TotalSwap contribute it, and
+	// only when a swap device exists (total > 0). Percent is always computed so a
+	// 0%-used swap still reports a value.
+	if sr, ok := c.Reader.(interface {
+		TotalSwap() (total, used uint64, ok bool)
+	}); ok {
+		if total, used, ok := sr.TotalSwap(); ok && total > 0 {
+			snap["total_swap"] = Reading{
+				Absolute:    float64(used),
+				HasAbsolute: true,
+				Percent:     float64(used) / float64(total) * 100,
+				HasPercent:  true,
+				Ready:       true,
+			}
+		}
+	}
+
 	c.lastSystem = snap
 	c.lastSystemA = now
 	return snap

@@ -81,6 +81,28 @@ func (OSReader) TotalMemory() (total, used uint64, ok bool) {
 	return memTotal, memTotal - memAvail, true
 }
 
+// TotalSwap reads SwapTotal and SwapFree from /proc/meminfo. used = total - free.
+func (OSReader) TotalSwap() (total, used uint64, ok bool) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0, false
+	}
+	var swapTotal, swapFree uint64
+	var haveTotal, haveFree bool
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case strings.HasPrefix(line, "SwapTotal:"):
+			swapTotal, haveTotal = parseMeminfoKB(line)
+		case strings.HasPrefix(line, "SwapFree:"):
+			swapFree, haveFree = parseMeminfoKB(line)
+		}
+	}
+	if !haveTotal || !haveFree || swapTotal < swapFree {
+		return 0, 0, false
+	}
+	return swapTotal, swapTotal - swapFree, true
+}
+
 // SystemCPU reads the aggregate cpu line of /proc/stat. busy excludes idle and
 // iowait; total is the sum of all fields.
 func (OSReader) SystemCPU() (busy, total uint64, ok bool) {

@@ -506,7 +506,7 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 
 	out := make([]web.HostMetric, 0, len(snap))
 	// Nice display order
-	order := []string{"load1", "load5", "load15", "total_cpu", "total_memory"}
+	order := []string{"load1", "load5", "load15", "total_cpu", "total_memory", "total_swap"}
 	seen := map[string]bool{}
 	for _, k := range order {
 		if r, ok := snap[k]; ok {
@@ -517,7 +517,7 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 			if r.HasAbsolute {
 				m.Absolute = r.Absolute
 			}
-			if k == "total_memory" {
+			if k == "total_memory" || k == "total_swap" {
 				m.Unit = "bytes"
 			}
 			out = append(out, m)
