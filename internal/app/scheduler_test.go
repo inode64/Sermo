@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/execx"
 	"sermo/internal/operation"
 )
 
@@ -231,5 +232,72 @@ func TestGateOperateReturnsOnShutdown(t *testing.T) {
 	res := w.Operate(ctx, "restart")
 	if res.Status != operation.ResultFailed || res.Message != "shutting down" {
 		t.Fatalf("result = %+v, want failed/shutting down", res)
+	}
+}
+
+// fakeEnvRunnerForScheduler verifies custom runner injection from scheduler -> watch -> hook.
+type fakeEnvRunnerForScheduler struct {
+	calls []struct {
+		env  []string
+		name string
+		args []string
+	}
+}
+
+func (f *fakeEnvRunnerForScheduler) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
+	return execx.Result{}, nil
+}
+func (f *fakeEnvRunnerForScheduler) RunEnv(ctx context.Context, env []string, name string, args ...string) (execx.Result, error) {
+	f.calls = append(f.calls, struct {
+		env  []string
+		name string
+		args []string
+	}{env, name, args})
+	return execx.Result{ExitCode: 0}, nil
+}
+
+func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
+	fake := &fakeEnvRunnerForScheduler{}
+	w := &Watch{
+		Name:       "disk-root",
+		Check:      stubCheck{name: "disk", ok: true},
+		Interval:   10 * time.Millisecond,
+		Runner:     OSHookRunner{Runner: fake},
+		Hook:       HookSpec{Command: []string{"/bin/custom-hook", "--alert"}, Timeout: 5 * time.Second},
+		FireOnFail: false,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		Scheduler{Interval: 10 * time.Millisecond}.Run(ctx, nil, []*Watch{w}, nil, nil, true)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("scheduler did not stop in time")
+	}
+
+	if len(fake.calls) == 0 {
+		t.Fatal("expected at least one call to custom execx runner from watch hook")
+	}
+	call := fake.calls[0]
+	if call.name != "/bin/custom-hook" || len(call.args) != 1 || call.args[0] != "--alert" {
+		t.Fatalf("bad argv: %s %v", call.name, call.args)
+	}
+	// Verify specific env from the stub check data
+	found := false
+	for _, e := range call.env {
+		if e == "SERMO_WATCH=disk-root" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("custom runner did not receive expected SERMO_WATCH env: %v", call.env)
 	}
 }
