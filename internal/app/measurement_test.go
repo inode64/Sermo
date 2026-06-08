@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/execx"
 )
 
 type fakeMeasureStore struct {
@@ -43,7 +44,7 @@ func TestMeasurementRecorderOnlyMeasuredChecks(t *testing.T) {
 		"web":   map[string]any{"type": "http"},
 		"space": map[string]any{"type": "disk"},
 	}}
-	deps := Deps{SLA: store, Now: func() time.Time { return time.Unix(0, 0) }}
+	deps := Deps{SLA: store, Now: func() time.Time { return time.Unix(0, 0) }, ExecxRunner: execx.CommandRunner{}}
 
 	record := measurementRecorder(deps, "svc", tree)
 	if record == nil {
@@ -60,7 +61,7 @@ func TestMeasurementRecorderOnlyMeasuredChecks(t *testing.T) {
 func TestMeasurementRecorderNilWithoutMeasuredChecks(t *testing.T) {
 	store := &fakeMeasureStore{}
 	tree := map[string]any{"checks": map[string]any{"space": map[string]any{"type": "disk"}}}
-	if measurementRecorder(Deps{SLA: store}, "svc", tree) != nil {
+	if measurementRecorder(Deps{SLA: store, ExecxRunner: execx.CommandRunner{}}, "svc", tree) != nil {
 		t.Fatal("expected nil recorder when no checks are measured")
 	}
 }

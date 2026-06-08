@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	web "sermo/internal/web"
@@ -263,7 +264,7 @@ checks:
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	b, warnings := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}})
+	b, warnings := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}

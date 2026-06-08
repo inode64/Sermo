@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
 )
 
 func writeWebProcessConfig(t *testing.T, pidfile string) *config.Config {
@@ -54,7 +55,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 	}
 	cfg := writeWebProcessConfig(t, pidfile)
 
-	wb, warnings := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}})
+	wb, warnings := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 	if len(warnings) > 0 {
 		t.Fatalf("NewWebBackend warnings: %v", warnings)
 	}
@@ -85,7 +86,7 @@ func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 
 func TestWebBackendDetailProcessesNone(t *testing.T) {
 	cfg := writeWebProcessConfig(t, "/nonexistent/pidfile.pid")
-	wb, _ := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}})
+	wb, _ := NewWebBackend(cfg, Deps{Backend: "systemd", Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
 
 	detail, ok := wb.Detail(context.Background(), "mysql-main")
 	if !ok {
