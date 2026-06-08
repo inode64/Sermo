@@ -1,7 +1,7 @@
 kind: profile
 name: lvm
 display_name: "LVM"
-service: { name: "lvm" }
+service: lvm
 variables:
   binary: "/sbin/lvm"
 preflight:

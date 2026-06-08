@@ -139,8 +139,8 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 		}
 
 		base := config.ServiceUnit(resolved.Tree, name)
-		aliases := config.UnitAliases(resolved.Tree, string(deps.Backend))
-		unit, err := resolver.Resolve(context.Background(), deps.Backend, base, aliases)
+		candidates, trust := config.ServiceCandidates(resolved.Tree, string(deps.Backend), name)
+		unit, err := resolver.Resolve(context.Background(), deps.Backend, candidates, trust)
 		if err != nil {
 			warnings = append(warnings, "service "+name+": "+err.Error()+" (using "+base+")")
 			unit = base

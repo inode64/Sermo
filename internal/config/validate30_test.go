@@ -684,17 +684,27 @@ commands:
 	}
 }
 
-func TestValidateAliases(t *testing.T) {
+func TestValidateServiceField(t *testing.T) {
+	// Per-init form: an unknown init key and an empty list are flagged.
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
-aliases:
+service:
   upstart: [foo]
-  openrc: []
+  systemd: []
 `)
-	mustHave(t, issues, `aliases key "upstart" is not a valid backend`)
-	mustHave(t, issues, "aliases.openrc must be a non-empty list")
+	mustHave(t, issues, `service key "upstart" is not one of systemd, openrc, name`)
+	mustHave(t, issues, "service.systemd must be a non-empty list")
+
+	// Mixing the legacy name with per-init lists is rejected.
+	mixed := validateService(t, `
+kind: service
+name: svc
+service:
+  name: x
+  systemd: [x]
+`)
+	mustHave(t, mixed, "service must not mix name with systemd/openrc")
 }
 
 func TestValidateCleanServicePasses(t *testing.T) {

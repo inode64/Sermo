@@ -386,9 +386,8 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		return operation.Result{}, fmt.Errorf("service manager unavailable: %v", err)
 	}
 
-	base := config.ServiceUnit(resolved.Tree, service)
-	aliases := config.UnitAliases(resolved.Tree, string(detection.Backend))
-	unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, base, aliases)
+	candidates, trust := config.ServiceCandidates(resolved.Tree, string(detection.Backend), service)
+	unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, candidates, trust)
 	if err != nil {
 		return operation.Result{}, err
 	}
@@ -698,7 +697,7 @@ func (a App) printPreflight(service string, outcome checks.Outcome) {
 }
 
 // statusFunc builds a lazy backend status query for `service` checks; it only
-// detects the backend and resolves the unit (aliases, section 11) when a service
+// detects the backend and resolves the unit (service candidates, section 11) when a service
 // check actually runs.
 func (a App) statusFunc(opts options, tree map[string]any, base string) func(context.Context) (servicemgr.Status, error) {
 	return func(ctx context.Context) (servicemgr.Status, error) {
@@ -710,8 +709,8 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 		if err != nil {
 			return "", err
 		}
-		aliases := config.UnitAliases(tree, string(detection.Backend))
-		unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, base, aliases)
+		candidates, trust := config.ServiceCandidates(tree, string(detection.Backend), base)
+		unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, candidates, trust)
 		if err != nil {
 			return "", err
 		}

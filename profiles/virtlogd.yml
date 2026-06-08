@@ -1,7 +1,7 @@
 kind: profile
 name: virtlogd
 display_name: "libvirt Log Daemon"
-service: { name: "virtlogd" }
+service: virtlogd
 variables:
   binary: "/usr/sbin/virtlogd"
 preflight:

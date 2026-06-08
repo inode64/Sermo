@@ -1,7 +1,7 @@
 kind: profile
 name: pptpd
 display_name: "PPTP Server"
-service: { name: "pptpd" }
+service: pptpd
 variables:
   binary: "/usr/sbin/pptpd"
 preflight:

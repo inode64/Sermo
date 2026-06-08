@@ -2,7 +2,7 @@ kind: profile
 name: lldpd
 display_name: "LLDP Daemon"
 description: "Link Layer Discovery Protocol"
-service: { name: "lldpd" }
+service: lldpd
 variables:
   binary: "/usr/sbin/lldpd"
 preflight:

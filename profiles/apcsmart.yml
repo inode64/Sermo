@@ -1,7 +1,7 @@
 kind: profile
 name: apcsmart
 display_name: "APC Smart UPS Driver"
-service: { name: "apcsmart" }
+service: apcsmart
 variables:
   binary: "/lib/nut/apcsmart"
 preflight:

@@ -44,7 +44,7 @@ func TestResolveSystemdPicksFirstKnownAlias(t *testing.T) {
 		"systemctl cat -- httpd.service":   {exit: 0},
 	}, nil)
 
-	unit, err := r.Resolve(context.Background(), BackendSystemd, "apache2", []string{"httpd.service"})
+	unit, err := r.Resolve(context.Background(), BackendSystemd, []string{"apache2", "httpd.service"}, false)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -55,7 +55,7 @@ func TestResolveSystemdPicksFirstKnownAlias(t *testing.T) {
 
 func TestResolveSystemdNormalizesBareName(t *testing.T) {
 	r := resolver(map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, nil)
-	unit, err := r.Resolve(context.Background(), BackendSystemd, "mysql", nil)
+	unit, err := r.Resolve(context.Background(), BackendSystemd, []string{"mysql"}, true)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -68,7 +68,7 @@ func TestResolveSystemdNoAliasesTrustsName(t *testing.T) {
 	// service.name is unknown to systemctl cat, but with no aliases the resolver
 	// trusts it rather than failing (sysv-generated units, etc.).
 	r := resolver(map[string]execxResultErr{"systemctl cat -- weird.service": {exit: 4}}, nil)
-	unit, err := r.Resolve(context.Background(), BackendSystemd, "weird", nil)
+	unit, err := r.Resolve(context.Background(), BackendSystemd, []string{"weird"}, true)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -82,7 +82,7 @@ func TestResolveSystemdAliasesNoneResolveFails(t *testing.T) {
 		"systemctl cat -- apache2.service": {exit: 1},
 		"systemctl cat -- httpd.service":   {exit: 1},
 	}, nil)
-	_, err := r.Resolve(context.Background(), BackendSystemd, "apache2", []string{"httpd.service"})
+	_, err := r.Resolve(context.Background(), BackendSystemd, []string{"apache2", "httpd.service"}, false)
 	if err == nil {
 		t.Fatal("Resolve() error = nil, want failure listing candidates")
 	}
@@ -91,7 +91,7 @@ func TestResolveSystemdAliasesNoneResolveFails(t *testing.T) {
 func TestResolveOpenRCByInitScript(t *testing.T) {
 	// apache absent, apache2 has an init script.
 	r := resolver(nil, map[string]bool{"/etc/init.d/apache2": true})
-	unit, err := r.Resolve(context.Background(), BackendOpenRC, "apache", []string{"apache2"})
+	unit, err := r.Resolve(context.Background(), BackendOpenRC, []string{"apache", "apache2"}, false)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -158,7 +158,7 @@ func TestResolveDeduplicatesCandidates(t *testing.T) {
 	// service.name repeated in aliases is probed once.
 	rr := scriptRunner{results: map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, calls: map[string]int{}}
 	r := UnitResolver{Runner: rr, Probe: fakeProbe{}}
-	if _, err := r.Resolve(context.Background(), BackendSystemd, "mysql", []string{"mysql.service", "mysql"}); err != nil {
+	if _, err := r.Resolve(context.Background(), BackendSystemd, []string{"mysql", "mysql.service", "mysql"}, false); err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	if rr.calls["systemctl cat -- mysql.service"] != 1 {
