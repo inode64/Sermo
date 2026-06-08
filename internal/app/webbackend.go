@@ -3,8 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -441,6 +444,11 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	info := web.DaemonInfo{}
 
+	if h, err := os.Hostname(); err == nil {
+		info.Hostname = h
+	}
+	info.OS = osPrettyName()
+
 	if b.cfg != nil {
 		g := b.cfg.Global
 		info.ConfigPath = g.Path
@@ -466,6 +474,25 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	}
 
 	return info
+}
+
+// osPrettyName returns a human-friendly OS label (PRETTY_NAME from os-release on
+// Linux, e.g. "Debian GNU/Linux 12 (bookworm)"), falling back to runtime.GOOS.
+func osPrettyName() string {
+	for _, path := range []string{"/etc/os-release", "/usr/lib/os-release"} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "PRETTY_NAME="); ok {
+				if name := strings.Trim(v, `"'`); name != "" {
+					return name
+				}
+			}
+		}
+	}
+	return runtime.GOOS
 }
 
 func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {

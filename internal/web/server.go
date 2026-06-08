@@ -70,6 +70,8 @@ type Notifier struct {
 // behavior without reading the config file.
 type DaemonInfo struct {
 	Backend               string `json:"backend,omitempty"`
+	Hostname              string `json:"hostname,omitempty"`
+	OS                    string `json:"os,omitempty"`
 	ConfigPath            string `json:"config_path,omitempty"`
 	RuntimeDir            string `json:"runtime_dir,omitempty"`
 	StateDir              string `json:"state_dir,omitempty"`
