@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -995,13 +994,17 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	if pid == 0 {
 		// Fallback: ask the system for a sermod pid (best effort, one pid).
 		// We try pidof first (common on systemd systems), then pgrep.
+		// Probes are bounded by a short timeout and go through the App's execx
+		// Runner (every external command must have a timeout; see AGENTS.md).
 		for _, probe := range [][]string{
 			{"pidof", "-s", "sermod"},
 			{"pgrep", "-x", "-n", "sermod"},
 		} {
-			out, err := exec.Command(probe[0], probe[1:]...).Output() //nolint:gosec // G204: fixed internal probe commands (systemctl/rc-status/pgrep)
+			probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			res, err := a.Runner.Run(probeCtx, probe[0], probe[1:]...)
+			cancel()
 			if err == nil {
-				if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n > 0 {
+				if n, err := strconv.Atoi(strings.TrimSpace(res.Stdout)); err == nil && n > 0 {
 					pid = n
 					break
 				}
