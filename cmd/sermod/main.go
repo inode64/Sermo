@@ -1,3 +1,4 @@
+// Command sermod is the Sermo monitoring daemon.
 package main
 
 import (
@@ -110,15 +111,15 @@ func run(args []string) int {
 	interval := app.EngineInterval(cfg, 30*time.Second)
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
 	deps := app.Deps{
-		Backend:        detection.Backend,
-		Manager:        manager,
-		Runtime:        cfg.Global.RuntimeDir(),
-		Interval:       interval,
+		Backend:          detection.Backend,
+		Manager:          manager,
+		Runtime:          cfg.Global.RuntimeDir(),
+		Interval:         interval,
 		DefaultTimeout:   app.EngineDuration(cfg, "default_timeout", 10*time.Second),
 		OperationTimeout: app.EngineDuration(cfg, "operation_timeout", 90*time.Second),
-		MaxParallel:    app.EngineInt(cfg, "max_parallel_checks", 8),
-		Sleep:          time.Sleep,
-		Now:            time.Now,
+		MaxParallel:      app.EngineInt(cfg, "max_parallel_checks", 8),
+		Sleep:            time.Sleep,
+		Now:              time.Now,
 		// Events go to slog and to the in-memory log the web UI reads.
 		Emit:            app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
 		Monitor:         store,
@@ -186,7 +187,7 @@ func run(args []string) int {
 			pidDir = "/run/sermo"
 		}
 		pidPath := filepath.Join(pidDir, "sermod.pid")
-		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { //nolint:gosec // G306: pidfile is intentionally world-readable (0644)
 			logger.Warn("write pidfile failed (reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
 		} else {
 			// Best effort cleanup on normal exit (init systems may manage their own).

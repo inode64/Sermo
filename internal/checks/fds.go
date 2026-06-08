@@ -93,11 +93,11 @@ func defaultFdsSampler() (FdsSample, error) {
 		return FdsSample{}, fmt.Errorf("malformed /proc/sys/fs/file-nr")
 	}
 	alloc, e1 := strconv.ParseUint(fields[0], 10, 64)
-	max, e3 := strconv.ParseUint(fields[2], 10, 64)
+	maxFds, e3 := strconv.ParseUint(fields[2], 10, 64)
 	if e1 != nil || e3 != nil {
 		return FdsSample{}, fmt.Errorf("malformed /proc/sys/fs/file-nr")
 	}
-	return FdsSample{Allocated: alloc, Max: max}, nil
+	return FdsSample{Allocated: alloc, Max: maxFds}, nil
 }
 
 // parseFdsPreds reads the used_pct/free/allocated predicates of an fds check. At

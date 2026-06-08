@@ -108,7 +108,7 @@ func (a App) cloneService(opts options, cfg *config.Config, source, target strin
 	dir := cfg.Global.Enabled[0]
 	path := filepath.Join(dir, target+".yml")
 	content := fmt.Sprintf("kind: service\nname: %s\nclone: %s\n", target, source)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: generated profile YAML is non-sensitive (0644)
 		a.reportError(opts, fmt.Sprintf("write %s: %v", path, err))
 		return exitRuntimeError
 	}

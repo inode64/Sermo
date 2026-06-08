@@ -377,6 +377,7 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, moni
 	return 0, "ok"
 }
 
+// Services returns the web view of every configured service.
 func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
 	for _, name := range b.order {
@@ -385,6 +386,7 @@ func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	return out
 }
 
+// Watches returns the configured host watches, including disabled ones.
 func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 	if len(b.watchOrder) == 0 {
 		return nil
@@ -420,6 +422,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 	return out
 }
 
+// Notifiers returns the configured notification targets.
 func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 	if len(b.notifierOrder) == 0 {
 		return nil
@@ -438,6 +441,7 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 	return out
 }
 
+// DaemonInfo returns the daemon's effective configuration and host identity.
 func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	info := web.DaemonInfo{}
 
@@ -535,6 +539,7 @@ func osPrettyName() string {
 	return runtime.GOOS
 }
 
+// HostMetrics returns the current host-level readings from the collector.
 func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 	if b.collector == nil {
 		return nil
@@ -581,6 +586,7 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 	return out
 }
 
+// Locks returns the active and stale runtime locks across services.
 func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
 	var out []web.Lock
 	for _, name := range b.order {
@@ -599,6 +605,7 @@ func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
 	return out
 }
 
+// ActivitySummary returns a rollup of recent events for the dashboard.
 func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 	summary := web.ActivitySummary{}
 
@@ -634,6 +641,7 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 	return summary
 }
 
+// MonitoringStatus returns how many services are monitored versus paused.
 func (b *WebBackend) MonitoringStatus(ctx context.Context) web.MonitoringStatus {
 	svcs := b.Services(ctx) // this already includes the live Monitored flag from store
 	total := len(svcs)
@@ -650,6 +658,7 @@ func (b *WebBackend) MonitoringStatus(ctx context.Context) web.MonitoringStatus 
 	}
 }
 
+// Detail returns the full detail view for one service.
 func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	e := b.entries[name]
 	if e == nil {
@@ -792,6 +801,7 @@ func lockToWeb(lk locks.Lock, service string) web.Lock {
 	return w
 }
 
+// Series returns a service's SLA availability series over the window.
 func (b *WebBackend) Series(_ context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
 	e := b.entries[name]
 	if e == nil {
@@ -817,6 +827,7 @@ func (b *WebBackend) Series(_ context.Context, name string, since time.Duration)
 	return out, true
 }
 
+// Diagnostics runs configuration and host diagnostics and returns the findings.
 func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 	r := diag.Diagnose(b.cfg, b.diagStore, b.host)
 	out := make([]web.Finding, 0, len(r.Findings)+1)
@@ -864,6 +875,7 @@ func operationSlotFindings(inUse, total int) []web.Finding {
 	}}
 }
 
+// Operations returns current operation-slot usage.
 func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
 	if b.opGate == nil {
 		return web.OperationSlots{}
@@ -872,6 +884,7 @@ func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
 	return web.OperationSlots{InUse: inUse, Total: total}
 }
 
+// Metrics returns a check's measured metric series over the window.
 func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {
 	e := b.entries[name]
 	if e == nil {
@@ -904,6 +917,7 @@ func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.D
 	return out, true
 }
 
+// Events returns the most recent events, newest first.
 func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {
 	if b.events == nil {
 		return nil
@@ -911,6 +925,7 @@ func (b *WebBackend) Events(_ context.Context, limit int) []web.Event {
 	return toWebEvents(b.events.Recent("", limit))
 }
 
+// ServiceEvents returns one service's recent events.
 func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([]web.Event, bool) {
 	if _, ok := b.entries[name]; !ok {
 		return nil, false
@@ -938,6 +953,7 @@ func toWebEvents(events []LoggedEvent) []web.Event {
 	return out
 }
 
+// Operate runs a start/stop/restart/monitor action on a service.
 func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
@@ -985,6 +1001,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 	return web.ActionResult{OK: r.OK(), Message: msg}
 }
 
+// SetMonitored enables or disables monitoring for a service.
 func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool) error {
 	action := "monitor"
 	if !monitored {

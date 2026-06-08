@@ -1,3 +1,5 @@
+// Package servicemgr detects and controls the host service backend (systemd,
+// OpenRC, ...) used to query status and start/stop/restart services.
 package servicemgr
 
 import (

@@ -393,14 +393,14 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	discoverer := process.NewDiscoverer()
 	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(detection.Backend, unit)
 	engine := operation.New(operation.Config{
-		Service:    service,
-		Unit:       unit,
-		Backend:    string(detection.Backend),
-		Tree:       resolved.Tree,
-		Manager:    manager,
-		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(runtime, "locks")),
-		Discoverer: discoverer,
+		Service:          service,
+		Unit:             unit,
+		Backend:          string(detection.Backend),
+		Tree:             resolved.Tree,
+		Manager:          manager,
+		Locker:           &locker,
+		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
+		Discoverer:       discoverer,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
@@ -912,13 +912,13 @@ func (a App) reportError(opts options, msg string) {
 }
 
 type statusJSON struct {
-	Service            string `json:"service"`
-	Backend            string `json:"backend"`
-	Status             string `json:"status"`
-	Unit               string `json:"unit"`
-	Paused             bool   `json:"paused"`
-	MonitorSource      string `json:"monitor_source,omitempty"`
-	MonitorChangedAt   string `json:"monitor_changed_at,omitempty"`
+	Service          string `json:"service"`
+	Backend          string `json:"backend"`
+	Status           string `json:"status"`
+	Unit             string `json:"unit"`
+	Paused           bool   `json:"paused"`
+	MonitorSource    string `json:"monitor_source,omitempty"`
+	MonitorChangedAt string `json:"monitor_changed_at,omitempty"`
 }
 
 // defaultTimeout returns the per-command outer deadline used when --timeout is
@@ -992,7 +992,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 			{"pidof", "-s", "sermod"},
 			{"pgrep", "-x", "-n", "sermod"},
 		} {
-			out, err := exec.Command(probe[0], probe[1:]...).Output()
+			out, err := exec.Command(probe[0], probe[1:]...).Output() //nolint:gosec // G204: fixed internal probe commands (systemctl/rc-status/pgrep)
 			if err == nil {
 				if n, err := strconv.Atoi(strings.TrimSpace(string(out))); err == nil && n > 0 {
 					pid = n

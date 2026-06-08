@@ -11,7 +11,7 @@ import (
 // service may need: the configured engine timeout raised per service by
 // stop_policy (operation.ResolveTimeout).
 func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Duration {
-	max := operation.ResolveTimeout(configured, nil)
+	maxTO := operation.ResolveTimeout(configured, nil)
 	for _, name := range serviceNames(cfg) {
 		doc := cfg.Services[name]
 		if doc == nil || isDisabled(doc.Body) {
@@ -21,9 +21,9 @@ func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Dura
 		if len(errs) > 0 {
 			continue
 		}
-		if t := operation.ResolveTimeout(configured, resolved.Tree); t > max {
-			max = t
+		if t := operation.ResolveTimeout(configured, resolved.Tree); t > maxTO {
+			maxTO = t
 		}
 	}
-	return max
+	return maxTO
 }

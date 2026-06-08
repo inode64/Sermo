@@ -31,13 +31,13 @@ func (OSProcessProber) StartTicks(pid int) (uint64, bool) {
 		return 0, false
 	}
 	stat := string(data)
-	close := strings.LastIndex(stat, ")")
-	if close < 0 || close+1 >= len(stat) {
+	closeParen := strings.LastIndex(stat, ")")
+	if closeParen < 0 || closeParen+1 >= len(stat) {
 		return 0, false
 	}
 	// After ')', fields begin at field 3 (state); starttime (field 22) is the
 	// 20th of these (index 19).
-	fields := strings.Fields(stat[close+1:])
+	fields := strings.Fields(stat[closeParen+1:])
 	const startTimeIndex = 19
 	if len(fields) <= startTimeIndex {
 		return 0, false
