@@ -45,7 +45,11 @@ defaults:
 func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	global := repoConfigPath(t)
 
-	cfg, err := config.Load(global)
+	// The shipped config points paths.profiles at the installed /usr/share/sermo
+	// location, so override it to the source tree's profiles for this test —
+	// exactly what `sermod run --profiles ./profiles` does.
+	profiles := filepath.Join(filepath.Dir(filepath.Dir(global)), "profiles")
+	cfg, err := config.Load(global, config.WithProfilesDirs(profiles))
 	if err != nil {
 		t.Fatalf("Load(%q): %v", global, err)
 	}
@@ -76,18 +80,39 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 
 func TestParseArgsVerbose(t *testing.T) {
 	for _, flag := range []string{"--verbose", "-v"} {
-		cmd, path, verbose, err := parseArgs([]string{"run", flag, "--config", "/etc/sermo/sermo.yml"})
+		parsed, err := parseArgs([]string{"run", flag, "--config", "/etc/sermo/sermo.yml"})
 		if err != nil {
 			t.Fatalf("parseArgs(%q): %v", flag, err)
 		}
-		if cmd != "run" || path != "/etc/sermo/sermo.yml" || !verbose {
-			t.Fatalf("parseArgs(%q) = (%q, %q, %v), want (run, /etc/sermo/sermo.yml, true)", flag, cmd, path, verbose)
+		if parsed.command != "run" || parsed.globalPath != "/etc/sermo/sermo.yml" || !parsed.verbose {
+			t.Fatalf("parseArgs(%q) = %+v, want (run, /etc/sermo/sermo.yml, verbose)", flag, parsed)
 		}
 	}
 
 	// Verbose defaults off.
-	if _, _, verbose, err := parseArgs([]string{"run"}); err != nil || verbose {
-		t.Fatalf("parseArgs(run) verbose = %v, err = %v; want false, nil", verbose, err)
+	if parsed, err := parseArgs([]string{"run"}); err != nil || parsed.verbose {
+		t.Fatalf("parseArgs(run) verbose = %v, err = %v; want false, nil", parsed.verbose, err)
+	}
+}
+
+func TestParseArgsProfiles(t *testing.T) {
+	// Both spellings, repeatable, accumulate in order.
+	parsed, err := parseArgs([]string{"run", "--profiles", "/a", "--profiles=/b"})
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if got := parsed.profiles; len(got) != 2 || got[0] != "/a" || got[1] != "/b" {
+		t.Fatalf("profiles = %v, want [/a /b]", got)
+	}
+
+	// Defaults to none.
+	if parsed, err := parseArgs([]string{"run"}); err != nil || len(parsed.profiles) != 0 {
+		t.Fatalf("parseArgs(run) profiles = %v, err = %v; want empty, nil", parsed.profiles, err)
+	}
+
+	// Missing value is an error.
+	if _, err := parseArgs([]string{"run", "--profiles"}); err == nil {
+		t.Fatal("parseArgs(--profiles) without value: want error, got nil")
 	}
 }
 

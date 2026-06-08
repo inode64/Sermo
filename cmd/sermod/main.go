@@ -37,24 +37,25 @@ func run(args []string) int {
 			return 0
 		}
 	}
-	command, globalPath, verbose, err := parseArgs(args)
+	parsed, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--verbose|-v]")
+		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--profiles DIR ...] [--verbose|-v]")
 		fmt.Fprintln(os.Stderr, "       sermod version")
 		return 64
 	}
-	if command != "run" {
-		fmt.Fprintf(os.Stderr, "usage error: unknown command %q\n", command)
+	if parsed.command != "run" {
+		fmt.Fprintf(os.Stderr, "usage error: unknown command %q\n", parsed.command)
 		return 64
 	}
+	globalPath := parsed.globalPath
 
 	level := slog.LevelInfo
-	if verbose {
+	if parsed.verbose {
 		level = slog.LevelDebug
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	if verbose {
+	if parsed.verbose {
 		logger.Debug("verbose logging enabled", "config", globalPath)
 	}
 
@@ -68,7 +69,12 @@ func run(args []string) int {
 			"affected", "service control, signalling other users' processes, icmp checks, per-process IO, cross-user /proc inspection")
 	}
 
-	cfg, err := config.Load(globalPath)
+	var loadOpts []config.Option
+	if len(parsed.profiles) > 0 {
+		loadOpts = append(loadOpts, config.WithProfilesDirs(parsed.profiles...))
+		logger.Debug("overriding profile directories", "profiles", parsed.profiles)
+	}
+	cfg, err := config.Load(globalPath, loadOpts...)
 	if err != nil {
 		logger.Error("load config", "error", err)
 		return 2
@@ -249,6 +255,7 @@ func run(args []string) int {
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder)
 	monitor.ConfigPath = globalPath
+	monitor.ProfileDirs = parsed.profiles
 	monitor.Logger = logger
 	monitor.Init(workers, watches)
 
@@ -265,33 +272,51 @@ func run(args []string) int {
 	return 0
 }
 
-func parseArgs(args []string) (command, globalPath string, verbose bool, err error) {
-	globalPath = config.DefaultGlobalPath
+// cliArgs holds the parsed `sermod` command line.
+type cliArgs struct {
+	command    string
+	globalPath string
+	verbose    bool
+	// profiles overrides paths.profiles from the global config. Repeatable;
+	// each --profiles adds a directory. Empty means use the config as-is.
+	profiles []string
+}
+
+func parseArgs(args []string) (cliArgs, error) {
+	parsed := cliArgs{globalPath: config.DefaultGlobalPath}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
 		case strings.HasPrefix(arg, "--config="):
-			globalPath = strings.TrimPrefix(arg, "--config=")
+			parsed.globalPath = strings.TrimPrefix(arg, "--config=")
 		case arg == "--config":
 			i++
 			if i >= len(args) {
-				return "", "", false, fmt.Errorf("--config requires a value")
+				return cliArgs{}, fmt.Errorf("--config requires a value")
 			}
-			globalPath = args[i]
+			parsed.globalPath = args[i]
+		case strings.HasPrefix(arg, "--profiles="):
+			parsed.profiles = append(parsed.profiles, strings.TrimPrefix(arg, "--profiles="))
+		case arg == "--profiles":
+			i++
+			if i >= len(args) {
+				return cliArgs{}, fmt.Errorf("--profiles requires a value")
+			}
+			parsed.profiles = append(parsed.profiles, args[i])
 		case arg == "--verbose" || arg == "-v":
-			verbose = true
+			parsed.verbose = true
 		case strings.HasPrefix(arg, "-"):
-			return "", "", false, fmt.Errorf("unknown flag %s", arg)
-		case command == "":
-			command = arg
+			return cliArgs{}, fmt.Errorf("unknown flag %s", arg)
+		case parsed.command == "":
+			parsed.command = arg
 		default:
-			return "", "", false, fmt.Errorf("unexpected argument %q", arg)
+			return cliArgs{}, fmt.Errorf("unexpected argument %q", arg)
 		}
 	}
-	if command == "" {
-		return "", "", false, fmt.Errorf("missing command")
+	if parsed.command == "" {
+		return cliArgs{}, fmt.Errorf("missing command")
 	}
-	return command, globalPath, verbose, nil
+	return parsed, nil
 }
 
 func notifiersRaw(cfg *config.Config) map[string]any {
