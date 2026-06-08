@@ -47,6 +47,10 @@
   summary::before { content: "\25B8"; color: #888; margin-right: .4rem; font-size: .9em; }
   details[open] > summary::before { content: "\25BE"; }
   summary > button { font-weight: 400; }
+  #rows tr:hover td { background: #8881; }
+  #rows tr.row-failing td { background: #cf222e1f; }
+  #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
+  #svc-filters button.f-active { background: #8883; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -69,6 +73,15 @@
 <div id="err"></div>
 <details id="services-section" open>
   <summary>Services</summary>
+  <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="svc-search" type="search" placeholder="filter services…  ( / )" oninput="setSvcQuery(this.value)" onkeydown="if(event.key==='Escape'){this.value='';setSvcQuery('')}">
+    <span id="svc-filters">
+      <button data-f="all" class="f-active" onclick="setSvcStatus('all')">all</button>
+      <button data-f="failing" onclick="setSvcStatus('failing')">failing</button>
+      <button data-f="paused" onclick="setSvcStatus('paused')">paused</button>
+    </span>
+    <span id="svc-count" class="muted"></span>
+  </div>
   <table>
     <thead>
       <tr><th>Service</th><th>Status</th><th>Checks</th><th>Monitoring</th><th>Backend</th><th class="actions">Actions</th></tr>
@@ -382,8 +395,48 @@ function checkHealthCell(s) {
   return '<span class="muted">—</span>';
 }
 
+// Service list state: latest fetched data plus the active search/status filter,
+// so typing or switching a filter re-renders from cache without a refetch.
+let allServices = [];
+let svcQuery = "";
+let svcStatus = "all"; // all | failing | paused
+
+function isFailing(s) { return s.enabled && s.check_health === "failing"; }
+function isPaused(s) { return s.enabled && !s.monitored; }
+
+function serviceMatches(s) {
+  if (svcQuery) {
+    const hay = `${s.name || ""} ${s.display_name || ""} ${s.unit || ""}`.toLowerCase();
+    if (!hay.includes(svcQuery)) return false;
+  }
+  if (svcStatus === "failing") return isFailing(s);
+  if (svcStatus === "paused") return isPaused(s);
+  return true;
+}
+
+function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); }
+function setSvcStatus(v) {
+  svcStatus = v;
+  document.querySelectorAll("#svc-filters button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.f === v));
+  renderServices();
+}
+
+// render receives fresh data on each refresh; cache it, then render through the
+// active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
-  const rows = (services || []).map((s) => {
+  if (services) allServices = services;
+  renderServices();
+}
+
+function renderServices() {
+  const total = (allServices || []).length;
+  const list = (allServices || []).filter(serviceMatches);
+  // Failing services first (stable sort keeps the backend order within groups).
+  list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
+  const cnt = $("#svc-count");
+  if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all") ? `showing ${list.length} of ${total}` : "";
+  const rows = list.map((s) => {
     const st = (s.status || "unknown").toLowerCase();
     let mon, actions;
     if (!s.enabled) {
@@ -406,7 +459,7 @@ function render(services) {
       ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
       : esc(s.name);
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    return `<tr>
+    return `<tr class="${isFailing(s) ? 'row-failing' : ''}">
       <td>${name}${activeLockBadges(s)}<div class="muted">${esc(s.unit || "")}</div></td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
@@ -415,7 +468,10 @@ function render(services) {
       <td class="actions">${actions}</td>
     </tr>`;
   });
-  $("#rows").innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No services.</td></tr>`;
+  const empty = (allServices || []).length
+    ? `<tr><td colspan="6" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="6" class="muted">No services.</td></tr>`;
+  $("#rows").innerHTML = rows.join("") || empty;
 }
 
 function renderWatches(watches) {
@@ -1026,6 +1082,20 @@ function setRefresh(v) {
   if (sel) sel.value = String(ms);
   applyRefresh(ms);
 })();
+
+// "/" focuses the service filter (unless already typing in a field). It opens
+// the Services section first so the box is visible.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const box = $("#svc-search");
+  if (!box) return;
+  e.preventDefault();
+  const sec = $("#services-section");
+  if (sec && !sec.open) sec.open = true;
+  box.focus();
+});
 </script>
 </body>
 </html>
