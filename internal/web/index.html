@@ -71,6 +71,7 @@
 </div>
 <div id="system-status" class="muted" style="margin:-.5rem 0 .35rem; font-size:.9rem; display:flex; gap:.5rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
+</div><!-- /topbar -->
 <p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
 <details id="services-section" open>
@@ -1114,6 +1115,22 @@ document.addEventListener("keydown", (e) => {
   if (sec && !sec.open) sec.open = true;
   box.focus();
 });
+
+// Remember which sections the operator left open/closed across reloads. Each
+// <details id="..."> restores its saved state on load and saves on every toggle;
+// sections with no saved state keep their HTML default.
+(function initCollapse() {
+  document.querySelectorAll("details[id]").forEach((el) => {
+    const key = "sermo-open-" + el.id;
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved !== null) el.open = saved === "1";
+    } catch (_) {}
+    el.addEventListener("toggle", () => {
+      try { localStorage.setItem(key, el.open ? "1" : "0"); } catch (_) {}
+    });
+  });
+})();
 </script>
 </body>
 </html>
