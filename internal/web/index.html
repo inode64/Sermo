@@ -620,26 +620,31 @@ function renderActivity(sum) {
   }
 }
 
+// getJSON fetches and parses one endpoint, returning dflt on any failure (network
+// error, non-2xx, bad JSON). It never throws, so one failing endpoint can't take
+// down the whole status line — each just degrades to its default for that cycle.
+async function getJSON(url, dflt) {
+  try {
+    const r = await fetch(url);
+    return r.ok ? await r.json() : dflt;
+  } catch (_) {
+    return dflt;
+  }
+}
+
 async function renderStatus() {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const [readyRes, liveRes, monRes, opsRes, locksRes, daemonRes, hostRes] = await Promise.all([
-      fetch("readyz?verbose"),
-      fetch("livez?verbose"),
-      fetch("api/monitoring"),
-      fetch("api/ops"),
-      fetch("api/locks"),
-      fetch("api/daemon"),
-      fetch("api/host")
+    const [ready, live, mon, ops, locks, daemon, hostMetrics] = await Promise.all([
+      getJSON("readyz?verbose", {}),
+      getJSON("livez?verbose", {}),
+      getJSON("api/monitoring", {}),
+      getJSON("api/ops", {}),
+      getJSON("api/locks", []),
+      getJSON("api/daemon", {}),
+      getJSON("api/host", [])
     ]);
-    const ready = readyRes.ok ? await readyRes.json() : {};
-    const live = liveRes.ok ? await liveRes.json() : {};
-    const mon = monRes.ok ? await monRes.json() : {};
-    const ops = opsRes.ok ? await opsRes.json() : {};
-    const locks = locksRes.ok ? await locksRes.json() : [];
-    const daemon = daemonRes.ok ? await daemonRes.json() : {};
-    const hostMetrics = hostRes.ok ? await hostRes.json() : [];
 
     // System-status line (line 2): host identity + detected backend + OS + live readings.
     const sys = $("#system-status");
