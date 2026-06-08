@@ -18,7 +18,8 @@ type Result struct {
 	Duration time.Duration
 }
 
-// Runner executes external commands. Callers must pass a context with a timeout.
+// Runner executes external commands. Callers must pass a context with a timeout
+// (or use the package Run helper below).
 //
 // Sermo prefers native Go (stdlib, x/sys, x/net) over spawning processes (see
 // AGENTS.md "Native Go, not external processes"). This runner exists only for the
@@ -85,4 +86,35 @@ func (OSLookup) LookPath(name string) (string, error) {
 		return "", fmt.Errorf("look up %s: %w", name, err)
 	}
 	return path, nil
+}
+
+// WithTimeout is a convenience wrapper around context.WithTimeout.
+//
+// It is the recommended way to prepare a context before calling Runner.Run
+// when you have a per-command timeout value. Every external command executed
+// via execx **must** have a deadline (see AGENTS.md).
+func WithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(parent)
+	}
+	return context.WithTimeout(parent, timeout)
+}
+
+// Run is a fortified wrapper that ensures the command runs under a deadline
+// and then delegates to r.Run.
+//
+// Typical usage:
+//
+//	res, err := execx.Run(ctx, runner, 5*time.Second, "systemctl", "is-active", unit)
+//
+// If timeout <= 0 the parent's deadline (if any) is used as-is. Callers are
+// still encouraged to pass a positive per-command timeout for fast-failing
+// probes and queries.
+func Run(ctx context.Context, r Runner, timeout time.Duration, name string, args ...string) (Result, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	return r.Run(ctx, name, args...)
 }

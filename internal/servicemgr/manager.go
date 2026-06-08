@@ -61,10 +61,7 @@ func MainPID(runner execx.Runner, backend Backend, unit string) (int, bool) {
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultDetectTimeout)
-	defer cancel()
-
-	res, err := runner.Run(ctx, "systemctl", "show", "-p", "MainPID", "--value", "--", unit)
+	res, err := execx.Run(context.Background(), runner, defaultDetectTimeout, "systemctl", "show", "-p", "MainPID", "--value", "--", unit)
 	if err != nil {
 		return 0, false
 	}
@@ -89,10 +86,7 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 	if readFile == nil {
 		readFile = os.ReadFile
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), defaultDetectTimeout)
-	defer cancel()
-
-	res, err := runner.Run(ctx, "systemctl", "show", "-p", "ControlGroup", "--value", "--", unit)
+	res, err := execx.Run(context.Background(), runner, defaultDetectTimeout, "systemctl", "show", "-p", "ControlGroup", "--value", "--", unit)
 	if err != nil {
 		return nil, false
 	}
