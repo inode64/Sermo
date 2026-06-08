@@ -114,6 +114,22 @@ func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail,
 	return web.Detail{}, false
 }
 
+// ConfigRender returns a resolved service config from the active backend.
+func (h *WebBackendHolder) ConfigRender(ctx context.Context, name, format string) (web.ConfigRender, bool, error) {
+	if b := h.backend(); b != nil {
+		return b.ConfigRender(ctx, name, format)
+	}
+	return web.ConfigRender{}, false, nil
+}
+
+// ConfigDiff compares resolved service configs from the active backend.
+func (h *WebBackendHolder) ConfigDiff(ctx context.Context, base, service string) (web.ConfigDiff, bool, error) {
+	if b := h.backend(); b != nil {
+		return b.ConfigDiff(ctx, base, service)
+	}
+	return web.ConfigDiff{}, false, nil
+}
+
 // Series returns a service's SLA series from the active backend.
 func (h *WebBackendHolder) Series(ctx context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
 	if b := h.backend(); b != nil {
