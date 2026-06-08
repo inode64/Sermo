@@ -2,7 +2,7 @@ kind: profile
 name: dhclient
 display_name: "DHCP Client"
 description: "Cliente DHCP"
-service: { name: "dhclient", backend: auto }
+service: { name: "dhclient" }
 variables:
   binary: "/sbin/dhclient"
 preflight:

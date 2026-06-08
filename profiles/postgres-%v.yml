@@ -1,7 +1,7 @@
 kind: profile
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-service: { name: "postgres", backend: auto }
+service: { name: "postgres" }
 variables:
   binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 preflight:

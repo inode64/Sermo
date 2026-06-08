@@ -5,7 +5,6 @@ type: appserver
 
 service:
   name: php-fpm
-  backend: auto
 
 aliases:
   systemd:

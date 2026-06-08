@@ -1,7 +1,7 @@
 kind: profile
 name: automount
 display_name: "Automount"
-service: { name: "automount", backend: auto }
+service: { name: "automount" }
 variables:
   binary: "/usr/sbin/automount"
 preflight:

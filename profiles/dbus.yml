@@ -2,7 +2,7 @@ kind: profile
 name: dbus-daemon
 display_name: "D-Bus"
 description: "DBus Daemon"
-service: { name: "dbus-daemon", backend: auto }
+service: { name: "dbus-daemon" }
 variables:
   binary: "/usr/bin/dbus-daemon"
 preflight:

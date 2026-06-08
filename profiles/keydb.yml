@@ -1,7 +1,7 @@
 kind: profile
 name: keydb-server
 display_name: "KeyDB"
-service: { name: "keydb-server", backend: auto }
+service: { name: "keydb-server" }
 variables:
   binary: "/usr/sbin/keydb-server"
 preflight:

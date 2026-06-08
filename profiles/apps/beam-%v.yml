@@ -1,7 +1,7 @@
 kind: profile
 name: beam-%v
 display_name: "Erlang BEAM ${version}"
-service: { name: "beam", backend: auto }
+service: { name: "beam" }
 variables:
   binary: "/usr/lib64/erlang/erts-${version}/bin/beam"
 preflight:

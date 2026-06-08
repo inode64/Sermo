@@ -1,7 +1,7 @@
 kind: profile
 name: squid
 display_name: "Squid"
-service: { name: "squid", backend: auto }
+service: { name: "squid" }
 variables:
   binary: "/usr/sbin/squid"
 preflight:

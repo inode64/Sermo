@@ -2,7 +2,7 @@ kind: profile
 name: cups-config
 display_name: "CUPS"
 description: "CUPSD"
-service: { name: "cups-config", backend: auto }
+service: { name: "cups-config" }
 variables:
   binary: "/usr/bin/cups-config"
 preflight:

@@ -1,7 +1,7 @@
 kind: profile
 name: qemu-ga
 display_name: "QEMU Guest Agent"
-service: { name: "qemu-ga", backend: auto }
+service: { name: "qemu-ga" }
 variables:
   binary: "/usr/bin/qemu-ga"
 preflight:

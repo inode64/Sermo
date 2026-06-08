@@ -1,7 +1,7 @@
 kind: profile
 name: acpid
 display_name: "ACPI Daemon"
-service: { name: "acpid", backend: auto }
+service: { name: "acpid" }
 variables:
   binary: "/usr/sbin/acpid"
 preflight:

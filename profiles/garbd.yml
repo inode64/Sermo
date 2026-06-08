@@ -2,7 +2,7 @@ kind: profile
 name: garbd
 display_name: "Galera Arbitrator"
 description: "Synchronous multi-master replication engine that provides the wsrep API"
-service: { name: "garbd", backend: auto }
+service: { name: "garbd" }
 variables:
   binary: "/usr/bin/garbd"
 preflight:

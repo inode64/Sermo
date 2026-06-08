@@ -2,7 +2,7 @@ kind: profile
 name: mailhog-bin
 display_name: "MailHog"
 description: "Mailhog"
-service: { name: "mailhog-bin", backend: auto }
+service: { name: "mailhog-bin" }
 variables:
   binary: "/usr/bin/mailhog-bin"
 preflight:

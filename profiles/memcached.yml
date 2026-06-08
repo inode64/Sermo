@@ -1,7 +1,7 @@
 kind: profile
 name: memcached
 display_name: "Memcached"
-service: { name: "memcached", backend: auto }
+service: { name: "memcached" }
 variables:
   binary: "/usr/bin/memcached"
 preflight:

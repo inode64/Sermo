@@ -1,6 +1,6 @@
 kind: profile
 name: syslog-ng
-service: { name: "syslog-ng", backend: auto }
+service: { name: "syslog-ng" }
 variables:
   binary: "/usr/sbin/syslog-ng"
 preflight:

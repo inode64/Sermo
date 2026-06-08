@@ -2,7 +2,7 @@ kind: profile
 name: dhcpd
 display_name: "DHCP Server"
 description: "Servidor DHCP"
-service: { name: "dhcpd", backend: auto }
+service: { name: "dhcpd" }
 variables:
   binary: "/usr/sbin/dhcpd"
 preflight:

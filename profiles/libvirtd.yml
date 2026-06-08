@@ -1,7 +1,7 @@
 kind: profile
 name: libvirtd
 display_name: "libvirt"
-service: { name: "libvirtd", backend: auto }
+service: { name: "libvirtd" }
 variables:
   binary: "/usr/sbin/libvirtd"
 preflight:
