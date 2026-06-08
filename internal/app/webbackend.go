@@ -395,10 +395,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w == nil {
 			continue
 		}
-		iv := ""
-		if w.interval > 0 {
-			iv = w.interval.String()
-		}
+		iv := formatInterval(w.interval)
 		ww := web.Watch{
 			Name:          w.name,
 			CheckType:     w.checkType,
@@ -456,12 +453,12 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 		info.StateDir = g.StateDir()
 
 		// Engine block (effective values with documented fallbacks)
-		info.Interval = EngineInterval(b.cfg, 30*time.Second).String()
+		info.Interval = formatInterval(EngineInterval(b.cfg, 30*time.Second))
 		info.MaxParallelChecks = EngineInt(b.cfg, "max_parallel_checks", 8)
 		info.MaxParallelOperations = EngineInt(b.cfg, "max_parallel_operations", 2)
-		info.DefaultTimeout = EngineDuration(b.cfg, "default_timeout", 10*time.Second).String()
-		info.OperationTimeout = EngineDuration(b.cfg, "operation_timeout", 90*time.Second).String()
-		info.StartupDelay = EngineDuration(b.cfg, "startup_delay", 0).String()
+		info.DefaultTimeout = formatInterval(EngineDuration(b.cfg, "default_timeout", 10*time.Second))
+		info.OperationTimeout = formatInterval(EngineDuration(b.cfg, "operation_timeout", 90*time.Second))
+		info.StartupDelay = formatInterval(EngineDuration(b.cfg, "startup_delay", 0))
 
 		if em := engineMap(b.cfg); em != nil {
 			if be, ok := em["backend"].(string); ok && be != "" {
@@ -474,6 +471,49 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	}
 
 	return info
+}
+
+// formatInterval renders a duration for display, dropping zero components so a
+// whole-hour interval reads "1h" instead of Go's default "1h0m0s". It extends
+// Go's units upward with day (d), week (w) and month (mo, taken as 30 days) so
+// long intervals stay compact: 24h reads "1d", 7d "1w", 30d "1mo", and mixed
+// values chain greatest-first ("1mo1w", "1d6h", "1h30m"). A zero (or negative)
+// duration is shown as "0s" — the only case where a 0 component survives.
+// Sub-second durations keep the standard library formatting (e.g. "1.5s").
+func formatInterval(d time.Duration) string {
+	if d <= 0 {
+		return "0s"
+	}
+	if d%time.Second != 0 {
+		return d.String()
+	}
+	total := int64(d / time.Second)
+	const (
+		minute = 60
+		hour   = 60 * minute
+		day    = 24 * hour
+		week   = 7 * day
+		month  = 30 * day // display approximation
+	)
+	units := []struct {
+		secs   int64
+		suffix string
+	}{
+		{month, "mo"},
+		{week, "w"},
+		{day, "d"},
+		{hour, "h"},
+		{minute, "m"},
+		{1, "s"},
+	}
+	var b strings.Builder
+	for _, u := range units {
+		if total >= u.secs {
+			fmt.Fprintf(&b, "%d%s", total/u.secs, u.suffix)
+			total %= u.secs
+		}
+	}
+	return b.String()
 }
 
 // osPrettyName returns a human-friendly OS label (PRETTY_NAME from os-release on
