@@ -13,8 +13,8 @@ jobs:
     name: build & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -27,8 +27,8 @@ jobs:
     name: static analysis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -40,9 +40,11 @@ jobs:
       - run: staticcheck ./...
       - run: revive -config revive.toml ./...
       - run: govulncheck ./...
-      # gosec runs through golangci-lint (see .golangci.yml). Pinned to a v1
-      # release for config compatibility; bump it when moving to a newer Go.
+      # gosec runs through golangci-lint (see .golangci.yml). Uses golangci-lint
+      # v2: the official v1 release binaries are built with Go 1.24 and refuse a
+      # config whose targeted Go (from go.mod) is newer, so v1 cannot lint this
+      # module. The action's v8 line installs v2 (matching the v2 .golangci.yml).
       - name: gosec (via golangci-lint)
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.64.8
+          version: latest
