@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/rules"
 )
 
@@ -26,7 +27,7 @@ func TestBuildWatchesBuildsDisk(t *testing.T) {
 			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -59,7 +60,7 @@ func TestBuildWatchesBuildsFile(t *testing.T) {
 			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/file.sh"}}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -103,7 +104,7 @@ func TestBuildWatchesBuildsProcess(t *testing.T) {
 			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/proc.sh"}}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -145,7 +146,7 @@ func TestBuildWatchesExpandsSwap(t *testing.T) {
 			},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -175,7 +176,7 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/y.sh"}}},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -258,7 +259,7 @@ func TestBuildWatchesExpandsNet(t *testing.T) {
 			},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -293,7 +294,7 @@ func TestBuildWatchesExpandsICMP(t *testing.T) {
 			},
 		},
 	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
@@ -344,7 +345,7 @@ func TestHasConfiguredTargets(t *testing.T) {
 			"check":   map[string]any{"type": "disk", "path": "/"},
 		},
 	})
-	watches, _ := BuildWatches(disabledWatch, Deps{DefaultTimeout: time.Second}, time.Second)
+	watches, _ := BuildWatches(disabledWatch, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, time.Second)
 	if len(watches) != 0 {
 		t.Fatalf("disabled watch should not build, got %d", len(watches))
 	}

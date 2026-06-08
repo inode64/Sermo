@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
 )
@@ -54,7 +55,7 @@ checks:
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}}
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}}
 	collector := metrics.New(metrics.OSReader{})
 	workers, _ := BuildWorkers(cfg, deps, collector)
 	if len(workers) != 1 {
@@ -151,7 +152,7 @@ checks:
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}}
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}}
 	collector := metrics.New(metrics.OSReader{})
 	workers, _ := BuildWorkers(cfg, deps, collector)
 	workers[0].cycle = 5

@@ -67,3 +67,17 @@ func (r OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string
 	_, err := execx.RunEnv(ctx, runner, fullEnv, timeout, argv[0], argv[1:]...)
 	return err
 }
+
+// defaultHookRunner returns the provided runner, or a default OSHookRunner
+// (which delegates to execx.CommandRunner and therefore goes through the
+// project's sanctioned exec path with context + timeout) if nil.
+//
+// This centralizes the defensive fallback used by watches when no runner
+// is injected (common in unit tests that construct Watch / fileWatcher /
+// procWatcher directly).
+func defaultHookRunner(r HookRunner) HookRunner {
+	if r != nil {
+		return r
+	}
+	return OSHookRunner{}
+}

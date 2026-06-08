@@ -219,10 +219,7 @@ func (w *procWatcher) fire(ctx context.Context, msg string, env map[string]strin
 	env["SERMO_MESSAGE"] = msg
 
 	if len(w.hook.Command) > 0 {
-		runner := w.runner
-		if runner == nil {
-			runner = OSHookRunner{}
-		}
+		runner := defaultHookRunner(w.runner)
 		if err := w.hook.Run(ctx, runner, env); err != nil {
 			w.emitEvent(Event{Watch: w.name, Kind: "hook-failed", Message: msg + ": " + err.Error()})
 		} else {

@@ -59,10 +59,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	env := hookEnv(w.Name, w.CheckType, res)
 	if len(w.Hook.Command) > 0 {
-		runner := w.Runner
-		if runner == nil {
-			runner = OSHookRunner{}
-		}
+		runner := defaultHookRunner(w.Runner)
 		if err := w.Hook.Run(ctx, runner, env); err != nil {
 			w.emit(Event{Watch: w.Name, Kind: "hook-failed", Message: err.Error()})
 		} else {
