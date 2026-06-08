@@ -41,6 +41,10 @@ func TestOSReaderProcfs(t *testing.T) {
 	if rss, ok := r.ProcessRSS(pid); !ok || rss == 0 {
 		t.Errorf("ProcessRSS(self) = (%d, %v); want ok with rss > 0", rss, ok)
 	}
+	// read/write bytes may legitimately be 0; we only require the file to parse.
+	if _, _, ok := r.ProcessIO(pid); !ok {
+		t.Error("ProcessIO(self) not ok")
+	}
 }
 
 // swapReader adds an optional TotalSwap to fakeReader so SampleSystem's swap

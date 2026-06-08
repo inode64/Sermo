@@ -159,6 +159,9 @@ type Process struct {
 	Role        string   `json:"role,omitempty"`
 	Source      string   `json:"source"`
 	Cmdline     []string `json:"cmdline,omitempty"`
+	RSS         int64    `json:"rss,omitempty"`      // resident memory, bytes
+	IORead      int64    `json:"io_read,omitempty"`  // cumulative disk read, bytes
+	IOWrite     int64    `json:"io_write,omitempty"` // cumulative disk write, bytes
 }
 
 // RuleWindow is one rule's window progress in a service detail.
