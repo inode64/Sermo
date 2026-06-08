@@ -38,7 +38,26 @@ type CommandRunner struct{}
 func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
+	return runPrepared(ctx, cmd, start, name)
+}
 
+// RunEnv is like Run, but allows providing a completely custom environment
+// (instead of inheriting the current process environment). If env is nil or
+// empty, it behaves like Run (inherits os.Environ).
+func (CommandRunner) RunEnv(ctx context.Context, env []string, name string, args ...string) (Result, error) {
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, name, args...)
+	if len(env) > 0 {
+		cmd.Env = env
+	}
+	return runPrepared(ctx, cmd, start, name)
+}
+
+// runPrepared executes a ready-to-run *exec.Cmd (with Stdout/Stderr and Env
+// already configured by the caller) and maps the result/error in the
+// standard execx way. The ctx passed must be the same one given to
+// CommandContext so that we can detect deadline errors.
+func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayName string) (Result, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -58,17 +77,17 @@ func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Resu
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		result.ExitCode = -1
-		return result, fmt.Errorf("run %s: %w", name, ctxErr)
+		return result, fmt.Errorf("run %s: %w", displayName, ctxErr)
 	}
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		result.ExitCode = exitErr.ExitCode()
-		return result, fmt.Errorf("run %s: exit code %d", name, result.ExitCode)
+		return result, fmt.Errorf("run %s: exit code %d", displayName, result.ExitCode)
 	}
 
 	result.ExitCode = -1
-	return result, fmt.Errorf("run %s: %w", name, err)
+	return result, fmt.Errorf("run %s: %w", displayName, err)
 }
 
 // CommandLookup finds executable commands.
@@ -117,4 +136,32 @@ func Run(ctx context.Context, r Runner, timeout time.Duration, name string, args
 		defer cancel()
 	}
 	return r.Run(ctx, name, args...)
+}
+
+// EnvRunner is an optional interface implemented by runners that can execute
+// commands with a caller-supplied environment (instead of always inheriting
+// the current process environment). It is primarily used by hook execution.
+type EnvRunner interface {
+	Runner
+	RunEnv(ctx context.Context, env []string, name string, args ...string) (Result, error)
+}
+
+// RunEnv is the fortified equivalent of Run for cases that need a custom
+// environment (e.g. hooks that inject SERMO_* variables).
+//
+// It applies the timeout (if > 0) and then delegates to an EnvRunner if the
+// provided runner implements it. If the runner does not implement EnvRunner,
+// it returns an error (in normal Sermo usage we always pass CommandRunner
+// for hooks).
+func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, name string, args ...string) (Result, error) {
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	if er, ok := r.(EnvRunner); ok {
+		return er.RunEnv(ctx, env, name, args...)
+	}
+	return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
 }
