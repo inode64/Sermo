@@ -1,4 +1,4 @@
-# golangci-lint configuration for Sermo (v2 schema).
+# golangci-lint configuration for Sermo.
 #
 # Its purpose is to run gosec, the security analyzer that is not installed as a
 # standalone binary in ~/go/bin. The other standards are covered by dedicated
@@ -6,30 +6,28 @@
 # is enabled here.
 #
 # Run with:  golangci-lint run
-version: "2"
 
 run:
   tests: true
 
 linters:
-  default: none
+  disable-all: true
   enable:
     - gosec
-  exclusions:
-    rules:
-      # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
-      - path: _test\.go
-        linters: [gosec]
-        text: "G306"
-      # G115 (integer-overflow conversions) is noisy and false-positive-prone in
-      # this codebase: every flagged site converts an already-bounded value (a port
-      # 0-65535, a /proc-reported count, a range-validated config field). Accepted
-      # project-wide. By-design exec (G204) and intentional 0644 writes (pidfile,
-      # generated YAML) are suppressed inline with //nolint:gosec + justification.
-      - linters: [gosec]
-        text: "G115"
 
 issues:
   # Report every finding (golangci-lint otherwise caps repeated issues at 3).
   max-same-issues: 0
   max-issues-per-linter: 0
+  exclude-rules:
+    # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
+    - path: _test\.go
+      linters: [gosec]
+      text: "G306"
+    # G115 (integer-overflow conversions) is noisy and false-positive-prone in
+    # this codebase: every flagged site converts an already-bounded value (a port
+    # 0-65535, a /proc-reported count, a range-validated config field). Accepted
+    # project-wide. By-design exec (G204) and intentional 0644 writes (pidfile,
+    # generated YAML) are suppressed inline with //nolint:gosec + justification.
+    - linters: [gosec]
+      text: "G115"
