@@ -29,19 +29,19 @@ type Engine struct {
 	Unit    string // backend unit, passed to Manager
 	Backend string
 
-	Manager     Manager
-	AcquireLock func(ttl time.Duration) (release func() error, err error)
-	LockTTL     time.Duration
-	NamedLocks  func() ([]locks.Lock, error)
-	Guard       func(ctx context.Context, action string) (blocked bool, reason string, err error)
-	Preflight   func(ctx context.Context) checks.Outcome
-	Postflight  func(ctx context.Context) checks.Outcome
-	Discover    func() []process.Process
-	Reaper      process.Reaper
-	KillPolicy  process.KillPolicy
-	Sleep             func(time.Duration)
-	OperationTimeout  time.Duration
-	Emit              func(Result)
+	Manager          Manager
+	AcquireLock      func(ttl time.Duration) (release func() error, err error)
+	LockTTL          time.Duration
+	NamedLocks       func() ([]locks.Lock, error)
+	Guard            func(ctx context.Context, action string) (blocked bool, reason string, err error)
+	Preflight        func(ctx context.Context) checks.Outcome
+	Postflight       func(ctx context.Context) checks.Outcome
+	Discover         func() []process.Process
+	Reaper           process.Reaper
+	KillPolicy       process.KillPolicy
+	Sleep            func(time.Duration)
+	OperationTimeout time.Duration
+	Emit             func(Result)
 }
 
 type plan struct {

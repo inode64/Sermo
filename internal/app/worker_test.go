@@ -209,7 +209,7 @@ func TestFailedOperationRecordsCooldown(t *testing.T) {
 
 func TestBlockedOperationAllowsImmediateRetry(t *testing.T) {
 	h := &workerHarness{
-		cache: failedCache("http"),
+		cache:    failedCache("http"),
 		opResult: operation.Result{Status: operation.ResultBlocked, Message: "lock held"},
 	}
 	policy := rules.Policy{Cooldown: time.Minute}
