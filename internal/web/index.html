@@ -84,8 +84,11 @@
     <input id="svc-search" type="search" placeholder="filter services…  ( / )" oninput="setSvcQuery(this.value)" onkeydown="if(event.key==='Escape'){this.value='';setSvcQuery('')}">
     <span id="svc-filters">
       <button data-f="all" class="f-active" onclick="setSvcStatus('all')">all</button>
-      <button data-f="failing" onclick="setSvcStatus('failing')">failing</button>
-      <button data-f="paused" onclick="setSvcStatus('paused')">paused</button>
+      <button data-f="active" onclick="setSvcStatus('active')">active</button>
+      <button data-f="inactive" onclick="setSvcStatus('inactive')">inactive</button>
+      <button data-f="failed" onclick="setSvcStatus('failed')">failed</button>
+      <button data-f="monitored" onclick="setSvcStatus('monitored')">monitored</button>
+      <button data-f="unmonitored" onclick="setSvcStatus('unmonitored')">unmonitored</button>
     </span>
     <span id="svc-count" class="muted"></span>
   </div>
@@ -409,19 +412,24 @@ function checkHealthCell(s) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | failing | paused
+let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
 
 function isFailing(s) { return s.enabled && s.check_health === "failing"; }
-function isPaused(s) { return s.enabled && !s.monitored; }
 
 function serviceMatches(s) {
   if (svcQuery) {
     const hay = `${s.name || ""} ${s.display_name || ""} ${s.unit || ""}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
-  if (svcStatus === "failing") return isFailing(s);
-  if (svcStatus === "paused") return isPaused(s);
-  return true;
+  const st = (s.status || "").toLowerCase();
+  switch (svcStatus) {
+    case "active":      return st === "active";
+    case "inactive":    return st === "inactive";
+    case "failed":      return st === "failed";
+    case "monitored":   return !!s.monitored;
+    case "unmonitored": return !s.monitored;
+    default:            return true; // "all"
+  }
 }
 
 function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); }
