@@ -531,9 +531,17 @@ async function loadExpansionFor(key) {
   try {
     let html;
     if (key.startsWith("svc:")) {
-      const res = await fetch(`api/services/${encodeURIComponent(key.slice(4))}`);
+      const name = key.slice(4);
+      const res = await fetch(`api/services/${encodeURIComponent(name)}`);
       if (!res.ok) return;
-      html = renderExpansion(await res.json());
+      const d = await res.json();
+      let metrics = null;
+      const measured = (d.checks || []).filter((c) => metricTypes.includes(c.type));
+      if (measured.length) {
+        const mr = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(measured[0].name)}&since=${metricWindow}`);
+        if (mr.ok) metrics = await mr.json();
+      }
+      html = renderExpansion(d, metrics);
     } else if (key.startsWith("wat:")) {
       const name = key.slice(4);
       const res = await fetch("api/events?limit=200");
@@ -549,12 +557,13 @@ async function loadExpansionFor(key) {
   } catch (_) { /* keep the last content on a transient error */ }
 }
 
-function renderExpansion(d) {
+function renderExpansion(d, metrics) {
   const procs = d.processes || [];
   const mem = procs.reduce((a, p) => a + (p.rss || 0), 0);
   const rd = procs.reduce((a, p) => a + (p.io_read || 0), 0);
   const wr = procs.reduce((a, p) => a + (p.io_write || 0), 0);
   const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(mem)}</b> · IO read <b>${fmtBytes(rd)}</b> · IO write <b>${fmtBytes(wr)}</b> · ${procs.length} process${procs.length === 1 ? '' : 'es'}</div>`;
+  const lat = renderLatency(metrics);
   const sla = renderSLA(d.sla);
   const procTable = procs.length
     ? `<table style="width:auto; font-size:.85rem;">
@@ -569,7 +578,18 @@ function renderExpansion(d) {
           <td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td>
         </tr>`).join("")}</tbody></table>`
     : '<div class="muted">No processes found.</div>';
-  return totals + sla + procTable;
+  return totals + lat + sla + procTable;
+}
+
+// renderLatency shows a measured check's latency over the default window: the
+// numeric avg/min/max summary plus the min–max band + average line chart
+// (reusing drawMetricChart from the detail panel).
+function renderLatency(m) {
+  if (!m || !(m.points || []).length) return "";
+  const s = m.summary || {};
+  const unit = esc(m.unit || "ms");
+  const head = `<div class="muted" style="margin:.25rem 0 .1rem">Latency <b>${esc(m.check || "")}</b> · avg <b>${(s.avg || 0).toFixed(1)} ${unit}</b> · min <b>${(s.min || 0).toFixed(1)}</b> · max <b>${(s.max || 0).toFixed(1)}</b>${s.count ? ` <span class="muted">(${s.count} samples)</span>` : ""}</div>`;
+  return head + `<div style="margin-bottom:.5rem">${drawMetricChart(m.points)}</div>`;
 }
 
 // renderSLA shows availability over the predefined rolling windows
