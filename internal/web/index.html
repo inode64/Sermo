@@ -68,6 +68,12 @@
   .modal-grid code, .modal-body code { font-size: .85rem; overflow-wrap: anywhere; }
   .danger-btn { border-color: #cf222e88; background: #cf222e22; }
   .danger-btn:hover { background: #cf222e33; }
+  #op-live { display:none; margin:.5rem 0 1rem; padding:.65rem .8rem; border:1px solid #8884; border-radius:.5rem; background:#8881; }
+  .op-card { display:flex; gap:.6rem 1rem; align-items:baseline; flex-wrap:wrap; }
+  .op-card + .op-card { margin-top:.35rem; padding-top:.35rem; border-top:1px solid #8883; }
+  .op-dot { width:.55rem; height:.55rem; border-radius:50%; background:#9a6700; display:inline-block; }
+  .op-dot.ok { background:#1a7f37; }
+  .op-dot.failed { background:#cf222e; }
 </style>
 </head>
 <body>
@@ -94,6 +100,7 @@
 </div><!-- /topbar -->
 <p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
+<div id="op-live"></div>
 <details id="services-section" open>
   <summary>Services</summary>
   <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
@@ -344,6 +351,8 @@ async function loadOps() {
     const res = await fetch("api/ops");
     if (!res.ok) return;
     const o = await res.json();
+    liveOpsSlots = o;
+    if (liveOps.size) renderOperationLive();
     if (!o.total) {
       $("#ops").textContent = "";
       return;
@@ -445,8 +454,97 @@ let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonit
 let allWatches = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
+const liveOps = new Map(); // operations started from this browser session, keyed by service
+let liveOpsTimer = null;
+let liveOpsSlots = null;
 
 function isFailing(s) { return s.enabled && s.check_health === "failing"; }
+function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart"; }
+function serviceBusy(name) {
+  const op = liveOps.get(name);
+  return !!op && !op.finished;
+}
+function opElapsed(op) {
+  const end = op.finished || Date.now();
+  return Math.max(0, Math.floor((end - op.started) / 1000));
+}
+function opStateText(op) {
+  if (!op.finished) return "running";
+  return op.ok ? "completed" : "failed";
+}
+function beginOperation(name, action) {
+  liveOps.set(name, {
+    name,
+    action,
+    started: Date.now(),
+    finished: 0,
+    ok: false,
+    message: "waiting for operation slot",
+  });
+  ensureLiveOpsTimer();
+  updateLiveOps();
+  renderOperationLive();
+  renderServices();
+}
+function finishOperation(name, ok, message) {
+  const op = liveOps.get(name) || { name, action: "operation", started: Date.now() };
+  op.finished = Date.now();
+  op.ok = !!ok;
+  op.message = message || (ok ? "completed" : "failed");
+  liveOps.set(name, op);
+  renderOperationLive();
+  renderServices();
+  setTimeout(() => {
+    if (liveOps.get(name) === op && op.finished) {
+      liveOps.delete(name);
+      renderOperationLive();
+      renderServices();
+      stopLiveOpsTimerIfIdle();
+    }
+  }, 8000);
+}
+function ensureLiveOpsTimer() {
+  if (!liveOpsTimer) liveOpsTimer = setInterval(updateLiveOps, 1000);
+}
+function stopLiveOpsTimerIfIdle() {
+  if (liveOpsTimer && liveOps.size === 0) {
+    clearInterval(liveOpsTimer);
+    liveOpsTimer = null;
+  }
+}
+async function updateLiveOps() {
+  liveOpsSlots = await getJSON("api/ops", liveOpsSlots || {});
+  renderOperationLive();
+  renderServices();
+  if (liveOps.size === 0) stopLiveOpsTimerIfIdle();
+}
+function renderOperationLive() {
+  const box = $("#op-live");
+  if (!box) return;
+  const ops = [...liveOps.values()].sort((a, b) => b.started - a.started);
+  if (!ops.length) {
+    box.style.display = "none";
+    box.innerHTML = "";
+    return;
+  }
+  const slotText = liveOpsSlots && liveOpsSlots.total != null
+    ? `<div class="muted" style="margin-bottom:.35rem">Operation slots: <b class="${(liveOpsSlots.in_use || 0) >= (liveOpsSlots.total || 1) ? 'failed' : ''}">${liveOpsSlots.in_use || 0}/${liveOpsSlots.total || 0}</b> in use</div>`
+    : "";
+  box.style.display = "block";
+  box.innerHTML = slotText + ops.map((op) => {
+    const state = opStateText(op);
+    const cls = op.finished ? (op.ok ? "ok" : "failed") : "";
+    const since = op.finished ? `${opElapsed(op)}s total` : `${opElapsed(op)}s elapsed`;
+    return `<div class="op-card">
+      <span class="op-dot ${cls}"></span>
+      <b>${esc(op.action)}</b>
+      <span>${esc(op.name)}</span>
+      <span class="${cls || 'inactive'}">${esc(state)}</span>
+      <span class="muted">${esc(since)}</span>
+      ${op.message ? `<span class="muted">${esc(op.message)}</span>` : ""}
+    </div>`;
+  }).join("");
+}
 
 function serviceMatches(s) {
   if (svcQuery) {
@@ -488,6 +586,11 @@ function renderServices() {
   if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all") ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((s) => {
     const st = (s.status || "unknown").toLowerCase();
+    const op = liveOps.get(s.name);
+    const busy = serviceBusy(s.name);
+    const busyText = op
+      ? `<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${esc(op.action)} ${esc(opStateText(op))} · ${opElapsed(op)}s${op.message ? ` <span class="muted">${esc(op.message)}</span>` : ""}</div>`
+      : "";
     let mon, actions;
     if (!s.enabled) {
       mon = '<span class="pill">disabled</span>';
@@ -498,12 +601,12 @@ function renderServices() {
         : `<span class="pill">paused</span>${monitorHint(s)}`;
       const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
-          <button ${st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
-          <button ${stopped ? "disabled" : ""} onclick="act('${esc(s.name)}','stop')">stop</button>
-          <button onclick="act('${esc(s.name)}','restart')">restart</button>
+          <button ${busy || st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
+          <button ${busy || stopped ? "disabled" : ""} onclick="act('${esc(s.name)}','stop')">stop</button>
+          <button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','restart')">restart</button>
           ${s.monitored
-            ? `<button onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
-            : `<button onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
+            ? `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
+            : `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
         : '<span class="muted">read-only</span>';
     }
     const label = s.display_name && s.display_name !== s.name
@@ -514,7 +617,7 @@ function renderServices() {
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
     const row = `<tr class="clickable ${isFailing(s) ? 'row-failing' : ''}" onclick="rowClick(event, '${esc(key)}')">
-      <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div></td>
+      <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div>${busyText}</td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
       <td>${mon}</td>
@@ -911,6 +1014,8 @@ async function renderStatus() {
 async function act(name, action) {
   if ((action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
   $("#err").textContent = "";
+  const tracked = isTrackedOperation(action);
+  if (tracked) beginOperation(name, action);
   try {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, {
       method: "POST",
@@ -920,7 +1025,9 @@ async function act(name, action) {
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
+    if (tracked) finishOperation(name, true, body.message || body.status || "operation completed");
   } catch (e) {
+    if (tracked) finishOperation(name, false, e.message);
     $("#err").textContent = `${action} ${name}: ${e.message}`;
   }
   load();
