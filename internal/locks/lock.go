@@ -7,7 +7,11 @@
 // and is never reported here.
 package locks
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // State is whether a lock currently blocks actions.
 type State string
@@ -38,6 +42,21 @@ type Lock struct {
 
 // Active reports whether the lock currently blocks actions.
 func (l Lock) Active() bool { return l.State == StateActive }
+
+func validateIdentifier(kind, value string, allowEmpty bool) error {
+	if value == "" {
+		if allowEmpty {
+			return nil
+		}
+		return fmt.Errorf("%s must not be empty", kind)
+	}
+	if value == "." || value == ".." ||
+		strings.Contains(value, "/") ||
+		strings.Contains(value, `\`) {
+		return fmt.Errorf("%s %q must be a simple name without path separators", kind, value)
+	}
+	return nil
+}
 
 // lockFile is the on-disk JSON payload (section 20).
 type lockFile struct {
