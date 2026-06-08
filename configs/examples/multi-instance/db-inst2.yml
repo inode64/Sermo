@@ -1,0 +1,8 @@
+kind: service
+name: db-inst2
+uses: dbserver
+service: db-inst2
+variables:
+  port:    3307
+  pidfile: /run/dbserver/inst2.pid
+  config:  /etc/dbserver/inst2.cnf

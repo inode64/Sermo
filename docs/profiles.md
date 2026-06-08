@@ -337,6 +337,63 @@ Clone copies the source **before** variable expansion, so overriding the `port`
 variable alone is enough — every check that references `${port}` resolves to the
 new value. Clone chains resolve transitively; cycles are rejected.
 
+## Multiple instances of one application
+
+To run several instances of the same application — same binary, same checks and
+rules, differing only in listen port, pidfile and config file — let each instance
+`uses` the profile and override just the variables that make it unique. No
+special "instance" mechanism is involved: it is the ordinary `uses` + `variables`
+inheritance.
+
+The profile parametrizes everything that varies with `${...}` placeholders and
+threads each one into the commands and checks that consume it. In particular the
+config-file path should be a variable wired into every command that reads it, so
+two instances never pick up each other's configuration:
+
+```yaml
+kind: profile
+name: dbserver
+variables:
+  port:    3306
+  pidfile: /run/dbserver/main.pid
+  config:  /etc/dbserver/main.cnf
+processes:
+  pidfile: { type: pidfile, path: "${pidfile}" }
+checks:
+  tcp:    { type: tcp, port: "${port}" }
+  config: { type: command, command: ["dbserverd", "--defaults-file=${config}", "--help"] }
+```
+
+Each instance overrides the three variables and gives itself an init unit (a
+systemd template instance or a distinct unit name) with a scalar `service`:
+
+```yaml
+kind: service
+name: db-inst1
+uses: dbserver
+service: db-inst1
+variables:
+  port:    3306
+  pidfile: /run/dbserver/inst1.pid
+  config:  /etc/dbserver/inst1.cnf
+```
+
+```yaml
+kind: service
+name: db-inst2
+uses: dbserver
+service: db-inst2
+variables:
+  port:    3307
+  pidfile: /run/dbserver/inst2.pid
+  config:  /etc/dbserver/inst2.cnf
+```
+
+Prefer `uses` over [`clone`](#cloning) here: every instance derives from the
+*profile* and only overrides variables. Reach for `clone` only when one instance
+should copy *another concrete service* almost verbatim. A runnable version of
+this example lives under `configs/examples/multi-instance/`.
+
 ## Disabling and deleting inherited entries
 
 ```yaml
