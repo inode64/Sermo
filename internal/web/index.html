@@ -67,11 +67,7 @@
   </thead>
   <tbody id="rows"></tbody>
 </table>
-<p id="ops" class="muted" style="margin-top:-.5rem"></p>
-<div id="controls" style="margin:.25rem 0 .5rem">
-  <button id="reload-btn" onclick="reloadConfig()" style="display:none">reload config</button>
-  <span class="muted" style="margin-left:.75rem">SIGHUP or systemctl reload sermod</span>
-</div>
+<p id="ops" class="muted" style="margin:.6rem 0 0"></p>
 
 <section id="watches-section" style="margin-top:1rem; display:none">
   <h2 style="font-size:1.05rem">Host watches <span id="watches-count" class="muted"></span></h2>
@@ -143,7 +139,10 @@
 <div id="detail"></div>
 
 <section>
-  <h2 style="font-size:1.05rem">Diagnostics <button onclick="loadDiag()">refresh</button></h2>
+  <h2 style="font-size:1.05rem">Diagnostics <button onclick="loadDiag()">refresh</button>
+    <button id="reload-btn" onclick="reloadConfig()" style="display:none">reload config</button>
+    <span class="muted" style="font-weight:400; font-size:.8rem; margin-left:.5rem">SIGHUP or systemctl reload sermod</span>
+  </h2>
   <table class="events"><tbody id="diag"></tbody></table>
 </section>
 
