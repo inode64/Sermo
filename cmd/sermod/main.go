@@ -17,6 +17,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/buildinfo"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/servicemgr"
@@ -145,6 +146,7 @@ func run(args []string) int {
 		Events:          eventLog,
 		SystemFreshness: interval / 2,
 		OpGate:          opGate,
+		ExecxRunner:     execx.CommandRunner{},
 	}
 
 	// Bound the SLA and measurement tables to roughly a year of per-minute data.

@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -107,6 +108,9 @@ type Deps struct {
 	// Collector provides live system and per-service metrics (cpu, memory, load).
 	// Made available to the web UI for host overview.
 	Collector *metrics.Collector
+	// ExecxRunner is used for executing hook commands from watches (file, process,
+	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
+	ExecxRunner execx.Runner
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
