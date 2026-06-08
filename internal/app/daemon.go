@@ -61,11 +61,11 @@ var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": tru
 
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
-	Backend        servicemgr.Backend
-	Manager        servicemgr.Manager
-	Runtime        string
-	DefaultTimeout    time.Duration
-	OperationTimeout  time.Duration
+	Backend          servicemgr.Backend
+	Manager          servicemgr.Manager
+	Runtime          string
+	DefaultTimeout   time.Duration
+	OperationTimeout time.Duration
 	// Interval is the global resolution (engine.interval). It is the base cycle
 	// rate and the unit a per-check `interval` is rounded to (a check runs every
 	// round(interval/resolution) cycles). A service's own `interval` overrides it.
@@ -185,9 +185,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Remediation: deps.Remediation,
 		RuleWindows: deps.RuleWindows,
 		CheckDeps:   checkDeps,
-		Interval:  durationField(tree["interval"]),
-		Gates:     parseCheckGates(tree),
-		Sample:    sampleMetrics,
+		Interval:    durationField(tree["interval"]),
+		Gates:       parseCheckGates(tree),
+		Sample:      sampleMetrics,
 		Operate: func(ctx context.Context, action string) operation.Result {
 			switch action {
 			case "start":

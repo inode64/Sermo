@@ -11,25 +11,25 @@ import (
 )
 
 type fakeBackend struct {
-	services    []Service
-	operated    []string // "name/action"
-	monitored   map[string]bool
-	failOp      bool
-	seriesSince time.Duration
-	eventLimit  int
-	metricCheck string
-	metricSince time.Duration
+	services        []Service
+	operated        []string // "name/action"
+	monitored       map[string]bool
+	failOp          bool
+	seriesSince     time.Duration
+	eventLimit      int
+	metricCheck     string
+	metricSince     time.Duration
 	opsSlots        OperationSlots
 	preflightCalled string
 }
 
-func (f *fakeBackend) Services(context.Context) []Service { return f.services }
-func (f *fakeBackend) Watches(context.Context) []Watch { return nil }
-func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
-func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo { return DaemonInfo{} }
-func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
-func (f *fakeBackend) Locks(context.Context) []Lock { return nil }
-func (f *fakeBackend) ActivitySummary(context.Context) ActivitySummary { return ActivitySummary{} }
+func (f *fakeBackend) Services(context.Context) []Service                { return f.services }
+func (f *fakeBackend) Watches(context.Context) []Watch                   { return nil }
+func (f *fakeBackend) Notifiers(context.Context) []Notifier              { return nil }
+func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo             { return DaemonInfo{} }
+func (f *fakeBackend) HostMetrics(context.Context) []HostMetric          { return nil }
+func (f *fakeBackend) Locks(context.Context) []Lock                      { return nil }
+func (f *fakeBackend) ActivitySummary(context.Context) ActivitySummary   { return ActivitySummary{} }
 func (f *fakeBackend) MonitoringStatus(context.Context) MonitoringStatus { return MonitoringStatus{} }
 func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
 	for _, s := range f.services {
@@ -102,7 +102,7 @@ func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult
 		if s.Name == name {
 			f.preflightCalled = name
 			return PreflightResult{
-				OK: true,
+				OK:     true,
 				Checks: []Check{{Name: "disk", OK: true, Ran: true, Message: "ok"}},
 			}, true
 		}
