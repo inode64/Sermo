@@ -58,14 +58,15 @@ func New(c Config) Engine {
 	}
 
 	tree := c.Tree
-	killPolicy, _ := process.ParseStopPolicy(tree)
+	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
+	configErr := firstWarningError(
+		warningError("stop_policy", stopPolicyWarnings),
+		warningError("selector config", selectorWarnings),
+	)
 
 	discover := func() ([]process.Process, error) {
-		if len(selectorWarnings) > 0 {
-			return nil, warningError("selector config", selectorWarnings)
-		}
 		procs, warnings := c.Discoverer.Discover(selectors)
 		if len(warnings) > 0 && !hasCommandMatch {
 			return procs, warningError("runtime discovery", warnings)
@@ -85,10 +86,11 @@ func New(c Config) Engine {
 	}
 
 	return Engine{
-		Service: c.Service,
-		Unit:    c.Unit,
-		Backend: c.Backend,
-		Manager: c.Manager,
+		Service:     c.Service,
+		Unit:        c.Unit,
+		Backend:     c.Backend,
+		ConfigError: configErr,
+		Manager:     c.Manager,
 		AcquireLock: func(t time.Duration) (func() error, error) {
 			h, err := c.Locker.Acquire(c.Service, t)
 			if err != nil {
@@ -123,7 +125,19 @@ func hasCommandMatchSelector(selectors []process.Selector) bool {
 }
 
 func warningError(prefix string, warnings []string) error {
+	if len(warnings) == 0 {
+		return nil
+	}
 	return fmt.Errorf("%s: %s", prefix, strings.Join(warnings, "; "))
+}
+
+func firstWarningError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // sectionRunner builds and runs a checks/preflight/postflight section, returning
