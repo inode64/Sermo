@@ -141,6 +141,85 @@ variables:
 	}
 }
 
+func TestMultiInstanceProfileOverridesPerInstance(t *testing.T) {
+	// Two services share one profile (same binary, checks and rules) but each
+	// overrides only the variables that make an instance unique: listen port,
+	// pidfile and config path. This is the supported pattern for running e.g.
+	// two MariaDB or php-fpm instances off a single profile — no new mechanism
+	// is needed beyond `uses` + per-instance `variables`.
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/dbserver.yml": `
+kind: profile
+name: dbserver
+service:
+  systemd: [dbserver]
+variables:
+  host: 127.0.0.1
+  port: 3306
+  pidfile: /run/dbserver/main.pid
+  config: /etc/dbserver/main.cnf
+processes:
+  pidfile:
+    type: pidfile
+    path: "${pidfile}"
+checks:
+  tcp:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+  config:
+    type: command
+    command: ["dbserverd", "--defaults-file=${config}", "--help"]
+`,
+		"enabled/db-inst1.yml": `
+kind: service
+name: db-inst1
+uses: dbserver
+service: db-inst1
+variables:
+  port: 3306
+  pidfile: /run/dbserver/inst1.pid
+  config: /etc/dbserver/inst1.cnf
+`,
+		"enabled/db-inst2.yml": `
+kind: service
+name: db-inst2
+uses: dbserver
+service: db-inst2
+variables:
+  port: 3307
+  pidfile: /run/dbserver/inst2.pid
+  config: /etc/dbserver/inst2.cnf
+`,
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	type want struct{ port, pidfile, config string }
+	cases := map[string]want{
+		"db-inst1": {port: "3306", pidfile: "/run/dbserver/inst1.pid", config: "/etc/dbserver/inst1.cnf"},
+		"db-inst2": {port: "3307", pidfile: "/run/dbserver/inst2.pid", config: "/etc/dbserver/inst2.cnf"},
+	}
+	for name, w := range cases {
+		resolved, errs := cfg.Resolve(name)
+		if len(errs) != 0 {
+			t.Fatalf("Resolve(%s) errors = %v", name, errs)
+		}
+		if got := scalarString(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != w.port {
+			t.Errorf("%s tcp.port = %q, want %q", name, got, w.port)
+		}
+		if got := scalarString(nested(t, resolved.Tree, "processes", "pidfile")["path"]); got != w.pidfile {
+			t.Errorf("%s pidfile.path = %q, want %q", name, got, w.pidfile)
+		}
+		cmd, _ := nested(t, resolved.Tree, "checks", "config")["command"].([]any)
+		if joined := fmt.Sprint(cmd...); !strings.Contains(joined, w.config) {
+			t.Errorf("%s config check command = %v, want to contain %q", name, cmd, w.config)
+		}
+	}
+}
+
 func TestValidateCleanConfig(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

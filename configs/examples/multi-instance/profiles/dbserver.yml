@@ -1,0 +1,63 @@
+kind: profile
+name: dbserver
+display_name: "DB Server"
+type: database
+
+# Shared base for every instance. Everything that varies between instances is a
+# ${variable}: an instance overrides only these and inherits the rest.
+#
+# `config` is the per-instance config file. It is parametrized here and threaded
+# into every command that reads it (--defaults-file=${config}) so two instances
+# never read each other's configuration. `port` and `pidfile` follow the same
+# rule and are already wired into the tcp check and the pidfile process below.
+service:
+  systemd: [dbserver]
+  openrc:  [dbserver]
+
+variables:
+  binary:  /usr/sbin/dbserverd
+  user:    dbserver
+  host:    127.0.0.1
+  port:    3306
+  pidfile: /run/dbserver/main.pid
+  config:  /etc/dbserver/main.cnf
+
+commands:
+  version:
+    command: ["${binary}", "--defaults-file=${config}", "--version"]
+
+preflight:
+  binary:
+    type: binary
+    path: "${binary}"
+  config:
+    type: command
+    command: ["${binary}", "--defaults-file=${config}", "--help", "--verbose"]
+    timeout: 15s
+
+processes:
+  pidfile:
+    type: pidfile
+    path: "${pidfile}"
+
+checks:
+  service:
+    type: service
+    expect: active
+  tcp:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+
+rules:
+  restart-if-tcp-failed:
+    type: remediation
+    if:
+      failed:
+        check: tcp
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
