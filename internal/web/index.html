@@ -57,6 +57,7 @@
     </select>
   </label>
 </div>
+<div id="system-status" class="muted" style="margin:-.5rem 0 .35rem; font-size:.9rem; display:flex; gap:.5rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
@@ -117,15 +118,6 @@
       <div>Ready: <span id="daemon-ready"></span></div>
     </div>
   </div>
-</section>
-
-<section id="host-section" style="margin-top:1rem;">
-  <h2 style="font-size:1.05rem">Host metrics (current)</h2>
-  <table style="width:auto; font-size:.9rem;">
-    <thead><tr><th>Metric</th><th>Value</th></tr></thead>
-    <tbody id="host-rows"></tbody>
-  </table>
-  <p class="muted" style="font-size:.8rem">Live system readings (memory, cpu rate, load). Updated on refresh.</p>
 </section>
 
 <section id="activity-section" style="margin-top:1rem;">
@@ -235,13 +227,6 @@ async function load() {
     }
   } catch (_) { /* non-fatal */ }
 
-  // Current host metrics (memory, cpu, load).
-  try {
-    const hr = await fetch("api/host");
-    if (hr.ok) {
-      renderHostMetrics(await hr.json());
-    }
-  } catch (_) { /* non-fatal */ }
 
   // Global runtime locks (active and stale).
   try {
@@ -498,25 +483,18 @@ function renderDaemon(info) {
   set("#engine-startup-delay", info.startup_delay);
 }
 
-function renderHostMetrics(metrics) {
-  const tbody = $("#host-rows");
-  if (!tbody) return;
-  if (!metrics || metrics.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="2" class="muted">no metrics</td></tr>`;
-    return;
-  }
-  const rows = metrics.map((m) => {
-    let val = "—";
-    if (m.percent != null) {
-      val = m.percent.toFixed(1) + "%";
-    } else if (m.absolute != null) {
-      val = m.absolute.toFixed(2);
-      if (m.unit) val += " " + m.unit;
-    }
-    const ready = m.ready ? "" : " (stale)";
-    return `<tr><td>${esc(m.name)}</td><td><b>${esc(val)}</b>${ready}</td></tr>`;
-  });
-  tbody.innerHTML = rows.join("");
+// hostMetricVal finds a single host metric by name and formats its value
+// (percent or absolute+unit), or returns null when absent. Used to fold the
+// live host readings into the system-status line.
+function hostMetricVal(metrics, name) {
+  const m = (metrics || []).find((x) => x.name === name);
+  if (!m) return null;
+  let val;
+  if (m.percent != null) val = m.percent.toFixed(1) + "%";
+  else if (m.absolute != null) { val = m.absolute.toFixed(2) + (m.unit ? " " + m.unit : ""); }
+  else return null;
+  if (!m.ready) val += " (stale)";
+  return val;
 }
 
 function renderLocks(locks) {
@@ -570,20 +548,40 @@ async function renderStatus() {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const [readyRes, liveRes, monRes, opsRes, locksRes] = await Promise.all([
+    const [readyRes, liveRes, monRes, opsRes, locksRes, daemonRes, hostRes] = await Promise.all([
       fetch("readyz?verbose"),
       fetch("livez?verbose"),
       fetch("api/monitoring"),
       fetch("api/ops"),
-      fetch("api/locks")
+      fetch("api/locks"),
+      fetch("api/daemon"),
+      fetch("api/host")
     ]);
     const ready = readyRes.ok ? await readyRes.json() : {};
     const live = liveRes.ok ? await liveRes.json() : {};
     const mon = monRes.ok ? await monRes.json() : {};
     const ops = opsRes.ok ? await opsRes.json() : {};
     const locks = locksRes.ok ? await locksRes.json() : [];
+    const daemon = daemonRes.ok ? await daemonRes.json() : {};
+    const hostMetrics = hostRes.ok ? await hostRes.json() : [];
+
+    // System-status line (line 2): host identity + detected backend + OS + live readings.
+    const sys = $("#system-status");
+    if (sys) {
+      const sp = [];
+      if (daemon.hostname) sp.push(`host: <b>${esc(daemon.hostname)}</b>`);
+      if (ready.backend) sp.push(`backend: <b>${esc(ready.backend)}</b>`);
+      if (daemon.os) sp.push(`OS: <b>${esc(daemon.os)}</b>`);
+      const cpu = hostMetricVal(hostMetrics, "total_cpu");
+      const mem = hostMetricVal(hostMetrics, "total_memory");
+      const load = hostMetricVal(hostMetrics, "load1");
+      if (cpu != null) sp.push(`cpu: <b>${esc(cpu)}</b>`);
+      if (mem != null) sp.push(`mem: <b>${esc(mem)}</b>`);
+      if (load != null) sp.push(`load: <b>${esc(load)}</b>`);
+      sys.innerHTML = sp.join(" &middot; ");
+    }
+
     const parts = [];
-    if (ready.backend) parts.push(`backend: <b>${esc(ready.backend)}</b>`);
     parts.push(`services: <b>${ready.services || 0}</b>`);
     parts.push(`watches: <b>${ready.watches || 0}</b>`);
     if (mon.total != null) {
