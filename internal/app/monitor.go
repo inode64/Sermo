@@ -101,6 +101,13 @@ func (m *Monitor) Reload() {
 	}
 
 	oldWorkers := m.workers
+	oldWatches := m.watches
+	// Stop the current generation before capturing state. This ensures no
+	// scheduler goroutines are calling RunCycle (which mutates cycle, State,
+	// windows and libBaseline) on the old workers while we snapshot them.
+	// See section 24 and reload state preservation.
+	m.stopGenerationLocked(false)
+
 	saved := captureWorkerState(oldWorkers)
 	prevCfg := m.cfg
 	prevDeps := m.deps
@@ -110,16 +117,18 @@ func (m *Monitor) Reload() {
 	workers, warnings := BuildWorkers(newCfg, m.deps, m.collector)
 	watches, watchWarnings := BuildWatches(newCfg, m.deps, m.deps.Interval)
 	if len(workers) == 0 && len(watches) == 0 && !HasConfiguredTargets(newCfg) {
+		// Rollback: restore previous generation and restart it (we stopped above).
 		m.cfg = prevCfg
 		m.deps = prevDeps
+		m.workers = oldWorkers
+		m.watches = oldWatches
 		m.emitReloadError("no services or watches configured")
+		m.startGenerationLocked(m.parent, false)
 		return
 	}
 
 	applyWorkerState(workers, saved)
 	resetRemovedServiceMetrics(m.collector, oldWorkers, workers)
-
-	m.stopGenerationLocked(false)
 
 	m.cfg = newCfg
 	m.workers = workers
