@@ -44,7 +44,19 @@
 </style>
 </head>
 <body>
-<h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
+<div style="display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+  <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
+  <label class="muted" style="font-size:.85rem; white-space:nowrap;">Auto-refresh
+    <select id="refresh-select" onchange="setRefresh(this.value)" style="font: inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">
+      <option value="5000">5s</option>
+      <option value="10000">10s</option>
+      <option value="30000">30s</option>
+      <option value="60000">1m</option>
+      <option value="120000">2m</option>
+      <option value="0">stop</option>
+    </select>
+  </label>
+</div>
 <div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
 <p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
 <div id="err"></div>
@@ -59,7 +71,6 @@
   <button id="reload-btn" onclick="reloadConfig()" style="display:none">reload config</button>
   <span class="muted" style="margin-left:.75rem">SIGHUP or systemctl reload sermod</span>
 </div>
-<p class="muted">Auto-refreshes every 5s.</p>
 
 <section id="watches-section" style="margin-top:1rem; display:none">
   <h2 style="font-size:1.05rem">Host watches <span id="watches-count" class="muted"></span></h2>
@@ -986,7 +997,23 @@ function esc(s) {
 
 loadMe().then(load);
 loadDiag();
-setInterval(() => { load(); if (current) detail(current); }, 5000);
+let refreshTimer = null;
+function applyRefresh(ms) {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = ms > 0 ? setInterval(() => { load(); if (current) detail(current); }, ms) : null;
+}
+function setRefresh(v) {
+  const ms = parseInt(v, 10) || 0;
+  applyRefresh(ms);
+  try { localStorage.setItem("sermo-refresh", String(ms)); } catch (_) {}
+}
+(function initRefresh() {
+  let ms = 5000;
+  try { const s = localStorage.getItem("sermo-refresh"); if (s !== null) ms = parseInt(s, 10) || 0; } catch (_) {}
+  const sel = $("#refresh-select");
+  if (sel) sel.value = String(ms);
+  applyRefresh(ms);
+})();
 </script>
 </body>
 </html>
