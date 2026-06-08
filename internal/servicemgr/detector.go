@@ -174,9 +174,7 @@ func (d Detector) probeOpenRC(ctx context.Context) BackendProbe {
 }
 
 func (d Detector) run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	commandCtx, cancel := context.WithTimeout(ctx, d.Timeout)
-	defer cancel()
-	return d.Runner.Run(commandCtx, name, args...)
+	return execx.Run(ctx, d.Runner, d.Timeout, name, args...)
 }
 
 func (d Detector) pid1Is(name string) bool {

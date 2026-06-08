@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
 )
 
 // appReport is one application's installed/version/health summary for `apps`.
@@ -104,9 +105,7 @@ func (a App) inspectApp(ctx context.Context, name string, resolved config.Resolv
 		return r
 	}
 
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	res, err := a.Runner.Run(cctx, argv[0], argv[1:]...)
+	res, err := execx.Run(ctx, a.Runner, 5*time.Second, argv[0], argv[1:]...)
 	switch {
 	case err != nil && res.ExitCode == 0:
 		r.Status = "error: " + err.Error()

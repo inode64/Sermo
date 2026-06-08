@@ -1000,9 +1000,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 			{"pidof", "-s", "sermod"},
 			{"pgrep", "-x", "-n", "sermod"},
 		} {
-			probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			res, err := a.Runner.Run(probeCtx, probe[0], probe[1:]...)
-			cancel()
+			res, err := execx.Run(ctx, a.Runner, 2*time.Second, probe[0], probe[1:]...)
 			if err == nil {
 				if n, err := strconv.Atoi(strings.TrimSpace(res.Stdout)); err == nil && n > 0 {
 					pid = n
