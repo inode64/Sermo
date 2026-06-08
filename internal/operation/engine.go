@@ -29,6 +29,7 @@ type Engine struct {
 	Unit    string // backend unit, passed to Manager
 	Backend string
 
+	ConfigError      error
 	Manager          Manager
 	AcquireLock      func(ttl time.Duration) (release func() error, err error)
 	LockTTL          time.Duration
@@ -82,6 +83,12 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 			e.Emit(result)
 		}
 	}()
+
+	if e.ConfigError != nil {
+		result.Status = ResultFailed
+		result.Message = "config: " + e.ConfigError.Error()
+		return result
+	}
 
 	// Step 3: acquire the internal operation lock; fail fast if held.
 	release, err := e.AcquireLock(e.LockTTL)

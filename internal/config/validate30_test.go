@@ -340,6 +340,21 @@ stop_policy:
 	mustHave(t, issues, "force_kill=true requires kill_only_if")
 }
 
+func TestValidateStopPolicyDurations(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+stop_policy:
+  graceful_timeout: nope
+  term_timeout: 0s
+  kill_timeout: -1s
+`)
+	mustHave(t, issues, `stop_policy.graceful_timeout "nope" must be a valid positive duration`)
+	mustHave(t, issues, `stop_policy.term_timeout "0s" must be a valid positive duration`)
+	mustHave(t, issues, `stop_policy.kill_timeout "-1s" must be a valid positive duration`)
+}
+
 func TestValidateCheckEntrySchemas(t *testing.T) {
 	issues := validateService(t, `
 kind: service

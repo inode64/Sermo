@@ -1279,6 +1279,11 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
+	for _, field := range []string{"graceful_timeout", "term_timeout", "kill_timeout"} {
+		if v, present := sp[field]; present && !isPositiveDuration(scalarString(v)) {
+			add("stop_policy.%s %q must be a valid positive duration", field, scalarString(v))
+		}
+	}
 	force, _ := sp["force_kill"].(bool)
 	koi, hasKoi := sp["kill_only_if"].(map[string]any)
 	if force && !hasKoi {

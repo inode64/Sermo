@@ -374,6 +374,36 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 	}
 }
 
+func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service: "mysql-main",
+		Unit:    "mysqld",
+		Backend: "systemd",
+		Tree: map[string]any{
+			"stop_policy": map[string]any{"term_timeout": "notaduration"},
+		},
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.NewDiscoverer(),
+		Sleep:      func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "config: stop_policy") {
+		t.Fatalf("message = %q, want stop_policy config error", res.Message)
+	}
+	if mgr.did("stop mysqld") || mgr.did("start mysqld") {
+		t.Fatalf("must not call service manager with invalid stop_policy, calls=%v", mgr.calls)
+	}
+}
+
 func TestRestartStartError(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.startErr = errors.New("boom")
