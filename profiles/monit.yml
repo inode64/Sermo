@@ -1,9 +1,0 @@
-kind: profile
-name: monit
-display_name: "Monit"
-service: { name: "monit", backend: auto }
-variables:
-  binary: "/usr/bin/monit"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
