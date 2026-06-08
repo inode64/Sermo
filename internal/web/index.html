@@ -726,7 +726,7 @@ function renderDetail(d) {
     <button class="close" onclick="closeDetail()">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
-    ${disabledNote}`
+    ${disabledNote}
     <h2>Remediation</h2>
     <p>${renderRemediation(d.remediation)}</p>
     <h2>Rules</h2>
