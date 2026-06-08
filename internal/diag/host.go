@@ -10,16 +10,19 @@ import (
 // interfaces and /proc/mounts.
 type OSHost struct{}
 
+// PathExists reports whether path exists on the host filesystem.
 func (OSHost) PathExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
 
+// InterfaceExists reports whether a network interface with the given name exists.
 func (OSHost) InterfaceExists(name string) bool {
 	_, err := net.InterfaceByName(name)
 	return err == nil
 }
 
+// IsMountPoint reports whether path is a mount point, per /proc/mounts.
 func (OSHost) IsMountPoint(path string) bool {
 	data, err := os.ReadFile("/proc/mounts")
 	if err != nil {

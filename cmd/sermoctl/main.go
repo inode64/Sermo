@@ -1,3 +1,4 @@
+// Command sermoctl is the command-line client for the Sermo service monitor.
 package main
 
 import (

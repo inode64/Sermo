@@ -23,6 +23,7 @@ type HookRunner interface {
 // HookRunnerFunc adapts a function to HookRunner.
 type HookRunnerFunc func(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error
 
+// RunHook calls the adapted function.
 func (f HookRunnerFunc) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error {
 	return f(ctx, argv, env, timeout)
 }
@@ -39,13 +40,15 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 // environment plus the provided SERMO_* variables, bounded by timeout.
 type OSHookRunner struct{}
 
+// RunHook executes argv via os/exec (no shell) with the given environment,
+// bounded by timeout when positive.
 func (OSHookRunner) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error {
 	if timeout > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) //nolint:gosec // G204: runs the operator-configured hook command, by design
 	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)

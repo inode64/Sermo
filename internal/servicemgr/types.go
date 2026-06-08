@@ -8,6 +8,7 @@ import (
 // Backend identifies a supported service manager backend.
 type Backend string
 
+// Supported service-manager backends.
 const (
 	BackendAuto    Backend = "auto"
 	BackendSystemd Backend = "systemd"
@@ -31,6 +32,7 @@ func ParseBackend(value string) (Backend, error) {
 // Status is the normalized service status returned by managers.
 type Status string
 
+// Normalized service statuses.
 const (
 	StatusActive   Status = "active"
 	StatusInactive Status = "inactive"

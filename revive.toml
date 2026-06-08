@@ -1,0 +1,31 @@
+# revive configuration for Sermo.
+#
+# This mirrors revive's default rule set, with one deliberate omission:
+# `unused-parameter` is disabled. Many methods implement interfaces (e.g.
+# web.Backend) whose signatures include a `ctx context.Context` the
+# implementation legitimately ignores; renaming those to `_` would hurt
+# readability and fight the interface contract, so the rule is off on purpose.
+
+[rule.blank-imports]
+[rule.context-as-argument]
+[rule.context-keys-type]
+[rule.dot-imports]
+[rule.empty-block]
+[rule.error-naming]
+[rule.error-return]
+[rule.error-strings]
+[rule.errorf]
+[rule.exported]
+[rule.if-return]
+[rule.increment-decrement]
+[rule.indent-error-flow]
+[rule.package-comments]
+[rule.range]
+[rule.receiver-naming]
+[rule.redefines-builtin-id]
+[rule.superfluous-else]
+[rule.time-naming]
+[rule.unexported-return]
+[rule.unreachable-code]
+[rule.var-declaration]
+[rule.var-naming]

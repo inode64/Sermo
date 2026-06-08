@@ -19,6 +19,7 @@ import (
 // Level is a finding's severity.
 type Level string
 
+// Finding severity levels.
 const (
 	LevelError   Level = "error"
 	LevelWarning Level = "warning"
@@ -37,8 +38,10 @@ type Result struct {
 	Findings []Finding `json:"findings"`
 }
 
-// Errors and Warnings count findings by level.
-func (r Result) Errors() int   { return r.count(LevelError) }
+// Errors returns the number of error-level findings.
+func (r Result) Errors() int { return r.count(LevelError) }
+
+// Warnings returns the number of warning-level findings.
 func (r Result) Warnings() int { return r.count(LevelWarning) }
 func (r Result) count(l Level) int {
 	n := 0

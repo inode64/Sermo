@@ -19,11 +19,11 @@ func (s *WindowState) Fires(r Rule, conditionTrue bool) bool {
 		if len(s.history) > r.Within.Cycles {
 			s.history = s.history[len(s.history)-r.Within.Cycles:]
 		}
-		min := r.Within.MinMatches
-		if min <= 0 {
-			min = 1
+		minMatches := r.Within.MinMatches
+		if minMatches <= 0 {
+			minMatches = 1
 		}
-		return countTrue(s.history) >= min
+		return countTrue(s.history) >= minMatches
 	}
 
 	// `for` (consecutive); default is 1 cycle.
@@ -46,11 +46,11 @@ func (s *WindowState) IsFiring(r Rule) bool {
 		s = &WindowState{}
 	}
 	if r.Within != nil && r.Within.Cycles > 0 {
-		min := r.Within.MinMatches
-		if min <= 0 {
-			min = 1
+		minMatches := r.Within.MinMatches
+		if minMatches <= 0 {
+			minMatches = 1
 		}
-		return countTrue(s.history) >= min
+		return countTrue(s.history) >= minMatches
 	}
 	need := 1
 	if r.For != nil && r.For.Cycles > 0 {
@@ -66,11 +66,11 @@ func (s *WindowState) Progress(r Rule) string {
 		s = &WindowState{}
 	}
 	if r.Within != nil && r.Within.Cycles > 0 {
-		min := r.Within.MinMatches
-		if min <= 0 {
-			min = 1
+		minMatches := r.Within.MinMatches
+		if minMatches <= 0 {
+			minMatches = 1
 		}
-		return fmt.Sprintf("%d/%d in %d cycles", countTrue(s.history), min, r.Within.Cycles)
+		return fmt.Sprintf("%d/%d in %d cycles", countTrue(s.history), minMatches, r.Within.Cycles)
 	}
 	need := 1
 	if r.For != nil && r.For.Cycles > 0 {
@@ -94,11 +94,11 @@ func (s *WindowState) Clone() *WindowState {
 // WindowDescription summarizes the configured for/within window.
 func WindowDescription(r Rule) string {
 	if r.Within != nil && r.Within.Cycles > 0 {
-		min := r.Within.MinMatches
-		if min <= 0 {
-			min = 1
+		minMatches := r.Within.MinMatches
+		if minMatches <= 0 {
+			minMatches = 1
 		}
-		return fmt.Sprintf("within %d cycles (min %d)", r.Within.Cycles, min)
+		return fmt.Sprintf("within %d cycles (min %d)", r.Within.Cycles, minMatches)
 	}
 	if r.For != nil && r.For.Cycles > 0 {
 		return fmt.Sprintf("for %d consecutive", r.For.Cycles)

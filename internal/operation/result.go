@@ -18,6 +18,7 @@ import (
 // ResultStatus is the outcome of an operation (section 18).
 type ResultStatus string
 
+// Operation result statuses (section 18).
 const (
 	ResultOK               ResultStatus = "ok"
 	ResultBlocked          ResultStatus = "blocked"

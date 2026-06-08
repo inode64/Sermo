@@ -86,7 +86,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, locker locks.NamedLo
 	}
 	defer func() { _ = handle.Release() }()
 
-	cmd := exec.CommandContext(ctx, opts.commandArgs[0], opts.commandArgs[1:]...)
+	cmd := exec.CommandContext(ctx, opts.commandArgs[0], opts.commandArgs[1:]...) //nolint:gosec // G204: runs the operator-provided locked command, by design
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

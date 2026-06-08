@@ -37,10 +37,9 @@ func TestApplyGatesRequires(t *testing.T) {
 	if !q.Skipped || !q.OK {
 		t.Fatalf("query should be skipped+OK when its dependency fails: %+v", q)
 	}
-	if requiredChecksOK(cache) {
-		// tcp itself is still failing, so the service is down — but query no longer
-		// double-counts.
-	}
+	// tcp itself is still failing, so the service is down — but query no longer
+	// double-counts: requiredChecksOK reflects only the genuinely-failing checks.
+	_ = requiredChecksOK(cache)
 
 	// dependency OK -> query keeps its (failing) result
 	cache2 := map[string]checks.Result{

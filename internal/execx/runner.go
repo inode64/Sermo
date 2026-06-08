@@ -1,3 +1,4 @@
+// Package execx runs external commands with timeout and output handling.
 package execx
 
 import (

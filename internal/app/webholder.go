@@ -42,6 +42,7 @@ func (h *WebBackendHolder) backend() *WebBackend {
 	return h.b
 }
 
+// Services returns the service list from the active backend (nil if unset).
 func (h *WebBackendHolder) Services(ctx context.Context) []web.Service {
 	if b := h.backend(); b != nil {
 		return b.Services(ctx)
@@ -49,6 +50,7 @@ func (h *WebBackendHolder) Services(ctx context.Context) []web.Service {
 	return nil
 }
 
+// Watches returns the host watches from the active backend.
 func (h *WebBackendHolder) Watches(ctx context.Context) []web.Watch {
 	if b := h.backend(); b != nil {
 		return b.Watches(ctx)
@@ -56,6 +58,7 @@ func (h *WebBackendHolder) Watches(ctx context.Context) []web.Watch {
 	return nil
 }
 
+// Notifiers returns the configured notifiers from the active backend.
 func (h *WebBackendHolder) Notifiers(ctx context.Context) []web.Notifier {
 	if b := h.backend(); b != nil {
 		return b.Notifiers(ctx)
@@ -63,6 +66,7 @@ func (h *WebBackendHolder) Notifiers(ctx context.Context) []web.Notifier {
 	return nil
 }
 
+// DaemonInfo returns daemon and engine info from the active backend.
 func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	if b := h.backend(); b != nil {
 		return b.DaemonInfo(ctx)
@@ -70,6 +74,7 @@ func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	return web.DaemonInfo{}
 }
 
+// HostMetrics returns current host metrics from the active backend.
 func (h *WebBackendHolder) HostMetrics(ctx context.Context) []web.HostMetric {
 	if b := h.backend(); b != nil {
 		return b.HostMetrics(ctx)
@@ -77,6 +82,7 @@ func (h *WebBackendHolder) HostMetrics(ctx context.Context) []web.HostMetric {
 	return nil
 }
 
+// Locks returns runtime locks from the active backend.
 func (h *WebBackendHolder) Locks(ctx context.Context) []web.Lock {
 	if b := h.backend(); b != nil {
 		return b.Locks(ctx)
@@ -84,6 +90,7 @@ func (h *WebBackendHolder) Locks(ctx context.Context) []web.Lock {
 	return nil
 }
 
+// ActivitySummary returns the recent-activity rollup from the active backend.
 func (h *WebBackendHolder) ActivitySummary(ctx context.Context) web.ActivitySummary {
 	if b := h.backend(); b != nil {
 		return b.ActivitySummary(ctx)
@@ -91,6 +98,7 @@ func (h *WebBackendHolder) ActivitySummary(ctx context.Context) web.ActivitySumm
 	return web.ActivitySummary{}
 }
 
+// MonitoringStatus returns the monitored/paused summary from the active backend.
 func (h *WebBackendHolder) MonitoringStatus(ctx context.Context) web.MonitoringStatus {
 	if b := h.backend(); b != nil {
 		return b.MonitoringStatus(ctx)
@@ -98,6 +106,7 @@ func (h *WebBackendHolder) MonitoringStatus(ctx context.Context) web.MonitoringS
 	return web.MonitoringStatus{}
 }
 
+// Detail returns a service's detail from the active backend.
 func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail, bool) {
 	if b := h.backend(); b != nil {
 		return b.Detail(ctx, name)
@@ -105,6 +114,7 @@ func (h *WebBackendHolder) Detail(ctx context.Context, name string) (web.Detail,
 	return web.Detail{}, false
 }
 
+// Series returns a service's SLA series from the active backend.
 func (h *WebBackendHolder) Series(ctx context.Context, name string, since time.Duration) ([]web.SeriesPoint, bool) {
 	if b := h.backend(); b != nil {
 		return b.Series(ctx, name, since)
@@ -112,6 +122,7 @@ func (h *WebBackendHolder) Series(ctx context.Context, name string, since time.D
 	return nil, false
 }
 
+// Metrics returns a check's metric series from the active backend.
 func (h *WebBackendHolder) Metrics(ctx context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {
 	if b := h.backend(); b != nil {
 		return b.Metrics(ctx, name, check, since)
@@ -119,6 +130,7 @@ func (h *WebBackendHolder) Metrics(ctx context.Context, name, check string, sinc
 	return web.MetricSeries{}, false
 }
 
+// Events returns recent events from the active backend.
 func (h *WebBackendHolder) Events(ctx context.Context, limit int) []web.Event {
 	if b := h.backend(); b != nil {
 		return b.Events(ctx, limit)
@@ -126,6 +138,7 @@ func (h *WebBackendHolder) Events(ctx context.Context, limit int) []web.Event {
 	return nil
 }
 
+// Diagnostics returns diagnostic findings from the active backend.
 func (h *WebBackendHolder) Diagnostics(ctx context.Context) []web.Finding {
 	if b := h.backend(); b != nil {
 		return b.Diagnostics(ctx)
@@ -133,6 +146,7 @@ func (h *WebBackendHolder) Diagnostics(ctx context.Context) []web.Finding {
 	return nil
 }
 
+// Operations returns operation-slot usage from the active backend.
 func (h *WebBackendHolder) Operations(ctx context.Context) web.OperationSlots {
 	if b := h.backend(); b != nil {
 		return b.Operations(ctx)
@@ -140,6 +154,7 @@ func (h *WebBackendHolder) Operations(ctx context.Context) web.OperationSlots {
 	return web.OperationSlots{}
 }
 
+// ServiceEvents returns a service's recent events from the active backend.
 func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit int) ([]web.Event, bool) {
 	if b := h.backend(); b != nil {
 		return b.ServiceEvents(ctx, name, limit)
@@ -147,6 +162,7 @@ func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit
 	return nil, false
 }
 
+// Operate runs a start/stop/restart action through the active backend.
 func (h *WebBackendHolder) Operate(ctx context.Context, name, action string) web.ActionResult {
 	if b := h.backend(); b != nil {
 		return b.Operate(ctx, name, action)
@@ -154,6 +170,7 @@ func (h *WebBackendHolder) Operate(ctx context.Context, name, action string) web
 	return web.ActionResult{OK: false, Message: "web backend unavailable"}
 }
 
+// Preflight runs a service's preflight checks through the active backend.
 func (h *WebBackendHolder) Preflight(ctx context.Context, name string) (web.PreflightResult, bool) {
 	if b := h.backend(); b != nil {
 		return b.Preflight(ctx, name)
@@ -161,6 +178,7 @@ func (h *WebBackendHolder) Preflight(ctx context.Context, name string) (web.Pref
 	return web.PreflightResult{}, false
 }
 
+// SetMonitored toggles a service's monitoring through the active backend.
 func (h *WebBackendHolder) SetMonitored(ctx context.Context, name string, monitored bool) error {
 	if b := h.backend(); b != nil {
 		return b.SetMonitored(ctx, name, monitored)
