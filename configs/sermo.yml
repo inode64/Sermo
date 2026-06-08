@@ -21,10 +21,12 @@ engine:
   startup_delay: 0
 
 paths:
-  # Relative to this file's directory (configs/). `make install` rewrites
-  # ../profiles to the packaged profile dir under /usr/share/sermo.
+  # Packaged profile directory (installed by `make install`). When running from
+  # the source tree, point this elsewhere without editing the file via
+  # `sermod run --profiles ./profiles` (repeatable for multiple dirs).
   profiles:
-    - ../profiles
+    - /usr/share/sermo/profiles
+  # Relative to this file's directory (configs/).
   enabled:
     - apps-enabled
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
