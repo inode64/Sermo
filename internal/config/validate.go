@@ -1005,6 +1005,9 @@ func validateDocuments(cfg *Config) []Issue {
 			issues = append(issues, Issue{Scope: scope, Msg: "document has no name"})
 			continue
 		}
+		if !validDocumentName(doc.Name) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("document name %q must be a simple name without path separators", doc.Name)})
+		}
 		if doc.Kind == kindProfile {
 			profileCount[doc.Name]++
 		} else {
@@ -1023,6 +1026,10 @@ func validateDocuments(cfg *Config) []Issue {
 		}
 	}
 	return issues
+}
+
+func validDocumentName(name string) bool {
+	return name != "." && name != ".." && !strings.Contains(name, "/") && !strings.Contains(name, `\`)
 }
 
 func validateServices(cfg *Config) []Issue {

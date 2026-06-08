@@ -46,6 +46,9 @@ func (l NamedLocker) Pin(service, name, reason string, ttl time.Duration) (strin
 // Release unlinks a named lock explicitly, for `lock release`. A missing lock is
 // not an error.
 func (l NamedLocker) Release(service, name string) error {
+	if err := validateLockIDs(service, name); err != nil {
+		return err
+	}
 	if err := os.Remove(l.path(service, name)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -68,6 +71,10 @@ func (l NamedLocker) identity() (int, uint64) {
 }
 
 func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ownerPID int, ownerTicks uint64) (*Handle, error) {
+	if err := validateLockIDs(service, name); err != nil {
+		return nil, err
+	}
+
 	proc := l.Proc
 	if proc == nil {
 		proc = OSProcessProber{}
@@ -120,4 +127,11 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 		}
 	}
 	return nil, &HeldError{Service: service, Lock: Lock{Service: service, Name: name, Path: path, State: StateActive}}
+}
+
+func validateLockIDs(service, name string) error {
+	if err := validateIdentifier("service", service, false); err != nil {
+		return err
+	}
+	return validateIdentifier("lock name", name, true)
 }

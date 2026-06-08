@@ -3,6 +3,8 @@ package locks
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +51,35 @@ func TestNamedPinIsActiveWithoutOwner(t *testing.T) {
 	// Release of a missing lock is not an error.
 	if err := l.Release("mysql", "backup"); err != nil {
 		t.Fatalf("second Release() error = %v", err)
+	}
+}
+
+func TestNamedLockerRejectsPathLikeIDs(t *testing.T) {
+	root := t.TempDir()
+	l := namedLocker(filepath.Join(root, "locks"), fakeProc{})
+
+	tests := []struct {
+		name    string
+		service string
+		lock    string
+	}{
+		{name: "service traversal", service: "../escape", lock: ""},
+		{name: "service separator", service: "mysql/main", lock: ""},
+		{name: "lock traversal", service: "mysql", lock: "../backup"},
+		{name: "lock separator", service: "mysql", lock: "backup/nightly"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := l.Pin(tc.service, tc.lock, "x", time.Hour); err == nil || !strings.Contains(err.Error(), "simple name") {
+				t.Fatalf("Pin() error = %v, want simple-name validation error", err)
+			}
+		})
+	}
+	if _, err := os.Stat(filepath.Join(root, "escape.lock")); !os.IsNotExist(err) {
+		t.Fatalf("path-like service must not create escaped lock file: %v", err)
+	}
+	if err := l.Release("mysql", "../backup"); err == nil || !strings.Contains(err.Error(), "simple name") {
+		t.Fatalf("Release() error = %v, want simple-name validation error", err)
 	}
 }
 
