@@ -13,6 +13,19 @@ import (
 	"sermo/internal/servicemgr"
 )
 
+func TestVersionCommand(t *testing.T) {
+	for _, arg := range []string{"version", "--version", "-V"} {
+		var stdout bytes.Buffer
+		app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+		if code := app.Run(context.Background(), []string{arg}); code != exitSuccess {
+			t.Fatalf("Run(%q) exit = %d, want %d", arg, code, exitSuccess)
+		}
+		if !strings.HasPrefix(stdout.String(), "sermo ") {
+			t.Errorf("Run(%q) stdout = %q, want it to start with %q", arg, stdout.String(), "sermo ")
+		}
+	}
+}
+
 func TestBackendCommandPrintsDetectedBackend(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
