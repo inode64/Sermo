@@ -44,14 +44,14 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 	}
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{
-		Service:    name,
-		Unit:       unit,
-		Backend:    string(deps.Backend),
-		Tree:       tree,
-		Manager:    deps.Manager,
-		Locker:     &locker,
-		Scanner:    locks.NewScanner(filepath.Join(deps.Runtime, "locks")),
-		Discoverer: discoverer,
+		Service:          name,
+		Unit:             unit,
+		Backend:          string(deps.Backend),
+		Tree:             tree,
+		Manager:          deps.Manager,
+		Locker:           &locker,
+		Scanner:          locks.NewScanner(filepath.Join(deps.Runtime, "locks")),
+		Discoverer:       discoverer,
 		CheckDeps:        checkDeps,
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
@@ -76,12 +76,12 @@ type webEntry struct {
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
 type webWatch struct {
-	name        string
-	checkType   string
-	interval    time.Duration
-	disabled    bool
-	fireOnFail  bool
-	hasHook     bool
+	name          string
+	checkType     string
+	interval      time.Duration
+	disabled      bool
+	fireOnFail    bool
+	hasHook       bool
 	notifierCount int
 }
 
@@ -96,25 +96,25 @@ type webNotifier struct {
 // the shared snapshots, and start/stop/restart through the same safe operation
 // engine the workers use.
 type WebBackend struct {
-	order        []string
-	entries      map[string]*webEntry
-	watchOrder   []string
-	watches      map[string]*webWatch
-	notifierOrder []string
-	notifiers    map[string]*webNotifier
-	store        MonitorStore
-	snapshots    *Snapshots
-	sla          SLAReader
-	events       *EventLog
-	remediation  *RemediationRegistry
-	ruleWindows  *RuleWindowRegistry
-	cfg          *config.Config
-	diagStore    diag.Store
-	host         diag.Host
-	measure      MeasurementReader
-	collector    *metrics.Collector
-	emit         func(Event)
-	opGate       *OpGate
+	order          []string
+	entries        map[string]*webEntry
+	watchOrder     []string
+	watches        map[string]*webWatch
+	notifierOrder  []string
+	notifiers      map[string]*webNotifier
+	store          MonitorStore
+	snapshots      *Snapshots
+	sla            SLAReader
+	events         *EventLog
+	remediation    *RemediationRegistry
+	ruleWindows    *RuleWindowRegistry
+	cfg            *config.Config
+	diagStore      diag.Store
+	host           diag.Host
+	measure        MeasurementReader
+	collector      *metrics.Collector
+	emit           func(Event)
+	opGate         *OpGate
 	defaultTimeout time.Duration
 }
 
@@ -128,11 +128,11 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		entries:   map[string]*webEntry{},
 		watches:   map[string]*webWatch{},
 		notifiers: map[string]*webNotifier{},
-		store: deps.Monitor, snapshots: deps.Snapshots,
+		store:     deps.Monitor, snapshots: deps.Snapshots,
 		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
 		cfg: cfg, host: diag.OSHost{},
 		collector: deps.Collector,
-		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
+		emit:      deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
