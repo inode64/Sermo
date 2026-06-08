@@ -21,6 +21,7 @@ type fakeBackend struct {
 	metricSince     time.Duration
 	opsSlots        OperationSlots
 	preflightCalled string
+	events          []Event
 }
 
 func (f *fakeBackend) Services(context.Context) []Service                { return f.services }
@@ -84,6 +85,12 @@ func (f *fakeBackend) Series(_ context.Context, name string, since time.Duration
 }
 func (f *fakeBackend) Events(_ context.Context, limit int) []Event {
 	f.eventLimit = limit
+	if f.events != nil {
+		if len(f.events) > limit {
+			return f.events[:limit]
+		}
+		return f.events
+	}
 	return []Event{{Time: "2026-06-07T10:00:00Z", Service: "web", Kind: "action", Action: "restart", Message: "restarted"}}
 }
 func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) ([]Event, bool) {
@@ -343,6 +350,61 @@ func TestEventLimitCapAndDefault(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/api/events?limit=99999", nil))
 	if b.eventLimit != maxEventLimit {
 		t.Fatalf("limit not capped: %d", b.eventLimit)
+	}
+}
+
+func TestGlobalEventsFilters(t *testing.T) {
+	events := []Event{
+		{Time: "2026-06-07T10:00:04Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "done"},
+		{Time: "2026-06-07T10:00:03Z", Service: "db", Kind: "error", Action: "restart", Status: "failed", Message: "blocked"},
+		{Time: "2026-06-07T10:00:02Z", Watch: "disk", Kind: "hook-failed", Status: "failed", Message: "hook failed"},
+		{Time: "2026-06-07T10:00:01Z", Watch: "disk", Kind: "hook", Status: "ok", Message: "hook ok"},
+	}
+	tests := []struct {
+		name       string
+		query      string
+		wantLimit  int
+		wantCount  int
+		wantFirst  string
+		wantStatus string
+	}{
+		{name: "service", query: "?service=db", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "db"},
+		{name: "watch kind", query: "?watch=disk&kind=hook-failed", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "disk"},
+		{name: "status", query: "?status=failed", wantLimit: maxEventLimit, wantCount: 2, wantStatus: "failed"},
+		{name: "only errors", query: "?only_errors=1", wantLimit: maxEventLimit, wantCount: 2},
+		{name: "filtered limit", query: "?only_errors=true&limit=1", wantLimit: maxEventLimit, wantCount: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &fakeBackend{events: events}
+			rec := httptest.NewRecorder()
+			newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/events"+tt.query, nil))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status %d", rec.Code)
+			}
+			if b.eventLimit != tt.wantLimit {
+				t.Fatalf("backend limit = %d, want %d", b.eventLimit, tt.wantLimit)
+			}
+			var got []Event
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if len(got) != tt.wantCount {
+				t.Fatalf("events = %+v, want %d", got, tt.wantCount)
+			}
+			if tt.wantFirst != "" {
+				who := got[0].Service
+				if who == "" {
+					who = got[0].Watch
+				}
+				if who != tt.wantFirst {
+					t.Fatalf("first subject = %q, want %q", who, tt.wantFirst)
+				}
+			}
+			if tt.wantStatus != "" && got[0].Status != tt.wantStatus {
+				t.Fatalf("first status = %q, want %q", got[0].Status, tt.wantStatus)
+			}
+		})
 	}
 }
 

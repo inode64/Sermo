@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -477,6 +478,82 @@ func eventLimit(r *http.Request) int {
 	return limit
 }
 
+type eventFilter struct {
+	Service    string
+	Watch      string
+	Kind       string
+	Status     string
+	OnlyErrors bool
+}
+
+func parseEventFilter(r *http.Request) eventFilter {
+	q := r.URL.Query()
+	return eventFilter{
+		Service:    q.Get("service"),
+		Watch:      q.Get("watch"),
+		Kind:       q.Get("kind"),
+		Status:     q.Get("status"),
+		OnlyErrors: truthy(q.Get("only_errors")),
+	}
+}
+
+func truthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func (f eventFilter) active() bool {
+	return f.Service != "" || f.Watch != "" || f.Kind != "" || f.Status != "" || f.OnlyErrors
+}
+
+func filterEvents(events []Event, f eventFilter, limit int) []Event {
+	if !f.active() {
+		if len(events) > limit {
+			return events[:limit]
+		}
+		return events
+	}
+	out := make([]Event, 0, min(limit, len(events)))
+	for _, e := range events {
+		if f.Service != "" && e.Service != f.Service {
+			continue
+		}
+		if f.Watch != "" && e.Watch != f.Watch {
+			continue
+		}
+		if f.Kind != "" && e.Kind != f.Kind {
+			continue
+		}
+		if f.Status != "" && e.Status != f.Status {
+			continue
+		}
+		if f.OnlyErrors && !isErrorEvent(e) {
+			continue
+		}
+		out = append(out, e)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
+}
+
+func isErrorEvent(e Event) bool {
+	if e.Kind == "error" || strings.Contains(e.Kind, "failed") {
+		return true
+	}
+	switch e.Status {
+	case "failed", "error", "blocked", "orphan_processes", "preflight_failed", "postflight_failed":
+		return true
+	default:
+		return false
+	}
+}
+
 // csrfHeader must be present on every state-changing (POST) request. A cross-site
 // HTML form cannot set a custom header, and a cross-site fetch that tries to would
 // trigger a CORS preflight we never answer — so requiring it blocks CSRF against
@@ -669,7 +746,13 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Backend.Events(r.Context(), eventLimit(r)))
+	limit := eventLimit(r)
+	filter := parseEventFilter(r)
+	fetchLimit := limit
+	if filter.active() {
+		fetchLimit = maxEventLimit
+	}
+	writeJSON(w, http.StatusOK, filterEvents(s.Backend.Events(r.Context(), fetchLimit), filter, limit))
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
