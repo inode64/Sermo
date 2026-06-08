@@ -3,6 +3,8 @@ package locks
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -41,6 +43,19 @@ func TestAcquireOnEmptyDir(t *testing.T) {
 	}
 	if !lf.ExpiresAt.Equal(fixedNow.Add(time.Hour)) {
 		t.Errorf("expires_at = %v, want now+1h", lf.ExpiresAt)
+	}
+}
+
+func TestOperationAcquireRejectsPathLikeService(t *testing.T) {
+	root := t.TempDir()
+	l := NewOperationLocker(filepath.Join(root, "ops"))
+
+	_, err := l.Acquire("../escape", time.Hour)
+	if err == nil || !strings.Contains(err.Error(), "simple name") {
+		t.Fatalf("Acquire() error = %v, want simple-name validation error", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "escape.lock")); !os.IsNotExist(statErr) {
+		t.Fatalf("path-like service must not create escaped lock file: %v", statErr)
 	}
 }
 

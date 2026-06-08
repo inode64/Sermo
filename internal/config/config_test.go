@@ -638,6 +638,32 @@ name: dup
 	}
 }
 
+func TestValidateRejectsPathLikeDocumentName(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/bad.yml": `
+kind: service
+name: ../escape
+service: { name: mysql }
+`,
+		"profiles/bad.yml": `
+kind: profile
+name: apache/main
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	if !hasIssue(issues, `document name "../escape" must be a simple name without path separators`) {
+		t.Fatalf("missing service name issue in %v", issues)
+	}
+	if !hasIssue(issues, `document name "apache/main" must be a simple name without path separators`) {
+		t.Fatalf("missing profile name issue in %v", issues)
+	}
+}
+
 func TestMergeMapsRecursive(t *testing.T) {
 	dst := map[string]any{"policy": map[string]any{"max_actions": 3, "cooldown": "2m"}}
 	src := map[string]any{"policy": map[string]any{"cooldown": "5m"}}

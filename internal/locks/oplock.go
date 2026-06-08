@@ -81,6 +81,10 @@ func NewOperationLocker(dir string) OperationLocker {
 // stale lock (expired TTL or dead/reused owner) is reclaimed and acquisition
 // proceeds (section 18/20).
 func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, error) {
+	if err := validateIdentifier("service", service, false); err != nil {
+		return nil, err
+	}
+
 	proc := l.Proc
 	if proc == nil {
 		proc = OSProcessProber{}
