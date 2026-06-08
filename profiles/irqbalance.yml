@@ -1,6 +1,6 @@
 kind: profile
 name: irqbalance
-service: { name: "irqbalance", backend: auto }
+service: { name: "irqbalance" }
 variables:
   binary: "/usr/sbin/irqbalance"
 preflight:

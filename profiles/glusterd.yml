@@ -2,7 +2,7 @@ kind: profile
 name: glusterd
 display_name: "GlusterFS"
 description: "GlusterFS"
-service: { name: "glusterd", backend: auto }
+service: { name: "glusterd" }
 variables:
   binary: "/usr/sbin/glusterd"
 preflight:

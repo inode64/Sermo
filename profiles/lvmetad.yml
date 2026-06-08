@@ -1,7 +1,7 @@
 kind: profile
 name: lvmetad
 display_name: "LVM Metadata Daemon"
-service: { name: "lvmetad", backend: auto }
+service: { name: "lvmetad" }
 variables:
   binary: "/sbin/lvmetad"
 preflight:

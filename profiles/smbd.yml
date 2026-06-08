@@ -2,7 +2,7 @@ kind: profile
 name: smbd
 display_name: "Samba SMB"
 description: "Servidor de ficheros Windows - SMB"
-service: { name: "smbd", backend: auto }
+service: { name: "smbd" }
 variables:
   binary: "/usr/sbin/smbd"
 preflight:

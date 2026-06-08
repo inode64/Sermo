@@ -2,7 +2,7 @@ kind: profile
 name: db%vsql
 display_name: "Berkeley DB ${version}"
 description: "Oracle Berkeley DB"
-service: { name: "db${version}sql", backend: auto }
+service: { name: "db${version}sql" }
 variables:
   binary: "/usr/bin/db${version}sql"
 preflight:

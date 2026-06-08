@@ -2,7 +2,7 @@ kind: profile
 name: varnishd
 display_name: "Varnish"
 description: "Varnish"
-service: { name: "varnishd", backend: auto }
+service: { name: "varnishd" }
 variables:
   binary: "/usr/sbin/varnishd"
 preflight:

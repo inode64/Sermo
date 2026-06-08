@@ -1,7 +1,7 @@
 kind: profile
 name: snmpd
 display_name: "Net-SNMP Daemon"
-service: { name: "snmpd", backend: auto }
+service: { name: "snmpd" }
 variables:
   binary: "/usr/sbin/snmpd"
 preflight:

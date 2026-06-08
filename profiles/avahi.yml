@@ -2,7 +2,7 @@ kind: profile
 name: avahi-daemon
 display_name: "Avahi"
 description: "Zero Configuration Networking"
-service: { name: "avahi-daemon", backend: auto }
+service: { name: "avahi-daemon" }
 variables:
   binary: "/usr/sbin/avahi-daemon"
 preflight:

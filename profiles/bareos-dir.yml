@@ -2,7 +2,7 @@ kind: profile
 name: bareos-dir
 display_name: "Bareos Director"
 description: "Backup director Server"
-service: { name: "bareos-dir", backend: auto }
+service: { name: "bareos-dir" }
 variables:
   binary: "/usr/sbin/bareos-dir"
 preflight:

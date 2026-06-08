@@ -1,7 +1,7 @@
 kind: profile
 name: nginx
 display_name: "Nginx"
-service: { name: "nginx", backend: auto }
+service: { name: "nginx" }
 variables:
   binary: "/usr/sbin/nginx"
 preflight:

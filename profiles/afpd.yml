@@ -1,7 +1,7 @@
 kind: profile
 name: afpd
 display_name: "Netatalk AFP Daemon"
-service: { name: "afpd", backend: auto }
+service: { name: "afpd" }
 variables:
   binary: "/usr/sbin/afpd"
 preflight:

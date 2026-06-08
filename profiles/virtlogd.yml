@@ -1,7 +1,7 @@
 kind: profile
 name: virtlogd
 display_name: "libvirt Log Daemon"
-service: { name: "virtlogd", backend: auto }
+service: { name: "virtlogd" }
 variables:
   binary: "/usr/sbin/virtlogd"
 preflight:
