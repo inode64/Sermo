@@ -294,6 +294,11 @@ func TestReloadNoPid(t *testing.T) {
 		LoadConfig: config.Load,
 		Stderr:     &stderr,
 		Stdout:     &bytes.Buffer{},
+		// Hermetic discovery: no absolute fallbacks and a probe runner that finds
+		// nothing, so reload reliably reports "could not find" rather than picking
+		// up a sermod daemon that happens to run on the host.
+		Runner:           &recordingProbeRunner{},
+		pidfileFallbacks: []string{},
 	}
 
 	code := app.Run(context.Background(), []string{"--config", cfgPath, "reload"})
@@ -301,8 +306,8 @@ func TestReloadNoPid(t *testing.T) {
 		t.Fatalf("reload exit = %d, want %d", code, exitRuntimeError)
 	}
 	out := stderr.String()
-	if !strings.Contains(out, "pid") || (!strings.Contains(out, "could not find") && !strings.Contains(out, "failed to signal")) {
-		t.Fatalf("stderr did not report pid lookup/signal failure: %q", out)
+	if !strings.Contains(out, "could not find") {
+		t.Fatalf("stderr did not report pid lookup failure: %q", out)
 	}
 }
 
@@ -333,6 +338,9 @@ func TestReloadPidProbeFallback(t *testing.T) {
 		Stderr:     &stderr,
 		Stdout:     &bytes.Buffer{},
 		Runner:     runner,
+		// Suppress the absolute /run fallbacks so discovery is hermetic: only the
+		// (empty) temp runtime dir is searched, forcing the probe path under test.
+		pidfileFallbacks: []string{},
 	}
 
 	code := app.Run(context.Background(), []string{"--config", cfgPath, "reload"})
