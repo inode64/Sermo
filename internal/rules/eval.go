@@ -294,7 +294,7 @@ func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (b
 			return false, "", fmt.Errorf("guard %s: %w", r.Name, err)
 		}
 		if ok {
-			reason := r.Then.Message
+			reason := r.Primary().Message
 			if reason == "" {
 				reason = "blocked by guard " + r.Name
 			}

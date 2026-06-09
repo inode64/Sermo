@@ -105,7 +105,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Name:       name,
 		CheckType:  typ,
 		Check:      check,
-		Window:     rules.Rule{For: parseForField(entry["for"]), Within: parseWithinField(entry["within"])},
+		Window:     rules.Rule{For: rules.ParseForWindow(entry["for"]), Within: rules.ParseWithinWindow(entry["within"])},
 		Hook:       hook,
 		Notifiers:  resolveNotifiers(names, deps.Notifiers),
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
@@ -179,7 +179,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Name:      name,
 			CheckType: stringField(checkEntry["type"]),
 			Check:     check,
-			Window:    rules.Rule{For: parseForField(mEntry["for"]), Within: parseWithinField(mEntry["within"])},
+			Window:    rules.Rule{For: rules.ParseForWindow(mEntry["for"]), Within: rules.ParseWithinWindow(mEntry["within"])},
 			Hook:      hook,
 			Notifiers: resolveNotifiers(names, deps.Notifiers),
 			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
@@ -423,22 +423,6 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 	return out
 }
 
-func parseForField(v any) *rules.ForWindow {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil
-	}
-	return &rules.ForWindow{Cycles: intField(m["cycles"])}
-}
-
-func parseWithinField(v any) *rules.WithinWindow {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil
-	}
-	return &rules.WithinWindow{Cycles: intField(m["cycles"]), MinMatches: intField(m["min_matches"])}
-}
-
 func sortedWatchNames(m map[string]any) []string {
 	names := make([]string, 0, len(m))
 	for k := range m {
@@ -472,21 +456,6 @@ func durationField(v any) time.Duration {
 		return 0
 	}
 	return d
-}
-
-func intField(v any) int {
-	switch t := v.(type) {
-	case int:
-		return t
-	case int64:
-		return int(t)
-	case uint64:
-		return int(t)
-	case float64:
-		return int(t)
-	default:
-		return 0
-	}
 }
 
 func boolField(v any) bool {

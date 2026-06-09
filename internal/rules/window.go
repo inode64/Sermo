@@ -108,7 +108,9 @@ func countTrue(history []bool) int {
 	return n
 }
 
-func parseForWindow(v any) *ForWindow {
+// ParseForWindow parses a `for` window ({cycles}) from a config node, or nil when
+// absent. Shared by the rules parser and the host-watch builder.
+func ParseForWindow(v any) *ForWindow {
 	m, ok := v.(map[string]any)
 	if !ok {
 		return nil
@@ -117,7 +119,9 @@ func parseForWindow(v any) *ForWindow {
 	return &ForWindow{Cycles: cycles}
 }
 
-func parseWithinWindow(v any) *WithinWindow {
+// ParseWithinWindow parses a `within` window ({cycles, min_matches}) from a config
+// node, or nil when absent. Shared by the rules parser and the host-watch builder.
+func ParseWithinWindow(v any) *WithinWindow {
 	m, ok := v.(map[string]any)
 	if !ok {
 		return nil
