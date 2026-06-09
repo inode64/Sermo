@@ -48,6 +48,7 @@ which reuse the same schema). MVP types:
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC (opens a connection and reports its version) (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
+| `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `unifi` / `unifi-controller` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
@@ -432,6 +433,17 @@ name. Supported protocols:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
   ```
+- `avahi` (alias `avahi-daemon`) — the Avahi mDNS/DNS-SD (zeroconf) daemon,
+  probed over its D-Bus API (`org.freedesktop.Avahi`). Connects to the system bus
+  (SASL auth + Hello) and calls
+  `org.freedesktop.Avahi.Server.GetVersionString` — a reply proves avahi-daemon is
+  up and registered on the bus — reporting the `version` (pair with
+  `on_version_change`) and, best-effort, the `hostname` and server `state`
+  (`running` when AVAHI_SERVER_RUNNING). **Target:** like `dbus`, defaults to the
+  system bus (`unix:path=/var/run/dbus/system_bus_socket`); set `socket` for a
+  different bus socket or `query` for a full D-Bus address. Socket-based, so there
+  is no TCP port. No auth — access is governed by the bus permissions. Uses
+  `github.com/godbus/dbus/v5` (pure Go).
 - `syncthing` — default port 8384; `tls`: `false` | `true` | `skip-verify`
   (`skip-verify` covers Syncthing's default self-signed GUI certificate). Sends
   `GET /rest/noauth/health` and expects `200` with `{"status":"OK"}` — the
@@ -818,7 +830,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
