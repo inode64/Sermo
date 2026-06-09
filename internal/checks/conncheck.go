@@ -234,9 +234,10 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if proto.Name() == "lvmpolld" && cfg.Socket == "" {
 		cfg.Socket = "/run/lvm/lvmpolld.socket"
 	}
-	// dbus resolves to a single D-Bus address (socket path or full address),
-	// stored in Socket so the check message shows it instead of host:port.
-	if proto.Name() == "dbus" {
+	// dbus and avahi (probed over D-Bus) resolve to a single D-Bus address
+	// (socket path or full address), stored in Socket so the check message shows
+	// it instead of host:port.
+	if proto.Name() == "dbus" || proto.Name() == "avahi" {
 		cfg.Socket = conn.DBusAddress(asString(entry["socket"]), asString(entry["query"]))
 	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}

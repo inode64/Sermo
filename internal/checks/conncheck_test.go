@@ -541,6 +541,34 @@ func TestBuildDBusCheck(t *testing.T) {
 	}
 }
 
+func TestBuildAvahiCheck(t *testing.T) {
+	// No socket/query -> the system bus default address; default port 0; alias
+	// avahi-daemon resolves.
+	for _, typ := range []string{"avahi", "avahi-daemon"} {
+		built, warns := Build(map[string]any{
+			"mdns": map[string]any{"type": typ},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "avahi" || cc.cfg.Port != 0 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+		if cc.cfg.Socket != "unix:path=/var/run/dbus/system_bus_socket" {
+			t.Fatalf("default address = %q", cc.cfg.Socket)
+		}
+	}
+
+	// A full D-Bus address in query is used verbatim.
+	built, _ := Build(map[string]any{
+		"mdns": map[string]any{"type": "avahi", "query": "tcp:host=10.0.0.5,port=44444"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "tcp:host=10.0.0.5,port=44444" {
+		t.Fatalf("query address = %q", cc.cfg.Socket)
+	}
+}
+
 func TestBuildLibvirtCheck(t *testing.T) {
 	// No socket and no host -> default to the local Unix socket; alias libvirtd
 	// resolves; default TCP port 16509.
