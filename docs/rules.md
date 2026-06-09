@@ -28,6 +28,7 @@ which reuse the same schema). MVP types:
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 | `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
 | `mysql` / `mariadb` | a connection to a MySQL/MariaDB server authenticates and responds (see Database) |
+| `mongodb` / `mongo` | a connection to a MongoDB server authenticates, pings and reports its version (see Database) |
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
 | `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING (see Database) |
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
@@ -75,6 +76,7 @@ which reuse the same schema). MVP types:
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
+| `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
 | `websocket` / `ws` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
@@ -342,6 +344,12 @@ name. Supported protocols:
 - `postgres` (alias `postgresql`) — default port 5432; `tls`: `false` | `true` |
   `skip-verify`, or a PostgreSQL sslmode (`disable`/`require`/`prefer`/
   `verify-ca`/`verify-full`).
+- `mongodb` (alias `mongo`) — default port 27017; `tls`: `false` | `true` |
+  `skip-verify`. `user` is **optional** (MongoDB may run without auth); with
+  credentials it authenticates against `auth_source` (defaults to `database`, then
+  `admin`). Connects, verifies a `ping`, and reads the server version via
+  `buildInfo`. Uses the official `go.mongodb.org/mongo-driver`. To run a query and
+  compare a result, see the **MongoDB query** check (`mongodb-query`).
 - `redis` (alias `valkey`) — default port 6379; `tls`: `false` | `true` |
   `skip-verify`. `user` is **optional** (legacy `requirepass` uses a password
   only, or no auth at all); a password-only check sends `AUTH <password>`.
@@ -777,6 +785,58 @@ checks:
   database or a `NULL` result fails the check. The check only reads — point it at
   a read-only user.
 
+### MongoDB query (`mongodb-query`)
+
+A `mongodb-query` check runs a MongoDB query and compares a **scalar result**
+against a `value`, the document-store counterpart of the `sql` check. It is
+**condition-style** (`OK == true` means the comparison holds). It uses the same
+connection variables as the `mongodb` connection check (`host`/`port`/`user`/
+`password`/`database`/`tls`, plus `auth_source`) and the official MongoDB driver.
+Three query shapes are supported:
+
+```yaml
+checks:
+  failed-jobs:                    # 1) document count
+    type: mongodb-query
+    host: 127.0.0.1               # host/port/user/password/database/tls/auth_source
+    user: monitor
+    password: "${env:MGPASS}"
+    database: app
+    collection: jobs
+    filter: '{"status":"failed"}' # optional JSON filter; default {} (count all)
+    op: "<"                       # == | != | > | >= | < | <= | =~
+    value: "10"
+  queued-jobs:                    # 2) aggregation pipeline (scalar at `result`)
+    type: mongodb-query
+    database: app
+    collection: jobs
+    pipeline: '[{"$match":{"state":"queued"}},{"$count":"n"}]'
+    result: "n"                   # dotted path into the first result document
+    op: ">"
+    value: "100"
+  connections:                    # 3) database command (scalar at `result`)
+    type: mongodb-query
+    database: app                 # command runs here; defaults to admin
+    command: '{"serverStatus":1}'
+    result: "connections.current" # dotted path into the reply
+    op: "<"
+    value: "5000"
+```
+
+- **Query shapes** (exactly one): a **`collection`** (+ optional JSON `filter`)
+  compares the matching **document count**; a `collection` + JSON **`pipeline`**
+  runs an aggregation; a **`command`** runs a database command. `pipeline` and
+  `command` extract a scalar at the dotted **`result`** path (a collection count
+  needs no `result`). `filter`/`pipeline`/`command` accept relaxed **extended
+  JSON** (so `$oid`, `$date`, etc. work). A collection query requires a
+  `database`; `command` defaults to `admin`.
+- **Operators** behave exactly as the `sql` check's (`>` `>=` `<` `<=` numeric;
+  `==`/`!=` numeric-or-string; `=~` RE2 regexp).
+- **Auth:** with a `user`, credentials are checked against `auth_source` (default
+  `database`, then `admin`). The check only reads — point it at a read-only user.
+- Result data carries `mode`, `op`, `threshold`, the raw `result` and, when
+  numeric, a `value` for hooks/rules.
+
 ### Size growth (`size`)
 
 A `size` check watches a file or directory and **alerts when it grows** by at
@@ -831,7 +891,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, mongodb/mongo, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
