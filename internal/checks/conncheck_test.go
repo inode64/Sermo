@@ -584,6 +584,30 @@ func TestBuildDHCPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildClamdCheck(t *testing.T) {
+	for _, typ := range []string{"clamd", "clamav"} {
+		built, warns := Build(map[string]any{
+			"av": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "clamd" || cc.cfg.Port != 3310 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+
+	// Unix socket form, and the inherited on_version_change toggle.
+	built, _ := Build(map[string]any{
+		"av": map[string]any{"type": "clamd", "socket": "/run/clamav/clamd.ctl", "on_version_change": true},
+	}, Deps{DefaultTimeout: time.Second})
+	cc := built[0].Check.(connCheck)
+	if cc.cfg.Socket != "/run/clamav/clamd.ctl" || !cc.onVersionChange {
+		t.Fatalf("cfg = %+v onVersionChange=%v", cc.cfg, cc.onVersionChange)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},

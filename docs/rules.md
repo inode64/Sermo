@@ -48,6 +48,7 @@ which reuse the same schema). MVP types:
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC (opens a connection and reports its version) (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
+| `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -451,6 +452,13 @@ name. Supported protocols:
   a kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
   data carries `stratum` and the clock `offset_seconds`. Probed natively (RFC
   5905).
+- `clamd` (alias `clamav`) — default port 3310 (TCP), or a Unix socket via
+  `socket` (e.g. `/run/clamav/clamd.ctl`). No auth, no TLS. Sends the clamd
+  `VERSION` command and verifies a `ClamAV <version>/…` reply — proof the daemon
+  is up and speaking the clamd protocol. Result data carries the engine
+  `version` (the daily signature-database part is dropped, so `on_version_change`
+  stays quiet across routine DB updates) and the full `version_string`. Probed
+  natively.
 - `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query`
   (default `localhost`) to the server and verifies it answers: `NOERROR` or
   `NXDOMAIN` pass (the server is up and speaking DNS); `SERVFAIL`, `REFUSED`, a
@@ -576,7 +584,7 @@ directory walk reads the whole subtree each cycle, so point it at a bounded path
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
