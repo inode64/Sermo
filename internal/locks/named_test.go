@@ -111,3 +111,70 @@ func TestNamedReclaimsExpired(t *testing.T) {
 		t.Fatalf("expired lock should have been reclaimed and rewritten, got %+v", lf)
 	}
 }
+
+func TestNamedReleaseInactiveRemovesExpiredAndStale(t *testing.T) {
+	tests := []struct {
+		name     string
+		file     string
+		payload  lockFile
+		proc     fakeProc
+		wantName string
+	}{
+		{
+			name: "expired",
+			file: "mysql.backup.lock",
+			payload: lockFile{
+				Service: "mysql", Name: "backup", OwnerPID: 100, OwnerStartTicks: 1,
+				ExpiresAt: fixedNow.Add(-time.Minute),
+			},
+			proc:     fakeProc{alive: map[int]bool{100: true}, ticks: map[int]uint64{100: 1}},
+			wantName: "backup",
+		},
+		{
+			name: "stale",
+			file: "mysql.lock",
+			payload: lockFile{
+				Service: "mysql", OwnerPID: 200, OwnerStartTicks: 1,
+				ExpiresAt: fixedNow.Add(time.Hour),
+			},
+			proc:     fakeProc{alive: map[int]bool{200: false}},
+			wantName: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := namedLocker(t.TempDir(), tt.proc)
+			writeLock(t, l.Dir, tt.file, tt.payload)
+
+			lk, err := l.ReleaseInactive("mysql", tt.wantName)
+			if err != nil {
+				t.Fatalf("ReleaseInactive() error = %v", err)
+			}
+			if lk.State == StateActive {
+				t.Fatalf("released lock state = %q, want inactive", lk.State)
+			}
+			if _, err := os.Stat(filepath.Join(l.Dir, tt.file)); !os.IsNotExist(err) {
+				t.Fatalf("lock file should be removed: %v", err)
+			}
+		})
+	}
+}
+
+func TestNamedReleaseInactiveRefusesActive(t *testing.T) {
+	l := namedLocker(t.TempDir(), fakeProc{alive: map[int]bool{100: true}, ticks: map[int]uint64{100: 1}})
+	writeLock(t, l.Dir, "mysql.backup.lock", lockFile{
+		Service: "mysql", Name: "backup", OwnerPID: 100, OwnerStartTicks: 1,
+		ExpiresAt: fixedNow.Add(time.Hour),
+	})
+
+	lk, err := l.ReleaseInactive("mysql", "backup")
+	if err == nil {
+		t.Fatal("ReleaseInactive() should refuse an active lock")
+	}
+	if lk.State != StateActive {
+		t.Fatalf("lock state = %q, want active", lk.State)
+	}
+	if _, statErr := os.Stat(filepath.Join(l.Dir, "mysql.backup.lock")); statErr != nil {
+		t.Fatalf("active lock should remain: %v", statErr)
+	}
+}

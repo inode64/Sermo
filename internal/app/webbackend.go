@@ -628,6 +628,7 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 // Locks returns the active and stale runtime locks across services.
 func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
 	var out []web.Lock
+	now := time.Now()
 	for _, name := range b.order {
 		e := b.entries[name]
 		if e == nil || e.disabled {
@@ -638,10 +639,62 @@ func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
 			continue
 		}
 		for _, lk := range report.Locks {
-			out = append(out, lockToWeb(lk, name))
+			out = append(out, lockToWebAt(lk, name, now))
 		}
 	}
 	return out
+}
+
+// ReleaseLock explicitly removes a stale or expired named runtime lock. Active
+// locks continue to block service actions until their owner releases them or the
+// TTL/staleness rules make them inactive.
+func (b *WebBackend) ReleaseLock(_ context.Context, service, name string) web.ActionResult {
+	if _, ok := b.entries[service]; !ok {
+		msg := "unknown service " + service
+		b.emitLockReleaseEvent(service, name, "error", "failed", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if b.cfg == nil {
+		msg := "runtime locks are unavailable"
+		b.emitLockReleaseEvent(service, name, "error", "failed", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	locker := locks.NewNamedLocker(filepath.Join(b.cfg.Global.RuntimeDir(), "locks"))
+	lk, err := locker.ReleaseInactive(service, name)
+	if err != nil {
+		msg := err.Error()
+		if lk.State == locks.StateActive {
+			b.emitLockReleaseEvent(service, name, "suppressed", "blocked", msg)
+		} else {
+			b.emitLockReleaseEvent(service, name, "error", "failed", msg)
+		}
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	id := service
+	if name != "" {
+		id += "." + name
+	}
+	msg := "released inactive runtime lock " + id
+	b.emitLockReleaseEvent(service, name, "action", "ok", msg)
+	return web.ActionResult{OK: true, Message: msg}
+}
+
+func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message string) {
+	if b.emit == nil {
+		return
+	}
+	rule := name
+	if rule == "" {
+		rule = "default"
+	}
+	b.emit(Event{
+		Service: service,
+		Kind:    kind,
+		Rule:    rule,
+		Action:  "release-lock",
+		Status:  status,
+		Message: message,
+	})
 }
 
 // ActivitySummary returns a rollup of recent events for the dashboard.
@@ -884,21 +937,52 @@ func processToWeb(p process.Process) web.Process {
 }
 
 func lockToWeb(lk locks.Lock, service string) web.Lock {
+	return lockToWebAt(lk, service, time.Now())
+}
+
+func lockToWebAt(lk locks.Lock, service string, now time.Time) web.Lock {
 	w := web.Lock{
 		Service:     service,
 		Name:        lk.Name,
 		Reason:      lk.Reason,
 		State:       string(lk.State),
 		OwnerPID:    lk.OwnerPID,
+		OwnerStatus: lockOwnerStatus(lk),
 		StaleReason: lk.StaleReason,
+		Releaseable: lk.State == locks.StateExpired || lk.State == locks.StateStale,
+	}
+	if lk.State == locks.StateActive {
+		w.BlockedActions = []string{"start", "stop", "restart"}
 	}
 	if !lk.CreatedAt.IsZero() {
 		w.CreatedAt = lk.CreatedAt.UTC().Format(time.RFC3339)
+		if now.After(lk.CreatedAt) {
+			w.CreatedAgeSeconds = int64(now.Sub(lk.CreatedAt).Seconds())
+		}
 	}
 	if !lk.ExpiresAt.IsZero() {
 		w.ExpiresAt = lk.ExpiresAt.UTC().Format(time.RFC3339)
+		if lk.ExpiresAt.After(now) {
+			w.TTLRemainingSeconds = int64(lk.ExpiresAt.Sub(now).Seconds())
+		}
 	}
 	return w
+}
+
+func lockOwnerStatus(lk locks.Lock) string {
+	if lk.OwnerPID <= 0 {
+		return "none"
+	}
+	switch lk.State {
+	case locks.StateActive:
+		return "live"
+	case locks.StateStale:
+		return "stale"
+	case locks.StateExpired:
+		return "expired"
+	default:
+		return string(lk.State)
+	}
 }
 
 // Series returns a service's SLA availability series over the window.

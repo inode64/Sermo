@@ -234,7 +234,7 @@
 <section id="locks-section" style="margin-top:1rem; display:none">
   <h2 style="font-size:1.05rem">Runtime Locks <span id="locks-count" class="muted"></span></h2>
   <table>
-    <thead><tr><th>Service</th><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
+    <thead><tr><th>Service</th><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
     <tbody id="locks-rows"></tbody>
   </table>
   <p class="muted" style="font-size:.8rem">Named runtime locks that can block start/stop/restart (manual or automatic). Stale/expired locks are shown for awareness.</p>
@@ -1207,6 +1207,78 @@ function pctVal(metrics, name) {
   return m.ready === false ? v + " (stale)" : v;
 }
 
+function fmtSeconds(n) {
+  n = Math.max(0, Math.floor(Number(n) || 0));
+  if (n <= 0) return "0s";
+  if (n < 60) return n + "s";
+  if (n < 3600) return Math.floor(n / 60) + "m";
+  if (n < 86400) return Math.floor(n / 3600) + "h";
+  return Math.floor(n / 86400) + "d";
+}
+
+function lockName(l) {
+  return l.name || "(default)";
+}
+
+function lockStateHTML(l) {
+  const cls = l.state === "active" ? "bad" : (l.state === "stale" ? "inactive" : "muted");
+  return `<span class="${cls}">${esc(l.state || "")}</span>`;
+}
+
+function lockTTL(l) {
+  if (!l.expires_at) return '<span class="muted">—</span>';
+  if (l.ttl_remaining_seconds > 0) return `<span title="${esc(fmtTime(l.expires_at))}">${esc(fmtSeconds(l.ttl_remaining_seconds))}</span>`;
+  return `<span class="muted" title="${esc(fmtTime(l.expires_at))}">expired</span>`;
+}
+
+function lockOwner(l) {
+  if (!l.owner_pid) return '<span class="muted">none</span>';
+  const cls = l.owner_status === "live" ? "ok" : (l.owner_status === "stale" ? "inactive" : "muted");
+  const reason = l.stale_reason ? ` · ${l.stale_reason}` : "";
+  return `<span class="${cls}">${esc(l.owner_pid)}</span> <span class="muted">${esc(l.owner_status || "")}${esc(reason)}</span>`;
+}
+
+function lockCreated(l) {
+  if (l.created_age_seconds > 0) return `<span title="${esc(fmtTime(l.created_at))}">${esc(fmtSeconds(l.created_age_seconds))} ago</span>`;
+  if (l.created_at) return `<span title="${esc(fmtTime(l.created_at))}">${esc(fmtAge(l.created_at))}</span>`;
+  return '<span class="muted">—</span>';
+}
+
+function lockBlocks(l) {
+  const actions = l.blocked_actions || [];
+  return actions.length ? esc(actions.join(" ")) : '<span class="muted">none</span>';
+}
+
+function lockReleaseButton(l) {
+  if (!me.can_act || !l.releaseable) return "";
+  return `<button class="danger-btn" onclick="releaseLock('${esc(l.service || "")}', '${esc(l.name || "")}')">release</button>`;
+}
+
+function lockServiceLink(l) {
+  const svc = l.service || "";
+  if (!svc) return '<span class="muted">—</span>';
+  return `<a class="name" onclick="detail('${esc(svc)}')">${esc(svc)}</a>`;
+}
+
+async function releaseLock(service, name) {
+  const label = name ? `${service}.${name}` : service;
+  if (!confirm(`release inactive lock "${label}"?`)) return;
+  $("#err").textContent = "";
+  const qs = name ? `?name=${encodeURIComponent(name)}` : "";
+  try {
+    const res = await fetch(`api/locks/${encodeURIComponent(service)}/release${qs}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    await load();
+    if (current === service) detail(service);
+  } catch (e) {
+    $("#err").textContent = `release ${label}: ${e.message}`;
+  }
+}
+
 function renderLocks(locks) {
   latestLocks = locks || [];
   const section = $("#locks-section");
@@ -1222,13 +1294,16 @@ function renderLocks(locks) {
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${locks.length})`;
   const rows = locks.map((l) => {
-    const stateCls = l.state === "active" ? "" : "muted";
     return `<tr>
-      <td>${esc(l.service || "")}</td>
-      <td>${esc(l.name)}</td>
-      <td class="${stateCls}">${esc(l.state)}</td>
-      <td>${l.owner_pid || ""}</td>
+      <td>${lockServiceLink(l)}</td>
+      <td>${esc(lockName(l))}</td>
+      <td>${lockStateHTML(l)}</td>
+      <td>${lockTTL(l)}</td>
+      <td>${lockOwner(l)}</td>
+      <td>${lockCreated(l)}</td>
+      <td>${lockBlocks(l)}</td>
       <td>${esc(l.reason || l.stale_reason || "")}</td>
+      <td>${lockReleaseButton(l)}</td>
     </tr>`;
   });
   tbody.innerHTML = rows.join("");
@@ -1528,17 +1603,18 @@ function renderDetail(d) {
     return `<div><div class="v">${v}</div><div class="muted">${esc(w.window)}</div></div>`;
   }).join("") || '<span class="muted">No SLA data.</span>';
 
-  const lockState = (s) => s === "active" ? '<span class="bad">active</span>'
-    : s === "stale" ? '<span class="inactive">stale</span>'
-    : `<span class="muted">${esc(s || "")}</span>`;
   const lockRows = (d.locks || []).map((l) => {
-    const id = l.name ? esc(l.name) : '<span class="muted">(default)</span>';
-    const extra = l.stale_reason ? ` <span class="muted">(${esc(l.stale_reason)})</span>` : "";
-    const exp = l.expires_at ? ` <span class="muted">expires ${esc(fmtTime(l.expires_at))}</span>` : "";
-    return `<tr><td>${id}</td><td>${lockState(l.state)}${extra}</td>
-      <td class="muted">${l.owner_pid || ""}</td>
-      <td class="muted">${esc(l.reason || "")}${exp}</td></tr>`;
-  }).join("") || `<tr><td colspan="4" class="muted">No named runtime locks.</td></tr>`;
+    return `<tr>
+      <td>${esc(lockName(l))}</td>
+      <td>${lockStateHTML(l)}</td>
+      <td>${lockTTL(l)}</td>
+      <td>${lockOwner(l)}</td>
+      <td>${lockCreated(l)}</td>
+      <td>${lockBlocks(l)}</td>
+      <td class="muted">${esc(l.reason || l.stale_reason || "")}</td>
+      <td>${lockReleaseButton(l)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">No named runtime locks.</td></tr>`;
   const lockWarns = (d.lock_warnings || []).map((w) =>
     `<div class="inactive" style="margin-top:.25rem">warning: ${esc(w)}</div>`
   ).join("");
@@ -1613,7 +1689,7 @@ function renderDetail(d) {
     <h2>Preflight ${me.can_act ? `<button onclick="runPreflight('${esc(d.name)}')">run</button>` : '<span class="muted">admin only</span>'}</h2>
     <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
-    <table><thead><tr><th>Name</th><th>State</th><th>Owner PID</th><th>Reason</th></tr></thead>
+    <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
       <tbody>${lockRows}</tbody></table>${lockWarns}
     <h2>Processes</h2>
     ${procSummary}${procWarns}
