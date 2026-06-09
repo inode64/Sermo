@@ -67,6 +67,9 @@ type Deps struct {
 	// CertSampler fetches a TLS endpoint's certificate for `cert` checks. Nil dials
 	// the host.
 	CertSampler CertSamplerFunc
+	// SizeSampler measures the byte size of a file or directory for `size` checks.
+	// Nil uses os.Stat (file) / a recursive walk (directory).
+	SizeSampler SizeSamplerFunc
 }
 
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
@@ -566,6 +569,21 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 
 	case "sql":
 		return buildSQLCheck(b, entry)
+
+	case "size":
+		path := asString(entry["path"])
+		if path == "" {
+			return nil, "size check requires a path"
+		}
+		growBy, err := parseSize(scalarString(entry["grow_by"]))
+		if err != nil || growBy <= 0 {
+			return nil, "size check requires a positive grow_by (e.g. 1GB)"
+		}
+		window := durationOr(entry["within"], 0)
+		if window <= 0 {
+			return nil, "size check requires a positive within (e.g. 1h)"
+		}
+		return &sizeCheck{base: b, path: path, growBy: growBy, window: window, sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
 
 	case "":
 		return nil, "missing type"

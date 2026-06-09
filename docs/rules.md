@@ -50,6 +50,7 @@ which reuse the same schema). MVP types:
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
+| `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -517,6 +518,33 @@ checks:
   string and, when numeric, a `value` for hooks/rules. A query error, a missing
   database or a `NULL` result fails the check. The check only reads — point it at
   a read-only user.
+
+### Size growth (`size`)
+
+A `size` check watches a file or directory and **alerts when it grows** by at
+least `grow_by` within the `within` window — useful to catch a runaway log, a
+disk-filling spool or a leaking cache. Only **increases** trip it: a steady or
+shrinking path passes. It is **condition-style** (`OK == true` means "grew too
+fast", so `active: {check: …}` fires) and **stateful**, so run it as a **host
+watch** where the same instance ticks each cycle and remembers recent sizes.
+
+```yaml
+watches:
+  log-runaway:
+    type: size
+    path: /var/log/app.log     # a file, or a directory (recursive sum of file sizes)
+    grow_by: 1GB               # alert if it grows at least this much…
+    within: 1h                 # …within this sliding window
+```
+
+Each cycle it samples the path's size (a file's bytes, or the recursive sum of
+regular-file sizes under a directory), keeps the samples seen in the last
+`within`, and compares the current size against the oldest one still in the
+window. It fails when `current − baseline ≥ grow_by`. The first cycle only
+baselines (no alert). Sizes accept human units (`1GB`, `500MB`, `2GiB`, or a
+plain byte count). Result data carries `current_bytes`, `baseline_bytes`,
+`growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
+directory walk reads the whole subtree each cycle, so point it at a bounded path.
 
 ```yaml
 checks:
