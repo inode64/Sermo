@@ -587,8 +587,11 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.url is required for an http check", prefix)
 	}
 	if v, present := fields["method"]; present {
-		if _, ok := v.(string); !ok {
+		s, ok := v.(string)
+		if !ok {
 			add("%s.method must be a string", prefix)
+		} else if _, known := httpMethods[strings.ToUpper(strings.TrimSpace(s))]; !known {
+			add("%s.method %q is not a standard HTTP method (GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, CONNECT)", prefix, s)
 		}
 	}
 	if p := scalarString(fields["proxy"]); p != "" {
@@ -1231,6 +1234,9 @@ var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
 var validActions = set("restart", "start", "stop", "alert", "block")
 var metricOps = set(">", ">=", "<", "<=", "==", "!=")
+
+// httpMethods are the standard HTTP request methods an http check may use.
+var httpMethods = set("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT")
 var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
 
 // compareOps is the operator set shared by the sql check and the http response

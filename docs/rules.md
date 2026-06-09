@@ -143,7 +143,7 @@ checks:
   api:
     type: http
     url: "https://api.example.com/v1/health"
-    method: POST                       # default GET
+    method: POST                       # any HTTP verb (default GET) — see below
     headers:
       Authorization: "Bearer ${token}" # any request headers
     json:                              # request body as JSON (sets Content-Type
@@ -160,7 +160,11 @@ checks:
 ```
 
 It passes (health-style, `OK == true`) when the status matches **and** every
-assertion holds. **`proxy`** routes the request through a forward proxy such as
+assertion holds. **`method`** accepts any standard HTTP verb — `GET` (default),
+`HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE`, `CONNECT` — written
+in any case (it is normalized to upper-case); an unknown verb is rejected at
+config validation. A request `body`/`json` is sent for any method that carries
+one (`POST`/`PUT`/`PATCH`/…). **`proxy`** routes the request through a forward proxy such as
 **Squid** (`http://[user:pass@]host:port`; `http`, `https` or `socks5` schemes —
 credentials, when present, go in the URL). This both monitors that the proxy
 forwards correctly and that the target is reachable through it; for an `https://`

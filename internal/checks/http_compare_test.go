@@ -41,6 +41,37 @@ func runHTTP(t *testing.T, srv *httptest.Server, entry map[string]any) Result {
 	return c.Run(context.Background())
 }
 
+func TestHTTPMethods(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Method
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	for _, m := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"} {
+		res := runHTTP(t, srv, map[string]any{"url": srv.URL, "method": m})
+		if !res.OK {
+			t.Fatalf("%s should pass: %s", m, res.Message)
+		}
+		if got != m {
+			t.Fatalf("server saw method %q, want %q", got, m)
+		}
+	}
+
+	// A lowercase method is normalized to uppercase before the request.
+	res := runHTTP(t, srv, map[string]any{"url": srv.URL, "method": "delete"})
+	if !res.OK || got != "DELETE" {
+		t.Fatalf("lowercase method should normalize to DELETE: got %q ok=%v", got, res.OK)
+	}
+
+	// A PUT carrying a body still works (the body is sent for any method).
+	got = ""
+	if res := runHTTP(t, srv, map[string]any{"url": srv.URL, "method": "PUT", "body": "payload"}); !res.OK || got != "PUT" {
+		t.Fatalf("PUT with body should pass: got %q ok=%v", got, res.OK)
+	}
+}
+
 func TestHTTPBodyOperators(t *testing.T) {
 	srv := httpCompareServer(t)
 	defer srv.Close()
