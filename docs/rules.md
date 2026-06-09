@@ -1128,7 +1128,7 @@ Service metrics measure the discovered process set; system metrics measure the
 machine. `value` is a number with an optional trailing `%`.
 
 ```
-scope: service   memory, swap, cpu, process_count, io, io_read, io_write, fds, threads
+scope: service   memory, swap, cpu, cpu_thread, process_count, io, io_read, io_write, fds, threads
 scope: system    total_memory, total_cpu, load1, load5, load15
 ```
 
@@ -1153,11 +1153,22 @@ processes are saturating every CPU thread of the server, and a single fully-busy
 core on an 8-thread host reads `~12.5%`. `total_cpu` uses the same whole-machine
 basis.
 
-`cpu`/`total_cpu` and the `io*` metrics are rates: they are **not ready** on the
-first cycle and a condition over a not-ready value is false. A `%` threshold needs
-a metric with a percentage form (`memory`, `cpu`, `total_memory`, `total_cpu`); a
-bare number needs an absolute form (everything else, including `io*`/`fds`/
-`threads`, which are absolute only). Reading another process's I/O or fd count
+`cpu_thread` complements `cpu` for the **single-thread** case: it is the **busiest
+single process** in the tree (parent or any child) measured against **one** CPU
+thread, so `100%` means one process is saturating a full core. Because the
+whole-machine `cpu` dilutes a single hot process across all cores (a core-bound
+process on an 8-thread host shows only `~12.5%` there), `cpu_thread` is what you
+alert on to catch a process — especially a single-threaded one — pegging its
+thread: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
+"90%"`. A multi-threaded process spanning several cores can read above `100%`.
+Like `cpu` it is a rate (not ready on the first cycle).
+
+`cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
+ready** on the first cycle and a condition over a not-ready value is false. A `%`
+threshold needs a metric with a percentage form (`memory`, `swap`, `cpu`,
+`cpu_thread`, `total_memory`, `total_cpu`; `swap`/`memory` also have an absolute
+byte form); a bare number needs an absolute form (everything else, including
+`io*`/`fds`/`threads`, which are absolute only). Reading another process's I/O or fd count
 requires privilege, so those sum only the processes the daemon can read.
 
 ## Rules

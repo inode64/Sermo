@@ -215,6 +215,58 @@ func TestServiceCPURate(t *testing.T) {
 	}
 }
 
+func TestServiceCPUThreadMaxOverTree(t *testing.T) {
+	// cpu_thread tracks the busiest single process against ONE thread, regardless
+	// of how many CPUs the host has.
+	clock := time.Unix(0, 0)
+	reader := fakeReader{cpu: map[int]uint64{10: 0, 11: 0, 12: 0}, hz: 100, ncpu: 8}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+
+	snap := c.SampleService("svc", []int{10, 11, 12})
+	if snap["cpu_thread"].Ready {
+		t.Fatal("cpu_thread must not be ready on the first cycle")
+	}
+
+	// One second later: pid 11 used 95 ticks (~95% of one core), the others little.
+	clock = clock.Add(time.Second)
+	reader.cpu[10], reader.cpu[11], reader.cpu[12] = 10, 95, 5
+	c.Reader = reader
+	snap = c.SampleService("svc", []int{10, 11, 12})
+
+	if !snap["cpu_thread"].Ready {
+		t.Fatal("cpu_thread should be ready on the second cycle")
+	}
+	// Busiest process is pid 11 at ~95% of one thread — NOT diluted by the 8 cores
+	// the way the whole-machine `cpu` metric would be.
+	if got := snap["cpu_thread"].Percent; got < 94.9 || got > 95.1 {
+		t.Fatalf("cpu_thread = %v, want ~95 (busiest single process on one thread)", got)
+	}
+	// The whole-machine cpu sums all three (110 ticks = 1.1s) over 8 cores ->
+	// ~13.75%, which looks unremarkable even though one process is pegging a core.
+	if got := snap["cpu"].Percent; got < 13.5 || got > 14 {
+		t.Fatalf("cpu (whole-machine) = %v, want ~13.75", got)
+	}
+}
+
+func TestCPUThreadCanExceed100ForMultithreaded(t *testing.T) {
+	// A multi-threaded process accrues utime+stime across its threads, so its
+	// single-thread rate can exceed 100% (it spans more than one core).
+	clock := time.Unix(0, 0)
+	reader := fakeReader{cpu: map[int]uint64{10: 0}, hz: 100, ncpu: 4}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10})
+
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 250 // 2.5 cores' worth in one second
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10})
+	if got := snap["cpu_thread"].Percent; got < 249.9 || got > 250.1 {
+		t.Fatalf("cpu_thread = %v, want ~250", got)
+	}
+}
+
 func TestServiceCPUAggregatesOverTree(t *testing.T) {
 	// CPU% must sum the parent and all child processes of the service.
 	clock := time.Unix(0, 0)
