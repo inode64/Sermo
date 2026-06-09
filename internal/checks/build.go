@@ -2,10 +2,12 @@ package checks
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -159,8 +161,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}, ""
 
 	case "http":
-		url := asString(entry["url"])
-		if url == "" {
+		rawURL := asString(entry["url"])
+		if rawURL == "" {
 			return nil, "http check requires a url"
 		}
 		method := strings.ToUpper(asString(entry["method"]))
@@ -182,10 +184,10 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		} else if s := asString(entry["body"]); s != "" {
 			body = []byte(s)
 		}
-		return &httpCheck{
+		hc := &httpCheck{
 			base:        b,
 			client:      client,
-			url:         url,
+			url:         rawURL,
 			method:      method,
 			headers:     stringMap(entry["headers"]),
 			body:        body,
@@ -193,7 +195,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			expect:      expect,
 			expectBody:  asString(entry["expect_body"]),
 			expectJSON:  parseJSONAssertions(entry["expect_json"]),
-		}, ""
+		}
+		if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
+			return nil, warn
+		}
+		return hc, ""
 
 	case "command":
 		argv := stringArray(entry["command"])
@@ -529,6 +535,55 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	default:
 		return nil, fmt.Sprintf("unsupported type %q", typ)
 	}
+}
+
+// httpCertKeys are the optional certificate-inspection keys on the http check.
+var httpCertKeys = []string{
+	"cert_expires_in_days", "cert_verify",
+	"cert_on_change", "cert_on_issuer_change", "cert_on_algorithm_change",
+}
+
+// configureHTTPCert enables certificate inspection on hc when any cert_* key is
+// present. It requires an https url and returns a warning string on a config
+// error (empty when there is nothing to configure or configuration succeeded).
+func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) string {
+	active := false
+	for _, k := range httpCertKeys {
+		if _, ok := entry[k]; ok {
+			active = true
+			break
+		}
+	}
+	if !active {
+		return ""
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "http check: invalid url: " + err.Error()
+	}
+	if u.Scheme != "https" {
+		return "http check: cert_* options require an https url"
+	}
+	verify := true
+	if v, ok := entry["cert_verify"].(bool); ok {
+		verify = v
+	}
+	days := 0
+	if v, ok := intField(entry["cert_expires_in_days"]); ok {
+		days = v
+	}
+	hc.certHost = u.Hostname()
+	hc.certOpts = certOptions{
+		expiresInDays:  days,
+		verify:         verify,
+		onAlgoChange:   asBool(entry["cert_on_algorithm_change"]),
+		onIssuerChange: asBool(entry["cert_on_issuer_change"]),
+		onChange:       asBool(entry["cert_on_change"]),
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // leaf inspected and verified manually via verifyCertChain
+	hc.certClient = &http.Client{Transport: tr}
+	return ""
 }
 
 // BuildInline builds a single check from an inline entry (type + fields), used
