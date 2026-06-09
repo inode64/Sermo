@@ -62,16 +62,17 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 
 // webEntry is one service's web-backend record.
 type webEntry struct {
-	displayName string
-	unit        string
-	backend     string
-	engine      operation.Engine
-	status      func(context.Context) (servicemgr.Status, error)
-	checkNames  []string          // sorted
-	checkTypes  map[string]string // check name -> type
-	discoverer  process.Discoverer
-	selectors   []process.Selector
-	disabled    bool // true when the service had `enabled: false` (still listed for visibility)
+	displayName    string
+	unit           string
+	backend        string
+	policyCooldown time.Duration
+	engine         operation.Engine
+	status         func(context.Context) (servicemgr.Status, error)
+	checkNames     []string          // sorted
+	checkTypes     map[string]string // check name -> type
+	discoverer     process.Discoverer
+	selectors      []process.Selector
+	disabled       bool // true when the service had `enabled: false` (still listed for visibility)
 }
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
@@ -158,9 +159,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			unit = base
 		}
 		entry := &webEntry{
-			displayName: config.DisplayName(resolved.Tree, name),
-			unit:        unit,
-			backend:     string(deps.Backend),
+			displayName:    config.DisplayName(resolved.Tree, name),
+			unit:           unit,
+			backend:        string(deps.Backend),
+			policyCooldown: rules.ParsePolicy(resolved.Tree).Cooldown,
 		}
 		if disabled {
 			entry.disabled = true
@@ -275,10 +277,17 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 		Enabled:     !e.disabled,
 		Monitored:   true, // no recorded state defaults to monitored
 	}
+	if e.policyCooldown > 0 {
+		svc.PolicyCooldown = formatInterval(e.policyCooldown)
+	}
+	if ev := b.lastServiceEvent(name); ev != nil {
+		svc.LastEvent = ev
+	}
 	if e.disabled {
 		svc.Status = "disabled"
 		svc.Monitored = false
 		svc.CheckHealth = ""
+		svc.RemediationState = "disabled"
 		return svc
 	}
 	status := "unknown"
@@ -307,7 +316,37 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 	if locks := activeLockNames(b.cfg, name); len(locks) > 0 {
 		svc.ActiveLocks = locks
 	}
+	b.decorateRemediation(name, &svc)
 	return svc
+}
+
+func (b *WebBackend) decorateRemediation(name string, svc *web.Service) {
+	if svc == nil {
+		return
+	}
+	if !svc.Monitored {
+		svc.RemediationState = "paused"
+		return
+	}
+	if b.remediation == nil {
+		svc.RemediationState = "pending"
+		return
+	}
+	rep, ok := b.remediation.Get(name)
+	if !ok {
+		svc.RemediationState = "pending"
+		return
+	}
+	if rep.Allowed {
+		svc.RemediationState = "eligible"
+	} else if rep.Reason != "" {
+		svc.RemediationState = rep.Reason
+	} else {
+		svc.RemediationState = "blocked"
+	}
+	if !rep.NextEligibleAt.IsZero() {
+		svc.NextEligibleAt = rep.NextEligibleAt.UTC().Format(time.RFC3339)
+	}
 }
 
 func locksScanner(cfg *config.Config) locks.Scanner {
@@ -822,6 +861,9 @@ func remediationToWeb(rep rules.RemediationReport) web.Remediation {
 	if !rep.CooldownUntil.IsZero() {
 		r.CooldownUntil = rep.CooldownUntil.UTC().Format(time.RFC3339)
 	}
+	if !rep.NextEligibleAt.IsZero() {
+		r.NextEligibleAt = rep.NextEligibleAt.UTC().Format(time.RFC3339)
+	}
 	if rep.MaxActionsWindow > 0 {
 		r.MaxActionsWindow = rep.MaxActionsWindow.String()
 	}
@@ -997,18 +1039,34 @@ func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([
 func toWebEvents(events []LoggedEvent) []web.Event {
 	out := make([]web.Event, 0, len(events))
 	for _, e := range events {
-		out = append(out, web.Event{
-			Time:    e.Time.Format(time.RFC3339),
-			Service: e.Service,
-			Watch:   e.Watch,
-			Kind:    e.Kind,
-			Rule:    e.Rule,
-			Action:  e.Action,
-			Status:  e.Status,
-			Message: e.Message,
-		})
+		out = append(out, loggedEventToWeb(e))
 	}
 	return out
+}
+
+func loggedEventToWeb(e LoggedEvent) web.Event {
+	return web.Event{
+		Time:    e.Time.Format(time.RFC3339),
+		Service: e.Service,
+		Watch:   e.Watch,
+		Kind:    e.Kind,
+		Rule:    e.Rule,
+		Action:  e.Action,
+		Status:  e.Status,
+		Message: e.Message,
+	}
+}
+
+func (b *WebBackend) lastServiceEvent(name string) *web.Event {
+	if b.events == nil {
+		return nil
+	}
+	events := b.events.Recent(name, 1)
+	if len(events) == 0 {
+		return nil
+	}
+	ev := loggedEventToWeb(events[0])
+	return &ev
 }
 
 // Operate runs a start/stop/restart/monitor action on a service.

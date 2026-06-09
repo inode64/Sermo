@@ -260,7 +260,8 @@ Notes:
 Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
 `check_health` and `checks_failing` for required checks, `active_locks` when
 named runtime locks are blocking, monitored,
-`monitor_source`, `monitor_changed_at`, backend, unit),
+`monitor_source`, `monitor_changed_at`, backend, unit, `policy_cooldown`,
+`remediation_state`, `next_eligible_at` and `last_event`),
 `GET /api/services/{name}` (a service's detail: its
 checks with the latest result, its SLA over the rolling windows, its named
 runtime locks (`sermoctl locks SERVICE`, including parse warnings for malformed

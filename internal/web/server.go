@@ -43,6 +43,10 @@ type Service struct {
 	CheckHealth      string   `json:"check_health,omitempty"`       // ok | failing | unknown | paused | disabled
 	ChecksFailing    int      `json:"checks_failing,omitempty"`     // required checks currently failing
 	ActiveLocks      []string `json:"active_locks,omitempty"`       // named runtime locks blocking actions
+	PolicyCooldown   string   `json:"policy_cooldown,omitempty"`    // resolved automatic remediation cooldown
+	RemediationState string   `json:"remediation_state,omitempty"`  // eligible | cooldown | rate limit | paused | pending | disabled
+	NextEligibleAt   string   `json:"next_eligible_at,omitempty"`   // RFC3339 when automatic remediation is next eligible
+	LastEvent        *Event   `json:"last_event,omitempty"`         // newest service event, when retained
 }
 
 // Watch is a view of a host watch for the dashboard (when services=0
@@ -201,8 +205,9 @@ type Remediation struct {
 	Cooldown          string `json:"cooldown,omitempty"`
 	EffectiveCooldown string `json:"effective_cooldown,omitempty"`
 	CurrentBackoff    string `json:"current_backoff,omitempty"`
-	LastActionAt      string `json:"last_action_at,omitempty"` // RFC3339
-	CooldownUntil     string `json:"cooldown_until,omitempty"` // RFC3339
+	LastActionAt      string `json:"last_action_at,omitempty"`   // RFC3339
+	CooldownUntil     string `json:"cooldown_until,omitempty"`   // RFC3339
+	NextEligibleAt    string `json:"next_eligible_at,omitempty"` // RFC3339
 	MaxActions        int    `json:"max_actions,omitempty"`
 	MaxActionsWindow  string `json:"max_actions_window,omitempty"`
 	RecentActions     int    `json:"recent_actions,omitempty"`
