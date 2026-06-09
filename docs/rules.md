@@ -59,6 +59,7 @@ which reuse the same schema). MVP types:
 | `sieve` / `managesieve` | a ManageSieve server sends its capability greeting ending in `OK` (see Database) |
 | `mqtt`        | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
 | `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
+| `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -475,6 +476,12 @@ name. Supported protocols:
   verifies a well-formed RPC reply — proof the daemon is up and speaking RPC. Any
   reply (accepted or denied) passes; result data carries the `rpc_status`. Probed
   natively (RFC 5531/1833).
+- `ceph` (alias `ceph-mon`) — default port 3300 (TCP, the Ceph monitor's
+  messenger v2; use port 6789 for the legacy v1). No auth. On connect a Ceph
+  daemon sends a messenger banner (`ceph v2\n` for v2, `ceph v027` for v1);
+  reading a `ceph v` banner proves it is a Ceph endpoint. Result data carries the
+  `messenger` version (`v1`/`v2`). The banner precedes the authenticated
+  handshake, so no credentials. Probed natively.
 - `varnish` (alias `varnishadm`) — default port 6082 (TCP, the Varnish `-T`
   management CLI). No auth. On connect varnishd sends a CLI response (a
   `<status> <length>` line and a body); status **200** carries the banner (with
@@ -682,7 +689,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
