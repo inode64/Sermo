@@ -49,6 +49,7 @@ which reuse the same schema). MVP types:
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
+| `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
 | `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
@@ -559,6 +560,10 @@ name. Supported protocols:
   successful connection proves acpid is listening (a stale socket left by a dead
   daemon refuses the connection). It reads nothing — reading would block until an
   ACPI event — and there is no version. No auth. Probed natively.
+- `spamd` (alias `spamassassin`) — default port 783 (TCP), or a Unix socket via
+  `socket`. No auth. Sends a SPAMC/SPAMD `PING` and verifies spamd answers
+  `SPAMD/<v> 0 PONG` — proof it is up and speaking the protocol. Result data
+  carries the SPAMD protocol version. Probed natively.
 - `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query`
   (default `localhost`) to the server and verifies it answers: `NOERROR` or
   `NXDOMAIN` pass (the server is up and speaking DNS); `SERVFAIL`, `REFUSED`, a
@@ -708,7 +713,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
