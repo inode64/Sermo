@@ -608,6 +608,26 @@ func TestBuildClamdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildMQTTCheck(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"broker": map[string]any{"type": "mqtt", "host": "127.0.0.1"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("mqtt check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "mqtt" || cc.cfg.Port != 1883 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	// With credentials + MQTTS.
+	built, _ = Build(map[string]any{
+		"broker": map[string]any{"type": "mqtt", "port": 8883, "tls": true, "user": "u", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Port != 8883 || cc.cfg.User != "u" || cc.cfg.TLS != "true" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildSieveCheck(t *testing.T) {
 	for _, typ := range []string{"sieve", "managesieve"} {
 		built, warns := Build(map[string]any{
