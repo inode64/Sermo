@@ -44,6 +44,7 @@ which reuse the same schema). MVP types:
 | `ipp` / `cups` | an IPP server (CUPS/cupsd) answers an IPP request with a valid response (see Database) |
 | `rsync` / `rsyncd` | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
 | `dhcp` / `dhcpd` | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
+| `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -307,6 +308,12 @@ name. Supported protocols:
   HTTP and verifies a valid IPP response — any parseable reply proves cupsd is up
   and speaking IPP. Result data carries the IPP version and status. Probed
   natively (RFC 8010/8011).
+- `rspamd` — default port 11334 (the controller worker); `tls`: `false` | `true`
+  | `skip-verify` (HTTPS). No auth. Sends `GET /ping` and expects `200` with a
+  `pong` body — the unauthenticated liveness endpoint every rspamd worker
+  exposes (point `port` at 11333 for the normal scanning worker or 11332 for the
+  proxy). Result data carries the rspamd version, read from the `Server` header.
+  Probed natively (HTTP).
 - `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
   a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
   connector. Probed natively (AJP13).
@@ -396,7 +403,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rsync, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
