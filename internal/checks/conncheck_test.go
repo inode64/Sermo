@@ -437,6 +437,28 @@ func TestBuildRsyncCheck(t *testing.T) {
 	}
 }
 
+func TestBuildSyncthingCheck(t *testing.T) {
+	// Anonymous health check: no user, default port 8384.
+	built, warns := Build(map[string]any{
+		"sync": map[string]any{"type": "syncthing", "host": "127.0.0.1"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("syncthing check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "syncthing" || cc.cfg.Port != 8384 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+
+	// API key (password) + HTTPS skip-verify carried through.
+	built, _ = Build(map[string]any{
+		"sync": map[string]any{"type": "syncthing", "password": "the-key", "tls": "skip-verify"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Password != "the-key" || cc.cfg.TLS != "skip-verify" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildDBusCheck(t *testing.T) {
 	// No socket/query -> the system bus default address; default port 0.
 	built, warns := Build(map[string]any{
