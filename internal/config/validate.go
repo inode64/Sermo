@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -1243,7 +1244,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "size", "websocket", "ws")
+	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1384,6 +1385,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			}
 		case "sql":
 			validateSQLFields(path, entry, add)
+		case "mongodb-query":
+			validateMongoFields(path, entry, add)
 		case "size":
 			validateSizeFields(path, entry, add)
 		case "websocket", "ws":
@@ -1449,6 +1452,66 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 	} else if !isPositiveDuration(w) {
 		add("%s.within %q must be a valid positive duration", prefix, w)
 	}
+}
+
+// validateMongoFields validates a mongodb-query check: a valid op and value, a
+// coherent query shape (count via collection[+filter] / aggregate via
+// collection+pipeline / command), JSON-parseable filter/pipeline/command, and a
+// result path where one is needed.
+func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
+	op := scalarString(fields["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+	}
+	if scalarString(fields["value"]) == "" {
+		add("%s.value is required for a mongodb-query check", prefix)
+	}
+
+	collection := scalarString(fields["collection"])
+	command := scalarString(fields["command"])
+	pipeline := scalarString(fields["pipeline"])
+	result := scalarString(fields["result"])
+
+	switch {
+	case command != "":
+		if collection != "" || pipeline != "" {
+			add("%s: command cannot be combined with collection/pipeline", prefix)
+		}
+		if result == "" {
+			add("%s.result is required with command", prefix)
+		}
+		if !isJSONObject(command) {
+			add("%s.command must be a JSON object", prefix)
+		}
+	case collection != "":
+		if scalarString(fields["database"]) == "" {
+			add("%s.database is required for a collection query", prefix)
+		}
+		if pipeline != "" {
+			if result == "" {
+				add("%s.result is required with pipeline", prefix)
+			}
+			if !isJSONArray(pipeline) {
+				add("%s.pipeline must be a JSON array", prefix)
+			}
+		} else if f := scalarString(fields["filter"]); f != "" && !isJSONObject(f) {
+			add("%s.filter must be a JSON object", prefix)
+		}
+	default:
+		add("%s requires a collection (+filter), a collection+pipeline, or a command", prefix)
+	}
+}
+
+// isJSONObject / isJSONArray report whether s is a syntactically valid JSON
+// object / array (extended-JSON for MongoDB is valid JSON syntax).
+func isJSONObject(s string) bool {
+	t := strings.TrimSpace(s)
+	return strings.HasPrefix(t, "{") && json.Valid([]byte(t))
+}
+
+func isJSONArray(s string) bool {
+	t := strings.TrimSpace(s)
+	return strings.HasPrefix(t, "[") && json.Valid([]byte(t))
 }
 
 // validateSQLFields validates a sql check: a known engine, a query, a valid op
