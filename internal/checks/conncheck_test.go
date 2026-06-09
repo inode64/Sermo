@@ -180,6 +180,31 @@ func TestBuildPOPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildSMTPCheck(t *testing.T) {
+	// Anonymous (no user), default port 25.
+	built, warns := Build(map[string]any{
+		"mx": map[string]any{"type": "smtp", "host": "mail.example"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("anonymous smtp should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "smtp" || cc.cfg.Port != 25 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+
+	// Submission with credentials on 587.
+	built, warns = Build(map[string]any{
+		"mx": map[string]any{"type": "smtp", "port": 587, "user": "joe", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("smtp with creds should build: warns=%v", warns)
+	}
+	if built[0].Check.(connCheck).cfg.Port != 587 {
+		t.Fatalf("port not parsed")
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
