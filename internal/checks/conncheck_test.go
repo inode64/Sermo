@@ -45,6 +45,41 @@ func TestConnCheckRunOKWithVersion(t *testing.T) {
 	}
 }
 
+func TestConnCheckOnChangeFingerprint(t *testing.T) {
+	fp := "SHA256:aaa"
+	c := connCheck{
+		base:  base{name: "ssh", timeout: time.Second},
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "h", Port: 22},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{Extra: map[string]string{"fingerprint": fp}}, nil
+		},
+		onChange: true,
+		state:    &connState{},
+	}
+	// First cycle primes; no alert.
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("first cycle must prime, not alert: %q", res.Message)
+	}
+	// Same fingerprint: still ok.
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("unchanged fingerprint must stay ok: %q", res.Message)
+	}
+	// Fingerprint changes: alert (fails).
+	fp = "SHA256:bbb"
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatal("a changed fingerprint must fail the check")
+	}
+	if res.Data["fingerprint_old"] != "SHA256:aaa" || res.Data["fingerprint"] != "SHA256:bbb" {
+		t.Fatalf("data should carry old/new: %v", res.Data)
+	}
+	// After alerting once, the new value becomes the baseline (no repeat alert).
+	if res := c.Run(context.Background()); !res.OK {
+		t.Fatalf("must not keep alerting on a stable fingerprint: %q", res.Message)
+	}
+}
+
 func TestConnCheckRunFailure(t *testing.T) {
 	c := connCheck{
 		base:  base{name: "db", timeout: time.Second},
@@ -261,6 +296,31 @@ func TestBuildFTPCheck(t *testing.T) {
 		"ftp": map[string]any{"type": "ftp", "port": 990, "tls": true, "user": "joe", "password": "p"},
 	}, Deps{DefaultTimeout: time.Second})
 	if cc := built[0].Check.(connCheck); cc.cfg.Port != 990 || cc.cfg.User != "joe" || cc.cfg.TLS != "true" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
+func TestBuildSSHCheck(t *testing.T) {
+	// Anonymous (no user), default port 22, with fingerprint-change detection.
+	built, warns := Build(map[string]any{
+		"ssh": map[string]any{"type": "ssh", "host": "host.example", "on_change": true},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("anonymous ssh should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "ssh" || cc.cfg.Port != 22 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	if !cc.onChange || cc.state == nil {
+		t.Fatal("on_change must enable stateful fingerprint detection")
+	}
+
+	// With credentials.
+	built, _ = Build(map[string]any{
+		"ssh": map[string]any{"type": "ssh", "host": "host.example", "user": "admin", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.User != "admin" || cc.cfg.Password != "p" {
 		t.Fatalf("cfg = %+v", cc.cfg)
 	}
 }
