@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -18,6 +19,7 @@ import (
 type fakeManager struct {
 	stopErr   error
 	startErr  error
+	resetErr  error
 	status    servicemgr.Status
 	statusErr error
 	calls     []string
@@ -35,6 +37,11 @@ func (m *fakeManager) Stop(_ context.Context, s string) error {
 
 func (m *fakeManager) Status(_ context.Context, s string) (servicemgr.ServiceStatus, error) {
 	return servicemgr.ServiceStatus{Status: m.status}, m.statusErr
+}
+
+func (m *fakeManager) ResetState(_ context.Context, s string) error {
+	m.calls = append(m.calls, "reset "+s)
+	return m.resetErr
 }
 
 func (m *fakeManager) did(call string) bool {
@@ -136,6 +143,45 @@ func TestRestartOK(t *testing.T) {
 	}
 	if h.released != 1 {
 		t.Errorf("op lock released %d times, want 1", h.released)
+	}
+}
+
+func TestStopReconcilesInitState(t *testing.T) {
+	h := defaultHarness()
+	res := h.engine().Stop(context.Background())
+	if !res.OK() {
+		t.Fatalf("stop status = %q (%s)", res.Status, res.Message)
+	}
+	// A clean stop (no residuals) must reconcile the init's recorded state.
+	want := []string{"stop mysqld", "reset mysqld"}
+	if !reflect.DeepEqual(h.mgr.calls, want) {
+		t.Fatalf("calls = %v, want %v", h.mgr.calls, want)
+	}
+}
+
+func TestRestartReconcilesBetweenStopAndStart(t *testing.T) {
+	h := defaultHarness()
+	res := h.restart(t)
+	if !res.OK() {
+		t.Fatalf("status = %q (%s)", res.Status, res.Message)
+	}
+	want := []string{"stop mysqld", "reset mysqld", "start mysqld"}
+	if !reflect.DeepEqual(h.mgr.calls, want) {
+		t.Fatalf("calls = %v, want stop->reset->start", h.mgr.calls)
+	}
+}
+
+func TestStopWithResidualsSkipsReset(t *testing.T) {
+	h := defaultHarness()
+	// ForceKill is false, so a discovered residual is reported as an orphan and
+	// the stop does not complete cleanly.
+	h.discoverSteps = [][]process.Process{{{PID: 4242}}}
+	res := h.engine().Stop(context.Background())
+	if res.Status != ResultOrphanProcesses {
+		t.Fatalf("status = %q, want orphan-processes", res.Status)
+	}
+	if h.mgr.did("reset mysqld") {
+		t.Fatalf("must not reconcile init state while residuals remain, calls=%v", h.mgr.calls)
 	}
 }
 

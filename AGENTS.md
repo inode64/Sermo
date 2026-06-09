@@ -593,8 +593,11 @@ Safe restart flow:
 10. Wait for graceful stop where applicable.
 11. Discover residual processes and apply stop_policy.
 12. If any residual remains, return `orphan_processes` and do not start.
-13. Execute Start through servicemgr only after the stop phase is clean.
-14. Run postflight checks and return the result.
+13. After a clean stop, reconcile init state (`ResetState`: systemd
+    `reset-failed`, OpenRC `zap`) so a stuck/failed marker can't disagree with
+    the processes. Best effort — never fails an already-successful stop.
+14. Execute Start through servicemgr only after the stop phase is clean.
+15. Run postflight checks and return the result.
 ```
 
 The two deferred steps mean the event always fires and the lock is always

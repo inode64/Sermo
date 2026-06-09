@@ -247,6 +247,10 @@ func (m fakeManager) Restart(_ context.Context, service string) error {
 	return m.record("restart", service)
 }
 
+func (m fakeManager) ResetState(_ context.Context, service string) error {
+	return m.record("reset", service)
+}
+
 func (m fakeManager) record(action, service string) error {
 	if m.actions != nil {
 		*m.actions = append(*m.actions, action+" "+service)

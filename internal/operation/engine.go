@@ -19,6 +19,9 @@ type Manager interface {
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
 	Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error)
+	// ResetState reconciles the init's recorded state with reality after a clean
+	// stop (systemd reset-failed, OpenRC zap).
+	ResetState(ctx context.Context, service string) error
 }
 
 // Engine performs the section-18 flow for one service over injected capability
@@ -176,6 +179,12 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 			result.Message = fmt.Sprintf("%d residual process(es) remain after stop", len(remaining))
 			return result // do NOT start
 		}
+		// Reconcile the init's recorded state with reality: after a clean stop
+		// with no residuals the service is genuinely down, so clear any lingering
+		// failed/stuck marker (systemd reset-failed, OpenRC zap) — otherwise the
+		// init keeps reporting a state that no longer matches the processes. Best
+		// effort: a stop that already succeeded must not fail on reconciliation.
+		_ = e.Manager.ResetState(ctx, e.Unit)
 	}
 
 	// Steps 12-13: start and verify status.

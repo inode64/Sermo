@@ -33,6 +33,11 @@ type Manager interface {
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
 	Restart(ctx context.Context, service string) error
+	// ResetState reconciles the init system's recorded state with reality,
+	// clearing a lingering failed/stuck marker so it no longer disagrees with the
+	// actual processes (systemd `reset-failed`, OpenRC `zap`). It is idempotent
+	// and a no-op when there is nothing to clear.
+	ResetState(ctx context.Context, service string) error
 }
 
 // NewManager returns a Manager for backend using the real host commands.
@@ -167,6 +172,10 @@ func (m systemdManager) Restart(ctx context.Context, service string) error {
 	return m.action(ctx, "restart", service)
 }
 
+func (m systemdManager) ResetState(ctx context.Context, service string) error {
+	return m.action(ctx, "reset-failed", service)
+}
+
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
 	result, err := m.runner.Run(ctx, "systemctl", verb, unit)
@@ -206,6 +215,10 @@ func (m openrcManager) Stop(ctx context.Context, service string) error {
 
 func (m openrcManager) Restart(ctx context.Context, service string) error {
 	return m.action(ctx, "restart", service)
+}
+
+func (m openrcManager) ResetState(ctx context.Context, service string) error {
+	return m.action(ctx, "zap", service)
 }
 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {
