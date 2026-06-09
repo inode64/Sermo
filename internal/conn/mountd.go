@@ -39,7 +39,7 @@ func (mountdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	xid := rpcXID()
-	c, err := (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}

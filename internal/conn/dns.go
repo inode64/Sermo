@@ -44,7 +44,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
-	c, err := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}

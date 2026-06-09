@@ -673,8 +673,8 @@ func TestBuildDHCPCheck(t *testing.T) {
 		if cc.proto.Name() != "dhcp" || cc.cfg.Port != 67 {
 			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
 		}
-		if cc.cfg.Params["interface"] != "eth0" || cc.cfg.Params["mac"] != "aa:bb:cc:dd:ee:ff" {
-			t.Fatalf("%s params = %v", typ, cc.cfg.Params)
+		if cc.cfg.Interface != "eth0" || cc.cfg.Params["mac"] != "aa:bb:cc:dd:ee:ff" {
+			t.Fatalf("%s cfg.Interface=%q params=%v", typ, cc.cfg.Interface, cc.cfg.Params)
 		}
 	}
 

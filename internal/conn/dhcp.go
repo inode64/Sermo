@@ -61,7 +61,7 @@ func (dhcpProtocol) DefaultPort() int   { return dhcpServerPort }
 func (dhcpProtocol) RequiresUser() bool { return false }
 
 func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	iface := cfg.Params["interface"]
+	iface := cfg.Interface
 	mac, err := dhcpClientMAC(cfg.Params["mac"])
 	if err != nil {
 		return Result{}, err

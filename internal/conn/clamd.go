@@ -34,7 +34,7 @@ func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		if port == 0 {
 			port = 3310
 		}
-		c, err = dialConn(ctx, cfg.Host, port, cfg.TLS)
+		c, err = dialConn(ctx, cfg, port)
 	}
 	if err != nil {
 		return Result{}, err

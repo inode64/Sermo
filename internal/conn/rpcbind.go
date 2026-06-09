@@ -44,7 +44,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	xid := rpcXID()
-	c, err := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}

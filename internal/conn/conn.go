@@ -22,7 +22,10 @@ type Config struct {
 	Database string
 	Query    string // protocol-specific lookup target (e.g. the DNS name to resolve)
 	TLS      string // "" / "false" (plaintext), "true", "skip-verify"
-	Params   map[string]string
+	// Interface, when set, is the network interface the probe must egress through
+	// (Linux SO_BINDTODEVICE) — for multi-homed hosts. Empty means default routing.
+	Interface string
+	Params    map[string]string
 }
 
 // Result is what a successful probe observed.

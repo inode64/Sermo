@@ -188,24 +188,20 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		Database: asString(entry["database"]),
 		Query:    asString(entry["query"]),
 		TLS:      tlsString(entry["tls"]),
+		// interface selects the egress network interface (SO_BINDTODEVICE) for
+		// every TCP/UDP-based protocol — useful on multi-homed hosts. Socket-only
+		// protocols ignore it.
+		Interface: asString(entry["interface"]),
 	}
-	// dhcp takes two protocol-specific params: the network interface to
-	// broadcast on (absent -> unicast to host) and an optional fixed client MAC
-	// (absent -> a random anonymous MAC). Scoped to dhcp so they never leak into
-	// the driver params other protocols pass through cfg.Params.
+	// dhcp takes an optional fixed client MAC (absent -> a random anonymous MAC).
+	// Scoped to dhcp so it never leaks into the driver params other protocols pass
+	// through cfg.Params. Its egress interface uses the shared cfg.Interface.
 	if proto.Name() == "dhcp" {
-		params := map[string]string{}
-		if iface := asString(entry["interface"]); iface != "" {
-			params["interface"] = iface
-		}
 		if mac := asString(entry["mac"]); mac != "" {
 			if _, err := net.ParseMAC(mac); err != nil {
 				return nil, fmt.Sprintf("dhcp check: invalid mac %q", mac)
 			}
-			params["mac"] = mac
-		}
-		if len(params) > 0 {
-			cfg.Params = params
+			cfg.Params = map[string]string{"mac": mac}
 		}
 	}
 	// openvpn defaults to UDP; `transport: tcp` selects TCP (length-prefixed
