@@ -185,9 +185,19 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		} else if s := asString(entry["body"]); s != "" {
 			body = []byte(s)
 		}
+		reqClient := client
+		proxyURL, pwarn := parseProxyURL(entry)
+		if pwarn != "" {
+			return nil, pwarn
+		}
+		if proxyURL != nil {
+			tr := http.DefaultTransport.(*http.Transport).Clone()
+			tr.Proxy = http.ProxyURL(proxyURL)
+			reqClient = &http.Client{Transport: tr}
+		}
 		hc := &httpCheck{
 			base:        b,
-			client:      client,
+			client:      reqClient,
 			url:         rawURL,
 			method:      method,
 			headers:     stringMap(entry["headers"]),
@@ -551,6 +561,26 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	}
 }
 
+// parseProxyURL reads the optional `proxy` field of an http check (e.g. a Squid
+// proxy, "http://[user:pass@]squid:3128"). It returns the parsed URL, or a
+// warning when the value is malformed. A nil URL with no warning means no proxy.
+func parseProxyURL(entry map[string]any) (*url.URL, string) {
+	s := asString(entry["proxy"])
+	if s == "" {
+		return nil, ""
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return nil, "http check: invalid proxy url " + strconv.Quote(s)
+	}
+	switch u.Scheme {
+	case "http", "https", "socks5", "socks5h":
+		return u, ""
+	default:
+		return nil, "http check: proxy scheme must be http, https or socks5"
+	}
+}
+
 // httpCertKeys are the optional certificate-inspection keys on the http check.
 var httpCertKeys = []string{
 	"cert_expires_in_days", "cert_verify",
@@ -596,6 +626,9 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // leaf inspected and verified manually via verifyCertChain
+	if pu, _ := parseProxyURL(entry); pu != nil {
+		tr.Proxy = http.ProxyURL(pu) // cert inspection also goes through the proxy (CONNECT for https)
+	}
 	hc.certClient = &http.Client{Transport: tr}
 	return ""
 }
