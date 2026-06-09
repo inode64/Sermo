@@ -3,6 +3,7 @@ module sermo
 go 1.26
 
 require (
+	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/goccy/go-yaml v1.19.2

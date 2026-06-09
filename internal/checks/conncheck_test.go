@@ -437,6 +437,46 @@ func TestBuildRsyncCheck(t *testing.T) {
 	}
 }
 
+func TestBuildLibvirtCheck(t *testing.T) {
+	// No socket and no host -> default to the local Unix socket; alias libvirtd
+	// resolves; default TCP port 16509.
+	for _, typ := range []string{"libvirt", "libvirtd"} {
+		built, warns := Build(map[string]any{
+			"vm": map[string]any{"type": typ},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "libvirt" || cc.cfg.Port != 16509 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+		if cc.cfg.Socket != "/var/run/libvirt/libvirt-sock" {
+			t.Fatalf("%s should default to the local socket, got %q", typ, cc.cfg.Socket)
+		}
+	}
+
+	// An explicit host selects TCP: no default socket is injected.
+	built, warns := Build(map[string]any{
+		"vm": map[string]any{"type": "libvirt", "host": "10.0.0.4", "query": "lxc:///"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("tcp libvirt should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.cfg.Socket != "" || cc.cfg.Host != "10.0.0.4" || cc.cfg.Query != "lxc:///" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+
+	// An explicit socket is kept verbatim.
+	built, _ = Build(map[string]any{
+		"vm": map[string]any{"type": "libvirt", "socket": "/run/libvirt/libvirt-sock"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/libvirt/libvirt-sock" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildRspamdCheck(t *testing.T) {
 	built, warns := Build(map[string]any{
 		"spam": map[string]any{"type": "rspamd", "host": "127.0.0.1", "tls": "skip-verify"},
