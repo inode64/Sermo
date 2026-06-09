@@ -408,7 +408,7 @@ func TestValidateCertWatch(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.c.check.host is required for a cert check") {
+	if !hasIssue(bad, "watches.c.check requires a host or a path") {
 		t.Fatalf("expected missing-host issue, got %v", bad)
 	}
 }

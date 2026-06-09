@@ -521,7 +521,7 @@ checks:
   bad-port: { type: cert, host: x, port: 70000 }
   bad-bool: { type: cert, host: x, verify: "yes" }
 `)
-	mustHave(t, bad, "checks.no-host.host is required for a cert check")
+	mustHave(t, bad, "checks.no-host requires a host or a path")
 	mustHave(t, bad, "checks.bad-days.expires_in_days must be a positive integer")
 	mustHave(t, bad, "checks.bad-port.port must be an integer in 1..65535")
 	mustHave(t, bad, "checks.bad-bool.verify must be a boolean")
