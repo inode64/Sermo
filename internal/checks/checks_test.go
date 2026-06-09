@@ -32,6 +32,13 @@ func TestTCPCheck(t *testing.T) {
 		t.Errorf("open port should pass: %s", res.Message)
 	}
 
+	// A bound, non-existent interface must fail the dial (never silently use the
+	// default route).
+	bound := tcpCheck{base: base{name: "bound", timeout: time.Second}, host: "127.0.0.1", iface: "sermo-nonexistent0", port: port}
+	if res := bound.Run(context.Background()); res.OK {
+		t.Errorf("tcp check bound to a bogus interface should fail")
+	}
+
 	// A port with no listener should fail fast.
 	ln.Close()
 	closed := tcpCheck{base: base{name: "closed", timeout: time.Second}, host: "127.0.0.1", port: port}

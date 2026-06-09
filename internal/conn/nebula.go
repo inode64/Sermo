@@ -51,7 +51,7 @@ func (nebulaProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// uint32 helper); the recv_error echoes it back so we can match the reply.
 	index := rpcXID()
 
-	c, err := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}

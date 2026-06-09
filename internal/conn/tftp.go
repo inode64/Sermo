@@ -45,7 +45,8 @@ func (tftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 	// An unconnected socket: a TFTP server replies from a fresh ephemeral port
 	// (the transfer TID), not from port 69, so a connected socket would drop it.
-	pc, err := net.ListenPacket("udp", ":0") //nolint:gosec // G102: ephemeral client socket for the TFTP reply, not a server listener
+	lc := BindListenConfig(cfg.Interface)
+	pc, err := lc.ListenPacket(ctx, "udp", ":0") //nolint:gosec // G102: ephemeral client socket for the TFTP reply, not a server listener
 	if err != nil {
 		return Result{}, err
 	}

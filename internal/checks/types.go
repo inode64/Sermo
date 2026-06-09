@@ -13,16 +13,18 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
 
-// tcpCheck dials a TCP host:port (section 12).
+// tcpCheck dials a TCP host:port (section 12), optionally egressing through iface.
 type tcpCheck struct {
 	base
-	host string
-	port int
+	host  string
+	iface string
+	port  int
 }
 
 func (c tcpCheck) Run(ctx context.Context) Result {
@@ -31,11 +33,11 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 	defer cancel()
 
 	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+	nc, err := conn.BindDialer(c.iface).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("dial %s: %v", addr, err), start)
 	}
-	_ = conn.Close()
+	_ = nc.Close()
 	return c.result(true, "connected to "+addr, start)
 }
 

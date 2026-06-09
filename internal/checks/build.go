@@ -131,7 +131,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if host == "" {
 			host = "127.0.0.1"
 		}
-		return tcpCheck{base: b, host: host, port: port}, ""
+		return tcpCheck{base: b, host: host, iface: asString(entry["interface"]), port: port}, ""
 
 	case "ports":
 		host := asString(entry["host"])
@@ -159,6 +159,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return &portsCheck{
 			base:           b,
 			host:           host,
+			iface:          asString(entry["interface"]),
 			ports:          ports,
 			expect:         expect,
 			match:          match,
@@ -209,6 +210,19 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		} else if proxyURL != nil {
 			tr := http.DefaultTransport.(*http.Transport).Clone()
 			tr.Proxy = http.ProxyURL(proxyURL)
+			reqClient = &http.Client{Transport: tr}
+		}
+		// interface: egress the HTTP request (and any proxy connection) through a
+		// specific interface by binding the transport's dialer.
+		if iface := asString(entry["interface"]); iface != "" {
+			if asBool(entry["http3"]) {
+				return nil, "http check: http3 and interface are mutually exclusive"
+			}
+			tr := http.DefaultTransport.(*http.Transport).Clone()
+			if proxyURL != nil {
+				tr.Proxy = http.ProxyURL(proxyURL)
+			}
+			tr.DialContext = conn.BindDialer(iface).DialContext
 			reqClient = &http.Client{Transport: tr}
 		}
 		hc := &httpCheck{
@@ -561,7 +575,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			count = v
 		}
 		metric := asString(entry["metric"])
-		c := &icmpCheck{base: b, host: host, count: count, metric: metric, sampler: deps.PingSampler}
+		c := &icmpCheck{base: b, host: host, iface: asString(entry["interface"]), count: count, metric: metric, sampler: deps.PingSampler}
 		switch metric {
 		case "state":
 			if exp := asString(entry["expect"]); exp != "" {

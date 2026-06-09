@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"sermo/internal/conn"
 )
 
 // wsGUID is the RFC 6455 magic value appended to the client key to derive the
@@ -29,6 +31,7 @@ type websocketCheck struct {
 	rawURL      string
 	scheme      string
 	host        string
+	iface       string
 	port        string
 	path        string
 	tls         string
@@ -43,13 +46,13 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 	defer cancel()
 
 	addr := net.JoinHostPort(c.host, c.port)
-	conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
+	nc, err := conn.BindDialer(c.iface).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() { _ = nc.Close() }()
 	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl)
+		_ = nc.SetDeadline(dl)
 	}
 
 	if c.scheme == "wss" || c.scheme == "https" {
@@ -57,22 +60,22 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 		if wsSkipVerify(c.tls) {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
-		tlsConn := tls.Client(conn, tc)
+		tlsConn := tls.Client(nc, tc)
 		if err := tlsConn.HandshakeContext(ctx); err != nil {
 			return c.result(false, fmt.Sprintf("websocket %s: TLS: %v", c.rawURL, err), start)
 		}
-		conn = tlsConn
+		nc = tlsConn
 	}
 
 	key, err := wsKey()
 	if err != nil {
 		return c.result(false, "websocket: "+err.Error(), start)
 	}
-	if _, err := conn.Write([]byte(c.handshakeRequest(key))); err != nil {
+	if _, err := nc.Write([]byte(c.handshakeRequest(key))); err != nil {
 		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
 	}
 
-	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodGet})
+	resp, err := http.ReadResponse(bufio.NewReader(nc), &http.Request{Method: http.MethodGet})
 	if err != nil {
 		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
 	}
@@ -145,6 +148,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		rawURL:      raw,
 		scheme:      u.Scheme,
 		host:        u.Hostname(),
+		iface:       asString(entry["interface"]),
 		port:        port,
 		path:        path,
 		tls:         tlsString(entry["tls"]),
