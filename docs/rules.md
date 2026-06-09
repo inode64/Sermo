@@ -37,6 +37,7 @@ which reuse the same schema). MVP types:
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
 | `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15) (see Database) |
+| `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); `on_change` alerts on device-identity change (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -289,6 +290,14 @@ name. Supported protocols:
   expects `pong`, so the pool must have **`ping.path = /ping`** enabled. Probed
   natively (FastCGI).
 
+- `snmp` — default port 161 (UDP). With **no `user`** it uses **SNMPv2c** with a
+  community string (`password`, default `public` — the anonymous/shared-secret
+  model). With a **`user`** it uses **SNMPv3 USM**: a `password` adds SHA
+  authentication (authNoPriv), otherwise noAuthNoPriv. It reads the system
+  description and object id; result data carries `sys_object_id`, `snmp_version`
+  and the description (as the version banner). Set **`on_change: true`** (on a
+  host watch) to alert when `sysObjectID` (the device identity — model/firmware)
+  changes. Uses `github.com/gosnmp/gosnmp`.
 - `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies
   the server answers in **server mode** with a synchronized **stratum (1–15)**;
   a kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
@@ -327,7 +336,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns, ntp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns, ntp, snmp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
