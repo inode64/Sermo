@@ -32,6 +32,7 @@ which reuse the same schema). MVP types:
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
+| `nntp` / `nntps` | an NNTP server greets 200/201 (anonymous) and, with credentials, AUTHINFO USER/PASS succeeds (see Database) |
 | `ftp`         | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
 | `ssh`         | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
@@ -355,6 +356,12 @@ name. Supported protocols:
   **optional**: with no credentials it is an **anonymous** check (greeting
   `220` + `EHLO`); with a user/password it performs `AUTH PLAIN`. Probed
   natively (RFC 5321).
+- `nntp` (alias `nntps`) — default port 119; `tls`: `false` | `true` |
+  `skip-verify` (implicit TLS / NNTPS — use port 563). `user` is **optional**:
+  with no credentials it is an **anonymous** check (server greets `200` posting
+  allowed / `201` posting prohibited — reported as `posting_allowed`); with a
+  user/password it performs `AUTHINFO USER`/`PASS`. Probed natively (RFC
+  3977/4643).
 - `ftp` — default port 21; `tls`: `false` | `true` | `skip-verify` (implicit TLS
   / FTPS — use port 990). `user` is **optional**: with no credentials it is an
   **anonymous** check (greeting `220`); with a user/password it performs
@@ -800,7 +807,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
