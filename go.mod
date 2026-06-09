@@ -5,6 +5,7 @@ go 1.26
 require (
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/goccy/go-yaml v1.19.2
+	github.com/lib/pq v1.12.3
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sys v0.46.0

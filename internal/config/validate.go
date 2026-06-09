@@ -994,9 +994,11 @@ func validateConnFields(prefix string, fields map[string]any, add addFunc) {
 			// fine
 		case string:
 			switch strings.ToLower(strings.TrimSpace(t)) {
-			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify", "skip_verify", "insecure":
+			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify", "skip_verify", "insecure",
+				// PostgreSQL sslmodes
+				"disable", "require", "prefer", "verify-ca", "verify-full":
 			default:
-				add("%s.tls %q must be true, false or skip-verify", prefix, t)
+				add("%s.tls %q must be a boolean, skip-verify, or a valid sslmode", prefix, t)
 			}
 		default:
 			add("%s.tls must be a boolean or a string (true/false/skip-verify)", prefix)
