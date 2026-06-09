@@ -57,6 +57,7 @@ which reuse the same schema). MVP types:
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
 | `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
 | `mountd` / `rpc.mountd` / `nfs-mountd` | the NFS mount daemon answers an RPC NULL call to MOUNT (100005) (see Database) |
+| `statd` / `rpc.statd` / `nsm` | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
 | `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
 | `guacd` / `guacamole` | the Guacamole proxy daemon answers a `select` with a Guacamole instruction (see Database) |
 | `asterisk` / `ami` | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
@@ -570,6 +571,16 @@ name. Supported protocols:
   (often random) port with rpcbind — so if the daemon is not on 20048, set `port`
   to its configured port (query it with `rpcinfo -p <host>`). Probed natively
   (RFC 5531/1813). Reuses the rpcbind RPC machinery.
+- `statd` (aliases `rpc.statd`, `nsm`, `nfs-statd`) — the NFS status-monitor
+  daemon (NSM, used for NFS lock recovery). Default port 662 (TCP), the
+  conventional fixed statd port. No auth. Sends an ONC RPC **NULL** call to the
+  NSM program (100024) — using RPC record marking over TCP — and verifies a
+  well-formed RPC reply, which proves the daemon is up and speaking RPC. A
+  version-mismatch reply still passes; result data carries the `rpc_status`.
+  rpc.statd has **no fixed well-known port** — it registers a (often random) port
+  with rpcbind — so if the daemon is not on 662, set `port` to its configured
+  port (query it with `rpcinfo -p <host>`). Probed natively (RFC 5531/1813).
+  Reuses the rpcbind RPC machinery.
 - `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
   `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
   Python pickle command protocol that is not worth reimplementing for a liveness
@@ -764,7 +775,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
