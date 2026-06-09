@@ -437,6 +437,19 @@ func TestBuildRsyncCheck(t *testing.T) {
 	}
 }
 
+func TestBuildRspamdCheck(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"spam": map[string]any{"type": "rspamd", "host": "127.0.0.1", "tls": "skip-verify"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("rspamd check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "rspamd" || cc.cfg.Port != 11334 || cc.cfg.TLS != "skip-verify" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildDHCPCheck(t *testing.T) {
 	// Broadcast form: interface + optional fixed MAC carried into Params; alias
 	// dhcpd resolves; default port 67.
