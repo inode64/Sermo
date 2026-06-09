@@ -867,6 +867,21 @@ func TestBuildStatdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildNebulaCheck(t *testing.T) {
+	for _, typ := range []string{"nebula", "nebula-vpn"} {
+		built, warns := Build(map[string]any{
+			"mesh": map[string]any{"type": typ, "host": "10.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "nebula" || cc.cfg.Port != 4242 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildRpcbindCheck(t *testing.T) {
 	for _, typ := range []string{"rpcbind", "portmap", "portmapper"} {
 		built, warns := Build(map[string]any{
