@@ -50,6 +50,7 @@ which reuse the same schema). MVP types:
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
+| `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -460,6 +461,11 @@ name. Supported protocols:
   `version` (the daily signature-database part is dropped, so `on_version_change`
   stays quiet across routine DB updates) and the full `version_string`. Probed
   natively.
+- `rpcbind` (aliases `portmap`, `portmapper`) — default port 111 (UDP). No auth.
+  Sends an ONC RPC **NULL** call to the portmapper program (100000 v2) and
+  verifies a well-formed RPC reply — proof the daemon is up and speaking RPC. Any
+  reply (accepted or denied) passes; result data carries the `rpc_status`. Probed
+  natively (RFC 5531/1833).
 - `acpid` — the ACPI event daemon. **Socket-only** (no TCP port); defaults to
   `/var/run/acpid.socket`, override with `socket`. acpid is an event broadcaster
   with no request/response protocol, so the check is the **connect itself**: a
@@ -591,7 +597,7 @@ directory walk reads the whole subtree each cycle, so point it at a bounded path
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, rpcbind, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
