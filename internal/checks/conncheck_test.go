@@ -1,0 +1,115 @@
+package checks
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+	"time"
+
+	"sermo/internal/conn"
+)
+
+type fakeProto struct{}
+
+func (fakeProto) Name() string     { return "mysql" }
+func (fakeProto) DefaultPort() int { return 3306 }
+func (fakeProto) Probe(context.Context, conn.Config) (conn.Result, error) {
+	return conn.Result{}, nil
+}
+
+func TestConnCheckRunOKWithVersion(t *testing.T) {
+	var gotCfg conn.Config
+	c := connCheck{
+		base:  base{name: "db", timeout: time.Second},
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "127.0.0.1", Port: 3306, User: "monitor"},
+		probe: func(_ context.Context, cfg conn.Config) (conn.Result, error) {
+			gotCfg = cfg
+			return conn.Result{Version: "8.0.36"}, nil
+		},
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("expected OK, got %q", res.Message)
+	}
+	if gotCfg.User != "monitor" {
+		t.Fatalf("probe got cfg %+v", gotCfg)
+	}
+	if res.Data["version"] != "8.0.36" || res.Data["protocol"] != "mysql" {
+		t.Fatalf("data = %v", res.Data)
+	}
+	if !strings.Contains(res.Message, "8.0.36") {
+		t.Fatalf("message should carry version: %q", res.Message)
+	}
+}
+
+func TestConnCheckRunFailure(t *testing.T) {
+	c := connCheck{
+		base:  base{name: "db", timeout: time.Second},
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "db", Port: 3306, User: "u"},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{}, errors.New("access denied")
+		},
+	}
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatal("a probe error must fail the check")
+	}
+	if !strings.Contains(res.Message, "access denied") {
+		t.Fatalf("message should carry the error: %q", res.Message)
+	}
+}
+
+func TestBuildMySQLCheck(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"db": map[string]any{
+			"type": "mysql", "user": "monitor", "password": "secret",
+			"host": "10.0.0.5", "port": 3307, "tls": "skip-verify",
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("expected a clean build, warns=%v built=%d", warns, len(built))
+	}
+	cc, ok := built[0].Check.(connCheck)
+	if !ok {
+		t.Fatalf("expected connCheck, got %T", built[0].Check)
+	}
+	if cc.proto.Name() != "mysql" || cc.cfg.Host != "10.0.0.5" || cc.cfg.Port != 3307 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	if cc.cfg.User != "monitor" || cc.cfg.Password != "secret" || cc.cfg.TLS != "skip-verify" {
+		t.Fatalf("creds/tls = %+v", cc.cfg)
+	}
+}
+
+func TestBuildMySQLCheckDefaultsAndUserRequired(t *testing.T) {
+	// mariadb alias resolves; missing user warns.
+	_, warns := Build(map[string]any{
+		"db": map[string]any{"type": "mariadb"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) == 0 || !strings.Contains(warns[0], "user") {
+		t.Fatalf("missing user should warn, got %v", warns)
+	}
+
+	built, warns := Build(map[string]any{
+		"db": map[string]any{"type": "mariadb", "user": "u"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("mariadb with user should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.cfg.Host != "127.0.0.1" || cc.cfg.Port != 3306 {
+		t.Fatalf("defaults = %+v, want 127.0.0.1:3306", cc.cfg)
+	}
+}
+
+func TestBuildUnknownTypeStillWarns(t *testing.T) {
+	_, warns := Build(map[string]any{
+		"x": map[string]any{"type": "nope"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) == 0 || !strings.Contains(warns[0], "nope") {
+		t.Fatalf("unknown type should still warn, got %v", warns)
+	}
+}

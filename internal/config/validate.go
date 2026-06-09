@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/conn"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -975,6 +977,33 @@ func isNumeric(s string) bool {
 	return err == nil
 }
 
+// validateConnFields validates a connection-protocol check (mysql, …): a user
+// is required (password is optional and may come from the environment), the
+// port must be numeric when present, and tls must be a boolean or one of the
+// known string modes.
+func validateConnFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["user"]) == "" {
+		add("%s.user is required for a connection check", prefix)
+	}
+	if v, present := fields["port"]; present && !isNumeric(scalarString(v)) {
+		add("%s.port %q must be numeric", prefix, scalarString(v))
+	}
+	if v, present := fields["tls"]; present {
+		switch t := v.(type) {
+		case bool:
+			// fine
+		case string:
+			switch strings.ToLower(strings.TrimSpace(t)) {
+			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify", "skip_verify", "insecure":
+			default:
+				add("%s.tls %q must be true, false or skip-verify", prefix, t)
+			}
+		default:
+			add("%s.tls must be a boolean or a string (true/false/skip-verify)", prefix)
+		}
+	}
+}
+
 func validateDocuments(cfg *Config) []Issue {
 	var issues []Issue
 	profileCount := map[string]int{}
@@ -1179,6 +1208,12 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			continue
 		}
 		if _, known := knownCheckTypes[typ]; !known {
+			// A connection-protocol check (mysql, …): the type names a protocol
+			// in the conn registry, validated generically below.
+			if _, isProto := conn.Lookup(typ); isProto {
+				validateConnFields(path, entry, add)
+				continue
+			}
 			add("%s has unknown type %q", path, typ)
 			continue
 		}

@@ -26,6 +26,7 @@ which reuse the same schema). MVP types:
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 | `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
+| `mysql` / `mariadb` | a connection to a MySQL/MariaDB server authenticates and responds (see Database) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -230,7 +231,35 @@ optional `interval` to run it less often than the worker cycle — every
 `round(interval / resolution)` cycles, reusing its last result in between (see
 [per-check interval](configuration.md#per-check-interval)).
 
-### Checks and host watches are the same types
+### Database connection (`mysql` / `mariadb`)
+
+A connection-protocol check connects to a server over its wire protocol, with a
+user and password, and verifies it responds. The check type **is** the protocol
+name. The first protocol is `mysql` (alias `mariadb` — they share the wire
+protocol):
+
+```yaml
+checks:
+  db:
+    type: mysql                 # or mariadb
+    host: 127.0.0.1             # default 127.0.0.1
+    port: 3306                  # default 3306
+    user: monitor               # required
+    password: "${env:DB_PASS}"  # resolved from the environment at load (never store secrets in plaintext)
+    database: ""                # optional
+    tls: false                  # optional: false | true | skip-verify
+    timeout: 5s                 # optional (engine.default_timeout)
+```
+
+It passes (health-style, `OK == true`) when it connects, authenticates as
+`user`, and the server answers a ping. Result data exposes `protocol`, `host`,
+`port` and the server `version`. A network/auth failure fails the check with the
+error. This is meant to be added to a MySQL/MariaDB service's `checks:` so a
+restart/alert can fire when the database stops accepting connections.
+
+More protocols (e.g. postgres, redis) are added the same way in later phases —
+the check type, dispatch and validation are protocol-agnostic, so a new protocol
+only registers itself.
 
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:
