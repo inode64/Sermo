@@ -794,6 +794,77 @@ checks:
 	}
 }
 
+func TestBuiltinPortVariable(t *testing.T) {
+	// A top-level `port:` field feeds the built-in ${port}.
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/db.yml": `
+kind: service
+name: db
+service: { name: db }
+port: 6379
+checks:
+  ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("db")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "6379" {
+		t.Errorf("ping port = %q, want 6379 (from top-level port)", got)
+	}
+}
+
+func TestUserPortVariableOverridesBuiltin(t *testing.T) {
+	// An explicit variables.port wins over the top-level `port:` field.
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/db.yml": `
+kind: service
+name: db
+service: { name: db }
+port: 6379
+variables: { port: 7000 }
+checks:
+  ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, _ := cfg.Resolve("db")
+	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "7000" {
+		t.Errorf("ping port = %q, want user-defined 7000", got)
+	}
+}
+
+func TestUndefinedPortVariableErrors(t *testing.T) {
+	// With neither a top-level port nor a variables.port, ${port} is undefined.
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/db.yml": `
+kind: service
+name: db
+service: { name: db }
+checks:
+  ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, errs := cfg.Resolve("db"); len(errs) == 0 {
+		t.Fatal("a ${port} with no port defined must error")
+	}
+}
+
 func TestOSSelectorCollapses(t *testing.T) {
 	old := detectedOS
 	detectedOS = "gentoo"
