@@ -212,6 +212,10 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if proto.Name() == "libvirt" && cfg.Socket == "" && asString(entry["host"]) == "" {
 		cfg.Socket = "/var/run/libvirt/libvirt-sock"
 	}
+	// acpid is socket-only; default to its well-known event socket.
+	if proto.Name() == "acpid" && cfg.Socket == "" {
+		cfg.Socket = "/var/run/acpid.socket"
+	}
 	// dbus resolves to a single D-Bus address (socket path or full address),
 	// stored in Socket so the check message shows it instead of host:port.
 	if proto.Name() == "dbus" {
