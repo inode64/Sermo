@@ -164,6 +164,22 @@ func TestBuildIMAPCheckAnonymousAndLogin(t *testing.T) {
 	}
 }
 
+func TestBuildPOPCheck(t *testing.T) {
+	// Anonymous (no user), default port 110; alias pop3 resolves.
+	for _, typ := range []string{"pop", "pop3"} {
+		built, warns := Build(map[string]any{
+			"mail": map[string]any{"type": typ, "host": "mail.example"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s anonymous should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "pop" || cc.cfg.Port != 110 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
