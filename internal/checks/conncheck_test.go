@@ -584,6 +584,28 @@ func TestBuildDHCPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildSpamdCheck(t *testing.T) {
+	for _, typ := range []string{"spamd", "spamassassin"} {
+		built, warns := Build(map[string]any{
+			"sa": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "spamd" || cc.cfg.Port != 783 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+	// Unix socket form.
+	built, _ := Build(map[string]any{
+		"sa": map[string]any{"type": "spamd", "socket": "/run/spamd.sock"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/spamd.sock" {
+		t.Fatalf("socket = %q", cc.cfg.Socket)
+	}
+}
+
 func TestBuildClamdCheck(t *testing.T) {
 	for _, typ := range []string{"clamd", "clamav"} {
 		built, warns := Build(map[string]any{
