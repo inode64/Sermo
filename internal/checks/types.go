@@ -45,15 +45,19 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 // request may carry custom headers and a raw or JSON body (section 12).
 type httpCheck struct {
 	base
-	client      *http.Client
-	url         string
-	method      string
-	headers     map[string]string
-	body        []byte
-	contentType string // set when the body is JSON, unless headers override it
-	expect      statusMatcher
-	expectBody  string
-	expectJSON  []jsonAssertion
+	client       *http.Client
+	url          string
+	method       string
+	headers      map[string]string
+	body         []byte
+	contentType  string // set when the body is JSON, unless headers override it
+	expect       statusMatcher
+	expectBody   string // substring the body must contain
+	bodyOp       string // when set, compare the (trimmed) body via compareValue
+	bodyValue    string
+	expectJSON   []jsonAssertion
+	latencyOp    string // when set, compare the response latency in ms
+	latencyValue string
 
 	// Certificate inspection (https only). certHost is non-empty when any cert_*
 	// option is configured; certClient is then an InsecureSkipVerify client so
@@ -101,6 +105,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	}
 
 	resp, err := client.Do(req)
+	elapsed := time.Since(start)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.method, c.url, err), start)
 	}
@@ -109,13 +114,32 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 	if !c.expect.matches(resp.StatusCode) {
 		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
 	}
-	if c.expectBody == "" && len(c.expectJSON) == 0 {
-		return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)
+	if c.latencyOp != "" {
+		ms := strconv.FormatInt(elapsed.Milliseconds(), 10)
+		ok, err := compareValue(ms, c.latencyOp, c.latencyValue)
+		if err != nil {
+			return c.result(false, fmt.Sprintf("latency: %v", err), start)
+		}
+		if !ok {
+			return c.result(false, fmt.Sprintf("status %d; latency %sms not %s %s", resp.StatusCode, ms, c.latencyOp, c.latencyValue), start)
+		}
+	}
+	if c.expectBody == "" && c.bodyOp == "" && len(c.expectJSON) == 0 {
+		return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), start)
 	}
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
 	if c.expectBody != "" && !strings.Contains(string(data), c.expectBody) {
 		return c.result(false, fmt.Sprintf("status %d; body does not contain %q", resp.StatusCode, c.expectBody), start)
+	}
+	if c.bodyOp != "" {
+		ok, err := compareValue(strings.TrimSpace(string(data)), c.bodyOp, c.bodyValue)
+		if err != nil {
+			return c.result(false, fmt.Sprintf("status %d; body: %v", resp.StatusCode, err), start)
+		}
+		if !ok {
+			return c.result(false, fmt.Sprintf("status %d; body %s %q not satisfied", resp.StatusCode, c.bodyOp, c.bodyValue), start)
+		}
 	}
 	if len(c.expectJSON) > 0 {
 		var doc any
@@ -132,16 +156,18 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 			}
 		}
 	}
-	return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)
+	return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), start)
 }
 
 // success builds the result for a request whose HTTP assertions all passed,
 // folding in certificate inspection when configured (https only). A certificate
 // problem turns the otherwise-passing check into a failure, keeping the http
 // check's pass/fail semantics (OK==true means healthy).
-func (c *httpCheck) success(resp *http.Response, statusMsg string, start time.Time) Result {
+func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMsg string, start time.Time) Result {
 	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
-		return c.result(true, statusMsg, start)
+		res := c.result(true, statusMsg, start)
+		res.Data = map[string]any{"status": resp.StatusCode, "latency_ms": elapsed.Milliseconds()}
+		return res
 	}
 	leaf := resp.TLS.PeerCertificates[0]
 	s := certSampleFromCert(leaf)
@@ -155,7 +181,9 @@ func (c *httpCheck) success(resp *http.Response, statusMsg string, start time.Ti
 		msg = c.certHost + ": " + strings.Join(problems, "; ")
 	}
 	res := c.result(ok, msg, start)
-	res.Data = certData(c.certHost, c.certHost, "", s, daysLeft, hasExpiry)
+	data := certData(c.certHost, c.certHost, "", s, daysLeft, hasExpiry)
+	data["status"], data["latency_ms"] = resp.StatusCode, elapsed.Milliseconds()
+	res.Data = data
 	return res
 }
 
@@ -171,6 +199,9 @@ func jsonAssert(got any, op, want string) bool {
 		return gotStr != want
 	case "contains":
 		return strings.Contains(gotStr, want)
+	case "=~":
+		ok, _ := compareValue(gotStr, "=~", want)
+		return ok
 	case ">", ">=", "<", "<=":
 		gf, err1 := strconv.ParseFloat(gotStr, 64)
 		wf, err2 := strconv.ParseFloat(want, 64)
@@ -230,13 +261,20 @@ func jsonValueString(v any) string {
 }
 
 // statusMatcher matches an HTTP status against exact codes and/or classes (the
-// leading digit of an Nxx pattern).
+// leading digit of an Nxx pattern), or — when op is set — an operator comparison
+// against value (e.g. op "<" value "500").
 type statusMatcher struct {
 	codes   []int
 	classes []int
+	op      string
+	value   string
 }
 
 func (m statusMatcher) matches(code int) bool {
+	if m.op != "" {
+		ok, _ := compareValue(strconv.Itoa(code), m.op, m.value)
+		return ok
+	}
 	for _, c := range m.codes {
 		if c == code {
 			return true
@@ -251,6 +289,9 @@ func (m statusMatcher) matches(code int) bool {
 }
 
 func (m statusMatcher) String() string {
+	if m.op != "" {
+		return m.op + " " + m.value
+	}
 	parts := make([]string, 0, len(m.codes)+len(m.classes))
 	for _, c := range m.codes {
 		parts = append(parts, strconv.Itoa(c))

@@ -147,13 +147,15 @@ checks:
       Authorization: "Bearer ${token}" # any request headers
     json:                              # request body as JSON (sets Content-Type
       probe: true                      # automatically; or use `body:` for raw text)
-    expect_status: 200                 # code, class (2xx) or list (default 200)
-    expect_body: "ready"               # optional: response must contain this substring
+    expect_status: 200                 # code, class (2xx), list, or { op, value }
+    expect_body: "ready"               # substring, or { op, value } (see below)
+    expect_latency: { op: "<", value: 800 }   # optional: response time in ms
     proxy: "http://user:pass@squid:3128"   # optional: route the request through a proxy (Squid)
     expect_json:                       # optional: response JSON must match (dotted paths)
       status: ok                       # equality (scalar)
-      data.replicas: { op: ">=", value: 2 }   # operator: >, >=, <, <=, ==, !=, contains
+      data.replicas: { op: ">=", value: 2 }   # operator: >, >=, <, <=, ==, !=, contains, =~
       data.message: { op: contains, value: "healthy" }
+      data.version: { op: "=~", value: "^v[0-9]+" }   # regex (Go/RE2)
 ```
 
 It passes (health-style, `OK == true`) when the status matches **and** every
@@ -167,8 +169,24 @@ application/json` (override it via `headers`); `body:` sends a raw string. The
 response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
 `expect_json` looks up **dotted paths** into nested objects. A scalar value is an
 equality check (compared as a string); a `{op, value}` mapping uses an operator —
-`>`, `>=`, `<`, `<=` (numeric), `==`, `!=` or `contains` (string) — handy for
-asserting a JSON health endpoint's fields without parsing.
+`>`, `>=`, `<`, `<=` (numeric), `==`, `!=`, `contains` (string), or `=~` (regex).
+
+**Response comparisons.** Beyond the substring shorthand, `expect_status`,
+`expect_body` and `expect_latency` accept an `{op, value}` mapping using the
+shared operator set `== != > >= < <=` (numeric, or string for `==`/`!=`) and
+`=~` (Go/RE2 regular expression) — the same operators as the [`sql`](#sql-query-sql)
+check:
+
+- `expect_status: { op: "<", value: 500 }` — compare the status code numerically
+  (in addition to the code/class/list forms).
+- `expect_body: { op: "=~", value: "^OK" }` — compare the **trimmed** response
+  body: numeric when both sides parse as numbers (`>`, `<`, …), otherwise string
+  equality, or a regex with `=~`. The plain string form (`expect_body: "ready"`)
+  is still a substring match.
+- `expect_latency: { op: "<", value: 800 }` — fail when the response time in
+  milliseconds does not satisfy the comparison.
+
+Result data carries `status` and `latency_ms` for use in rules/hooks.
 
 On an `https://` URL the same check can also inspect the **server certificate**
 presented on the request connection, so one check covers reachability *and* TLS
