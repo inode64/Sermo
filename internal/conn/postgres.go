@@ -42,6 +42,10 @@ func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return Result{Version: version}, nil
 }
 
+// PostgresDSN renders a lib/pq connection URL from cfg (escaping the password).
+// Exported so the sql check can open a PostgreSQL connection reusing this logic.
+func PostgresDSN(cfg Config) string { return buildPGDSN(cfg) }
+
 // buildPGDSN renders a lib/pq connection URL from cfg. A URL (with
 // url.UserPassword) escapes special characters in the password correctly.
 func buildPGDSN(cfg Config) string {

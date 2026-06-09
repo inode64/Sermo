@@ -49,6 +49,7 @@ which reuse the same schema). MVP types:
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
+| `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -456,6 +457,48 @@ It passes (health-style, `OK == true`) when `PRAGMA integrity_check` reports
 reported corruption fails the check with the detail. The file is opened
 **read-only**, so the check never modifies it. `quick: true` runs
 `PRAGMA quick_check` (faster, skips some per-row checks) for large databases.
+
+### SQL query (`sql`)
+
+A `sql` check runs a query against a database and compares its **scalar result**
+(the first column of the first row) against a `value`. It is **condition-style**
+(`OK == true` means the comparison holds), so in rules `active: {check: …}`
+fires on it. It reuses the MySQL/PostgreSQL connection builders and the SQLite
+read-only open of the other checks.
+
+```yaml
+checks:
+  jobs-backlog:
+    type: sql
+    engine: postgres            # mysql | mariadb | postgres | postgresql | sqlite | sqlite3
+    host: 127.0.0.1             # mysql/postgres: host/port/user/password/database/tls
+    user: monitor
+    password: "${env:PGPASS}"
+    database: app
+    query: "SELECT count(*) FROM jobs WHERE state = 'queued'"
+    op: ">"                     # == | != | > | >= | < | <= | =~
+    value: "100"
+  schema-version:
+    type: sql
+    engine: sqlite
+    path: /var/lib/app/app.db   # sqlite: a path, opened read-only
+    query: "SELECT value FROM meta WHERE key = 'schema'"
+    op: "=~"                    # regular expression (Go/RE2)
+    value: "^v[0-9]+$"
+```
+
+- **Operators:** `>`, `>=`, `<`, `<=` compare numerically (result and `value`
+  must parse as numbers); `==` / `!=` compare numerically when both are numbers,
+  otherwise as strings (equal/different); `=~` matches the result against `value`
+  as a Go (RE2) regular expression.
+- **Engines:** `mysql`/`mariadb` and `postgres`/`postgresql` use the same
+  connection fields as their protocol checks (`host`/`port`/`user`/`password`/
+  `database`/`tls`) and **require a `user`**; `sqlite`/`sqlite3` take a `path`
+  and open it **read-only**.
+- Result data carries `engine`, `query`, `op`, `threshold`, the raw `result`
+  string and, when numeric, a `value` for hooks/rules. A query error, a missing
+  database or a `NULL` result fails the check. The check only reads — point it at
+  a read-only user.
 
 ```yaml
 checks:
