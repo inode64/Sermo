@@ -54,6 +54,11 @@ type App struct {
 	// Runner executes external commands (e.g. an app's version command for the
 	// `apps` command). Injectable for testing; defaults to the real runner.
 	Runner execx.Runner
+	// pidfileFallbacks lists absolute pidfile locations `reload` searches after
+	// the configured runtime dir when resolving the daemon. nil selects the
+	// production defaults; tests set it (often empty) to keep pidfile discovery
+	// hermetic instead of reading the host's /run/sermo/sermod.pid.
+	pidfileFallbacks []string
 }
 
 type options struct {
@@ -973,11 +978,14 @@ func (a App) runReload(ctx context.Context, opts options) int {
 		runtimeDir = "/run/sermo"
 	}
 
-	candidates := []string{
-		filepath.Join(runtimeDir, "sermod.pid"),
-		"/run/sermo/sermod.pid",
-		"/run/sermod.pid", // legacy from OpenRC packaging
+	fallbacks := a.pidfileFallbacks
+	if fallbacks == nil {
+		fallbacks = []string{
+			"/run/sermo/sermod.pid",
+			"/run/sermod.pid", // legacy from OpenRC packaging
+		}
 	}
+	candidates := append([]string{filepath.Join(runtimeDir, "sermod.pid")}, fallbacks...)
 
 	var pid int
 	for _, p := range candidates {
