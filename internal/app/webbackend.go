@@ -813,17 +813,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	if len(procWarnings) > 0 {
 		d.ProcessWarnings = append([]string(nil), procWarnings...)
 	}
-	reader := metrics.OSReader{}
-	for _, p := range procs {
-		wp := processToWeb(p)
-		if rss, ok := reader.ProcessRSS(p.PID); ok {
-			wp.RSS = int64(rss)
-		}
-		if rd, wr, ok := reader.ProcessIO(p.PID); ok {
-			wp.IORead, wp.IOWrite = int64(rd), int64(wr)
-		}
-		d.Processes = append(d.Processes, wp)
-	}
+	d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
 
 	if b.remediation != nil {
 		if rep, ok := b.remediation.Get(name); ok {
@@ -943,6 +933,49 @@ func processToWeb(p process.Process) web.Process {
 		Source:      p.Source,
 		Cmdline:     p.Cmdline,
 	}
+}
+
+// procMetricReader is the subset of metrics.OSReader the process table needs;
+// injectable so aggregation is testable without real /proc.
+type procMetricReader interface {
+	ProcessRSS(pid int) (uint64, bool)
+	ProcessIO(pid int) (read, write uint64, ok bool)
+	ProcessFDs(pid int) (uint64, bool)
+	ProcessThreads(pid int) (uint64, bool)
+}
+
+// aggregateProcesses builds the per-process rows and the service total. Because
+// procs is the whole discovered tree (matched processes plus their children),
+// the total reflects the service's workers and helpers, not just its main
+// process. The total is nil when there are no processes.
+func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Process, *web.ProcessTotals) {
+	if len(procs) == 0 {
+		return nil, nil
+	}
+	out := make([]web.Process, 0, len(procs))
+	totals := web.ProcessTotals{Count: len(procs)}
+	for _, p := range procs {
+		wp := processToWeb(p)
+		if rss, ok := r.ProcessRSS(p.PID); ok {
+			wp.RSS = int64(rss)
+			totals.RSS += int64(rss)
+		}
+		if rd, wr, ok := r.ProcessIO(p.PID); ok {
+			wp.IORead, wp.IOWrite = int64(rd), int64(wr)
+			totals.IORead += int64(rd)
+			totals.IOWrite += int64(wr)
+		}
+		if n, ok := r.ProcessFDs(p.PID); ok {
+			wp.FDs = int64(n)
+			totals.FDs += int64(n)
+		}
+		if n, ok := r.ProcessThreads(p.PID); ok {
+			wp.Threads = int64(n)
+			totals.Threads += int64(n)
+		}
+		out = append(out, wp)
+	}
+	return out, &totals
 }
 
 func lockToWeb(lk locks.Lock, service string) web.Lock {
