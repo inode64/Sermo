@@ -102,7 +102,9 @@ rc-service sermod reload
 
 The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
 at startup to make `sermoctl reload` reliable (it also checks the legacy
-`/run/sermod.pid` used by the OpenRC packaging).
+`/run/sermod.pid` used by the OpenRC packaging). If no pidfile is present,
+`sermoctl reload` falls back to locating the running `sermod` process by name —
+a native scan of `/proc`, no external `pidof`/`pgrep` needed.
 
 ### Per-service interval
 

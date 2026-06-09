@@ -54,6 +54,10 @@ type App struct {
 	// Runner executes external commands (e.g. an app's version command for the
 	// `apps` command). Injectable for testing; defaults to the real runner.
 	Runner execx.Runner
+	// FindPID locates running PIDs by program name, used by `reload` to find the
+	// daemon when no pidfile is present. Injectable for testing; defaults to a
+	// native /proc scan (process.PIDsByComm).
+	FindPID func(name string) ([]int, error)
 	// pidfileFallbacks lists absolute pidfile locations `reload` searches after
 	// the configured runtime dir when resolving the daemon. nil selects the
 	// production defaults; tests set it (often empty) to keep pidfile discovery
@@ -1000,18 +1004,18 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 
 	if pid == 0 {
-		// Fallback: ask the system for a sermod pid (best effort, one pid).
-		// We try pidof first (common on systemd systems), then pgrep.
-		// Probes are bounded by a short timeout and go through the App's execx
-		// Runner (every external command must have a timeout; see AGENTS.md).
-		for _, probe := range [][]string{
-			{"pidof", "-s", "sermod"},
-			{"pgrep", "-x", "-n", "sermod"},
-		} {
-			res, err := execx.Run(ctx, a.Runner, 2*time.Second, probe[0], probe[1:]...)
-			if err == nil {
-				if n, err := strconv.Atoi(strings.TrimSpace(res.Stdout)); err == nil && n > 0 {
-					pid = n
+		// Fallback: find a running sermod by program name. This is a native
+		// /proc scan (process.PIDsByComm), not a pidof/pgrep shell-out — it
+		// reads the world-readable /proc/<pid>/comm so it locates a root-owned
+		// daemon without external binaries.
+		find := a.FindPID
+		if find == nil {
+			find = process.PIDsByComm
+		}
+		if pids, err := find("sermod"); err == nil {
+			for _, p := range pids {
+				if p > 0 {
+					pid = p
 					break
 				}
 			}
@@ -1019,7 +1023,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 
 	if pid <= 0 {
-		a.reportError(opts, "could not find running sermod pid (no pidfile and pidof/pgrep failed)")
+		a.reportError(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
 		return exitRuntimeError
 	}
 
