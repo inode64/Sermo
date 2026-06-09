@@ -4,7 +4,7 @@
 //
 // Service checks/preflight/postflight support tcp, ports, http, command, service,
 // file_exists, binary, process, metric (via the daemon's stateful collector),
-// libraries, count, and host-resource probes (disk, load, fds, conntrack,
+// libraries, count, and host-resource probes (disk, autofs, load, fds, conntrack,
 // entropy, zombies, oom, cert). Multi-target watch types (net, icmp, swap, file)
 // are built for host watches, not single-shot service checks — see buildCheck and
 // config validation's knownCheckTypes.

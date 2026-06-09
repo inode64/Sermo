@@ -19,6 +19,7 @@ which reuse the same schema). MVP types:
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
 | `disk`        | a filesystem's space/inode predicates hold (used_pct/free_pct/inodes_*)|
+| `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
@@ -929,6 +930,38 @@ metric) and the multi-target watches (`file`, `process`, one event/hook per
 changed path or matching pid). `service`/`metric`/`process` checks need per-service
 context (backend status, a metric sampler, process discovery) and so are not
 available as standalone watches.
+
+### Autofs
+
+The `autofs` check verifies the autofs **automounter** (`automount`) is active.
+autofs has no socket or port — the daemon talks to the kernel over an internal
+pipe — so the liveness signal is the **mount table**: while `automount` runs it
+maintains its configured map roots as `autofs`-type mountpoints in
+`/proc/mounts` (they disappear when the daemon stops). Unlike `disk`/`count`,
+this is a **health** check: it passes (OK) when the automounter is active as
+configured, and fails when it is not.
+
+```yaml
+checks:
+  automounter:
+    type: autofs                  # with no path/count: require >= 1 autofs mountpoint
+  home-automount:
+    type: autofs
+    path: /home                   # require this exact autofs mountpoint to be active
+  all-maps:
+    type: autofs
+    count: { op: ">=", value: 3 } # require at least 3 autofs mountpoints
+```
+
+- With **no `path` and no `count`**, the check passes when at least one autofs
+  mountpoint is present (the automounter is running with maps).
+- **`path`** requires that exact mountpoint to be an active autofs mount.
+- **`count` `{op, value}`** compares the number of autofs mountpoints (`op` is one
+  of `>=, >, <=, <, ==, !=`). `path` and `count` are mutually exclusive.
+- Result data carries the `count` of autofs mountpoints and the comma-joined
+  `mountpoints`. On-demand mounts triggered by access appear under these roots as
+  their real filesystem (e.g. `nfs`), not as `autofs`, so they are not counted —
+  the check tracks the map roots, i.e. that the automounter itself is up.
 
 ### Count
 
