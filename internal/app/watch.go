@@ -11,7 +11,22 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
+	"sermo/internal/volume"
 )
+
+// VolumeExpander grows the filesystem backing a path. Satisfied by
+// volume.Expander; injected so a watch's expand action can be tested without
+// touching real LVM.
+type VolumeExpander interface {
+	ExpandPath(ctx context.Context, path string, by int64) (volume.Result, error)
+}
+
+// ExpandSpec is a watch's native disk-expansion action (`then.expand`): grow the
+// volume backing the checked path by up to By bytes (capped to the volume
+// group's free space).
+type ExpandSpec struct {
+	By int64
+}
 
 // Watch monitors one host resource: each cycle it runs its check, advances its
 // window, and fires its hook when the condition (check.OK) holds for the window.
@@ -39,7 +54,16 @@ type Watch struct {
 	// OK==true (threshold crossed) and leave this false.
 	FireOnFail bool
 
-	state rules.WindowState
+	// Expand, when set, runs a native disk-expansion action on a firing cycle,
+	// gated by Policy so it does not run every cycle while the volume stays low.
+	// It is meant for `disk` watches; the target path comes from the check
+	// Result's "path" data.
+	Expand   *ExpandSpec
+	Expander VolumeExpander
+	Policy   rules.Policy
+
+	state       rules.WindowState
+	policyState rules.RemediationState
 }
 
 // RunCycle runs the check, advances the window, and fires the hook on a firing
@@ -57,6 +81,9 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if !w.state.Fires(w.Window, fired) {
 		return
 	}
+	if w.Expand != nil && w.Expander != nil {
+		w.runExpand(ctx, res)
+	}
 	env := hookEnv(w.Name, w.CheckType, res)
 	if len(w.Hook.Command) > 0 {
 		runner := defaultHookRunner(w.Runner)
@@ -67,6 +94,30 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		}
 	}
 	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+}
+
+// runExpand performs the native disk-expansion action on a firing cycle, gated
+// by Policy. The action is attempted at most once per cooldown window even while
+// the volume stays low; an attempt (success or failure) records the time so a
+// failing expansion is not retried every cycle.
+func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
+	now := time.Now
+	if w.Now != nil {
+		now = w.Now
+	}
+	at := now()
+	if allowed, reason := w.Policy.Allow(&w.policyState, at); !allowed {
+		w.emit(Event{Watch: w.Name, Kind: "expand-skipped", Message: reason})
+		return
+	}
+	path := stringifyValue(res.Data["path"])
+	r, err := w.Expander.ExpandPath(ctx, path, w.Expand.By)
+	w.policyState.Record(at, w.Policy)
+	if err != nil {
+		w.emit(Event{Watch: w.Name, Kind: "expand-failed", Message: err.Error()})
+		return
+	}
+	w.emit(Event{Watch: w.Name, Kind: "expand", Message: fmt.Sprintf("%s: grew %s/%s by %d bytes", path, r.VG, r.LV, r.GrewBytes)})
 }
 
 func (w *Watch) emit(e Event) {

@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/rules"
+	"sermo/internal/volume"
 )
 
 // stubCheck returns a fixed result for the watch cycle tests.
@@ -43,6 +45,90 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 		t.Fatalf("unexpected env: %v", env)
 	}
 }
+
+// fakeExpander records expansion calls and returns a canned result.
+type fakeExpander struct {
+	calls []string
+	res   volume.Result
+	err   error
+}
+
+func (e *fakeExpander) ExpandPath(_ context.Context, path string, by int64) (volume.Result, error) {
+	e.calls = append(e.calls, fmt.Sprintf("%s:%d", path, by))
+	return e.res, e.err
+}
+
+func TestWatchExpandFiresOnceThenCooldown(t *testing.T) {
+	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
+	at := time.Date(2026, 6, 9, 12, 0, 0, 0, time.UTC)
+	var events []Event
+	w := &Watch{
+		Name:      "expand-backup",
+		CheckType: "disk",
+		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/mnt/backup", "free_pct": 5.0}},
+		Expand:    &ExpandSpec{By: 5 << 30},
+		Expander:  exp,
+		Policy:    rules.Policy{Cooldown: 30 * time.Minute},
+		Now:       func() time.Time { return at },
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+
+	w.RunCycle(context.Background()) // fires + expands
+	if len(exp.calls) != 1 || exp.calls[0] != "/mnt/backup:5368709120" {
+		t.Fatalf("expand calls = %v, want one /mnt/backup:5368709120", exp.calls)
+	}
+	if !hasEventKind(events, "expand") {
+		t.Fatalf("expected an 'expand' event, got %v", events)
+	}
+
+	// Same instant, still within cooldown: must NOT expand again.
+	w.RunCycle(context.Background())
+	if len(exp.calls) != 1 {
+		t.Fatalf("expand must be suppressed within cooldown, calls = %v", exp.calls)
+	}
+	if !hasEventKind(events, "expand-skipped") {
+		t.Fatalf("expected an 'expand-skipped' event on cooldown, got %v", events)
+	}
+
+	// After the cooldown elapses, it expands again.
+	at = at.Add(31 * time.Minute)
+	w.RunCycle(context.Background())
+	if len(exp.calls) != 2 {
+		t.Fatalf("expand must run again after cooldown, calls = %v", exp.calls)
+	}
+}
+
+func TestWatchExpandFailureEmitsEvent(t *testing.T) {
+	exp := &fakeExpander{err: errExpandTest}
+	var events []Event
+	w := &Watch{
+		Name:      "expand-backup",
+		CheckType: "disk",
+		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/mnt/backup"}},
+		Expand:    &ExpandSpec{By: 1 << 30},
+		Expander:  exp,
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+	w.RunCycle(context.Background())
+	if !hasEventKind(events, "expand-failed") {
+		t.Fatalf("expected an 'expand-failed' event, got %v", events)
+	}
+}
+
+func hasEventKind(events []Event, kind string) bool {
+	for _, e := range events {
+		if e.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+var errExpandTest = errTest("boom")
+
+type errTest string
+
+func (e errTest) Error() string { return string(e) }
 
 func TestHookEnvMapsAllDataKeys(t *testing.T) {
 	res := checks.Result{

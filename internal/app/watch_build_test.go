@@ -15,6 +15,50 @@ func cfgWithWatches(raw map[string]any) *config.Config {
 	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw}}}
 }
 
+func TestBuildWatchesDiskExpandAction(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"expand-backup": map[string]any{
+			"check": map[string]any{
+				"type":     "disk",
+				"path":     "/mnt/backup",
+				"free_pct": map[string]any{"op": "<", "value": 10},
+			},
+			"policy": map[string]any{"cooldown": "30m"},
+			"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	w := watches[0]
+	if w.Expand == nil || w.Expand.By != 5<<30 {
+		t.Fatalf("expand not parsed: %+v", w.Expand)
+	}
+	if w.Expander == nil {
+		t.Fatal("expander must be injected")
+	}
+	if w.Policy.Cooldown != 30*time.Minute {
+		t.Fatalf("policy cooldown = %v, want 30m", w.Policy.Cooldown)
+	}
+}
+
+func TestBuildWatchesExpandRejectedOnNonDisk(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"bad-expand": map[string]any{
+			"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">=", "value": 10}},
+			"then":  map[string]any{"expand": map[string]any{"by": "5G"}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
+	if len(watches) != 0 || len(warns) == 0 {
+		t.Fatalf("then.expand on a non-disk watch must warn and not build: watches=%d warns=%v", len(watches), warns)
+	}
+}
+
 func TestBuildWatchesBuildsDisk(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
