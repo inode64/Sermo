@@ -105,6 +105,23 @@ func TestBuildMySQLCheckDefaultsAndUserRequired(t *testing.T) {
 	}
 }
 
+func TestBuildPostgresCheck(t *testing.T) {
+	// The generic dispatch picks up any registered protocol — postgres needed no
+	// change to buildCheck. Alias "postgresql" resolves too.
+	for _, typ := range []string{"postgres", "postgresql"} {
+		built, warns := Build(map[string]any{
+			"db": map[string]any{"type": typ, "user": "monitor"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s should build cleanly: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "postgres" || cc.cfg.Port != 5432 || cc.cfg.Host != "127.0.0.1" {
+			t.Fatalf("%s cfg = %+v (proto %s)", typ, cc.cfg, cc.proto.Name())
+		}
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
