@@ -608,6 +608,29 @@ func TestBuildClamdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildGuacdCheck(t *testing.T) {
+	for _, typ := range []string{"guacd", "guacamole"} {
+		built, warns := Build(map[string]any{
+			"guac": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "guacd" || cc.cfg.Port != 4822 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+
+	// query selects the Guacamole protocol to handshake with.
+	built, _ := Build(map[string]any{
+		"guac": map[string]any{"type": "guacd", "host": "127.0.0.1", "query": "rdp"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Query != "rdp" {
+		t.Fatalf("query = %q, want rdp", cc.cfg.Query)
+	}
+}
+
 func TestBuildRDPCheck(t *testing.T) {
 	for _, typ := range []string{"rdp", "ms-wbt-server"} {
 		built, warns := Build(map[string]any{
