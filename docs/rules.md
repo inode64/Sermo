@@ -567,6 +567,19 @@ A referenced field the probe did not return fails the check with a clear
 message. This reuses the same comparison engine as the `http` and `sql` checks,
 so it works for every registered protocol with no per-protocol configuration.
 
+**Response latency (`expect_latency`).** Any protocol check also accepts
+`expect_latency: { op, value }` (milliseconds), like the `http` check — it fails
+when the probe's response time does not satisfy the comparison. Result data
+always carries `latency_ms`:
+
+```yaml
+checks:
+  cache:
+    type: redis
+    password: "${env:REDIS_PASS}"
+    expect_latency: { op: "<", value: 50 }   # alert when Redis answers slowly
+```
+
 More protocols are added the same way — the check type, dispatch and validation
 are protocol-agnostic, so a new protocol only registers itself.
 
