@@ -1,0 +1,36 @@
+package conn
+
+import (
+	"context"
+	"net"
+)
+
+func init() { Register(fail2banProtocol{}) }
+
+// fail2banDefaultSocket is fail2ban-server's well-known control socket.
+const fail2banDefaultSocket = "/var/run/fail2ban/fail2ban.sock"
+
+// fail2banProtocol probes fail2ban-server. fail2ban speaks a Python pickle
+// command protocol over a Unix socket, which is not worth reimplementing for a
+// liveness check; instead the check is the connect itself — fail2ban-server
+// creates and listens on the socket, so a successful connection proves it is
+// running (a stale socket left by a dead server refuses the connection). It
+// exchanges no commands. Socket-only (no TCP port), no auth.
+type fail2banProtocol struct{}
+
+func (fail2banProtocol) Name() string       { return "fail2ban" }
+func (fail2banProtocol) DefaultPort() int   { return 0 }
+func (fail2banProtocol) RequiresUser() bool { return false }
+
+func (fail2banProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	socket := cfg.Socket
+	if socket == "" {
+		socket = fail2banDefaultSocket
+	}
+	c, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	if err != nil {
+		return Result{}, err
+	}
+	_ = c.Close()
+	return Result{Extra: map[string]string{"socket": socket}}, nil
+}

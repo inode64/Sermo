@@ -691,6 +691,31 @@ func TestBuildRpcbindCheck(t *testing.T) {
 	}
 }
 
+func TestBuildFail2banCheck(t *testing.T) {
+	// Socket-only: default port 0 and the well-known control socket by default.
+	built, warns := Build(map[string]any{
+		"f2b": map[string]any{"type": "fail2ban"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("fail2ban check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "fail2ban" || cc.cfg.Port != 0 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	if cc.cfg.Socket != "/var/run/fail2ban/fail2ban.sock" {
+		t.Fatalf("default socket = %q", cc.cfg.Socket)
+	}
+
+	// An explicit socket is kept.
+	built, _ = Build(map[string]any{
+		"f2b": map[string]any{"type": "fail2ban", "socket": "/run/fail2ban/fail2ban.sock"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/fail2ban/fail2ban.sock" {
+		t.Fatalf("socket = %q", cc.cfg.Socket)
+	}
+}
+
 func TestBuildAcpidCheck(t *testing.T) {
 	// Socket-only: default port 0 and the well-known socket when none is given.
 	built, warns := Build(map[string]any{
