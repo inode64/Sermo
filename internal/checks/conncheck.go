@@ -19,6 +19,17 @@ type connCheck struct {
 	proto conn.Protocol
 	cfg   conn.Config
 	probe func(context.Context, conn.Config) (conn.Result, error)
+	// onChange alerts when the server's fingerprint (Result.Extra["fingerprint"],
+	// e.g. an SSH host key) changes between cycles. state holds the previous value;
+	// being a pointer, it survives across cycles when the check is built once (a
+	// host watch), matching the cert check's change detection.
+	onChange bool
+	state    *connState
+}
+
+type connState struct {
+	primed          bool
+	lastFingerprint string
 }
 
 func (c connCheck) Run(ctx context.Context) Result {
@@ -37,6 +48,17 @@ func (c connCheck) Run(ctx context.Context) Result {
 	res, err := probe(ctx, c.cfg)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
+	}
+	if c.onChange && c.state != nil {
+		fp := res.Extra["fingerprint"]
+		changed := c.state.primed && fp != c.state.lastFingerprint
+		old := c.state.lastFingerprint
+		c.state.primed, c.state.lastFingerprint = true, fp
+		if changed {
+			r := c.result(false, fmt.Sprintf("%s %s: fingerprint changed (%s -> %s)", c.proto.Name(), addr, old, fp), start)
+			r.Data = map[string]any{"protocol": c.proto.Name(), "host": c.cfg.Host, "port": c.cfg.Port, "fingerprint": fp, "fingerprint_old": old}
+			return r
+		}
 	}
 	msg := fmt.Sprintf("%s %s ok", c.proto.Name(), addr)
 	if res.Version != "" {
@@ -83,7 +105,12 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		Query:    asString(entry["query"]),
 		TLS:      tlsString(entry["tls"]),
 	}
-	return connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}, ""
+	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
+	if asBool(entry["on_change"]) {
+		c.onChange = true
+		c.state = &connState{}
+	}
+	return c, ""
 }
 
 // tlsString reads a tls field that may be a YAML bool (true/false) or a string
