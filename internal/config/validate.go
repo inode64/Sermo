@@ -1243,7 +1243,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "size", "websocket", "ws")
+	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1362,6 +1362,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateCount(entry, path, add)
 		case "disk":
 			validateDiskFields(path, entry, add)
+		case "autofs":
+			validateAutofsFields(path, entry, add)
 		case "load":
 			validateLoadFields(path, entry, add)
 		case "fds":
@@ -1407,6 +1409,25 @@ func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) 
 	case "ws", "wss", "http", "https":
 	default:
 		add("%s.url scheme must be ws, wss, http or https", prefix)
+	}
+}
+
+// validateAutofsFields validates an autofs check: an optional count {op, value}
+// predicate, mutually exclusive with path.
+func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
+	count, hasCount := fields["count"].(map[string]any)
+	if !hasCount {
+		return
+	}
+	if scalarString(fields["path"]) != "" {
+		add("%s: path and count are mutually exclusive", prefix)
+	}
+	op := scalarString(count["op"])
+	if _, ok := metricOps[op]; !ok {
+		add("%s.count.op %q is not one of >, >=, <, <=, ==, !=", prefix, op)
+	}
+	if !isNumeric(scalarString(count["value"])) {
+		add("%s.count.value must be numeric", prefix)
 	}
 }
 
