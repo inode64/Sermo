@@ -47,7 +47,7 @@ func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		if port == 0 {
 			port = 9000
 		}
-		c, err = dialConn(ctx, cfg.Host, port, cfg.TLS)
+		c, err = dialConn(ctx, cfg, port)
 	}
 	if err != nil {
 		return Result{}, err

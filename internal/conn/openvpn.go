@@ -56,7 +56,7 @@ func (openvpnProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 
 	sid := openvpnSessionID()
-	c, err := (&net.Dialer{}).DialContext(ctx, transport, net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(cfg.Interface).DialContext(ctx, transport, net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}

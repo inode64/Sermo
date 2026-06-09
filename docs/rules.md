@@ -86,6 +86,43 @@ which reuse the same schema). MVP types:
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
 
+### Egress interface (`interface`)
+
+On a **multi-homed host** (several NICs) a network check can be pinned to leave
+through a specific interface with the optional **`interface`** field:
+
+```yaml
+checks:
+  gw-via-wan:
+    type: icmp
+    host: 8.8.8.8
+    metric: state
+    expect: up
+    interface: eth1        # ping out of eth1 specifically
+  db-on-mgmt:
+    type: tcp
+    host: 10.0.0.5
+    port: 5432
+    interface: mgmt0       # connect over the management NIC
+```
+
+- **Optional.** When `interface` is omitted (the default) the probe uses normal
+  routing across all interfaces, exactly as before — nothing changes unless you
+  set it.
+- **Mechanism.** For TCP/UDP it binds the socket with `SO_BINDTODEVICE`, forcing
+  egress through that interface regardless of the routing table; for `icmp` it
+  binds the probe to that interface's IPv4 address (the `ping -I <addr>`
+  mechanism). **Linux only**, and `SO_BINDTODEVICE` needs `CAP_NET_RAW` (root) —
+  if the interface does not exist or the daemon lacks privilege the check **fails**
+  rather than silently using the wrong link.
+- **Where it applies.** `tcp`, `ports`, `icmp`, `http`, `websocket`, and every
+  natively-dialed connection-protocol check (the TCP/UDP probes such as `redis`,
+  `imap`, `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`, `tftp`, …, plus
+  the `influxdb`/`prometheus` HTTP probes). It is **not** honored by checks that
+  dial through a third-party library — the SQL drivers (`mysql`/`postgres`),
+  `mongodb`, `ldap`, `libvirt`, and the `syncthing`/`unifi`/`rspamd`/`ipp` HTTP
+  probes — where it is ignored.
+
 ### Check interdependencies (`requires` / `skip_when_changed`)
 
 Any check may declare interdependencies so it is **skipped** (not counted, no

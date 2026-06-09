@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"sermo/internal/conn"
 )
 
 // maxPorts caps a single ports check to keep a scan bounded.
@@ -31,6 +33,7 @@ const defaultPortConnectTimeout = time.Second
 type portsCheck struct {
 	base
 	host           string
+	iface          string
 	ports          []int
 	expect         string // open | closed | any
 	match          string // all | any | none
@@ -156,11 +159,11 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 	}
 	pctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	conn, err := (&net.Dialer{}).DialContext(pctx, "tcp", net.JoinHostPort(c.host, strconv.Itoa(port)))
+	nc, err := conn.BindDialer(c.iface).DialContext(pctx, "tcp", net.JoinHostPort(c.host, strconv.Itoa(port)))
 	if err != nil {
 		return false
 	}
-	_ = conn.Close()
+	_ = nc.Close()
 	return true
 }
 

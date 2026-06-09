@@ -50,14 +50,20 @@ func InfluxClient(cfg Config) (*http.Client, string) {
 	}
 	scheme := "http"
 	client := &http.Client{}
-	if mode := normalizeTLS(cfg.TLS); mode != "" {
-		scheme = "https"
+	mode := normalizeTLS(cfg.TLS)
+	if cfg.Interface != "" || mode != "" {
 		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-		if mode == "skip-verify" {
-			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
+		if cfg.Interface != "" {
+			tr.DialContext = BindDialer(cfg.Interface).DialContext
 		}
-		tr.TLSClientConfig = tc
+		if mode != "" {
+			scheme = "https"
+			tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+			if mode == "skip-verify" {
+				tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
+			}
+			tr.TLSClientConfig = tc
+		}
 		client.Transport = tr
 	}
 	return client, scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))

@@ -18,9 +18,10 @@ type PingSample struct {
 	RTTKnown  bool
 }
 
-// PingSamplerFunc probes a host with count echo requests bounded by timeout.
-// Injected for tests; the default uses native ICMP via golang.org/x/net.
-type PingSamplerFunc func(host string, count int, timeout time.Duration) (PingSample, error)
+// PingSamplerFunc probes a host with count echo requests bounded by timeout,
+// egressing through iface when non-empty. Injected for tests; the default uses
+// native ICMP via golang.org/x/net.
+type PingSamplerFunc func(host, iface string, count int, timeout time.Duration) (PingSample, error)
 
 // icmpCheck watches one metric (state|latency) of one external host. Stateful
 // across cycles (baseline for on:change / change), hence a pointer type; safe
@@ -28,6 +29,7 @@ type PingSamplerFunc func(host string, count int, timeout time.Duration) (PingSa
 type icmpCheck struct {
 	base
 	host         string
+	iface        string
 	count        int
 	metric       string
 	expect       string // state: "up"|"down"; "" means on-change
@@ -50,7 +52,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	if sampler == nil {
 		sampler = defaultPingSampler
 	}
-	s, err := sampler(c.host, c.count, c.timeout)
+	s, err := sampler(c.host, c.iface, c.count, c.timeout)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("icmp %s: %v", c.host, err), start)
 	}
@@ -122,8 +124,10 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 }
 
 // defaultPingSampler sends count ICMPv4 echo requests via a raw socket
-// (needs CAP_NET_RAW) and reports reachability + mean RTT in ms.
-func defaultPingSampler(host string, count int, timeout time.Duration) (PingSample, error) {
+// (needs CAP_NET_RAW) and reports reachability + mean RTT in ms. When iface is
+// set it binds the socket to that interface's IPv4 address (the `ping -I <addr>`
+// mechanism) so the echo requests leave through it on a multi-homed host.
+func defaultPingSampler(host, iface string, count int, timeout time.Duration) (PingSample, error) {
 	if count <= 0 {
 		count = 3
 	}
@@ -134,7 +138,15 @@ func defaultPingSampler(host string, count int, timeout time.Duration) (PingSamp
 	if err != nil {
 		return PingSample{}, err
 	}
-	conn, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
+	listen := "0.0.0.0"
+	if iface != "" {
+		ip, err := interfaceIPv4(iface)
+		if err != nil {
+			return PingSample{}, err
+		}
+		listen = ip
+	}
+	conn, err := icmp.ListenPacket("ip4:icmp", listen)
 	if err != nil {
 		return PingSample{}, err
 	}
@@ -182,4 +194,25 @@ func defaultPingSampler(host string, count int, timeout time.Duration) (PingSamp
 		sum += r
 	}
 	return PingSample{Reachable: true, RTTKnown: true, RTTms: sum / float64(len(rtts))}, nil
+}
+
+// interfaceIPv4 returns the first IPv4 address of the named interface, for binding
+// a probe's source address to it.
+func interfaceIPv4(iface string) (string, error) {
+	ifi, err := net.InterfaceByName(iface)
+	if err != nil {
+		return "", err
+	}
+	addrs, err := ifi.Addrs()
+	if err != nil {
+		return "", err
+	}
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok {
+			if ip4 := ipnet.IP.To4(); ip4 != nil {
+				return ip4.String(), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("interface %s has no IPv4 address", iface)
 }
