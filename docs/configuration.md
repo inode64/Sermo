@@ -469,6 +469,15 @@ fields, addressed by name.
 when a threshold is crossed. They are daemon configuration; they never merge into
 a service.
 
+> **Tip — generate watches interactively.** `sermoctl wizard` walks you through
+> creating watches: `sermoctl wizard volume` for disk checks (pick volumes, set
+> the notify threshold, and optionally enable auto-expand) and `sermoctl wizard
+> net` for network interfaces (pick interfaces and which of link state / errors /
+> speed to watch). Run with no argument to choose from the list. It prints the
+> generated `watches:` block and offers to merge it into the global config
+> (writing a `.bak` first); then `sermoctl reload`. New assistant types can be
+> added over time.
+
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
 `notify` list, an `expand` (disk only), or any combination (at least one is
 required):

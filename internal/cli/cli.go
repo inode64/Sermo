@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"sermo/internal/app"
+	"sermo/internal/assist"
 	"sermo/internal/buildinfo"
 	"sermo/internal/checks"
 	"sermo/internal/config"
@@ -51,6 +52,12 @@ type App struct {
 	Env     func(string) string
 	Stdout  io.Writer
 	Stderr  io.Writer
+	// Stdin is the interactive input source, used by `wizard`. Injectable for
+	// testing; defaults to os.Stdin.
+	Stdin io.Reader
+	// wizardEnvFunc overrides the host facts (volumes/interfaces/notifiers) the
+	// wizard offers. nil uses the real host; tests set it for hermetic runs.
+	wizardEnvFunc func(*config.Config) assist.Env
 	// Runner executes external commands (e.g. an app's version command for the
 	// `apps` command). Injectable for testing; defaults to the real runner.
 	Runner execx.Runner
@@ -102,6 +109,7 @@ func Main(ctx context.Context, args []string) int {
 		Env:        os.Getenv,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
+		Stdin:      os.Stdin,
 	}
 	app.Operate = app.defaultOperate
 	return app.Run(ctx, args)
@@ -205,6 +213,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runDiagnose(opts)
 	case "reload":
 		return a.runReload(ctx, opts)
+	case "wizard":
+		return a.runWizard(ctx, opts)
 	case "":
 		fmt.Fprintln(a.Stderr, "usage error: missing command")
 		writeUsage(a.Stderr)
@@ -1163,7 +1173,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
-	fmt.Fprintln(w, "          diagnose")
+	fmt.Fprintln(w, "          diagnose | wizard [volume|net]")
 	fmt.Fprintln(w, "          apps [all] | libs [all] | services [all] | profile list | profile show PROFILE | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
