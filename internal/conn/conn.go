@@ -20,6 +20,7 @@ type Config struct {
 	User     string
 	Password string
 	Database string
+	Query    string // protocol-specific lookup target (e.g. the DNS name to resolve)
 	TLS      string // "" / "false" (plaintext), "true", "skip-verify"
 	Params   map[string]string
 }

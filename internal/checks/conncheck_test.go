@@ -231,6 +231,19 @@ func TestBuildFPMCheck(t *testing.T) {
 	}
 }
 
+func TestBuildDNSCheck(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"resolver": map[string]any{"type": "dns", "host": "1.1.1.1", "query": "example.com"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("dns check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "dns" || cc.cfg.Port != 53 || cc.cfg.Query != "example.com" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},

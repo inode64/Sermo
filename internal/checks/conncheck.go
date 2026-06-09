@@ -80,6 +80,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		User:     user,
 		Password: asString(entry["password"]),
 		Database: asString(entry["database"]),
+		Query:    asString(entry["query"]),
 		TLS:      tlsString(entry["tls"]),
 	}
 	return connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}, ""
