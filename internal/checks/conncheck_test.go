@@ -12,8 +12,9 @@ import (
 
 type fakeProto struct{}
 
-func (fakeProto) Name() string     { return "mysql" }
-func (fakeProto) DefaultPort() int { return 3306 }
+func (fakeProto) Name() string       { return "mysql" }
+func (fakeProto) DefaultPort() int   { return 3306 }
+func (fakeProto) RequiresUser() bool { return true }
 func (fakeProto) Probe(context.Context, conn.Config) (conn.Result, error) {
 	return conn.Result{}, nil
 }
@@ -119,6 +120,21 @@ func TestBuildPostgresCheck(t *testing.T) {
 		if cc.proto.Name() != "postgres" || cc.cfg.Port != 5432 || cc.cfg.Host != "127.0.0.1" {
 			t.Fatalf("%s cfg = %+v (proto %s)", typ, cc.cfg, cc.proto.Name())
 		}
+	}
+}
+
+func TestBuildRedisCheckUserOptional(t *testing.T) {
+	// redis does not require a user (password-only / no-auth) — must build with
+	// just a password, and default to port 6379.
+	built, warns := Build(map[string]any{
+		"cache": map[string]any{"type": "redis", "password": "secret"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("redis with only a password should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "redis" || cc.cfg.Port != 6379 || cc.cfg.Password != "secret" {
+		t.Fatalf("cfg = %+v", cc.cfg)
 	}
 }
 

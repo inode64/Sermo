@@ -981,8 +981,8 @@ func isNumeric(s string) bool {
 // is required (password is optional and may come from the environment), the
 // port must be numeric when present, and tls must be a boolean or one of the
 // known string modes.
-func validateConnFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["user"]) == "" {
+func validateConnFields(prefix string, fields map[string]any, requireUser bool, add addFunc) {
+	if requireUser && scalarString(fields["user"]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
 	if v, present := fields["port"]; present && !isNumeric(scalarString(v)) {
@@ -1212,8 +1212,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		if _, known := knownCheckTypes[typ]; !known {
 			// A connection-protocol check (mysql, …): the type names a protocol
 			// in the conn registry, validated generically below.
-			if _, isProto := conn.Lookup(typ); isProto {
-				validateConnFields(path, entry, add)
+			if proto, isProto := conn.Lookup(typ); isProto {
+				validateConnFields(path, entry, proto.RequiresUser(), add)
 				continue
 			}
 			add("%s has unknown type %q", path, typ)
