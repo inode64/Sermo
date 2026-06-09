@@ -24,6 +24,26 @@ checks:
 	}
 }
 
+func TestValidateHTTPMethods(t *testing.T) {
+	// Every standard verb (any case) validates cleanly.
+	for _, m := range []string{"GET", "head", "POST", "Put", "PATCH", "delete", "OPTIONS", "TRACE", "CONNECT"} {
+		issues := validateService(t, "kind: service\nname: web\nservice: { name: x }\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
+		for _, is := range issues {
+			if hasIssue([]Issue{is}, "checks.api") {
+				t.Fatalf("method %q must be valid: %v", m, issues)
+			}
+		}
+	}
+	// A typo / non-standard verb warns.
+	mustHave(t, validateService(t, `
+kind: service
+name: web
+service: { name: x }
+checks:
+  api: { type: http, url: "http://h/", method: GTE }
+`), "not a standard HTTP method")
+}
+
 func TestValidateHTTPComparisonErrors(t *testing.T) {
 	cases := map[string]struct {
 		field string
