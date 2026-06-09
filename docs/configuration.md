@@ -499,6 +499,22 @@ watches:
       hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }   # optional
 ```
 
+Two conventions keep the per-type sections below short:
+
+- **Hook environment.** Every watch hook receives `SERMO_WATCH` (the watch name),
+  `SERMO_CHECK_TYPE`, `SERMO_VALUE` (the breaching reading) and `SERMO_MESSAGE`,
+  plus **every key the check puts in its result `Data`, exported as
+  `SERMO_<UPPER_KEY>`** (non-alphanumeric characters become `_`). Each type lists
+  only its notable extra keys as *Hook extras*.
+- **Evaluation model.** A **level check** (`disk`, `load`, `fds`, `conntrack`,
+  `entropy`, `zombies`, swap `usage`) fires when **every present predicate holds**
+  — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
+  at least one, and add `for: { cycles: N }` to require N consecutive cycles. A
+  **stateful check** (counter deltas — net `errors`, swap `io`, `oom`; and change
+  detection — net/icmp `state`/`speed`/`latency`, `file`, `process`) compares
+  against a baseline carried across cycles: the **first cycle primes the baseline
+  and never fires**, and a counter reset clamps the per-cycle delta to zero.
+
 ### `then.expand` — automatic volume growth (disk watches)
 
 A `disk` watch can grow the LVM-backed filesystem under the checked path
@@ -658,23 +674,13 @@ The three metrics and their conditions:
 - **`state`** — interface up/down. Use `on: change` to fire on any transition, or
   `expect: up` / `expect: down` to fire whenever the state **is** the expected
   value.
-- **`speed`** — link speed in Mbps. Supports `on: change` only; it primes a
-  baseline on the first cycle and fires when the speed differs afterwards.
+- **`speed`** — link speed in Mbps. Supports `on: change` only (fires when the
+  speed differs from the baseline).
 - **`errors`** — sums the named `counters` (default `rx_errors`, `tx_errors`) and
-  fires when the per-cycle **delta** satisfies `delta: {op, value}` (same operator
-  set as disk). The first cycle primes a baseline; counter resets clamp the delta
-  to zero (never fire on a reset).
+  fires when the per-cycle **delta** satisfies `delta: {op, value}`.
 
-Change/delta metrics are **stateful across cycles**: the first cycle establishes a
-baseline and does not fire.
-
-A net hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_INTERFACE`,
-`SERMO_METRIC`, `SERMO_VALUE`, `SERMO_MESSAGE`, and — for the change metrics
-(`state`, `speed`) — `SERMO_OLD` and `SERMO_NEW`.
-
-In general, **every key a check puts in its result `Data` is exported to the hook
-as `SERMO_<UPPER_KEY>`** (non-alphanumeric characters become `_`). The lists above
-are simply the keys each built-in check emits.
+Hook extras: `SERMO_INTERFACE`, `SERMO_METRIC`, and — for the change metrics
+(`state`/`speed`) — `SERMO_OLD`/`SERMO_NEW`.
 
 ### `icmp` — external host (ping)
 
@@ -715,13 +721,8 @@ The two metrics and their conditions:
   while the host is reachable; an unreachable cycle never fires latency and never
   updates the change baseline (so the baseline is the last *reachable* RTT).
 
-The change-based metrics (`state` with `on: change`, `latency` with `change`) are
-**stateful across cycles**: the first cycle establishes a baseline and does not
-fire.
-
-An icmp hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE`, `SERMO_HOST`,
-`SERMO_METRIC`, `SERMO_VALUE`, `SERMO_MESSAGE`, and — for the change metrics —
-`SERMO_OLD` and `SERMO_NEW`.
+Hook extras: `SERMO_HOST`, `SERMO_METRIC`, and — for the change metrics —
+`SERMO_OLD`/`SERMO_NEW`.
 
 ICMP requires elevated privileges: the daemon needs the `CAP_NET_RAW` capability
 (or the host's `net.ipv4.ping_group_range` sysctl must include the daemon's gid)
@@ -729,10 +730,10 @@ to open a raw ICMP socket. This iteration is **IPv4-only**.
 
 ### `swap` — system swap
 
-A `swap` watch monitors system swap, grouped like `net`/`icmp`: two independent
-metrics, each with its own condition **and its own hook**. `usage` catches swap
-filling up; `io` catches swap thrashing (heavy paging in/out, a classic sign of
-memory pressure).
+A `swap` watch monitors system swap as two independent metrics, grouped like
+`net`/`icmp` (each with its own condition **and its own hook**). `usage` catches
+swap filling up (a level check); `io` catches swap thrashing (a counter delta —
+heavy paging in/out, a classic sign of memory pressure).
 
 ```yaml
 watches:
@@ -741,39 +742,29 @@ watches:
     interval: 30s
     check: { type: swap }
     metrics:
-      usage:                                   # how full swap is (a level check)
-        used_pct: { op: ">=", value: 80 }      # any of used_pct / free_pct / free_bytes
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-swap-usage.sh]
-      io:                                      # paging activity (thrashing)
-        delta: { op: ">", value: 1000 }        # pages swapped in+out per cycle
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-swap-io.sh]
+      usage:                                 # how full swap is (level check)
+        used_pct: { op: ">=", value: 80 }    # any of used_pct / free_pct / free_bytes
+        then: { hook: { command: [/usr/local/bin/sermo-swap-usage.sh] } }
+      io:                                    # paging activity (counter delta)
+        delta: { op: ">", value: 1000 }      # pages swapped in+out per cycle
+        then: { hook: { command: [/usr/local/bin/sermo-swap-io.sh] } }
 ```
 
-- **`usage`** — like `disk`, fires when every present predicate holds. Predicates
-  are `used_pct`, `free_pct` (percent of total swap) and `free_bytes`, each
-  `{op, value}` with the disk operator set. A host with **no swap configured**
-  never fires (so a `free_bytes` predicate does not misfire on a swapless box).
-- **`io`** — sums the pages swapped **in and out** (`pswpin`+`pswpout` from
-  `/proc/vmstat`) and fires when the **per-cycle delta** satisfies `delta: {op,
-  value}` (like `net` errors). The threshold is pages per interval, so it scales
-  with `interval`. The first cycle primes a baseline and never fires; counter
-  resets clamp the delta to zero.
-
-A swap hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`swap`), `SERMO_METRIC`
-(`usage`|`io`), `SERMO_VALUE` (the breaching reading: a percent/bytes for usage,
-the page delta for io), `SERMO_MESSAGE`, plus `SERMO_TOTAL_BYTES`/`SERMO_FREE_BYTES`.
+- **`usage`** predicates: `used_pct`, `free_pct` (of total swap) and `free_bytes`.
+  A host with **no swap configured** never fires (so a `free_bytes` predicate does
+  not misfire on a swapless box).
+- **`io`** sums the pages swapped **in and out** (`pswpin`+`pswpout` from
+  `/proc/vmstat`); the `delta` threshold is pages per interval, so it scales with
+  `interval`.
+- Hook extras: `SERMO_METRIC` (`usage`|`io`), `SERMO_TOTAL_BYTES`,
+  `SERMO_FREE_BYTES`.
 
 ### `load` — system load average
 
-A `load` watch checks the system load averages (1/5/15-minute) against thresholds.
-Like `disk` it is a single level check with one hook: it fires when every present
-predicate holds. With `per_cpu: true` the loads are divided by the CPU count
-first, so a threshold means **load per core** (≈1.0 is fully utilized) and the
-same config works on any machine size.
+A `load` watch checks the 1/5/15-minute load averages against thresholds. With
+`per_cpu: true` the loads are divided by the CPU count first, so a threshold means
+**load per core** (≈1.0 is fully utilized) and the same config works on any
+machine size.
 
 ```yaml
 watches:
@@ -786,159 +777,100 @@ watches:
       load5: { op: ">", value: 1.5 }    # any of load1 / load5 / load15
       load15: { op: ">", value: 1.0 }
     for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-load-alert.sh]
+    then: { hook: { command: [/usr/local/bin/sermo-load-alert.sh] } }
 ```
 
-Predicates are `load1`, `load5`, `load15`, each `{op, value}` with the disk
-operator set; declare at least one. Prefer `load5`/`load15` for sustained
-saturation (`load1` is spiky). A load hook receives `SERMO_WATCH`,
-`SERMO_CHECK_TYPE` (`load`), `SERMO_VALUE` (the first predicate's reading,
-per-core when `per_cpu`), `SERMO_MESSAGE`, plus `SERMO_LOAD1`/`SERMO_LOAD5`/
+Predicates: `load1`, `load5`, `load15`. Prefer `load5`/`load15` for sustained
+saturation (`load1` is spiky). Hook extras: `SERMO_LOAD1`/`SERMO_LOAD5`/
 `SERMO_LOAD15` (raw) and `SERMO_NUM_CPU`.
 
 ### `oom` — kernel OOM kills
 
 An `oom` watch fires when the kernel out-of-memory killer has reaped processes
-since the last cycle. It tracks the cumulative `oom_kill` counter from
-`/proc/vmstat` and compares the **per-cycle delta** to a threshold — the same
-stateful pattern as swap `io` / net `errors`.
+since the last cycle — a counter delta on the cumulative `oom_kill` counter from
+`/proc/vmstat`.
 
 ```yaml
 watches:
   oom:
-    enabled: false
-    interval: 30s
-    check:
-      type: oom
-      # delta is optional; the default fires on any kill (> 0).
-      delta: { op: ">", value: 0 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-oom-alert.sh]
+    check: { type: oom }            # delta optional; default fires on any kill (> 0)
+    then: { hook: { command: [/usr/local/bin/sermo-oom-alert.sh] } }
 ```
 
-The common case is "alert on any OOM kill", so `delta` may be omitted entirely
-(`check: { type: oom }` defaults to `> 0`); set a higher threshold to alert only
-on a burst. The first cycle primes the baseline and never fires; a host whose
-kernel does not expose the `oom_kill` counter never fires. An oom hook receives
-`SERMO_WATCH`, `SERMO_CHECK_TYPE` (`oom`), `SERMO_VALUE` (kills this cycle),
-`SERMO_TOTAL` (cumulative), and `SERMO_MESSAGE`.
+The common case is "alert on any OOM kill", so `delta` may be omitted (defaults to
+`> 0`); set a higher threshold to alert only on a burst. A host whose kernel does
+not expose `oom_kill` never fires. Hook extras: `SERMO_TOTAL` (cumulative kills).
 
 ### `fds` — system file descriptors
 
 An `fds` watch checks the system-wide open file descriptors against the kernel
-maximum (`fs.file-max`), read from `/proc/sys/fs/file-nr`. Like `disk` it is a
-level check with one hook. Fd exhaustion makes every `open()`/`socket()`/
-`accept()` on the host fail with `EMFILE`/`ENFILE`, so it is worth catching early.
+maximum (`fs.file-max`, from `/proc/sys/fs/file-nr`). Fd exhaustion makes every
+`open()`/`socket()`/`accept()` fail with `EMFILE`/`ENFILE`, so it is worth
+catching early.
 
 ```yaml
-watches:
-  fds:
-    enabled: false
-    interval: 30s
-    check:
-      type: fds
-      used_pct: { op: ">=", value: 85 }    # allocated / file-max
-      # free: { op: "<", value: 10000 }    # absolute headroom, alternatively
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-fds-alert.sh]
+check:                                   # in a watches: entry like `load` above
+  type: fds
+  used_pct: { op: ">=", value: 85 }      # allocated / file-max
+  # free: { op: "<", value: 10000 }      # absolute headroom, alternatively
 ```
 
-Predicates are `used_pct` (allocated as a percent of the limit), `free`
-(`file-max − allocated`) and `allocated` (absolute), each `{op, value}` with the
-disk operator set; declare at least one. An fds hook receives `SERMO_WATCH`,
-`SERMO_CHECK_TYPE` (`fds`), `SERMO_VALUE` (the first predicate's reading),
-`SERMO_MESSAGE`, plus `SERMO_ALLOCATED`, `SERMO_MAX`, `SERMO_USED_PCT` and
-`SERMO_FREE`.
+Predicates: `used_pct` (percent of the limit), `free` (`file-max − allocated`) and
+`allocated` (absolute). Hook extras: `SERMO_ALLOCATED`, `SERMO_MAX`,
+`SERMO_USED_PCT`, `SERMO_FREE`.
 
 ### `conntrack` — netfilter connection table
 
 A `conntrack` watch checks the netfilter connection-tracking table against its
-maximum (`nf_conntrack_max`), read from `/proc/sys/net/netfilter`. Like `disk` it
-is a level check with one hook. A full table silently **drops new connections**
-(and logs `nf_conntrack: table full, dropping packet`), so it is worth catching
-on busy gateways, proxies and NAT boxes before it saturates.
+maximum (`nf_conntrack_max`, from `/proc/sys/net/netfilter`). A full table
+silently **drops new connections** (and logs `nf_conntrack: table full`), so it is
+worth catching on busy gateways, proxies and NAT boxes before it saturates.
 
 ```yaml
-watches:
-  conntrack:
-    enabled: false
-    interval: 30s
-    check:
-      type: conntrack
-      used_pct: { op: ">=", value: 90 }    # count / nf_conntrack_max
-      # free: { op: "<", value: 20000 }    # absolute headroom, alternatively
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-conntrack-alert.sh]
+check:                                   # in a watches: entry like `load` above
+  type: conntrack
+  used_pct: { op: ">=", value: 90 }      # count / nf_conntrack_max
+  # free: { op: "<", value: 20000 }      # absolute headroom, alternatively
 ```
 
-Predicates are `used_pct` (count as a percent of the max), `free`
-(`nf_conntrack_max − count`) and `count` (absolute), each `{op, value}` with the
-disk operator set; declare at least one. It needs the `nf_conntrack` module
-loaded; on a host without it the check simply never fires. A conntrack hook
-receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`conntrack`), `SERMO_VALUE` (the first
-predicate's reading), `SERMO_MESSAGE`, plus `SERMO_COUNT`, `SERMO_MAX`,
-`SERMO_USED_PCT` and `SERMO_FREE`.
+Predicates: `used_pct` (percent of the max), `free` (`nf_conntrack_max − count`)
+and `count` (absolute). Needs the `nf_conntrack` module loaded; without it the
+check never fires. Hook extras: `SERMO_COUNT`, `SERMO_MAX`, `SERMO_USED_PCT`,
+`SERMO_FREE`.
 
 ### `entropy` — kernel entropy pool
 
 An `entropy` watch checks the available kernel entropy (bits) from
 `/proc/sys/kernel/random/entropy_avail` against a threshold. Low entropy makes
-reads from `/dev/random` block and slows crypto and TLS handshakes — most visible
-on VMs and headless/embedded hosts without a hardware RNG. Like `disk` it is a
-level check with one hook.
+`/dev/random` reads block and slows crypto and TLS handshakes — most visible on
+VMs and headless/embedded hosts without a hardware RNG.
 
 ```yaml
-watches:
-  entropy:
-    enabled: false
-    interval: 1m
-    check:
-      type: entropy
-      avail: { op: "<", value: 200 }    # fire when available entropy drops below 200 bits
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-entropy-alert.sh]
+check:                                   # in a watches: entry like `load` above
+  type: entropy
+  avail: { op: "<", value: 200 }         # fire when available entropy drops below 200 bits
 ```
 
-The single `avail: {op, value}` predicate (disk operator set) is required; the
-usual form is `avail < N`. An entropy hook receives `SERMO_WATCH`,
-`SERMO_CHECK_TYPE` (`entropy`), `SERMO_AVAIL`/`SERMO_VALUE` (bits available) and
-`SERMO_MESSAGE`.
+The single `avail: {op, value}` predicate is required; the usual form is
+`avail < N`. Hook extras: `SERMO_AVAIL` (the same value as `SERMO_VALUE`, bits
+available).
 
 ### `zombies` — defunct processes
 
 A `zombies` watch counts processes in the zombie (defunct) run state — those that
 have exited but whose parent has not reaped them — against a threshold. A few are
 transient and normal; a growing count means a parent is leaking child slots and
-will eventually exhaust the PID table. Like `disk` it is a level check with one
-hook.
+will eventually exhaust the PID table.
 
 ```yaml
-watches:
-  zombies:
-    enabled: false
-    interval: 1m
-    check:
-      type: zombies
-      count: { op: ">", value: 20 }    # fire when more than 20 zombies persist
-    for: { cycles: 3 }                 # for a few cycles, to ignore brief spikes
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-zombies-alert.sh]
+check:                                   # in a watches: entry like `load` above
+  type: zombies
+  count: { op: ">", value: 20 }          # fire when more than 20 zombies persist
 ```
 
-The single `count: {op, value}` predicate (disk operator set) is required; pair it
-with a `for` window so a momentary burst of exiting children does not fire. A
-zombies hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`zombies`),
-`SERMO_ZOMBIES`/`SERMO_VALUE` (the count) and `SERMO_MESSAGE`.
+The single `count: {op, value}` predicate is required; pair it with a `for` window
+so a momentary burst of exiting children does not fire. Hook extras:
+`SERMO_ZOMBIES` (the same value as `SERMO_VALUE`, the count).
 
 ### `file` — file/directory attributes
 
@@ -986,10 +918,9 @@ are adopted silently; deleted entries fire `existence` if configured. Each detec
 change is **one event and one hook run**, so a cycle that finds several changes
 fires several times.
 
-A file hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`file`), `SERMO_PATH` (the
-changed path), `SERMO_CHANGE` (`size` | `size_threshold` | `permissions` | `owner`
-| `deleted`), `SERMO_MESSAGE`, and, depending on the change, `SERMO_OLD`/`SERMO_NEW`
-(old/new value) plus `SERMO_SIZE`, `SERMO_OP`, `SERMO_VALUE` for size conditions.
+Hook extras: `SERMO_PATH` (the changed path), `SERMO_CHANGE`
+(`size`|`size_threshold`|`permissions`|`owner`|`deleted`), `SERMO_OLD`/`SERMO_NEW`
+(old/new value), and `SERMO_SIZE`/`SERMO_OP` for size conditions.
 
 ### `process` — process by name
 
@@ -1035,11 +966,11 @@ process is present. Set it alone for a pure liveness alert ("nginx is gone"), or
 alongside the presence conditions. With multiple matching PIDs it fires per exited
 PID, mirroring the per-PID model.
 
-A process hook receives `SERMO_WATCH`, `SERMO_CHECK_TYPE` (`process`), `SERMO_PID`
-(the matching pid), `SERMO_PROCESS` (the configured name), `SERMO_CHANGE`
-(`threshold` for a presence fire, `gone` for a disappearance), `SERMO_USER` (if
-set), `SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS bytes), and — once a rate is
-available — `SERMO_CPU` (percent) and `SERMO_IO` (bytes/sec).
+Hook extras: `SERMO_PID` (the matching pid), `SERMO_PROCESS` (the configured
+name), `SERMO_CHANGE` (`threshold` for a presence fire, `gone` for a
+disappearance), `SERMO_USER` (if set), `SERMO_AGE_SECONDS`, `SERMO_MEMORY` (RSS
+bytes), and — once a rate is available — `SERMO_CPU` (percent) and `SERMO_IO`
+(bytes/sec).
 
 `for` is measured from when the daemon **first observed** the process, so a daemon
 restart resets it (the real elapsed-since-start is not tracked across restarts).
