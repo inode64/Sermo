@@ -50,6 +50,7 @@ which reuse the same schema). MVP types:
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
+| `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
 | `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
@@ -560,6 +561,26 @@ name. Supported protocols:
   successful connection proves acpid is listening (a stale socket left by a dead
   daemon refuses the connection). It reads nothing — reading would block until an
   ACPI event — and there is no version. No auth. Probed natively.
+- `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is
+  **optional**. It first runs an SMB2 `NEGOTIATE` (proving the server is up) and
+  reports the negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/
+  `3.0.2`/`3.1.1` — pair with `on_version_change`), the `protocol` family
+  (`SMB2`/`SMB3`) and whether **signing is required**. With a `user` it then
+  authenticates over **NTLM** (a failed login fails the check), counts the
+  shares (`shares`), and — if a share is named in `query` — verifies it can be
+  **mounted** (`share_access`). The domain may be embedded in `user`
+  (`DOMAIN\user` or `user@domain`). Uses `github.com/cloudsoda/go-smb2` for the
+  authenticated session; the NEGOTIATE is native.
+
+  ```yaml
+  checks:
+    fileserver:
+      type: smb
+      host: 10.0.0.9
+      user: "WORKGROUP\\monitor"     # optional; enables NTLM auth + share checks
+      password: "${env:SMB_PASS}"
+      query: "data"                   # optional: verify this share mounts
+  ```
 - `spamd` (alias `spamassassin`) — default port 783 (TCP), or a Unix socket via
   `socket`. No auth. Sends a SPAMC/SPAMD `PING` and verifies spamd answers
   `SPAMD/<v> 0 PONG` — proof it is up and speaking the protocol. Result data
@@ -713,7 +734,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
