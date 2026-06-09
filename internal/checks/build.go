@@ -131,7 +131,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if host == "" {
 			host = "127.0.0.1"
 		}
-		return tcpCheck{base: b, host: host, iface: asString(entry["interface"]), port: port}, ""
+		all, iwarn := parseInterfaceMatch(entry)
+		if iwarn != "" {
+			return nil, "tcp check: " + iwarn
+		}
+		return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: all, port: port}, ""
 
 	case "ports":
 		host := asString(entry["host"])
@@ -156,10 +160,15 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if match != "all" && match != "any" && match != "none" {
 			return nil, "ports check: match must be all, any or none"
 		}
+		allIf, iwarn := parseInterfaceMatch(entry)
+		if iwarn != "" {
+			return nil, "ports check: " + iwarn
+		}
 		return &portsCheck{
 			base:           b,
 			host:           host,
-			iface:          asString(entry["interface"]),
+			ifaces:         parseInterfaces(entry["interface"]),
+			ifaceAll:       allIf,
 			ports:          ports,
 			expect:         expect,
 			match:          match,
@@ -213,8 +222,9 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			reqClient = &http.Client{Transport: tr}
 		}
 		// interface: egress the HTTP request (and any proxy connection) through a
-		// specific interface by binding the transport's dialer.
-		if iface := asString(entry["interface"]); iface != "" {
+		// specific interface by binding the transport's dialer. The http client has
+		// one fixed transport, so it honors a single interface (the first listed).
+		if ifaces := parseInterfaces(entry["interface"]); len(ifaces) > 0 {
 			if asBool(entry["http3"]) {
 				return nil, "http check: http3 and interface are mutually exclusive"
 			}
@@ -222,7 +232,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			if proxyURL != nil {
 				tr.Proxy = http.ProxyURL(proxyURL)
 			}
-			tr.DialContext = conn.BindDialer(iface).DialContext
+			tr.DialContext = conn.BindDialer(ifaces[0]).DialContext
 			reqClient = &http.Client{Transport: tr}
 		}
 		hc := &httpCheck{
@@ -575,7 +585,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			count = v
 		}
 		metric := asString(entry["metric"])
-		c := &icmpCheck{base: b, host: host, iface: asString(entry["interface"]), count: count, metric: metric, sampler: deps.PingSampler}
+		allIf, iwarn := parseInterfaceMatch(entry)
+		if iwarn != "" {
+			return nil, "icmp check: " + iwarn
+		}
+		c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 		switch metric {
 		case "state":
 			if exp := asString(entry["expect"]); exp != "" {

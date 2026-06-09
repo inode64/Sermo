@@ -31,7 +31,12 @@ func dhcpExchange(ctx context.Context, iface, server string, packet []byte, xid 
 					return
 				}
 				if iface != "" {
-					serr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, iface)
+					dev, derr := ResolveInterfaceName(iface) // accepts name/IP/MAC
+					if derr != nil {
+						serr = derr
+						return
+					}
+					serr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, dev)
 				}
 			}); err != nil {
 				return err

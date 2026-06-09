@@ -1324,11 +1324,13 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			// in the conn registry, validated generically below.
 			if proto, isProto := conn.Lookup(typ); isProto {
 				validateConnFields(path, entry, proto.RequiresUser(), add)
+				validateInterfaceFields(path, entry, add)
 				continue
 			}
 			add("%s has unknown type %q", path, typ)
 			continue
 		}
+		validateInterfaceFields(path, entry, add)
 		switch typ {
 		case "http":
 			validateHTTPFields(path, entry, add)
@@ -1503,6 +1505,29 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 		}
 	default:
 		add("%s requires a collection (+filter), a collection+pipeline, or a command", prefix)
+	}
+}
+
+// validateInterfaceFields validates the optional egress-interface selection
+// shared by network checks: `interface` is a string or a list of strings (a
+// name/IP/MAC), and `interface_match` is any|all.
+func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) {
+	if v, ok := fields["interface"]; ok {
+		switch t := v.(type) {
+		case string:
+		case []any:
+			for _, e := range t {
+				if _, ok := e.(string); !ok {
+					add("%s.interface list entries must be strings (name/IP/MAC)", prefix)
+					break
+				}
+			}
+		default:
+			add("%s.interface must be a string or a list of strings (name/IP/MAC)", prefix)
+		}
+	}
+	if m := scalarString(fields["interface_match"]); m != "" && m != "any" && m != "all" {
+		add("%s.interface_match %q must be any or all", prefix, m)
 	}
 }
 

@@ -34,7 +34,7 @@ func TestTCPCheck(t *testing.T) {
 
 	// A bound, non-existent interface must fail the dial (never silently use the
 	// default route).
-	bound := tcpCheck{base: base{name: "bound", timeout: time.Second}, host: "127.0.0.1", iface: "sermo-nonexistent0", port: port}
+	bound := tcpCheck{base: base{name: "bound", timeout: time.Second}, host: "127.0.0.1", ifaces: []string{"sermo-nonexistent0"}, port: port}
 	if res := bound.Run(context.Background()); res.OK {
 		t.Errorf("tcp check bound to a bogus interface should fail")
 	}

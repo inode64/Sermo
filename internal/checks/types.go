@@ -19,12 +19,14 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-// tcpCheck dials a TCP host:port (section 12), optionally egressing through iface.
+// tcpCheck dials a TCP host:port (section 12), optionally egressing through one
+// or more interfaces (ifaces); ifaceAll requires every one to succeed.
 type tcpCheck struct {
 	base
-	host  string
-	iface string
-	port  int
+	host     string
+	ifaces   []string
+	ifaceAll bool
+	port     int
 }
 
 func (c tcpCheck) Run(ctx context.Context) Result {
@@ -33,12 +35,21 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 	defer cancel()
 
 	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
-	nc, err := conn.BindDialer(c.iface).DialContext(ctx, "tcp", addr)
+	chosen, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+		nc, e := conn.BindDialer(iface).DialContext(ctx, "tcp", addr)
+		if e == nil {
+			_ = nc.Close()
+		}
+		return e
+	})
 	if err != nil {
-		return c.result(false, fmt.Sprintf("dial %s: %v", addr, err), start)
+		r := c.result(false, fmt.Sprintf("dial %s: %v", addr, err), start)
+		r.Data = ifaceData(perIface)
+		return r
 	}
-	_ = nc.Close()
-	return c.result(true, "connected to "+addr, start)
+	r := c.result(true, "connected to "+addr+ifaceSuffix(chosen), start)
+	r.Data = ifaceData(perIface)
+	return r
 }
 
 // httpCheck issues an HTTP request and asserts the response: the status code
