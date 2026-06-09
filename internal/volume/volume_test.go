@@ -52,6 +52,26 @@ func TestResolveLVM(t *testing.T) {
 	}
 }
 
+func TestListFiltersPseudoFilesystems(t *testing.T) {
+	src := staticMounts(
+		Mount{Device: "proc", Mountpoint: "/proc", FSType: "proc"},
+		Mount{Device: "tmpfs", Mountpoint: "/run", FSType: "tmpfs"},
+		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"},
+		Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/mnt/backup", FSType: "ext4"},
+		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"}, // dup mountpoint
+	)
+	got, err := List(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d mounts, want 2 (real /dev devices, deduped): %+v", len(got), got)
+	}
+	if got[0].Mountpoint != "/" || got[1].Mountpoint != "/mnt/backup" {
+		t.Fatalf("unexpected mounts: %+v", got)
+	}
+}
+
 func TestExpandExt4CapsToFreeAndGrows(t *testing.T) {
 	r := &fakeRunner{out: map[string]execx.Result{
 		"vgs": {Stdout: "  2147483648\n"}, // 2 GiB free
