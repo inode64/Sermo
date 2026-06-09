@@ -98,6 +98,9 @@ func TestPolicyReportCooldownUntil(t *testing.T) {
 	if !rep.CooldownUntil.Equal(wantUntil) {
 		t.Fatalf("CooldownUntil = %v, want %v", rep.CooldownUntil, wantUntil)
 	}
+	if !rep.NextEligibleAt.Equal(wantUntil) {
+		t.Fatalf("NextEligibleAt = %v, want %v", rep.NextEligibleAt, wantUntil)
+	}
 	if rep.EffectiveCooldown != time.Minute {
 		t.Fatalf("EffectiveCooldown = %v", rep.EffectiveCooldown)
 	}
@@ -111,6 +114,27 @@ func TestPolicyReportRateLimit(t *testing.T) {
 	rep := p.Report(st, t0.Add(2*time.Minute))
 	if rep.Allowed || rep.Reason != "rate limit" || rep.RecentActions != 2 {
 		t.Fatalf("Report = %+v", rep)
+	}
+	wantUntil := t0.Add(time.Hour)
+	if !rep.NextEligibleAt.Equal(wantUntil) {
+		t.Fatalf("NextEligibleAt = %v, want %v", rep.NextEligibleAt, wantUntil)
+	}
+}
+
+func TestPolicyReportRateLimitNextEligibleAfterEnoughActionsExpire(t *testing.T) {
+	p := Policy{MaxActions: 2, MaxActionsWindow: time.Hour}
+	st := &RemediationState{}
+	st.Record(t0, Policy{MaxActionsWindow: time.Hour})
+	st.Record(t0.Add(time.Minute), Policy{MaxActionsWindow: time.Hour})
+	st.Record(t0.Add(2*time.Minute), Policy{MaxActionsWindow: time.Hour})
+
+	rep := p.Report(st, t0.Add(3*time.Minute))
+	if rep.Allowed || rep.Reason != "rate limit" {
+		t.Fatalf("Report = %+v, want rate limit", rep)
+	}
+	wantUntil := t0.Add(time.Hour + time.Minute)
+	if !rep.NextEligibleAt.Equal(wantUntil) {
+		t.Fatalf("NextEligibleAt = %v, want %v", rep.NextEligibleAt, wantUntil)
 	}
 }
 
