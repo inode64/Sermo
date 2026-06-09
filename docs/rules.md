@@ -52,6 +52,7 @@ which reuse the same schema). MVP types:
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
 | `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
+| `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -467,6 +468,13 @@ name. Supported protocols:
   verifies a well-formed RPC reply — proof the daemon is up and speaking RPC. Any
   reply (accepted or denied) passes; result data carries the `rpc_status`. Probed
   natively (RFC 5531/1833).
+- `rdp` (alias `ms-wbt-server`) — default port 3389 (TCP). No auth. Sends an
+  X.224 **Connection Request** with an RDP Negotiation Request and verifies the
+  server answers with an X.224 **Connection Confirm** — proof it is up and
+  speaking RDP. A negotiation failure still counts as up (the server answered).
+  Result data carries the negotiated `security` protocol (`rdp` = standard RDP
+  security, `tls`, `hybrid` = CredSSP/NLA, `hybrid-ex`). Probed natively
+  (MS-RDPBCGR); the negotiation precedes authentication, so no credentials.
 - `nfs` (aliases `nfs-server`, `nfsd`) — default port 2049 (TCP). No auth. Sends
   an ONC RPC **NULL** call to the NFS program (100003) — using RPC record marking
   over TCP — and verifies a well-formed RPC reply, which proves the server is up
@@ -604,7 +612,7 @@ directory walk reads the whole subtree each cycle, so point it at a bounded path
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, rpcbind, nfs, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, rpcbind, nfs, rdp, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
