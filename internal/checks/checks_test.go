@@ -71,6 +71,37 @@ func TestHTTPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPCertRequiresHTTPS(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"h": map[string]any{"type": "http", "url": "http://example.com", "cert_expires_in_days": 14},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(built) != 0 || len(warns) == 0 {
+		t.Fatalf("cert_* on an http url must warn and build nothing: built=%d warns=%v", len(built), warns)
+	}
+	if !strings.Contains(warns[0], "https") {
+		t.Fatalf("warning should mention https: %q", warns[0])
+	}
+}
+
+func TestBuildHTTPSCertActivates(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"h": map[string]any{"type": "http", "url": "https://example.com", "cert_expires_in_days": 14},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("a valid https cert check must build cleanly: warns=%v", warns)
+	}
+	hc, ok := built[0].Check.(*httpCheck)
+	if !ok {
+		t.Fatalf("http check must build to *httpCheck, got %T", built[0].Check)
+	}
+	if hc.certHost != "example.com" || hc.certClient == nil || hc.certOpts.expiresInDays != 14 {
+		t.Fatalf("cert inspection not wired: host=%q client=%v opts=%+v", hc.certHost, hc.certClient, hc.certOpts)
+	}
+	if !hc.certOpts.verify {
+		t.Fatal("cert_verify must default to true when inspection is active")
+	}
+}
+
 func hostOf(t *testing.T, raw string) string {
 	t.Helper()
 	u, err := url.Parse(raw)
