@@ -1139,6 +1139,14 @@ main process. `io`/`io_read`/`io_write` are byte/second rates over actual
 block-layer I/O (`io` is read+write); `fds` is the open file-descriptor count and
 `threads` the thread count.
 
+The `cpu` percentage is the service's summed CPU time (parent + children) over
+the elapsed wall-clock, **normalized by the server's total logical CPUs** (the
+hardware threads, counted from `/proc/stat` so the figure reflects the whole
+machine even if Sermo is pinned to a CPU subset). So `100%` means the service's
+processes are saturating every CPU thread of the server, and a single fully-busy
+core on an 8-thread host reads `~12.5%`. `total_cpu` uses the same whole-machine
+basis.
+
 `cpu`/`total_cpu` and the `io*` metrics are rates: they are **not ready** on the
 first cycle and a condition over a not-ready value is false. A `%` threshold needs
 a metric with a percentage form (`memory`, `cpu`, `total_memory`, `total_cpu`); a
