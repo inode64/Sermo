@@ -584,6 +584,29 @@ func TestBuildDHCPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildSMBCheck(t *testing.T) {
+	// Anonymous (no user): builds, default port 445.
+	for _, typ := range []string{"smb", "samba", "cifs"} {
+		built, warns := Build(map[string]any{
+			"share": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "smb" || cc.cfg.Port != 445 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+	// With credentials + a share to verify.
+	built, _ := Build(map[string]any{
+		"share": map[string]any{"type": "smb", "host": "fs", "user": `WG\joe`, "password": "p", "query": "data"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.User != `WG\joe` || cc.cfg.Query != "data" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildSpamdCheck(t *testing.T) {
 	for _, typ := range []string{"spamd", "spamassassin"} {
 		built, warns := Build(map[string]any{
