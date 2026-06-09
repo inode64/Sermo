@@ -608,6 +608,21 @@ func TestBuildClamdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildRpcbindCheck(t *testing.T) {
+	for _, typ := range []string{"rpcbind", "portmap", "portmapper"} {
+		built, warns := Build(map[string]any{
+			"rpc": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "rpcbind" || cc.cfg.Port != 111 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildAcpidCheck(t *testing.T) {
 	// Socket-only: default port 0 and the well-known socket when none is given.
 	built, warns := Build(map[string]any{
