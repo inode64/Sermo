@@ -1,0 +1,135 @@
+package conn
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"strconv"
+	"time"
+
+	"github.com/digitalocean/go-libvirt"
+	"github.com/digitalocean/go-libvirt/socket/dialers"
+)
+
+func init() { Register(libvirtProtocol{}, "libvirtd") }
+
+// libvirtProtocol probes a libvirt daemon (libvirtd) natively over its RPC
+// protocol using the pure-Go github.com/digitalocean/go-libvirt client. It opens
+// a connection (CONNECT_OPEN) to a driver URI and reads the daemon's libvirt
+// version; both succeeding proves libvirtd is up and answering RPC. No write
+// operation is performed.
+//
+// Transport is selected by the config: a `socket` path (or the default when
+// neither socket nor host is set) uses the local Unix socket; a `host` selects
+// plain TCP (port 16509). TLS/SASL is out of scope. The connect URI defaults to
+// qemu:///system and is overridable via `query` (e.g. lxc:/// or xen://). Local
+// socket access is governed by the socket's permissions/polkit, so no
+// user/password is required here.
+type libvirtProtocol struct{}
+
+func (libvirtProtocol) Name() string       { return "libvirt" }
+func (libvirtProtocol) DefaultPort() int   { return 16509 }
+func (libvirtProtocol) RequiresUser() bool { return false }
+
+func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	mode, addr, uri := libvirtTransport(cfg)
+	timeout := libvirtTimeout(ctx)
+
+	var l *libvirt.Libvirt
+	switch mode {
+	case "socket":
+		l = libvirt.NewWithDialer(dialers.NewLocal(
+			dialers.WithSocket(addr),
+			dialers.WithLocalTimeout(timeout),
+		))
+	default: // tcp
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return Result{}, err
+		}
+		l = libvirt.NewWithDialer(dialers.NewRemote(host,
+			dialers.UsePort(port),
+			dialers.WithRemoteTimeout(timeout),
+		))
+	}
+
+	// go-libvirt's connect/RPC calls are not context-aware, so run them on a
+	// goroutine and honor ctx. The dialer timeout is a backstop so the goroutine
+	// cannot hang past the deadline; the buffered channel keeps it from leaking
+	// if ctx fires first.
+	type probeOut struct {
+		res Result
+		err error
+	}
+	ch := make(chan probeOut, 1)
+	go func() {
+		res, err := libvirtProbe(l, uri, mode)
+		ch <- probeOut{res, err}
+	}()
+	select {
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	case out := <-ch:
+		return out.res, out.err
+	}
+}
+
+// libvirtProbe opens the connection, reads the version (and hostname) and closes.
+func libvirtProbe(l *libvirt.Libvirt, uri, mode string) (Result, error) {
+	if err := l.ConnectToURI(libvirt.ConnectURI(uri)); err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = l.Disconnect() }()
+
+	ver, err := l.ConnectGetLibVersion()
+	if err != nil {
+		return Result{}, err
+	}
+	version := formatLibvirtVersion(ver)
+	extra := map[string]string{"uri": uri, "lib_version": version, "transport": mode}
+	if hostname, err := l.ConnectGetHostname(); err == nil && hostname != "" {
+		extra["hostname"] = hostname
+	}
+	return Result{Version: version, Extra: extra}, nil
+}
+
+// libvirtTransport decides the transport, dial address and connect URI from the
+// config: an explicit socket path, otherwise plain TCP to host:port. The connect
+// URI defaults to qemu:///system.
+func libvirtTransport(cfg Config) (mode, addr, uri string) {
+	uri = cfg.Query
+	if uri == "" {
+		uri = string(libvirt.QEMUSystem)
+	}
+	if cfg.Socket != "" {
+		return "socket", cfg.Socket, uri
+	}
+	host := cfg.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = 16509
+	}
+	return "tcp", net.JoinHostPort(host, strconv.Itoa(port)), uri
+}
+
+// libvirtTimeout derives a dialer timeout from the context deadline, falling
+// back to 10s when the context has none.
+func libvirtTimeout(ctx context.Context) time.Duration {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return 10 * time.Second
+	}
+	if d := time.Until(dl); d > 0 {
+		return d
+	}
+	return time.Nanosecond // already past the deadline: fail fast
+}
+
+// formatLibvirtVersion renders libvirt's packed version (major*1e6 + minor*1e3 +
+// micro) as "major.minor.micro".
+func formatLibvirtVersion(v uint64) string {
+	return fmt.Sprintf("%d.%d.%d", v/1_000_000, (v%1_000_000)/1_000, v%1_000)
+}

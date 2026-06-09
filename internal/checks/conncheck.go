@@ -124,6 +124,10 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Params = params
 		}
 	}
+	// libvirt defaults to the local Unix socket; an explicit host selects TCP.
+	if proto.Name() == "libvirt" && cfg.Socket == "" && asString(entry["host"]) == "" {
+		cfg.Socket = "/var/run/libvirt/libvirt-sock"
+	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	if asBool(entry["on_change"]) {
 		c.onChange = true
