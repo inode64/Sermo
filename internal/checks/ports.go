@@ -33,7 +33,8 @@ const defaultPortConnectTimeout = time.Second
 type portsCheck struct {
 	base
 	host           string
-	iface          string
+	ifaces         []string
+	ifaceAll       bool
 	ports          []int
 	expect         string // open | closed | any
 	match          string // all | any | none
@@ -159,12 +160,16 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 	}
 	pctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	nc, err := conn.BindDialer(c.iface).DialContext(pctx, "tcp", net.JoinHostPort(c.host, strconv.Itoa(port)))
-	if err != nil {
-		return false
-	}
-	_ = nc.Close()
-	return true
+	// With an interface set, a port is "open" if it connects on any (or, with
+	// ifaceAll, every) configured interface.
+	_, _, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+		nc, e := conn.BindDialer(iface).DialContext(pctx, "tcp", net.JoinHostPort(c.host, strconv.Itoa(port)))
+		if e == nil {
+			_ = nc.Close()
+		}
+		return e
+	})
+	return err == nil
 }
 
 func portState(open bool) string {

@@ -7,6 +7,7 @@ import (
 	"crypto/sha1" //nolint:gosec // RFC 6455 mandates SHA-1 for the Sec-WebSocket-Accept key
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -31,7 +32,8 @@ type websocketCheck struct {
 	rawURL      string
 	scheme      string
 	host        string
-	iface       string
+	ifaces      []string
+	ifaceAll    bool
 	port        string
 	path        string
 	tls         string
@@ -45,8 +47,35 @@ func (c *websocketCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
+	var chosenRes Result
+	chosen, perIface, perr := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+		r := c.handshake(ctx, iface, start)
+		chosenRes = r
+		if !r.OK {
+			return errors.New(r.Message)
+		}
+		return nil
+	})
+	if perr != nil {
+		r := c.result(false, chosenRes.Message, start)
+		r.Data = ifaceData(perIface)
+		return r
+	}
+	chosenRes.Message += ifaceSuffix(chosen)
+	if perIface != nil {
+		if chosenRes.Data == nil {
+			chosenRes.Data = map[string]any{}
+		}
+		chosenRes.Data["interfaces"] = perIface
+	}
+	return chosenRes
+}
+
+// handshake performs the RFC 6455 opening handshake over iface (empty = default
+// routing) and returns its Result.
+func (c *websocketCheck) handshake(ctx context.Context, iface string, start time.Time) Result {
 	addr := net.JoinHostPort(c.host, c.port)
-	nc, err := conn.BindDialer(c.iface).DialContext(ctx, "tcp", addr)
+	nc, err := conn.BindDialer(iface).DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("websocket %s: %v", c.rawURL, err), start)
 	}
@@ -143,12 +172,17 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 	if path == "" {
 		path = "/"
 	}
+	wsAll, iwarn := parseInterfaceMatch(entry)
+	if iwarn != "" {
+		return nil, "websocket check: " + iwarn
+	}
 	return &websocketCheck{
 		base:        b,
 		rawURL:      raw,
 		scheme:      u.Scheme,
 		host:        u.Hostname(),
-		iface:       asString(entry["interface"]),
+		ifaces:      parseInterfaces(entry["interface"]),
+		ifaceAll:    wsAll,
 		port:        port,
 		path:        path,
 		tls:         tlsString(entry["tls"]),

@@ -9,6 +9,8 @@ import (
 
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+
+	"sermo/internal/conn"
 )
 
 // PingSample is one ICMP observation of a host.
@@ -29,7 +31,8 @@ type PingSamplerFunc func(host, iface string, count int, timeout time.Duration) 
 type icmpCheck struct {
 	base
 	host         string
-	iface        string
+	ifaces       []string
+	ifaceAll     bool
 	count        int
 	metric       string
 	expect       string // state: "up"|"down"; "" means on-change
@@ -52,7 +55,7 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	if sampler == nil {
 		sampler = defaultPingSampler
 	}
-	s, err := sampler(c.host, c.iface, c.count, c.timeout)
+	s, err := c.sample(sampler)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("icmp %s: %v", c.host, err), start)
 	}
@@ -123,6 +126,49 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	}
 }
 
+// sample runs the ping sampler over the configured interface set and combines
+// reachability per interface_match (any: reachable if one interface reaches; all:
+// reachable only if every one reaches, reporting the worst RTT). With no
+// interfaces it samples once with default routing.
+func (c *icmpCheck) sample(sampler PingSamplerFunc) (PingSample, error) {
+	if len(c.ifaces) == 0 {
+		return sampler(c.host, "", c.count, c.timeout)
+	}
+	var combined PingSample
+	var lastErr error
+	anyValid := false
+	reachable := 0
+	for _, ifc := range c.ifaces {
+		s, err := sampler(c.host, ifc, c.count, c.timeout)
+		if err != nil {
+			lastErr = err
+			if c.ifaceAll {
+				return PingSample{}, err // a failed path fails an all-match check
+			}
+			continue
+		}
+		anyValid = true
+		if s.Reachable {
+			reachable++
+			if !combined.Reachable {
+				combined = s // first reachable provides the RTT baseline
+			} else if c.ifaceAll && s.RTTKnown && s.RTTms > combined.RTTms {
+				combined.RTTms = s.RTTms // all: report the worst path
+			}
+		}
+	}
+	if !anyValid {
+		return PingSample{}, lastErr // every interface errored
+	}
+	if c.ifaceAll {
+		combined.Reachable = reachable == len(c.ifaces)
+		if !combined.Reachable {
+			combined.RTTKnown = false
+		}
+	}
+	return combined, nil
+}
+
 // defaultPingSampler sends count ICMPv4 echo requests via a raw socket
 // (needs CAP_NET_RAW) and reports reachability + mean RTT in ms. When iface is
 // set it binds the socket to that interface's IPv4 address (the `ping -I <addr>`
@@ -140,7 +186,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 	}
 	listen := "0.0.0.0"
 	if iface != "" {
-		ip, err := interfaceIPv4(iface)
+		ip, err := conn.ResolveInterfaceIPv4(iface)
 		if err != nil {
 			return PingSample{}, err
 		}
@@ -194,25 +240,4 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		sum += r
 	}
 	return PingSample{Reachable: true, RTTKnown: true, RTTms: sum / float64(len(rtts))}, nil
-}
-
-// interfaceIPv4 returns the first IPv4 address of the named interface, for binding
-// a probe's source address to it.
-func interfaceIPv4(iface string) (string, error) {
-	ifi, err := net.InterfaceByName(iface)
-	if err != nil {
-		return "", err
-	}
-	addrs, err := ifi.Addrs()
-	if err != nil {
-		return "", err
-	}
-	for _, a := range addrs {
-		if ipnet, ok := a.(*net.IPNet); ok {
-			if ip4 := ipnet.IP.To4(); ip4 != nil {
-				return ip4.String(), nil
-			}
-		}
-	}
-	return "", fmt.Errorf("interface %s has no IPv4 address", iface)
 }

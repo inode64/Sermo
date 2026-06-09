@@ -38,6 +38,10 @@ type connCheck struct {
 	// (expect_latency), like the http check.
 	latencyOp    string
 	latencyValue string
+	// ifaces optionally pins the probe to one or more egress interfaces
+	// (name/IP/MAC); ifaceAll requires every one to succeed (else any).
+	ifaces   []string
+	ifaceAll bool
 }
 
 type connState struct {
@@ -69,10 +73,22 @@ func (c connCheck) Run(ctx context.Context) Result {
 	if addr == "" {
 		addr = net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
 	}
-	res, err := probe(ctx, c.cfg)
-	elapsed := time.Since(start)
+	var res conn.Result
+	var elapsed time.Duration
+	_, perIface, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
+		cfg := c.cfg
+		cfg.Interface = iface
+		t0 := time.Now()
+		r, e := probe(ctx, cfg)
+		if e == nil {
+			res, elapsed = r, time.Since(t0)
+		}
+		return e
+	})
 	if err != nil {
-		return c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
+		r := c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
+		r.Data = ifaceData(perIface)
+		return r
 	}
 	if c.state != nil {
 		var problems []string
@@ -128,6 +144,9 @@ func (c connCheck) Run(ctx context.Context) Result {
 		r.Data["socket"] = c.cfg.Socket
 	} else {
 		r.Data["host"], r.Data["port"] = c.cfg.Host, c.cfg.Port
+	}
+	if perIface != nil {
+		r.Data["interfaces"] = perIface
 	}
 	if res.Version != "" {
 		r.Data["version"] = res.Version
@@ -188,10 +207,8 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		Database: asString(entry["database"]),
 		Query:    asString(entry["query"]),
 		TLS:      tlsString(entry["tls"]),
-		// interface selects the egress network interface (SO_BINDTODEVICE) for
-		// every TCP/UDP-based protocol — useful on multi-homed hosts. Socket-only
-		// protocols ignore it.
-		Interface: asString(entry["interface"]),
+		// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
+		// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
 	}
 	// dhcp takes an optional fixed client MAC (absent -> a random anonymous MAC).
 	// Scoped to dhcp so it never leaks into the driver params other protocols pass
@@ -264,6 +281,12 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if c.onChange || c.onVersionChange {
 		c.state = &connState{}
 	}
+	c.ifaces = parseInterfaces(entry["interface"])
+	all, iwarn := parseInterfaceMatch(entry)
+	if iwarn != "" {
+		return nil, proto.Name() + " check: " + iwarn
+	}
+	c.ifaceAll = all
 	return c, ""
 }
 
