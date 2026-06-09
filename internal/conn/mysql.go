@@ -41,6 +41,10 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	return Result{Version: version}, nil
 }
 
+// MySQLDSN renders a go-sql-driver DSN from cfg (escaping the password). Exported
+// so the sql check can open a MySQL/MariaDB connection reusing this logic.
+func MySQLDSN(cfg Config) string { return buildDSN(cfg) }
+
 // buildDSN renders a go-sql-driver DSN from cfg, using mysql.Config so that
 // special characters in the password are escaped correctly.
 func buildDSN(cfg Config) string {
