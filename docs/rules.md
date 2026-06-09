@@ -36,6 +36,7 @@ which reuse the same schema). MVP types:
 | `ssh`         | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
+| `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15) (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -288,6 +289,11 @@ name. Supported protocols:
   expects `pong`, so the pool must have **`ping.path = /ping`** enabled. Probed
   natively (FastCGI).
 
+- `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies
+  the server answers in **server mode** with a synchronized **stratum (1–15)**;
+  a kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
+  data carries `stratum` and the clock `offset_seconds`. Probed natively (RFC
+  5905).
 - `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query`
   (default `localhost`) to the server and verifies it answers: `NOERROR` or
   `NXDOMAIN` pass (the server is up and speaking DNS); `SERVFAIL`, `REFUSED`, a
@@ -321,7 +327,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns, ntp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
