@@ -486,6 +486,28 @@ func TestBuildSyncthingCheck(t *testing.T) {
 	}
 }
 
+func TestBuildUnifiCheck(t *testing.T) {
+	for _, typ := range []string{"unifi", "unifi-controller", "unifi-network"} {
+		built, warns := Build(map[string]any{
+			"unifi": map[string]any{"type": typ, "host": "10.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "unifi" || cc.cfg.Port != 8443 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+	// tls: true (require a valid certificate) is carried through.
+	built, _ := Build(map[string]any{
+		"unifi": map[string]any{"type": "unifi", "host": "10.0.0.1", "tls": true},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.TLS != "true" {
+		t.Fatalf("tls = %q", cc.cfg.TLS)
+	}
+}
+
 func TestBuildDBusCheck(t *testing.T) {
 	// No socket/query -> the system bus default address; default port 0.
 	built, warns := Build(map[string]any{
