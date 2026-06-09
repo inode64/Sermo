@@ -1259,7 +1259,7 @@ var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sq
 // comparisons (expect_body / expect_status / expect_latency).
 var compareOps = set("==", "!=", ">", ">=", "<", "<=", "=~")
 var metricCatalog = map[string]map[string]struct{}{
-	"service": set("memory", "cpu", "process_count", "io", "io_read", "io_write", "fds", "threads"),
+	"service": set("memory", "swap", "cpu", "process_count", "io", "io_read", "io_write", "fds", "threads"),
 	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
 }
 
@@ -1269,6 +1269,7 @@ type metricForm struct{ absolute, percent bool }
 
 var metricForms = map[string]metricForm{
 	"memory":        {absolute: true, percent: true},
+	"swap":          {absolute: true, percent: true},
 	"cpu":           {percent: true},
 	"process_count": {absolute: true},
 	"io":            {absolute: true},

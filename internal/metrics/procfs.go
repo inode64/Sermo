@@ -59,6 +59,23 @@ func (OSReader) ProcessRSS(pid int) (uint64, bool) {
 	return pages * pageSize, true
 }
 
+// ProcessSwap reads VmSwap (swapped-out anonymous memory) from
+// /proc/<pid>/status as bytes. A process with nothing swapped reports 0; a
+// process without a VmSwap line (e.g. a kernel thread) also reports 0, true. ok
+// is false only when the file cannot be read.
+func (OSReader) ProcessSwap(pid int) (uint64, bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "VmSwap:") {
+			return parseMeminfoKB(line)
+		}
+	}
+	return 0, true // no VmSwap line -> nothing swapped
+}
+
 // ProcessIO reads read_bytes and write_bytes (actual block-layer I/O) from
 // /proc/<pid>/io. Reading another user's io requires privilege, so ok is false
 // when the file cannot be read.
