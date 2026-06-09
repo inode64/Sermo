@@ -397,84 +397,137 @@ optional `interval` to run it less often than the worker cycle — every
 
 ### Database connection (`mysql` / `mariadb`)
 
-A connection-protocol check connects to a server over its wire protocol, with a
-user and password, and verifies it responds. The check type **is** the protocol
-name. Supported protocols:
+A connection-protocol check connects to a server over its wire protocol and
+verifies it responds; the check type **is** the protocol name. A few conventions
+keep the per-protocol entries short:
 
-- `mysql` (alias `mariadb`) — default port 3306; `tls`: `false` | `true` | `skip-verify`.
-- `postgres` (alias `postgresql`) — default port 5432; `tls`: `false` | `true` |
-  `skip-verify`, or a PostgreSQL sslmode (`disable`/`require`/`prefer`/
-  `verify-ca`/`verify-full`).
-- `mongodb` (alias `mongo`) — default port 27017; `tls`: `false` | `true` |
-  `skip-verify`. `user` is **optional** (MongoDB may run without auth); with
-  credentials it authenticates against `auth_source` (defaults to `database`, then
-  `admin`). Connects, verifies a `ping`, and reads the server version via
-  `buildInfo`. Uses the official `go.mongodb.org/mongo-driver`. To run a query and
-  compare a result, see the **MongoDB query** check (`mongodb-query`).
-- `redis` (alias `valkey`) — default port 6379; `tls`: `false` | `true` |
-  `skip-verify`. `user` is **optional** (legacy `requirepass` uses a password
-  only, or no auth at all); a password-only check sends `AUTH <password>`.
-  Probed natively over RESP (no driver), verifying `PING` → `PONG`.
-- `imap` — default port 143; `tls`: `false` | `true` | `skip-verify` (implicit
-  TLS / IMAPS — use port 993). `user` is **optional**: with no credentials it is
-  an **anonymous** check that verifies the server greets `* OK`; with a
-  user/password it performs an IMAP `LOGIN`. Probed natively (RFC 3501).
-- `pop` (alias `pop3`) — default port 110; `tls`: `false` | `true` |
-  `skip-verify` (implicit TLS / POP3S — use port 995). `user` is **optional**:
-  with no credentials it is an **anonymous** check (server greets `+OK`); with a
-  user/password it performs `USER`/`PASS`. Probed natively (RFC 1939).
-- `smtp` — default port 25; `tls`: `false` | `true` | `skip-verify` (implicit
-  TLS / SMTPS — use port 465; for submission use port 587). `user` is
-  **optional**: with no credentials it is an **anonymous** check (greeting
-  `220` + `EHLO`); with a user/password it performs `AUTH PLAIN`. Probed
-  natively (RFC 5321).
-- `nntp` (alias `nntps`) — default port 119; `tls`: `false` | `true` |
-  `skip-verify` (implicit TLS / NNTPS — use port 563). `user` is **optional**:
-  with no credentials it is an **anonymous** check (server greets `200` posting
-  allowed / `201` posting prohibited — reported as `posting_allowed`); with a
-  user/password it performs `AUTHINFO USER`/`PASS`. Probed natively (RFC
-  3977/4643).
-- `ftp` — default port 21; `tls`: `false` | `true` | `skip-verify` (implicit TLS
-  / FTPS — use port 990). `user` is **optional**: with no credentials it is an
-  **anonymous** check (greeting `220`); with a user/password it performs
-  `USER`/`PASS` (a password with no user logs in as `anonymous`). Probed natively
-  (RFC 959).
-- `ssh` — default port 22 (no `tls`: SSH has its own transport crypto). `user`
-  is **optional**: with no credentials it is an **anonymous** check that
-  completes the key exchange to capture the server's host key — authentication
-  then fails, which is expected; with a user/password it requires login to
-  succeed. Result data exposes `fingerprint` (SHA256 of the host key),
-  `host_key_algo`, `server_version` and `protocol`. Set **`on_change: true`**
-  (on a host watch, where the check is built once) to alert when the host-key
-  fingerprint changes between cycles — a possible re-key or man-in-the-middle.
-  Uses `golang.org/x/crypto/ssh`.
-- `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's
-  Unix socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default
-  9000) for a TCP pool. No auth. It performs a FastCGI request to `/ping` and
-  expects `pong`, so the pool must have **`ping.path = /ping`** enabled. Probed
-  natively (FastCGI).
+- **Native by default.** The probe is implemented in pure Go unless the entry
+  names a third-party library.
+- **`tls`** (where listed) accepts `false` (plaintext, the default), `true`
+  (verified TLS) or `skip-verify` (TLS without certificate verification). Entries
+  add only protocol-specific notes — the implicit-TLS port (e.g. IMAPS 993) or
+  extra modes (e.g. PostgreSQL sslmodes).
+- **Auth** is noted per entry; many protocols are anonymous.
+- **`socket`** (a Unix socket path) dials the socket instead of `host`/`port`;
+  **`query`** is the per-protocol lookup target (e.g. the DNS name for `dns`).
 
-- `ipp` (alias `cups`) — default port 631; `tls`: `false` | `true` |
-  `skip-verify` (IPPS). No auth. POSTs an IPP `CUPS-Get-Default` request over
-  HTTP and verifies a valid IPP response — any parseable reply proves cupsd is up
-  and speaking IPP. Result data carries the IPP version and status. Probed
-  natively (RFC 8010/8011).
-- `rspamd` — default port 11334 (the controller worker); `tls`: `false` | `true`
-  | `skip-verify` (HTTPS). No auth. Sends `GET /ping` and expects `200` with a
-  `pong` body — the unauthenticated liveness endpoint every rspamd worker
-  exposes (point `port` at 11333 for the normal scanning worker or 11332 for the
-  proxy). Result data carries the rspamd version, read from the `Server` header.
-  Probed natively (HTTP).
+Protocols, in the order of the table above:
+
+- `mysql` (alias `mariadb`) — default port 3306; `tls` supported. Uses
+  `github.com/go-sql-driver/mysql`.
+- `mongodb` (alias `mongo`) — default port 27017; `tls` supported. `user` is
+  **optional** (MongoDB may run without auth); with credentials it authenticates
+  against `auth_source` (defaults to `database`, then `admin`). Connects, verifies
+  a `ping`, and reads the version via `buildInfo`. To run a query and compare a
+  result, see the **MongoDB query** check. Uses `go.mongodb.org/mongo-driver`.
+- `postgres` (alias `postgresql`) — default port 5432; `tls` supported, plus the
+  PostgreSQL sslmodes (`disable`/`require`/`prefer`/`verify-ca`/`verify-full`).
+  Uses `github.com/lib/pq`.
+- `redis` (alias `valkey`) — default port 6379; `tls` supported. `user` is
+  **optional** (legacy `requirepass` uses a password only, or no auth at all); a
+  password-only check sends `AUTH <password>`. Verifies `PING` → `PONG` over RESP
+  (no driver).
+- `imap` — default port 143; `tls` supported (implicit TLS / IMAPS — use port
+  993). `user` is **optional**: with no credentials it verifies the server greets
+  `* OK`; with a user/password it performs an IMAP `LOGIN`. RFC 3501.
+- `pop` (alias `pop3`) — default port 110; `tls` supported (POP3S — use port 995).
+  `user` is **optional**: anonymous verifies the `+OK` greeting; with a
+  user/password it performs `USER`/`PASS`. RFC 1939.
+- `smtp` — default port 25; `tls` supported (SMTPS — use port 465; submission
+  587). `user` is **optional**: anonymous checks the `220` greeting + `EHLO`; with
+  a user/password it performs `AUTH PLAIN`. RFC 5321.
+- `nntp` (alias `nntps`) — default port 119; `tls` supported (NNTPS — use port
+  563). `user` is **optional**: anonymous checks the greeting (`200` posting
+  allowed / `201` prohibited — reported as `posting_allowed`); with a user/password
+  it performs `AUTHINFO USER`/`PASS`. RFC 3977/4643.
+- `ftp` — default port 21; `tls` supported (FTPS — use port 990). `user` is
+  **optional**: anonymous checks the `220` greeting; with a user/password it
+  performs `USER`/`PASS` (a password with no user logs in as `anonymous`). RFC 959.
+- `ssh` — default port 22 (no `tls`: SSH has its own transport crypto). `user` is
+  **optional**: anonymous completes the key exchange to capture the server's host
+  key (authentication then fails, which is expected); with a user/password login
+  must succeed. Result data: `fingerprint` (SHA256 of the host key),
+  `host_key_algo`, `server_version`, `protocol`. Set **`on_change: true`** (on a
+  host watch) to alert when the host-key fingerprint changes — a possible re-key or
+  man-in-the-middle. Uses `golang.org/x/crypto/ssh`.
+- `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's Unix
+  socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default 9000) for
+  a TCP pool. No auth. Performs a FastCGI request to `/ping` and expects `pong`, so
+  the pool must have **`ping.path = /ping`** enabled.
+- `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query` (default
+  `localhost`) and verifies the answer: `NOERROR`/`NXDOMAIN` pass (the server is up
+  and speaking DNS); `SERVFAIL`, `REFUSED`, a timeout or a transport error fail.
+  Result data: the `rcode` and answer count. Set `query` to a name the server
+  should answer (e.g. a zone it is authoritative for). RFC 1035.
+- `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies the
+  server answers in **server mode** with a synchronized **stratum (1–15)**; a
+  kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
+  data: `stratum` and the clock `offset_seconds`. RFC 5905.
+- `snmp` — default port 161 (UDP). With **no `user`** it uses **SNMPv2c** with a
+  community string (`password`, default `public` — the anonymous/shared-secret
+  model). With a **`user`** it uses **SNMPv3 USM**: a `password` adds SHA
+  authentication (authNoPriv), otherwise noAuthNoPriv. It reads the system
+  description and object id; result data carries `sys_object_id`, `snmp_version`
+  and the description (as the version banner). Set **`on_change: true`** (on a host
+  watch) to alert when `sysObjectID` (the device identity — model/firmware)
+  changes. Uses `github.com/gosnmp/gosnmp`.
+- `tftp` — default port 69 (UDP). No auth. Sends a read request (RRQ) for `query`
+  (default `sermo-tftp-check`) and verifies a valid TFTP packet: a `DATA` reply
+  (the file is served) or an `ERROR` reply (e.g. file not found) both pass. Result
+  data: the reply kind and, for an error, the TFTP error code/message. RFC 1350.
+- `ldap` — default port 389; `tls` supported (implicit TLS / LDAPS — use port
+  636). `user` is **optional**: with no credentials it does an **anonymous bind** (a
+  successful bind, or an LDAP-level rejection, both prove the directory is up —
+  only a transport error fails); with a user/password it does a **simple bind**
+  where `user` is the bind DN and must succeed. Result data: the bind mode and
+  result. Uses `github.com/go-ldap/ldap/v3`.
+- `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects a
+  **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
+  connector.
+- `ipp` (alias `cups`) — default port 631; `tls` supported (IPPS). No auth. POSTs
+  an IPP `CUPS-Get-Default` request over HTTP and verifies a valid IPP response —
+  any parseable reply proves cupsd is up and speaking IPP. Result data: the IPP
+  version and status. RFC 8010/8011.
+- `rsync` (alias `rsyncd`) — default port 873 (TCP). No auth. Reads the rsync
+  daemon's `@RSYNCD: <version>` greeting; receiving it proves the daemon is up.
+  Result data carries the protocol version.
+- `dhcp` (alias `dhcpd`) — default port 67 (UDP). **Linux only.** No auth. Sends a
+  `DHCPDISCOVER` and verifies the server replies with a `DHCPOFFER` — proof it is
+  up and handing out leases. It never sends a `DHCPREQUEST`, so **no real lease is
+  consumed**. Two modes: set `interface` to **broadcast** the DISCOVER out that
+  link and discover any server (`255.255.255.255`); omit it to **unicast** to
+  `host` (a known server or relay). The client hardware address is a random,
+  anonymous locally-administered MAC by default; set `mac` to use a fixed address
+  (e.g. a server that only answers reserved clients). Result data: the offered IP,
+  server id, subnet mask and lease time. **Requires elevated privileges** to bind
+  the DHCP client port 68 (and `CAP_NET_RAW` for the per-interface bind), like the
+  `icmp` check; the host should not run a competing DHCP client on that interface.
+  RFC 2131.
+
+  ```yaml
+  checks:
+    dhcp-broadcast:
+      type: dhcp
+      interface: eth0            # broadcast on this link (discovers any server)
+      mac: "02:00:00:ab:cd:ef"   # optional; default is a random anonymous MAC
+    dhcp-unicast:
+      type: dhcp
+      host: 10.0.0.1             # unicast to a known server/relay (no interface)
+  ```
+- `rspamd` — default port 11334 (the controller worker); `tls` supported (HTTPS).
+  No auth. Sends `GET /ping` and expects `200` with a `pong` body — the
+  unauthenticated liveness endpoint every rspamd worker exposes (point `port` at
+  11333 for the normal scanning worker or 11332 for the proxy). Result data: the
+  rspamd version, read from the `Server` header.
 - `libvirt` (alias `libvirtd`) — opens an RPC connection to a libvirt daemon and
-  reads its version; both succeeding prove libvirtd is up and answering. It runs
-  no write operation. **Transport:** with no `socket` and no `host` it dials the
-  local Unix socket `/var/run/libvirt/libvirt-sock`; set `socket` for a different
-  path, or set `host` to use plain **TCP** (default port 16509). TLS/SASL is not
-  supported. **Connect URI:** `query` selects the driver, default `qemu:///system`
-  (e.g. `lxc:///`, `xen://`). No auth — local socket access is governed by the
-  socket's permissions/polkit. Result data carries the libvirt version, connect
-  URI, transport and the daemon hostname. Uses
-  `github.com/digitalocean/go-libvirt` (pure Go).
+  reads its version; both succeeding prove libvirtd is up. It runs no write
+  operation. **Transport:** with no `socket` and no `host` it dials the local Unix
+  socket `/var/run/libvirt/libvirt-sock`; set `socket` for a different path, or set
+  `host` to use plain **TCP** (default port 16509). TLS/SASL is not supported.
+  **Connect URI:** `query` selects the driver, default `qemu:///system` (e.g.
+  `lxc:///`, `xen://`). No auth — local socket access is governed by the socket's
+  permissions/polkit. Result data: the libvirt version, connect URI, transport and
+  daemon hostname. Uses `github.com/digitalocean/go-libvirt`.
 
   ```yaml
   checks:
@@ -492,8 +545,8 @@ name. Supported protocols:
   (`unix:path=/var/run/dbus/system_bus_socket`); set `socket` for a different
   socket path, or `query` for a full D-Bus address (`unix:abstract=…`,
   `tcp:host=…,port=…`). Socket-based, so there is no TCP port. No auth — access is
-  governed by the socket's permissions. Result data carries the bus id, address
-  and the connection's unique name. Uses `github.com/godbus/dbus/v5` (pure Go).
+  governed by the socket's permissions. Result data: the bus id, address and the
+  connection's unique name. Uses `github.com/godbus/dbus/v5`.
 
   ```yaml
   checks:
@@ -503,24 +556,21 @@ name. Supported protocols:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
   ```
-- `avahi` (alias `avahi-daemon`) — the Avahi mDNS/DNS-SD (zeroconf) daemon,
-  probed over its D-Bus API (`org.freedesktop.Avahi`). Connects to the system bus
-  (SASL auth + Hello) and calls
-  `org.freedesktop.Avahi.Server.GetVersionString` — a reply proves avahi-daemon is
-  up and registered on the bus — reporting the `version` (pair with
-  `on_version_change`) and, best-effort, the `hostname` and server `state`
-  (`running` when AVAHI_SERVER_RUNNING). **Target:** like `dbus`, defaults to the
-  system bus (`unix:path=/var/run/dbus/system_bus_socket`); set `socket` for a
-  different bus socket or `query` for a full D-Bus address. Socket-based, so there
-  is no TCP port. No auth — access is governed by the bus permissions. Uses
-  `github.com/godbus/dbus/v5` (pure Go).
-- `syncthing` — default port 8384; `tls`: `false` | `true` | `skip-verify`
-  (`skip-verify` covers Syncthing's default self-signed GUI certificate). Sends
-  `GET /rest/noauth/health` and expects `200` with `{"status":"OK"}` — the
-  unauthenticated liveness endpoint. With an **API key** in `password` (sent as
-  `X-API-Key`) it also reads `/rest/system/version` and reports the Syncthing
-  version (`os`/`arch` too); a rejected key fails the check. No user. Probed
-  natively (HTTP/REST).
+- `avahi` (alias `avahi-daemon`) — the Avahi mDNS/DNS-SD (zeroconf) daemon, probed
+  over its D-Bus API (`org.freedesktop.Avahi`). Connects to the system bus (SASL
+  auth + Hello) and calls `org.freedesktop.Avahi.Server.GetVersionString` — a reply
+  proves avahi-daemon is up and registered on the bus — reporting the `version`
+  (pair with `on_version_change`) and, best-effort, the `hostname` and server
+  `state` (`running` when AVAHI_SERVER_RUNNING). **Target:** like `dbus`, defaults
+  to the system bus; set `socket` for a different bus socket or `query` for a full
+  D-Bus address. Socket-based, no TCP port, no auth. Uses
+  `github.com/godbus/dbus/v5`.
+- `syncthing` — default port 8384; `tls` supported (`skip-verify` covers
+  Syncthing's default self-signed GUI certificate). Sends `GET /rest/noauth/health`
+  and expects `200` with `{"status":"OK"}` — the unauthenticated liveness endpoint.
+  With an **API key** in `password` (sent as `X-API-Key`) it also reads
+  `/rest/system/version` and reports the Syncthing version (`os`/`arch` too); a
+  rejected key fails the check. No user.
 
   ```yaml
   checks:
@@ -531,226 +581,43 @@ name. Supported protocols:
       # password: "${env:ST_KEY}"   # optional API key -> also reports version
   ```
 - `unifi` (aliases `unifi-controller`, `unifi-network`) — a UniFi Network
-  controller (Ubiquiti). Default port 8443. The controller is **HTTPS-only** and
-  ships a self-signed certificate, so `tls` here selects only verification:
-  certificate verification is **skipped by default**; set `tls: true` to require a
-  valid certificate. No user. Sends `GET /status` (the unauthenticated liveness
-  endpoint) and expects `200` with JSON `meta.rc == "ok"`, reporting the
-  controller's `server_version` (pair with `on_version_change`) and `uuid`. Probed
-  natively (HTTP/REST). Note: this targets the self-hosted UniFi Network
-  application; on a UniFi OS console (UDM/Cloud Key) the controller is proxied
-  under `/proxy/network/`, which this check does not follow.
-- `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
-  a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
-  connector. Probed natively (AJP13).
-- `rsync` (alias `rsyncd`) — default port 873 (TCP). No auth. Reads the rsync
-  daemon's `@RSYNCD: <version>` greeting; receiving it proves the daemon is up
-  and speaking the rsync protocol. Result data carries the protocol version.
-  Probed natively.
-- `ldap` — default port 389; `tls`: `false` | `true` | `skip-verify` (implicit
-  TLS / LDAPS — use port 636). `user` is **optional**: with no credentials it
-  does an **anonymous bind** (a successful bind, or an LDAP-level rejection, both
-  prove the directory is up — only a transport error fails); with a
-  user/password it does a **simple bind** where `user` is the bind DN and must
-  succeed. Result data carries the bind mode and result. Uses
-  `github.com/go-ldap/ldap/v3`.
-- `snmp` — default port 161 (UDP). With **no `user`** it uses **SNMPv2c** with a
-  community string (`password`, default `public` — the anonymous/shared-secret
-  model). With a **`user`** it uses **SNMPv3 USM**: a `password` adds SHA
-  authentication (authNoPriv), otherwise noAuthNoPriv. It reads the system
-  description and object id; result data carries `sys_object_id`, `snmp_version`
-  and the description (as the version banner). Set **`on_change: true`** (on a
-  host watch) to alert when `sysObjectID` (the device identity — model/firmware)
-  changes. Uses `github.com/gosnmp/gosnmp`.
-- `tftp` — default port 69 (UDP). No auth. Sends a read request (RRQ) for
-  `query` (default `sermo-tftp-check`) and verifies the server answers with a
-  valid TFTP packet: a `DATA` reply (the file is served) or an `ERROR` reply
-  (e.g. file not found) both pass — either proves the server is up and speaking
-  TFTP. Result data carries the reply kind and, for an error, the TFTP error
-  code/message. Probed natively (RFC 1350).
-- `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies
-  the server answers in **server mode** with a synchronized **stratum (1–15)**;
-  a kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
-  data carries `stratum` and the clock `offset_seconds`. Probed natively (RFC
-  5905).
-- `clamd` (alias `clamav`) — default port 3310 (TCP), or a Unix socket via
-  `socket` (e.g. `/run/clamav/clamd.ctl`). No auth, no TLS. Sends the clamd
-  `VERSION` command and verifies a `ClamAV <version>/…` reply — proof the daemon
-  is up and speaking the clamd protocol. Result data carries the engine
-  `version` (the daily signature-database part is dropped, so `on_version_change`
-  stays quiet across routine DB updates) and the full `version_string`. Probed
-  natively.
-- `rpcbind` (aliases `portmap`, `portmapper`) — default port 111 (UDP). No auth.
-  Sends an ONC RPC **NULL** call to the portmapper program (100000 v2) and
-  verifies a well-formed RPC reply — proof the daemon is up and speaking RPC. Any
-  reply (accepted or denied) passes; result data carries the `rpc_status`. Probed
-  natively (RFC 5531/1833).
-- `glusterfs` (aliases `glusterd`, `gluster`) — default port 24007 (TCP, the
-  glusterd management daemon). No auth. Sends an ONC RPC **NULL** call to the
-  GlusterFS handshake program (record marking over TCP) and verifies a
-  well-formed RPC reply — proof that node's glusterd is up and speaking RPC;
-  result data carries the `rpc_status`. Probed natively (reuses the rpcbind RPC
-  machinery). **This checks one node.** To alert when **any node** in a cluster
-  is down, configure one check per node (one `host` each) — the failing node's
-  check fires:
-
-  ```yaml
-  checks:
-    gluster-n1: { type: glusterfs, host: 10.0.0.1 }
-    gluster-n2: { type: glusterfs, host: 10.0.0.2 }
-    gluster-n3: { type: glusterfs, host: 10.0.0.3 }
-  ```
-
-  Cluster-wide peer status is not gathered in-protocol (it would need
-  authenticated GlusterD management RPC).
-- `ceph` (alias `ceph-mon`) — default port 3300 (TCP, the Ceph monitor's
-  messenger v2; use port 6789 for the legacy v1). No auth. On connect a Ceph
-  daemon sends a messenger banner (`ceph v2\n` for v2, `ceph v027` for v1);
-  reading a `ceph v` banner proves it is a Ceph endpoint. Result data carries the
-  `messenger` version (`v1`/`v2`). The banner precedes the authenticated
-  handshake, so no credentials. Probed natively.
-- `varnish` (alias `varnishadm`) — default port 6082 (TCP, the Varnish `-T`
-  management CLI). No auth. On connect varnishd sends a CLI response (a
-  `<status> <length>` line and a body); status **200** carries the banner (with
-  the version) and **107** is an authentication challenge (a CLI secret is set) —
-  either proves the management CLI is up and speaking the protocol. Result data
-  carries the `cli_status` and, for a banner, the Varnish `version`. The CLI
-  secret authentication is not performed (liveness only). Probed natively.
-- `openvswitch` (aliases `ovs`, `ovsdb`, `ovsdb-server`) — default port 6640
-  (TCP, the Open vSwitch configuration database server `ovsdb-server`), or a Unix
-  socket via `socket` (commonly `/run/openvswitch/db.sock`); `tls`: `false` |
-  `true` | `skip-verify` (SSL). No auth. Issues an OVSDB (RFC 7047) `list_dbs`
-  JSON-RPC request and verifies a result listing the served databases — proof
-  ovsdb-server is up and speaking OVSDB; result data carries the `databases`
-  list. When the `Open_vSwitch` database is present it follows up with a
-  `transact` select reading `ovs_version`, reported as the `version`. Probed
-  natively.
-- `mqtt` — default port 1883 (TCP); `tls`: `false` | `true` | `skip-verify`
-  (MQTTS, port 8883). Performs an MQTT 3.1.1 `CONNECT` handshake and verifies the
-  broker answers `CONNACK` accepting the connection (return code 0). With no
-  credentials it is an anonymous connect; `user`/`password` authenticate. A
-  refused CONNACK (e.g. `not-authorized`, `bad-username-or-password`) fails the
-  check with the reason; result data carries the `connack` status. Probed
-  natively (MQTT 3.1.1).
-- `sieve` (alias `managesieve`) — default port 4190 (TCP); `tls`: `false` |
-  `true` | `skip-verify` (implicit TLS). No auth. On connect the server sends a
-  greeting of capability lines terminated by an `OK` response (RFC 5804); reading
-  it and seeing the `OK` proves the server is up and speaking ManageSieve. The
-  `IMPLEMENTATION` capability is reported as the server `version` (a `NO`/`BYE`
-  greeting, e.g. a connection-limit refusal, fails the check). Probed natively.
-- `asterisk` (alias `ami`) — default port 5038 (TCP); `tls`: `false` | `true` |
-  `skip-verify` (AMI over TLS). No auth. On connect, Asterisk's Manager Interface
-  sends an `Asterisk Call Manager/<version>` greeting before any login; reading
-  it proves AMI is up and yields the manager `version` (result data also carries
-  the full `banner`). Pair with `on_version_change` (host watch) to alert on an
-  Asterisk upgrade. Probed natively.
-- `guacd` (alias `guacamole`) — default port 4822 (TCP). No auth. Opens the
-  Guacamole handshake by sending a `select` instruction for a protocol (`query`,
-  default `vnc`) and verifies guacd replies with a well-formed Guacamole
-  instruction — an `args` reply (protocol available) or an `error` (e.g. plugin
-  missing) both prove guacd is up and speaking the protocol. Result data carries
-  the selected protocol and the reply `opcode`. Probed natively (Guacamole
-  protocol).
-- `rdp` (alias `ms-wbt-server`) — default port 3389 (TCP). No auth. Sends an
-  X.224 **Connection Request** with an RDP Negotiation Request and verifies the
-  server answers with an X.224 **Connection Confirm** — proof it is up and
-  speaking RDP. A negotiation failure still counts as up (the server answered).
-  Result data carries the negotiated `security` protocol (`rdp` = standard RDP
-  security, `tls`, `hybrid` = CredSSP/NLA, `hybrid-ex`). Probed natively
-  (MS-RDPBCGR); the negotiation precedes authentication, so no credentials.
-- `nfs` (aliases `nfs-server`, `nfsd`) — default port 2049 (TCP). No auth. Sends
-  an ONC RPC **NULL** call to the NFS program (100003) — using RPC record marking
-  over TCP — and verifies a well-formed RPC reply, which proves the server is up
-  and speaking RPC. A version-mismatch reply (e.g. an NFSv4-only server answering
-  a v3 NULL) still passes; result data carries the `rpc_status`. Probed natively
-  (RFC 5531/1813). Reuses the rpcbind RPC machinery.
-- `mountd` (aliases `rpc.mountd`, `nfs-mountd`) — the NFS mount daemon. Default
-  port 20048 (TCP), the common fixed mountd port. No auth. Sends an ONC RPC
-  **NULL** call to the MOUNT program (100005) — using RPC record marking over TCP
-  — and verifies a well-formed RPC reply, which proves the daemon is up and
-  speaking RPC. A version-mismatch reply still passes; result data carries the
-  `rpc_status`. rpc.mountd has **no fixed well-known port** — it registers a
-  (often random) port with rpcbind — so if the daemon is not on 20048, set `port`
-  to its configured port (query it with `rpcinfo -p <host>`). Probed natively
-  (RFC 5531/1813). Reuses the rpcbind RPC machinery.
-- `statd` (aliases `rpc.statd`, `nsm`, `nfs-statd`) — the NFS status-monitor
-  daemon (NSM, used for NFS lock recovery). Default port 662 (TCP), the
-  conventional fixed statd port. No auth. Sends an ONC RPC **NULL** call to the
-  NSM program (100024) — using RPC record marking over TCP — and verifies a
-  well-formed RPC reply, which proves the daemon is up and speaking RPC. A
-  version-mismatch reply still passes; result data carries the `rpc_status`.
-  rpc.statd has **no fixed well-known port** — it registers a (often random) port
-  with rpcbind — so if the daemon is not on 662, set `port` to its configured
-  port (query it with `rpcinfo -p <host>`). Probed natively (RFC 5531/1813).
-  Reuses the rpcbind RPC machinery.
-- `nebula` (alias `nebula-vpn`) — a [Nebula](https://github.com/slackhq/nebula)
-  mesh-VPN node. Default port 4242 (**UDP**). No auth. A real tunnel needs a
-  CA-signed certificate, but a node answers a data packet for a tunnel index it
-  does not know with a plaintext **recv_error** (telling the sender to
-  re-handshake), so the check sends a Nebula `message` packet carrying a random
-  index and verifies the node replies with a `recv_error` echoing it — proof the
-  node is up and speaking Nebula, with no credentials. Probed natively (16-byte
-  Nebula header over UDP). The reply is governed by the node's
-  `listen.send_recv_error` setting (default `always`); a node set to `never` — or
-  to `private` when probed from a public address — stays silent and reads as
-  down, so probe lighthouses/nodes from an address their config answers.
-- `openvpn` (alias `ovpn`) — an OpenVPN server. Default port 1194; `transport`
-  selects the transport (`udp`, the default, or `tcp` — set it to match the
-  server's `proto`). No auth. The first step of the OpenVPN handshake is
-  unauthenticated (TLS comes after): the check sends a
-  `P_CONTROL_HARD_RESET_CLIENT_V2` carrying a random session id and verifies the
-  server answers with a `P_CONTROL_HARD_RESET_SERVER_V2` that acknowledges that
-  session id — proof the server is up and speaking OpenVPN, with no credentials.
-  Result data carries the `transport`. Probed natively (OpenVPN control-channel
-  wire format). **Caveat:** the reset only gets a reply from a server without
-  `tls-auth`/`tls-crypt`; those HMAC-wrap (or encrypt) control packets, so a bare
-  reset is dropped and the server stays silent — silence is then expected and is
-  not proof it is down.
-- `influxdb` (alias `influx`) — an InfluxDB server. Default port 8086; `tls`:
-  `false` (plain HTTP, the default) | `true` | `skip-verify` (https). No auth. GETs
+  controller (Ubiquiti). Default port 8443, **HTTPS-only** with a self-signed
+  certificate, so `tls` here selects only verification: it is **skipped by
+  default**; set `tls: true` to require a valid certificate. No user. Sends `GET
+  /status` (the unauthenticated liveness endpoint) and expects `200` with JSON
+  `meta.rc == "ok"`, reporting `server_version` (pair with `on_version_change`) and
+  `uuid`. Targets the self-hosted UniFi Network application; on a UniFi OS console
+  (UDM/Cloud Key) the controller is proxied under `/proxy/network/`, which this
+  check does not follow.
+- `influxdb` (alias `influx`) — an InfluxDB server. Default port 8086; `tls`
+  supported (`true`/`skip-verify` → https; plain HTTP by default). No auth. GETs
   `/health` (InfluxDB 2.x / 1.8+) and verifies a JSON `status` of `pass`, reporting
   the server `version` (pair with `on_version_change`); on older servers without
   `/health` it falls back to `/ping`, which answers `204` with the version in the
-  `X-Influxdb-Version` header. Probed natively (HTTP/REST). This is a
-  liveness/version check; to run an InfluxQL query and compare a result, see the
-  **InfluxDB query** check (`influxdb-query`).
-- `prometheus` (alias `prom`) — a Prometheus server. Default port 9090; `tls`:
-  `false` (plain HTTP, the default) | `true` | `skip-verify` (https). GETs
-  `/api/v1/status/buildinfo` and verifies a `success` status, reporting the server
-  `version` (pair with `on_version_change`); on older servers it falls back to
-  `/-/healthy` (liveness only). An optional `user`/`password` is sent as HTTP Basic
-  auth (for a reverse proxy fronting the API). Probed natively (HTTP/REST).
-- `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
-  `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
-  Python pickle command protocol that is not worth reimplementing for a liveness
-  check, so the check is the **connect itself**: a successful connection proves
-  fail2ban-server is listening (a stale socket left by a dead server refuses the
-  connection). It exchanges no commands. No auth. Probed natively.
-- `acpid` — the ACPI event daemon. **Socket-only** (no TCP port); defaults to
-  `/var/run/acpid.socket`, override with `socket`. acpid is an event broadcaster
-  with no request/response protocol, so the check is the **connect itself**: a
-  successful connection proves acpid is listening (a stale socket left by a dead
-  daemon refuses the connection). It reads nothing — reading would block until an
-  ACPI event — and there is no version. No auth. Probed natively.
-- `lvmpolld` — LVM's poll daemon. **Socket-only** (no TCP port); defaults to
-  `/run/lvm/lvmpolld.socket`, override with `socket`. Unlike acpid/fail2ban it is
-  probed by protocol: it speaks LVM's generic daemon framework, so the check
-  sends a `hello` request and verifies the daemon replies `OK` — proof lvmpolld is
-  up and speaking its protocol (a stale socket left by a dead daemon refuses the
-  connection). It also guards against pointing at a different LVM daemon
-  (lvmetad, dmeventd) by checking the reported protocol name. Result data carries
-  the `protocol` and `protocol_version`; the handshake exposes no lvm2 software
-  version. No auth. Probed natively.
-- `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is
-  **optional**. It first runs an SMB2 `NEGOTIATE` (proving the server is up) and
-  reports the negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/
-  `3.0.2`/`3.1.1` — pair with `on_version_change`), the `protocol` family
-  (`SMB2`/`SMB3`) and whether **signing is required**. With a `user` it then
-  authenticates over **NTLM** (a failed login fails the check), counts the
-  shares (`shares`), and — if a share is named in `query` — verifies it can be
-  **mounted** (`share_access`). The domain may be embedded in `user`
-  (`DOMAIN\user` or `user@domain`). Uses `github.com/cloudsoda/go-smb2` for the
-  authenticated session; the NEGOTIATE is native.
+  `X-Influxdb-Version` header. A liveness/version check; to run an InfluxQL query
+  and compare a result, see the **InfluxDB query** check.
+- `prometheus` (alias `prom`) — a Prometheus server. Default port 9090; `tls`
+  supported (https). GETs `/api/v1/status/buildinfo` and verifies a `success`
+  status, reporting the server `version` (pair with `on_version_change`); on older
+  servers it falls back to `/-/healthy` (liveness only). An optional `user`/
+  `password` is sent as HTTP Basic auth (for a reverse proxy fronting the API).
+- `clamd` (alias `clamav`) — default port 3310 (TCP), or a Unix socket via `socket`
+  (e.g. `/run/clamav/clamd.ctl`). No auth, no TLS. Sends the clamd `VERSION` command
+  and verifies a `ClamAV <version>/…` reply. Result data: the engine `version` (the
+  daily signature-database part is dropped, so `on_version_change` stays quiet
+  across routine DB updates) and the full `version_string`.
+- `spamd` (alias `spamassassin`) — default port 783 (TCP), or a Unix socket via
+  `socket`. No auth. Sends a SPAMC/SPAMD `PING` and verifies spamd answers
+  `SPAMD/<v> 0 PONG`. Result data: the SPAMD protocol version.
+- `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is **optional**.
+  It first runs an SMB2 `NEGOTIATE` (proving the server is up) and reports the
+  negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/`3.0.2`/`3.1.1` —
+  pair with `on_version_change`), the `protocol` family (`SMB2`/`SMB3`) and whether
+  **signing is required**. With a `user` it then authenticates over **NTLM** (a
+  failed login fails the check), counts the shares (`shares`), and — if a share is
+  named in `query` — verifies it can be **mounted** (`share_access`). The domain
+  may be embedded in `user` (`DOMAIN\user` or `user@domain`). The NEGOTIATE is
+  native; the authenticated session uses `github.com/cloudsoda/go-smb2`.
 
   ```yaml
   checks:
@@ -761,43 +628,122 @@ name. Supported protocols:
       password: "${env:SMB_PASS}"
       query: "data"                   # optional: verify this share mounts
   ```
-- `spamd` (alias `spamassassin`) — default port 783 (TCP), or a Unix socket via
-  `socket`. No auth. Sends a SPAMC/SPAMD `PING` and verifies spamd answers
-  `SPAMD/<v> 0 PONG` — proof it is up and speaking the protocol. Result data
-  carries the SPAMD protocol version. Probed natively.
-- `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query`
-  (default `localhost`) to the server and verifies it answers: `NOERROR` or
-  `NXDOMAIN` pass (the server is up and speaking DNS); `SERVFAIL`, `REFUSED`, a
-  timeout or a transport error fail. Result data carries the `rcode` and answer
-  count. Probed natively (RFC 1035 message). Set `query` to a name the server
-  should answer (e.g. a zone it is authoritative for).
-- `dhcp` (alias `dhcpd`) — default port 67 (UDP). **Linux only.** No auth. Sends
-  a `DHCPDISCOVER` and verifies the server replies with a `DHCPOFFER` — proof it
-  is up and handing out leases. It never sends a `DHCPREQUEST`, so **no real
-  lease is consumed**. Two modes: set `interface` to **broadcast** the DISCOVER
-  out that link and discover any server (`255.255.255.255`); omit it to
-  **unicast** to `host` (a known server or relay). The client hardware address
-  is a random, anonymous locally-administered MAC by default; set `mac` to use a
-  fixed address (e.g. a server that only answers reserved clients). Result data
-  carries the offered IP, server id, subnet mask and lease time. **Requires
-  elevated privileges** to bind the DHCP client port 68 (and `CAP_NET_RAW` for
-  the per-interface bind), like the `icmp` check; the host should not run a
-  competing DHCP client on that interface. Probed natively (RFC 2131).
+- `acpid` — the ACPI event daemon. **Socket-only** (no TCP port; defaults to
+  `/var/run/acpid.socket`, override with `socket`). It is an event broadcaster with
+  no request/response protocol, so the check is the **connect itself**: a
+  successful connection proves acpid is listening (a stale socket left by a dead
+  daemon refuses the connection). It reads nothing — reading would block until an
+  ACPI event — and there is no version. No auth.
+- `fail2ban` — fail2ban-server. **Socket-only** (defaults to
+  `/var/run/fail2ban/fail2ban.sock`, override with `socket`). Its Python pickle
+  command protocol is not worth reimplementing for a liveness check, so — like
+  `acpid` — the check is the **connect itself**; it exchanges no commands. No auth.
+- `lvmpolld` — LVM's poll daemon. **Socket-only** (defaults to
+  `/run/lvm/lvmpolld.socket`, override with `socket`). Unlike acpid/fail2ban it is
+  probed by protocol: it speaks LVM's generic daemon framework, so the check sends
+  a `hello` request and verifies the daemon replies `OK`, also guarding against a
+  different LVM daemon (lvmetad, dmeventd) by the reported protocol name. Result
+  data: the `protocol` and `protocol_version` (the handshake exposes no lvm2
+  software version). No auth.
+- `rpcbind` (aliases `portmap`, `portmapper`) — default port 111 (UDP). No auth.
+  Sends an **ONC RPC NULL** call (RFC 5531/1833) to the portmapper program (100000
+  v2) and verifies a well-formed RPC reply — any reply (accepted or denied) proves
+  the daemon is up and speaking RPC; result data carries the `rpc_status`. The same
+  NULL-call probe backs the `nfs`/`mountd`/`statd`/`glusterfs` checks below.
+- `nfs` (aliases `nfs-server`, `nfsd`) — an ONC RPC NULL to the NFS program
+  (100003) over TCP (record marking), like `rpcbind`; default port 2049. A
+  version-mismatch reply (e.g. an NFSv4-only server answering a v3 NULL) still
+  passes.
+- `mountd` (aliases `rpc.mountd`, `nfs-mountd`) — the NFS mount daemon: an ONC RPC
+  NULL to the MOUNT program (100005) over TCP, like `nfs`. **No fixed well-known
+  port** — mountd registers a (often random) port with rpcbind; default 20048,
+  override `port` (find it with `rpcinfo -p <host>`).
+- `statd` (aliases `rpc.statd`, `nsm`, `nfs-statd`) — the NFS status-monitor (NSM,
+  used for lock recovery): an ONC RPC NULL to the NSM program (100024), like
+  `mountd`. Default port 662; same no-fixed-port caveat — override `port`
+  (`rpcinfo -p <host>`).
+- `nebula` (alias `nebula-vpn`) — a [Nebula](https://github.com/slackhq/nebula)
+  mesh-VPN node. Default port 4242 (**UDP**). No auth. A real tunnel needs a
+  CA-signed certificate, but a node answers a data packet for a tunnel index it
+  does not know with a plaintext **recv_error** (telling the sender to
+  re-handshake), so the check sends a Nebula `message` packet carrying a random
+  index and verifies the node replies with a `recv_error` echoing it — proof the
+  node is up, with no credentials. The reply is governed by the node's
+  `listen.send_recv_error` setting (default `always`); a node set to `never` — or to
+  `private` when probed from a public address — stays silent and reads as down, so
+  probe lighthouses/nodes from an address their config answers.
+- `openvpn` (alias `ovpn`) — an OpenVPN server. Default port 1194; `transport`
+  selects the transport (`udp`, the default, or `tcp` — match the server's
+  `proto`). No auth. The first step of the OpenVPN handshake is unauthenticated
+  (TLS comes after): the check sends a `P_CONTROL_HARD_RESET_CLIENT_V2` carrying a
+  random session id and verifies the server answers with a
+  `P_CONTROL_HARD_RESET_SERVER_V2` acknowledging it. Result data: the `transport`.
+  **Caveat:** the reset only gets a reply from a server without `tls-auth`/
+  `tls-crypt`; those HMAC-wrap (or encrypt) control packets, so a bare reset is
+  dropped — silence is then expected and is not proof it is down.
+- `rdp` (alias `ms-wbt-server`) — default port 3389 (TCP). No auth. Sends an X.224
+  **Connection Request** with an RDP Negotiation Request and verifies the server
+  answers with an X.224 **Connection Confirm**; a negotiation failure still counts
+  as up (the server answered). Result data: the negotiated `security` protocol
+  (`rdp` = standard RDP security, `tls`, `hybrid` = CredSSP/NLA, `hybrid-ex`).
+  MS-RDPBCGR; the negotiation precedes authentication, so no credentials.
+- `guacd` (alias `guacamole`) — default port 4822 (TCP). No auth. Opens the
+  Guacamole handshake by sending a `select` instruction for a protocol (`query`,
+  default `vnc`) and verifies guacd replies with a well-formed Guacamole
+  instruction — an `args` reply (protocol available) or an `error` (e.g. plugin
+  missing) both prove guacd is up. Result data: the selected protocol and the reply
+  `opcode`.
+- `asterisk` (alias `ami`) — default port 5038 (TCP); `tls` supported (AMI over
+  TLS). No auth. On connect, Asterisk's Manager Interface sends an `Asterisk Call
+  Manager/<version>` greeting before any login; reading it yields the manager
+  `version` (result data also carries the full `banner`). Pair with
+  `on_version_change` (host watch) to alert on an Asterisk upgrade.
+- `sieve` (alias `managesieve`) — default port 4190 (TCP); `tls` supported
+  (implicit TLS). No auth. On connect the server sends a greeting of capability
+  lines terminated by an `OK` response (RFC 5804); reading it and seeing the `OK`
+  proves the server is up. The `IMPLEMENTATION` capability is reported as the server
+  `version` (a `NO`/`BYE` greeting, e.g. a connection-limit refusal, fails the
+  check).
+- `mqtt` — default port 1883 (TCP); `tls` supported (MQTTS, port 8883). Performs an
+  MQTT 3.1.1 `CONNECT` handshake and verifies the broker answers `CONNACK`
+  accepting the connection (return code 0). With no credentials it is an anonymous
+  connect; `user`/`password` authenticate. A refused CONNACK (e.g. `not-authorized`,
+  `bad-username-or-password`) fails the check with the reason; result data: the
+  `connack` status.
+- `varnish` (alias `varnishadm`) — default port 6082 (TCP, the Varnish `-T`
+  management CLI). No auth. On connect varnishd sends a CLI response (a `<status>
+  <length>` line and a body); status **200** carries the banner (with the version)
+  and **107** is an authentication challenge (a CLI secret is set) — either proves
+  the management CLI is up. Result data: the `cli_status` and, for a banner, the
+  Varnish `version`. The CLI secret authentication is not performed (liveness only).
+- `ceph` (alias `ceph-mon`) — default port 3300 (TCP, the Ceph monitor's messenger
+  v2; use port 6789 for the legacy v1). No auth. On connect a Ceph daemon sends a
+  messenger banner (`ceph v2\n` for v2, `ceph v027` for v1); reading a `ceph v`
+  banner proves it is a Ceph endpoint. Result data: the `messenger` version
+  (`v1`/`v2`). The banner precedes the authenticated handshake, so no credentials.
+- `glusterfs` (aliases `glusterd`, `gluster`) — default port 24007 (TCP, the
+  glusterd management daemon). No auth. An ONC RPC NULL to the GlusterFS handshake
+  program over TCP (record marking), like `rpcbind`; result data carries the
+  `rpc_status`. **This checks one node.** To alert when **any node** in a cluster
+  is down, configure one check per node (one `host` each) — the failing node's
+  check fires:
 
   ```yaml
   checks:
-    dhcp-broadcast:
-      type: dhcp
-      interface: eth0            # broadcast on this link (discovers any server)
-      mac: "02:00:00:ab:cd:ef"   # optional; default is a random anonymous MAC
-    dhcp-unicast:
-      type: dhcp
-      host: 10.0.0.1             # unicast to a known server/relay (no interface)
+    gluster-n1: { type: glusterfs, host: 10.0.0.1 }
+    gluster-n2: { type: glusterfs, host: 10.0.0.2 }
+    gluster-n3: { type: glusterfs, host: 10.0.0.3 }
   ```
 
-The `socket` field (Unix socket path) is generic; when set the check dials the
-socket instead of `host`/`port`. The `query` field is the per-protocol lookup
-target (the DNS name for `dns`).
+  Cluster-wide peer status is not gathered in-protocol (it would need authenticated
+  GlusterD management RPC).
+- `openvswitch` (aliases `ovs`, `ovsdb`, `ovsdb-server`) — default port 6640 (TCP,
+  the Open vSwitch configuration database server `ovsdb-server`), or a Unix socket
+  via `socket` (commonly `/run/openvswitch/db.sock`); `tls` supported (SSL). No
+  auth. Issues an OVSDB (RFC 7047) `list_dbs` JSON-RPC request and verifies a result
+  listing the served databases — result data carries the `databases` list. When the
+  `Open_vSwitch` database is present it follows up with a `transact` select reading
+  `ovs_version`, reported as the `version`.
 
 ### SQLite integrity (`sqlite` / `sqlite3`)
 
