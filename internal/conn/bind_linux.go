@@ -13,9 +13,13 @@ import (
 // routing table. Needs CAP_NET_RAW.
 func bindControl(iface string) func(network, address string, c syscall.RawConn) error {
 	return func(_, _ string, c syscall.RawConn) error {
+		dev, err := ResolveInterfaceName(iface) // accepts a name, IP or MAC
+		if err != nil {
+			return err
+		}
 		var serr error
 		if err := c.Control(func(fd uintptr) {
-			serr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, iface)
+			serr = unix.SetsockoptString(int(fd), unix.SOL_SOCKET, unix.SO_BINDTODEVICE, dev)
 		}); err != nil {
 			return err
 		}

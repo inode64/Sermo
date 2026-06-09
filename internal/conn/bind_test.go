@@ -45,3 +45,29 @@ func TestBindDialerBadInterface(t *testing.T) {
 		t.Fatal("dialing bound to a bogus interface must fail")
 	}
 }
+
+func TestResolveInterface(t *testing.T) {
+	if _, err := net.InterfaceByName("lo"); err != nil {
+		t.Skip("no loopback interface")
+	}
+	// By name.
+	if n, err := ResolveInterfaceName("lo"); err != nil || n != "lo" {
+		t.Fatalf("ResolveInterfaceName(lo) = %q/%v", n, err)
+	}
+	// By IP -> the interface that carries it.
+	if n, err := ResolveInterfaceName("127.0.0.1"); err != nil || n != "lo" {
+		t.Fatalf("ResolveInterfaceName(127.0.0.1) = %q/%v", n, err)
+	}
+	// IPv4 of the interface.
+	if ip, err := ResolveInterfaceIPv4("lo"); err != nil || ip != "127.0.0.1" {
+		t.Fatalf("ResolveInterfaceIPv4(lo) = %q/%v", ip, err)
+	}
+	// An IPv4 identifier is used verbatim.
+	if ip, err := ResolveInterfaceIPv4("127.0.0.1"); err != nil || ip != "127.0.0.1" {
+		t.Fatalf("ResolveInterfaceIPv4(127.0.0.1) = %q/%v", ip, err)
+	}
+	// Unknown identifier errors.
+	if _, err := ResolveInterfaceName("sermo-nope0"); err == nil {
+		t.Fatal("unknown identifier must error")
+	}
+}

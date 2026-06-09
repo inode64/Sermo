@@ -89,7 +89,9 @@ The `disk` check also verifies the **mount** of its `path` — see
 ### Egress interface (`interface`)
 
 On a **multi-homed host** (several NICs) a network check can be pinned to leave
-through a specific interface with the optional **`interface`** field:
+through a specific interface with the optional **`interface`** field. The value
+may be an **interface name**, an **IP** the interface carries, or its **MAC**, and
+may be a **single value or a list**:
 
 ```yaml
 checks:
@@ -98,30 +100,49 @@ checks:
     host: 8.8.8.8
     metric: state
     expect: up
-    interface: eth1        # ping out of eth1 specifically
+    interface: eth1                 # by name
   db-on-mgmt:
     type: tcp
     host: 10.0.0.5
     port: 5432
-    interface: mgmt0       # connect over the management NIC
+    interface: 192.168.1.2          # by IP it carries
+  api-by-mac:
+    type: http
+    url: https://10.0.0.9/health
+    interface: "00:11:22:33:44:55"  # by MAC
+  gw-redundant:
+    type: icmp
+    host: 8.8.8.8
+    metric: state
+    expect: up
+    interface: [eth0, eth1]         # two uplinks
+    interface_match: any            # any (default) | all
 ```
 
-- **Optional.** When `interface` is omitted (the default) the probe uses normal
-  routing across all interfaces, exactly as before — nothing changes unless you
-  set it.
+- **Optional.** Omit `interface` (the default) and the probe uses normal routing
+  across **all** interfaces, exactly as before — nothing changes unless you set it.
+- **Value forms.** `eth0` (name), `192.168.1.2` (an address on the interface), or
+  `00:11:22:33:44:55` (MAC) — all resolve to the same interface. A **list** pins
+  the check to several interfaces.
+- **`interface_match`** (only meaningful with a list): **`any`** (default) — the
+  check passes if the probe succeeds through **at least one** interface (failover/
+  redundant-link monitoring); **`all`** — it passes only if the probe succeeds
+  through **every** listed interface (verify each path independently). The
+  per-interface outcome is in the result data under `interfaces`.
 - **Mechanism.** For TCP/UDP it binds the socket with `SO_BINDTODEVICE`, forcing
   egress through that interface regardless of the routing table; for `icmp` it
-  binds the probe to that interface's IPv4 address (the `ping -I <addr>`
-  mechanism). **Linux only**, and `SO_BINDTODEVICE` needs `CAP_NET_RAW` (root) —
-  if the interface does not exist or the daemon lacks privilege the check **fails**
-  rather than silently using the wrong link.
-- **Where it applies.** `tcp`, `ports`, `icmp`, `http`, `websocket`, and every
-  natively-dialed connection-protocol check (the TCP/UDP probes such as `redis`,
-  `imap`, `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`, `tftp`, …, plus
-  the `influxdb`/`prometheus` HTTP probes). It is **not** honored by checks that
-  dial through a third-party library — the SQL drivers (`mysql`/`postgres`),
-  `mongodb`, `ldap`, `libvirt`, and the `syncthing`/`unifi`/`rspamd`/`ipp` HTTP
-  probes — where it is ignored.
+  binds the probe to the interface's IPv4 (the `ping -I <addr>` mechanism).
+  **Linux only**, and `SO_BINDTODEVICE` needs `CAP_NET_RAW` (root) — if the
+  interface does not exist or the daemon lacks privilege the check **fails** rather
+  than silently using the wrong link.
+- **Where it applies.** `tcp`, `ports`, `icmp`, `websocket`, and every
+  natively-dialed connection-protocol check (the TCP/UDP probes — `redis`, `imap`,
+  `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`, `tftp`, …, plus the
+  `influxdb`/`prometheus` HTTP probes) honor the **full list + `interface_match`**.
+  The standalone `http` check honors a **single** interface (the first listed). It
+  is **not** honored by checks that dial through a third-party library — the SQL
+  drivers (`mysql`/`postgres`), `mongodb`, `ldap`, `libvirt`, and the
+  `syncthing`/`unifi`/`rspamd`/`ipp` HTTP probes.
 
 ### Check interdependencies (`requires` / `skip_when_changed`)
 
