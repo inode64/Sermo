@@ -32,6 +32,7 @@ which reuse the same schema). MVP types:
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
+| `ftp`         | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
@@ -266,6 +267,11 @@ name. Supported protocols:
   **optional**: with no credentials it is an **anonymous** check (greeting
   `220` + `EHLO`); with a user/password it performs `AUTH PLAIN`. Probed
   natively (RFC 5321).
+- `ftp` — default port 21; `tls`: `false` | `true` | `skip-verify` (implicit TLS
+  / FTPS — use port 990). `user` is **optional**: with no credentials it is an
+  **anonymous** check (greeting `220`); with a user/password it performs
+  `USER`/`PASS` (a password with no user logs in as `anonymous`). Probed natively
+  (RFC 959).
 - `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's
   Unix socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default
   9000) for a TCP pool. No auth. It performs a FastCGI request to `/ping` and
@@ -305,7 +311,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, postgresql, redis, valkey, imap, pop, smtp, fpm, dns
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, fpm, dns
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
