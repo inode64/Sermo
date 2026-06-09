@@ -823,6 +823,28 @@ func TestBuildNFSCheck(t *testing.T) {
 	}
 }
 
+func TestBuildMountdCheck(t *testing.T) {
+	for _, typ := range []string{"mountd", "rpc.mountd", "nfs-mountd"} {
+		built, warns := Build(map[string]any{
+			"mnt": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "mountd" || cc.cfg.Port != 20048 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+	// An explicit port (mountd often runs on a configured/random port) is kept.
+	built, _ := Build(map[string]any{
+		"mnt": map[string]any{"type": "mountd", "host": "127.0.0.1", "port": 32767},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Port != 32767 {
+		t.Fatalf("port = %d", cc.cfg.Port)
+	}
+}
+
 func TestBuildRpcbindCheck(t *testing.T) {
 	for _, typ := range []string{"rpcbind", "portmap", "portmapper"} {
 		built, warns := Build(map[string]any{
