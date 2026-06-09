@@ -58,6 +58,7 @@ which reuse the same schema). MVP types:
 | `asterisk` / `ami` | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
 | `sieve` / `managesieve` | a ManageSieve server sends its capability greeting ending in `OK` (see Database) |
 | `mqtt`        | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
+| `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -474,6 +475,13 @@ name. Supported protocols:
   verifies a well-formed RPC reply — proof the daemon is up and speaking RPC. Any
   reply (accepted or denied) passes; result data carries the `rpc_status`. Probed
   natively (RFC 5531/1833).
+- `varnish` (alias `varnishadm`) — default port 6082 (TCP, the Varnish `-T`
+  management CLI). No auth. On connect varnishd sends a CLI response (a
+  `<status> <length>` line and a body); status **200** carries the banner (with
+  the version) and **107** is an authentication challenge (a CLI secret is set) —
+  either proves the management CLI is up and speaking the protocol. Result data
+  carries the `cli_status` and, for a banner, the Varnish `version`. The CLI
+  secret authentication is not performed (liveness only). Probed natively.
 - `mqtt` — default port 1883 (TCP); `tls`: `false` | `true` | `skip-verify`
   (MQTTS, port 8883). Performs an MQTT 3.1.1 `CONNECT` handshake and verifies the
   broker answers `CONNACK` accepting the connection (return code 0). With no
@@ -674,7 +682,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
