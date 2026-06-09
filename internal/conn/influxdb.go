@@ -26,6 +26,20 @@ func (influxdbProtocol) DefaultPort() int   { return 8086 }
 func (influxdbProtocol) RequiresUser() bool { return false }
 
 func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	client, base := InfluxClient(cfg)
+
+	// /health (v2 / v1.8+) carries a status and version; when the endpoint is
+	// absent (older v1) the request is not "handled" and we fall back to /ping.
+	if res, handled, err := influxHealth(ctx, client, base); handled {
+		return res, err
+	}
+	return influxPing(ctx, client, base)
+}
+
+// InfluxClient builds an HTTP client and base URL for an InfluxDB server from cfg
+// (host/port/tls — https when tls is set). Exported so the influxdb-query check
+// reuses the same transport and addressing as the connection check.
+func InfluxClient(cfg Config) (*http.Client, string) {
 	host := cfg.Host
 	if host == "" {
 		host = "127.0.0.1"
@@ -46,14 +60,7 @@ func (influxdbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		tr.TLSClientConfig = tc
 		client.Transport = tr
 	}
-	base := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
-
-	// /health (v2 / v1.8+) carries a status and version; when the endpoint is
-	// absent (older v1) the request is not "handled" and we fall back to /ping.
-	if res, handled, err := influxHealth(ctx, client, base); handled {
-		return res, err
-	}
-	return influxPing(ctx, client, base)
+	return client, scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 // influxHealth queries /health. handled is true when the result is conclusive (a
