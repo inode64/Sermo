@@ -54,6 +54,14 @@ type httpCheck struct {
 	expect      statusMatcher
 	expectBody  string
 	expectJSON  []jsonAssertion
+
+	// Certificate inspection (https only). certHost is non-empty when any cert_*
+	// option is configured; certClient is then an InsecureSkipVerify client so
+	// the leaf can be read even when expired or otherwise invalid.
+	certHost   string
+	certClient *http.Client
+	certOpts   certOptions
+	certEval   certEvaluator
 }
 
 // jsonAssertion is one response-JSON check: the value at a dotted path compared to
@@ -67,10 +75,15 @@ type jsonAssertion struct {
 // maxHTTPBody bounds how much of the response is read for body/JSON assertions.
 const maxHTTPBody = 1 << 20
 
-func (c httpCheck) Run(ctx context.Context) Result {
+func (c *httpCheck) Run(ctx context.Context) Result {
 	start := time.Now()
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
+
+	client := c.client
+	if c.certHost != "" {
+		client = c.certClient
+	}
 
 	var body io.Reader
 	if len(c.body) > 0 {
@@ -87,7 +100,7 @@ func (c httpCheck) Run(ctx context.Context) Result {
 		req.Header.Set(k, v)
 	}
 
-	resp, err := c.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.method, c.url, err), start)
 	}
@@ -97,7 +110,7 @@ func (c httpCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("status %d (want %s)", resp.StatusCode, c.expect), start)
 	}
 	if c.expectBody == "" && len(c.expectJSON) == 0 {
-		return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start)
+		return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)
 	}
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
@@ -119,7 +132,31 @@ func (c httpCheck) Run(ctx context.Context) Result {
 			}
 		}
 	}
-	return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start)
+	return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)
+}
+
+// success builds the result for a request whose HTTP assertions all passed,
+// folding in certificate inspection when configured (https only). A certificate
+// problem turns the otherwise-passing check into a failure, keeping the http
+// check's pass/fail semantics (OK==true means healthy).
+func (c *httpCheck) success(resp *http.Response, statusMsg string, start time.Time) Result {
+	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
+		return c.result(true, statusMsg, start)
+	}
+	leaf := resp.TLS.PeerCertificates[0]
+	s := certSampleFromCert(leaf)
+	if c.certOpts.verify {
+		s.VerifyError = verifyCertChain(leaf, resp.TLS.PeerCertificates[1:], c.certHost)
+	}
+	problems, daysLeft, hasExpiry := c.certEval.evaluate(s, c.certOpts, time.Now())
+	ok := len(problems) == 0
+	msg := statusMsg
+	if !ok {
+		msg = c.certHost + ": " + strings.Join(problems, "; ")
+	}
+	res := c.result(ok, msg, start)
+	res.Data = certData(c.certHost, c.certHost, "", s, daysLeft, hasExpiry)
+	return res
 }
 
 // jsonAssert compares a decoded JSON value against want under op. Numeric
