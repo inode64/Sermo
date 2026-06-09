@@ -10,33 +10,45 @@ type WindowState struct {
 	history     []bool // sliding window for `within`
 }
 
-// Fires updates the window with this cycle's condition value and reports whether
-// the rule fires. With neither for nor within, the default is `for 1 cycle`
-// (fire the moment the condition is true).
-func (s *WindowState) Fires(r Rule, conditionTrue bool) bool {
+// withinWindow returns a within-window's cycle count and effective minimum
+// matches (defaulting to 1), and whether a within window is configured. It is the
+// single source of the within defaults shared by Fires/IsFiring/Progress.
+func (r Rule) withinWindow() (cycles, minMatches int, ok bool) {
 	if r.Within != nil && r.Within.Cycles > 0 {
-		s.history = append(s.history, conditionTrue)
-		if len(s.history) > r.Within.Cycles {
-			s.history = s.history[len(s.history)-r.Within.Cycles:]
+		mm := r.Within.MinMatches
+		if mm <= 0 {
+			mm = 1
 		}
-		minMatches := r.Within.MinMatches
-		if minMatches <= 0 {
-			minMatches = 1
+		return r.Within.Cycles, mm, true
+	}
+	return 0, 0, false
+}
+
+// forNeed is the number of consecutive cycles a `for` window requires; with no
+// window the default is 1 (fire the moment the condition is true).
+func (r Rule) forNeed() int {
+	if r.For != nil && r.For.Cycles > 0 {
+		return r.For.Cycles
+	}
+	return 1
+}
+
+// Fires updates the window with this cycle's condition value and reports whether
+// the rule fires. With neither for nor within, the default is `for 1 cycle`.
+func (s *WindowState) Fires(r Rule, conditionTrue bool) bool {
+	if cycles, minMatches, ok := r.withinWindow(); ok {
+		s.history = append(s.history, conditionTrue)
+		if len(s.history) > cycles {
+			s.history = s.history[len(s.history)-cycles:]
 		}
 		return countTrue(s.history) >= minMatches
-	}
-
-	// `for` (consecutive); default is 1 cycle.
-	need := 1
-	if r.For != nil && r.For.Cycles > 0 {
-		need = r.For.Cycles
 	}
 	if conditionTrue {
 		s.consecutive++
 	} else {
 		s.consecutive = 0
 	}
-	return s.consecutive >= need
+	return s.consecutive >= r.forNeed()
 }
 
 // IsFiring reports whether the rule would fire from the current window state
@@ -45,18 +57,10 @@ func (s *WindowState) IsFiring(r Rule) bool {
 	if s == nil {
 		s = &WindowState{}
 	}
-	if r.Within != nil && r.Within.Cycles > 0 {
-		minMatches := r.Within.MinMatches
-		if minMatches <= 0 {
-			minMatches = 1
-		}
+	if _, minMatches, ok := r.withinWindow(); ok {
 		return countTrue(s.history) >= minMatches
 	}
-	need := 1
-	if r.For != nil && r.For.Cycles > 0 {
-		need = r.For.Cycles
-	}
-	return s.consecutive >= need
+	return s.consecutive >= r.forNeed()
 }
 
 // Progress returns an operator-facing window counter such as "2/3" for
@@ -65,18 +69,10 @@ func (s *WindowState) Progress(r Rule) string {
 	if s == nil {
 		s = &WindowState{}
 	}
-	if r.Within != nil && r.Within.Cycles > 0 {
-		minMatches := r.Within.MinMatches
-		if minMatches <= 0 {
-			minMatches = 1
-		}
-		return fmt.Sprintf("%d/%d in %d cycles", countTrue(s.history), minMatches, r.Within.Cycles)
+	if cycles, minMatches, ok := r.withinWindow(); ok {
+		return fmt.Sprintf("%d/%d in %d cycles", countTrue(s.history), minMatches, cycles)
 	}
-	need := 1
-	if r.For != nil && r.For.Cycles > 0 {
-		need = r.For.Cycles
-	}
-	return fmt.Sprintf("%d/%d", s.consecutive, need)
+	return fmt.Sprintf("%d/%d", s.consecutive, r.forNeed())
 }
 
 // Clone returns a deep copy of the window state for config reload.
@@ -93,12 +89,8 @@ func (s *WindowState) Clone() *WindowState {
 
 // WindowDescription summarizes the configured for/within window.
 func WindowDescription(r Rule) string {
-	if r.Within != nil && r.Within.Cycles > 0 {
-		minMatches := r.Within.MinMatches
-		if minMatches <= 0 {
-			minMatches = 1
-		}
-		return fmt.Sprintf("within %d cycles (min %d)", r.Within.Cycles, minMatches)
+	if cycles, minMatches, ok := r.withinWindow(); ok {
+		return fmt.Sprintf("within %d cycles (min %d)", cycles, minMatches)
 	}
 	if r.For != nil && r.For.Cycles > 0 {
 		return fmt.Sprintf("for %d consecutive", r.For.Cycles)
@@ -122,7 +114,7 @@ func parseForWindow(v any) *ForWindow {
 		return nil
 	}
 	cycles, _ := parseInt(m["cycles"])
-	return &ForWindow{Cycles: cycles, Mode: asString(m["mode"])}
+	return &ForWindow{Cycles: cycles}
 }
 
 func parseWithinWindow(v any) *WithinWindow {

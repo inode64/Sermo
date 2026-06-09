@@ -51,10 +51,7 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 		state = &RemediationState{}
 	}
 	allowed, reason := p.Allow(state, now)
-	effective := p.Cooldown
-	if state.CurrentBackoff > effective {
-		effective = state.CurrentBackoff
-	}
+	effective := p.effectiveCooldown(state)
 	var until time.Time
 	if effective > 0 && !state.LastActionAt.IsZero() {
 		until = state.LastActionAt.Add(effective)
@@ -80,6 +77,15 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 		MaxActionsWindow:  p.MaxActionsWindow,
 		RecentActions:     state.countWithin(now, p.MaxActionsWindow),
 	}
+}
+
+// effectiveCooldown is the gate between actions: the configured cooldown, or the
+// grown backoff when it is longer.
+func (p Policy) effectiveCooldown(state *RemediationState) time.Duration {
+	if state.CurrentBackoff > p.Cooldown {
+		return state.CurrentBackoff
+	}
+	return p.Cooldown
 }
 
 func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time {
@@ -124,10 +130,7 @@ func maxTime(a, b time.Time) time.Time {
 //  2. else max_actions reached inside the window -> suppress;
 //  3. else allow.
 func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
-	effective := p.Cooldown
-	if state.CurrentBackoff > effective {
-		effective = state.CurrentBackoff
-	}
+	effective := p.effectiveCooldown(state)
 	if effective > 0 && !state.LastActionAt.IsZero() && now.Sub(state.LastActionAt) < effective {
 		return false, "cooldown"
 	}

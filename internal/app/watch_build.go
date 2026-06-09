@@ -428,7 +428,7 @@ func parseForField(v any) *rules.ForWindow {
 	if !ok {
 		return nil
 	}
-	return &rules.ForWindow{Cycles: intField(m["cycles"]), Mode: stringField(m["mode"])}
+	return &rules.ForWindow{Cycles: intField(m["cycles"])}
 }
 
 func parseWithinField(v any) *rules.WithinWindow {
