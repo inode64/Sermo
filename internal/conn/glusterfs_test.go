@@ -1,0 +1,65 @@
+package conn
+
+import (
+	"context"
+	"encoding/binary"
+	"io"
+	"net"
+	"strconv"
+	"testing"
+)
+
+func TestGlusterFSRegistered(t *testing.T) {
+	for _, name := range []string{"glusterfs", "glusterd", "gluster"} {
+		p, ok := Lookup(name)
+		if !ok {
+			t.Fatalf("%s not registered", name)
+		}
+		if p.DefaultPort() != 24007 {
+			t.Fatalf("%s default port = %d, want 24007", name, p.DefaultPort())
+		}
+		if p.RequiresUser() {
+			t.Fatalf("%s must not require a user", name)
+		}
+	}
+}
+
+func TestGlusterFSProbeAgainstFakeServer(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.Close() }()
+		// Read the record marker + the RPC NULL call, echo an accepted reply.
+		var m [4]byte
+		if _, err := io.ReadFull(c, m[:]); err != nil {
+			return
+		}
+		n := int(binary.BigEndian.Uint32(m[:]) &^ 0x80000000)
+		call := make([]byte, n)
+		if _, err := io.ReadFull(c, call); err != nil {
+			return
+		}
+		xid := binary.BigEndian.Uint32(call[0:4])
+		reply := rpcAcceptedReply(xid, 0)
+		hdr := make([]byte, 4)
+		binary.BigEndian.PutUint32(hdr, uint32(len(reply))|0x80000000)
+		_, _ = c.Write(append(hdr, reply...))
+	}()
+
+	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	res, err := glusterfsProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: port})
+	if err != nil {
+		t.Fatalf("probe: %v", err)
+	}
+	if res.Extra["rpc_status"] != "success" {
+		t.Fatalf("rpc_status = %q", res.Extra["rpc_status"])
+	}
+}
