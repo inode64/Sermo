@@ -53,7 +53,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		_ = c.SetDeadline(dl)
 	}
 
-	if _, err := c.Write(buildRPCNull(xid)); err != nil {
+	if _, err := c.Write(buildRPCNull(xid, portmapProg, portmapVers)); err != nil {
 		return Result{}, err
 	}
 	buf := make([]byte, 1500)
@@ -76,15 +76,16 @@ func rpcXID() uint32 {
 	return binary.BigEndian.Uint32(b[:])
 }
 
-// buildRPCNull builds an ONC RPC CALL for the portmapper NULL procedure with
-// AUTH_NONE credentials and verifier (no procedure arguments).
-func buildRPCNull(xid uint32) []byte {
+// buildRPCNull builds an ONC RPC CALL for the NULL procedure of program prog
+// version vers, with AUTH_NONE credentials and verifier (no procedure
+// arguments). Shared by the rpcbind and nfs probes.
+func buildRPCNull(xid, prog, vers uint32) []byte {
 	b := make([]byte, 40)
 	binary.BigEndian.PutUint32(b[0:], xid)
 	binary.BigEndian.PutUint32(b[4:], rpcCall)
 	binary.BigEndian.PutUint32(b[8:], rpcVers)
-	binary.BigEndian.PutUint32(b[12:], portmapProg)
-	binary.BigEndian.PutUint32(b[16:], portmapVers)
+	binary.BigEndian.PutUint32(b[12:], prog)
+	binary.BigEndian.PutUint32(b[16:], vers)
 	binary.BigEndian.PutUint32(b[20:], rpcProcNull)
 	binary.BigEndian.PutUint32(b[24:], rpcAuthNone) // cred flavor
 	binary.BigEndian.PutUint32(b[28:], 0)           // cred length
