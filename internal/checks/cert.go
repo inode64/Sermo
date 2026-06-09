@@ -179,7 +179,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		msg = src + ": " + strings.Join(problems, "; ")
 	}
 	res := c.result(ok, msg, start)
-	res.Data = certData(c, s, daysLeft, hasExpiry)
+	res.Data = certData(c.source(), c.host, c.path, s, daysLeft, hasExpiry)
 	return res
 }
 
@@ -200,17 +200,17 @@ func certMessage(src string, s CertSample, daysLeft int, hasExpiry bool) string 
 
 // certData assembles the Result data map, including only fields that apply to the
 // material's kind.
-func certData(c *certCheck, s CertSample, daysLeft int, hasExpiry bool) map[string]any {
+func certData(source, host, path string, s CertSample, daysLeft int, hasExpiry bool) map[string]any {
 	data := map[string]any{
 		"kind":        s.Kind,
-		"source":      c.source(),
+		"source":      source,
 		"fingerprint": s.Fingerprint,
 	}
-	if c.host != "" {
-		data["host"] = c.host
+	if host != "" {
+		data["host"] = host
 	}
-	if c.path != "" {
-		data["path"] = c.path
+	if path != "" {
+		data["path"] = path
 	}
 	if s.SignatureAlgorithm != "" {
 		data["signature_algorithm"] = s.SignatureAlgorithm
