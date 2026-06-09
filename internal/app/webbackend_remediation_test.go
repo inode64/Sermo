@@ -40,6 +40,48 @@ func TestWebBackendDetailRemediation(t *testing.T) {
 	}
 }
 
+func TestWebBackendServicesExposeRemediationAndLastEventSummary(t *testing.T) {
+	reg := NewRemediationRegistry()
+	events := NewEventLog(10)
+	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
+
+	policy := rules.Policy{Cooldown: 5 * time.Minute}
+	state := &rules.RemediationState{LastActionAt: t0}
+	reg.Publish("web", policy, state, t0.Add(time.Minute))
+
+	events.now = func() time.Time { return t0.Add(2 * time.Minute) }
+	events.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restart completed"})
+
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {
+				unit:           "nginx.service",
+				backend:        "systemd",
+				policyCooldown: 5 * time.Minute,
+			},
+		},
+		remediation: reg,
+		events:      events,
+	}
+
+	services := b.Services(context.Background())
+	if len(services) != 1 {
+		t.Fatalf("Services length = %d, want 1", len(services))
+	}
+	svc := services[0]
+	if svc.PolicyCooldown != "5m" || svc.RemediationState != "cooldown" {
+		t.Fatalf("service remediation summary = cooldown %q state %q", svc.PolicyCooldown, svc.RemediationState)
+	}
+	wantNext := t0.Add(5 * time.Minute).Format(time.RFC3339)
+	if svc.NextEligibleAt != wantNext {
+		t.Fatalf("NextEligibleAt = %q, want %q", svc.NextEligibleAt, wantNext)
+	}
+	if svc.LastEvent == nil || svc.LastEvent.Action != "restart" || svc.LastEvent.Status != "ok" {
+		t.Fatalf("LastEvent = %+v, want restart/ok", svc.LastEvent)
+	}
+}
+
 func TestWorkerPublishesRemediationWhenPaused(t *testing.T) {
 	reg := NewRemediationRegistry()
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
