@@ -30,6 +30,10 @@ type connCheck struct {
 	// shared operator. All must hold for the check to pass (additive to the
 	// liveness probe). Reuses the expect_json triple shape and compareValue.
 	expect []jsonAssertion
+	// latencyOp/latencyValue optionally compare the probe's response time in ms
+	// (expect_latency), like the http check.
+	latencyOp    string
+	latencyValue string
 }
 
 type connState struct {
@@ -51,6 +55,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 		addr = net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
 	}
 	res, err := probe(ctx, c.cfg)
+	elapsed := time.Since(start)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
 	}
@@ -73,8 +78,18 @@ func (c connCheck) Run(ctx context.Context) Result {
 	if fail := c.evalExpect(res); fail != "" {
 		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
 	}
+	if ok && c.latencyOp != "" {
+		ms := strconv.FormatInt(elapsed.Milliseconds(), 10)
+		pass, lerr := compareValue(ms, c.latencyOp, c.latencyValue)
+		switch {
+		case lerr != nil:
+			ok, msg = false, fmt.Sprintf("%s %s: latency: %v", c.proto.Name(), addr, lerr)
+		case !pass:
+			ok, msg = false, fmt.Sprintf("%s %s: latency %sms not %s %s", c.proto.Name(), addr, ms, c.latencyOp, c.latencyValue)
+		}
+	}
 	r := c.result(ok, msg, start)
-	r.Data = map[string]any{"protocol": c.proto.Name()}
+	r.Data = map[string]any{"protocol": c.proto.Name(), "latency_ms": elapsed.Milliseconds()}
 	if c.cfg.Socket != "" {
 		r.Data["socket"] = c.cfg.Socket
 	} else {
@@ -178,6 +193,11 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		}
 	}
 	c.expect = expect
+	lop, lval, lwarn := parseExpectLatency(entry)
+	if lwarn != "" {
+		return nil, proto.Name() + " check: " + lwarn
+	}
+	c.latencyOp, c.latencyValue = lop, lval
 	if asBool(entry["on_change"]) {
 		c.onChange = true
 		c.state = &connState{}

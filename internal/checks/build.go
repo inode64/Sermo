@@ -218,13 +218,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			}
 			hc.bodyOp, hc.bodyValue = op, scalarString(eb["value"])
 		}
-		if lat, ok := entry["expect_latency"].(map[string]any); ok {
-			op := asString(lat["op"])
-			if !validCompareOp(op) {
-				return nil, "http expect_latency op must be one of ==, !=, >, >=, <, <=, =~"
-			}
-			hc.latencyOp, hc.latencyValue = op, scalarString(lat["value"])
+		lop, lval, lwarn := parseExpectLatency(entry)
+		if lwarn != "" {
+			return nil, "http " + lwarn
 		}
+		hc.latencyOp, hc.latencyValue = lop, lval
 		if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
 			return nil, warn
 		}

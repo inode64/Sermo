@@ -1069,6 +1069,13 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			}
 		}
 	}
+	if v, present := fields["expect_latency"]; present {
+		if m, ok := v.(map[string]any); ok {
+			validateOpValue(prefix, "expect_latency", m, add)
+		} else {
+			add("%s.expect_latency must be an {op, value} mapping", prefix)
+		}
+	}
 }
 
 func validateDocuments(cfg *Config) []Issue {
