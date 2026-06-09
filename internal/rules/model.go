@@ -38,7 +38,6 @@ type Action struct {
 // ForWindow requires the condition to hold for N consecutive cycles (section 15).
 type ForWindow struct {
 	Cycles int
-	Mode   string // only "consecutive" in the MVP
 }
 
 // WithinWindow requires the condition to be true at least MinMatches times in the
