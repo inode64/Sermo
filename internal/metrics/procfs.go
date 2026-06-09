@@ -194,8 +194,40 @@ func (OSReader) LoadAverages() (l1, l5, l15 float64, ok bool) {
 	return l1, l5, l15, true
 }
 
-// NumCPU returns the number of logical CPUs.
-func (OSReader) NumCPU() int { return runtime.NumCPU() }
+// NumCPU returns the number of logical CPUs (hardware threads) on the host. It
+// counts the per-CPU "cpuN" lines in /proc/stat so the count reflects the whole
+// server, not this process's CPU affinity: runtime.NumCPU() honours the affinity
+// mask and would undercount when Sermo is pinned (taskset/cpuset/systemd
+// CPUAffinity/container limits), which would inflate the service CPU%. Falls back
+// to runtime.NumCPU() when /proc/stat is unavailable.
+func (OSReader) NumCPU() int {
+	if n := procStatCPUCount(); n > 0 {
+		return n
+	}
+	return runtime.NumCPU()
+}
+
+// procStatCPUCount counts the per-CPU "cpuN" lines in /proc/stat. Returns 0 when
+// /proc/stat cannot be read.
+func procStatCPUCount() int {
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return 0
+	}
+	return countCPULines(data)
+}
+
+// countCPULines counts the per-CPU "cpuN" lines in /proc/stat content (the
+// aggregate "cpu" line, which has no digit after the prefix, is excluded).
+func countCPULines(data []byte) int {
+	n := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		if len(line) > 3 && strings.HasPrefix(line, "cpu") && line[3] >= '0' && line[3] <= '9' {
+			n++
+		}
+	}
+	return n
+}
 
 // ClockTicks returns the kernel USER_HZ.
 func (OSReader) ClockTicks() float64 { return clockTicks }
