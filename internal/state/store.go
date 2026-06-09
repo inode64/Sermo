@@ -83,7 +83,11 @@ type Store struct {
 // coexist across processes.
 func Open(path string) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		// Owner-only (root): the state DB holds monitoring state, not secrets, but
+		// there is no reason for it to be world-traversable. Matches the
+		// packaging (tmpfiles.d / OpenRC) mode. MkdirAll leaves an existing dir's
+		// mode untouched, so a pre-created 0700 dir is preserved.
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, fmt.Errorf("create state dir %s: %w", dir, err)
 		}
 	}
