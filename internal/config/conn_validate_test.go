@@ -27,6 +27,21 @@ checks:
 `), "user is required")
 }
 
+func TestValidatePostgresSSLModeAccepted(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: db
+service: { name: x }
+checks:
+  conn: { type: postgres, user: monitor, tls: verify-full }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.conn") {
+			t.Fatalf("postgres tls=verify-full must be valid: %v", issues)
+		}
+	}
+}
+
 func TestValidateMySQLCheckBadTLS(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service

@@ -1,0 +1,90 @@
+package conn
+
+import (
+	"context"
+	"database/sql"
+	"net"
+	"net/url"
+	"strconv"
+	"strings"
+
+	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
+)
+
+func init() {
+	Register(postgresProtocol{}, "postgresql")
+}
+
+// postgresProtocol probes a PostgreSQL server.
+type postgresProtocol struct{}
+
+func (postgresProtocol) Name() string     { return "postgres" }
+func (postgresProtocol) DefaultPort() int { return 5432 }
+
+// Probe connects (authenticating with the configured user/password), verifies
+// the server responds with a ping, and reads its version. The caller's context
+// bounds the whole probe.
+func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	db, err := sql.Open("postgres", buildPGDSN(cfg))
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := db.PingContext(ctx); err != nil {
+		return Result{}, err
+	}
+	var version string
+	// Best effort: a successful ping already proves connect + auth.
+	// SHOW server_version gives a clean number (vs the verbose version()).
+	_ = db.QueryRowContext(ctx, "SHOW server_version").Scan(&version)
+	return Result{Version: version}, nil
+}
+
+// buildPGDSN renders a lib/pq connection URL from cfg. A URL (with
+// url.UserPassword) escapes special characters in the password correctly.
+func buildPGDSN(cfg Config) string {
+	host := cfg.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := cfg.Port
+	if port == 0 {
+		port = 5432
+	}
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(cfg.User, cfg.Password),
+		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+		Path:   "/" + cfg.Database,
+	}
+	q := url.Values{}
+	q.Set("sslmode", sslMode(cfg.TLS))
+	for k, v := range cfg.Params {
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// sslMode maps the generic tls field to a PostgreSQL sslmode. Default disable
+// (plaintext). "true"/"skip-verify" encrypt without strict verification
+// (lib/pq "require"); the verify-* / prefer modes pass through.
+func sslMode(tls string) string {
+	switch strings.ToLower(strings.TrimSpace(tls)) {
+	case "", "false", "no", "off", "disable":
+		return "disable"
+	case "true", "yes", "on", "require":
+		return "require"
+	case "skip-verify", "skip_verify", "insecure":
+		return "require"
+	case "prefer":
+		return "prefer"
+	case "verify-ca":
+		return "verify-ca"
+	case "verify-full":
+		return "verify-full"
+	default:
+		return tls // allow a valid sslmode passed through
+	}
+}
