@@ -50,6 +50,10 @@ New optional keys on the `http` check (all default off / empty):
 **Activation:** certificate inspection runs when *any* `cert_*` key is present.
 With none set, the `http` check behaves exactly as today (shared verifying
 client, no certificate inspection, request fails on an invalid certificate).
+Setting only `cert_verify: false` (no expiry/change keys) is a degenerate but
+harmless case: inspection activates and switches to the insecure client, but
+the only assertion — chain/hostname verification — is disabled, so the check
+never reports a certificate problem. This is intentional and covered by a test.
 
 **Protocol awareness:** the scheme is parsed from `url`. If any `cert_*` key is
 set on a non-`https` URL, `buildCheck` returns the warning
@@ -82,7 +86,9 @@ check-construction time. The certificate is then read from
 - `resp.TLS.PeerCertificates[0]` → `certSampleFromCert` (existing) → `CertSample`.
 - Chain/hostname verification reuses the logic extracted from
   `defaultCertSampler`, with `PeerCertificates[1:]` as intermediates and the URL
-  host as the `ServerName`. The result populates `CertSample.VerifyError`.
+  host as the `ServerName`. The result populates `CertSample.VerifyError`. No
+  `server_name` override key is added to the `http` check — the `ServerName`
+  comes solely from the host parsed out of `url`.
 
 The shared client used by non-cert `http` checks is unchanged (verifying,
 default transport), so existing behaviour is preserved.
