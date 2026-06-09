@@ -698,6 +698,28 @@ func TestBuildVarnishCheck(t *testing.T) {
 	}
 }
 
+func TestBuildOpenvswitchCheck(t *testing.T) {
+	for _, typ := range []string{"openvswitch", "ovs", "ovsdb", "ovsdb-server"} {
+		built, warns := Build(map[string]any{
+			"sw": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "openvswitch" || cc.cfg.Port != 6640 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+	// Unix socket form.
+	built, _ := Build(map[string]any{
+		"sw": map[string]any{"type": "ovs", "socket": "/run/openvswitch/db.sock"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/openvswitch/db.sock" {
+		t.Fatalf("socket = %q", cc.cfg.Socket)
+	}
+}
+
 func TestBuildMQTTCheck(t *testing.T) {
 	built, warns := Build(map[string]any{
 		"broker": map[string]any{"type": "mqtt", "host": "127.0.0.1"},
