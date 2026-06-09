@@ -1020,15 +1020,20 @@ async function loadExpansionFor(key) {
 
 function renderExpansion(d, metrics) {
   const procs = d.processes || [];
-  const mem = procs.reduce((a, p) => a + (p.rss || 0), 0);
-  const rd = procs.reduce((a, p) => a + (p.io_read || 0), 0);
-  const wr = procs.reduce((a, p) => a + (p.io_write || 0), 0);
-  const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(mem)}</b> · IO read <b>${fmtBytes(rd)}</b> · IO write <b>${fmtBytes(wr)}</b> · ${procs.length} process${procs.length === 1 ? '' : 'es'}</div>`;
+  const pt = d.process_totals || {
+    rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
+    io_read: procs.reduce((a, p) => a + (p.io_read || 0), 0),
+    io_write: procs.reduce((a, p) => a + (p.io_write || 0), 0),
+    fds: procs.reduce((a, p) => a + (p.fds || 0), 0),
+    threads: procs.reduce((a, p) => a + (p.threads || 0), 0),
+    count: procs.length,
+  };
+  const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b> · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`;
   const lat = renderLatency(metrics);
   const sla = renderSLA(d.sla);
   const procTable = procs.length
     ? `<table style="width:auto; font-size:.85rem;">
-        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>Mem</th><th>IO r/w</th></tr></thead>
+        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
         <tbody>${procs.map((p) => `<tr>
           <td>${p.pid}</td>
           <td class="muted">${p.ppid}</td>
@@ -1037,6 +1042,8 @@ function renderExpansion(d, metrics) {
           <td class="muted">${esc(p.role || "")}</td>
           <td>${p.rss ? fmtBytes(p.rss) : '—'}</td>
           <td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td>
+          <td class="muted">${p.fds || '—'}</td>
+          <td class="muted">${p.threads || '—'}</td>
         </tr>`).join("")}</tbody></table>`
     : '<div class="muted">No processes found.</div>';
   return totals + lat + sla + procTable;
@@ -1627,6 +1634,10 @@ function renderDetail(d) {
     ...unresolvedProcs.map((p) => `<div class="inactive" style="margin-top:.25rem">pid ${p.pid}: exe is unresolved, so it cannot satisfy safe process matching</div>`),
   ].join("");
   const procSummary = `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}${unresolvedProcs.length ? ` · ${unresolvedProcs.length} unresolved exe` : ""}</p>`;
+  const pt = d.process_totals;
+  const procTotals = pt
+    ? `<p class="muted" style="margin:-.1rem 0 .35rem">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b> · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
+    : "";
   const procExe = (p) => {
     if (p.exe_resolved && p.exe) return esc(p.exe);
     if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
@@ -1638,8 +1649,9 @@ function renderDetail(d) {
     const user = p.user ? esc(p.user) : '<span class="muted">unknown</span>';
     const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
     return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
-      <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td></tr>`;
-  }).join("") || `<tr><td colspan="7" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
+      <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
+      <td>${p.rss ? fmtBytes(p.rss) : '—'}</td><td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
 
   const wins = winButtons([["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
@@ -1693,8 +1705,8 @@ function renderDetail(d) {
     <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
       <tbody>${lockRows}</tbody></table>${lockWarns}
     <h2>Processes</h2>
-    ${procSummary}${procWarns}
-    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th></tr></thead>
+    ${procSummary}${procTotals}${procWarns}
+    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
       <tbody>${procRows}</tbody></table>
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
