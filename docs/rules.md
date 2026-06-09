@@ -63,6 +63,7 @@ which reuse the same schema). MVP types:
 | `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
 | `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
 | `glusterfs` / `glusterd` / `gluster` | a GlusterFS node's glusterd answers an RPC NULL on 24007 (see Database) |
+| `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -510,6 +511,15 @@ name. Supported protocols:
   either proves the management CLI is up and speaking the protocol. Result data
   carries the `cli_status` and, for a banner, the Varnish `version`. The CLI
   secret authentication is not performed (liveness only). Probed natively.
+- `openvswitch` (aliases `ovs`, `ovsdb`, `ovsdb-server`) — default port 6640
+  (TCP, the Open vSwitch configuration database server `ovsdb-server`), or a Unix
+  socket via `socket` (commonly `/run/openvswitch/db.sock`); `tls`: `false` |
+  `true` | `skip-verify` (SSL). No auth. Issues an OVSDB (RFC 7047) `list_dbs`
+  JSON-RPC request and verifies a result listing the served databases — proof
+  ovsdb-server is up and speaking OVSDB; result data carries the `databases`
+  list. When the `Open_vSwitch` database is present it follows up with a
+  `transact` select reading `ovs_version`, reported as the `version`. Probed
+  natively.
 - `mqtt` — default port 1883 (TCP); `tls`: `false` | `true` | `skip-verify`
   (MQTTS, port 8883). Performs an MQTT 3.1.1 `CONNECT` handshake and verifies the
   broker answers `CONNACK` accepting the connection (return code 0). With no
@@ -734,7 +744,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
