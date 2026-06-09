@@ -164,7 +164,8 @@ It alerts when the certificate is **expired or not yet valid**, **expires within
 `expires_in_days`**, fails chain/hostname **verification** (`verify`, on by
 default — catches self-signed, wrong host, expired chains), or — between cycles —
 its **signature algorithm**, **issuer** or **fingerprint** changes. Result data
-exposes `days_left`, `not_after`, `issuer`, `signature_algorithm`,
+exposes `days_left`, `not_before`, `not_after`, `issuer`, `subject`,
+`serial_number` (hex), `dns_names` (SANs), `signature_algorithm`,
 `public_key_algorithm` and `fingerprint`. A network/TLS error fetching the cert is
 **not** an alert (use a `tcp`/`http` check for reachability).
 
