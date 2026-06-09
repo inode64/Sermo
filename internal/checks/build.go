@@ -356,6 +356,25 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}
 		return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
 
+	case "autofs":
+		path := asString(entry["path"])
+		op, value := "", 0.0
+		if m, ok := entry["count"].(map[string]any); ok {
+			op = asString(m["op"])
+			if !validDiskOp(op) {
+				return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
+			}
+			v, err := strconv.ParseFloat(scalarString(m["value"]), 64)
+			if err != nil {
+				return nil, "autofs check count value must be numeric"
+			}
+			value = v
+		}
+		if path != "" && op != "" {
+			return nil, "autofs check: path and count are mutually exclusive"
+		}
+		return autofsCheck{base: b, path: path, op: op, value: value, sampler: deps.MountSampler}, ""
+
 	case "net":
 		iface := asString(entry["interface"])
 		if iface == "" {
