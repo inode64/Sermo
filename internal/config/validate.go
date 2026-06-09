@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
+
 	"sermo/internal/conn"
 )
 
@@ -1223,7 +1225,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "size")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1359,7 +1361,29 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			}
 		case "sql":
 			validateSQLFields(path, entry, add)
+		case "size":
+			validateSizeFields(path, entry, add)
 		}
+	}
+}
+
+// validateSizeFields validates a size (growth) check: a required path, a
+// positive parseable grow_by byte size and a positive within duration.
+func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["path"]) == "" {
+		add("%s.path is required for a size check", prefix)
+	}
+	gb := scalarString(fields["grow_by"])
+	if gb == "" {
+		add("%s.grow_by is required for a size check (e.g. 1GB)", prefix)
+	} else if n, err := humanize.ParseBytes(gb); err != nil || n == 0 {
+		add("%s.grow_by %q must be a positive size (e.g. 1GB, 500MB)", prefix, gb)
+	}
+	w := scalarString(fields["within"])
+	if w == "" {
+		add("%s.within is required for a size check (e.g. 1h)", prefix)
+	} else if !isPositiveDuration(w) {
+		add("%s.within %q must be a valid positive duration", prefix, w)
 	}
 }
 
