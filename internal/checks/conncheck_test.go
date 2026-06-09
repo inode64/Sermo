@@ -215,6 +215,33 @@ func TestBuildPOPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildNNTPCheck(t *testing.T) {
+	// Anonymous (no user), default port 119; alias nntps resolves.
+	for _, typ := range []string{"nntp", "nntps"} {
+		built, warns := Build(map[string]any{
+			"news": map[string]any{"type": typ, "host": "news.example"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s anonymous should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "nntp" || cc.cfg.Port != 119 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+
+	// NNTPS with credentials on 563.
+	built, warns := Build(map[string]any{
+		"news": map[string]any{"type": "nntp", "port": 563, "tls": true, "user": "joe", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("nntps with creds should build: warns=%v", warns)
+	}
+	if cc := built[0].Check.(connCheck); cc.cfg.Port != 563 || cc.cfg.TLS != "true" || cc.cfg.User != "joe" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildSMTPCheck(t *testing.T) {
 	// Anonymous (no user), default port 25.
 	built, warns := Build(map[string]any{
