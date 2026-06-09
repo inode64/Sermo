@@ -53,6 +53,7 @@ which reuse the same schema). MVP types:
 | `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
 | `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
+| `lvmpolld`    | LVM's poll daemon answers a `hello` request with `OK` over its socket (see Database) |
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
 | `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
 | `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
@@ -571,6 +572,15 @@ name. Supported protocols:
   successful connection proves acpid is listening (a stale socket left by a dead
   daemon refuses the connection). It reads nothing — reading would block until an
   ACPI event — and there is no version. No auth. Probed natively.
+- `lvmpolld` — LVM's poll daemon. **Socket-only** (no TCP port); defaults to
+  `/run/lvm/lvmpolld.socket`, override with `socket`. Unlike acpid/fail2ban it is
+  probed by protocol: it speaks LVM's generic daemon framework, so the check
+  sends a `hello` request and verifies the daemon replies `OK` — proof lvmpolld is
+  up and speaking its protocol (a stale socket left by a dead daemon refuses the
+  connection). It also guards against pointing at a different LVM daemon
+  (lvmetad, dmeventd) by checking the reported protocol name. Result data carries
+  the `protocol` and `protocol_version`; the handshake exposes no lvm2 software
+  version. No auth. Probed natively.
 - `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is
   **optional**. It first runs an SMB2 `NEGOTIATE` (proving the server is up) and
   reports the negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/
@@ -744,7 +754,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
