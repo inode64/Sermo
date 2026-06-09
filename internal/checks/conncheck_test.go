@@ -867,6 +867,37 @@ func TestBuildStatdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildOpenVPNCheck(t *testing.T) {
+	for _, typ := range []string{"openvpn", "ovpn"} {
+		built, warns := Build(map[string]any{
+			"vpn": map[string]any{"type": typ, "host": "10.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "openvpn" || cc.cfg.Port != 1194 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+		if cc.cfg.Params["transport"] != "" {
+			t.Fatalf("default transport should be unset (udp), got %q", cc.cfg.Params["transport"])
+		}
+	}
+	// transport: tcp is carried through params.
+	built, _ := Build(map[string]any{
+		"vpn": map[string]any{"type": "openvpn", "host": "10.0.0.1", "transport": "TCP"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Params["transport"] != "tcp" {
+		t.Fatalf("transport = %q", cc.cfg.Params["transport"])
+	}
+	// An invalid transport is rejected.
+	if _, warns := Build(map[string]any{
+		"vpn": map[string]any{"type": "openvpn", "host": "10.0.0.1", "transport": "sctp"},
+	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+		t.Fatal("an invalid transport must warn")
+	}
+}
+
 func TestBuildNebulaCheck(t *testing.T) {
 	for _, typ := range []string{"nebula", "nebula-vpn"} {
 		built, warns := Build(map[string]any{
