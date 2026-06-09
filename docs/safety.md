@@ -34,7 +34,11 @@ through the same engine (section 18):
 6. If residuals remain and `force_kill` is false → `orphan_processes` (do **not**
    start). If true, SIGTERM then SIGKILL only the processes that exactly match
    `kill_only_if`, rediscovering between steps.
-7. Start, verify status, run required postflight.
+7. After a clean stop (no residuals), reconcile the init's recorded state with
+   reality — `systemctl reset-failed` (systemd) or `rc-service … zap` (OpenRC) —
+   so a lingering failed/stuck marker can't disagree with the actual processes.
+   Best effort: it never fails a stop that already succeeded.
+8. Start, verify status, run required postflight.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
