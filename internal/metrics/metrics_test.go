@@ -39,6 +39,7 @@ func TestCompareFormMismatchErrors(t *testing.T) {
 type fakeReader struct {
 	cpu     map[int]uint64
 	rss     map[int]uint64
+	swap    map[int]uint64
 	ioRead  map[int]uint64
 	ioWrite map[int]uint64
 	fds     map[int]uint64
@@ -50,8 +51,9 @@ type fakeReader struct {
 	sysBusy, sysTotal uint64
 }
 
-func (r fakeReader) ProcessCPU(pid int) (uint64, bool) { v, ok := r.cpu[pid]; return v, ok }
-func (r fakeReader) ProcessRSS(pid int) (uint64, bool) { v, ok := r.rss[pid]; return v, ok }
+func (r fakeReader) ProcessCPU(pid int) (uint64, bool)  { v, ok := r.cpu[pid]; return v, ok }
+func (r fakeReader) ProcessRSS(pid int) (uint64, bool)  { v, ok := r.rss[pid]; return v, ok }
+func (r fakeReader) ProcessSwap(pid int) (uint64, bool) { v, ok := r.swap[pid]; return v, ok }
 func (r fakeReader) ProcessIO(pid int) (uint64, uint64, bool) {
 	rd, ok := r.ioRead[pid]
 	wr, ok2 := r.ioWrite[pid]
@@ -66,6 +68,23 @@ func (r fakeReader) SystemCPU() (uint64, uint64, bool)               { return r.
 func (r fakeReader) LoadAverages() (float64, float64, float64, bool) { return 1.5, 0.7, 0.3, true }
 func (r fakeReader) NumCPU() int                                     { return r.ncpu }
 func (r fakeReader) ClockTicks() float64                             { return r.hz }
+
+// readerNoSwap implements the core Reader interface but NOT the optional
+// ProcessSwap, so the swap metric must not appear for it.
+type readerNoSwap struct{}
+
+func (readerNoSwap) ProcessCPU(int) (uint64, bool)        { return 0, false }
+func (readerNoSwap) ProcessRSS(int) (uint64, bool)        { return 0, false }
+func (readerNoSwap) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
+func (readerNoSwap) ProcessFDs(int) (uint64, bool)        { return 0, false }
+func (readerNoSwap) ProcessThreads(int) (uint64, bool)    { return 0, false }
+func (readerNoSwap) TotalMemory() (uint64, uint64, bool)  { return 0, 0, false }
+func (readerNoSwap) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
+func (readerNoSwap) LoadAverages() (float64, float64, float64, bool) {
+	return 0, 0, 0, false
+}
+func (readerNoSwap) NumCPU() int         { return 1 }
+func (readerNoSwap) ClockTicks() float64 { return 100 }
 
 func TestServiceIOFDsThreadsAggregateOverTree(t *testing.T) {
 	clock := time.Unix(0, 0)
@@ -137,6 +156,39 @@ func TestServiceMemoryAndCount(t *testing.T) {
 	// First cycle: cpu rate not ready.
 	if snap["cpu"].Ready {
 		t.Errorf("cpu must not be ready on the first cycle")
+	}
+}
+
+func TestServiceSwapAggregatesOverTree(t *testing.T) {
+	// Per-service swap must sum the parent and all children (like RSS), and report
+	// its share of total swap. swapReader supplies the optional TotalSwap.
+	reader := swapReader{
+		fakeReader: fakeReader{
+			swap: map[int]uint64{10: 100, 11: 200, 12: 50}, // parent + two children
+			hz:   100, ncpu: 1,
+		},
+		swapTotal: 1000, swapOK: true,
+	}
+	c := New(reader)
+	snap := c.SampleService("svc", []int{10, 11, 12})
+
+	sw, ok := snap["swap"]
+	if !ok {
+		t.Fatal("a reader with ProcessSwap must produce a swap metric")
+	}
+	if sw.Absolute != 350 {
+		t.Fatalf("swap absolute = %v, want 350 (sum across the tree)", sw.Absolute)
+	}
+	if !sw.HasPercent || sw.Percent != 35 {
+		t.Fatalf("swap percent = %v (has=%v), want 35%% of total swap", sw.Percent, sw.HasPercent)
+	}
+}
+
+func TestServiceSwapAbsentWithoutReaderSupport(t *testing.T) {
+	// readerNoSwap omits ProcessSwap; the swap metric is then simply not produced.
+	c := New(readerNoSwap{})
+	if _, ok := c.SampleService("svc", []int{10})["swap"]; ok {
+		t.Fatal("swap metric must be absent when the reader has no ProcessSwap")
 	}
 }
 
