@@ -456,3 +456,55 @@ func atoi(t *testing.T, s string) int {
 	}
 	return n
 }
+
+func TestParseProxyURL(t *testing.T) {
+	if u, w := parseProxyURL(map[string]any{}); u != nil || w != "" {
+		t.Fatalf("no proxy = nil/empty, got %v/%q", u, w)
+	}
+	u, w := parseProxyURL(map[string]any{"proxy": "http://squid:3128"})
+	if w != "" || u == nil || u.Host != "squid:3128" {
+		t.Fatalf("valid proxy: %v / %q", u, w)
+	}
+	if _, w := parseProxyURL(map[string]any{"proxy": "ftp://x:1"}); w == "" {
+		t.Fatal("a non-http/socks scheme must warn")
+	}
+	if _, w := parseProxyURL(map[string]any{"proxy": "://nope"}); w == "" {
+		t.Fatal("a malformed proxy url must warn")
+	}
+}
+
+func TestHTTPCheckThroughProxy(t *testing.T) {
+	// A fake forward proxy that answers 200 to any proxied request.
+	var gotProxied bool
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// A forward-proxy request carries an absolute URI in the request line.
+		if r.URL.IsAbs() {
+			gotProxied = true
+		}
+		w.WriteHeader(200)
+	}))
+	defer proxy.Close()
+
+	built, warns := Build(map[string]any{
+		"web": map[string]any{"type": "http", "url": "http://example.invalid/health", "proxy": proxy.URL, "expect_status": 200},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("proxied http check should build: warns=%v", warns)
+	}
+	res := built[0].Check.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("request through the proxy should pass: %q", res.Message)
+	}
+	if !gotProxied {
+		t.Fatal("the request did not go through the proxy")
+	}
+}
+
+func TestBuildHTTPProxyBadURL(t *testing.T) {
+	_, warns := Build(map[string]any{
+		"web": map[string]any{"type": "http", "url": "http://x/", "proxy": "ftp://bad:1"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) == 0 {
+		t.Fatal("a bad proxy scheme must warn")
+	}
+}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -585,6 +586,18 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 	if v, present := fields["method"]; present {
 		if _, ok := v.(string); !ok {
 			add("%s.method must be a string", prefix)
+		}
+	}
+	if p := scalarString(fields["proxy"]); p != "" {
+		u, err := url.Parse(p)
+		if err != nil || u.Host == "" {
+			add("%s.proxy %q is not a valid URL", prefix, p)
+		} else {
+			switch u.Scheme {
+			case "http", "https", "socks5", "socks5h":
+			default:
+				add("%s.proxy scheme must be http, https or socks5", prefix)
+			}
 		}
 	}
 	if v, present := fields["body"]; present {
