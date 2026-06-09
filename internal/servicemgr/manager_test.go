@@ -147,6 +147,24 @@ func TestOpenRCManagerActionUsesRunner(t *testing.T) {
 	}
 }
 
+func TestResetStateReconcilesInitState(t *testing.T) {
+	sysRec := &recordRunner{}
+	if err := (systemdManager{runner: sysRec}).ResetState(context.Background(), "nginx"); err != nil {
+		t.Fatalf("systemd ResetState() error = %v", err)
+	}
+	if len(sysRec.calls) != 1 || sysRec.calls[0] != "systemctl reset-failed nginx.service" {
+		t.Fatalf("systemd calls = %v, want [systemctl reset-failed nginx.service]", sysRec.calls)
+	}
+
+	rcRec := &recordRunner{}
+	if err := (openrcManager{runner: rcRec}).ResetState(context.Background(), "nginx"); err != nil {
+		t.Fatalf("openrc ResetState() error = %v", err)
+	}
+	if len(rcRec.calls) != 1 || rcRec.calls[0] != "rc-service nginx zap" {
+		t.Fatalf("openrc calls = %v, want [rc-service nginx zap]", rcRec.calls)
+	}
+}
+
 func TestNewManagerUnsupportedBackend(t *testing.T) {
 	if _, err := newManager(BackendAuto, stubRunner{}); err == nil {
 		t.Fatal("newManager(auto) error = nil, want unsupported error")
