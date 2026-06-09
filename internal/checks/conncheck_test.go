@@ -608,6 +608,21 @@ func TestBuildClamdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildNFSCheck(t *testing.T) {
+	for _, typ := range []string{"nfs", "nfs-server", "nfsd"} {
+		built, warns := Build(map[string]any{
+			"share": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "nfs" || cc.cfg.Port != 2049 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildRpcbindCheck(t *testing.T) {
 	for _, typ := range []string{"rpcbind", "portmap", "portmapper"} {
 		built, warns := Build(map[string]any{

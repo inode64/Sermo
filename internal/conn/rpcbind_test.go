@@ -24,7 +24,7 @@ func TestRpcbindRegistered(t *testing.T) {
 }
 
 func TestBuildRPCNull(t *testing.T) {
-	b := buildRPCNull(0x12345678)
+	b := buildRPCNull(0x12345678, portmapProg, portmapVers)
 	if len(b) != 40 {
 		t.Fatalf("len = %d, want 40", len(b))
 	}
@@ -58,7 +58,7 @@ func TestParseRPCReply(t *testing.T) {
 		t.Fatal("xid mismatch must error")
 	}
 	// A CALL (not a REPLY) must be rejected.
-	call := buildRPCNull(7)
+	call := buildRPCNull(7, portmapProg, portmapVers)
 	if _, err := parseRPCReply(call, 7); err == nil {
 		t.Fatal("a non-reply message must error")
 	}
