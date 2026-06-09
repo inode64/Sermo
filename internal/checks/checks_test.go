@@ -2,10 +2,12 @@ package checks
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,6 +68,76 @@ func TestHTTPCheck(t *testing.T) {
 	classBad := httpCheck{base: base{name: "h", timeout: time.Second}, client: srv.Client(), url: srv.URL + "/down", method: "GET", expect: statusMatcher{classes: []int{2}}}
 	if res := classBad.Run(context.Background()); res.OK {
 		t.Errorf("2xx class should reject 503")
+	}
+}
+
+func hostOf(t *testing.T, raw string) string {
+	t.Helper()
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return u.Hostname()
+}
+
+func TestHTTPCheckCertExpiry(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
+	// Threshold far in the future → the server's short-lived cert "expires soon".
+	c := &httpCheck{
+		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
+		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
+		certHost: hostOf(t, srv.URL), certOpts: certOptions{expiresInDays: 1000000},
+	}
+	res := c.Run(context.Background())
+	if res.OK {
+		t.Fatalf("a cert inside the expiry threshold must fail the http check: %q", res.Message)
+	}
+	if res.Data["fingerprint"] == nil {
+		t.Fatalf("cert data must be exposed: %v", res.Data)
+	}
+}
+
+func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
+	c := &httpCheck{
+		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
+		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
+		certHost: hostOf(t, srv.URL), certOpts: certOptions{verify: false},
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("a reachable cert with no failing assertion must pass: %q", res.Message)
+	}
+	if _, ok := res.Data["not_after"].(string); !ok {
+		t.Fatalf("cert data must carry not_after: %v", res.Data)
+	}
+}
+
+func TestHTTPCheckCertVerifyFails(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
+	c := &httpCheck{
+		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
+		url: srv.URL, method: "GET", expect: statusMatcher{codes: []int{200}},
+		certHost: hostOf(t, srv.URL), certOpts: certOptions{verify: true},
+	}
+	if c.Run(context.Background()).OK {
+		t.Fatal("verify=true against a self-signed test server must fail")
 	}
 }
 
