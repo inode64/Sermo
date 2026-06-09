@@ -49,6 +49,7 @@ which reuse the same schema). MVP types:
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC (opens a connection and reports its version) (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
+| `unifi` / `unifi-controller` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
 | `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
@@ -447,6 +448,16 @@ name. Supported protocols:
       # tls: skip-verify            # if the GUI is on HTTPS
       # password: "${env:ST_KEY}"   # optional API key -> also reports version
   ```
+- `unifi` (aliases `unifi-controller`, `unifi-network`) — a UniFi Network
+  controller (Ubiquiti). Default port 8443. The controller is **HTTPS-only** and
+  ships a self-signed certificate, so `tls` here selects only verification:
+  certificate verification is **skipped by default**; set `tls: true` to require a
+  valid certificate. No user. Sends `GET /status` (the unauthenticated liveness
+  endpoint) and expects `200` with JSON `meta.rc == "ok"`, reporting the
+  controller's `server_version` (pair with `on_version_change`) and `uuid`. Probed
+  natively (HTTP/REST). Note: this targets the self-hosted UniFi Network
+  application; on a UniFi OS console (UDM/Cloud Key) the controller is proxied
+  under `/proxy/network/`, which this check does not follow.
 - `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
   a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
   connector. Probed natively (AJP13).
@@ -807,7 +818,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
