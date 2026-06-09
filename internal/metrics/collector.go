@@ -35,6 +35,13 @@ type cpuSample struct {
 	at    time.Time
 }
 
+// procCPUSample remembers each process's CPU jiffies at a time, so the per-process
+// (single-thread) CPU rate can be computed for the busiest process in the tree.
+type procCPUSample struct {
+	ticks map[int]uint64
+	at    time.Time
+}
+
 type ioSample struct {
 	read  uint64
 	write uint64
@@ -55,30 +62,34 @@ type Collector struct {
 	Now             func() time.Time
 	SystemFreshness time.Duration
 
-	mu            sync.Mutex
-	prevService   map[string]cpuSample
-	prevServiceIO map[string]ioSample
-	prevSystem    *sysSample
-	lastSystem    Snapshot
-	lastSystemA   time.Time
+	mu               sync.Mutex
+	prevService      map[string]cpuSample
+	prevServiceProcs map[string]procCPUSample
+	prevServiceIO    map[string]ioSample
+	prevSystem       *sysSample
+	lastSystem       Snapshot
+	lastSystemA      time.Time
 }
 
 // New returns a Collector over reader.
 func New(reader Reader) *Collector {
 	return &Collector{
-		Reader:          reader,
-		Now:             time.Now,
-		SystemFreshness: 2 * time.Second,
-		prevService:     map[string]cpuSample{},
-		prevServiceIO:   map[string]ioSample{},
+		Reader:           reader,
+		Now:              time.Now,
+		SystemFreshness:  2 * time.Second,
+		prevService:      map[string]cpuSample{},
+		prevServiceProcs: map[string]procCPUSample{},
+		prevServiceIO:    map[string]ioSample{},
 	}
 }
 
 // SampleService computes the service-scope metrics over its discovered process
 // set — which includes the matched processes AND their descendants, so every
 // metric below sums across the whole tree (parent + children): memory (RSS sum,
-// bytes and % of RAM), cpu (rate %), process_count, io/io_read/io_write (rate,
-// bytes/s), fds and threads.
+// bytes and % of RAM), swap, cpu (whole-machine rate %), process_count,
+// io/io_read/io_write (rate, bytes/s), fds and threads. cpu_thread is the one
+// exception — it is the busiest single process's rate against one CPU thread, not
+// a sum.
 func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -93,12 +104,14 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	})
 
 	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
+	curTicks := make(map[int]uint64, len(pids)) // per-process CPU jiffies this cycle
 	for _, pid := range pids {
 		if v, ok := c.Reader.ProcessRSS(pid); ok {
 			rss += v
 		}
 		if v, ok := c.Reader.ProcessCPU(pid); ok {
 			ticks += v
+			curTicks[pid] = v
 		}
 		if hasSwap {
 			if v, ok := swapReader.ProcessSwap(pid); ok {
@@ -146,6 +159,14 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	}
 	c.prevService[service] = cur
 	snap["cpu"] = cpu
+
+	// cpu_thread: the highest single-process CPU rate in the tree, normalized to a
+	// single CPU thread (100% = one process saturating one core). Unlike `cpu`
+	// (whole-machine), this catches a single-threaded process pegging its one
+	// thread, which the machine-wide percentage would dilute across all cores.
+	curProcs := procCPUSample{ticks: curTicks, at: now}
+	snap["cpu_thread"] = maxProcCPURate(c.prevServiceProcs[service], curProcs, c.Reader.ClockTicks())
+	c.prevServiceProcs[service] = curProcs
 
 	curIO := ioSample{read: ioRead, write: ioWrite, at: now}
 	if prev, ok := c.prevServiceIO[service]; ok {
@@ -252,8 +273,36 @@ func readerTotalSwap(r Reader) (total, used uint64, ok bool) {
 func (c *Collector) Reset(service string) {
 	c.mu.Lock()
 	delete(c.prevService, service)
+	delete(c.prevServiceProcs, service)
 	delete(c.prevServiceIO, service)
 	c.mu.Unlock()
+}
+
+// maxProcCPURate computes the highest single-process CPU rate between two
+// per-process samples, as a percentage of ONE CPU thread (100% = a process using
+// a full core; a multi-threaded process may exceed 100%). Only PIDs present in
+// both samples contribute (a process needs a baseline), and a lower current tick
+// count (PID reuse / restart) is skipped. Not ready until there is a previous
+// sample.
+func maxProcCPURate(prev, cur procCPUSample, hz float64) Reading {
+	if prev.ticks == nil || prev.at.IsZero() {
+		return Reading{HasPercent: true}
+	}
+	wall := cur.at.Sub(prev.at).Seconds()
+	if wall <= 0 || hz <= 0 {
+		return Reading{HasPercent: true, Ready: false}
+	}
+	maxPct := 0.0
+	for pid, curT := range cur.ticks {
+		prevT, ok := prev.ticks[pid]
+		if !ok || curT < prevT {
+			continue
+		}
+		if pct := float64(curT-prevT) / hz / wall * 100; pct > maxPct {
+			maxPct = pct
+		}
+	}
+	return Reading{Percent: maxPct, HasPercent: true, Ready: true}
 }
 
 // cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100 (section 12).
