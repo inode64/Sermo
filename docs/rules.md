@@ -140,6 +140,38 @@ equality check (compared as a string); a `{op, value}` mapping uses an operator 
 `>`, `>=`, `<`, `<=` (numeric), `==`, `!=` or `contains` (string) — handy for
 asserting a JSON health endpoint's fields without parsing.
 
+On an `https://` URL the same check can also inspect the **server certificate**
+presented on the request connection, so one check covers reachability *and* TLS
+health. Add any of these optional keys (they reuse the `cert` check's logic):
+
+```yaml
+checks:
+  api:
+    type: http
+    url: "https://api.example.com/v1/health"
+    expect_status: 200
+    cert_expires_in_days: 14         # warn this many days before expiry
+    cert_verify: true                # verify chain + hostname (default true here)
+    cert_on_change: false            # alert on any rotation (leaf fingerprint)
+    cert_on_issuer_change: false     # alert when the issuer changes
+    cert_on_algorithm_change: false  # alert when the signature algorithm changes
+```
+
+Certificate inspection activates when **any** `cert_*` key is present, and
+requires an `https` URL — setting one on an `http://` URL is a configuration
+error. A certificate problem (expired/not-yet-valid, inside the
+`cert_expires_in_days` window, failing verification, or a change between cycles)
+**fails** the `http` check, keeping its health-style semantics (`OK == true`
+means healthy) — the opposite of the standalone `cert` check. When inspection
+runs, the result data carries the same certificate fields the `cert` check
+exposes (`issuer`, `subject`, `dns_names`, `not_after`, `days_left`,
+`fingerprint`, …). To read the certificate even when it is expired or otherwise
+invalid, the request skips transport-level verification and verifies the chain
+manually; `cert_verify: false` disables that verification. The change conditions
+are **stateful** (they remember the previous cycle), so they only apply when the
+check is built once — as a host watch. For raw TLS endpoints or local
+certificate files, use the standalone [`cert`](#cert) check.
+
 ### Cert
 
 A `cert` check inspects TLS material — either a **live TLS endpoint** (`host`) or
