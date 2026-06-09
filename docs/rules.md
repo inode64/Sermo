@@ -142,15 +142,16 @@ asserting a JSON health endpoint's fields without parsing.
 
 ### Cert
 
-A `cert` check connects to a TLS endpoint, reads its leaf certificate and alerts
-(`OK == true`) on any configured problem. It is condition-style, so as a watch the
-hook/notify fires on a problem and in rules `active: {check: api-cert}` is true.
+A `cert` check inspects TLS material — either a **live TLS endpoint** (`host`) or
+a **local file** (`path`) — and alerts (`OK == true`) on any configured problem. It
+is condition-style, so as a watch the hook/notify fires on a problem and in rules
+`active: {check: api-cert}` is true.
 
 ```yaml
 checks:
-  api-cert:
+  api-cert:                    # live endpoint
     type: cert
-    host: api.example.com      # required
+    host: api.example.com      # host XOR path (exactly one required)
     port: 443                  # optional, default 443
     server_name: api.example.com   # optional SNI + hostname to verify (default = host)
     expires_in_days: 14        # optional: warn this many days before expiry
@@ -158,16 +159,34 @@ checks:
     on_algorithm_change: true  # optional: alert when the signature algorithm changes
     on_issuer_change: true     # optional: alert when the issuer (CA) changes / re-issue
     on_change: false           # optional: alert on any certificate rotation (fingerprint)
+
+  tls-keypair:                 # local file
+    type: cert
+    path: /etc/ssl/private/api.key   # host XOR path
+    on_change: true            # optional: alert if the file's fingerprint changes
 ```
 
-It alerts when the certificate is **expired or not yet valid**, **expires within
-`expires_in_days`**, fails chain/hostname **verification** (`verify`, on by
-default — catches self-signed, wrong host, expired chains), or — between cycles —
-its **signature algorithm**, **issuer** or **fingerprint** changes. Result data
-exposes `days_left`, `not_before`, `not_after`, `issuer`, `subject`,
-`serial_number` (hex), `dns_names` (SANs), `signature_algorithm`,
-`public_key_algorithm` and `fingerprint`. A network/TLS error fetching the cert is
-**not** an alert (use a `tcp`/`http` check for reachability).
+**Host source.** It alerts when the certificate is **expired or not yet valid**,
+**expires within `expires_in_days`**, fails chain/hostname **verification**
+(`verify`, on by default — catches self-signed, wrong host, expired chains), or —
+between cycles — its **signature algorithm**, **issuer** or **fingerprint** changes.
+A network/TLS error fetching the cert is **not** an alert (use a `tcp`/`http` check
+for reachability).
+
+**File source (`path`).** Reads and parses a local file, recognising natively (no
+external tools): PEM **certificate**, **certificate request** (CSR), PKCS#1 / EC /
+PKCS#8 **private keys**, PKIX **public key**, **OpenSSH** private key, and **OpenSSH**
+public key (`authorized_keys` line). Certificates are checked for expiry/validity as
+above; material that does not expire (keys, CSRs) alerts only on
+`on_change`/`on_algorithm_change`. A **missing, unreadable or unparseable file is an
+alert** (a local configuration problem, unlike a transient network error). `verify`,
+`port` and `server_name` do not apply to files.
+
+**Result data** exposes `kind` (certificate / certificate_request / private_key /
+public_key / openssh_private_key / openssh_public_key / …), `source`,
+`signature_algorithm`, `public_key_algorithm`, `key_bits`, `subject` and
+`fingerprint`. Certificates additionally expose `days_left`, `not_before`,
+`not_after`, `issuer`, `serial_number` (hex) and `dns_names` (SANs).
 
 The change conditions are **stateful** (they remember the previous value across
 cycles), so they work as a **host watch** (built once); as a per-service check —
