@@ -437,6 +437,45 @@ func TestBuildRsyncCheck(t *testing.T) {
 	}
 }
 
+func TestBuildDHCPCheck(t *testing.T) {
+	// Broadcast form: interface + optional fixed MAC carried into Params; alias
+	// dhcpd resolves; default port 67.
+	for _, typ := range []string{"dhcp", "dhcpd"} {
+		built, warns := Build(map[string]any{
+			"leases": map[string]any{"type": typ, "interface": "eth0", "mac": "aa:bb:cc:dd:ee:ff"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "dhcp" || cc.cfg.Port != 67 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+		if cc.cfg.Params["interface"] != "eth0" || cc.cfg.Params["mac"] != "aa:bb:cc:dd:ee:ff" {
+			t.Fatalf("%s params = %v", typ, cc.cfg.Params)
+		}
+	}
+
+	// Unicast form: no interface, no MAC params.
+	built, warns := Build(map[string]any{
+		"leases": map[string]any{"type": "dhcp", "host": "10.0.0.1"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("unicast dhcp should build: warns=%v", warns)
+	}
+	if cc := built[0].Check.(connCheck); cc.cfg.Host != "10.0.0.1" || len(cc.cfg.Params) != 0 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+
+	// An invalid MAC fails the build with a clear message.
+	_, warns = Build(map[string]any{
+		"leases": map[string]any{"type": "dhcp", "interface": "eth0", "mac": "not-a-mac"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) == 0 || !strings.Contains(warns[0], "mac") {
+		t.Fatalf("invalid mac should warn, got %v", warns)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},

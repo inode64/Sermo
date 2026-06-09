@@ -43,6 +43,7 @@ which reuse the same schema). MVP types:
 | `ajp`         | an AJP13 connector (e.g. Tomcat's 8009) answers a CPing with CPong (see Database) |
 | `ipp` / `cups` | an IPP server (CUPS/cupsd) answers an IPP request with a valid response (see Database) |
 | `rsync` / `rsyncd` | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
+| `dhcp` / `dhcpd` | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -345,6 +346,29 @@ name. Supported protocols:
   timeout or a transport error fail. Result data carries the `rcode` and answer
   count. Probed natively (RFC 1035 message). Set `query` to a name the server
   should answer (e.g. a zone it is authoritative for).
+- `dhcp` (alias `dhcpd`) — default port 67 (UDP). **Linux only.** No auth. Sends
+  a `DHCPDISCOVER` and verifies the server replies with a `DHCPOFFER` — proof it
+  is up and handing out leases. It never sends a `DHCPREQUEST`, so **no real
+  lease is consumed**. Two modes: set `interface` to **broadcast** the DISCOVER
+  out that link and discover any server (`255.255.255.255`); omit it to
+  **unicast** to `host` (a known server or relay). The client hardware address
+  is a random, anonymous locally-administered MAC by default; set `mac` to use a
+  fixed address (e.g. a server that only answers reserved clients). Result data
+  carries the offered IP, server id, subnet mask and lease time. **Requires
+  elevated privileges** to bind the DHCP client port 68 (and `CAP_NET_RAW` for
+  the per-interface bind), like the `icmp` check; the host should not run a
+  competing DHCP client on that interface. Probed natively (RFC 2131).
+
+  ```yaml
+  checks:
+    dhcp-broadcast:
+      type: dhcp
+      interface: eth0            # broadcast on this link (discovers any server)
+      mac: "02:00:00:ab:cd:ef"   # optional; default is a random anonymous MAC
+    dhcp-unicast:
+      type: dhcp
+      host: 10.0.0.1             # unicast to a known server/relay (no interface)
+  ```
 
 The `socket` field (Unix socket path) is generic; when set the check dials the
 socket instead of `host`/`port`. The `query` field is the per-protocol lookup
@@ -372,7 +396,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rsync, fpm, dns, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rsync, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
