@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quic-go/quic-go/http3"
+
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -193,7 +195,18 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		if pwarn != "" {
 			return nil, pwarn
 		}
-		if proxyURL != nil {
+		if asBool(entry["http3"]) {
+			// HTTP/3 runs over QUIC (always TLS 1.3) and cannot use an HTTP
+			// forward proxy. The transport never falls back to TCP, so a failure
+			// to reach the endpoint over QUIC fails (alerts) the check.
+			if u, err := url.Parse(rawURL); err != nil || u.Scheme != "https" {
+				return nil, "http check: http3 requires an https url"
+			}
+			if proxyURL != nil {
+				return nil, "http check: http3 and proxy are mutually exclusive"
+			}
+			reqClient = &http.Client{Transport: &http3.Transport{}}
+		} else if proxyURL != nil {
 			tr := http.DefaultTransport.(*http.Transport).Clone()
 			tr.Proxy = http.ProxyURL(proxyURL)
 			reqClient = &http.Client{Transport: tr}
@@ -660,6 +673,14 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 		onAlgoChange:   asBool(entry["cert_on_algorithm_change"]),
 		onIssuerChange: asBool(entry["cert_on_issuer_change"]),
 		onChange:       asBool(entry["cert_on_change"]),
+	}
+	if asBool(entry["http3"]) {
+		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
+		// certificate logic applies. TLS 1.3 is enforced by QUIC.
+		hc.certClient = &http.Client{Transport: &http3.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS13}, //nolint:gosec // leaf inspected and verified manually via verifyCertChain
+		}}
+		return ""
 	}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // leaf inspected and verified manually via verifyCertChain

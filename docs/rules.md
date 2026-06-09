@@ -164,7 +164,8 @@ assertion holds. **`method`** accepts any standard HTTP verb — `GET` (default)
 `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `TRACE`, `CONNECT` — written
 in any case (it is normalized to upper-case); an unknown verb is rejected at
 config validation. A request `body`/`json` is sent for any method that carries
-one (`POST`/`PUT`/`PATCH`/…). **`proxy`** routes the request through a forward proxy such as
+one (`POST`/`PUT`/`PATCH`/…). **`http3: true`** sends the request over **HTTP/3
+(QUIC)** instead of TCP — see below. **`proxy`** routes the request through a forward proxy such as
 **Squid** (`http://[user:pass@]host:port`; `http`, `https` or `socks5` schemes —
 credentials, when present, go in the URL). This both monitors that the proxy
 forwards correctly and that the target is reachable through it; for an `https://`
@@ -224,6 +225,28 @@ manually; `cert_verify: false` disables that verification. The change conditions
 are **stateful** (they remember the previous cycle), so they only apply when the
 check is built once — as a host watch. For raw TLS endpoints or local
 certificate files, use the standalone [`cert`](#cert) check.
+
+**HTTP/3 (QUIC).** Set `http3: true` to send the request over **HTTP/3** (QUIC,
+UDP) instead of TCP:
+
+```yaml
+checks:
+  api-h3:
+    type: http
+    url: "https://api.example.com/health"   # https only (QUIC is always TLS 1.3)
+    http3: true
+    expect_status: 200
+    expect_latency: { op: "<", value: 300 }
+```
+
+All the assertions above (status, body, JSON, latency, methods, and certificate
+inspection) work the same over HTTP/3. The QUIC transport **never falls back to
+TCP**, so a server that does not speak HTTP/3 — or a blocked UDP/443 — makes the
+request fail and **fires the check's alert/hook**, which is how you monitor that
+HTTP/3 stays available. The negotiated protocol is reported in result data as
+`protocol` (e.g. `HTTP/3.0`; for normal checks it is `HTTP/2.0` or `HTTP/1.1`).
+HTTP/3 requires an `https` URL and cannot be combined with `proxy` (both rejected
+at config validation). Uses `github.com/quic-go/quic-go` (pure Go).
 
 ### Cert
 
