@@ -128,6 +128,11 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if proto.Name() == "libvirt" && cfg.Socket == "" && asString(entry["host"]) == "" {
 		cfg.Socket = "/var/run/libvirt/libvirt-sock"
 	}
+	// dbus resolves to a single D-Bus address (socket path or full address),
+	// stored in Socket so the check message shows it instead of host:port.
+	if proto.Name() == "dbus" {
+		cfg.Socket = conn.DBusAddress(asString(entry["socket"]), asString(entry["query"]))
+	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	if asBool(entry["on_change"]) {
 		c.onChange = true

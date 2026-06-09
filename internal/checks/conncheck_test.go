@@ -437,6 +437,39 @@ func TestBuildRsyncCheck(t *testing.T) {
 	}
 }
 
+func TestBuildDBusCheck(t *testing.T) {
+	// No socket/query -> the system bus default address; default port 0.
+	built, warns := Build(map[string]any{
+		"bus": map[string]any{"type": "dbus"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("dbus check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "dbus" || cc.cfg.Port != 0 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	if cc.cfg.Socket != "unix:path=/var/run/dbus/system_bus_socket" {
+		t.Fatalf("default address = %q", cc.cfg.Socket)
+	}
+
+	// A socket path is wrapped as unix:path=.
+	built, _ = Build(map[string]any{
+		"bus": map[string]any{"type": "dbus", "socket": "/run/dbus/system_bus_socket"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "unix:path=/run/dbus/system_bus_socket" {
+		t.Fatalf("socket address = %q", cc.cfg.Socket)
+	}
+
+	// A full D-Bus address in query is used verbatim.
+	built, _ = Build(map[string]any{
+		"bus": map[string]any{"type": "dbus", "query": "tcp:host=10.0.0.5,port=44444"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "tcp:host=10.0.0.5,port=44444" {
+		t.Fatalf("query address = %q", cc.cfg.Socket)
+	}
+}
+
 func TestBuildLibvirtCheck(t *testing.T) {
 	// No socket and no host -> default to the local Unix socket; alias libvirtd
 	// resolves; default TCP port 16509.

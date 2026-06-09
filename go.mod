@@ -7,6 +7,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/goccy/go-yaml v1.19.2
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/lib/pq v1.12.3
 	golang.org/x/crypto v0.53.0
