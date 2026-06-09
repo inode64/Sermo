@@ -241,7 +241,12 @@ there is genuinely no native equivalent.
     `sermoctl lock -- COMMAND` wrapper — running an external program is their
     whole purpose. Argv only.
   - The **`libraries` check's `ldd`**: it queries the dynamic loader; reimplementing
-    that from `debug/elf` would be unreliable. The one internal tool dependency.
+    that from `debug/elf` would be unreliable.
+  - The **disk watch's `then.expand` action** (`internal/volume`): LVM and
+    filesystem growth have no native Go API, so it shells out to `lvs`/`vgs`/
+    `lvextend` and `resize2fs`/`xfs_growfs`/`btrfs`. The orchestration —
+    resolving the path's mount (native `/proc/mounts`) and LV, checking VG free,
+    capping the request, sequencing extend-then-grow — is all Go.
 - When you need OS information, prefer a syscall over a tool: e.g. architecture is
   read with `unix.Uname` (not `uname -m`), filesystem usage with `syscall.Statfs`
   (not `df`), process data from `/proc` (not `ps`).

@@ -470,7 +470,8 @@ when a threshold is crossed. They are daemon configuration; they never merge int
 a service.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
-`notify` list, or both (at least one is required):
+`notify` list, an `expand` (disk only), or any combination (at least one is
+required):
 
 ```yaml
 watches:
@@ -480,6 +481,38 @@ watches:
       notify: [ops-email]                # send to these notifiers
       hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }   # optional
 ```
+
+### `then.expand` — automatic volume growth (disk watches)
+
+A `disk` watch can grow the LVM-backed filesystem under the checked path
+automatically when it runs low. The expansion is native (Sermo orchestrates it
+in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem grow tool —
+`resize2fs`, `xfs_growfs` or `btrfs` — which have no Go API):
+
+```yaml
+watches:
+  expand-backup:
+    check: { type: disk, path: /mnt/backup, free_pct: { op: "<", value: 10 } }
+    for: { cycles: 3 }                    # confirm low for 3 cycles first
+    policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
+    then:
+      expand: { by: 5G }                  # grow by up to 5G (capped to VG free)
+      notify: [ops-email]                 # optional: report the outcome
+```
+
+`expand.by` is the amount to grow by (`K`/`M`/`G`/`T`, binary units). It is
+**capped to the volume group's free space**, and when the VG has no free space
+the action fails and is reported — Sermo never shrinks or reformats. Scope:
+LVM logical volumes with an ext2/3/4, xfs or btrfs filesystem; a non-LVM or
+otherwise unsupported volume fails cleanly rather than guessing.
+
+Because a watch fires **every cycle** the condition holds, an `expand` action
+should always carry a watch-level **`policy`** block (same fields as service
+remediation: `cooldown`, `backoff`, `max_actions`/`max_actions_window`) so the
+volume is not extended on every tick while it stays low. The action runs at most
+once per cooldown window; each attempt — success or failure — starts the
+cooldown, so a failing expansion is not retried every cycle. Outcomes are
+recorded as `expand` / `expand-skipped` / `expand-failed` events.
 
 `then.notify` lists notifier names (each must be defined under `notifiers`). For
 the multi-metric watches (`net`, `icmp`, `swap`) the `notify`/`hook` live in each

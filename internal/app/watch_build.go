@@ -11,6 +11,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
+	"sermo/internal/volume"
 )
 
 // BuildWatches resolves the global `watches` section into runnable Watches.
@@ -88,11 +89,19 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, names, err := parseThen(entry)
+	then, _ := entry["then"].(map[string]any)
+	hook, names, err := parseActions(then)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	return &Watch{
+	expand, err := parseExpand(then, typ)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
+	if len(hook.Command) == 0 && len(names) == 0 && expand == nil {
+		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
+	}
+	w := &Watch{
 		Name:       name,
 		CheckType:  typ,
 		Check:      check,
@@ -104,7 +113,13 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		FireOnFail: isHealthCheckType(typ),
 		Now:        deps.Now,
 		Emit:       deps.Emit,
-	}, ""
+	}
+	if expand != nil {
+		w.Expand = expand
+		w.Policy = rules.ParsePolicy(entry)
+		w.Expander = volume.Expander{Runner: deps.ExecxRunner}
+	}
+	return w, ""
 }
 
 // isHealthCheckType reports whether a check type's OK==true means "healthy", so a
@@ -346,6 +361,20 @@ func parseThen(entry map[string]any) (HookSpec, []string, error) {
 	if !ok {
 		return HookSpec{}, nil, fmt.Errorf("missing then")
 	}
+	hook, names, err := parseActions(then)
+	if err != nil {
+		return HookSpec{}, nil, err
+	}
+	if len(hook.Command) == 0 && len(names) == 0 {
+		return HookSpec{}, nil, fmt.Errorf("then requires a hook and/or notify")
+	}
+	return hook, names, nil
+}
+
+// parseActions reads the hook and notify targets from a `then` block without
+// requiring that at least one is present (the caller enforces that, so an
+// expand-only `then` is allowed). It errors only on a malformed hook.
+func parseActions(then map[string]any) (HookSpec, []string, error) {
 	var hook HookSpec
 	if h, ok := then["hook"].(map[string]any); ok {
 		cmd := stringArray(h["command"])
@@ -354,11 +383,31 @@ func parseThen(entry map[string]any) (HookSpec, []string, error) {
 		}
 		hook = HookSpec{Command: cmd, Timeout: durationField(h["timeout"])}
 	}
-	names := stringArray(then["notify"])
-	if len(hook.Command) == 0 && len(names) == 0 {
-		return HookSpec{}, nil, fmt.Errorf("then requires a hook and/or notify")
+	return hook, stringArray(then["notify"]), nil
+}
+
+// parseExpand reads a `then.expand` disk-expansion action. It is only valid on a
+// disk watch, since the action grows the volume backing the checked path.
+func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
+	raw, ok := then["expand"].(map[string]any)
+	if !ok {
+		return nil, nil
 	}
-	return hook, names, nil
+	if checkType != "disk" {
+		return nil, fmt.Errorf("then.expand is only valid on a disk watch, not %q", checkType)
+	}
+	by := stringField(raw["by"])
+	if by == "" {
+		return nil, fmt.Errorf("then.expand requires a `by` size (e.g. 5G)")
+	}
+	n, err := parseSize(by)
+	if err != nil {
+		return nil, fmt.Errorf("then.expand by: %w", err)
+	}
+	if n <= 0 {
+		return nil, fmt.Errorf("then.expand by must be positive")
+	}
+	return &ExpandSpec{By: n}, nil
 }
 
 // resolveNotifiers maps notifier names to the configured notifiers, skipping
