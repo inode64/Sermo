@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"sermo/internal/config"
-	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 )
 
@@ -256,27 +254,6 @@ func (m fakeManager) record(action, service string) error {
 	return m.actionErr
 }
 
-// recordingProbeRunner is a test double for execx.Runner used to exercise
-// the pidof/pgrep fallback in runReload without shelling out. It records
-// calls and can be configured to return synthetic stdout for specific probes.
-type recordingProbeRunner struct {
-	calls []string
-	outs  map[string]string // key "cmd arg..." -> stdout to return with exit 0
-}
-
-func (r *recordingProbeRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
-	key := name
-	if len(args) > 0 {
-		key += " " + strings.Join(args, " ")
-	}
-	r.calls = append(r.calls, key)
-	if out, ok := r.outs[key]; ok {
-		return execx.Result{Stdout: out, ExitCode: 0}, nil
-	}
-	// Simulate "not found" / no matching pid (non-zero exit).
-	return execx.Result{ExitCode: 1}, fmt.Errorf("exit 1")
-}
-
 // TestReloadNoPid exercises the error path for sermoctl reload when no
 // sermod pidfile or live process can be found. It proves the command is
 // wired and uses the loaded config's runtime dir for pidfile discovery.
@@ -294,10 +271,10 @@ func TestReloadNoPid(t *testing.T) {
 		LoadConfig: config.Load,
 		Stderr:     &stderr,
 		Stdout:     &bytes.Buffer{},
-		// Hermetic discovery: no absolute fallbacks and a probe runner that finds
+		// Hermetic discovery: no absolute fallbacks and a name probe that finds
 		// nothing, so reload reliably reports "could not find" rather than picking
 		// up a sermod daemon that happens to run on the host.
-		Runner:           &recordingProbeRunner{},
+		FindPID:          func(string) ([]int, error) { return nil, nil },
 		pidfileFallbacks: []string{},
 	}
 
@@ -311,11 +288,11 @@ func TestReloadNoPid(t *testing.T) {
 	}
 }
 
-// TestReloadPidProbeFallback exercises the pidof/pgrep fallback path inside
-// runReload using an injected execx.Runner. It verifies that when no pidfile
-// exists, the code uses the Runner (with timeout) to probe, parses the pid
-// from stdout, and attempts to signal it (the synthetic pid causes a signal
-// error, which is the expected outcome in the test environment).
+// TestReloadPidProbeFallback exercises the by-name discovery fallback inside
+// runReload using an injected FindPID. It verifies that when no pidfile exists,
+// the code resolves the daemon pid natively (no pidof/pgrep shell-out) and
+// attempts to signal it (the synthetic pid causes a signal error, which is the
+// expected outcome in the test environment).
 func TestReloadPidProbeFallback(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
@@ -324,12 +301,11 @@ func TestReloadPidProbeFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Configure the runner to make "pidof" succeed with a synthetic pid.
-	// pgrep will not be reached (first probe wins). The Kill will then fail.
-	runner := &recordingProbeRunner{
-		outs: map[string]string{
-			"pidof -s sermod": "42424\n",
-		},
+	// Native by-name probe returns a synthetic pid; the Kill will then fail.
+	var probedName string
+	findPID := func(name string) ([]int, error) {
+		probedName = name
+		return []int{42424}, nil
 	}
 
 	var stderr bytes.Buffer
@@ -337,7 +313,7 @@ func TestReloadPidProbeFallback(t *testing.T) {
 		LoadConfig: config.Load,
 		Stderr:     &stderr,
 		Stdout:     &bytes.Buffer{},
-		Runner:     runner,
+		FindPID:    findPID,
 		// Suppress the absolute /run fallbacks so discovery is hermetic: only the
 		// (empty) temp runtime dir is searched, forcing the probe path under test.
 		pidfileFallbacks: []string{},
@@ -348,10 +324,9 @@ func TestReloadPidProbeFallback(t *testing.T) {
 		t.Fatalf("reload exit = %d, want %d (signal on fake pid from probe should fail)", code, exitRuntimeError)
 	}
 
-	// Assert the probe was actually invoked through the Runner (this is the
-	// key coverage for switching away from raw exec.Command).
-	if len(runner.calls) == 0 || runner.calls[0] != "pidof -s sermod" {
-		t.Fatalf("runner calls = %v, want first call to be pidof probe via execx.Runner", runner.calls)
+	// The native probe must be consulted for the daemon's program name.
+	if probedName != "sermod" {
+		t.Fatalf("FindPID probed %q, want %q", probedName, "sermod")
 	}
 
 	out := stderr.String()
