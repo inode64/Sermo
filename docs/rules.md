@@ -40,6 +40,7 @@ which reuse the same schema). MVP types:
 | `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); `on_change` alerts on device-identity change (see Database) |
 | `tftp`        | a TFTP server answers an RRQ with a valid packet (DATA or ERROR) (see Database) |
 | `ldap`        | an LDAP directory accepts an anonymous bind, or a simple bind with credentials (see Database) |
+| `ajp`         | an AJP13 connector (e.g. Tomcat's 8009) answers a CPing with CPong (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -298,6 +299,9 @@ name. Supported protocols:
   expects `pong`, so the pool must have **`ping.path = /ping`** enabled. Probed
   natively (FastCGI).
 
+- `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
+  a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
+  connector. Probed natively (AJP13).
 - `ldap` — default port 389; `tls`: `false` | `true` | `skip-verify` (implicit
   TLS / LDAPS — use port 636). `user` is **optional**: with no credentials it
   does an **anonymous bind** (a successful bind, or an LDAP-level rejection, both
@@ -357,7 +361,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, fpm, dns, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, fpm, dns, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
