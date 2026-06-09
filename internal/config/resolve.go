@@ -32,9 +32,11 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 }
 
 // injectBuiltinVariables makes the document's identity available for ${...}
-// expansion: ${name} (the resolved service name) and ${display_name} (the
-// display_name field, falling back to name). They let profiles parameterize
-// human-facing strings — e.g. message: "${display_name} backup is running".
+// expansion: ${name} (the resolved service name), ${display_name} (the
+// display_name field, falling back to name), ${service} (the primary unit),
+// ${host} (the detected hostname) and ${port} (the top-level `port:` field, when
+// set). They let profiles parameterize strings — e.g. a tcp check
+// port: "${port}" or message: "${display_name} backup is running".
 // Injected after validateVariableValues so a display_name carrying its own
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
 // the same name takes precedence and is left untouched.
@@ -50,6 +52,14 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	}
 	if _, ok := vars["host"]; !ok {
 		vars["host"] = detectedHost
+	}
+	// ${port} mirrors the top-level `port:` field; unlike the others it has no
+	// fallback, so it is injected only when the field is set — leaving ${port}
+	// undefined (and so a clear error) when nothing provides a port.
+	if _, ok := vars["port"]; !ok {
+		if p := scalarString(merged["port"]); p != "" {
+			vars["port"] = p
+		}
 	}
 }
 

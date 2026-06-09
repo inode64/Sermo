@@ -144,6 +144,7 @@ environment variables (useful for testing or building config off-host).
 | `${display_name}` | the display name (falls back to name)   | resolution      |
 | `${service}`      | the service's primary unit name         | resolution      |
 | `${host}`         | hostname (`SERMO_HOST` override)        | resolution¹     |
+| `${port}`         | the top-level `port:` field (when set)  | resolution³     |
 | `${arch}`         | machine architecture (`SERMO_ARCH`)     | load (baked)    |
 | `${os}`           | os-release id (`SERMO_OS`)              | load (baked)    |
 | `${date}`         | event timestamp (RFC3339)               | runtime²        |
@@ -157,6 +158,22 @@ bind address like `127.0.0.1`); an explicit `host` always wins.
 message, so they belong in `message:` strings — e.g.
 `message: "[${host}] ${service}: ${event} → ${action} at ${date}"`. Elsewhere they
 stay literal.
+
+³ `${port}` mirrors a top-level `port:` field on the service (or profile), so an
+instance can set its listen port once and have every `${port}` reference resolve
+to it:
+
+```yaml
+kind: service
+name: db-inst2
+uses: dbserver
+port: 3307          # → ${port} everywhere in the profile
+```
+
+Unlike the other built-ins it has **no fallback**: declare `port:` (or a
+`variables.port`, which wins) wherever `${port}` is used, or resolution reports
+`${port}` as undefined. This is the first-class equivalent of putting `port`
+under `variables:` (as the multi-instance example below still shows).
 
 ### OS-specific blocks (os:)
 
