@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestSQLCompare(t *testing.T) {
+func TestCompareValue(t *testing.T) {
 	cases := []struct {
 		result, op, value string
 		want              bool
@@ -38,19 +38,19 @@ func TestSQLCompare(t *testing.T) {
 		{"x", "><", "1", false, true},      // unsupported op
 	}
 	for _, c := range cases {
-		got, err := sqlCompare(c.result, c.op, c.value)
+		got, err := compareValue(c.result, c.op, c.value)
 		if c.wantErr {
 			if err == nil {
-				t.Errorf("sqlCompare(%q,%q,%q): expected error", c.result, c.op, c.value)
+				t.Errorf("compareValue(%q,%q,%q): expected error", c.result, c.op, c.value)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("sqlCompare(%q,%q,%q): %v", c.result, c.op, c.value, err)
+			t.Errorf("compareValue(%q,%q,%q): %v", c.result, c.op, c.value, err)
 			continue
 		}
 		if got != c.want {
-			t.Errorf("sqlCompare(%q,%q,%q) = %v, want %v", c.result, c.op, c.value, got, c.want)
+			t.Errorf("compareValue(%q,%q,%q) = %v, want %v", c.result, c.op, c.value, got, c.want)
 		}
 	}
 }
