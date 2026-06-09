@@ -1,7 +1,9 @@
 package checks
 
 import (
+	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,22 +16,27 @@ import (
 	"sermo/internal/conn"
 )
 
-// influxCheck runs an InfluxQL query against an InfluxDB 1.x HTTP API and
-// compares a scalar result against a value — the time-series counterpart of the
-// sql/mongodb-query checks. It is condition-style: OK == true means the
-// comparison holds. Connection variables (host/port/user/password/tls) mirror the
-// influxdb connection check; the query runs against `database` over `GET /query`.
+// influxCheck runs a query against an InfluxDB HTTP API and compares a scalar
+// result against a value — the time-series counterpart of the sql/mongodb-query
+// checks. It is condition-style: OK == true means the comparison holds.
+// Connection variables (host/port/user/password/tls) mirror the influxdb
+// connection check. Two query languages are supported:
+//   - influxql (default): InfluxDB 1.x `GET /query` against `database`; the JSON
+//     result's scalar is the last column of the first row (or the named `column`).
+//   - flux: InfluxDB 2.x `POST /api/v2/query` against `org` with a `token`; the
+//     annotated-CSV result's scalar is the `_value` column of the first data row
+//     (or the named `column`).
 //
-// By default the scalar is the last column of the first row of the first series
-// (InfluxQL puts `time` first and the aggregate value last); set `column` to read
-// a named column instead. Use a read-only user; the query is run as given.
+// Use a read-only user/token; the query is run as given.
 type influxCheck struct {
 	base
 	cfg      conn.Config
-	database string
+	language string // influxql | flux
+	database string // influxql: the database
+	org      string // flux: the organization
 	query    string
 	column   string // optional named result column
-	token    string // optional InfluxDB API token (Authorization: Token …)
+	token    string // API token (required for flux; optional v1.8+ for influxql)
 	op       string
 	value    string
 }
@@ -53,7 +60,13 @@ func (c influxCheck) Run(ctx context.Context) Result {
 		return c.result(false, "influxdb: "+err.Error(), start)
 	}
 	res := c.result(ok, fmt.Sprintf("influxdb: %q %s %q = %t", result, c.op, c.value, ok), start)
-	data := map[string]any{"database": c.database, "query": c.query, "op": c.op, "threshold": c.value, "result": result}
+	data := map[string]any{"language": c.language, "query": c.query, "op": c.op, "threshold": c.value, "result": result}
+	if c.database != "" {
+		data["database"] = c.database
+	}
+	if c.org != "" {
+		data["org"] = c.org
+	}
 	if f, perr := strconv.ParseFloat(strings.TrimSpace(result), 64); perr == nil {
 		data["value"] = f
 	}
@@ -61,9 +74,17 @@ func (c influxCheck) Run(ctx context.Context) Result {
 	return res
 }
 
-// queryScalar runs the InfluxQL query and returns the chosen scalar. The second
-// return reports an empty/NULL result (no series, or a null cell).
+// queryScalar runs the query and returns the chosen scalar. The second return
+// reports an empty result (no data, or a null/empty cell).
 func (c influxCheck) queryScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
+	if c.language == "flux" {
+		return c.fluxScalar(ctx, client, base)
+	}
+	return c.influxqlScalar(ctx, client, base)
+}
+
+// influxqlScalar runs the InfluxQL query over the 1.x GET /query API.
+func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
 	q := url.Values{"db": {c.database}, "q": {c.query}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/query?"+q.Encode(), nil)
 	if err != nil {
@@ -130,14 +151,76 @@ func (c influxCheck) queryScalar(ctx context.Context, client *http.Client, base 
 	return jsonValueString(row[idx]), false, nil
 }
 
-// influxErrorBody extracts InfluxDB's JSON error message from a non-200 body,
-// falling back to the trimmed raw body.
+// fluxScalar runs the Flux query over the 2.x POST /api/v2/query API and reads a
+// scalar from the annotated-CSV response (the `_value` column by default).
+func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base string) (string, bool, error) {
+	u := base + "/api/v2/query?org=" + url.QueryEscape(c.org)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(c.query))
+	if err != nil {
+		return "", false, err
+	}
+	req.Header.Set("Authorization", "Token "+c.token)
+	req.Header.Set("Content-Type", "application/vnd.flux")
+	req.Header.Set("Accept", "application/csv")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return "", false, fmt.Errorf("HTTP status %d: %s", resp.StatusCode, influxErrorBody(body))
+	}
+
+	// Annotated CSV: '#'-prefixed annotation lines, then a header row and data
+	// rows. Read the first header + first data row of the first result block.
+	cr := csv.NewReader(bytes.NewReader(body))
+	cr.Comment = '#'
+	cr.FieldsPerRecord = -1
+	header, err := cr.Read()
+	if err == io.EOF {
+		return "", true, nil // no result
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("invalid CSV response: %w", err)
+	}
+	row, err := cr.Read()
+	if err == io.EOF {
+		return "", true, nil // header but no data
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("invalid CSV response: %w", err)
+	}
+
+	col := c.column
+	if col == "" {
+		col = "_value" // Flux's value column
+	}
+	idx := indexOf(header, col)
+	if idx < 0 || idx >= len(row) {
+		return "", false, fmt.Errorf("column %q not found in result", col)
+	}
+	if row[idx] == "" {
+		return "", true, nil
+	}
+	return row[idx], false, nil
+}
+
+// influxErrorBody extracts InfluxDB's JSON error message from a non-200 body
+// (1.x uses `error`, 2.x uses `message`), falling back to the trimmed raw body.
 func influxErrorBody(body []byte) string {
 	var e struct {
-		Error string `json:"error"`
+		Error   string `json:"error"`
+		Message string `json:"message"`
 	}
-	if json.Unmarshal(body, &e) == nil && e.Error != "" {
-		return e.Error
+	if json.Unmarshal(body, &e) == nil {
+		if e.Error != "" {
+			return e.Error
+		}
+		if e.Message != "" {
+			return e.Message
+		}
 	}
 	return strings.TrimSpace(string(body))
 }
@@ -152,16 +235,12 @@ func indexOf(list []string, v string) int {
 }
 
 // buildInfluxCheck builds an influxdb-query check, reusing the influxdb
-// connection variables (host/port/user/password/tls) plus a database and an
-// InfluxQL query.
+// connection variables (host/port/user/password/tls). `language` selects InfluxQL
+// (1.x, needs a `database`) or Flux (2.x, needs an `org` and `token`).
 func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 	query := asString(entry["query"])
 	if query == "" {
 		return nil, "influxdb-query check requires a query"
-	}
-	database := asString(entry["database"])
-	if database == "" {
-		return nil, "influxdb-query check requires a database"
 	}
 	op := asString(entry["op"])
 	if !validCompareOp(op) {
@@ -171,16 +250,39 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 	if value == "" {
 		return nil, "influxdb-query check requires a value"
 	}
-	return influxCheck{
+	language := asString(entry["language"])
+	if language == "" {
+		language = "influxql"
+	}
+
+	c := influxCheck{
 		base:     b,
 		cfg:      influxConnConfig(entry),
-		database: database,
+		language: language,
+		database: asString(entry["database"]),
+		org:      asString(entry["org"]),
 		query:    query,
 		column:   asString(entry["column"]),
 		token:    asString(entry["token"]),
 		op:       op,
 		value:    value,
-	}, ""
+	}
+	switch language {
+	case "influxql":
+		if c.database == "" {
+			return nil, "influxdb-query (influxql) check requires a database"
+		}
+	case "flux":
+		if c.org == "" {
+			return nil, "influxdb-query (flux) check requires an org"
+		}
+		if c.token == "" {
+			return nil, "influxdb-query (flux) check requires a token"
+		}
+	default:
+		return nil, "influxdb-query check language must be influxql or flux"
+	}
+	return c, ""
 }
 
 // influxConnConfig builds a conn.Config for an influxdb-query check, defaulting

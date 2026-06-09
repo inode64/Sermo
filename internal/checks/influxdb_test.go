@@ -97,13 +97,86 @@ func TestInfluxQueryError(t *testing.T) {
 	}
 }
 
+// serveFlux runs a fake InfluxDB 2.x POST /api/v2/query endpoint requiring the
+// token and org, returning csvBody (annotated CSV).
+func serveFlux(t *testing.T, csvBody, wantToken, wantOrg string) (host string, port int) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v2/query" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("Authorization") != "Token "+wantToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = io.WriteString(w, `{"message":"unauthorized access"}`)
+			return
+		}
+		if r.URL.Query().Get("org") != wantOrg {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = io.WriteString(w, `{"message":"organization not found"}`)
+			return
+		}
+		_, _ = io.WriteString(w, csvBody)
+	}))
+	t.Cleanup(srv.Close)
+	h, ps, err := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := strconv.Atoi(ps)
+	return h, p
+}
+
+func TestInfluxFluxQuery(t *testing.T) {
+	csvBody := "#datatype,string,long,double\n" +
+		",result,table,_value\n" +
+		",,0,42.5\n"
+	host, port := serveFlux(t, csvBody, "tok123", "myorg")
+	res := runInflux(t, map[string]any{
+		"type": "influxdb-query", "host": host, "port": port, "language": "flux",
+		"org": "myorg", "token": "tok123",
+		"query": `from(bucket:"telegraf") |> range(start:-5m) |> mean()`,
+		"op":    "<", "value": "80",
+	})
+	if !res.OK {
+		t.Fatalf("expected OK (42.5 < 80): %q", res.Message)
+	}
+	if res.Data["result"] != "42.5" || res.Data["language"] != "flux" {
+		t.Fatalf("data = %v", res.Data)
+	}
+}
+
+func TestInfluxFluxEmptyAndAuth(t *testing.T) {
+	// Header but no data row -> no value.
+	host, port := serveFlux(t, ",result,table,_value\n", "tok", "org")
+	res := runInflux(t, map[string]any{
+		"type": "influxdb-query", "host": host, "port": port, "language": "flux",
+		"org": "org", "token": "tok", "query": "from(bucket:\"b\")", "op": ">", "value": "0",
+	})
+	if res.OK || !strings.Contains(res.Message, "no value") {
+		t.Fatalf("empty flux result should not pass: %q", res.Message)
+	}
+
+	// Wrong token -> 401 surfaces the JSON message.
+	res = runInflux(t, map[string]any{
+		"type": "influxdb-query", "host": host, "port": port, "language": "flux",
+		"org": "org", "token": "wrong", "query": "from(bucket:\"b\")", "op": ">", "value": "0",
+	})
+	if res.OK || !strings.Contains(res.Message, "unauthorized") {
+		t.Fatalf("bad token should fail with the server message: %q", res.Message)
+	}
+}
+
 func TestBuildInfluxCheckErrors(t *testing.T) {
 	cases := []map[string]any{
-		{"type": "influxdb-query", "database": "d", "op": "<", "value": "1"},                       // no query
-		{"type": "influxdb-query", "query": "SELECT 1", "op": "<", "value": "1"},                   // no database
-		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "value": "1"},             // no/blank op
-		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "~~", "value": "1"}, // bad op
-		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "<"},                // no value
+		{"type": "influxdb-query", "database": "d", "op": "<", "value": "1"},                                     // no query
+		{"type": "influxdb-query", "query": "SELECT 1", "op": "<", "value": "1"},                                 // influxql without database
+		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "value": "1"},                           // no/blank op
+		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "~~", "value": "1"},               // bad op
+		{"type": "influxdb-query", "database": "d", "query": "SELECT 1", "op": "<"},                              // no value
+		{"type": "influxdb-query", "language": "flux", "token": "t", "query": "from()", "op": "<", "value": "1"}, // flux without org
+		{"type": "influxdb-query", "language": "flux", "org": "o", "query": "from()", "op": "<", "value": "1"},   // flux without token
+		{"type": "influxdb-query", "language": "promql", "database": "d", "query": "x", "op": "<", "value": "1"}, // bad language
 	}
 	for i, entry := range cases {
 		if _, warns := Build(map[string]any{"q": entry}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
