@@ -2,12 +2,50 @@ package checks
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"testing"
 	"time"
 )
 
 func fakeCert(s CertSample) CertSamplerFunc {
 	return func(context.Context, string, string, string, bool) (CertSample, error) { return s, nil }
+}
+
+// mustSelfSigned mints a self-signed leaf certificate for tests.
+func mustSelfSigned(t *testing.T, notBefore, notAfter time.Time) *x509.Certificate {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "test.local"},
+		DNSNames:     []string{"test.local"},
+		NotBefore:    notBefore,
+		NotAfter:     notAfter,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cert
+}
+
+func TestVerifyCertChainSelfSigned(t *testing.T) {
+	// A self-signed leaf does not chain to the system roots.
+	leaf := mustSelfSigned(t, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+	if got := verifyCertChain(leaf, nil, leaf.Subject.CommonName); got == "" {
+		t.Fatal("a self-signed cert must produce a verify error")
+	}
 }
 
 func healthyCert() CertSample {
