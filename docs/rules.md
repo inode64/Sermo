@@ -32,6 +32,7 @@ which reuse the same schema). MVP types:
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
+| `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -263,12 +264,20 @@ name. Supported protocols:
   **optional**: with no credentials it is an **anonymous** check (greeting
   `220` + `EHLO`); with a user/password it performs `AUTH PLAIN`. Probed
   natively (RFC 5321).
+- `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's
+  Unix socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default
+  9000) for a TCP pool. No auth. It performs a FastCGI request to `/ping` and
+  expects `pong`, so the pool must have **`ping.path = /ping`** enabled. Probed
+  natively (FastCGI).
+
+The `socket` field (Unix socket path) is generic; when set the check dials the
+socket instead of `host`/`port`.
 
 ```yaml
 checks:
   db:
-    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey, imap, pop, smtp
-    # user is required for SQL protocols; optional for redis/imap/pop/smtp (password-only or anonymous)
+    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey, imap, pop, smtp, fpm
+    # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm uses no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
     user: monitor               # required
