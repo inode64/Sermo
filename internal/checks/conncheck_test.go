@@ -325,6 +325,19 @@ func TestBuildSSHCheck(t *testing.T) {
 	}
 }
 
+func TestBuildNTPCheck(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"clock": map[string]any{"type": "ntp", "host": "pool.ntp.org"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("ntp check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "ntp" || cc.cfg.Port != 123 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
