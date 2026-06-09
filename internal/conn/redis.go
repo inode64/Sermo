@@ -3,11 +3,9 @@ package conn
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"strconv"
 	"strings"
 )
@@ -31,28 +29,11 @@ func (redisProtocol) RequiresUser() bool { return false }
 // set, verifies the server answers PING, and reads its version. The caller's
 // context bounds the probe.
 func (redisProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	host := cfg.Host
-	if host == "" {
-		host = "127.0.0.1"
-	}
 	port := cfg.Port
 	if port == 0 {
 		port = 6379
 	}
-	addr := net.JoinHostPort(host, strconv.Itoa(port))
-
-	var c net.Conn
-	var err error
-	switch normalizeTLS(cfg.TLS) {
-	case "":
-		c, err = (&net.Dialer{}).DialContext(ctx, "tcp", addr)
-	case "skip-verify":
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} //nolint:gosec // operator chose tls: skip-verify
-		c, err = (&tls.Dialer{Config: tc}).DialContext(ctx, "tcp", addr)
-	default:
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-		c, err = (&tls.Dialer{Config: tc}).DialContext(ctx, "tcp", addr)
-	}
+	c, err := dialConn(ctx, cfg.Host, port, cfg.TLS)
 	if err != nil {
 		return Result{}, err
 	}
