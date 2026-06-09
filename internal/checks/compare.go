@@ -53,3 +53,18 @@ func validCompareOp(op string) bool {
 		return false
 	}
 }
+
+// parseExpectLatency reads an optional `expect_latency: {op, value}` field shared
+// by the http and connection checks. It returns the operator and value (empty op
+// when the field is absent) or a warning when the operator is invalid.
+func parseExpectLatency(entry map[string]any) (op, value, warn string) {
+	lat, ok := entry["expect_latency"].(map[string]any)
+	if !ok {
+		return "", "", ""
+	}
+	op = asString(lat["op"])
+	if !validCompareOp(op) {
+		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, =~"
+	}
+	return op, scalarString(lat["value"]), ""
+}

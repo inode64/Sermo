@@ -93,4 +93,13 @@ checks:
     expect:
       answers: { op: ">", value: "abc" }
 `), "must be numeric")
+	mustHave(t, validateService(t, `
+kind: service
+name: dns
+service: { name: x }
+checks:
+  resolver:
+    type: dns
+    expect_latency: { op: "<", value: "abc" }
+`), "must be numeric")
 }

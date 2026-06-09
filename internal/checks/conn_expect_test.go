@@ -70,6 +70,28 @@ func TestConnExpectVersionRegexAndMissing(t *testing.T) {
 	}
 }
 
+func TestConnExpectLatency(t *testing.T) {
+	res := conn.Result{Version: "1.0"}
+
+	// A generous ceiling passes and latency_ms is exposed in the data.
+	c := connCheckWithExpect(nil, res)
+	c.latencyOp, c.latencyValue = "<", "100000"
+	r := c.Run(context.Background())
+	if !r.OK {
+		t.Fatalf("latency under 100s should pass: %s", r.Message)
+	}
+	if _, ok := r.Data["latency_ms"]; !ok {
+		t.Fatalf("data should carry latency_ms: %v", r.Data)
+	}
+
+	// latency < 0 is impossible -> deterministic failure.
+	c = connCheckWithExpect(nil, res)
+	c.latencyOp, c.latencyValue = "<", "0"
+	if r := c.Run(context.Background()); r.OK {
+		t.Fatal("latency < 0 must fail")
+	}
+}
+
 func TestBuildConnCheckExpect(t *testing.T) {
 	// dns needs no user; expect mixes a scalar (==) and an {op,value}.
 	built, warns := Build(map[string]any{
@@ -97,5 +119,26 @@ func TestBuildConnCheckExpect(t *testing.T) {
 	}, Deps{DefaultTimeout: time.Second})
 	if len(warns) == 0 {
 		t.Fatal("invalid expect op should warn")
+	}
+
+	// expect_latency is parsed onto the connCheck.
+	built, warns = Build(map[string]any{
+		"resolver": map[string]any{
+			"type": "dns", "host": "1.1.1.1",
+			"expect_latency": map[string]any{"op": "<", "value": 800},
+		},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("dns check with expect_latency should build: warns=%v", warns)
+	}
+	if cc := built[0].Check.(connCheck); cc.latencyOp != "<" || cc.latencyValue != "800" {
+		t.Fatalf("latency = %q %q", cc.latencyOp, cc.latencyValue)
+	}
+
+	// An invalid expect_latency op warns.
+	if _, warns := Build(map[string]any{
+		"resolver": map[string]any{"type": "dns", "expect_latency": map[string]any{"op": "~~", "value": 1}},
+	}, Deps{DefaultTimeout: time.Second}); len(warns) == 0 {
+		t.Fatal("invalid expect_latency op should warn")
 	}
 }
