@@ -1235,8 +1235,13 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 // port (1..65535), optional positive expires_in_days, and boolean toggles. New
 // certificate conditions add here.
 func validateCertFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["host"]) == "" {
-		add("%s.host is required for a cert check", prefix)
+	host := scalarString(fields["host"])
+	path := scalarString(fields["path"])
+	switch {
+	case host == "" && path == "":
+		add("%s requires a host or a path", prefix)
+	case host != "" && path != "":
+		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
 	if v, present := fields["port"]; present {
 		if n, ok := scalarInt(v); !ok || n < 1 || n > 65535 {

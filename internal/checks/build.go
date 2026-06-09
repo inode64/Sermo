@@ -407,8 +407,12 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 
 	case "cert":
 		host := asString(entry["host"])
-		if host == "" {
-			return nil, "cert check requires a host"
+		path := asString(entry["path"])
+		switch {
+		case host == "" && path == "":
+			return nil, "cert check requires a host or a path"
+		case host != "" && path != "":
+			return nil, "cert check: host and path are mutually exclusive"
 		}
 		port := "443"
 		if p, ok := intField(entry["port"]); ok {
@@ -431,6 +435,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			host:           host,
 			port:           port,
 			serverName:     serverName,
+			path:           path,
 			expiresInDays:  days,
 			onAlgoChange:   asBool(entry["on_algorithm_change"]),
 			onIssuerChange: asBool(entry["on_issuer_change"]),
