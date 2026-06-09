@@ -486,6 +486,28 @@ func TestBuildSyncthingCheck(t *testing.T) {
 	}
 }
 
+func TestBuildInfluxdbCheck(t *testing.T) {
+	for _, typ := range []string{"influxdb", "influx"} {
+		built, warns := Build(map[string]any{
+			"tsdb": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "influxdb" || cc.cfg.Port != 8086 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+	// https via tls is carried through.
+	built, _ := Build(map[string]any{
+		"tsdb": map[string]any{"type": "influxdb", "host": "127.0.0.1", "tls": "skip-verify"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.TLS != "skip-verify" {
+		t.Fatalf("tls = %q", cc.cfg.TLS)
+	}
+}
+
 func TestBuildUnifiCheck(t *testing.T) {
 	for _, typ := range []string{"unifi", "unifi-controller", "unifi-network"} {
 		built, warns := Build(map[string]any{

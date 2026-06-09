@@ -53,6 +53,7 @@ which reuse the same schema). MVP types:
 | `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `unifi` / `unifi-controller` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
+| `influxdb` / `influx` | an InfluxDB server answers `/health` (or `/ping`) and reports its version on 8086 (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
 | `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
@@ -645,6 +646,14 @@ name. Supported protocols:
   `tls-auth`/`tls-crypt`; those HMAC-wrap (or encrypt) control packets, so a bare
   reset is dropped and the server stays silent — silence is then expected and is
   not proof it is down.
+- `influxdb` (alias `influx`) — an InfluxDB server. Default port 8086; `tls`:
+  `false` (plain HTTP, the default) | `true` | `skip-verify` (https). No auth. GETs
+  `/health` (InfluxDB 2.x / 1.8+) and verifies a JSON `status` of `pass`, reporting
+  the server `version` (pair with `on_version_change`); on older servers without
+  `/health` it falls back to `/ping`, which answers `204` with the version in the
+  `X-Influxdb-Version` header. Probed natively (HTTP/REST). This is a
+  liveness/version check; running an InfluxQL/Flux query and comparing a result is
+  not (yet) supported.
 - `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
   `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
   Python pickle command protocol that is not worth reimplementing for a liveness
@@ -891,7 +900,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
