@@ -11,6 +11,19 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #8884; }
   th { font-weight: 600; }
+  .table-wrap { width: 100%; overflow-x: auto; }
+  .services-table { min-width: 76rem; font-size: .82rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
+  .services-table th, .services-table td { padding: .26rem .42rem; vertical-align: top; }
+  .services-table th { color: #888; white-space: nowrap; }
+  .services-table td { white-space: nowrap; }
+  .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; }
+  .services-table .svc-sub { margin-left: 1.15rem; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
+  .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
+  .services-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
+  .services-table .policy-cell { max-width: 11rem; }
+  .services-table .actions { min-width: 14rem; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .count-badge { display: inline-block; min-width: 1.5rem; text-align: right; font-weight: 600; }
   .status { font-weight: 600; }
   .active { color: #1a7f37; }
   .inactive, .unknown { color: #9a6700; }
@@ -91,12 +104,6 @@
   #event-controls input[type="text"] { font:inherit; padding:.2rem .5rem; border-radius:.35rem; border:1px solid #8886; background:#8881; width:8.5rem; }
   .event-group td { background:#8881; font-weight:600; }
   .event-msg button { margin-left:.35rem; padding:.05rem .35rem; font-size:.8rem; }
-  .spark { width:9rem; min-height:2.15rem; }
-  .spark svg { display:block; width:9rem; height:1.45rem; }
-  .spark .v { font-variant-numeric:tabular-nums; font-size:.82rem; }
-  .spark.degraded .v { color:#cf222e; font-weight:600; }
-  .spark.warn .v { color:#9a6700; font-weight:600; }
-  #sla-range button.f-active { background:#8883; font-weight:600; }
 </style>
 </head>
 <body>
@@ -137,20 +144,16 @@
       <button data-f="monitored" onclick="setSvcStatus('monitored')">monitored</button>
       <button data-f="unmonitored" onclick="setSvcStatus('unmonitored')">unmonitored</button>
     </span>
-    <span id="sla-range" class="muted">SLA
-      <button data-w="1h" onclick="setSlaRange('1h')">1h</button>
-      <button data-w="24h" class="f-active" onclick="setSlaRange('24h')">24h</button>
-      <button data-w="168h" onclick="setSlaRange('168h')">7d</button>
-      <button data-w="720h" onclick="setSlaRange('720h')">30d</button>
-    </span>
     <span id="svc-count" class="muted"></span>
   </div>
-  <table>
+  <div class="table-wrap">
+  <table class="services-table">
     <thead>
-      <tr><th>Service</th><th>Status</th><th>Checks</th><th>SLA</th><th>Monitoring</th><th class="actions">Actions</th></tr>
+      <tr><th>Service</th><th>Backend unit</th><th>Status</th><th>Checks</th><th>Policy</th><th>Locks</th><th>Last event</th><th>Next remediation</th><th>Monitoring</th><th class="actions">Actions</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
+  </div>
   <p id="ops" class="muted" style="margin:.6rem 0 0"></p>
 </details>
 
@@ -593,6 +596,57 @@ function checkHealthCell(s) {
   return '<span class="muted">—</span>';
 }
 
+function unitCell(s) {
+  const backend = s.backend ? `<span class="muted">${esc(s.backend)}</span>` : '<span class="muted">—</span>';
+  const unit = s.unit ? `<span class="mono" title="${esc(s.unit)}">${esc(s.unit)}</span>` : '<span class="muted">—</span>';
+  return `<div class="unit-cell">${backend} ${unit}</div>`;
+}
+
+function policyStateClass(state) {
+  switch (state) {
+    case "eligible": return "ok";
+    case "cooldown":
+    case "rate limit":
+    case "blocked": return "inactive";
+    case "disabled":
+    case "paused":
+    case "pending": return "muted";
+    default: return "muted";
+  }
+}
+
+function policyCell(s) {
+  const state = s.remediation_state || (s.enabled ? "pending" : "disabled");
+  const cd = s.policy_cooldown ? `<div class="muted mono">${esc(s.policy_cooldown)}</div>` : "";
+  return `<div class="policy-cell"><span class="${policyStateClass(state)}">${esc(state)}</span>${cd}</div>`;
+}
+
+function locksCell(s) {
+  const locks = s.active_locks || [];
+  if (!locks.length) return '<span class="muted count-badge">0</span>';
+  const label = locks.length === 1 ? locks[0] : locks.join(", ");
+  return `<span class="bad count-badge" title="${esc(label)}">${locks.length}</span>`;
+}
+
+function lastEventCell(s) {
+  const e = s.last_event;
+  if (!e) return '<span class="muted">—</span>';
+  const detail = [e.kind, e.action, e.status].filter(Boolean).join(" ");
+  const title = [fmtTime(e.time), e.message || ""].filter(Boolean).join(" · ");
+  return `<div class="event-cell" title="${esc(title)}"><span class="muted">${esc(fmtAge(e.time))}</span> ${detail ? `<span class="kind kind-${esc(e.kind || "")}">${esc(detail)}</span>` : ""}</div>`;
+}
+
+function nextRemediationCell(s) {
+  if (!s.enabled) return '<span class="muted">disabled</span>';
+  const state = s.remediation_state || "";
+  if (s.next_eligible_at) {
+    return `<span title="${esc(fmtTime(s.next_eligible_at))}">${esc(fmtUntilShort(s.next_eligible_at))}</span>`;
+  }
+  if (state === "eligible") return '<span class="ok">now</span>';
+  if (state === "paused" || state === "pending") return `<span class="muted">${esc(state)}</span>`;
+  return '<span class="muted">—</span>';
+}
+
 function summarizeSLA(points) {
   const pts = (points || []).filter((p) => p && p.total > 0);
   if (!pts.length) return { ratio: null, recent: null, previous: null, degraded: false };
@@ -612,60 +666,11 @@ function summarizeSLA(points) {
   };
 }
 
-function drawSpark(points) {
-  const pts = (points || []).filter((p) => p && p.total > 0).slice(-48);
-  if (!pts.length) return '<span class="muted">no data</span>';
-  const W = 144, H = 24, pad = 2;
-  const bw = (W - pad * 2) / pts.length;
-  const bars = pts.map((p, i) => {
-    const ratio = p.total ? p.up / p.total : 0;
-    const h = Math.max(1, ratio * (H - pad * 2));
-    const x = pad + i * bw;
-    const y = H - pad - h;
-    const color = ratio >= 0.99 ? "#1a7f37" : ratio >= 0.95 ? "#9a6700" : "#cf222e";
-    return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw - 0.5, 1).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"></rect>`;
-  }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${bars}</svg>`;
-}
-
-function slaCell(name) {
-  const entry = slaCache.get(name);
-  if (!entry) return `<div class="spark muted" id="sla-${esc(name)}">loading…</div>`;
-  if (entry.error) return `<div class="spark muted" id="sla-${esc(name)}">unavailable</div>`;
-  const s = summarizeSLA(entry.points || []);
-  const pct = s.ratio == null ? "n/a" : (s.ratio * 100).toFixed(2) + "%";
-  const recent = s.recent == null ? "" : ` recent ${(s.recent * 100).toFixed(1)}%`;
-  const cls = s.degraded ? "degraded" : (s.ratio != null && s.ratio < 0.99 ? "warn" : "");
-  const title = s.degraded ? `Degraded: recent ${(s.recent * 100).toFixed(1)}% vs prior ${(s.previous * 100).toFixed(1)}%` : "";
-  return `<div class="spark ${cls}" id="sla-${esc(name)}" title="${esc(title)}">${drawSpark(entry.points || [])}<div class="v">${esc(pct)}${s.degraded ? ' <span class="bad">drop</span>' : recent ? `<span class="muted">${esc(recent)}</span>` : ""}</div></div>`;
-}
-
-async function loadVisibleSLA(names) {
-  const now = Date.now();
-  const missing = names.filter((n) => {
-    const cached = slaCache.get(n);
-    return n && (!cached || (now - (cached.ts || 0)) > 60000);
-  });
-  await Promise.all(missing.slice(0, 12).map(async (name) => {
-    try {
-      const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${slaRange}`);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const body = await res.json();
-      slaCache.set(name, { points: body.points || [], ts: Date.now() });
-    } catch (e) {
-      slaCache.set(name, { error: e.message || "failed", ts: Date.now() });
-    }
-  }));
-  if (missing.length) renderServices();
-}
-
 // Service list state: latest fetched data plus the active search/status filter,
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
-let slaRange = "24h";
-let slaCache = new Map();
 let allWatches = [];
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
@@ -894,16 +899,6 @@ function setSvcStatus(v) {
   renderServices();
 }
 
-function setSlaRange(win) {
-  slaRange = win;
-  seriesWindow = win;
-  document.querySelectorAll("#sla-range button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.w === win));
-  slaCache.clear();
-  renderServices();
-  if (current) loadSeries(current);
-}
-
 // render receives fresh data on each refresh; cache it, then render through the
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
@@ -951,24 +946,27 @@ function renderServices() {
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
     const row = `<tr class="clickable ${isFailing(s) ? 'row-failing' : ''}" onclick="rowClick(event, '${esc(key)}')">
-      <td>${chev}${name}${activeLockBadges(s)}<div class="muted" style="margin-left:1.15rem">${esc(s.unit || "")}</div>${busyText}</td>
+      <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
+      <td>${unitCell(s)}</td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
-      <td>${slaCell(s.name)}</td>
+      <td>${policyCell(s)}</td>
+      <td>${locksCell(s)}</td>
+      <td>${lastEventCell(s)}</td>
+      <td>${nextRemediationCell(s)}</td>
       <td>${mon}</td>
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="6">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
   const empty = (allServices || []).length
-    ? `<tr><td colspan="6" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="6" class="muted">No services.</td></tr>`;
+    ? `<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="10" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows.join("") || empty;
   renderAttention();
-  loadVisibleSLA(list.slice(0, 12).map((s) => s.name));
   expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
 }
 
@@ -1732,9 +1730,6 @@ const windowMs = { "1h": 36e5, "24h": 864e5, "168h": 6048e5, "720h": 2592e6, "87
 
 function setWin(win) {
   seriesWindow = win;
-  slaRange = win;
-  document.querySelectorAll("#sla-range button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.w === win));
   if (current) detail(current);
 }
 
@@ -1872,6 +1867,17 @@ function fmtRemain(until) {
   return Math.floor(sec / 3600) + "h remaining · until " + fmtTime(until);
 }
 
+function fmtUntilShort(until) {
+  const d = new Date(until);
+  if (isNaN(d)) return "";
+  const sec = Math.floor((d - Date.now()) / 1000);
+  if (sec <= 0) return "now";
+  if (sec < 60) return "in " + sec + "s";
+  if (sec < 3600) return "in " + Math.floor(sec / 60) + "m";
+  if (sec < 86400) return "in " + Math.floor(sec / 3600) + "h";
+  return d.toLocaleDateString();
+}
+
 function ruleState(r) {
   if (r.firing) return '<span class="bad">firing</span>';
   if (r.condition_true) return '<span class="inactive">matching</span>';
@@ -1907,6 +1913,7 @@ function renderRemediation(r) {
       const lim = r.max_actions ? `${r.recent_actions || 0}/${r.max_actions}` : String(r.recent_actions || 0);
       parts.push(`<span class="inactive">rate limit</span> · ${esc(lim)}`);
       if (r.max_actions_window) parts.push(`<span class="muted">in ${esc(r.max_actions_window)}</span>`);
+      if (r.next_eligible_at) parts.push(`<span class="muted">eligible ${esc(fmtUntilShort(r.next_eligible_at))}</span>`);
     } else if (r.reason) {
       parts.push(`<span class="inactive">${esc(r.reason)}</span>`);
     }
