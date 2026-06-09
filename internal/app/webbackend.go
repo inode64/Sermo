@@ -65,6 +65,7 @@ type webEntry struct {
 	displayName    string
 	unit           string
 	backend        string
+	interval       time.Duration // resolved per-service cycle cadence (own interval or engine default)
 	policyCooldown time.Duration
 	engine         operation.Engine
 	status         func(context.Context) (servicemgr.Status, error)
@@ -158,10 +159,15 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		if err != nil {
 			unit = base
 		}
+		iv := durationField(resolved.Tree["interval"])
+		if iv <= 0 {
+			iv = EngineInterval(cfg, 30*time.Second)
+		}
 		entry := &webEntry{
 			displayName:    config.DisplayName(resolved.Tree, name),
 			unit:           unit,
 			backend:        string(deps.Backend),
+			interval:       iv,
 			policyCooldown: rules.ParsePolicy(resolved.Tree).Cooldown,
 		}
 		if disabled {
@@ -276,6 +282,9 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 		Unit:        e.unit,
 		Enabled:     !e.disabled,
 		Monitored:   true, // no recorded state defaults to monitored
+	}
+	if e.interval > 0 {
+		svc.Interval = formatInterval(e.interval)
 	}
 	if e.policyCooldown > 0 {
 		svc.PolicyCooldown = formatInterval(e.policyCooldown)

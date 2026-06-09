@@ -36,7 +36,8 @@ type Service struct {
 	Backend          string   `json:"backend"`
 	Unit             string   `json:"unit"`
 	Status           string   `json:"status"`
-	Enabled          bool     `json:"enabled"` // false when service document has `enabled: false`
+	Interval         string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
+	Enabled          bool     `json:"enabled"`            // false when service document has `enabled: false`
 	Monitored        bool     `json:"monitored"`
 	MonitorSource    string   `json:"monitor_source,omitempty"`     // cli | web | config | daemon
 	MonitorChangedAt string   `json:"monitor_changed_at,omitempty"` // RFC3339 when monitoring state last changed

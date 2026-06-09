@@ -97,6 +97,19 @@ func TestWebBackendViewMonitorSource(t *testing.T) {
 	}
 }
 
+func TestWebBackendViewInterval(t *testing.T) {
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {unit: "nginx", backend: "systemd", interval: 10 * time.Second},
+		},
+	}
+	svc := b.view(context.Background(), "web", b.entries["web"])
+	if svc.Interval != "10s" {
+		t.Fatalf("Interval = %q, want %q", svc.Interval, "10s")
+	}
+}
+
 func TestWebBackendDetailAtTimestamp(t *testing.T) {
 	t0 := time.Date(2026, 6, 7, 12, 30, 0, 0, time.UTC)
 	t1 := t0.Add(time.Minute)
