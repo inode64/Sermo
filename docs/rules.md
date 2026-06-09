@@ -33,6 +33,7 @@ which reuse the same schema). MVP types:
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
 | `ftp`         | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
+| `ssh`         | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
@@ -272,6 +273,15 @@ name. Supported protocols:
   **anonymous** check (greeting `220`); with a user/password it performs
   `USER`/`PASS` (a password with no user logs in as `anonymous`). Probed natively
   (RFC 959).
+- `ssh` — default port 22 (no `tls`: SSH has its own transport crypto). `user`
+  is **optional**: with no credentials it is an **anonymous** check that
+  completes the key exchange to capture the server's host key — authentication
+  then fails, which is expected; with a user/password it requires login to
+  succeed. Result data exposes `fingerprint` (SHA256 of the host key),
+  `host_key_algo`, `server_version` and `protocol`. Set **`on_change: true`**
+  (on a host watch, where the check is built once) to alert when the host-key
+  fingerprint changes between cycles — a possible re-key or man-in-the-middle.
+  Uses `golang.org/x/crypto/ssh`.
 - `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's
   Unix socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default
   9000) for a TCP pool. No auth. It performs a FastCGI request to `/ping` and
@@ -311,7 +321,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, fpm, dns
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
