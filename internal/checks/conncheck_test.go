@@ -608,6 +608,21 @@ func TestBuildClamdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildGlusterFSCheck(t *testing.T) {
+	for _, typ := range []string{"glusterfs", "glusterd", "gluster"} {
+		built, warns := Build(map[string]any{
+			"gfs": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "glusterfs" || cc.cfg.Port != 24007 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildCephCheck(t *testing.T) {
 	for _, typ := range []string{"ceph", "ceph-mon"} {
 		built, warns := Build(map[string]any{

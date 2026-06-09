@@ -60,6 +60,7 @@ which reuse the same schema). MVP types:
 | `mqtt`        | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
 | `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
 | `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
+| `glusterfs` / `glusterd` / `gluster` | a GlusterFS node's glusterd answers an RPC NULL on 24007 (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -476,6 +477,24 @@ name. Supported protocols:
   verifies a well-formed RPC reply — proof the daemon is up and speaking RPC. Any
   reply (accepted or denied) passes; result data carries the `rpc_status`. Probed
   natively (RFC 5531/1833).
+- `glusterfs` (aliases `glusterd`, `gluster`) — default port 24007 (TCP, the
+  glusterd management daemon). No auth. Sends an ONC RPC **NULL** call to the
+  GlusterFS handshake program (record marking over TCP) and verifies a
+  well-formed RPC reply — proof that node's glusterd is up and speaking RPC;
+  result data carries the `rpc_status`. Probed natively (reuses the rpcbind RPC
+  machinery). **This checks one node.** To alert when **any node** in a cluster
+  is down, configure one check per node (one `host` each) — the failing node's
+  check fires:
+
+  ```yaml
+  checks:
+    gluster-n1: { type: glusterfs, host: 10.0.0.1 }
+    gluster-n2: { type: glusterfs, host: 10.0.0.2 }
+    gluster-n3: { type: glusterfs, host: 10.0.0.3 }
+  ```
+
+  Cluster-wide peer status is not gathered in-protocol (it would need
+  authenticated GlusterD management RPC).
 - `ceph` (alias `ceph-mon`) — default port 3300 (TCP, the Ceph monitor's
   messenger v2; use port 6789 for the legacy v1). No auth. On connect a Ceph
   daemon sends a messenger banner (`ceph v2\n` for v2, `ceph v027` for v1);
@@ -689,7 +708,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
