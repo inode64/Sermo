@@ -124,7 +124,7 @@ func TestWithTimeout(t *testing.T) {
 		if !ok {
 			t.Fatal("child should have a deadline")
 		}
-		if dl.Sub(time.Now()) > 10*time.Millisecond {
+		if time.Until(dl) > 10*time.Millisecond {
 			t.Errorf("child deadline too far in future; parent short deadline should win")
 		}
 	})
