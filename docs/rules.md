@@ -78,7 +78,7 @@ which reuse the same schema). MVP types:
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
-| `influxdb-query` | an InfluxQL query's scalar result compares against a value (see InfluxDB query) |
+| `influxdb-query` | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
 | `websocket` / `ws` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
@@ -849,46 +849,58 @@ checks:
 
 ### InfluxDB query (`influxdb-query`)
 
-An `influxdb-query` check runs an **InfluxQL** query against an InfluxDB 1.x HTTP
-API (`GET /query`) and compares a **scalar result** against a `value`, the
-time-series counterpart of the `sql`/`mongodb-query` checks. It is
-**condition-style** (`OK == true` means the comparison holds) and reuses the
-`influxdb` connection variables (`host`/`port`/`user`/`password`/`tls`).
+An `influxdb-query` check runs a query against InfluxDB and compares a **scalar
+result** against a `value`, the time-series counterpart of the `sql`/
+`mongodb-query` checks. It is **condition-style** (`OK == true` means the
+comparison holds) and reuses the `influxdb` connection variables (`host`/`port`/
+`user`/`password`/`tls`). The **`language`** selects the query API:
+
+- **`influxql`** (default) — InfluxDB **1.x** `GET /query` against a `database`.
+- **`flux`** — InfluxDB **2.x** `POST /api/v2/query` against an `org` with a
+  `token`.
 
 ```yaml
 checks:
-  cpu-load:
+  cpu-load:                     # InfluxQL (1.x)
     type: influxdb-query
     host: 127.0.0.1             # host/port/user/password/tls (https when tls set)
     user: monitor               # optional: sent as HTTP Basic auth
     password: "${env:INFLUXPW}"
-    database: telegraf          # required (the InfluxQL database)
+    database: telegraf          # required for influxql
     query: "SELECT mean(usage_user) FROM cpu WHERE time > now() - 5m"
     op: "<"                     # == | != | > | >= | < | <= | =~
     value: "80"
-  series-count:
+  disk-flux:                    # Flux (2.x)
     type: influxdb-query
+    language: flux
     host: 127.0.0.1
-    token: "${env:INFLUX_TOKEN}" # optional: InfluxDB API token (v1.8+/v2 compat)
-    database: telegraf
-    query: "SELECT count(value) FROM disk WHERE host = 'node1'"
-    column: count               # optional: pick a named column (default: the last)
-    op: ">"
-    value: "0"
+    tls: true                   # InfluxDB 2.x is usually https
+    org: my-org                 # required for flux
+    token: "${env:INFLUX_TOKEN}" # required for flux (Authorization: Token …)
+    query: >
+      from(bucket: "telegraf")
+        |> range(start: -5m)
+        |> filter(fn: (r) => r._measurement == "disk" and r._field == "used_percent")
+        |> mean()
+    op: "<"
+    value: "90"
 ```
 
-- **Scalar selection:** InfluxQL returns rows of `[time, …]`; by default the
+- **Scalar selection.** *InfluxQL* returns rows of `[time, …]`; by default the
   result is the **last column** of the first row of the first series (the
-  aggregate value, since `time` is first). Set **`column`** to read a named column
-  instead. A query that matches nothing (no series) fails the check ("no value").
+  aggregate value, since `time` is first). *Flux* returns annotated CSV; by
+  default the result is the **`_value`** column of the first data row. Set
+  **`column`** to read a named column in either mode. A query that matches nothing
+  fails the check ("no value").
 - **Operators** behave exactly as the `sql` check's (`>` `>=` `<` `<=` numeric;
   `==`/`!=` numeric-or-string; `=~` RE2 regexp).
-- **Auth:** a `user`/`password` is sent as HTTP Basic auth; a `token` (InfluxDB
-  1.8+/2.x compatibility) is sent as `Authorization: Token …` and takes
-  precedence. The check only reads — point it at a read-only user.
-- Result data carries `database`, `query`, `op`, `threshold`, the raw `result`
-  and, when numeric, a `value` for hooks/rules. A query error (e.g. unknown
-  database) fails the check.
+- **Auth.** *InfluxQL:* a `user`/`password` is sent as HTTP Basic auth; an
+  optional `token` (1.8+/2.x compatibility) is sent as `Authorization: Token …`
+  and takes precedence. *Flux:* the `token` is required. The check only reads —
+  point it at a read-only user/token.
+- Result data carries `language`, `query`, `op`, `threshold`, the `database`/`org`
+  in use, the raw `result` and, when numeric, a `value` for hooks/rules. A query
+  error (e.g. unknown database, bad token) fails the check.
 
 ### Size growth (`size`)
 

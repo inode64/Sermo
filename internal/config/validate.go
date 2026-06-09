@@ -1504,12 +1504,10 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
-// validateInfluxFields validates an influxdb-query check: a required database and
-// InfluxQL query, a valid op and a value.
+// validateInfluxFields validates an influxdb-query check: a query, a valid op and
+// a value, plus the language-specific target — InfluxQL needs a `database`, Flux
+// needs an `org` and `token`.
 func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["database"]) == "" {
-		add("%s.database is required for an influxdb-query check", prefix)
-	}
 	if scalarString(fields["query"]) == "" {
 		add("%s.query is required for an influxdb-query check", prefix)
 	}
@@ -1519,6 +1517,25 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	if scalarString(fields["value"]) == "" {
 		add("%s.value is required for an influxdb-query check", prefix)
+	}
+	language := scalarString(fields["language"])
+	if language == "" {
+		language = "influxql"
+	}
+	switch language {
+	case "influxql":
+		if scalarString(fields["database"]) == "" {
+			add("%s.database is required for an influxql query", prefix)
+		}
+	case "flux":
+		if scalarString(fields["org"]) == "" {
+			add("%s.org is required for a flux query", prefix)
+		}
+		if scalarString(fields["token"]) == "" {
+			add("%s.token is required for a flux query", prefix)
+		}
+	default:
+		add("%s.language %q must be influxql or flux", prefix, language)
 	}
 }
 
