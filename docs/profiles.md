@@ -95,13 +95,11 @@ Both are optional and behave differently when missing:
 
 Both must be strings if present; validation rejects non-string values.
 
-### Using name and display_name in expansion
+### Built-in variables
 
-`${name}` and `${display_name}` are always available as variables during
-resolution, without being declared under `variables`. `${name}` expands to the
-resolved service name and `${display_name}` to its display name (falling back to
-`name`). This lets a profile parameterize human-facing strings instead of
-hardcoding a brand:
+The variables in the table below are always available during resolution
+**without being declared** under `variables` — so a profile can parameterize
+human-facing strings (and paths) instead of hardcoding them:
 
 ```yaml
 rules:
@@ -110,33 +108,17 @@ rules:
     blocks: [restart, stop]
     then:
       action: block
-      message: "${display_name} backup is running"
-```
-
-When a service `uses` the profile, `${display_name}` resolves to whatever that
-service's display name is (the profile's, unless the service overrides it). An
-explicit `variables.name` or `variables.display_name` takes precedence over the
-built-in.
-
-`${arch}` is a third built-in: the machine architecture in `uname -m` form
-(`x86_64`, `aarch64`, ...). Use it to locate an arch-specific binary or library:
-
-```yaml
+      message: "${display_name} backup is running"   # → "MariaDB backup is running"
 variables:
-  binary: "/usr/bin/qemu-system-${arch}"   # → /usr/bin/qemu-system-x86_64
+  binary: "/usr/bin/qemu-system-${arch}"             # → /usr/bin/qemu-system-x86_64
 ```
 
-`${arch}` is substituted everywhere on load (including inside variable values and
-version-template discovery paths), so it works in `binary`, library paths, and
-`versions.from` alike.
-
-`${os}` is the OS id from `/etc/os-release` (`gentoo`, `debian`, `ubuntu`, ...),
-substituted the same way — e.g. `confdir: "/etc/${os}-apache"`.
-
-`${arch}` and `${os}` can be overridden with the `SERMO_ARCH` / `SERMO_OS`
-environment variables (useful for testing or building config off-host).
-
-### All built-in variables
+An explicit `variables` entry of the same name always takes precedence over a
+built-in. `${arch}`/`${os}` are baked **on load** (everywhere — variable values
+and `versions.from` discovery paths included); the rest resolve per service, and
+the runtime ones (`${date}`/`${event}`/`${action}`) only in rule `message:`
+strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` environment variables
+override the matching built-in (handy for testing or building config off-host).
 
 | Variable          | Value                                   | Resolved        |
 |-------------------|-----------------------------------------|-----------------|
@@ -258,21 +240,20 @@ precisely.
 
 ### Integer placeholder (%n)
 
-`%v`/`${version}` accepts a free-form version (`8.3`, `12.0.2`). When the value is
-a plain integer, use `%n`/`${n}` instead: it matches only whole numbers, so it
-rejects siblings like `python3.11`. Otherwise it works exactly like `%v`.
+`%v`/`${version}` accepts a free-form version (`8.3`, `12.0.2`); use `%n`/`${n}`
+when the value is a **plain integer** — it matches only whole numbers, otherwise
+working exactly like `%v`:
 
 ```yaml
 kind: profile
 name: python%n
 display_name: "Python ${n}"
 service: python${n}
-variables:
-  binary: "/usr/bin/python${n}"
+variables: { binary: "/usr/bin/python${n}" }
 ```
 
-`/usr/bin/python*` then materializes `python2` and `python3`, but not
-`python3.11` or `python-config`.
+`/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
+`python-config`.
 
 ### Listing installed applications
 
@@ -395,16 +376,8 @@ variables:
   config:  /etc/dbserver/inst1.cnf
 ```
 
-```yaml
-kind: service
-name: db-inst2
-uses: dbserver
-service: db-inst2
-variables:
-  port:    3307
-  pidfile: /run/dbserver/inst2.pid
-  config:  /etc/dbserver/inst2.cnf
-```
+A second instance is the same file with its own name/unit and variables (e.g.
+`name: db-inst2`, `service: db-inst2`, `port: 3307`, the `inst2.*` paths).
 
 Prefer `uses` over [`clone`](#cloning) here: every instance derives from the
 *profile* and only overrides variables. Reach for `clone` only when one instance
