@@ -107,38 +107,20 @@ func BuildRuleWindowReports(ruleSet []Rule, windows map[string]*WindowState, eva
 				cond = false
 			}
 		}
-		action := ""
-		if op, ok := r.OperationAction(); ok {
-			action = string(op)
-		} else if r.Then.Type != "" {
-			action = string(r.Then.Type)
-		}
+		// Then is already the primary action (the operation if any, else the
+		// first), so its type is the reported action.
 		out = append(out, RuleWindowReport{
 			Name:          r.Name,
 			Type:          string(r.Type),
-			Action:        action,
+			Action:        string(r.Then.Type),
 			Condition:     FormatCondition(r.If),
 			ConditionTrue: cond,
 			Window:        WindowDescription(r),
-			Progress:      windowProgress(ws, r),
-			Firing:        windowFiring(ws, r),
+			Progress:      ws.Progress(r), // Progress/IsFiring nil-guard the receiver
+			Firing:        ws.IsFiring(r),
 		})
 	}
 	return out
-}
-
-func windowProgress(ws *WindowState, r Rule) string {
-	if ws == nil {
-		return (&WindowState{}).Progress(r)
-	}
-	return ws.Progress(r)
-}
-
-func windowFiring(ws *WindowState, r Rule) bool {
-	if ws == nil {
-		return (&WindowState{}).IsFiring(r)
-	}
-	return ws.IsFiring(r)
 }
 
 // String returns a debug-friendly summary.
