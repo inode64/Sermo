@@ -182,7 +182,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		} else if s := asString(entry["body"]); s != "" {
 			body = []byte(s)
 		}
-		return httpCheck{
+		return &httpCheck{
 			base:        b,
 			client:      client,
 			url:         url,
