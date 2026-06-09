@@ -117,7 +117,7 @@ func TestHTTPCheckCertExpiry(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
 
 	// Threshold far in the future → the server's short-lived cert "expires soon".
 	c := &httpCheck{
@@ -139,7 +139,7 @@ func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	defer srv.Close()
-	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
 
 	c := &httpCheck{
 		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
@@ -160,7 +160,7 @@ func TestHTTPCheckCertVerifyFails(t *testing.T) {
 		w.WriteHeader(200)
 	}))
 	defer srv.Close()
-	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
 
 	c := &httpCheck{
 		base: base{name: "h", timeout: time.Second}, client: insecure, certClient: insecure,
