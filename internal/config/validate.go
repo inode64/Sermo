@@ -1120,7 +1120,7 @@ var processStates = set("running", "zombie", "absent")
 var validActions = set("restart", "start", "stop", "alert", "block")
 var metricOps = set(">", ">=", "<", "<=", "==", "!=")
 var metricCatalog = map[string]map[string]struct{}{
-	"service": set("memory", "cpu", "process_count"),
+	"service": set("memory", "cpu", "process_count", "io", "io_read", "io_write", "fds", "threads"),
 	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
 }
 
@@ -1132,6 +1132,11 @@ var metricForms = map[string]metricForm{
 	"memory":        {absolute: true, percent: true},
 	"cpu":           {percent: true},
 	"process_count": {absolute: true},
+	"io":            {absolute: true},
+	"io_read":       {absolute: true},
+	"io_write":      {absolute: true},
+	"fds":           {absolute: true},
+	"threads":       {absolute: true},
 	"total_memory":  {absolute: true, percent: true},
 	"total_cpu":     {percent: true},
 	"load1":         {absolute: true},

@@ -82,6 +82,26 @@ func (OSReader) ProcessIO(pid int) (read, write uint64, ok bool) {
 	return read, write, haveR && haveW
 }
 
+// ProcessFDs counts the entries in /proc/<pid>/fd (open file descriptors).
+// Reading another user's fd dir requires privilege, so ok is false when it
+// cannot be read.
+func (OSReader) ProcessFDs(pid int) (uint64, bool) {
+	entries, err := os.ReadDir("/proc/" + strconv.Itoa(pid) + "/fd")
+	if err != nil {
+		return 0, false
+	}
+	return uint64(len(entries)), true
+}
+
+// ProcessThreads counts the entries in /proc/<pid>/task (the process's threads).
+func (OSReader) ProcessThreads(pid int) (uint64, bool) {
+	entries, err := os.ReadDir("/proc/" + strconv.Itoa(pid) + "/task")
+	if err != nil {
+		return 0, false
+	}
+	return uint64(len(entries)), true
+}
+
 // TotalMemory reads MemTotal and MemAvailable from /proc/meminfo.
 func (OSReader) TotalMemory() (total, used uint64, ok bool) {
 	data, err := os.ReadFile("/proc/meminfo")
