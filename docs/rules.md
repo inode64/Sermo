@@ -1128,7 +1128,7 @@ Service metrics measure the discovered process set; system metrics measure the
 machine. `value` is a number with an optional trailing `%`.
 
 ```
-scope: service   memory, cpu, process_count, io, io_read, io_write, fds, threads
+scope: service   memory, swap, cpu, process_count, io, io_read, io_write, fds, threads
 scope: system    total_memory, total_cpu, load1, load5, load15
 ```
 
@@ -1138,6 +1138,12 @@ processes *and* their child/descendant processes — so a service's `cpu`,
 main process. `io`/`io_read`/`io_write` are byte/second rates over actual
 block-layer I/O (`io` is read+write); `fds` is the open file-descriptor count and
 `threads` the thread count.
+
+`memory` is the summed **RSS** (resident memory) of the process tree, as bytes
+and as a percentage of total RAM. `swap` is the summed **swapped-out** memory
+(`VmSwap`) of the tree, as bytes and — when a swap device exists — as a
+percentage of total swap; it is reported only on hosts where swap accounting is
+readable.
 
 The `cpu` percentage is the service's summed CPU time (parent + children) over
 the elapsed wall-clock, **normalized by the server's total logical CPUs** (the
