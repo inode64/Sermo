@@ -38,6 +38,7 @@ which reuse the same schema). MVP types:
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
 | `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15) (see Database) |
 | `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); `on_change` alerts on device-identity change (see Database) |
+| `tftp`        | a TFTP server answers an RRQ with a valid packet (DATA or ERROR) (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -298,6 +299,12 @@ name. Supported protocols:
   and the description (as the version banner). Set **`on_change: true`** (on a
   host watch) to alert when `sysObjectID` (the device identity — model/firmware)
   changes. Uses `github.com/gosnmp/gosnmp`.
+- `tftp` — default port 69 (UDP). No auth. Sends a read request (RRQ) for
+  `query` (default `sermo-tftp-check`) and verifies the server answers with a
+  valid TFTP packet: a `DATA` reply (the file is served) or an `ERROR` reply
+  (e.g. file not found) both pass — either proves the server is up and speaking
+  TFTP. Result data carries the reply kind and, for an error, the TFTP error
+  code/message. Probed natively (RFC 1350).
 - `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies
   the server answers in **server mode** with a synchronized **stratum (1–15)**;
   a kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
@@ -336,7 +343,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns, ntp, snmp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, fpm, dns, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
