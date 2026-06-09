@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"sermo/internal/conn"
@@ -20,11 +21,14 @@ type connCheck struct {
 	cfg   conn.Config
 	probe func(context.Context, conn.Config) (conn.Result, error)
 	// onChange alerts when the server's fingerprint (Result.Extra["fingerprint"],
-	// e.g. an SSH host key) changes between cycles. state holds the previous value;
-	// being a pointer, it survives across cycles when the check is built once (a
-	// host watch), matching the cert check's change detection.
-	onChange bool
-	state    *connState
+	// e.g. an SSH host key) changes between cycles. onVersionChange alerts when the
+	// server's version identity changes (its reported version, or the connection
+	// greeting banner for protocols that have no version — smtp/imap/pop/ftp).
+	// state holds the previous values; being a pointer, it survives across cycles
+	// when the check is built once (a host watch), like the cert check.
+	onChange        bool
+	onVersionChange bool
+	state           *connState
 	// expect holds optional response assertions: each compares a field of the
 	// probe Result ("version" or a Result.Extra key) against a value with a
 	// shared operator. All must hold for the check to pass (additive to the
@@ -39,6 +43,17 @@ type connCheck struct {
 type connState struct {
 	primed          bool
 	lastFingerprint string
+	lastVersion     string
+}
+
+// versionIdentity is the string tracked for on_version_change: the protocol's
+// reported version, or the connection greeting banner when it has none (so
+// smtp/imap/pop/ftp, which expose only a greeting, still detect version changes).
+func versionIdentity(res conn.Result) string {
+	if res.Version != "" {
+		return res.Version
+	}
+	return res.Extra["greeting"]
 }
 
 func (c connCheck) Run(ctx context.Context) Result {
@@ -59,14 +74,33 @@ func (c connCheck) Run(ctx context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
 	}
-	if c.onChange && c.state != nil {
-		fp := res.Extra["fingerprint"]
-		changed := c.state.primed && fp != c.state.lastFingerprint
-		old := c.state.lastFingerprint
-		c.state.primed, c.state.lastFingerprint = true, fp
-		if changed {
-			r := c.result(false, fmt.Sprintf("%s %s: fingerprint changed (%s -> %s)", c.proto.Name(), addr, old, fp), start)
-			r.Data = map[string]any{"protocol": c.proto.Name(), "host": c.cfg.Host, "port": c.cfg.Port, "fingerprint": fp, "fingerprint_old": old}
+	if c.state != nil {
+		var problems []string
+		extra := map[string]any{}
+		if c.onChange {
+			fp := res.Extra["fingerprint"]
+			if c.state.primed && fp != c.state.lastFingerprint {
+				problems = append(problems, fmt.Sprintf("fingerprint changed (%s -> %s)", c.state.lastFingerprint, fp))
+				extra["fingerprint_old"] = c.state.lastFingerprint
+			}
+			c.state.lastFingerprint, extra["fingerprint"] = fp, fp
+		}
+		if c.onVersionChange {
+			v := versionIdentity(res)
+			if c.state.primed && v != c.state.lastVersion {
+				problems = append(problems, fmt.Sprintf("version changed (%s -> %s)", c.state.lastVersion, v))
+				extra["version_old"] = c.state.lastVersion
+			}
+			c.state.lastVersion, extra["version"] = v, v
+		}
+		primed := c.state.primed
+		c.state.primed = true
+		if primed && len(problems) > 0 {
+			r := c.result(false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, strings.Join(problems, "; ")), start)
+			r.Data = map[string]any{"protocol": c.proto.Name(), "host": c.cfg.Host, "port": c.cfg.Port, "latency_ms": elapsed.Milliseconds()}
+			for k, v := range extra {
+				r.Data[k] = v
+			}
 			return r
 		}
 	}
@@ -198,8 +232,9 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, proto.Name() + " check: " + lwarn
 	}
 	c.latencyOp, c.latencyValue = lop, lval
-	if asBool(entry["on_change"]) {
-		c.onChange = true
+	c.onChange = asBool(entry["on_change"])
+	c.onVersionChange = asBool(entry["on_version_change"])
+	if c.onChange || c.onVersionChange {
 		c.state = &connState{}
 	}
 	return c, ""
