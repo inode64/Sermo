@@ -16,6 +16,7 @@ import (
 type Config struct {
 	Host     string
 	Port     int
+	Socket   string // Unix socket path; when set, protocols dial it instead of host:port
 	User     string
 	Password string
 	Database string

@@ -205,6 +205,32 @@ func TestBuildSMTPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildFPMCheck(t *testing.T) {
+	// Unix socket form: no user; socket carried into the config and reflected in
+	// the result addr.
+	built, warns := Build(map[string]any{
+		"php": map[string]any{"type": "fpm", "socket": "/run/php/php8.2-fpm.sock"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("fpm socket check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "fpm" || cc.cfg.Socket != "/run/php/php8.2-fpm.sock" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+
+	// TCP form via the php-fpm alias, default port 9000.
+	built, _ = Build(map[string]any{
+		"php": map[string]any{"type": "php-fpm", "host": "127.0.0.1"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(built) != 1 {
+		t.Fatal("php-fpm alias should build")
+	}
+	if built[0].Check.(connCheck).cfg.Port != 9000 {
+		t.Fatal("fpm default tcp port should be 9000")
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
