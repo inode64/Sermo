@@ -46,6 +46,7 @@ which reuse the same schema). MVP types:
 | `dhcp` / `dhcpd` | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC (opens a connection and reports its version) (see Database) |
+| `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -335,6 +336,24 @@ name. Supported protocols:
       host: 10.0.0.4             # plain TCP on 16509
       query: "qemu:///system"    # optional connect URI (default qemu:///system)
   ```
+- `dbus` — connects to a D-Bus daemon and completes its SASL auth +
+  `org.freedesktop.DBus.Hello` handshake — which alone proves the bus is up — then
+  calls `org.freedesktop.DBus.GetId` to read the bus UUID. It runs no write
+  operation. **Target:** defaults to the system bus
+  (`unix:path=/var/run/dbus/system_bus_socket`); set `socket` for a different
+  socket path, or `query` for a full D-Bus address (`unix:abstract=…`,
+  `tcp:host=…,port=…`). Socket-based, so there is no TCP port. No auth — access is
+  governed by the socket's permissions. Result data carries the bus id, address
+  and the connection's unique name. Uses `github.com/godbus/dbus/v5` (pure Go).
+
+  ```yaml
+  checks:
+    dbus-system:                 # dials unix:path=/var/run/dbus/system_bus_socket
+      type: dbus
+    dbus-custom:
+      type: dbus
+      socket: /run/dbus/system_bus_socket   # or use `query` for a full address
+  ```
 - `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
   a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
   connector. Probed natively (AJP13).
@@ -424,7 +443,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
