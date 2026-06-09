@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sermo</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7'%20fill='%231a7f37'/%3E%3C/svg%3E">
 <style>
   :root { color-scheme: light dark; }
   body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem; }
@@ -703,6 +704,14 @@ function openPanelTarget(target) {
   if (el.tagName === "DETAILS") el.open = true;
   el.scrollIntoView({ block: "start", behavior: "smooth" });
 }
+// setFavicon reflects overall health in the browser tab: green = ok,
+// orange = warning, red = something malfunctioning.
+function setFavicon(status) {
+  const color = status === "critical" ? "#cf222e" : status === "warning" ? "#e8830c" : "#1a7f37";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
+  const link = $("#favicon");
+  if (link) link.href = "data:image/svg+xml," + encodeURIComponent(svg);
+}
 function renderAttention() {
   const box = $("#attention");
   if (!box) return;
@@ -771,10 +780,12 @@ function renderAttention() {
     });
   }
   if (!items.length) {
+    setFavicon("ok");
     box.style.display = "none";
     box.innerHTML = "";
     return;
   }
+  setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
   box.style.display = "block";
   box.innerHTML = `
     <div class="attn-head">
