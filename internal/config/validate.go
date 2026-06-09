@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -1157,12 +1158,14 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
 var validActions = set("restart", "start", "stop", "alert", "block")
 var metricOps = set(">", ">=", "<", "<=", "==", "!=")
+var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
+var sqlOps = set("==", "!=", ">", ">=", "<", "<=", "=~")
 var metricCatalog = map[string]map[string]struct{}{
 	"service": set("memory", "cpu", "process_count", "io", "io_read", "io_write", "fds", "threads"),
 	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
@@ -1286,6 +1289,46 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			if scalarString(entry["path"]) == "" {
 				add("%s.path is required for a sqlite check", path)
 			}
+		case "sql":
+			validateSQLFields(path, entry, add)
+		}
+	}
+}
+
+// validateSQLFields validates a sql check: a known engine, a query, a valid op
+// and a value. For numeric ops the value must be numeric; for =~ it must be a
+// valid regexp. mysql/postgres require a user; sqlite requires a path.
+func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
+	engine := scalarString(fields["engine"])
+	if _, ok := sqlEngines[engine]; !ok {
+		add("%s.engine must be one of mysql, mariadb, postgres, postgresql, sqlite", prefix)
+	}
+	if scalarString(fields["query"]) == "" {
+		add("%s.query is required for a sql check", prefix)
+	}
+	op := scalarString(fields["op"])
+	if _, ok := sqlOps[op]; !ok {
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+	}
+	value := scalarString(fields["value"])
+	switch op {
+	case ">", ">=", "<", "<=":
+		if !isNumeric(value) {
+			add("%s.value %q must be numeric for op %s", prefix, value, op)
+		}
+	case "=~":
+		if _, err := regexp.Compile(value); err != nil {
+			add("%s.value is not a valid regexp: %v", prefix, err)
+		}
+	}
+	switch engine {
+	case "sqlite", "sqlite3":
+		if scalarString(fields["path"]) == "" {
+			add("%s.path is required for a sqlite sql check", prefix)
+		}
+	case "mysql", "mariadb", "postgres", "postgresql":
+		if scalarString(fields["user"]) == "" {
+			add("%s.user is required for a %s sql check", prefix, engine)
 		}
 	}
 }

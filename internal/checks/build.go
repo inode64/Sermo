@@ -548,6 +548,9 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}
 		return c, ""
 
+	case "sql":
+		return buildSQLCheck(b, entry)
+
 	case "":
 		return nil, "missing type"
 	default:
