@@ -51,3 +51,46 @@ checks:
   conn: { type: mariadb, user: u, tls: maybe }
 `), "tls")
 }
+
+func TestValidateConnExpectValid(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: dns
+service: { name: x }
+checks:
+  resolver:
+    type: dns
+    host: 1.1.1.1
+    expect:
+      rcode: NOERROR
+      answers: { op: ">", value: 0 }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.resolver") {
+			t.Fatalf("valid conn expect must produce no issue: %v", issues)
+		}
+	}
+}
+
+func TestValidateConnExpectErrors(t *testing.T) {
+	mustHave(t, validateService(t, `
+kind: service
+name: dns
+service: { name: x }
+checks:
+  resolver:
+    type: dns
+    expect:
+      answers: { op: "~~", value: 0 }
+`), "expect.answers op")
+	mustHave(t, validateService(t, `
+kind: service
+name: dns
+service: { name: x }
+checks:
+  resolver:
+    type: dns
+    expect:
+      answers: { op: ">", value: "abc" }
+`), "must be numeric")
+}

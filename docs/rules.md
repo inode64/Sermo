@@ -538,6 +538,35 @@ It passes (health-style, `OK == true`) when it connects, authenticates as
 error. This is meant to be added to a database service's `checks:` so a
 restart/alert can fire when it stops accepting connections.
 
+**Response comparisons (`expect`).** Any protocol check can assert the values
+its probe returns — the server `version` or any field the protocol puts in its
+result data (e.g. `answers`/`rcode` for `dns`, `stratum`/`offset_seconds` for
+`ntp`, `sys_object_id` for `snmp`, `offered_ip`/`lease_seconds` for `dhcp`,
+`ipp_version` for `ipp`, …). `expect` is a mapping of field → value (equality) or
+field → `{op, value}` using the shared operators `== != > >= < <=` (numeric, or
+string for `==`/`!=`) and `=~` (Go/RE2 regex). All assertions must hold, **in
+addition** to the probe succeeding:
+
+```yaml
+checks:
+  resolver:
+    type: dns
+    host: 1.1.1.1
+    query: example.com
+    expect:
+      rcode: NOERROR                 # equality (scalar)
+      answers: { op: ">", value: 0 } # operator comparison
+  clock:
+    type: ntp
+    host: pool.ntp.org
+    expect:
+      stratum: { op: "<=", value: 3 }
+```
+
+A referenced field the probe did not return fails the check with a clear
+message. This reuses the same comparison engine as the `http` and `sql` checks,
+so it works for every registered protocol with no per-protocol configuration.
+
 More protocols are added the same way — the check type, dispatch and validation
 are protocol-agnostic, so a new protocol only registers itself.
 

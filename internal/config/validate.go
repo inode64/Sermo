@@ -1055,6 +1055,20 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			add("%s.tls must be a boolean or a string (true/false/skip-verify)", prefix)
 		}
 	}
+	// expect: optional response assertions (field -> value | {op, value}),
+	// compared against the probe's version / Extra fields.
+	if v, present := fields["expect"]; present {
+		m, ok := v.(map[string]any)
+		if !ok {
+			add("%s.expect must be a mapping of field -> value or {op, value}", prefix)
+		} else {
+			for _, field := range sortedKeys(m) {
+				if cond, ok := m[field].(map[string]any); ok {
+					validateOpValue(prefix, "expect."+field, cond, add)
+				}
+			}
+		}
+	}
 }
 
 func validateDocuments(cfg *Config) []Issue {
