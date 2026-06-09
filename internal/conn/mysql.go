@@ -18,8 +18,9 @@ func init() {
 // mysqlProtocol probes a MySQL or MariaDB server.
 type mysqlProtocol struct{}
 
-func (mysqlProtocol) Name() string     { return "mysql" }
-func (mysqlProtocol) DefaultPort() int { return 3306 }
+func (mysqlProtocol) Name() string       { return "mysql" }
+func (mysqlProtocol) DefaultPort() int   { return 3306 }
+func (mysqlProtocol) RequiresUser() bool { return true }
 
 // Probe connects (authenticating with the configured user/password), verifies
 // the server responds with a ping, and reads its version. The caller's context

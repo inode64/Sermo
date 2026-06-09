@@ -28,6 +28,7 @@ which reuse the same schema). MVP types:
 | `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
 | `mysql` / `mariadb` | a connection to a MySQL/MariaDB server authenticates and responds (see Database) |
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
+| `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING (see Database) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -242,11 +243,16 @@ name. Supported protocols:
 - `postgres` (alias `postgresql`) — default port 5432; `tls`: `false` | `true` |
   `skip-verify`, or a PostgreSQL sslmode (`disable`/`require`/`prefer`/
   `verify-ca`/`verify-full`).
+- `redis` (alias `valkey`) — default port 6379; `tls`: `false` | `true` |
+  `skip-verify`. `user` is **optional** (legacy `requirepass` uses a password
+  only, or no auth at all); a password-only check sends `AUTH <password>`.
+  Probed natively over RESP (no driver), verifying `PING` → `PONG`.
 
 ```yaml
 checks:
   db:
-    type: mysql                 # or mariadb, postgres, postgresql
+    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey
+    # user is required for SQL protocols; optional for redis (password-only auth)
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
     user: monitor               # required

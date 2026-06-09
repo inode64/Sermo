@@ -18,8 +18,9 @@ func init() {
 // postgresProtocol probes a PostgreSQL server.
 type postgresProtocol struct{}
 
-func (postgresProtocol) Name() string     { return "postgres" }
-func (postgresProtocol) DefaultPort() int { return 5432 }
+func (postgresProtocol) Name() string       { return "postgres" }
+func (postgresProtocol) DefaultPort() int   { return 5432 }
+func (postgresProtocol) RequiresUser() bool { return true }
 
 // Probe connects (authenticating with the configured user/password), verifies
 // the server responds with a ping, and reads its version. The caller's context
