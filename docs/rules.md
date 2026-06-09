@@ -50,6 +50,7 @@ which reuse the same schema). MVP types:
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
+| `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
 | `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
 | `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
@@ -496,6 +497,12 @@ name. Supported protocols:
   and speaking RPC. A version-mismatch reply (e.g. an NFSv4-only server answering
   a v3 NULL) still passes; result data carries the `rpc_status`. Probed natively
   (RFC 5531/1813). Reuses the rpcbind RPC machinery.
+- `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
+  `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
+  Python pickle command protocol that is not worth reimplementing for a liveness
+  check, so the check is the **connect itself**: a successful connection proves
+  fail2ban-server is listening (a stale socket left by a dead server refuses the
+  connection). It exchanges no commands. No auth. Probed natively.
 - `acpid` — the ACPI event daemon. **Socket-only** (no TCP port); defaults to
   `/var/run/acpid.socket`, override with `socket`. acpid is an event broadcaster
   with no request/response protocol, so the check is the **connect itself**: a
@@ -627,7 +634,7 @@ directory walk reads the whole subtree each cycle, so point it at a bounded path
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, rpcbind, nfs, rdp, guacd, asterisk, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, acpid, fail2ban, rpcbind, nfs, rdp, guacd, asterisk, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
