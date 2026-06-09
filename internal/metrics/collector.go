@@ -86,13 +86,24 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	now := c.Now()
 	snap := Snapshot{}
 
-	var rss, ticks, ioRead, ioWrite, fds, threads uint64
+	// Swap is optional: only readers that implement ProcessSwap contribute a
+	// per-service swap metric (summed over the tree, like RSS).
+	swapReader, hasSwap := c.Reader.(interface {
+		ProcessSwap(pid int) (uint64, bool)
+	})
+
+	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
 	for _, pid := range pids {
 		if v, ok := c.Reader.ProcessRSS(pid); ok {
 			rss += v
 		}
 		if v, ok := c.Reader.ProcessCPU(pid); ok {
 			ticks += v
+		}
+		if hasSwap {
+			if v, ok := swapReader.ProcessSwap(pid); ok {
+				swap += v
+			}
 		}
 		if rd, wr, ok := c.Reader.ProcessIO(pid); ok {
 			ioRead += rd
@@ -112,6 +123,17 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		mem.HasPercent = true
 	}
 	snap["memory"] = mem
+
+	// Per-service swap: total swapped-out memory of the process tree (bytes), and
+	// — when a swap device exists — its share of total swap.
+	if hasSwap {
+		sw := Reading{Absolute: float64(swap), HasAbsolute: true, Ready: true}
+		if total, _, ok := readerTotalSwap(c.Reader); ok && total > 0 {
+			sw.Percent = float64(swap) / float64(total) * 100
+			sw.HasPercent = true
+		}
+		snap["swap"] = sw
+	}
 
 	snap["process_count"] = Reading{Absolute: float64(len(pids)), HasAbsolute: true, Ready: true}
 	snap["fds"] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: true}
@@ -199,23 +221,31 @@ func (c *Collector) SampleSystem() Snapshot {
 	// Swap is optional: only readers that implement TotalSwap contribute it, and
 	// only when a swap device exists (total > 0). Percent is always computed so a
 	// 0%-used swap still reports a value.
-	if sr, ok := c.Reader.(interface {
-		TotalSwap() (total, used uint64, ok bool)
-	}); ok {
-		if total, used, ok := sr.TotalSwap(); ok && total > 0 {
-			snap["total_swap"] = Reading{
-				Absolute:    float64(used),
-				HasAbsolute: true,
-				Percent:     float64(used) / float64(total) * 100,
-				HasPercent:  true,
-				Ready:       true,
-			}
+	if total, used, ok := readerTotalSwap(c.Reader); ok && total > 0 {
+		snap["total_swap"] = Reading{
+			Absolute:    float64(used),
+			HasAbsolute: true,
+			Percent:     float64(used) / float64(total) * 100,
+			HasPercent:  true,
+			Ready:       true,
 		}
 	}
 
 	c.lastSystem = snap
 	c.lastSystemA = now
 	return snap
+}
+
+// readerTotalSwap returns the host swap totals when the reader implements the
+// optional TotalSwap method (kept out of the core Reader interface so swap stays
+// optional). Shared by the per-service swap metric and the system total_swap.
+func readerTotalSwap(r Reader) (total, used uint64, ok bool) {
+	if sr, has := r.(interface {
+		TotalSwap() (total, used uint64, ok bool)
+	}); has {
+		return sr.TotalSwap()
+	}
+	return 0, 0, false
 }
 
 // Reset clears a service's CPU history (section 12: reset on reload).
