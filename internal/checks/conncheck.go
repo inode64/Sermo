@@ -218,6 +218,14 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Params = map[string]string{"transport": tr}
 		}
 	}
+	// mongodb takes an optional auth_source (the credentials database); MongoConnect
+	// defaults it to the target database, then admin. Scoped here so it never leaks
+	// into other protocols' params.
+	if proto.Name() == "mongodb" {
+		if as := asString(entry["auth_source"]); as != "" {
+			cfg.Params = map[string]string{"auth_source": as}
+		}
+	}
 	// libvirt defaults to the local Unix socket; an explicit host selects TCP.
 	if proto.Name() == "libvirt" && cfg.Socket == "" && asString(entry["host"]) == "" {
 		cfg.Socket = "/var/run/libvirt/libvirt-sock"
