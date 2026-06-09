@@ -204,8 +204,26 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			body:        body,
 			contentType: contentType,
 			expect:      expect,
-			expectBody:  asString(entry["expect_body"]),
 			expectJSON:  parseJSONAssertions(entry["expect_json"]),
+		}
+		// expect_body is either a substring (string form) or an {op, value}
+		// operator comparison against the trimmed body.
+		switch eb := entry["expect_body"].(type) {
+		case string:
+			hc.expectBody = eb
+		case map[string]any:
+			op := asString(eb["op"])
+			if !validCompareOp(op) {
+				return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, =~"
+			}
+			hc.bodyOp, hc.bodyValue = op, scalarString(eb["value"])
+		}
+		if lat, ok := entry["expect_latency"].(map[string]any); ok {
+			op := asString(lat["op"])
+			if !validCompareOp(op) {
+				return nil, "http expect_latency op must be one of ==, !=, >, >=, <, <=, =~"
+			}
+			hc.latencyOp, hc.latencyValue = op, scalarString(lat["value"])
 		}
 		if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
 			return nil, warn
@@ -784,6 +802,14 @@ func stringArray(v any) []string {
 func parseStatusMatcher(v any) (statusMatcher, error) {
 	if v == nil {
 		return statusMatcher{codes: []int{200}}, nil
+	}
+	// Operator form: {op, value} (e.g. status < 500).
+	if cond, ok := v.(map[string]any); ok {
+		op := asString(cond["op"])
+		if !validCompareOp(op) {
+			return statusMatcher{}, fmt.Errorf("expect_status op must be one of ==, !=, >, >=, <, <=, =~")
+		}
+		return statusMatcher{op: op, value: scalarString(cond["value"])}, nil
 	}
 	var m statusMatcher
 	var items []any

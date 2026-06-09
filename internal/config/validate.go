@@ -612,8 +612,23 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		}
 	}
 	if v, present := fields["expect_body"]; present {
-		if _, ok := v.(string); !ok {
-			add("%s.expect_body must be a string", prefix)
+		switch m := v.(type) {
+		case string:
+			// substring match
+		case map[string]any:
+			validateOpValue(prefix, "expect_body", m, add)
+		default:
+			add("%s.expect_body must be a string or an {op, value} mapping", prefix)
+		}
+	}
+	if m, ok := fields["expect_status"].(map[string]any); ok {
+		validateOpValue(prefix, "expect_status", m, add)
+	}
+	if v, present := fields["expect_latency"]; present {
+		if m, ok := v.(map[string]any); ok {
+			validateOpValue(prefix, "expect_latency", m, add)
+		} else {
+			add("%s.expect_latency must be an {op, value} mapping", prefix)
 		}
 	}
 	if v, present := fields["expect_json"]; present {
@@ -634,10 +649,32 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 
 func validJSONOp(op string) bool {
 	switch op {
-	case "==", "!=", ">", ">=", "<", "<=", "contains":
+	case "==", "!=", ">", ">=", "<", "<=", "contains", "=~":
 		return true
 	default:
 		return false
+	}
+}
+
+// validateOpValue validates an {op, value} comparison mapping (shared by the
+// http response comparisons): op must be a known comparison operator, and value
+// must be numeric for ordering ops and a valid regexp for =~.
+func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
+	op := scalarString(m["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, label, op)
+		return
+	}
+	value := scalarString(m["value"])
+	switch op {
+	case ">", ">=", "<", "<=":
+		if !isNumeric(value) {
+			add("%s.%s value %q must be numeric for op %s", prefix, label, value, op)
+		}
+	case "=~":
+		if _, err := regexp.Compile(value); err != nil {
+			add("%s.%s value is not a valid regexp: %v", prefix, label, err)
+		}
 	}
 }
 
@@ -1165,7 +1202,10 @@ var processStates = set("running", "zombie", "absent")
 var validActions = set("restart", "start", "stop", "alert", "block")
 var metricOps = set(">", ">=", "<", "<=", "==", "!=")
 var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
-var sqlOps = set("==", "!=", ">", ">=", "<", "<=", "=~")
+
+// compareOps is the operator set shared by the sql check and the http response
+// comparisons (expect_body / expect_status / expect_latency).
+var compareOps = set("==", "!=", ">", ">=", "<", "<=", "=~")
 var metricCatalog = map[string]map[string]struct{}{
 	"service": set("memory", "cpu", "process_count", "io", "io_read", "io_write", "fds", "threads"),
 	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
@@ -1307,7 +1347,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.query is required for a sql check", prefix)
 	}
 	op := scalarString(fields["op"])
-	if _, ok := sqlOps[op]; !ok {
+	if _, ok := compareOps[op]; !ok {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
 	}
 	value := scalarString(fields["value"])

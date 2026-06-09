@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -40,7 +39,7 @@ func (c sqlCheck) Run(ctx context.Context) Result {
 		return c.result(false, fmt.Sprintf("sql %s: query returned NULL", c.engine), start)
 	}
 
-	ok, err := sqlCompare(result, c.op, c.value)
+	ok, err := compareValue(result, c.op, c.value)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("sql %s: %v", c.engine, err), start)
 	}
@@ -95,42 +94,6 @@ func sqlValueString(v any) string {
 	}
 }
 
-// sqlCompare evaluates "result op value". Numeric ops (> >= < <=) parse both as
-// floats; == and != compare numerically when both parse as numbers, else as
-// strings; =~ matches result against value as a Go (RE2) regexp.
-func sqlCompare(result, op, value string) (bool, error) {
-	switch op {
-	case ">", ">=", "<", "<=":
-		rf, err := strconv.ParseFloat(strings.TrimSpace(result), 64)
-		if err != nil {
-			return false, fmt.Errorf("result %q is not numeric for op %s", result, op)
-		}
-		vf, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-		if err != nil {
-			return false, fmt.Errorf("value %q is not numeric", value)
-		}
-		return compareFloat(rf, op, vf), nil
-	case "==", "!=":
-		if rf, err := strconv.ParseFloat(strings.TrimSpace(result), 64); err == nil {
-			if vf, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
-				return compareFloat(rf, op, vf), nil
-			}
-		}
-		if op == "==" {
-			return result == value, nil
-		}
-		return result != value, nil
-	case "=~":
-		re, err := regexp.Compile(value)
-		if err != nil {
-			return false, fmt.Errorf("invalid regex %q: %v", value, err)
-		}
-		return re.MatchString(result), nil
-	default:
-		return false, fmt.Errorf("unsupported op %q", op)
-	}
-}
-
 // sqlEngineDriver maps an engine token to its database/sql driver name.
 func sqlEngineDriver(engine string) (string, bool) {
 	switch engine {
@@ -159,7 +122,7 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 		return nil, "sql check requires a query"
 	}
 	op := asString(entry["op"])
-	if !validSQLOp(op) {
+	if !validCompareOp(op) {
 		return nil, "sql check op must be one of ==, !=, >, >=, <, <=, =~"
 	}
 	value := scalarString(entry["value"])
@@ -206,14 +169,4 @@ func sqlConnConfig(engine string, entry map[string]any) conn.Config {
 		cfg.Port = p
 	}
 	return cfg
-}
-
-// validSQLOp reports whether op is a supported sql comparison operator.
-func validSQLOp(op string) bool {
-	switch op {
-	case "==", "!=", ">", ">=", "<", "<=", "=~":
-		return true
-	default:
-		return false
-	}
 }
