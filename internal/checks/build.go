@@ -451,6 +451,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 			sampler:        deps.CertSampler,
 		}, ""
 
+	case "sqlite", "sqlite3":
+		path := asString(entry["path"])
+		if path == "" {
+			return nil, "sqlite check requires a path"
+		}
+		return sqliteCheck{base: b, path: path, quick: asBool(entry["quick"])}, ""
+
 	case "swap":
 		metric := asString(entry["metric"])
 		c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}

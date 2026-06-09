@@ -1144,7 +1144,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1269,6 +1269,10 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateOomFields(path, entry, add)
 		case "cert":
 			validateCertFields(path, entry, add)
+		case "sqlite", "sqlite3":
+			if scalarString(entry["path"]) == "" {
+				add("%s.path is required for a sqlite check", path)
+			}
 		}
 	}
 }
