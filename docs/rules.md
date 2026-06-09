@@ -78,6 +78,7 @@ which reuse the same schema). MVP types:
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
+| `influxdb-query` | an InfluxQL query's scalar result compares against a value (see InfluxDB query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
 | `websocket` / `ws` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
@@ -652,8 +653,8 @@ name. Supported protocols:
   the server `version` (pair with `on_version_change`); on older servers without
   `/health` it falls back to `/ping`, which answers `204` with the version in the
   `X-Influxdb-Version` header. Probed natively (HTTP/REST). This is a
-  liveness/version check; running an InfluxQL/Flux query and comparing a result is
-  not (yet) supported.
+  liveness/version check; to run an InfluxQL query and compare a result, see the
+  **InfluxDB query** check (`influxdb-query`).
 - `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
   `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
   Python pickle command protocol that is not worth reimplementing for a liveness
@@ -845,6 +846,49 @@ checks:
   `database`, then `admin`). The check only reads — point it at a read-only user.
 - Result data carries `mode`, `op`, `threshold`, the raw `result` and, when
   numeric, a `value` for hooks/rules.
+
+### InfluxDB query (`influxdb-query`)
+
+An `influxdb-query` check runs an **InfluxQL** query against an InfluxDB 1.x HTTP
+API (`GET /query`) and compares a **scalar result** against a `value`, the
+time-series counterpart of the `sql`/`mongodb-query` checks. It is
+**condition-style** (`OK == true` means the comparison holds) and reuses the
+`influxdb` connection variables (`host`/`port`/`user`/`password`/`tls`).
+
+```yaml
+checks:
+  cpu-load:
+    type: influxdb-query
+    host: 127.0.0.1             # host/port/user/password/tls (https when tls set)
+    user: monitor               # optional: sent as HTTP Basic auth
+    password: "${env:INFLUXPW}"
+    database: telegraf          # required (the InfluxQL database)
+    query: "SELECT mean(usage_user) FROM cpu WHERE time > now() - 5m"
+    op: "<"                     # == | != | > | >= | < | <= | =~
+    value: "80"
+  series-count:
+    type: influxdb-query
+    host: 127.0.0.1
+    token: "${env:INFLUX_TOKEN}" # optional: InfluxDB API token (v1.8+/v2 compat)
+    database: telegraf
+    query: "SELECT count(value) FROM disk WHERE host = 'node1'"
+    column: count               # optional: pick a named column (default: the last)
+    op: ">"
+    value: "0"
+```
+
+- **Scalar selection:** InfluxQL returns rows of `[time, …]`; by default the
+  result is the **last column** of the first row of the first series (the
+  aggregate value, since `time` is first). Set **`column`** to read a named column
+  instead. A query that matches nothing (no series) fails the check ("no value").
+- **Operators** behave exactly as the `sql` check's (`>` `>=` `<` `<=` numeric;
+  `==`/`!=` numeric-or-string; `=~` RE2 regexp).
+- **Auth:** a `user`/`password` is sent as HTTP Basic auth; a `token` (InfluxDB
+  1.8+/2.x compatibility) is sent as `Authorization: Token …` and takes
+  precedence. The check only reads — point it at a read-only user.
+- Result data carries `database`, `query`, `op`, `threshold`, the raw `result`
+  and, when numeric, a `value` for hooks/rules. A query error (e.g. unknown
+  database) fails the check.
 
 ### Size growth (`size`)
 
