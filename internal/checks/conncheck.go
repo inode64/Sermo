@@ -25,6 +25,11 @@ type connCheck struct {
 	// host watch), matching the cert check's change detection.
 	onChange bool
 	state    *connState
+	// expect holds optional response assertions: each compares a field of the
+	// probe Result ("version" or a Result.Extra key) against a value with a
+	// shared operator. All must hold for the check to pass (additive to the
+	// liveness probe). Reuses the expect_json triple shape and compareValue.
+	expect []jsonAssertion
 }
 
 type connState struct {
@@ -64,7 +69,11 @@ func (c connCheck) Run(ctx context.Context) Result {
 	if res.Version != "" {
 		msg += " (" + res.Version + ")"
 	}
-	r := c.result(true, msg, start)
+	ok := true
+	if fail := c.evalExpect(res); fail != "" {
+		ok, msg = false, fmt.Sprintf("%s %s: %s", c.proto.Name(), addr, fail)
+	}
+	r := c.result(ok, msg, start)
 	r.Data = map[string]any{"protocol": c.proto.Name()}
 	if c.cfg.Socket != "" {
 		r.Data["socket"] = c.cfg.Socket
@@ -78,6 +87,32 @@ func (c connCheck) Run(ctx context.Context) Result {
 		r.Data[k] = v
 	}
 	return r
+}
+
+// evalExpect checks every configured assertion against the probe result and
+// returns the first failure ("" when all hold or none are configured). A field
+// is "version" (the Result.Version) or a key of Result.Extra.
+func (c connCheck) evalExpect(res conn.Result) string {
+	for _, a := range c.expect {
+		var got string
+		if a.path == "version" {
+			got = res.Version
+		} else {
+			v, ok := res.Extra[a.path]
+			if !ok {
+				return fmt.Sprintf("field %q not available", a.path)
+			}
+			got = v
+		}
+		ok, err := compareValue(got, a.op, a.value)
+		if err != nil {
+			return fmt.Sprintf("%s: %v", a.path, err)
+		}
+		if !ok {
+			return fmt.Sprintf("%s %q %s %q not satisfied", a.path, got, a.op, a.value)
+		}
+	}
+	return ""
 }
 
 // buildConnCheck builds a connection-protocol check for a registered protocol.
@@ -134,6 +169,15 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		cfg.Socket = conn.DBusAddress(asString(entry["socket"]), asString(entry["query"]))
 	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
+	// Optional response assertions: a mapping of field -> value | {op, value},
+	// compared against the probe Result (version / Extra) — works for any protocol.
+	expect := parseJSONAssertions(entry["expect"])
+	for _, a := range expect {
+		if !validCompareOp(a.op) {
+			return nil, proto.Name() + " check: expect." + a.path + " op must be one of ==, !=, >, >=, <, <=, =~"
+		}
+	}
+	c.expect = expect
 	if asBool(entry["on_change"]) {
 		c.onChange = true
 		c.state = &connState{}
