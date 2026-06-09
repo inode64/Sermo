@@ -166,7 +166,7 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMsg string, start time.Time) Result {
 	if c.certHost == "" || resp.TLS == nil || len(resp.TLS.PeerCertificates) == 0 {
 		res := c.result(true, statusMsg, start)
-		res.Data = map[string]any{"status": resp.StatusCode, "latency_ms": elapsed.Milliseconds()}
+		res.Data = map[string]any{"status": resp.StatusCode, "latency_ms": elapsed.Milliseconds(), "protocol": resp.Proto}
 		return res
 	}
 	leaf := resp.TLS.PeerCertificates[0]
@@ -182,7 +182,7 @@ func (c *httpCheck) success(resp *http.Response, elapsed time.Duration, statusMs
 	}
 	res := c.result(ok, msg, start)
 	data := certData(c.certHost, c.certHost, "", s, daysLeft, hasExpiry)
-	data["status"], data["latency_ms"] = resp.StatusCode, elapsed.Milliseconds()
+	data["status"], data["latency_ms"], data["protocol"] = resp.StatusCode, elapsed.Milliseconds(), resp.Proto
 	res.Data = data
 	return res
 }

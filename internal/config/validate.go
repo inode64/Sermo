@@ -594,6 +594,21 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.method %q is not a standard HTTP method (GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, CONNECT)", prefix, s)
 		}
 	}
+	if v, present := fields["http3"]; present {
+		if h3, ok := v.(bool); !ok {
+			add("%s.http3 must be a boolean", prefix)
+		} else if h3 {
+			// HTTP/3 runs over QUIC (TLS-only) and cannot use an HTTP proxy.
+			if u := scalarString(fields["url"]); u != "" {
+				if parsed, err := url.Parse(u); err != nil || parsed.Scheme != "https" {
+					add("%s.http3 requires an https url", prefix)
+				}
+			}
+			if scalarString(fields["proxy"]) != "" {
+				add("%s.http3 and proxy are mutually exclusive", prefix)
+			}
+		}
+	}
 	if p := scalarString(fields["proxy"]); p != "" {
 		u, err := url.Parse(p)
 		if err != nil || u.Host == "" {

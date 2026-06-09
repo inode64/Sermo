@@ -44,6 +44,38 @@ checks:
 `), "not a standard HTTP method")
 }
 
+func TestValidateHTTP3(t *testing.T) {
+	// Valid: http3 over https.
+	issues := validateService(t, `
+kind: service
+name: web
+service: { name: x }
+checks:
+  h3: { type: http, url: "https://h/", http3: true }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.h3") {
+			t.Fatalf("valid http3 check must produce no issue: %v", issues)
+		}
+	}
+	// http3 over http:// is rejected.
+	mustHave(t, validateService(t, `
+kind: service
+name: web
+service: { name: x }
+checks:
+  h3: { type: http, url: "http://h/", http3: true }
+`), "http3 requires an https url")
+	// http3 + proxy is rejected.
+	mustHave(t, validateService(t, `
+kind: service
+name: web
+service: { name: x }
+checks:
+  h3: { type: http, url: "https://h/", http3: true, proxy: "http://squid:3128" }
+`), "mutually exclusive")
+}
+
 func TestValidateHTTPComparisonErrors(t *testing.T) {
 	cases := map[string]struct {
 		field string
