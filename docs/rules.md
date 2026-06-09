@@ -33,6 +33,7 @@ which reuse the same schema). MVP types:
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
+| `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -270,14 +271,22 @@ name. Supported protocols:
   expects `pong`, so the pool must have **`ping.path = /ping`** enabled. Probed
   natively (FastCGI).
 
+- `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query`
+  (default `localhost`) to the server and verifies it answers: `NOERROR` or
+  `NXDOMAIN` pass (the server is up and speaking DNS); `SERVFAIL`, `REFUSED`, a
+  timeout or a transport error fail. Result data carries the `rcode` and answer
+  count. Probed natively (RFC 1035 message). Set `query` to a name the server
+  should answer (e.g. a zone it is authoritative for).
+
 The `socket` field (Unix socket path) is generic; when set the check dials the
-socket instead of `host`/`port`.
+socket instead of `host`/`port`. The `query` field is the per-protocol lookup
+target (the DNS name for `dns`).
 
 ```yaml
 checks:
   db:
-    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey, imap, pop, smtp, fpm
-    # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm uses no auth
+    type: mysql                 # mariadb, postgres, postgresql, redis, valkey, imap, pop, smtp, fpm, dns
+    # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
     user: monitor               # required
