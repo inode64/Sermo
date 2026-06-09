@@ -131,10 +131,3 @@ func TestOSHookRunnerWithInjectedExecxRunner(t *testing.T) {
 		t.Fatalf("injected SERMO_ vars not found in env passed to execx; env had %d entries, sample: %v", len(call.env), call.env[:min(5, len(call.env))])
 	}
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
