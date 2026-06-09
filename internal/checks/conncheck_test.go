@@ -372,6 +372,28 @@ func TestBuildTFTPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildLDAPCheck(t *testing.T) {
+	// Anonymous (no user), default port 389.
+	built, warns := Build(map[string]any{
+		"dir": map[string]any{"type": "ldap", "host": "ldap.example"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("anonymous ldap should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "ldap" || cc.cfg.Port != 389 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	// LDAPS + simple bind.
+	built, _ = Build(map[string]any{
+		"dir": map[string]any{"type": "ldap", "host": "ldap.example", "port": 636, "tls": true,
+			"user": "cn=monitor,dc=example,dc=com", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Port != 636 || cc.cfg.TLS != "true" || cc.cfg.User == "" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
