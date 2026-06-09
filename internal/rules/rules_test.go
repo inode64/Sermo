@@ -243,8 +243,8 @@ func TestParseRules(t *testing.T) {
 	if r.Name != "block-during-backup" || r.Type != RuleGuard || len(r.Blocks) != 2 {
 		t.Fatalf("rule = %+v", r)
 	}
-	if r.Then.Type != ActionBlock || r.Then.Message != "backup running" {
-		t.Fatalf("action = %+v", r.Then)
+	if r.Primary().Type != ActionBlock || r.Primary().Message != "backup running" {
+		t.Fatalf("action = %+v", r.Primary())
 	}
 	if len(warnings) != 1 { // no-then warns; disabled is silent
 		t.Fatalf("warnings = %v, want 1", warnings)
