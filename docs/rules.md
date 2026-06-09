@@ -30,6 +30,7 @@ which reuse the same schema). MVP types:
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
 | `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING (see Database) |
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
+| `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -252,12 +253,16 @@ name. Supported protocols:
   TLS / IMAPS — use port 993). `user` is **optional**: with no credentials it is
   an **anonymous** check that verifies the server greets `* OK`; with a
   user/password it performs an IMAP `LOGIN`. Probed natively (RFC 3501).
+- `pop` (alias `pop3`) — default port 110; `tls`: `false` | `true` |
+  `skip-verify` (implicit TLS / POP3S — use port 995). `user` is **optional**:
+  with no credentials it is an **anonymous** check (server greets `+OK`); with a
+  user/password it performs `USER`/`PASS`. Probed natively (RFC 1939).
 
 ```yaml
 checks:
   db:
-    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey, imap
-    # user is required for SQL protocols; optional for redis/imap (password-only or anonymous)
+    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey, imap, pop
+    # user is required for SQL protocols; optional for redis/imap/pop (password-only or anonymous)
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
     user: monitor               # required
