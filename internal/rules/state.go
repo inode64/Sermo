@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"sort"
 	"strconv"
 	"time"
 )
@@ -37,6 +38,7 @@ type RemediationReport struct {
 	CurrentBackoff    time.Duration
 	LastActionAt      time.Time
 	CooldownUntil     time.Time // zero when not in cooldown/backoff
+	NextEligibleAt    time.Time // zero when currently allowed or unknown
 	MaxActions        int
 	MaxActionsWindow  time.Duration
 	RecentActions     int
@@ -60,6 +62,11 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 			until = time.Time{}
 		}
 	}
+	rateUntil := p.rateLimitUntil(state, now)
+	next := maxTime(until, rateUntil)
+	if allowed {
+		next = time.Time{}
+	}
 	return RemediationReport{
 		Allowed:           allowed,
 		Reason:            reason,
@@ -68,9 +75,45 @@ func (p Policy) Report(state *RemediationState, now time.Time) RemediationReport
 		CurrentBackoff:    state.CurrentBackoff,
 		LastActionAt:      state.LastActionAt,
 		CooldownUntil:     until,
+		NextEligibleAt:    next,
 		MaxActions:        p.MaxActions,
 		MaxActionsWindow:  p.MaxActionsWindow,
 		RecentActions:     state.countWithin(now, p.MaxActionsWindow),
+	}
+}
+
+func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time {
+	if p.MaxActions <= 0 || p.MaxActionsWindow <= 0 {
+		return time.Time{}
+	}
+	cutoff := now.Add(-p.MaxActionsWindow)
+	var relevant []time.Time
+	for _, t := range state.RecentActions {
+		if t.After(cutoff) {
+			relevant = append(relevant, t)
+		}
+	}
+	if len(relevant) < p.MaxActions {
+		return time.Time{}
+	}
+	sort.Slice(relevant, func(i, j int) bool { return relevant[i].Before(relevant[j]) })
+	until := relevant[len(relevant)-p.MaxActions].Add(p.MaxActionsWindow)
+	if !now.Before(until) {
+		return time.Time{}
+	}
+	return until
+}
+
+func maxTime(a, b time.Time) time.Time {
+	switch {
+	case a.IsZero():
+		return b
+	case b.IsZero():
+		return a
+	case a.After(b):
+		return a
+	default:
+		return b
 	}
 }
 
