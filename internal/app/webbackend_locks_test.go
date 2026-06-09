@@ -171,6 +171,109 @@ func TestWebBackendViewActiveLocks(t *testing.T) {
 	}
 }
 
+func TestWebBackendLocksContext(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	now := time.Now().UTC()
+
+	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+		"service":           "mysql",
+		"name":              "backup",
+		"reason":            "backup mysql",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": webLockStartTicks(t),
+		"created_at":        now.Add(-5 * time.Minute).Format(time.RFC3339),
+		"expires_at":        now.Add(time.Hour).Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "mysql.old.lock", map[string]any{
+		"service":           "mysql",
+		"name":              "old",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": webLockStartTicks(t),
+		"created_at":        now.Add(-2 * time.Hour).Format(time.RFC3339),
+		"expires_at":        now.Add(-time.Minute).Format(time.RFC3339),
+	})
+
+	b := &WebBackend{
+		order:   []string{"mysql"},
+		entries: map[string]*webEntry{"mysql": {}},
+		cfg:     &config.Config{Global: config.Global{Runtime: runtime}},
+	}
+
+	locks := b.Locks(context.Background())
+	byName := map[string]struct {
+		state       string
+		owner       string
+		releaseable bool
+		blocks      int
+	}{}
+	for _, lk := range locks {
+		byName[lk.Name] = struct {
+			state       string
+			owner       string
+			releaseable bool
+			blocks      int
+		}{lk.State, lk.OwnerStatus, lk.Releaseable, len(lk.BlockedActions)}
+		if lk.Name == "backup" && (lk.TTLRemainingSeconds <= 0 || lk.CreatedAgeSeconds <= 0) {
+			t.Fatalf("active lock timing fields missing: %+v", lk)
+		}
+	}
+	if byName["backup"].state != "active" || byName["backup"].owner != "live" || byName["backup"].releaseable || byName["backup"].blocks != 3 {
+		t.Fatalf("backup context = %+v", byName["backup"])
+	}
+	if byName["old"].state != "expired" || !byName["old"].releaseable || byName["old"].blocks != 0 {
+		t.Fatalf("old context = %+v", byName["old"])
+	}
+}
+
+func TestWebBackendReleaseLockOnlyInactive(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	ticks := webLockStartTicks(t)
+
+	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+		"service":           "mysql",
+		"name":              "backup",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "mysql.old.lock", map[string]any{
+		"service":           "mysql",
+		"name":              "old",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+	})
+
+	var events []Event
+	b := &WebBackend{
+		order:   []string{"mysql"},
+		entries: map[string]*webEntry{"mysql": {}},
+		cfg:     &config.Config{Global: config.Global{Runtime: runtime}},
+		emit:    func(e Event) { events = append(events, e) },
+	}
+
+	if res := b.ReleaseLock(context.Background(), "mysql", "backup"); res.OK {
+		t.Fatalf("active lock release should be blocked: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(locksDir, "mysql.backup.lock")); err != nil {
+		t.Fatalf("active lock should remain: %v", err)
+	}
+
+	if res := b.ReleaseLock(context.Background(), "mysql", "old"); !res.OK {
+		t.Fatalf("expired lock release failed: %+v", res)
+	}
+	if _, err := os.Stat(filepath.Join(locksDir, "mysql.old.lock")); !os.IsNotExist(err) {
+		t.Fatalf("expired lock should be removed: %v", err)
+	}
+	if len(events) != 2 || events[0].Kind != "suppressed" || events[1].Kind != "action" {
+		t.Fatalf("events = %+v", events)
+	}
+}
+
 func TestWebBackendDetailLocksNone(t *testing.T) {
 	root := t.TempDir()
 	cfg := &config.Config{Global: config.Global{Runtime: filepath.Join(root, "run")}}

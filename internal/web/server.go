@@ -215,14 +215,19 @@ type Remediation struct {
 
 // Lock is a named runtime lock for one service (parity with `sermoctl locks`).
 type Lock struct {
-	Service     string `json:"service,omitempty"`
-	Name        string `json:"name,omitempty"`
-	Reason      string `json:"reason,omitempty"`
-	State       string `json:"state"` // active | expired | stale
-	OwnerPID    int    `json:"owner_pid"`
-	StaleReason string `json:"stale_reason,omitempty"`
-	CreatedAt   string `json:"created_at,omitempty"` // RFC3339
-	ExpiresAt   string `json:"expires_at,omitempty"` // RFC3339
+	Service             string   `json:"service,omitempty"`
+	Name                string   `json:"name,omitempty"`
+	Reason              string   `json:"reason,omitempty"`
+	State               string   `json:"state"` // active | expired | stale
+	OwnerPID            int      `json:"owner_pid"`
+	OwnerStatus         string   `json:"owner_status,omitempty"` // live | stale | none | expired
+	StaleReason         string   `json:"stale_reason,omitempty"`
+	CreatedAt           string   `json:"created_at,omitempty"` // RFC3339
+	ExpiresAt           string   `json:"expires_at,omitempty"` // RFC3339
+	CreatedAgeSeconds   int64    `json:"created_age_seconds,omitempty"`
+	TTLRemainingSeconds int64    `json:"ttl_remaining_seconds,omitempty"`
+	BlockedActions      []string `json:"blocked_actions,omitempty"`
+	Releaseable         bool     `json:"releaseable,omitempty"`
 }
 
 // Detail is a single service's view: its summary plus its checks and SLA.
@@ -369,6 +374,8 @@ type Backend interface {
 	HostMetrics(ctx context.Context) []HostMetric
 	// Locks returns runtime locks (active, expired, stale) across all services.
 	Locks(ctx context.Context) []Lock
+	// ReleaseLock explicitly removes an inactive named runtime lock.
+	ReleaseLock(ctx context.Context, service, name string) ActionResult
 	// ActivitySummary returns a quick overview of recent daemon activity
 	// (useful for the dashboard header when you have mostly watches).
 	ActivitySummary(ctx context.Context) ActivitySummary
@@ -434,6 +441,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/host", s.handleHost)
 	mux.HandleFunc("GET /api/locks", s.handleLocks)
+	mux.HandleFunc("POST /api/locks/{service}/release", s.handleLockRelease)
 	mux.HandleFunc("GET /api/activity", s.handleActivity)
 	mux.HandleFunc("GET /api/monitoring", s.handleMonitoring)
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
@@ -654,6 +662,15 @@ func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLocks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Locks(r.Context()))
+}
+
+func (s *Server) handleLockRelease(w http.ResponseWriter, r *http.Request) {
+	res := s.Backend.ReleaseLock(r.Context(), r.PathValue("service"), r.URL.Query().Get("name"))
+	status := http.StatusOK
+	if !res.OK {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, res)
 }
 
 func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {

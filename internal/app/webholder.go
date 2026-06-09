@@ -90,6 +90,14 @@ func (h *WebBackendHolder) Locks(ctx context.Context) []web.Lock {
 	return nil
 }
 
+// ReleaseLock removes an inactive named runtime lock from the active backend.
+func (h *WebBackendHolder) ReleaseLock(ctx context.Context, service, name string) web.ActionResult {
+	if b := h.backend(); b != nil {
+		return b.ReleaseLock(ctx, service, name)
+	}
+	return web.ActionResult{OK: false, Message: "web backend unavailable"}
+}
+
 // ActivitySummary returns the recent-activity rollup from the active backend.
 func (h *WebBackendHolder) ActivitySummary(ctx context.Context) web.ActivitySummary {
 	if b := h.backend(); b != nil {
