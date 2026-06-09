@@ -105,6 +105,25 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		Query:    asString(entry["query"]),
 		TLS:      tlsString(entry["tls"]),
 	}
+	// dhcp takes two protocol-specific params: the network interface to
+	// broadcast on (absent -> unicast to host) and an optional fixed client MAC
+	// (absent -> a random anonymous MAC). Scoped to dhcp so they never leak into
+	// the driver params other protocols pass through cfg.Params.
+	if proto.Name() == "dhcp" {
+		params := map[string]string{}
+		if iface := asString(entry["interface"]); iface != "" {
+			params["interface"] = iface
+		}
+		if mac := asString(entry["mac"]); mac != "" {
+			if _, err := net.ParseMAC(mac); err != nil {
+				return nil, fmt.Sprintf("dhcp check: invalid mac %q", mac)
+			}
+			params["mac"] = mac
+		}
+		if len(params) > 0 {
+			cfg.Params = params
+		}
+	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	if asBool(entry["on_change"]) {
 		c.onChange = true
