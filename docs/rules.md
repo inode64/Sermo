@@ -47,6 +47,7 @@ which reuse the same schema). MVP types:
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC (opens a connection and reports its version) (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
+| `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -354,6 +355,22 @@ name. Supported protocols:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
   ```
+- `syncthing` — default port 8384; `tls`: `false` | `true` | `skip-verify`
+  (`skip-verify` covers Syncthing's default self-signed GUI certificate). Sends
+  `GET /rest/noauth/health` and expects `200` with `{"status":"OK"}` — the
+  unauthenticated liveness endpoint. With an **API key** in `password` (sent as
+  `X-API-Key`) it also reads `/rest/system/version` and reports the Syncthing
+  version (`os`/`arch` too); a rejected key fails the check. No user. Probed
+  natively (HTTP/REST).
+
+  ```yaml
+  checks:
+    syncthing:
+      type: syncthing
+      host: 127.0.0.1
+      # tls: skip-verify            # if the GUI is on HTTPS
+      # password: "${env:ST_KEY}"   # optional API key -> also reports version
+  ```
 - `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
   a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
   connector. Probed natively (AJP13).
@@ -443,7 +460,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
