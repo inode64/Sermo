@@ -244,6 +244,27 @@ func TestBuildDNSCheck(t *testing.T) {
 	}
 }
 
+func TestBuildFTPCheck(t *testing.T) {
+	// Anonymous (no user), default port 21.
+	built, warns := Build(map[string]any{
+		"ftp": map[string]any{"type": "ftp", "host": "ftp.example"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("anonymous ftp should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "ftp" || cc.cfg.Port != 21 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	// With credentials + implicit FTPS on 990.
+	built, _ = Build(map[string]any{
+		"ftp": map[string]any{"type": "ftp", "port": 990, "tls": true, "user": "joe", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Port != 990 || cc.cfg.User != "joe" || cc.cfg.TLS != "true" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
