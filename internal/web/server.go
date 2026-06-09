@@ -185,6 +185,20 @@ type Process struct {
 	RSS         int64    `json:"rss,omitempty"`      // resident memory, bytes
 	IORead      int64    `json:"io_read,omitempty"`  // cumulative disk read, bytes
 	IOWrite     int64    `json:"io_write,omitempty"` // cumulative disk write, bytes
+	FDs         int64    `json:"fds,omitempty"`      // open file descriptors
+	Threads     int64    `json:"threads,omitempty"`  // thread count
+}
+
+// ProcessTotals aggregates a service's whole discovered process tree — the
+// matched processes and their child/descendant processes — so the totals reflect
+// the service's workers and helpers, not just its main process.
+type ProcessTotals struct {
+	Count   int   `json:"count"`
+	RSS     int64 `json:"rss,omitempty"`
+	IORead  int64 `json:"io_read,omitempty"`
+	IOWrite int64 `json:"io_write,omitempty"`
+	FDs     int64 `json:"fds,omitempty"`
+	Threads int64 `json:"threads,omitempty"`
 }
 
 // RuleWindow is one rule's window progress in a service detail.
@@ -234,14 +248,15 @@ type Lock struct {
 // Detail is a single service's view: its summary plus its checks and SLA.
 type Detail struct {
 	Service
-	Checks          []Check      `json:"checks"`
-	SLA             []SLAWindow  `json:"sla"`
-	Locks           []Lock       `json:"locks,omitempty"`
-	LockWarnings    []string     `json:"lock_warnings,omitempty"`
-	ProcessWarnings []string     `json:"process_warnings,omitempty"`
-	Processes       []Process    `json:"processes,omitempty"`
-	Remediation     *Remediation `json:"remediation,omitempty"`
-	Rules           []RuleWindow `json:"rules,omitempty"`
+	Checks          []Check        `json:"checks"`
+	SLA             []SLAWindow    `json:"sla"`
+	Locks           []Lock         `json:"locks,omitempty"`
+	LockWarnings    []string       `json:"lock_warnings,omitempty"`
+	ProcessWarnings []string       `json:"process_warnings,omitempty"`
+	Processes       []Process      `json:"processes,omitempty"`
+	ProcessTotals   *ProcessTotals `json:"process_totals,omitempty"`
+	Remediation     *Remediation   `json:"remediation,omitempty"`
+	Rules           []RuleWindow   `json:"rules,omitempty"`
 }
 
 // SeriesPoint is one per-minute availability sample of the SLA history. Ratio is
