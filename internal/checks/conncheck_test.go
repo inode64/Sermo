@@ -863,6 +863,31 @@ func TestBuildFail2banCheck(t *testing.T) {
 	}
 }
 
+func TestBuildLvmpolldCheck(t *testing.T) {
+	// Socket-only: default port 0 and the well-known control socket by default.
+	built, warns := Build(map[string]any{
+		"lvm": map[string]any{"type": "lvmpolld"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("lvmpolld check should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "lvmpolld" || cc.cfg.Port != 0 {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+	if cc.cfg.Socket != "/run/lvm/lvmpolld.socket" {
+		t.Fatalf("default socket = %q", cc.cfg.Socket)
+	}
+
+	// An explicit socket is kept.
+	built, _ = Build(map[string]any{
+		"lvm": map[string]any{"type": "lvmpolld", "socket": "/var/run/lvm/lvmpolld.socket"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/var/run/lvm/lvmpolld.socket" {
+		t.Fatalf("socket = %q", cc.cfg.Socket)
+	}
+}
+
 func TestBuildAcpidCheck(t *testing.T) {
 	// Socket-only: default port 0 and the well-known socket when none is given.
 	built, warns := Build(map[string]any{
