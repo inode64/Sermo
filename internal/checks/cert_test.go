@@ -17,6 +17,9 @@ func healthyCert() CertSample {
 		SignatureAlgorithm: "SHA256-RSA",
 		PublicKeyAlgorithm: "RSA",
 		Issuer:             "CN=Let's Encrypt",
+		Subject:            "CN=api.example.com",
+		SerialNumber:       "deadbeef",
+		DNSNames:           []string{"api.example.com", "www.example.com"},
 		Fingerprint:        "aaaa",
 	}
 }
@@ -34,6 +37,34 @@ func TestCertHealthyNoAlert(t *testing.T) {
 	}
 	if res.Data["days_left"].(int) < 58 {
 		t.Fatalf("days_left = %v", res.Data["days_left"])
+	}
+}
+
+func TestCertDataFields(t *testing.T) {
+	c := certWith(healthyCert())
+	res := c.Run(context.Background())
+	cases := map[string]any{
+		"issuer":               "CN=Let's Encrypt",
+		"subject":              "CN=api.example.com",
+		"serial_number":        "deadbeef",
+		"signature_algorithm":  "SHA256-RSA",
+		"public_key_algorithm": "RSA",
+		"fingerprint":          "aaaa",
+	}
+	for k, want := range cases {
+		if got := res.Data[k]; got != want {
+			t.Errorf("Data[%q] = %v, want %v", k, got, want)
+		}
+	}
+	if _, ok := res.Data["not_before"].(string); !ok {
+		t.Errorf("not_before missing or not a string: %v", res.Data["not_before"])
+	}
+	if _, ok := res.Data["not_after"].(string); !ok {
+		t.Errorf("not_after missing or not a string: %v", res.Data["not_after"])
+	}
+	sans, ok := res.Data["dns_names"].([]string)
+	if !ok || len(sans) != 2 || sans[0] != "api.example.com" {
+		t.Errorf("dns_names = %v", res.Data["dns_names"])
 	}
 }
 

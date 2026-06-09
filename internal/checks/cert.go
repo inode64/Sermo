@@ -20,8 +20,11 @@ type CertSample struct {
 	SignatureAlgorithm string
 	PublicKeyAlgorithm string
 	Issuer             string
-	Fingerprint        string // SHA-256 of the DER, hex
-	VerifyError        string // chain/hostname/validity error when verify requested, else ""
+	Subject            string
+	SerialNumber       string   // hex
+	DNSNames           []string // subject alternative names
+	Fingerprint        string   // SHA-256 of the DER, hex
+	VerifyError        string   // chain/hostname/validity error when verify requested, else ""
 }
 
 // CertSamplerFunc fetches a TLS endpoint's leaf certificate. Injected for tests;
@@ -100,7 +103,7 @@ func (c *certCheck) Run(ctx context.Context) Result {
 	c.lastAlgo, c.lastIssuer, c.lastFP = s.SignatureAlgorithm, s.Issuer, s.Fingerprint
 
 	ok := len(problems) > 0
-	msg := fmt.Sprintf("%s: valid %d days, %s", c.host, daysLeft, s.SignatureAlgorithm)
+	msg := fmt.Sprintf("%s: valid %d days (until %s), %s, issuer %s", c.host, daysLeft, s.NotAfter.Format("2006-01-02"), s.SignatureAlgorithm, s.Issuer)
 	if ok {
 		msg = c.host + ": " + strings.Join(problems, "; ")
 	}
@@ -109,8 +112,12 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		"host":                 c.host,
 		"days_left":            daysLeft,
 		"value":                daysLeft,
+		"not_before":           s.NotBefore.Format(time.RFC3339),
 		"not_after":            s.NotAfter.Format(time.RFC3339),
 		"issuer":               s.Issuer,
+		"subject":              s.Subject,
+		"serial_number":        s.SerialNumber,
+		"dns_names":            s.DNSNames,
 		"signature_algorithm":  s.SignatureAlgorithm,
 		"public_key_algorithm": s.PublicKeyAlgorithm,
 		"fingerprint":          s.Fingerprint,
@@ -135,12 +142,19 @@ func defaultCertSampler(ctx context.Context, host, port, serverName string, veri
 	leaf := state.PeerCertificates[0]
 
 	sum := sha256.Sum256(leaf.Raw)
+	var serial string
+	if leaf.SerialNumber != nil {
+		serial = leaf.SerialNumber.Text(16)
+	}
 	s := CertSample{
 		NotBefore:          leaf.NotBefore,
 		NotAfter:           leaf.NotAfter,
 		SignatureAlgorithm: leaf.SignatureAlgorithm.String(),
 		PublicKeyAlgorithm: leaf.PublicKeyAlgorithm.String(),
 		Issuer:             leaf.Issuer.String(),
+		Subject:            leaf.Subject.String(),
+		SerialNumber:       serial,
+		DNSNames:           leaf.DNSNames,
 		Fingerprint:        hex.EncodeToString(sum[:]),
 	}
 	if verify {
