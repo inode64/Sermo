@@ -1,9 +1,0 @@
-kind: profile
-name: dspam
-display_name: "DSPAM"
-service: dspam
-variables:
-  binary: "/usr/bin/dspam"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
