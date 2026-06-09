@@ -1243,7 +1243,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "size")
+	"disk", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1384,7 +1384,29 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateSQLFields(path, entry, add)
 		case "size":
 			validateSizeFields(path, entry, add)
+		case "websocket", "ws":
+			validateWebsocketFields(path, entry, add)
 		}
+	}
+}
+
+// validateWebsocketFields validates a websocket check: a required url with a
+// ws/wss/http/https scheme.
+func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) {
+	raw := scalarString(fields["url"])
+	if raw == "" {
+		add("%s.url is required for a websocket check", prefix)
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		add("%s.url %q is not a valid URL", prefix, raw)
+		return
+	}
+	switch u.Scheme {
+	case "ws", "wss", "http", "https":
+	default:
+		add("%s.url scheme must be ws, wss, http or https", prefix)
 	}
 }
 
