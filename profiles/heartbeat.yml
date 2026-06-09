@@ -1,9 +1,0 @@
-kind: profile
-name: heartbeat
-display_name: "Heartbeat"
-service: heartbeat
-variables:
-  binary: "/usr/lib64/heartbeat/heartbeat"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
