@@ -9,6 +9,7 @@ type fakeProto struct{ name string }
 
 func (f fakeProto) Name() string                                { return f.name }
 func (f fakeProto) DefaultPort() int                            { return 1234 }
+func (fakeProto) RequiresUser() bool                            { return true }
 func (fakeProto) Probe(context.Context, Config) (Result, error) { return Result{}, nil }
 
 func TestRegistryLookupAndAlias(t *testing.T) {

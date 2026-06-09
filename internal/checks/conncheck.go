@@ -54,7 +54,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 // The password arrives already resolved from ${env:...} by the config loader.
 func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, string) {
 	user := asString(entry["user"])
-	if user == "" {
+	if user == "" && proto.RequiresUser() {
 		return nil, proto.Name() + " check requires a user"
 	}
 	host := asString(entry["host"])
