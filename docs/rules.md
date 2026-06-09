@@ -140,6 +140,7 @@ checks:
       probe: true                      # automatically; or use `body:` for raw text)
     expect_status: 200                 # code, class (2xx) or list (default 200)
     expect_body: "ready"               # optional: response must contain this substring
+    proxy: "http://user:pass@squid:3128"   # optional: route the request through a proxy (Squid)
     expect_json:                       # optional: response JSON must match (dotted paths)
       status: ok                       # equality (scalar)
       data.replicas: { op: ">=", value: 2 }   # operator: >, >=, <, <=, ==, !=, contains
@@ -147,7 +148,12 @@ checks:
 ```
 
 It passes (health-style, `OK == true`) when the status matches **and** every
-assertion holds. `json:` marshals the value and sets `Content-Type:
+assertion holds. **`proxy`** routes the request through a forward proxy such as
+**Squid** (`http://[user:pass@]host:port`; `http`, `https` or `socks5` schemes —
+credentials, when present, go in the URL). This both monitors that the proxy
+forwards correctly and that the target is reachable through it; for an `https://`
+target the proxy is used via `CONNECT`, and certificate inspection (below) still
+applies to the target's certificate. `json:` marshals the value and sets `Content-Type:
 application/json` (override it via `headers`); `body:` sends a raw string. The
 response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
 `expect_json` looks up **dotted paths** into nested objects. A scalar value is an
