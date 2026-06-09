@@ -138,6 +138,32 @@ func TestBuildRedisCheckUserOptional(t *testing.T) {
 	}
 }
 
+func TestBuildIMAPCheckAnonymousAndLogin(t *testing.T) {
+	// Anonymous: no user/password — must build (imap allows it), default port 143.
+	built, warns := Build(map[string]any{
+		"mail": map[string]any{"type": "imap", "host": "mail.example"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("anonymous imap should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "imap" || cc.cfg.Port != 143 || cc.cfg.Host != "mail.example" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+
+	// With credentials + implicit TLS on 993.
+	built, warns = Build(map[string]any{
+		"mail": map[string]any{"type": "imap", "port": 993, "tls": true, "user": "joe", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("imap with creds should build: warns=%v", warns)
+	}
+	cc = built[0].Check.(connCheck)
+	if cc.cfg.Port != 993 || cc.cfg.User != "joe" || cc.cfg.TLS != "true" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},

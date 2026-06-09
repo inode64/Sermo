@@ -29,6 +29,7 @@ which reuse the same schema). MVP types:
 | `mysql` / `mariadb` | a connection to a MySQL/MariaDB server authenticates and responds (see Database) |
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
 | `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING (see Database) |
+| `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -247,12 +248,16 @@ name. Supported protocols:
   `skip-verify`. `user` is **optional** (legacy `requirepass` uses a password
   only, or no auth at all); a password-only check sends `AUTH <password>`.
   Probed natively over RESP (no driver), verifying `PING` → `PONG`.
+- `imap` — default port 143; `tls`: `false` | `true` | `skip-verify` (implicit
+  TLS / IMAPS — use port 993). `user` is **optional**: with no credentials it is
+  an **anonymous** check that verifies the server greets `* OK`; with a
+  user/password it performs an IMAP `LOGIN`. Probed natively (RFC 3501).
 
 ```yaml
 checks:
   db:
-    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey
-    # user is required for SQL protocols; optional for redis (password-only auth)
+    type: mysql                 # or mariadb, postgres, postgresql, redis, valkey, imap
+    # user is required for SQL protocols; optional for redis/imap (password-only or anonymous)
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
     user: monitor               # required
@@ -268,9 +273,8 @@ It passes (health-style, `OK == true`) when it connects, authenticates as
 error. This is meant to be added to a database service's `checks:` so a
 restart/alert can fire when it stops accepting connections.
 
-More protocols (e.g. redis) are added the same way in later phases — the check
-type, dispatch and validation are protocol-agnostic, so a new protocol only
-registers itself.
+More protocols are added the same way — the check type, dispatch and validation
+are protocol-agnostic, so a new protocol only registers itself.
 
 Every type above is a **single-shot check** (`Check.Run → Result`) and is usable in
 **both** places:
