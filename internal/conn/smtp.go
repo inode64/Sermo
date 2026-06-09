@@ -41,7 +41,7 @@ func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // authenticates with AUTH PLAIN when a user is supplied, and quits.
 func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
-	code, greeting, err := readSMTPReply(br)
+	code, greeting, err := readReplyCode(br)
 	if err != nil {
 		return Result{}, err
 	}
@@ -53,7 +53,7 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	if _, err := fmt.Fprint(rw, "EHLO sermo\r\n"); err != nil {
 		return Result{}, err
 	}
-	code, _, err = readSMTPReply(br)
+	code, _, err = readReplyCode(br)
 	if err != nil {
 		return Result{}, err
 	}
@@ -63,7 +63,7 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			return Result{}, err
 		}
 		var text string
-		if code, text, err = readSMTPReply(br); err != nil {
+		if code, text, err = readReplyCode(br); err != nil {
 			return Result{}, err
 		}
 		if code != 250 {
@@ -76,7 +76,7 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		if _, err := fmt.Fprintf(rw, "AUTH PLAIN %s\r\n", token); err != nil {
 			return Result{}, err
 		}
-		code, text, err := readSMTPReply(br)
+		code, text, err := readReplyCode(br)
 		if err != nil {
 			return Result{}, err
 		}
@@ -89,10 +89,10 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	return res, nil
 }
 
-// readSMTPReply reads one (possibly multi-line) reply and returns its numeric
+// readReplyCode reads one (possibly multi-line) reply and returns its numeric
 // code and the joined text. Lines with a '-' after the code continue the reply;
-// a space ends it.
-func readSMTPReply(br *bufio.Reader) (int, string, error) {
+// a space ends it. This is the RFC 959 reply format, shared by SMTP and FTP.
+func readReplyCode(br *bufio.Reader) (int, string, error) {
 	var parts []string
 	for {
 		s, err := br.ReadString('\n')
