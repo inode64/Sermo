@@ -163,6 +163,45 @@ func TestServiceCPURate(t *testing.T) {
 	}
 }
 
+func TestServiceCPUAggregatesOverTree(t *testing.T) {
+	// CPU% must sum the parent and all child processes of the service.
+	clock := time.Unix(0, 0)
+	reader := fakeReader{cpu: map[int]uint64{10: 0, 11: 0, 12: 0}, hz: 100, ncpu: 4}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+
+	c.SampleService("svc", []int{10, 11, 12}) // parent + two children, 0 ticks
+
+	// One second later: parent +100, child +200, child +100 = 400 ticks =
+	// 4 CPU-seconds. With 4 CPUs that is 4/(1*4)*100 = 100%.
+	clock = clock.Add(time.Second)
+	reader.cpu[10], reader.cpu[11], reader.cpu[12] = 100, 200, 100
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10, 11, 12})
+
+	if !snap["cpu"].Ready {
+		t.Fatal("cpu should be ready on the second cycle")
+	}
+	if got := snap["cpu"].Percent; got < 99.9 || got > 100.1 {
+		t.Fatalf("cpu%% = %v, want ~100 (sum across the tree)", got)
+	}
+}
+
+func TestCountCPULines(t *testing.T) {
+	stat := "cpu  100 0 50 800 0 0 0 0 0 0\n" +
+		"cpu0 25 0 12 200 0 0 0 0 0 0\n" +
+		"cpu1 25 0 13 200 0 0 0 0 0 0\n" +
+		"cpu2 25 0 13 200 0 0 0 0 0 0\n" +
+		"cpu3 25 0 12 200 0 0 0 0 0 0\n" +
+		"intr 12345\nctxt 67890\nbtime 1700000000\nprocesses 100\n"
+	if n := countCPULines([]byte(stat)); n != 4 {
+		t.Fatalf("countCPULines = %d, want 4 (the aggregate 'cpu' line is excluded)", n)
+	}
+	if n := countCPULines([]byte("cpu 1 2 3\n")); n != 0 {
+		t.Fatalf("countCPULines with only the aggregate line = %d, want 0", n)
+	}
+}
+
 func TestSystemCPURateAndFreshness(t *testing.T) {
 	clock := time.Unix(0, 0)
 	reader := fakeReader{memTotal: 1000, memUsed: 250, sysBusy: 0, sysTotal: 0, hz: 100, ncpu: 1}
