@@ -58,6 +58,7 @@ which reuse the same schema). MVP types:
 | `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
 | `mountd` / `rpc.mountd` / `nfs-mountd` | the NFS mount daemon answers an RPC NULL call to MOUNT (100005) (see Database) |
 | `statd` / `rpc.statd` / `nsm` | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
+| `nebula` / `nebula-vpn` | a Nebula mesh-VPN node answers an unknown-tunnel packet with a `recv_error` on 4242/udp (see Database) |
 | `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
 | `guacd` / `guacamole` | the Guacamole proxy daemon answers a `select` with a Guacamole instruction (see Database) |
 | `asterisk` / `ami` | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
@@ -581,6 +582,17 @@ name. Supported protocols:
   with rpcbind — so if the daemon is not on 662, set `port` to its configured
   port (query it with `rpcinfo -p <host>`). Probed natively (RFC 5531/1813).
   Reuses the rpcbind RPC machinery.
+- `nebula` (alias `nebula-vpn`) — a [Nebula](https://github.com/slackhq/nebula)
+  mesh-VPN node. Default port 4242 (**UDP**). No auth. A real tunnel needs a
+  CA-signed certificate, but a node answers a data packet for a tunnel index it
+  does not know with a plaintext **recv_error** (telling the sender to
+  re-handshake), so the check sends a Nebula `message` packet carrying a random
+  index and verifies the node replies with a `recv_error` echoing it — proof the
+  node is up and speaking Nebula, with no credentials. Probed natively (16-byte
+  Nebula header over UDP). The reply is governed by the node's
+  `listen.send_recv_error` setting (default `always`); a node set to `never` — or
+  to `private` when probed from a public address — stays silent and reads as
+  down, so probe lighthouses/nodes from an address their config answers.
 - `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
   `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
   Python pickle command protocol that is not worth reimplementing for a liveness
@@ -775,7 +787,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
