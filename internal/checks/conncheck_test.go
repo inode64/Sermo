@@ -407,6 +407,21 @@ func TestBuildAJPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildIPPCheck(t *testing.T) {
+	for _, typ := range []string{"ipp", "cups"} {
+		built, warns := Build(map[string]any{
+			"printer": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "ipp" || cc.cfg.Port != 631 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
