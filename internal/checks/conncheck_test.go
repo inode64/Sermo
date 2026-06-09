@@ -608,6 +608,21 @@ func TestBuildClamdCheck(t *testing.T) {
 	}
 }
 
+func TestBuildSieveCheck(t *testing.T) {
+	for _, typ := range []string{"sieve", "managesieve"} {
+		built, warns := Build(map[string]any{
+			"filter": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "sieve" || cc.cfg.Port != 4190 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildAsteriskCheck(t *testing.T) {
 	for _, typ := range []string{"asterisk", "ami"} {
 		built, warns := Build(map[string]any{
