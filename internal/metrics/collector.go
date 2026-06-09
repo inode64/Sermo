@@ -12,6 +12,12 @@ type Reader interface {
 	ProcessCPU(pid int) (uint64, bool)
 	// ProcessRSS returns a process's resident memory in bytes.
 	ProcessRSS(pid int) (uint64, bool)
+	// ProcessIO returns a process's cumulative block-layer read/write bytes.
+	ProcessIO(pid int) (read, write uint64, ok bool)
+	// ProcessFDs returns a process's count of open file descriptors.
+	ProcessFDs(pid int) (uint64, bool)
+	// ProcessThreads returns a process's thread count.
+	ProcessThreads(pid int) (uint64, bool)
 	// TotalMemory returns total and used machine memory in bytes.
 	TotalMemory() (total, used uint64, ok bool)
 	// SystemCPU returns busy and total jiffies from /proc/stat.
@@ -29,6 +35,12 @@ type cpuSample struct {
 	at    time.Time
 }
 
+type ioSample struct {
+	read  uint64
+	write uint64
+	at    time.Time
+}
+
 type sysSample struct {
 	busy  uint64
 	total uint64
@@ -43,11 +55,12 @@ type Collector struct {
 	Now             func() time.Time
 	SystemFreshness time.Duration
 
-	mu          sync.Mutex
-	prevService map[string]cpuSample
-	prevSystem  *sysSample
-	lastSystem  Snapshot
-	lastSystemA time.Time
+	mu            sync.Mutex
+	prevService   map[string]cpuSample
+	prevServiceIO map[string]ioSample
+	prevSystem    *sysSample
+	lastSystem    Snapshot
+	lastSystemA   time.Time
 }
 
 // New returns a Collector over reader.
@@ -57,23 +70,42 @@ func New(reader Reader) *Collector {
 		Now:             time.Now,
 		SystemFreshness: 2 * time.Second,
 		prevService:     map[string]cpuSample{},
+		prevServiceIO:   map[string]ioSample{},
 	}
 }
 
 // SampleService computes the service-scope metrics over its discovered process
-// set: memory (RSS sum, bytes and % of RAM), cpu (rate %), process_count.
+// set — which includes the matched processes AND their descendants, so every
+// metric below sums across the whole tree (parent + children): memory (RSS sum,
+// bytes and % of RAM), cpu (rate %), process_count, io/io_read/io_write (rate,
+// bytes/s), fds and threads.
 func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	now := c.Now()
 	snap := Snapshot{}
 
-	var rss uint64
+	var rss, ticks, ioRead, ioWrite, fds, threads uint64
 	for _, pid := range pids {
 		if v, ok := c.Reader.ProcessRSS(pid); ok {
 			rss += v
 		}
+		if v, ok := c.Reader.ProcessCPU(pid); ok {
+			ticks += v
+		}
+		if rd, wr, ok := c.Reader.ProcessIO(pid); ok {
+			ioRead += rd
+			ioWrite += wr
+		}
+		if v, ok := c.Reader.ProcessFDs(pid); ok {
+			fds += v
+		}
+		if v, ok := c.Reader.ProcessThreads(pid); ok {
+			threads += v
+		}
 	}
+
 	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: true}
 	if total, _, ok := c.Reader.TotalMemory(); ok && total > 0 {
 		mem.Percent = float64(rss) / float64(total) * 100
@@ -82,14 +114,10 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	snap["memory"] = mem
 
 	snap["process_count"] = Reading{Absolute: float64(len(pids)), HasAbsolute: true, Ready: true}
+	snap["fds"] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: true}
+	snap["threads"] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: true}
 
-	var ticks uint64
-	for _, pid := range pids {
-		if v, ok := c.Reader.ProcessCPU(pid); ok {
-			ticks += v
-		}
-	}
-	cur := cpuSample{ticks: ticks, at: c.Now()}
+	cur := cpuSample{ticks: ticks, at: now}
 	cpu := Reading{HasPercent: true}
 	if prev, ok := c.prevService[service]; ok {
 		cpu = cpuRate(prev, cur, c.Reader.ClockTicks(), c.Reader.NumCPU())
@@ -97,7 +125,33 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	c.prevService[service] = cur
 	snap["cpu"] = cpu
 
+	curIO := ioSample{read: ioRead, write: ioWrite, at: now}
+	if prev, ok := c.prevServiceIO[service]; ok {
+		snap["io_read"] = ioRate(prev.read, curIO.read, prev.at, curIO.at)
+		snap["io_write"] = ioRate(prev.write, curIO.write, prev.at, curIO.at)
+		snap["io"] = ioRate(prev.read+prev.write, curIO.read+curIO.write, prev.at, curIO.at)
+	} else {
+		notReady := Reading{HasAbsolute: true}
+		snap["io_read"], snap["io_write"], snap["io"] = notReady, notReady, notReady
+	}
+	c.prevServiceIO[service] = curIO
+
 	return snap
+}
+
+// ioRate computes a bytes/second rate from two cumulative samples. A drop in the
+// total (a counter reset, or a child leaving the process set between cycles)
+// clamps to 0 rather than underflowing.
+func ioRate(prevBytes, curBytes uint64, prevAt, curAt time.Time) Reading {
+	wall := curAt.Sub(prevAt).Seconds()
+	if wall <= 0 {
+		return Reading{HasAbsolute: true, Ready: false}
+	}
+	var rate float64
+	if curBytes > prevBytes {
+		rate = float64(curBytes-prevBytes) / wall
+	}
+	return Reading{Absolute: rate, HasAbsolute: true, Ready: true}
 }
 
 // SampleSystem computes the machine-scope metrics: total_memory (bytes and %),
@@ -168,6 +222,7 @@ func (c *Collector) SampleSystem() Snapshot {
 func (c *Collector) Reset(service string) {
 	c.mu.Lock()
 	delete(c.prevService, service)
+	delete(c.prevServiceIO, service)
 	c.mu.Unlock()
 }
 

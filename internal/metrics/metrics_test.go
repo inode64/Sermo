@@ -37,10 +37,14 @@ func TestCompareFormMismatchErrors(t *testing.T) {
 
 // fakeReader feeds scripted process/system values.
 type fakeReader struct {
-	cpu  map[int]uint64
-	rss  map[int]uint64
-	hz   float64
-	ncpu int
+	cpu     map[int]uint64
+	rss     map[int]uint64
+	ioRead  map[int]uint64
+	ioWrite map[int]uint64
+	fds     map[int]uint64
+	threads map[int]uint64
+	hz      float64
+	ncpu    int
 	// system
 	memTotal, memUsed uint64
 	sysBusy, sysTotal uint64
@@ -48,6 +52,13 @@ type fakeReader struct {
 
 func (r fakeReader) ProcessCPU(pid int) (uint64, bool) { v, ok := r.cpu[pid]; return v, ok }
 func (r fakeReader) ProcessRSS(pid int) (uint64, bool) { v, ok := r.rss[pid]; return v, ok }
+func (r fakeReader) ProcessIO(pid int) (uint64, uint64, bool) {
+	rd, ok := r.ioRead[pid]
+	wr, ok2 := r.ioWrite[pid]
+	return rd, wr, ok || ok2
+}
+func (r fakeReader) ProcessFDs(pid int) (uint64, bool)     { v, ok := r.fds[pid]; return v, ok }
+func (r fakeReader) ProcessThreads(pid int) (uint64, bool) { v, ok := r.threads[pid]; return v, ok }
 func (r fakeReader) TotalMemory() (uint64, uint64, bool) {
 	return r.memTotal, r.memUsed, r.memTotal > 0
 }
@@ -55,6 +66,62 @@ func (r fakeReader) SystemCPU() (uint64, uint64, bool)               { return r.
 func (r fakeReader) LoadAverages() (float64, float64, float64, bool) { return 1.5, 0.7, 0.3, true }
 func (r fakeReader) NumCPU() int                                     { return r.ncpu }
 func (r fakeReader) ClockTicks() float64                             { return r.hz }
+
+func TestServiceIOFDsThreadsAggregateOverTree(t *testing.T) {
+	clock := time.Unix(0, 0)
+	// Two processes (a service main + its child): io/fds/threads should sum.
+	reader := fakeReader{
+		ioRead:  map[int]uint64{10: 0, 20: 0},
+		ioWrite: map[int]uint64{10: 0, 20: 0},
+		fds:     map[int]uint64{10: 5, 20: 7},
+		threads: map[int]uint64{10: 2, 20: 3},
+		hz:      100, ncpu: 1,
+	}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+
+	snap := c.SampleService("svc", []int{10, 20})
+	if snap["fds"].Absolute != 12 {
+		t.Fatalf("fds = %v, want 12 (5+7)", snap["fds"].Absolute)
+	}
+	if snap["threads"].Absolute != 5 {
+		t.Fatalf("threads = %v, want 5 (2+3)", snap["threads"].Absolute)
+	}
+	if snap["io"].Ready {
+		t.Fatal("io rate must not be ready on the first cycle")
+	}
+
+	// One second later: pid 10 read 1MB, pid 20 wrote 2MB -> io = 3MB/s.
+	clock = clock.Add(time.Second)
+	reader.ioRead[10] = 1 << 20
+	reader.ioWrite[20] = 2 << 20
+	c.Reader = reader
+	snap = c.SampleService("svc", []int{10, 20})
+
+	if !snap["io"].Ready || snap["io"].Absolute != float64(3<<20) {
+		t.Fatalf("io = %+v, want 3MiB/s aggregated", snap["io"])
+	}
+	if snap["io_read"].Absolute != float64(1<<20) || snap["io_write"].Absolute != float64(2<<20) {
+		t.Fatalf("io_read/io_write = %v/%v, want 1MiB/2MiB", snap["io_read"].Absolute, snap["io_write"].Absolute)
+	}
+}
+
+func TestServiceIORateClampsOnShrink(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{ioRead: map[int]uint64{10: 5000}, ioWrite: map[int]uint64{10: 0}, hz: 100, ncpu: 1}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10}) // prime at 5000
+
+	// A child exits / counter resets -> totals drop. Rate must clamp to 0, not underflow.
+	clock = clock.Add(time.Second)
+	reader.ioRead[10] = 1000
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10})
+	if !snap["io"].Ready || snap["io"].Absolute != 0 {
+		t.Fatalf("io on counter shrink = %+v, want clamped to 0", snap["io"])
+	}
+}
 
 func TestServiceMemoryAndCount(t *testing.T) {
 	reader := fakeReader{rss: map[int]uint64{10: 100, 20: 300}, memTotal: 1000, hz: 100, ncpu: 1}
