@@ -41,6 +41,10 @@ func TestOSReaderProcfs(t *testing.T) {
 	if rss, ok := r.ProcessRSS(pid); !ok || rss == 0 {
 		t.Errorf("ProcessRSS(self) = (%d, %v); want ok with rss > 0", rss, ok)
 	}
+	// VmSwap is usually 0 for the test process, but the read must succeed.
+	if _, ok := r.ProcessSwap(pid); !ok {
+		t.Error("ProcessSwap(self) not ok")
+	}
 	// read/write bytes may legitimately be 0; we only require the file to parse.
 	if _, _, ok := r.ProcessIO(pid); !ok {
 		t.Error("ProcessIO(self) not ok")
