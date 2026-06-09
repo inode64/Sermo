@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
@@ -533,6 +534,12 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	case "":
 		return nil, "missing type"
 	default:
+		// A connection-protocol check (mysql, …): the type names a protocol in
+		// the conn registry. New protocols register themselves and need no case
+		// here.
+		if proto, ok := conn.Lookup(typ); ok {
+			return buildConnCheck(b, proto, entry)
+		}
 		return nil, fmt.Sprintf("unsupported type %q", typ)
 	}
 }
