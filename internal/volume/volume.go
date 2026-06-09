@@ -204,6 +204,30 @@ func containingMount(mounts []Mount, path string) (Mount, bool) {
 	return best, found
 }
 
+// List returns the real disk-backed mounts (those whose source is a /dev/
+// device), skipping pseudo filesystems (tmpfs, proc, sysfs, cgroup, …) and
+// duplicate mount points. It is the candidate list the volume wizard offers.
+// mounts is injectable for tests; nil reads /proc/mounts.
+func List(mounts MountSource) ([]Mount, error) {
+	if mounts == nil {
+		mounts = procMounts
+	}
+	all, err := mounts()
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var out []Mount
+	for _, m := range all {
+		if !strings.HasPrefix(m.Device, "/dev/") || seen[m.Mountpoint] {
+			continue
+		}
+		seen[m.Mountpoint] = true
+		out = append(out, m)
+	}
+	return out, nil
+}
+
 // procMounts reads the mount table from /proc/mounts.
 func procMounts() ([]Mount, error) {
 	data, err := os.ReadFile("/proc/mounts")
