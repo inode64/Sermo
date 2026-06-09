@@ -149,7 +149,7 @@
   <div class="table-wrap">
   <table class="services-table">
     <thead>
-      <tr><th>Service</th><th>Backend unit</th><th>Status</th><th>Checks</th><th>Policy</th><th>Locks</th><th>Last event</th><th>Next remediation</th><th>Monitoring</th><th class="actions">Actions</th></tr>
+      <tr><th>Service</th><th>Backend unit</th><th>Status</th><th>Checks</th><th>Interval</th><th>Policy</th><th>Locks</th><th>Last event</th><th>Next remediation</th><th>Monitoring</th><th class="actions">Actions</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
@@ -950,6 +950,7 @@ function renderServices() {
       <td>${unitCell(s)}</td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
       <td>${checkHealthCell(s)}</td>
+      <td>${s.interval ? esc(s.interval) : '<span class="muted">—</span>'}</td>
       <td>${policyCell(s)}</td>
       <td>${locksCell(s)}</td>
       <td>${lastEventCell(s)}</td>
@@ -958,13 +959,13 @@ function renderServices() {
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="11">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
   const empty = (allServices || []).length
-    ? `<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="10" class="muted">No services.</td></tr>`;
+    ? `<tr><td colspan="11" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="11" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows.join("") || empty;
   renderAttention();
   expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
