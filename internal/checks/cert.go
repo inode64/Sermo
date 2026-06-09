@@ -43,6 +43,61 @@ type CertSample struct {
 // the default dials the host and inspects the presented chain.
 type CertSamplerFunc func(ctx context.Context, host, port, serverName string, verify bool) (CertSample, error)
 
+// certOptions configures which certificate conditions raise a problem.
+type certOptions struct {
+	expiresInDays  int
+	verify         bool
+	onAlgoChange   bool
+	onIssuerChange bool
+	onChange       bool
+}
+
+// certEvaluator turns a CertSample into the problems it represents under a set
+// of certOptions. It is stateful for change detection — it remembers the
+// previous sample's algorithm, issuer and fingerprint — so a change condition
+// only fires from the second observation onward.
+type certEvaluator struct {
+	primed     bool
+	lastAlgo   string
+	lastIssuer string
+	lastFP     string
+}
+
+// evaluate reports the problems for sample s under opts at time now, plus the
+// days until expiry and whether the material has an expiry at all.
+func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) (problems []string, daysLeft int, hasExpiry bool) {
+	hasExpiry = !s.NotAfter.IsZero()
+	if hasExpiry {
+		daysLeft = int(s.NotAfter.Sub(now).Hours() / 24)
+		switch {
+		case now.After(s.NotAfter):
+			problems = append(problems, "expired")
+		case now.Before(s.NotBefore):
+			problems = append(problems, "not yet valid")
+		case opts.expiresInDays > 0 && daysLeft < opts.expiresInDays:
+			problems = append(problems, fmt.Sprintf("expires in %d days", daysLeft))
+		}
+	}
+	if opts.verify && s.VerifyError != "" {
+		problems = append(problems, "chain: "+s.VerifyError)
+	}
+	if !e.primed {
+		e.primed = true
+	} else {
+		if opts.onAlgoChange && s.SignatureAlgorithm != e.lastAlgo {
+			problems = append(problems, "signature algorithm "+e.lastAlgo+" -> "+s.SignatureAlgorithm)
+		}
+		if opts.onIssuerChange && s.Issuer != e.lastIssuer {
+			problems = append(problems, "issuer changed")
+		}
+		if opts.onChange && s.Fingerprint != e.lastFP {
+			problems = append(problems, "certificate changed")
+		}
+	}
+	e.lastAlgo, e.lastIssuer, e.lastFP = s.SignatureAlgorithm, s.Issuer, s.Fingerprint
+	return problems, daysLeft, hasExpiry
+}
+
 // certCheck inspects TLS material. It is condition-style (OK==true means an
 // alert). The material comes from a live TLS endpoint (host) or a local file
 // (path); exactly one is set. A certificate alerts when it is expiring within
@@ -66,10 +121,7 @@ type certCheck struct {
 	verify         bool
 	sampler        CertSamplerFunc
 
-	primed     bool
-	lastAlgo   string
-	lastIssuer string
-	lastFP     string
+	eval certEvaluator
 }
 
 // source is the human-readable origin of the material (file path or host).
@@ -112,39 +164,13 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		s = sampled
 	}
 
-	now := time.Now()
-	var problems []string
-	var daysLeft int
-	hasExpiry := !s.NotAfter.IsZero()
-	if hasExpiry {
-		daysLeft = int(s.NotAfter.Sub(now).Hours() / 24)
-		switch {
-		case now.After(s.NotAfter):
-			problems = append(problems, "expired")
-		case now.Before(s.NotBefore):
-			problems = append(problems, "not yet valid")
-		case c.expiresInDays > 0 && daysLeft < c.expiresInDays:
-			problems = append(problems, fmt.Sprintf("expires in %d days", daysLeft))
-		}
-	}
-	if c.verify && s.VerifyError != "" {
-		problems = append(problems, "chain: "+s.VerifyError)
-	}
-
-	if !c.primed {
-		c.primed = true
-	} else {
-		if c.onAlgoChange && s.SignatureAlgorithm != c.lastAlgo {
-			problems = append(problems, "signature algorithm "+c.lastAlgo+" -> "+s.SignatureAlgorithm)
-		}
-		if c.onIssuerChange && s.Issuer != c.lastIssuer {
-			problems = append(problems, "issuer changed")
-		}
-		if c.onChange && s.Fingerprint != c.lastFP {
-			problems = append(problems, "certificate changed")
-		}
-	}
-	c.lastAlgo, c.lastIssuer, c.lastFP = s.SignatureAlgorithm, s.Issuer, s.Fingerprint
+	problems, daysLeft, hasExpiry := c.eval.evaluate(s, certOptions{
+		expiresInDays:  c.expiresInDays,
+		verify:         c.verify,
+		onAlgoChange:   c.onAlgoChange,
+		onIssuerChange: c.onIssuerChange,
+		onChange:       c.onChange,
+	}, time.Now())
 
 	ok := len(problems) > 0
 	src := c.source()
