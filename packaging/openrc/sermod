@@ -24,7 +24,8 @@ depend() {
 }
 
 start_pre() {
-	checkpath --directory --mode 0755 /run/sermo
+	# Owner-only (root) directories, matching the systemd tmpfiles.d config.
+	checkpath --directory --mode 0700 /run/sermo
 	# Persistent state database (monitoring state, restored across reboots).
-	checkpath --directory --mode 0750 /var/lib/sermo
+	checkpath --directory --mode 0700 /var/lib/sermo
 }

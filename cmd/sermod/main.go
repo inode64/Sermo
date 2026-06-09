@@ -109,6 +109,15 @@ func run(args []string) int {
 	}
 	logger.Debug("service backend detected", "backend", detection.Backend)
 
+	// Ensure the runtime root exists owner-only (root) before any lock dir or the
+	// pidfile is created under it, so it stays 0700 even when the packaging
+	// (tmpfiles.d / OpenRC) has not pre-created it. Best-effort.
+	if rt := cfg.Global.RuntimeDir(); rt != "" {
+		if err := os.MkdirAll(rt, 0o700); err != nil {
+			logger.Warn("create runtime dir failed", "path", rt, "error", err)
+		}
+	}
+
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
 		logger.Error("open state store", "error", err)

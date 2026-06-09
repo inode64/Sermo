@@ -13,13 +13,10 @@ RestartSec=5s
 # root. The operation engine only ever signals processes that exactly match a
 # service's kill_only_if selector (resolved exe + real UID).
 User=root
-# RuntimeDirectory creates /run/sermo for named and operation locks.
-RuntimeDirectory=sermo
-RuntimeDirectoryMode=0755
-# StateDirectory creates /var/lib/sermo for the persistent state database
-# (monitoring state, restored across reboots). Survives restarts, unlike /run.
-StateDirectory=sermo
-StateDirectoryMode=0750
+# /run/sermo (runtime locks, pidfile) and /var/lib/sermo (persistent state DB)
+# are created at 0700 root:root by systemd-tmpfiles from the shipped
+# tmpfiles.d/sermo.conf — not by RuntimeDirectory=/StateDirectory= here — so the
+# state dir survives restarts and both stay owner-only.
 
 [Install]
 WantedBy=multi-user.target

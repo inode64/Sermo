@@ -36,6 +36,14 @@ is what lets a service's `monitor: previous` flag restore its last monitoring
 state. The schema is versioned and migrated forward automatically, so future
 features can add tables without a manual upgrade.
 
+Both directories are created **0700, owner root**. On systemd they come from the
+shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
+applied at boot by `systemd-tmpfiles-setup` or immediately with
+`systemd-tmpfiles --create sermo.conf` — the `sermod.service` unit no longer uses
+`RuntimeDirectory=`/`StateDirectory=`. On OpenRC the init script's `checkpath`
+creates them at 0700. The daemon also creates either at 0700 if it has to, so the
+mode holds even outside the packaging.
+
 ## Engine settings
 
 The `engine` block is daemon-wide configuration consumed by `sermod`; it never
