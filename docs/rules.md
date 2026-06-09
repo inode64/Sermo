@@ -42,6 +42,7 @@ which reuse the same schema). MVP types:
 | `ldap`        | an LDAP directory accepts an anonymous bind, or a simple bind with credentials (see Database) |
 | `ajp`         | an AJP13 connector (e.g. Tomcat's 8009) answers a CPing with CPong (see Database) |
 | `ipp` / `cups` | an IPP server (CUPS/cupsd) answers an IPP request with a valid response (see Database) |
+| `rsync` / `rsyncd` | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
@@ -308,6 +309,10 @@ name. Supported protocols:
 - `ajp` — default port 8009 (TCP). No auth. Sends an **AJP13 CPing** and expects
   a **CPong** — the same liveness probe Apache/nginx use against Tomcat's AJP
   connector. Probed natively (AJP13).
+- `rsync` (alias `rsyncd`) — default port 873 (TCP). No auth. Reads the rsync
+  daemon's `@RSYNCD: <version>` greeting; receiving it proves the daemon is up
+  and speaking the rsync protocol. Result data carries the protocol version.
+  Probed natively.
 - `ldap` — default port 389; `tls`: `false` | `true` | `skip-verify` (implicit
   TLS / LDAPS — use port 636). `user` is **optional**: with no credentials it
   does an **anonymous bind** (a successful bind, or an LDAP-level rejection, both
@@ -367,7 +372,7 @@ reported corruption fails the check with the detail. The file is opened
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, fpm, dns, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rsync, fpm, dns, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
