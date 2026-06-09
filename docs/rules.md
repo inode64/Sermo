@@ -34,6 +34,7 @@ which reuse the same schema). MVP types:
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
 | `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
+| `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -281,6 +282,25 @@ name. Supported protocols:
 The `socket` field (Unix socket path) is generic; when set the check dials the
 socket instead of `host`/`port`. The `query` field is the per-protocol lookup
 target (the DNS name for `dns`).
+
+### SQLite integrity (`sqlite` / `sqlite3`)
+
+A `sqlite` check verifies a local SQLite database file is healthy by running
+SQLite's integrity check. It is a **local file** check (not a network protocol).
+
+```yaml
+checks:
+  app-db:
+    type: sqlite
+    path: /var/lib/app/app.db   # required
+    quick: false                # optional: true runs the faster PRAGMA quick_check
+```
+
+It passes (health-style, `OK == true`) when `PRAGMA integrity_check` reports
+`ok`. A missing/unreadable file, a file that is not a SQLite database, or
+reported corruption fails the check with the detail. The file is opened
+**read-only**, so the check never modifies it. `quick: true` runs
+`PRAGMA quick_check` (faster, skips some per-row checks) for large databases.
 
 ```yaml
 checks:
