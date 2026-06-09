@@ -605,6 +605,9 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	case "mongodb-query":
 		return buildMongoCheck(b, entry)
 
+	case "influxdb-query":
+		return buildInfluxCheck(b, entry)
+
 	case "websocket", "ws":
 		return buildWebsocketCheck(b, entry)
 

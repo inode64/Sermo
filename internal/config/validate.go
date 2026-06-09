@@ -1244,7 +1244,7 @@ var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "size", "websocket", "ws")
+	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
@@ -1387,6 +1387,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateSQLFields(path, entry, add)
 		case "mongodb-query":
 			validateMongoFields(path, entry, add)
+		case "influxdb-query":
+			validateInfluxFields(path, entry, add)
 		case "size":
 			validateSizeFields(path, entry, add)
 		case "websocket", "ws":
@@ -1499,6 +1501,24 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 		}
 	default:
 		add("%s requires a collection (+filter), a collection+pipeline, or a command", prefix)
+	}
+}
+
+// validateInfluxFields validates an influxdb-query check: a required database and
+// InfluxQL query, a valid op and a value.
+func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
+	if scalarString(fields["database"]) == "" {
+		add("%s.database is required for an influxdb-query check", prefix)
+	}
+	if scalarString(fields["query"]) == "" {
+		add("%s.query is required for an influxdb-query check", prefix)
+	}
+	op := scalarString(fields["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+	}
+	if scalarString(fields["value"]) == "" {
+		add("%s.value is required for an influxdb-query check", prefix)
 	}
 }
 
