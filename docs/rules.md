@@ -60,6 +60,7 @@ which reuse the same schema). MVP types:
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
 | `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
+| `websocket` / `ws` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
@@ -637,6 +638,30 @@ baselines (no alert). Sizes accept human units (`1GB`, `500MB`, `2GiB`, or a
 plain byte count). Result data carries `current_bytes`, `baseline_bytes`,
 `growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
 directory walk reads the whole subtree each cycle, so point it at a bounded path.
+
+### WebSocket (`websocket` / `ws`)
+
+A `websocket` check verifies a WebSocket endpoint completes the RFC 6455 opening
+handshake: it sends the HTTP `Upgrade` request and checks the server answers
+`101 Switching Protocols` with a `Sec-WebSocket-Accept` matching the sent key
+(so it confirms a real WebSocket server, not just any HTTP 101).
+
+```yaml
+checks:
+  realtime:
+    type: websocket
+    url: "wss://example.com/socket"   # ws:// | wss:// | http:// | https://
+    # tls: skip-verify                # accept a self-signed cert (wss/https)
+    # origin: "https://example.com"   # optional Origin header
+    # subprotocol: "chat"             # optional Sec-WebSocket-Protocol
+    # headers: { Authorization: "Bearer ${token}" }   # optional extra headers
+```
+
+It passes (health-style, `OK == true`) when the handshake completes. `ws`/`http`
+connect in plaintext; `wss`/`https` use TLS (`tls: skip-verify` accepts a
+self-signed certificate). The default port follows the scheme (80 / 443) unless
+the URL gives one. Result data carries the negotiated `subprotocol`. Probed
+natively (no external library).
 
 ```yaml
 checks:
