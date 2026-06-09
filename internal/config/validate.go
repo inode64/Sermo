@@ -1076,6 +1076,13 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			add("%s.expect_latency must be an {op, value} mapping", prefix)
 		}
 	}
+	for _, key := range []string{"on_change", "on_version_change"} {
+		if v, present := fields[key]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.%s must be a boolean", prefix, key)
+			}
+		}
+	}
 }
 
 func validateDocuments(cfg *Config) []Issue {

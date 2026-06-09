@@ -580,6 +580,24 @@ checks:
     expect_latency: { op: "<", value: 50 }   # alert when Redis answers slowly
 ```
 
+**Version-change detection (`on_version_change`).** Set `on_version_change: true`
+(on a **host watch**, so the check is built once and keeps state across cycles) to
+alert when the server's version changes between cycles — e.g. after a package
+upgrade. The tracked identity is the protocol's reported `version` (mysql,
+postgres, redis, ssh, snmp, rspamd, libvirt, syncthing) or, for protocols that
+only return a greeting banner (`smtp`, `imap`, `pop`, `ftp`), that banner. The
+first cycle baselines silently; a later change **fails** the check and the result
+data carries `version`/`version_old`. It composes with `on_change` (the SSH/SNMP
+fingerprint identity) — both can be enabled at once.
+
+```yaml
+watches:
+  mail-version:
+    type: smtp
+    host: mail.example.com
+    on_version_change: true     # alert when the SMTP banner/version changes
+```
+
 More protocols are added the same way — the check type, dispatch and validation
 are protocol-agnostic, so a new protocol only registers itself.
 
