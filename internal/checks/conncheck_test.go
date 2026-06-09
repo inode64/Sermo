@@ -338,6 +338,27 @@ func TestBuildNTPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildSNMPCheck(t *testing.T) {
+	// v2c anonymous (community), default port 161, with identity-change detection.
+	built, warns := Build(map[string]any{
+		"router": map[string]any{"type": "snmp", "host": "10.0.0.1", "on_change": true},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("snmp v2c should build: warns=%v", warns)
+	}
+	cc := built[0].Check.(connCheck)
+	if cc.proto.Name() != "snmp" || cc.cfg.Port != 161 || !cc.onChange {
+		t.Fatalf("cfg = %+v onChange=%v", cc.cfg, cc.onChange)
+	}
+	// v3 with user/password.
+	built, _ = Build(map[string]any{
+		"router": map[string]any{"type": "snmp", "host": "10.0.0.1", "user": "monitor", "password": "p"},
+	}, Deps{DefaultTimeout: time.Second})
+	if cc := built[0].Check.(connCheck); cc.cfg.User != "monitor" || cc.cfg.Password != "p" {
+		t.Fatalf("cfg = %+v", cc.cfg)
+	}
+}
+
 func TestBuildUnknownTypeStillWarns(t *testing.T) {
 	_, warns := Build(map[string]any{
 		"x": map[string]any{"type": "nope"},
