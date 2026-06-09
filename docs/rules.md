@@ -59,6 +59,7 @@ which reuse the same schema). MVP types:
 | `mountd` / `rpc.mountd` / `nfs-mountd` | the NFS mount daemon answers an RPC NULL call to MOUNT (100005) (see Database) |
 | `statd` / `rpc.statd` / `nsm` | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
 | `nebula` / `nebula-vpn` | a Nebula mesh-VPN node answers an unknown-tunnel packet with a `recv_error` on 4242/udp (see Database) |
+| `openvpn` / `ovpn` | an OpenVPN server answers a hard-reset-client with a hard-reset-server on 1194 (see Database) |
 | `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
 | `guacd` / `guacamole` | the Guacamole proxy daemon answers a `select` with a Guacamole instruction (see Database) |
 | `asterisk` / `ami` | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
@@ -593,6 +594,18 @@ name. Supported protocols:
   `listen.send_recv_error` setting (default `always`); a node set to `never` — or
   to `private` when probed from a public address — stays silent and reads as
   down, so probe lighthouses/nodes from an address their config answers.
+- `openvpn` (alias `ovpn`) — an OpenVPN server. Default port 1194; `transport`
+  selects the transport (`udp`, the default, or `tcp` — set it to match the
+  server's `proto`). No auth. The first step of the OpenVPN handshake is
+  unauthenticated (TLS comes after): the check sends a
+  `P_CONTROL_HARD_RESET_CLIENT_V2` carrying a random session id and verifies the
+  server answers with a `P_CONTROL_HARD_RESET_SERVER_V2` that acknowledges that
+  session id — proof the server is up and speaking OpenVPN, with no credentials.
+  Result data carries the `transport`. Probed natively (OpenVPN control-channel
+  wire format). **Caveat:** the reset only gets a reply from a server without
+  `tls-auth`/`tls-crypt`; those HMAC-wrap (or encrypt) control packets, so a bare
+  reset is dropped and the server stays silent — silence is then expected and is
+  not proof it is down.
 - `fail2ban` — fail2ban-server. **Socket-only** (no TCP port); defaults to
   `/var/run/fail2ban/fail2ban.sock`, override with `socket`. fail2ban speaks a
   Python pickle command protocol that is not worth reimplementing for a liveness
@@ -787,7 +800,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, redis, valkey, imap, pop, smtp, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, syncthing, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)

@@ -208,6 +208,16 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Params = params
 		}
 	}
+	// openvpn defaults to UDP; `transport: tcp` selects TCP (length-prefixed
+	// framing). Scoped here so it never leaks into other protocols' params.
+	if proto.Name() == "openvpn" {
+		if tr := strings.ToLower(asString(entry["transport"])); tr != "" {
+			if tr != "udp" && tr != "tcp" {
+				return nil, fmt.Sprintf("openvpn check: transport must be udp or tcp, got %q", tr)
+			}
+			cfg.Params = map[string]string{"transport": tr}
+		}
+	}
 	// libvirt defaults to the local Unix socket; an explicit host selects TCP.
 	if proto.Name() == "libvirt" && cfg.Socket == "" && asString(entry["host"]) == "" {
 		cfg.Socket = "/var/run/libvirt/libvirt-sock"
