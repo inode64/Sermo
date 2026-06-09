@@ -55,9 +55,23 @@ type Rule struct {
 	If      map[string]any
 	For     *ForWindow
 	Within  *WithinWindow
-	Then    Action   // the primary action (the operation, or the first)
 	Actions []Action // all actions in order (post-MVP multi-action then)
 	Blocks  []string
+}
+
+// Primary is the action other code treats as the rule's main one: the operation
+// (restart/start/stop) if present, else the first.
+func (r Rule) Primary() Action {
+	for _, a := range r.Actions {
+		switch a.Type {
+		case ActionRestart, ActionStart, ActionStop:
+			return a
+		}
+	}
+	if len(r.Actions) > 0 {
+		return r.Actions[0]
+	}
+	return Action{}
 }
 
 // OperationAction returns the rule's restart/start/stop action, if any.
@@ -98,21 +112,6 @@ func parseActions(then map[string]any) []Action {
 	return []Action{{Type: ActionType(asString(then["action"])), Message: asString(then["message"])}}
 }
 
-// primaryAction is the action other code treats as the rule's main one: the
-// operation (restart/start/stop) if present, else the first.
-func primaryAction(actions []Action) Action {
-	for _, a := range actions {
-		switch a.Type {
-		case ActionRestart, ActionStart, ActionStop:
-			return a
-		}
-	}
-	if len(actions) > 0 {
-		return actions[0]
-	}
-	return Action{}
-}
-
 // ParseRules extracts the resolved `rules` section into Rules, skipping
 // `enabled: false` entries and reporting malformed ones as warnings. Rules are
 // returned in name order (guards are evaluated in this order, section 13).
@@ -148,9 +147,8 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			Name:    name,
 			Type:    RuleType(asString(entry["type"])),
 			If:      ifNode,
-			For:     parseForWindow(entry["for"]),
-			Within:  parseWithinWindow(entry["within"]),
-			Then:    primaryAction(actions),
+			For:     ParseForWindow(entry["for"]),
+			Within:  ParseWithinWindow(entry["within"]),
 			Actions: actions,
 			Blocks:  stringList(entry["blocks"]),
 		})
