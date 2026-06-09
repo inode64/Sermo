@@ -30,7 +30,10 @@ func (c connCheck) Run(ctx context.Context) Result {
 	if probe == nil {
 		probe = c.proto.Probe
 	}
-	addr := net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
+	addr := c.cfg.Socket
+	if addr == "" {
+		addr = net.JoinHostPort(c.cfg.Host, strconv.Itoa(c.cfg.Port))
+	}
 	res, err := probe(ctx, c.cfg)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("%s %s: %v", c.proto.Name(), addr, err), start)
@@ -40,7 +43,12 @@ func (c connCheck) Run(ctx context.Context) Result {
 		msg += " (" + res.Version + ")"
 	}
 	r := c.result(true, msg, start)
-	r.Data = map[string]any{"protocol": c.proto.Name(), "host": c.cfg.Host, "port": c.cfg.Port}
+	r.Data = map[string]any{"protocol": c.proto.Name()}
+	if c.cfg.Socket != "" {
+		r.Data["socket"] = c.cfg.Socket
+	} else {
+		r.Data["host"], r.Data["port"] = c.cfg.Host, c.cfg.Port
+	}
 	if res.Version != "" {
 		r.Data["version"] = res.Version
 	}
@@ -68,6 +76,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	cfg := conn.Config{
 		Host:     host,
 		Port:     port,
+		Socket:   asString(entry["socket"]),
 		User:     user,
 		Password: asString(entry["password"]),
 		Database: asString(entry["database"]),
