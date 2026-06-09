@@ -486,6 +486,21 @@ func TestBuildSyncthingCheck(t *testing.T) {
 	}
 }
 
+func TestBuildPrometheusCheck(t *testing.T) {
+	for _, typ := range []string{"prometheus", "prom"} {
+		built, warns := Build(map[string]any{
+			"mon": map[string]any{"type": typ, "host": "127.0.0.1"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "prometheus" || cc.cfg.Port != 9090 {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+}
+
 func TestBuildInfluxdbCheck(t *testing.T) {
 	for _, typ := range []string{"influxdb", "influx"} {
 		built, warns := Build(map[string]any{
