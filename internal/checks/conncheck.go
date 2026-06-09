@@ -216,6 +216,10 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	if proto.Name() == "acpid" && cfg.Socket == "" {
 		cfg.Socket = "/var/run/acpid.socket"
 	}
+	// fail2ban is socket-only; default to its well-known control socket.
+	if proto.Name() == "fail2ban" && cfg.Socket == "" {
+		cfg.Socket = "/var/run/fail2ban/fail2ban.sock"
+	}
 	// dbus resolves to a single D-Bus address (socket path or full address),
 	// stored in Socket so the check message shows it instead of host:port.
 	if proto.Name() == "dbus" {
