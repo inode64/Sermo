@@ -278,6 +278,10 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
 malformed lock files under `<paths.runtime>/locks`),
+`GET /api/locks` (named runtime locks with TTL remaining, owner status,
+created age, blocked actions and release eligibility),
+`POST /api/locks/{service}/release?name=NAME` (admin-only, CSRF-protected,
+releases an inactive stale/expired named runtime lock; active locks are refused),
 `GET /api/ops` (global operation slot usage: `{in_use, total}` for
 `engine.max_parallel_operations`),
 `GET /livez` (liveness, see below), `GET /readyz` (readiness, see below), and

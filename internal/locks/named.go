@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -53,6 +54,57 @@ func (l NamedLocker) Release(service, name string) error {
 		return err
 	}
 	return nil
+}
+
+// ReleaseInactive unlinks a named lock only when it is inactive (expired or
+// stale). Active locks still represent ongoing external work and must not be
+// cleared from the web UI.
+func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
+	if err := validateLockIDs(service, name); err != nil {
+		return Lock{}, err
+	}
+	proc := l.Proc
+	if proc == nil {
+		proc = OSProcessProber{}
+	}
+	now := l.Now
+	if now == nil {
+		now = time.Now
+	}
+	path := l.path(service, name)
+	existing, err := readLockFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return Lock{}, fmt.Errorf("lock %s not found", lockID(service, name))
+		}
+		return Lock{}, err
+	}
+	state, reason := classify(existing, now(), proc)
+	lock := toLock(existing, path, state, reason)
+	if lock.Service == "" {
+		lock.Service = service
+	}
+	if lock.Name == "" {
+		lock.Name = name
+	}
+	if state == StateActive {
+		return lock, fmt.Errorf("lock %s is active; refusing release", lockID(service, name))
+	}
+	if reclaimStale(path, existing, proc, now) {
+		return lock, nil
+	}
+	current, err := readLockFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return lock, nil
+		}
+		return lock, err
+	}
+	state, reason = classify(current, now(), proc)
+	if state == StateActive {
+		return toLock(current, path, state, reason), fmt.Errorf("lock %s became active; refusing release", lockID(service, name))
+	}
+	return toLock(current, path, state, reason), fmt.Errorf("lock %s changed while releasing; retry", lockID(service, name))
 }
 
 func (l NamedLocker) path(service, name string) string {
@@ -134,4 +186,12 @@ func validateLockIDs(service, name string) error {
 		return err
 	}
 	return validateIdentifier("lock name", name, true)
+}
+
+func lockID(service, name string) string {
+	parts := []string{service}
+	if name != "" {
+		parts = append(parts, name)
+	}
+	return strings.Join(parts, ".")
 }

@@ -22,14 +22,23 @@ type fakeBackend struct {
 	opsSlots        OperationSlots
 	preflightCalled string
 	events          []Event
+	releasedLocks   []string
+	releaseOK       bool
 }
 
-func (f *fakeBackend) Services(context.Context) []Service                { return f.services }
-func (f *fakeBackend) Watches(context.Context) []Watch                   { return nil }
-func (f *fakeBackend) Notifiers(context.Context) []Notifier              { return nil }
-func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo             { return DaemonInfo{} }
-func (f *fakeBackend) HostMetrics(context.Context) []HostMetric          { return nil }
-func (f *fakeBackend) Locks(context.Context) []Lock                      { return nil }
+func (f *fakeBackend) Services(context.Context) []Service       { return f.services }
+func (f *fakeBackend) Watches(context.Context) []Watch          { return nil }
+func (f *fakeBackend) Notifiers(context.Context) []Notifier     { return nil }
+func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo    { return DaemonInfo{} }
+func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
+func (f *fakeBackend) Locks(context.Context) []Lock             { return nil }
+func (f *fakeBackend) ReleaseLock(_ context.Context, service, name string) ActionResult {
+	f.releasedLocks = append(f.releasedLocks, service+"."+name)
+	if !f.releaseOK {
+		return ActionResult{OK: false, Message: "release blocked"}
+	}
+	return ActionResult{OK: true, Message: "released"}
+}
 func (f *fakeBackend) ActivitySummary(context.Context) ActivitySummary   { return ActivitySummary{} }
 func (f *fakeBackend) MonitoringStatus(context.Context) MonitoringStatus { return MonitoringStatus{} }
 func (f *fakeBackend) Detail(_ context.Context, name string) (Detail, bool) {
@@ -475,6 +484,26 @@ func TestOperationsAPI(t *testing.T) {
 	}
 	if got.InUse != 2 || got.Total != 2 {
 		t.Fatalf("unexpected ops: %+v", got)
+	}
+}
+
+func TestReleaseLockEndpoint(t *testing.T) {
+	b := &fakeBackend{releaseOK: true}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/locks/mysql/release?name=backup"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("release status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(b.releasedLocks) != 1 || b.releasedLocks[0] != "mysql.backup" {
+		t.Fatalf("releasedLocks = %v", b.releasedLocks)
+	}
+}
+
+func TestReleaseLockEndpointConflict(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/locks/mysql/release"))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("blocked release status = %d, want 409", rec.Code)
 	}
 }
 
