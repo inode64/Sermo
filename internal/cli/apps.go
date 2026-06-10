@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 )
@@ -98,28 +99,34 @@ func (a App) inspectApp(ctx context.Context, name string, resolved config.Resolv
 	}
 	r.Installed = true
 
-	argv, expectExit := appVersionCommand(resolved.Tree)
-	if len(argv) == 0 {
+	vc := appVersionCommand(resolved.Tree)
+	if len(vc.argv) == 0 {
 		r.OK = true
 		r.Status = "ok"
 		return r
 	}
 
-	res, err := execx.Run(ctx, a.Runner, 5*time.Second, argv[0], argv[1:]...)
+	res, err := execx.Run(ctx, a.Runner, 5*time.Second, vc.argv[0], vc.argv[1:]...)
 	switch {
 	case err != nil && res.ExitCode == 0:
 		r.Status = "error: " + err.Error()
-	case res.ExitCode != expectExit:
-		r.Status = fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, expectExit)
+	case res.ExitCode != vc.expectExit:
+		r.Status = fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, vc.expectExit)
 		if line := firstNonEmptyLine(res.Stderr); line != "" {
 			r.Status += ": " + line
 		}
 	default:
-		r.OK = true
-		r.Status = "ok"
-		r.Version = firstNonEmptyLine(res.Stdout)
-		if r.Version == "" {
-			r.Version = firstNonEmptyLine(res.Stderr)
+		if ok, detail := vc.stdout.Match(res.Stdout); !ok {
+			r.Status = "error: stdout " + detail
+		} else if ok, detail := vc.stderr.Match(res.Stderr); !ok {
+			r.Status = "error: stderr " + detail
+		} else {
+			r.OK = true
+			r.Status = "ok"
+			r.Version = firstNonEmptyLine(res.Stdout)
+			if r.Version == "" {
+				r.Version = firstNonEmptyLine(res.Stderr)
+			}
 		}
 	}
 	return r
@@ -158,9 +165,19 @@ func appBinary(tree map[string]any) string {
 	return ""
 }
 
-// appVersionCommand returns the argv and expected exit code of a profile's version
-// command, looked up in `preflight.version` then `commands.version`.
-func appVersionCommand(tree map[string]any) ([]string, int) {
+// versionCommand is a profile's resolved version command and the expectations its
+// result must meet: the exit code and optional stdout/stderr matchers.
+type versionCommand struct {
+	argv       []string
+	expectExit int
+	stdout     checks.OutputMatcher
+	stderr     checks.OutputMatcher
+}
+
+// appVersionCommand returns a profile's version command and outcome expectations,
+// looked up in `preflight.version` then `commands.version`. argv is nil when no
+// version command is configured.
+func appVersionCommand(tree map[string]any) versionCommand {
 	for _, src := range []string{"preflight", "commands"} {
 		section, ok := tree[src].(map[string]any)
 		if !ok {
@@ -174,18 +191,15 @@ func appVersionCommand(tree map[string]any) ([]string, int) {
 		if len(argv) == 0 {
 			continue
 		}
-		expect := 0
-		if v, ok := entry["expect_exit"]; ok {
-			expect = asInt(v)
+		vc := versionCommand{argv: argv}
+		if v, ok := cfgval.Int(entry["expect_exit"]); ok {
+			vc.expectExit = v
 		}
-		return argv, expect
+		vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
+		vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
+		return vc
 	}
-	return nil, 0
-}
-
-func asInt(v any) int {
-	n, _ := cfgval.Int(v)
-	return n
+	return versionCommand{}
 }
 
 func firstNonEmptyLine(s string) string {

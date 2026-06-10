@@ -12,6 +12,32 @@ import (
 	"sermo/internal/execx"
 )
 
+func TestAppVersionCommandExpectations(t *testing.T) {
+	tree := map[string]any{
+		"commands": map[string]any{
+			"version": map[string]any{
+				"command":       []any{"/bin/tool", "--version"},
+				"expect_exit":   3,
+				"expect_stdout": "v1.",
+				"expect_stderr": map[string]any{"op": "==", "value": ""},
+			},
+		},
+	}
+	vc := appVersionCommand(tree)
+	if len(vc.argv) != 2 || vc.argv[0] != "/bin/tool" {
+		t.Fatalf("argv = %v", vc.argv)
+	}
+	if vc.expectExit != 3 {
+		t.Errorf("expectExit = %d, want 3", vc.expectExit)
+	}
+	if vc.stdout.Substring != "v1." {
+		t.Errorf("stdout matcher = %+v, want substring v1.", vc.stdout)
+	}
+	if vc.stderr.Op != "==" {
+		t.Errorf("stderr matcher = %+v, want op ==", vc.stderr)
+	}
+}
+
 // fakeRunner answers version-command invocations keyed by the binary path.
 type fakeRunner struct{ byPath map[string]execx.Result }
 
