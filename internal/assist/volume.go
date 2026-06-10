@@ -2,9 +2,12 @@ package assist
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
+
+const notifyNone = "none"
 
 // volumeAssistant creates `disk` watches: a free/used-space threshold with
 // notifications and an optional native auto-expand action.
@@ -81,7 +84,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
 		s.cooldown = p.Ask("Minimum time between expansions (cooldown)", "30m")
 	}
-	if len(s.notifiers) == 0 && !s.expand {
+	if !hasNotifyAction(s.notifiers) && !s.expand {
 		return s, fmt.Errorf("a watch needs at least one notifier or auto-expand; none chosen for %s", label)
 	}
 	return s, nil
@@ -113,19 +116,38 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	return entry
 }
 
-// chooseNotifiers asks which configured notifiers to alert. With none
-// configured it returns nil without prompting.
+// chooseNotifiers asks which configured notifiers to alert. Selecting "none"
+// writes the reserved notify sentinel so the generated watch does not inherit a
+// global notify default. With no configured notifiers it returns nil without
+// prompting.
 func chooseNotifiers(p *Prompt, env Env) []string {
 	if len(env.Notifiers) == 0 {
 		p.printf("  (no notifiers are configured; alerts will rely on the action below)\n")
 		return nil
 	}
-	idx := p.MultiChoose("Notify which targets?", env.Notifiers)
+	options := make([]string, 0, len(env.Notifiers)+1)
+	options = append(options, "none (do not notify)")
+	options = append(options, env.Notifiers...)
+	idx := p.MultiChoose("Notify which targets?", options)
+	if slices.Contains(idx, 0) {
+		if len(idx) == len(options) {
+			idx = idx[1:]
+		} else {
+			return []string{notifyNone}
+		}
+	}
+	if len(idx) == 0 {
+		return []string{notifyNone}
+	}
 	out := make([]string, 0, len(idx))
 	for _, i := range idx {
-		out = append(out, env.Notifiers[i])
+		out = append(out, env.Notifiers[i-1])
 	}
 	return out
+}
+
+func hasNotifyAction(names []string) bool {
+	return len(names) > 0 && !slices.Contains(names, notifyNone)
 }
 
 // askSize reads a size like 5G, re-prompting on an obviously bad value.

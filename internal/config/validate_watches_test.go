@@ -313,6 +313,10 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  map[string]any{"notify": []any{"ops-email"}}, // notify-only, no hook
 			},
+			"disk-expand": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"notify": []any{"none"}, "expand": map[string]any{"by": "5G"}},
+			},
 		},
 	})
 	if w := watchIssues(good); len(w) != 0 {
@@ -330,11 +334,16 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  map[string]any{},
 			},
+			"no-action-none": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"notify": []any{"none"}},
+			},
 		},
 	})
 	for _, w := range []string{
 		"watches.disk-root.then.notify references unknown notifier \"ghost\"",
-		"watches.no-action.then requires a hook and/or notify",
+		"watches.no-action.then requires a hook, notify and/or expand",
+		"watches.no-action-none.then requires a hook, notify and/or expand",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
@@ -357,6 +366,18 @@ func TestValidateServiceCheckAsWatch(t *testing.T) {
 	})
 	if w := watchIssues(good); len(w) != 0 {
 		t.Fatalf("service checks should be valid as watches, got %v", w)
+	}
+
+	badExpand := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"load": map[string]any{
+				"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 8}},
+				"then":  map[string]any{"expand": map[string]any{"by": "5G"}},
+			},
+		},
+	})
+	if !hasIssue(badExpand, "watches.load.then.expand is only valid on a disk watch") {
+		t.Fatalf("non-disk expand should be rejected: %v", badExpand)
 	}
 
 	bad := validateRawGlobal(t, map[string]any{

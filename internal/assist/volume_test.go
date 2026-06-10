@@ -25,13 +25,13 @@ func testEnv() Env {
 
 func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	// Select volume 1 (/mnt/backup); free space condition, 10%; for 3 cycles;
-	// notifier 1 (ops-email); enable expand 5G cooldown 30m.
+	// notifier ops-email; enable expand 5G cooldown 30m.
 	script := strings.Join([]string{
 		"1",   // MultiChoose volumes -> /mnt/backup
 		"1",   // condition: free space below %
 		"10",  // value
 		"3",   // for cycles
-		"1",   // notifier ops-email
+		"2",   // notifier ops-email
 		"y",   // auto-expand
 		"5G",  // by
 		"30m", // cooldown
@@ -72,8 +72,8 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 }
 
 func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
-	// Select volume 2 (/), used-space condition 90, for 1, notifier 2, no expand.
-	script := strings.Join([]string{"2", "2", "90", "1", "2", "n"}, "\n") + "\n"
+	// Select volume 2 (/), used-space condition 90, for 1, notifier team-slack, no expand.
+	script := strings.Join([]string{"2", "2", "90", "1", "3", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -102,5 +102,33 @@ func TestVolumeAssistantNoActionErrors(t *testing.T) {
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (volumeAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a watch with neither notify nor expand must error")
+	}
+}
+
+func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
+	// Select volume 1; free 10; for 3; explicit none; enable expand.
+	script := strings.Join([]string{"1", "1", "10", "3", "1", "y", "5G", "30m"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := volumeAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	then := entry["then"].(map[string]any)
+	notify := then["notify"].([]string)
+	if len(notify) != 1 || notify[0] != "none" {
+		t.Fatalf("notify = %v, want [none]", notify)
+	}
+	if _, ok := then["expand"].(map[string]any); !ok {
+		t.Fatalf("expand missing from then: %v", then)
+	}
+}
+
+func TestVolumeAssistantNotifyNoneWithoutExpandErrors(t *testing.T) {
+	// Select volume 1; free 10; for 3; explicit none; decline expand.
+	script := strings.Join([]string{"1", "1", "10", "3", "1", "n"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	if _, err := (volumeAssistant{}).Run(p, testEnv()); err == nil {
+		t.Fatal("notify none without expand should leave no action and error")
 	}
 }
