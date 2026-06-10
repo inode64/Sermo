@@ -19,7 +19,7 @@ which reuse the same schema). MVP types:
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
-| `disk`        | a filesystem's space/inode predicates hold (used_pct/free_pct/inodes_*)|
+| `disk`        | a filesystem's space/inode predicates hold (used_pct/free_pct/used_bytes/free_bytes/inodes_*)|
 | `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|

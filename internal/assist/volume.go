@@ -57,9 +57,9 @@ func (volumeAssistant) Run(p *Prompt, env Env) (Result, error) {
 
 // volSettings are the answers gathered for one (or all) volume(s).
 type volSettings struct {
-	metric    string // free_pct | used_pct
+	metric    string // free_pct | used_pct | free_bytes | used_bytes
 	op        string
-	value     int
+	value     any
 	forCycles int
 	notifiers []string
 	expand    bool
@@ -69,13 +69,24 @@ type volSettings struct {
 
 func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 	var s volSettings
-	switch p.Choose("Alert on which condition for "+label+"?", []string{"free space below a %", "used space at/above a %"}) {
+	switch p.Choose("Alert on which condition for "+label+"?", []string{
+		"free space below a %",
+		"used space at/above a %",
+		"free space below a size (K/M/G/T)",
+		"used space at/above a size (K/M/G/T)",
+	}) {
 	case 0:
 		s.metric, s.op = "free_pct", "<"
 		s.value = p.AskInt("Alert when free space drops below (%)", 10)
-	default:
+	case 1:
 		s.metric, s.op = "used_pct", ">="
 		s.value = p.AskInt("Alert when used space reaches/exceeds (%)", 90)
+	case 2:
+		s.metric, s.op = "free_bytes", "<"
+		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", "10G")
+	default:
+		s.metric, s.op = "used_bytes", ">="
+		s.value = askSize(p, "Alert when used space reaches/exceeds (e.g. 100G)", "100G")
 	}
 	s.forCycles = p.AskInt("Require the condition for how many cycles first?", 3)
 	s.notifiers = chooseNotifiers(p, env)

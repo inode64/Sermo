@@ -7,7 +7,11 @@ import (
 
 func fakeDisk(usedPct, freePct float64, freeBytes, totalBytes uint64) func(string) (DiskStats, error) {
 	return func(string) (DiskStats, error) {
-		return DiskStats{UsedPct: usedPct, FreePct: freePct, FreeBytes: freeBytes, TotalBytes: totalBytes}, nil
+		var usedBytes uint64
+		if totalBytes >= freeBytes {
+			usedBytes = totalBytes - freeBytes
+		}
+		return DiskStats{UsedPct: usedPct, FreePct: freePct, UsedBytes: usedBytes, FreeBytes: freeBytes, TotalBytes: totalBytes}, nil
 	}
 }
 
@@ -52,6 +56,38 @@ func TestDiskCheckMultiPredAnd(t *testing.T) {
 	}
 }
 
+func TestDiskCheckFreeBytesBreached(t *testing.T) {
+	c := diskCheck{
+		base:  base{name: "disk"},
+		path:  "/",
+		preds: []diskPred{{field: "free_bytes", op: "<", value: float64(10 << 30)}},
+		usage: fakeDisk(92, 8, 9<<30, 100<<30),
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("expected free_bytes threshold crossed, got %+v", res)
+	}
+	if res.Data["value"] != float64(9<<30) || res.Data["free_bytes"] != uint64(9<<30) {
+		t.Fatalf("unexpected data: %+v", res.Data)
+	}
+}
+
+func TestDiskCheckUsedBytesBreached(t *testing.T) {
+	c := diskCheck{
+		base:  base{name: "disk"},
+		path:  "/",
+		preds: []diskPred{{field: "used_bytes", op: ">=", value: float64(90 << 30)}},
+		usage: fakeDisk(92, 8, 8<<30, 100<<30),
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("expected used_bytes threshold crossed, got %+v", res)
+	}
+	if res.Data["value"] != float64(92<<30) || res.Data["used_bytes"] != uint64(92<<30) {
+		t.Fatalf("unexpected data: %+v", res.Data)
+	}
+}
+
 func TestDiskCheckStatError(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk"},
@@ -81,6 +117,23 @@ func TestBuildDiskCheck(t *testing.T) {
 	}
 	if !built[0].Check.Run(context.Background()).OK {
 		t.Fatal("expected disk check to fire above threshold")
+	}
+}
+
+func TestBuildDiskByteSizeCheck(t *testing.T) {
+	section := map[string]any{
+		"d": map[string]any{
+			"type":       "disk",
+			"path":       "/",
+			"free_bytes": map[string]any{"op": "<", "value": "10G"},
+		},
+	}
+	built, warns := Build(section, Deps{DiskUsage: fakeDisk(92, 8, 9<<30, 100<<30)})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
+		t.Fatal("byte-sized disk check should build and fire below threshold")
 	}
 }
 
