@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -93,7 +94,7 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 
 	var built []Built
 	var warnings []string
-	for _, name := range sortedKeys(section) {
+	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, fmt.Sprintf("check %q is not a mapping", name))
@@ -798,15 +799,6 @@ func disabled(entry map[string]any) bool {
 	return ok && !b
 }
 
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
@@ -847,7 +839,7 @@ func parseJSONAssertions(v any) []jsonAssertion {
 		return nil
 	}
 	out := make([]jsonAssertion, 0, len(m))
-	for _, path := range sortedKeys(m) {
+	for _, path := range slices.Sorted(maps.Keys(m)) {
 		raw := m[path]
 		if cond, ok := raw.(map[string]any); ok {
 			op := asString(cond["op"])

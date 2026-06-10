@@ -3,9 +3,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -169,7 +171,7 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
 func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
-	for _, name := range sortedKeys(notifiers) {
+	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
 		entry, ok := notifiers[name].(map[string]any)
 		if !ok {
 			add("notifiers.%s must be a mapping", name)
@@ -229,7 +231,7 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 	}
 	check("watches."+name, entry["then"])
 	if metrics, ok := entry["metrics"].(map[string]any); ok {
-		for _, key := range sortedKeys(metrics) {
+		for _, key := range slices.Sorted(maps.Keys(metrics)) {
 			if m, ok := metrics[key].(map[string]any); ok {
 				check(fmt.Sprintf("watches.%s.metrics.%s", name, key), m["then"])
 			}
@@ -238,7 +240,7 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 }
 
 func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, add func(string, ...any)) {
-	for _, name := range sortedKeys(watches) {
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
 			add("watches.%s must be a mapping", name)
@@ -391,7 +393,7 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		add("watches.%s.metrics is required and must be non-empty for a net check", name)
 		return
 	}
-	for _, key := range sortedKeys(metrics) {
+	for _, key := range slices.Sorted(maps.Keys(metrics)) {
 		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
 		m, ok := metrics[key].(map[string]any)
 		if !ok {
@@ -636,7 +638,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		if !ok {
 			add("%s.expect_json must be a mapping", prefix)
 		} else {
-			for _, path := range sortedKeys(m) {
+			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
 					if op := scalarString(cond["op"]); op != "" && !validJSONOp(op) {
 						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains", prefix, path, op)
@@ -793,7 +795,7 @@ func validateSwapCheck(name string, entry map[string]any, add func(string, ...an
 		add("watches.%s.metrics is required and must be non-empty for a swap check", name)
 		return
 	}
-	for _, key := range sortedKeys(metrics) {
+	for _, key := range slices.Sorted(maps.Keys(metrics)) {
 		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
 		m, ok := metrics[key].(map[string]any)
 		if !ok {
@@ -873,7 +875,7 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 		add("watches.%s.metrics is required and must be non-empty for an icmp check", name)
 		return
 	}
-	for _, key := range sortedKeys(metrics) {
+	for _, key := range slices.Sorted(maps.Keys(metrics)) {
 		prefix := fmt.Sprintf("watches.%s.metrics.%s", name, key)
 		m, ok := metrics[key].(map[string]any)
 		if !ok {
@@ -1072,7 +1074,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 		if !ok {
 			add("%s.expect must be a mapping of field -> value or {op, value}", prefix)
 		} else {
-			for _, field := range sortedKeys(m) {
+			for _, field := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[field].(map[string]any); ok {
 					validateOpValue(prefix, "expect."+field, cond, add)
 				}
@@ -1135,12 +1137,12 @@ func validateDocuments(cfg *Config) []Issue {
 		}
 	}
 
-	for _, name := range sortedKeys(profileCount) {
+	for _, name := range slices.Sorted(maps.Keys(profileCount)) {
 		if profileCount[name] > 1 {
 			issues = append(issues, Issue{Scope: "profile " + name, Msg: "duplicate profile name"})
 		}
 	}
-	for _, name := range sortedKeys(serviceCount) {
+	for _, name := range slices.Sorted(maps.Keys(serviceCount)) {
 		if serviceCount[name] > 1 {
 			issues = append(issues, Issue{Scope: "service " + name, Msg: "duplicate service name"})
 		}
@@ -1285,7 +1287,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 	if !ok {
 		return
 	}
-	for _, name := range sortedKeys(entries) {
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		path := section + "." + name
 		entry, ok := entries[name].(map[string]any)
 		if !ok {
@@ -1720,7 +1722,7 @@ func validateProcesses(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	for _, name := range sortedKeys(processes) {
+	for _, name := range slices.Sorted(maps.Keys(processes)) {
 		path := "processes." + name
 		entry, ok := processes[name].(map[string]any)
 		if !ok {
@@ -1781,7 +1783,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 	if !ok {
 		return
 	}
-	for _, name := range sortedKeys(commands) {
+	for _, name := range slices.Sorted(maps.Keys(commands)) {
 		entry, ok := commands[name].(map[string]any)
 		if !ok {
 			add("commands.%s must be a mapping", name)
@@ -1810,7 +1812,7 @@ func validateServiceField(tree map[string]any, add addFunc) {
 		}
 	case map[string]any:
 		hasInit, hasName := false, false
-		for _, k := range sortedKeys(v) {
+		for _, k := range slices.Sorted(maps.Keys(v)) {
 			switch k {
 			case "systemd", "openrc":
 				hasInit = true
@@ -1842,7 +1844,7 @@ func validateRules(tree map[string]any, add addFunc) {
 	checkNames := collectCheckNames(tree)
 	systemMetricChecks := collectSystemMetricChecks(tree)
 
-	for _, name := range sortedKeys(ruleMap) {
+	for _, name := range slices.Sorted(maps.Keys(ruleMap)) {
 		path := "rules." + name
 		entry, ok := ruleMap[name].(map[string]any)
 		if !ok {

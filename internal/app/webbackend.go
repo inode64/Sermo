@@ -3,9 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -192,7 +194,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	// be empty). We read the raw global watches section (same source BuildWatches
 	// uses) so listing is independent of whether the watch runner is active.
 	if raw, ok := cfg.Global.Raw["watches"].(map[string]any); ok && len(raw) > 0 {
-		for _, name := range sortedKeys(raw) {
+		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
 			disabled := isDisabled(entry)
 			ctype := ""
@@ -241,7 +243,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 
 	// Surface configured notifiers (useful to know what watches can notify to).
 	if raw, ok := cfg.Global.Raw["notifiers"].(map[string]any); ok && len(raw) > 0 {
-		for _, name := range sortedKeys(raw) {
+		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
 			typ := stringField(entry["type"])
 			wn := &webNotifier{name: name, typ: typ}
@@ -1351,12 +1353,12 @@ func lineDiff(base, other string) (removed, added []string) {
 	baseSet := lineCount(base)
 	otherSet := lineCount(other)
 	for _, l := range strings.Split(strings.TrimRight(base, "\n"), "\n") {
-		if otherSet[l] == 0 && !containsLine(removed, l) {
+		if otherSet[l] == 0 && !slices.Contains(removed, l) {
 			removed = append(removed, l)
 		}
 	}
 	for _, l := range strings.Split(strings.TrimRight(other, "\n"), "\n") {
-		if baseSet[l] == 0 && !containsLine(added, l) {
+		if baseSet[l] == 0 && !slices.Contains(added, l) {
 			added = append(added, l)
 		}
 	}
@@ -1369,15 +1371,6 @@ func lineCount(s string) map[string]int {
 		out[l]++
 	}
 	return out
-}
-
-func containsLine(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
 }
 
 func webScalarString(v any) string {

@@ -5,7 +5,10 @@
 // backoff), and single- or multi-action `then` blocks.
 package rules
 
-import "sort"
+import (
+	"maps"
+	"slices"
+)
 
 // RuleType classifies a rule (section 16).
 type RuleType string
@@ -129,7 +132,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 
 	var rules []Rule
 	var warnings []string
-	for _, name := range sortedKeys(raw) {
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "rule "+name+" is not a mapping")
@@ -177,15 +180,6 @@ func disabled(entry map[string]any) bool {
 	return ok && !b
 }
 
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
@@ -203,13 +197,4 @@ func stringList(v any) []string {
 		}
 	}
 	return out
-}
-
-func contains(list []string, target string) bool {
-	for _, s := range list {
-		if s == target {
-			return true
-		}
-	}
-	return false
 }
