@@ -14,6 +14,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -72,24 +73,24 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	if engine, ok := raw["engine"].(map[string]any); ok {
-		if backend := scalarString(engine["backend"]); !isValidBackend(backend) {
+		if backend := cfgval.String(engine["backend"]); !isValidBackend(backend) {
 			add("engine.backend %q is not one of auto, systemd, openrc", backend)
 		}
 		for _, field := range []string{"interval", "default_timeout", "operation_timeout"} {
-			if v, present := engine[field]; present && !isPositiveDuration(scalarString(v)) {
-				add("engine.%s %q must be a valid positive duration", field, scalarString(v))
+			if v, present := engine[field]; present && !isPositiveDuration(cfgval.String(v)) {
+				add("engine.%s %q must be a valid positive duration", field, cfgval.String(v))
 			}
 		}
-		if v, present := engine["startup_delay"]; present && !isNonNegativeDuration(scalarString(v)) {
-			add("engine.startup_delay %q must be a valid non-negative duration (0 disables the wait)", scalarString(v))
+		if v, present := engine["startup_delay"]; present && !isNonNegativeDuration(cfgval.String(v)) {
+			add("engine.startup_delay %q must be a valid non-negative duration (0 disables the wait)", cfgval.String(v))
 		}
 		if v, present := engine["max_parallel_checks"]; present {
-			if n, ok := scalarInt(v); !ok || n <= 0 {
+			if n, ok := cfgval.Int(v); !ok || n <= 0 {
 				add("engine.max_parallel_checks must be an integer > 0")
 			}
 		}
 		if v, present := engine["max_parallel_operations"]; present {
-			if n, ok := scalarInt(v); !ok || n <= 0 {
+			if n, ok := cfgval.Int(v); !ok || n <= 0 {
 				add("engine.max_parallel_operations must be an integer > 0")
 			}
 		}
@@ -99,10 +100,10 @@ func validateGlobal(cfg *Config) []Issue {
 		if _, present := paths["locks"]; present {
 			add("paths.locks is not supported in the MVP; runtime locks derive from paths.runtime")
 		}
-		if runtime := scalarString(paths["runtime"]); runtime != "" && !filepath.IsAbs(runtime) {
+		if runtime := cfgval.String(paths["runtime"]); runtime != "" && !filepath.IsAbs(runtime) {
 			add("paths.runtime %q must be an absolute directory", runtime)
 		}
-		if stateDir := scalarString(paths["state"]); stateDir != "" && !filepath.IsAbs(stateDir) {
+		if stateDir := cfgval.String(paths["state"]); stateDir != "" && !filepath.IsAbs(stateDir) {
 			add("paths.state %q must be an absolute directory", stateDir)
 		}
 	}
@@ -144,7 +145,7 @@ func validateGlobal(cfg *Config) []Issue {
 // omitted) is valid and leaves the dashboard disabled, matching sermod.
 func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	if portRaw, present := webCfg["port"]; present {
-		port, ok := scalarInt(portRaw)
+		port, ok := cfgval.Int(portRaw)
 		if !ok || port < 1 || port > 65535 {
 			add("web.port must be an integer in 1..65535")
 		}
@@ -177,22 +178,22 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 			add("notifiers.%s must be a mapping", name)
 			continue
 		}
-		switch scalarString(entry["type"]) {
+		switch cfgval.String(entry["type"]) {
 		case "email":
-			dsn := scalarString(entry["dsn"])
+			dsn := cfgval.String(entry["dsn"])
 			if dsn == "" {
 				add("notifiers.%s.dsn is required for an email notifier", name)
 			} else if !strings.HasPrefix(dsn, "smtp://") && !strings.HasPrefix(dsn, "smtps://") {
 				add("notifiers.%s.dsn must be an smtp:// or smtps:// URL", name)
 			}
-			if scalarString(entry["from"]) == "" {
+			if cfgval.String(entry["from"]) == "" {
 				add("notifiers.%s.from is required for an email notifier", name)
 			}
-			if len(stringSlice(entry["to"])) == 0 {
+			if len(cfgval.StringList(entry["to"])) == 0 {
 				add("notifiers.%s.to must list at least one address", name)
 			}
 		case "slack":
-			wh := scalarString(entry["webhook"])
+			wh := cfgval.String(entry["webhook"])
 			if wh == "" {
 				add("notifiers.%s.webhook is required for a slack notifier", name)
 			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
@@ -201,7 +202,7 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 		case "":
 			add("notifiers.%s.type is required", name)
 		default:
-			add("notifiers.%s.type %q is not supported (email, slack)", name, scalarString(entry["type"]))
+			add("notifiers.%s.type %q is not supported (email, slack)", name, cfgval.String(entry["type"]))
 		}
 	}
 }
@@ -223,7 +224,7 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 		if !ok {
 			return
 		}
-		for _, ref := range stringSlice(t["notify"]) {
+		for _, ref := range cfgval.StringList(t["notify"]) {
 			if _, ok := notifiers[ref]; !ok {
 				add("%s.then.notify references unknown notifier %q", prefix, ref)
 			}
@@ -256,7 +257,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 		cp := "watches." + name + ".check"
-		switch scalarString(check["type"]) {
+		switch cfgval.String(check["type"]) {
 		case "disk":
 			validateDiskFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, add)
@@ -296,15 +297,15 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		default:
 			// Any single-shot service check (tcp, http, command, …) can be a host
 			// watch: validate its fields and require a hook (section: unified checks).
-			if validateWatchableCheck(cp, scalarString(check["type"]), check, locksDir, add) {
+			if validateWatchableCheck(cp, cfgval.String(check["type"]), check, locksDir, add) {
 				validateHookBlock("watches."+name, entry, add)
 			} else {
-				add("watches.%s.check.type %q is not supported", name, scalarString(check["type"]))
+				add("watches.%s.check.type %q is not supported", name, cfgval.String(check["type"]))
 			}
 		}
 
-		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
-			add("watches.%s.interval %q must be a valid positive duration", name, scalarString(v))
+		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("watches.%s.interval %q must be a valid positive duration", name, cfgval.String(v))
 		}
 
 		validateNotifyRefs(name, entry, notifiers, add)
@@ -318,7 +319,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 // and/or the mount (mounted/fstype/options/device), so at least one of the two
 // must be present.
 func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["path"]) == "" {
+	if cfgval.String(fields["path"]) == "" {
 		add("%s.path is required for a disk check", prefix)
 	}
 	preds := validatePresentThresholds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
@@ -339,10 +340,10 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 			add("%s.mounted must be a boolean", prefix)
 		}
 	}
-	if scalarString(fields["fstype"]) != "" {
+	if cfgval.String(fields["fstype"]) != "" {
 		active = true
 	}
-	if scalarString(fields["device"]) != "" {
+	if cfgval.String(fields["device"]) != "" {
 		active = true
 	}
 	if v, present := fields["options"]; present {
@@ -365,7 +366,7 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 		return
 	}
 	hook, hasHook := then["hook"].(map[string]any)
-	notify := stringSlice(then["notify"])
+	notify := cfgval.StringList(then["notify"])
 	if !hasHook && len(notify) == 0 {
 		add("%s.then requires a hook and/or notify", prefix)
 		return
@@ -375,8 +376,8 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 		if !ok || len(list) == 0 {
 			add("%s.then.hook.command must be a non-empty array", prefix)
 		}
-		if v, present := hook["timeout"]; present && !isPositiveDuration(scalarString(v)) {
-			add("%s.then.hook.timeout %q must be a valid positive duration", prefix, scalarString(v))
+		if v, present := hook["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s.then.hook.timeout %q must be a valid positive duration", prefix, cfgval.String(v))
 		}
 	}
 }
@@ -385,7 +386,7 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 // metrics map, each metric with a valid condition and its own hook
 // (spec 2026-06-06-net-interface-watch §4).
 func validateNetCheck(name string, check, entry map[string]any, add func(string, ...any)) {
-	if scalarString(check["interface"]) == "" {
+	if cfgval.String(check["interface"]) == "" {
 		add("watches.%s.check.interface is required for a net check", name)
 	}
 	metrics, ok := entry["metrics"].(map[string]any)
@@ -404,7 +405,7 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		case "state":
 			validateStateMetric(prefix, m, add)
 		case "speed":
-			if scalarString(m["on"]) != "change" {
+			if cfgval.String(m["on"]) != "change" {
 				add("%s requires on: change", prefix)
 			}
 		case "errors":
@@ -412,11 +413,11 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 			if !ok {
 				add("%s.delta {op, value} is required", prefix)
 			} else {
-				if !isValidDiskOp(scalarString(delta["op"])) {
-					add("%s.delta has an invalid op %q", prefix, scalarString(delta["op"]))
+				if !isValidDiskOp(cfgval.String(delta["op"])) {
+					add("%s.delta has an invalid op %q", prefix, cfgval.String(delta["op"]))
 				}
-				if !isNumeric(scalarString(delta["value"])) {
-					add("%s.delta value %q must be numeric", prefix, scalarString(delta["value"]))
+				if !isNumeric(cfgval.String(delta["value"])) {
+					add("%s.delta value %q must be numeric", prefix, cfgval.String(delta["value"]))
 				}
 			}
 			if c, present := m["counters"]; present {
@@ -451,11 +452,11 @@ func validateThresholdMap(prefix, field string, raw any, suffix string, add addF
 		add("%s.%s {op, value} is required %s", prefix, field, suffix)
 		return
 	}
-	if !isValidDiskOp(scalarString(m["op"])) {
-		add("%s.%s has an invalid op %q", prefix, field, scalarString(m["op"]))
+	if !isValidDiskOp(cfgval.String(m["op"])) {
+		add("%s.%s has an invalid op %q", prefix, field, cfgval.String(m["op"]))
 	}
-	if !isNumeric(scalarString(m["value"])) {
-		add("%s.%s value %q must be numeric", prefix, field, scalarString(m["value"]))
+	if !isNumeric(cfgval.String(m["value"])) {
+		add("%s.%s value %q must be numeric", prefix, field, cfgval.String(m["value"]))
 	}
 }
 
@@ -474,11 +475,11 @@ func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields [
 			add("%s.%s must be a mapping {op, value}", prefix, field)
 			continue
 		}
-		if !isValidDiskOp(scalarString(m["op"])) {
-			add("%s.%s has an invalid op %q", prefix, field, scalarString(m["op"]))
+		if !isValidDiskOp(cfgval.String(m["op"])) {
+			add("%s.%s has an invalid op %q", prefix, field, cfgval.String(m["op"]))
 		}
-		if !isNumeric(scalarString(m["value"])) {
-			add("%s.%s value %q must be numeric", prefix, field, scalarString(m["value"]))
+		if !isNumeric(cfgval.String(m["value"])) {
+			add("%s.%s value %q must be numeric", prefix, field, cfgval.String(m["value"]))
 		}
 	}
 	return preds
@@ -505,11 +506,11 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.delta must be a mapping {op, value}", prefix)
 		return
 	}
-	if !isValidDiskOp(scalarString(m["op"])) {
-		add("%s.delta has an invalid op %q", prefix, scalarString(m["op"]))
+	if !isValidDiskOp(cfgval.String(m["op"])) {
+		add("%s.delta has an invalid op %q", prefix, cfgval.String(m["op"]))
 	}
-	if !isNumeric(scalarString(m["value"])) {
-		add("%s.delta value %q must be numeric", prefix, scalarString(m["value"]))
+	if !isNumeric(cfgval.String(m["value"])) {
+		add("%s.delta value %q must be numeric", prefix, cfgval.String(m["value"]))
 	}
 }
 
@@ -551,7 +552,7 @@ func gateStrings(v any) ([]string, bool) {
 	case []any:
 		out := make([]string, 0, len(t))
 		for _, e := range t {
-			if s := scalarString(e); s != "" {
+			if s := cfgval.String(e); s != "" {
 				out = append(out, s)
 			}
 		}
@@ -565,7 +566,7 @@ func gateStrings(v any) ([]string, bool) {
 // optional request (method/headers/body/json) and response-assertion fields
 // (expect_body/expect_json) shapes.
 func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["url"]) == "" {
+	if cfgval.String(fields["url"]) == "" {
 		add("%s.url is required for an http check", prefix)
 	}
 	if v, present := fields["method"]; present {
@@ -581,17 +582,17 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.http3 must be a boolean", prefix)
 		} else if h3 {
 			// HTTP/3 runs over QUIC (TLS-only) and cannot use an HTTP proxy.
-			if u := scalarString(fields["url"]); u != "" {
+			if u := cfgval.String(fields["url"]); u != "" {
 				if parsed, err := url.Parse(u); err != nil || parsed.Scheme != "https" {
 					add("%s.http3 requires an https url", prefix)
 				}
 			}
-			if scalarString(fields["proxy"]) != "" {
+			if cfgval.String(fields["proxy"]) != "" {
 				add("%s.http3 and proxy are mutually exclusive", prefix)
 			}
 		}
 	}
-	if p := scalarString(fields["proxy"]); p != "" {
+	if p := cfgval.String(fields["proxy"]); p != "" {
 		u, err := url.Parse(p)
 		if err != nil || u.Host == "" {
 			add("%s.proxy %q is not a valid URL", prefix, p)
@@ -640,7 +641,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		} else {
 			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
-					if op := scalarString(cond["op"]); op != "" && !validJSONOp(op) {
+					if op := cfgval.String(cond["op"]); op != "" && !validJSONOp(op) {
 						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains", prefix, path, op)
 					}
 				}
@@ -662,12 +663,12 @@ func validJSONOp(op string) bool {
 // http response comparisons): op must be a known comparison operator, and value
 // must be numeric for ordering ops and a valid regexp for =~.
 func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
-	op := scalarString(m["op"])
+	op := cfgval.String(m["op"])
 	if _, ok := compareOps[op]; !ok {
 		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, label, op)
 		return
 	}
-	value := scalarString(m["value"])
+	value := cfgval.String(m["value"])
 	switch op {
 	case ">", ">=", "<", "<=":
 		if !isNumeric(value) {
@@ -683,13 +684,13 @@ func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
 // validatePortsFields validates a ports check at prefix: a parseable `ports` spec
 // (list + ranges) and the enumerated expect/match values.
 func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
-	if err := validatePortSpec(scalarString(fields["ports"])); err != "" {
+	if err := validatePortSpec(cfgval.String(fields["ports"])); err != "" {
 		add("%s.ports %s", prefix, err)
 	}
-	if v := scalarString(fields["expect"]); v != "" && v != "open" && v != "closed" && v != "any" {
+	if v := cfgval.String(fields["expect"]); v != "" && v != "open" && v != "closed" && v != "any" {
 		add("%s.expect must be open, closed or any", prefix)
 	}
-	if v := scalarString(fields["match"]); v != "" && v != "all" && v != "any" && v != "none" {
+	if v := cfgval.String(fields["match"]); v != "" && v != "all" && v != "any" && v != "none" {
 		add("%s.match must be all, any or none", prefix)
 	}
 	if v, present := fields["on_change"]; present {
@@ -741,7 +742,7 @@ func validatePortSpec(spec string) string {
 func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
 	switch typ {
 	case "tcp":
-		if _, ok := scalarInt(fields["port"]); !ok {
+		if _, ok := cfgval.Int(fields["port"]); !ok {
 			add("%s.port is required and must be numeric for a tcp check", prefix)
 		}
 	case "ports":
@@ -753,15 +754,15 @@ func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir 
 			add("%s.command must be an array, not a shell string", prefix)
 		}
 	case "binary":
-		if scalarString(fields["path"]) == "" {
+		if cfgval.String(fields["path"]) == "" {
 			add("%s.path is required for a binary check", prefix)
 		}
 	case "libraries":
-		if scalarString(fields["binary"]) == "" {
+		if cfgval.String(fields["binary"]) == "" {
 			add("%s.binary is required for a libraries check", prefix)
 		}
 	case "file_exists":
-		p := scalarString(fields["path"])
+		p := cfgval.String(fields["path"])
 		if p == "" {
 			add("%s.path is required for a file_exists check", prefix)
 		} else if underDir(p, locksDir) {
@@ -816,11 +817,11 @@ func validateSwapCheck(name string, entry map[string]any, add func(string, ...an
 					add("%s.%s must be a mapping {op, value}", prefix, field)
 					continue
 				}
-				if !isValidDiskOp(scalarString(mm["op"])) {
-					add("%s.%s has an invalid op %q", prefix, field, scalarString(mm["op"]))
+				if !isValidDiskOp(cfgval.String(mm["op"])) {
+					add("%s.%s has an invalid op %q", prefix, field, cfgval.String(mm["op"]))
 				}
-				if !isNumeric(scalarString(mm["value"])) {
-					add("%s.%s value %q must be numeric", prefix, field, scalarString(mm["value"]))
+				if !isNumeric(cfgval.String(mm["value"])) {
+					add("%s.%s value %q must be numeric", prefix, field, cfgval.String(mm["value"]))
 				}
 			}
 			if preds == 0 {
@@ -831,11 +832,11 @@ func validateSwapCheck(name string, entry map[string]any, add func(string, ...an
 			if !ok {
 				add("%s.delta {op, value} is required", prefix)
 			} else {
-				if !isValidDiskOp(scalarString(delta["op"])) {
-					add("%s.delta has an invalid op %q", prefix, scalarString(delta["op"]))
+				if !isValidDiskOp(cfgval.String(delta["op"])) {
+					add("%s.delta has an invalid op %q", prefix, cfgval.String(delta["op"]))
 				}
-				if !isNumeric(scalarString(delta["value"])) {
-					add("%s.delta value %q must be numeric", prefix, scalarString(delta["value"]))
+				if !isNumeric(cfgval.String(delta["value"])) {
+					add("%s.delta value %q must be numeric", prefix, cfgval.String(delta["value"]))
 				}
 			}
 		default:
@@ -849,8 +850,8 @@ func validateSwapCheck(name string, entry map[string]any, add func(string, ...an
 // validateStateMetric validates a state metric condition shared by net/icmp:
 // expect up|down OR on: change.
 func validateStateMetric(prefix string, m map[string]any, add func(string, ...any)) {
-	exp := scalarString(m["expect"])
-	onChange := scalarString(m["on"]) == "change"
+	exp := cfgval.String(m["expect"])
+	onChange := cfgval.String(m["on"]) == "change"
 	if exp == "" && !onChange {
 		add("%s requires expect: up|down or on: change", prefix)
 	} else if exp != "" && exp != "up" && exp != "down" {
@@ -862,11 +863,11 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 // count) and a non-empty metrics map, each metric with a valid condition and its
 // own hook (spec 2026-06-06-icmp-host-watch §3).
 func validateICMPCheck(name string, check, entry map[string]any, add func(string, ...any)) {
-	if scalarString(check["host"]) == "" {
+	if cfgval.String(check["host"]) == "" {
 		add("watches.%s.check.host is required for an icmp check", name)
 	}
 	if v, present := check["count"]; present {
-		if n, ok := scalarInt(v); !ok || n <= 0 {
+		if n, ok := cfgval.Int(v); !ok || n <= 0 {
 			add("watches.%s.check.count must be a positive integer", name)
 		}
 	}
@@ -895,16 +896,16 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 				add("%s must set only one of threshold or change", prefix)
 			}
 			if hasT {
-				if !isValidDiskOp(scalarString(th["op"])) {
-					add("%s.threshold has an invalid op %q", prefix, scalarString(th["op"]))
+				if !isValidDiskOp(cfgval.String(th["op"])) {
+					add("%s.threshold has an invalid op %q", prefix, cfgval.String(th["op"]))
 				}
-				if !isNumeric(scalarString(th["value"])) {
-					add("%s.threshold value %q must be numeric", prefix, scalarString(th["value"]))
+				if !isNumeric(cfgval.String(th["value"])) {
+					add("%s.threshold value %q must be numeric", prefix, cfgval.String(th["value"]))
 				}
 			}
 			if hasC {
-				if !isNumeric(scalarString(ch["delta"])) {
-					add("%s.change delta %q must be numeric", prefix, scalarString(ch["delta"]))
+				if !isNumeric(cfgval.String(ch["delta"])) {
+					add("%s.change delta %q must be numeric", prefix, cfgval.String(ch["delta"]))
 				}
 			}
 		default:
@@ -919,7 +920,7 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 // recursive, and at least one attribute condition (size threshold/change,
 // permissions/owner on change, existence on delete), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, add func(string, ...any)) {
-	if scalarString(check["path"]) == "" {
+	if cfgval.String(check["path"]) == "" {
 		add("watches.%s.check.path is required for a file check", name)
 	}
 	if v, present := check["recursive"]; present {
@@ -931,8 +932,8 @@ func validateFileCheck(name string, check, entry map[string]any, add func(string
 	conds := 0
 	if sz, ok := check["size"].(map[string]any); ok {
 		conds++
-		if scalarString(sz["on"]) != "change" {
-			if !isValidDiskOp(scalarString(sz["op"])) || !isNumeric(scalarString(sz["value"])) {
+		if cfgval.String(sz["on"]) != "change" {
+			if !isValidDiskOp(cfgval.String(sz["op"])) || !isNumeric(cfgval.String(sz["value"])) {
 				add("watches.%s.check.size requires on: change or {op, value} with a numeric value", name)
 			}
 		}
@@ -940,14 +941,14 @@ func validateFileCheck(name string, check, entry map[string]any, add func(string
 	for _, attr := range []string{"permissions", "owner"} {
 		if m, ok := check[attr].(map[string]any); ok {
 			conds++
-			if scalarString(m["on"]) != "change" {
+			if cfgval.String(m["on"]) != "change" {
 				add("watches.%s.check.%s requires on: change", name, attr)
 			}
 		}
 	}
 	if e, ok := check["existence"].(map[string]any); ok {
 		conds++
-		if scalarString(e["on"]) != "delete" {
+		if cfgval.String(e["on"]) != "delete" {
 			add("watches.%s.check.existence requires on: delete", name)
 		}
 	}
@@ -962,14 +963,14 @@ func validateFileCheck(name string, check, entry map[string]any, add func(string
 // at least one condition (for duration, or cpu/memory/io {op, value}), plus the
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, add func(string, ...any)) {
-	if scalarString(check["name"]) == "" {
+	if cfgval.String(check["name"]) == "" {
 		add("watches.%s.check.name is required for a process check", name)
 	}
 	conds := 0
 	if v, present := check["for"]; present {
 		conds++
-		if !isPositiveDuration(scalarString(v)) {
-			add("watches.%s.check.for %q must be a valid positive duration", name, scalarString(v))
+		if !isPositiveDuration(cfgval.String(v)) {
+			add("watches.%s.check.for %q must be a valid positive duration", name, cfgval.String(v))
 		}
 	}
 	for _, attr := range []string{"cpu", "memory", "io"} {
@@ -978,7 +979,7 @@ func validateProcessWatch(name string, check, entry map[string]any, add func(str
 			continue
 		}
 		conds++
-		if !isValidDiskOp(scalarString(m["op"])) || !isNumeric(scalarString(m["value"])) {
+		if !isValidDiskOp(cfgval.String(m["op"])) || !isNumeric(cfgval.String(m["value"])) {
 			add("watches.%s.check.%s requires {op, value} with a numeric value", name, attr)
 		}
 	}
@@ -1007,13 +1008,13 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 		add("%s cannot define both for and within", prefix)
 	}
 	if f, ok := entry["for"].(map[string]any); ok {
-		if c, _ := scalarInt(f["cycles"]); c <= 0 {
+		if c, _ := cfgval.Int(f["cycles"]); c <= 0 {
 			add("%s.for.cycles must be > 0", prefix)
 		}
 	}
 	if wn, ok := entry["within"].(map[string]any); ok {
-		cycles, _ := scalarInt(wn["cycles"])
-		matches, _ := scalarInt(wn["min_matches"])
+		cycles, _ := cfgval.Int(wn["cycles"])
+		matches, _ := cfgval.Int(wn["min_matches"])
 		if cycles <= 0 {
 			add("%s.within.cycles must be > 0", prefix)
 		}
@@ -1045,11 +1046,11 @@ func isNumeric(s string) bool {
 // port must be numeric when present, and tls must be a boolean or one of the
 // known string modes.
 func validateConnFields(prefix string, fields map[string]any, requireUser bool, add addFunc) {
-	if requireUser && scalarString(fields["user"]) == "" {
+	if requireUser && cfgval.String(fields["user"]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
-	if v, present := fields["port"]; present && !isNumeric(scalarString(v)) {
-		add("%s.port %q must be numeric", prefix, scalarString(v))
+	if v, present := fields["port"]; present && !isNumeric(cfgval.String(v)) {
+		add("%s.port %q must be numeric", prefix, cfgval.String(v))
 	}
 	if v, present := fields["tls"]; present {
 		switch t := v.(type) {
@@ -1178,14 +1179,14 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
 	}
 
-	if v, present := tree["interval"]; present && !isPositiveDuration(scalarString(v)) {
-		add("interval %q must be a valid positive duration", scalarString(v))
+	if v, present := tree["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("interval %q must be a valid positive duration", cfgval.String(v))
 	}
 
 	if mode, present := tree["monitor"]; present {
 		s, isStr := mode.(string)
 		if _, ok := validMonitorModes[s]; !isStr || !ok {
-			add("monitor %q is not one of enabled, disabled, previous", scalarString(mode))
+			add("monitor %q is not one of enabled, disabled, previous", cfgval.String(mode))
 		}
 	}
 
@@ -1302,11 +1303,11 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		// A per-check interval runs the check every N cycles (N rounded from
 		// interval/resolution). It must be a positive duration; the daemon warns at
 		// startup if it is below the resolution or not an exact multiple.
-		if v, present := entry["interval"]; present && !isPositiveDuration(scalarString(v)) {
-			add("%s.interval %q must be a valid positive duration", path, scalarString(v))
+		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s.interval %q must be a valid positive duration", path, cfgval.String(v))
 		}
 		validateCheckGate(path, name, entry, entries, add)
-		typ := scalarString(entry["type"])
+		typ := cfgval.String(entry["type"])
 		if typ == "" {
 			add("%s has no type", path)
 			continue
@@ -1333,24 +1334,24 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 				add("%s command must be an array, not a shell string", path)
 			}
 			if v, present := entry["expect_exit"]; present {
-				if _, ok := scalarInt(v); !ok {
+				if _, ok := cfgval.Int(v); !ok {
 					add("%s expect_exit must be an integer", path)
 				}
 			}
 		case "service":
-			if st := scalarString(entry["expect"]); st != "" {
+			if st := cfgval.String(entry["expect"]); st != "" {
 				if _, ok := serviceStates[st]; !ok {
 					add("%s expect %q is not one of active, inactive, failed, unknown", path, st)
 				}
 			}
 		case "process":
-			if st := scalarString(entry["state"]); st != "" {
+			if st := cfgval.String(entry["state"]); st != "" {
 				if _, ok := processStates[st]; !ok {
 					add("%s state %q is not one of running, zombie, absent", path, st)
 				}
 			}
 		case "file_exists":
-			if p := scalarString(entry["path"]); p != "" && underDir(p, locksDir) {
+			if p := cfgval.String(entry["path"]); p != "" && underDir(p, locksDir) {
 				add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
 			}
 		case "metric":
@@ -1376,7 +1377,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 		case "cert":
 			validateCertFields(path, entry, add)
 		case "sqlite", "sqlite3":
-			if scalarString(entry["path"]) == "" {
+			if cfgval.String(entry["path"]) == "" {
 				add("%s.path is required for a sqlite check", path)
 			}
 		case "sql":
@@ -1396,7 +1397,7 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 // validateWebsocketFields validates a websocket check: a required url with a
 // ws/wss/http/https scheme.
 func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) {
-	raw := scalarString(fields["url"])
+	raw := cfgval.String(fields["url"])
 	if raw == "" {
 		add("%s.url is required for a websocket check", prefix)
 		return
@@ -1420,14 +1421,14 @@ func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
 	if !hasCount {
 		return
 	}
-	if scalarString(fields["path"]) != "" {
+	if cfgval.String(fields["path"]) != "" {
 		add("%s: path and count are mutually exclusive", prefix)
 	}
-	op := scalarString(count["op"])
+	op := cfgval.String(count["op"])
 	if _, ok := metricOps[op]; !ok {
 		add("%s.count.op %q is not one of >, >=, <, <=, ==, !=", prefix, op)
 	}
-	if !isNumeric(scalarString(count["value"])) {
+	if !isNumeric(cfgval.String(count["value"])) {
 		add("%s.count.value must be numeric", prefix)
 	}
 }
@@ -1435,16 +1436,16 @@ func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
 // validateSizeFields validates a size (growth) check: a required path, a
 // positive parseable grow_by byte size and a positive within duration.
 func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["path"]) == "" {
+	if cfgval.String(fields["path"]) == "" {
 		add("%s.path is required for a size check", prefix)
 	}
-	gb := scalarString(fields["grow_by"])
+	gb := cfgval.String(fields["grow_by"])
 	if gb == "" {
 		add("%s.grow_by is required for a size check (e.g. 1GB)", prefix)
 	} else if n, err := humanize.ParseBytes(gb); err != nil || n == 0 {
 		add("%s.grow_by %q must be a positive size (e.g. 1GB, 500MB)", prefix, gb)
 	}
-	w := scalarString(fields["within"])
+	w := cfgval.String(fields["within"])
 	if w == "" {
 		add("%s.within is required for a size check (e.g. 1h)", prefix)
 	} else if !isPositiveDuration(w) {
@@ -1457,18 +1458,18 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 // collection+pipeline / command), JSON-parseable filter/pipeline/command, and a
 // result path where one is needed.
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
-	op := scalarString(fields["op"])
+	op := cfgval.String(fields["op"])
 	if _, ok := compareOps[op]; !ok {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
 	}
-	if scalarString(fields["value"]) == "" {
+	if cfgval.String(fields["value"]) == "" {
 		add("%s.value is required for a mongodb-query check", prefix)
 	}
 
-	collection := scalarString(fields["collection"])
-	command := scalarString(fields["command"])
-	pipeline := scalarString(fields["pipeline"])
-	result := scalarString(fields["result"])
+	collection := cfgval.String(fields["collection"])
+	command := cfgval.String(fields["command"])
+	pipeline := cfgval.String(fields["pipeline"])
+	result := cfgval.String(fields["result"])
 
 	switch {
 	case command != "":
@@ -1482,7 +1483,7 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.command must be a JSON object", prefix)
 		}
 	case collection != "":
-		if scalarString(fields["database"]) == "" {
+		if cfgval.String(fields["database"]) == "" {
 			add("%s.database is required for a collection query", prefix)
 		}
 		if pipeline != "" {
@@ -1492,7 +1493,7 @@ func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 			if !isJSONArray(pipeline) {
 				add("%s.pipeline must be a JSON array", prefix)
 			}
-		} else if f := scalarString(fields["filter"]); f != "" && !isJSONObject(f) {
+		} else if f := cfgval.String(fields["filter"]); f != "" && !isJSONObject(f) {
 			add("%s.filter must be a JSON object", prefix)
 		}
 	default:
@@ -1518,7 +1519,7 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 			add("%s.interface must be a string or a list of strings (name/IP/MAC)", prefix)
 		}
 	}
-	if m := scalarString(fields["interface_match"]); m != "" && m != "any" && m != "all" {
+	if m := cfgval.String(fields["interface_match"]); m != "" && m != "any" && m != "all" {
 		add("%s.interface_match %q must be any or all", prefix, m)
 	}
 }
@@ -1527,30 +1528,30 @@ func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) 
 // a value, plus the language-specific target — InfluxQL needs a `database`, Flux
 // needs an `org` and `token`.
 func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
-	if scalarString(fields["query"]) == "" {
+	if cfgval.String(fields["query"]) == "" {
 		add("%s.query is required for an influxdb-query check", prefix)
 	}
-	op := scalarString(fields["op"])
+	op := cfgval.String(fields["op"])
 	if _, ok := compareOps[op]; !ok {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
 	}
-	if scalarString(fields["value"]) == "" {
+	if cfgval.String(fields["value"]) == "" {
 		add("%s.value is required for an influxdb-query check", prefix)
 	}
-	language := scalarString(fields["language"])
+	language := cfgval.String(fields["language"])
 	if language == "" {
 		language = "influxql"
 	}
 	switch language {
 	case "influxql":
-		if scalarString(fields["database"]) == "" {
+		if cfgval.String(fields["database"]) == "" {
 			add("%s.database is required for an influxql query", prefix)
 		}
 	case "flux":
-		if scalarString(fields["org"]) == "" {
+		if cfgval.String(fields["org"]) == "" {
 			add("%s.org is required for a flux query", prefix)
 		}
-		if scalarString(fields["token"]) == "" {
+		if cfgval.String(fields["token"]) == "" {
 			add("%s.token is required for a flux query", prefix)
 		}
 	default:
@@ -1574,18 +1575,18 @@ func isJSONArray(s string) bool {
 // and a value. For numeric ops the value must be numeric; for =~ it must be a
 // valid regexp. mysql/postgres require a user; sqlite requires a path.
 func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
-	engine := scalarString(fields["engine"])
+	engine := cfgval.String(fields["engine"])
 	if _, ok := sqlEngines[engine]; !ok {
 		add("%s.engine must be one of mysql, mariadb, postgres, postgresql, sqlite", prefix)
 	}
-	if scalarString(fields["query"]) == "" {
+	if cfgval.String(fields["query"]) == "" {
 		add("%s.query is required for a sql check", prefix)
 	}
-	op := scalarString(fields["op"])
+	op := cfgval.String(fields["op"])
 	if _, ok := compareOps[op]; !ok {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
 	}
-	value := scalarString(fields["value"])
+	value := cfgval.String(fields["value"])
 	switch op {
 	case ">", ">=", "<", "<=":
 		if !isNumeric(value) {
@@ -1598,11 +1599,11 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	switch engine {
 	case "sqlite", "sqlite3":
-		if scalarString(fields["path"]) == "" {
+		if cfgval.String(fields["path"]) == "" {
 			add("%s.path is required for a sqlite sql check", prefix)
 		}
 	case "mysql", "mariadb", "postgres", "postgresql":
-		if scalarString(fields["user"]) == "" {
+		if cfgval.String(fields["user"]) == "" {
 			add("%s.user is required for a %s sql check", prefix, engine)
 		}
 	}
@@ -1612,8 +1613,8 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 // port (1..65535), optional positive expires_in_days, and boolean toggles. New
 // certificate conditions add here.
 func validateCertFields(prefix string, fields map[string]any, add addFunc) {
-	host := scalarString(fields["host"])
-	path := scalarString(fields["path"])
+	host := cfgval.String(fields["host"])
+	path := cfgval.String(fields["path"])
 	switch {
 	case host == "" && path == "":
 		add("%s requires a host or a path", prefix)
@@ -1621,12 +1622,12 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
 	}
 	if v, present := fields["port"]; present {
-		if n, ok := scalarInt(v); !ok || n < 1 || n > 65535 {
+		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
 			add("%s.port must be an integer in 1..65535", prefix)
 		}
 	}
 	if v, present := fields["expires_in_days"]; present {
-		if n, ok := scalarInt(v); !ok || n < 1 {
+		if n, ok := cfgval.Int(v); !ok || n < 1 {
 			add("%s.expires_in_days must be a positive integer", prefix)
 		}
 	}
@@ -1642,10 +1643,10 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 // validateCount checks a count entry: a path, an optional `of` kind, an optional
 // boolean `recursive`, and a required numeric threshold (op + value).
 func validateCount(entry map[string]any, path string, add addFunc) {
-	if scalarString(entry["path"]) == "" {
+	if cfgval.String(entry["path"]) == "" {
 		add("%s count check requires a path", path)
 	}
-	if of := scalarString(entry["of"]); of != "" {
+	if of := cfgval.String(entry["of"]); of != "" {
 		if _, ok := countKinds[of]; !ok {
 			add("%s count `of` %q is not one of any, file, dir, symlink", path, of)
 		}
@@ -1655,11 +1656,11 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 			add("%s count recursive must be a boolean", path)
 		}
 	}
-	if op := scalarString(entry["op"]); !isValidDiskOp(op) {
+	if op := cfgval.String(entry["op"]); !isValidDiskOp(op) {
 		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
 	}
-	if !isNumeric(scalarString(entry["value"])) {
-		add("%s count check value %q must be numeric", path, scalarString(entry["value"]))
+	if !isNumeric(cfgval.String(entry["value"])) {
+		add("%s count check value %q must be numeric", path, cfgval.String(entry["value"]))
 	}
 }
 
@@ -1676,14 +1677,14 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 		add("rule_window must be a mapping")
 		return
 	}
-	cycles, _ := scalarInt(m["cycles"])
+	cycles, _ := cfgval.Int(m["cycles"])
 	if cycles <= 0 {
 		add("rule_window.cycles must be > 0")
 	}
-	switch mode := scalarString(m["mode"]); mode {
+	switch mode := cfgval.String(m["mode"]); mode {
 	case "", "consecutive":
 	case "within", "sliding":
-		matches, _ := scalarInt(m["min_matches"])
+		matches, _ := cfgval.Int(m["min_matches"])
 		switch {
 		case matches <= 0:
 			add("rule_window.min_matches must be > 0 for mode %q", mode)
@@ -1701,8 +1702,8 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		return
 	}
 	for _, field := range []string{"graceful_timeout", "term_timeout", "kill_timeout"} {
-		if v, present := sp[field]; present && !isPositiveDuration(scalarString(v)) {
-			add("stop_policy.%s %q must be a valid positive duration", field, scalarString(v))
+		if v, present := sp[field]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("stop_policy.%s %q must be a valid positive duration", field, cfgval.String(v))
 		}
 	}
 	force, _ := sp["force_kill"].(bool)
@@ -1711,7 +1712,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 		add("stop_policy.force_kill=true requires kill_only_if")
 	}
 	if hasKoi {
-		if len(stringSlice(koi["users"])) == 0 || len(stringSlice(koi["exe_any"])) == 0 {
+		if len(cfgval.StringList(koi["users"])) == 0 || len(cfgval.StringList(koi["exe_any"])) == 0 {
 			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
 		}
 	}
@@ -1729,13 +1730,13 @@ func validateProcesses(tree map[string]any, add addFunc) {
 			add("%s must be a mapping", path)
 			continue
 		}
-		switch typ := scalarString(entry["type"]); typ {
+		switch typ := cfgval.String(entry["type"]); typ {
 		case "pidfile":
-			if scalarString(entry["path"]) == "" {
+			if cfgval.String(entry["path"]) == "" {
 				add("%s.path is required for a pidfile selector", path)
 			}
 		case "command_match":
-			if scalarString(entry["exe"]) == "" || scalarString(entry["user"]) == "" {
+			if cfgval.String(entry["exe"]) == "" || cfgval.String(entry["user"]) == "" {
 				add("%s command_match requires both exe and user", path)
 			}
 		case "":
@@ -1752,23 +1753,23 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		return
 	}
 	if v, present := policy["max_actions"]; present {
-		if n, ok := scalarInt(v); !ok || n <= 0 {
+		if n, ok := cfgval.Int(v); !ok || n <= 0 {
 			add("policy.max_actions must be an integer > 0")
 		}
 		if _, hasWindow := policy["max_actions_window"]; !hasWindow {
 			add("policy.max_actions requires policy.max_actions_window")
 		}
 	}
-	if v, present := policy["max_actions_window"]; present && !isPositiveDuration(scalarString(v)) {
-		add("policy.max_actions_window %q must be a valid positive duration", scalarString(v))
+	if v, present := policy["max_actions_window"]; present && !isPositiveDuration(cfgval.String(v)) {
+		add("policy.max_actions_window %q must be a valid positive duration", cfgval.String(v))
 	}
 	if bo, ok := policy["backoff"].(map[string]any); ok {
-		initial := scalarString(bo["initial"])
+		initial := cfgval.String(bo["initial"])
 		if !isPositiveDuration(initial) {
 			add("policy.backoff.initial must be a valid positive duration")
 		}
 		di, _ := time.ParseDuration(initial)
-		dm, errMax := time.ParseDuration(scalarString(bo["max"]))
+		dm, errMax := time.ParseDuration(cfgval.String(bo["max"]))
 		if errMax != nil || dm < di {
 			add("policy.backoff.max must be >= initial")
 		}
@@ -1792,8 +1793,8 @@ func validateCommands(tree map[string]any, add addFunc) {
 		if !isStringArray(entry["command"]) {
 			add("commands.%s command must be an array, not a shell string", name)
 		}
-		if v, present := entry["timeout"]; present && !isPositiveDuration(scalarString(v)) {
-			add("commands.%s timeout %q must be a valid positive duration", name, scalarString(v))
+		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("commands.%s timeout %q must be a valid positive duration", name, cfgval.String(v))
 		}
 	}
 }
@@ -1816,12 +1817,12 @@ func validateServiceField(tree map[string]any, add addFunc) {
 			switch k {
 			case "systemd", "openrc":
 				hasInit = true
-				if len(stringSlice(v[k])) == 0 {
+				if len(cfgval.StringList(v[k])) == 0 {
 					add("service.%s must be a non-empty list", k)
 				}
 			case "name":
 				hasName = true
-				if scalarString(v["name"]) == "" {
+				if cfgval.String(v["name"]) == "" {
 					add("service.name must not be empty")
 				}
 			default:
@@ -1852,7 +1853,7 @@ func validateRules(tree map[string]any, add addFunc) {
 			continue
 		}
 
-		rtype := scalarString(entry["type"])
+		rtype := cfgval.String(entry["type"])
 		switch rtype {
 		case "remediation", "guard", "alert":
 		default:
@@ -1869,7 +1870,7 @@ func validateRules(tree map[string]any, add addFunc) {
 		}
 		actions := ruleActions(then)
 		isGuard := rtype == "guard"
-		blocks := stringSlice(entry["blocks"])
+		blocks := cfgval.StringList(entry["blocks"])
 		hasBlock := false
 		for _, act := range actions {
 			if act.typ != "" {
@@ -1948,7 +1949,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case "process":
 		validateState(node["process"], "state", processStates, "running, zombie, absent", path+".process", add)
 	case "file":
-		if m, ok := node["file"].(map[string]any); !ok || scalarString(m["path"]) == "" {
+		if m, ok := node["file"].(map[string]any); !ok || cfgval.String(m["path"]) == "" {
 			add("%s.file requires a path", path)
 		}
 	case "command":
@@ -1956,7 +1957,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 		if !isStringArray(m["command"]) {
 			add("%s.command must use array form, not a shell string", path)
 		}
-		if scalarString(m["timeout"]) == "" {
+		if cfgval.String(m["timeout"]) == "" {
 			add("%s.command condition must declare a timeout", path)
 		}
 	case "metric":
@@ -1964,7 +1965,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 			validateMetric(m, path+".metric", allowSystemMetric, add)
 		}
 	case "changed":
-		if m, ok := node["changed"].(map[string]any); !ok || scalarString(m["path"]) == "" {
+		if m, ok := node["changed"].(map[string]any); !ok || cfgval.String(m["path"]) == "" {
 			add("%s.changed requires a path", path)
 		}
 	}
@@ -1976,7 +1977,7 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 		add("%s must be a mapping", path)
 		return
 	}
-	if ref := scalarString(m["check"]); ref != "" {
+	if ref := cfgval.String(m["check"]); ref != "" {
 		if _, ok := checkNames[ref]; !ok {
 			add("%s references unknown check %q", path, ref)
 		} else if _, isSys := systemMetricChecks[ref]; isSys && !allowSystemMetric {
@@ -2001,7 +2002,7 @@ func validateState(v any, field string, valid map[string]struct{}, list, path st
 		add("%s must be a mapping", path)
 		return
 	}
-	st := scalarString(m[field])
+	st := cfgval.String(m[field])
 	if st == "" {
 		return // defaulted
 	}
@@ -2011,7 +2012,7 @@ func validateState(v any, field string, valid map[string]struct{}, list, path st
 }
 
 func validateMetric(entry map[string]any, path string, allowSystem bool, add addFunc) {
-	scope := scalarString(entry["scope"])
+	scope := cfgval.String(entry["scope"])
 	if scope == "" {
 		scope = "service"
 	}
@@ -2020,7 +2021,7 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 		add("%s scope %q is not service or system", path, scope)
 		return
 	}
-	name := scalarString(entry["name"])
+	name := cfgval.String(entry["name"])
 	known := false
 	if name == "" {
 		add("%s requires a metric name", path)
@@ -2029,12 +2030,12 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 	} else {
 		known = true
 	}
-	if op := scalarString(entry["op"]); op != "" {
+	if op := cfgval.String(entry["op"]); op != "" {
 		if _, ok := metricOps[op]; !ok {
 			add("%s op %q is not one of >, >=, <, <=, ==, !=", path, op)
 		}
 	}
-	value := scalarString(entry["value"])
+	value := cfgval.String(entry["value"])
 	if !parseMetricValue(value) {
 		add("%s value %q must be a number with an optional trailing %%", path, value)
 	} else if known {
@@ -2066,12 +2067,12 @@ func ruleActions(then map[string]any) []valAction {
 		out := make([]valAction, 0, len(list))
 		for _, item := range list {
 			if m, ok := item.(map[string]any); ok {
-				out = append(out, valAction{typ: scalarString(m["type"]), message: scalarString(m["message"])})
+				out = append(out, valAction{typ: cfgval.String(m["type"]), message: cfgval.String(m["message"])})
 			}
 		}
 		return out
 	}
-	return []valAction{{typ: scalarString(then["action"]), message: scalarString(then["message"])}}
+	return []valAction{{typ: cfgval.String(then["action"]), message: cfgval.String(then["message"])}}
 }
 
 func collectCheckNames(tree map[string]any) map[string]struct{} {
@@ -2097,7 +2098,7 @@ func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
 			continue
 		}
 		for name, raw := range entries {
-			if e, ok := raw.(map[string]any); ok && scalarString(e["type"]) == "metric" && scalarString(e["scope"]) == "system" {
+			if e, ok := raw.(map[string]any); ok && cfgval.String(e["type"]) == "metric" && cfgval.String(e["scope"]) == "system" {
 				names[name] = struct{}{}
 			}
 		}
@@ -2147,42 +2148,6 @@ func isStringArray(v any) bool {
 	return true
 }
 
-func stringSlice(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
-}
-
-func scalarInt(v any) (int, bool) {
-	switch t := v.(type) {
-	case int:
-		return t, true
-	case int64:
-		return int(t), true
-	case uint64:
-		return int(t), true
-	case float64:
-		return int(t), true
-	case string:
-		n, err := strconv.Atoi(strings.TrimSpace(t))
-		return n, err == nil
-	default:
-		return 0, false
-	}
-}
-
 func set(values ...string) map[string]struct{} {
 	out := make(map[string]struct{}, len(values))
 	for _, v := range values {
@@ -2200,7 +2165,7 @@ func defaultsCooldown(defaults map[string]any) (string, bool) {
 	if !present {
 		return "", false
 	}
-	return scalarString(v), true
+	return cfgval.String(v), true
 }
 
 func policyCooldown(tree map[string]any) (string, bool) {
@@ -2212,7 +2177,7 @@ func policyCooldown(tree map[string]any) (string, bool) {
 	if !present {
 		return "", false
 	}
-	return scalarString(v), true
+	return cfgval.String(v), true
 }
 
 // walkScalars visits every scalar leaf in the tree (skipping the `variables`
@@ -2238,7 +2203,7 @@ func walkScalarValue(path, key string, v any, visit func(path, key, value string
 			walkScalarValue(fmt.Sprintf("%s[%d]", path, i), key, e, visit)
 		}
 	default:
-		visit(path, key, scalarString(t))
+		visit(path, key, cfgval.String(t))
 	}
 }
 

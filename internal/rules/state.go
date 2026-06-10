@@ -1,7 +1,7 @@
 package rules
 
 import (
-	"fmt"
+	"sermo/internal/cfgval"
 	"sort"
 	"strconv"
 	"time"
@@ -208,16 +208,16 @@ func ParsePolicy(tree map[string]any) Policy {
 	if !ok {
 		return p
 	}
-	p.Cooldown = parseDuration(section["cooldown"])
-	p.MaxActionsWindow = parseDuration(section["max_actions_window"])
-	if n, ok := parseInt(section["max_actions"]); ok {
+	p.Cooldown = cfgval.Duration(section["cooldown"])
+	p.MaxActionsWindow = cfgval.Duration(section["max_actions_window"])
+	if n, ok := cfgval.Int(section["max_actions"]); ok {
 		p.MaxActions = n
 	}
 	if bo, ok := section["backoff"].(map[string]any); ok {
 		b := &Backoff{
-			Initial: parseDuration(bo["initial"]),
+			Initial: cfgval.Duration(bo["initial"]),
 			Factor:  parseFloat(bo["factor"]),
-			Max:     parseDuration(bo["max"]),
+			Max:     cfgval.Duration(bo["max"]),
 		}
 		if b.Factor <= 0 {
 			b.Factor = 2
@@ -243,58 +243,5 @@ func parseFloat(v any) float64 {
 		return f
 	default:
 		return 0
-	}
-}
-
-func parseDuration(v any) time.Duration {
-	s, ok := v.(string)
-	if !ok {
-		return 0
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0
-	}
-	return d
-}
-
-// scalarString renders a YAML scalar as a string. A metric `value` is logically
-// a string (section 14) but `0` decodes as an int, so it must be stringified.
-func scalarString(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	case uint64:
-		return strconv.FormatUint(t, 10)
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case bool:
-		return strconv.FormatBool(t)
-	case nil:
-		return ""
-	default:
-		return fmt.Sprintf("%v", t)
-	}
-}
-
-func parseInt(v any) (int, bool) {
-	switch t := v.(type) {
-	case int:
-		return t, true
-	case int64:
-		return int(t), true
-	case uint64:
-		return int(t), true
-	case float64:
-		return int(t), true
-	case string:
-		n, err := strconv.Atoi(t)
-		return n, err == nil
-	default:
-		return 0, false
 	}
 }

@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"sermo/internal/cfgval"
 	"strconv"
 	"time"
 )
@@ -54,13 +55,13 @@ func parseEntropyThreshold(entry map[string]any) (op string, value float64, err 
 	if !ok {
 		return "", 0, fmt.Errorf("requires avail {op, value}")
 	}
-	op = asString(m["op"])
+	op = cfgval.AsString(m["op"])
 	if !validDiskOp(op) {
 		return "", 0, fmt.Errorf("avail has invalid op %q", op)
 	}
-	value, perr := strconv.ParseFloat(scalarString(m["value"]), 64)
+	value, perr := strconv.ParseFloat(cfgval.String(m["value"]), 64)
 	if perr != nil {
-		return "", 0, fmt.Errorf("avail value %q is not numeric", scalarString(m["value"]))
+		return "", 0, fmt.Errorf("avail value %q is not numeric", cfgval.String(m["value"]))
 	}
 	return op, value, nil
 }

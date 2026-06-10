@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -138,21 +139,21 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 // the mysql-style host/port/user/password/database/tls fields) and the query
 // shape (count / aggregate / command).
 func buildMongoCheck(b base, entry map[string]any) (Check, string) {
-	op := asString(entry["op"])
+	op := cfgval.AsString(entry["op"])
 	if !validCompareOp(op) {
 		return nil, "mongodb-query check op must be one of ==, !=, >, >=, <, <=, =~"
 	}
-	value := scalarString(entry["value"])
+	value := cfgval.String(entry["value"])
 	if value == "" {
 		return nil, "mongodb-query check requires a value"
 	}
 
-	collection := asString(entry["collection"])
-	command := asString(entry["command"])
-	pipeline := asString(entry["pipeline"])
-	resultPath := asString(entry["result"])
+	collection := cfgval.AsString(entry["collection"])
+	command := cfgval.AsString(entry["command"])
+	pipeline := cfgval.AsString(entry["pipeline"])
+	resultPath := cfgval.AsString(entry["result"])
 
-	c := mongoCheck{base: b, cfg: mongoConnConfig(entry), database: asString(entry["database"]), collection: collection, op: op, value: value}
+	c := mongoCheck{base: b, cfg: mongoConnConfig(entry), database: cfgval.AsString(entry["database"]), collection: collection, op: op, value: value}
 
 	switch {
 	case command != "":
@@ -185,7 +186,7 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 			c.mode, c.pipeline, c.resultPath = "aggregate", pl, strings.Split(resultPath, ".")
 		} else {
 			filter := bson.D{}
-			if f := asString(entry["filter"]); f != "" {
+			if f := cfgval.AsString(entry["filter"]); f != "" {
 				d, err := parseMongoDoc(f)
 				if err != nil {
 					return nil, "mongodb-query check: invalid filter JSON: " + err.Error()
@@ -205,10 +206,10 @@ func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 // optional auth_source.
 func mongoConnConfig(entry map[string]any) conn.Config {
 	cfg := conn.Config{
-		Host:     asString(entry["host"]),
-		User:     asString(entry["user"]),
-		Password: asString(entry["password"]),
-		Database: asString(entry["database"]),
+		Host:     cfgval.AsString(entry["host"]),
+		User:     cfgval.AsString(entry["user"]),
+		Password: cfgval.AsString(entry["password"]),
+		Database: cfgval.AsString(entry["database"]),
 		TLS:      tlsString(entry["tls"]),
 	}
 	if cfg.Host == "" {
@@ -218,10 +219,10 @@ func mongoConnConfig(entry map[string]any) conn.Config {
 	if proto, ok := conn.Lookup("mongodb"); ok {
 		cfg.Port = proto.DefaultPort()
 	}
-	if p, ok := intField(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry["port"]); ok {
 		cfg.Port = p
 	}
-	if as := asString(entry["auth_source"]); as != "" {
+	if as := cfgval.AsString(entry["auth_source"]); as != "" {
 		cfg.Params = map[string]string{"auth_source": as}
 	}
 	return cfg

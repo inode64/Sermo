@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"fmt"
+	"sermo/internal/cfgval"
 	"strings"
 )
 
@@ -30,15 +31,15 @@ func FormatCondition(node map[string]any) string {
 		switch op {
 		case "failed", "active":
 			if m, ok := body.(map[string]any); ok {
-				if c := asString(m["check"]); c != "" {
+				if c := cfgval.AsString(m["check"]); c != "" {
 					return op + ":" + c
 				}
 			}
 		case "metric":
 			if m, ok := body.(map[string]any); ok {
-				name := asString(m["name"])
+				name := cfgval.AsString(m["name"])
 				if name == "" {
-					name = asString(m["metric"])
+					name = cfgval.AsString(m["metric"])
 				}
 				if name != "" {
 					return "metric:" + name
@@ -46,19 +47,19 @@ func FormatCondition(node map[string]any) string {
 			}
 		case "service":
 			if m, ok := body.(map[string]any); ok {
-				if s := asString(m["service"]); s != "" {
+				if s := cfgval.AsString(m["service"]); s != "" {
 					return "service:" + s
 				}
 			}
 		case "process":
 			if m, ok := body.(map[string]any); ok {
-				if n := asString(m["name"]); n != "" {
+				if n := cfgval.AsString(m["name"]); n != "" {
 					return "process:" + n
 				}
 			}
 		case "file":
 			if m, ok := body.(map[string]any); ok {
-				if p := asString(m["path"]); p != "" {
+				if p := cfgval.AsString(m["path"]); p != "" {
 					return "file:" + p
 				}
 			}
@@ -66,7 +67,7 @@ func FormatCondition(node map[string]any) string {
 			return "command"
 		case "changed":
 			if m, ok := body.(map[string]any); ok {
-				if p := asString(m["path"]); p != "" {
+				if p := cfgval.AsString(m["path"]); p != "" {
 					return "changed:" + p
 				}
 			}

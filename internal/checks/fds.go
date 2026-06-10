@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -113,13 +114,13 @@ func parseFdsPreds(entry map[string]any) ([]fdsPred, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
 		}
-		op := asString(m["op"])
+		op := cfgval.AsString(m["op"])
 		if !validDiskOp(op) {
 			return nil, fmt.Errorf("%s has invalid op %q", field, op)
 		}
-		val, err := strconv.ParseFloat(scalarString(m["value"]), 64)
+		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
 		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, scalarString(m["value"]))
+			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
 		}
 		preds = append(preds, fdsPred{field: field, op: op, value: val})
 	}

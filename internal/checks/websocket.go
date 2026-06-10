@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -146,7 +147,7 @@ func (c *websocketCheck) handshakeRequest(key string) string {
 
 // buildWebsocketCheck parses the url and builds a websocket check.
 func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
-	raw := asString(entry["url"])
+	raw := cfgval.AsString(entry["url"])
 	if raw == "" {
 		return nil, "websocket check requires a url"
 	}
@@ -186,9 +187,9 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		port:        port,
 		path:        path,
 		tls:         tlsString(entry["tls"]),
-		origin:      asString(entry["origin"]),
-		subprotocol: asString(entry["subprotocol"]),
-		headers:     stringMap(entry["headers"]),
+		origin:      cfgval.AsString(entry["origin"]),
+		subprotocol: cfgval.AsString(entry["subprotocol"]),
+		headers:     cfgval.StringMap(entry["headers"]),
 	}, ""
 }
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/quic-go/quic-go/http3"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -107,16 +108,16 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 		b := base{
 			name:    name,
 			service: deps.Service,
-			timeout: durationOr(entry["timeout"], deps.DefaultTimeout),
+			timeout: cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
 		}
-		typ := asString(entry["type"])
+		typ := cfgval.AsString(entry["type"])
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
 		if warn != "" {
 			warnings = append(warnings, fmt.Sprintf("check %q: %s", name, warn))
 			continue
 		}
-		built = append(built, Built{Check: check, Optional: asBool(entry["optional"])})
+		built = append(built, Built{Check: check, Optional: cfgval.Bool(entry["optional"])})
 	}
 	return built, warnings
 }
@@ -196,11 +197,11 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 
 // buildTCPCheck builds a tcp connectivity check.
 func buildTCPCheck(b base, entry map[string]any) (Check, string) {
-	port, ok := intField(entry["port"])
+	port, ok := cfgval.Int(entry["port"])
 	if !ok {
 		return nil, "tcp check requires a numeric port"
 	}
-	host := asString(entry["host"])
+	host := cfgval.AsString(entry["host"])
 	if host == "" {
 		host = "127.0.0.1"
 	}
@@ -213,22 +214,22 @@ func buildTCPCheck(b base, entry map[string]any) (Check, string) {
 
 // buildPortsCheck builds a multi-port open/closed check.
 func buildPortsCheck(b base, entry map[string]any) (Check, string) {
-	host := asString(entry["host"])
+	host := cfgval.AsString(entry["host"])
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	ports, err := parsePortSpec(asString(entry["ports"]))
+	ports, err := parsePortSpec(cfgval.AsString(entry["ports"]))
 	if err != nil {
 		return nil, "ports check: " + err.Error()
 	}
-	expect := asString(entry["expect"])
+	expect := cfgval.AsString(entry["expect"])
 	if expect == "" {
 		expect = "open"
 	}
 	if expect != "open" && expect != "closed" && expect != "any" {
 		return nil, "ports check: expect must be open, closed or any"
 	}
-	match := asString(entry["match"])
+	match := cfgval.AsString(entry["match"])
 	if match == "" {
 		match = "all"
 	}
@@ -247,19 +248,19 @@ func buildPortsCheck(b base, entry map[string]any) (Check, string) {
 		ports:          ports,
 		expect:         expect,
 		match:          match,
-		onChange:       asBool(entry["on_change"]),
-		connectTimeout: durationOr(entry["connect_timeout"], 0),
+		onChange:       cfgval.Bool(entry["on_change"]),
+		connectTimeout: cfgval.DurationOr(entry["connect_timeout"], 0),
 	}, ""
 }
 
 // buildHTTPCheck builds an http(s) check, configuring proxy, http3 and interface
 // egress on a per-check client when requested.
 func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, string) {
-	rawURL := asString(entry["url"])
+	rawURL := cfgval.AsString(entry["url"])
 	if rawURL == "" {
 		return nil, "http check requires a url"
 	}
-	method := strings.ToUpper(asString(entry["method"]))
+	method := strings.ToUpper(cfgval.AsString(entry["method"]))
 	if method == "" {
 		method = http.MethodGet
 	}
@@ -275,7 +276,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 			return nil, "http check: invalid json body: " + err.Error()
 		}
 		body, contentType = raw, "application/json"
-	} else if s := asString(entry["body"]); s != "" {
+	} else if s := cfgval.AsString(entry["body"]); s != "" {
 		body = []byte(s)
 	}
 	reqClient := client
@@ -283,7 +284,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	if pwarn != "" {
 		return nil, pwarn
 	}
-	if asBool(entry["http3"]) {
+	if cfgval.Bool(entry["http3"]) {
 		// HTTP/3 runs over QUIC (always TLS 1.3) and cannot use an HTTP
 		// forward proxy. The transport never falls back to TCP, so a failure
 		// to reach the endpoint over QUIC fails (alerts) the check.
@@ -303,7 +304,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	// specific interface by binding the transport's dialer. The http client has
 	// one fixed transport, so it honors a single interface (the first listed).
 	if ifaces := parseInterfaces(entry["interface"]); len(ifaces) > 0 {
-		if asBool(entry["http3"]) {
+		if cfgval.Bool(entry["http3"]) {
 			return nil, "http check: http3 and interface are mutually exclusive"
 		}
 		tr := http.DefaultTransport.(*http.Transport).Clone()
@@ -318,7 +319,7 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		client:      reqClient,
 		url:         rawURL,
 		method:      method,
-		headers:     stringMap(entry["headers"]),
+		headers:     cfgval.StringMap(entry["headers"]),
 		body:        body,
 		contentType: contentType,
 		expect:      expect,
@@ -330,11 +331,11 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 	case string:
 		hc.expectBody = eb
 	case map[string]any:
-		op := asString(eb["op"])
+		op := cfgval.AsString(eb["op"])
 		if !validCompareOp(op) {
 			return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, =~"
 		}
-		hc.bodyOp, hc.bodyValue = op, scalarString(eb["value"])
+		hc.bodyOp, hc.bodyValue = op, cfgval.String(eb["value"])
 	}
 	lop, lval, lwarn := parseExpectLatency(entry)
 	if lwarn != "" {
@@ -349,12 +350,12 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 
 // buildCommandCheck builds a check that runs a command and asserts its exit code.
 func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
-	argv := stringArray(entry["command"])
+	argv := cfgval.StringArray(entry["command"])
 	if len(argv) == 0 {
 		return nil, "command check requires a non-empty command array"
 	}
 	expect := 0
-	if v, ok := intField(entry["expect_exit"]); ok {
+	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
 		expect = v
 	}
 	return commandCheck{base: b, runner: runner, argv: argv, expectExit: expect}, ""
@@ -362,7 +363,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 
 // buildServiceCheck builds a check on a service-manager unit's expected state.
 func buildServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	expect := asString(entry["expect"])
+	expect := cfgval.AsString(entry["expect"])
 	if expect == "" {
 		return nil, "service check requires expect"
 	}
@@ -374,7 +375,7 @@ func buildServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 
 // buildFileExistsCheck builds a check that a path exists.
 func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "file_exists check requires a path"
 	}
@@ -383,7 +384,7 @@ func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
 
 // buildBinaryCheck builds a check on a binary's fingerprint.
 func buildBinaryCheck(b base, entry map[string]any) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "binary check requires a path"
 	}
@@ -392,7 +393,7 @@ func buildBinaryCheck(b base, entry map[string]any) (Check, string) {
 
 // buildLibrariesCheck builds a check on a binary's shared-library dependencies.
 func buildLibrariesCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
-	binary := asString(entry["binary"])
+	binary := cfgval.AsString(entry["binary"])
 	if binary == "" {
 		return nil, "libraries check requires a binary"
 	}
@@ -401,35 +402,35 @@ func buildLibrariesCheck(b base, entry map[string]any, runner execx.Runner) (Che
 
 // buildMetricCheck builds a check comparing a sampled metric to a threshold.
 func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	name := asString(entry["name"])
+	name := cfgval.AsString(entry["name"])
 	if name == "" {
 		return nil, "metric check requires a name"
 	}
-	scope := asString(entry["scope"])
+	scope := cfgval.AsString(entry["scope"])
 	if scope == "" {
 		scope = "service"
 	}
-	op := asString(entry["op"])
+	op := cfgval.AsString(entry["op"])
 	if op == "" {
 		return nil, "metric check requires an op"
 	}
 	if deps.Metrics == nil {
 		return nil, "metric check needs a metric source, unavailable here"
 	}
-	return metricCheck{base: b, scope: scope, metric: name, op: op, value: scalarString(entry["value"]), source: deps.Metrics}, ""
+	return metricCheck{base: b, scope: scope, metric: name, op: op, value: cfgval.String(entry["value"]), source: deps.Metrics}, ""
 }
 
 // buildProcessCheck builds a check on processes matching an exe/user selector.
 func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	exe := asString(entry["exe"])
-	user := asString(entry["user"])
+	exe := cfgval.AsString(entry["exe"])
+	user := cfgval.AsString(entry["user"])
 	if exe == "" && user == "" {
 		return nil, "process check requires exe and/or user"
 	}
 	if deps.Processes == nil {
 		return nil, "process check needs process discovery, unavailable here"
 	}
-	expect := asString(entry["state"])
+	expect := cfgval.AsString(entry["state"])
 	if expect == "" {
 		expect = "running"
 	}
@@ -438,31 +439,31 @@ func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 
 // buildCountCheck builds a check on the number of entries under a path.
 func buildCountCheck(b base, entry map[string]any) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "count check requires a path"
 	}
-	kind := asString(entry["of"])
+	kind := cfgval.AsString(entry["of"])
 	if kind == "" {
 		kind = countAny
 	}
 	if !validCountKind(kind) {
 		return nil, "count check `of` must be file, dir, symlink or any"
 	}
-	op := asString(entry["op"])
+	op := cfgval.AsString(entry["op"])
 	if !validDiskOp(op) {
 		return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
 	}
-	val, err := strconv.ParseFloat(scalarString(entry["value"]), 64)
+	val, err := strconv.ParseFloat(cfgval.String(entry["value"]), 64)
 	if err != nil {
 		return nil, "count check value must be numeric"
 	}
-	return countCheck{base: b, path: path, kind: kind, recursive: asBool(entry["recursive"]), op: op, value: val}, ""
+	return countCheck{base: b, path: path, kind: kind, recursive: cfgval.Bool(entry["recursive"]), op: op, value: val}, ""
 }
 
 // buildDiskCheck builds a disk space/inode and/or mount check.
 func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "disk check requires a path"
 	}
@@ -479,14 +480,14 @@ func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildAutofsCheck builds an autofs automounter check.
 func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	op, value := "", 0.0
 	if m, ok := entry["count"].(map[string]any); ok {
-		op = asString(m["op"])
+		op = cfgval.AsString(m["op"])
 		if !validDiskOp(op) {
 			return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
 		}
-		v, err := strconv.ParseFloat(scalarString(m["value"]), 64)
+		v, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
 		if err != nil {
 			return nil, "autofs check count value must be numeric"
 		}
@@ -500,31 +501,31 @@ func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildNetCheck builds a network-interface state/speed/errors check.
 func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	iface := asString(entry["interface"])
+	iface := cfgval.AsString(entry["interface"])
 	if iface == "" {
 		return nil, "net check requires an interface"
 	}
-	metric := asString(entry["metric"])
+	metric := cfgval.AsString(entry["metric"])
 	c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
 	switch metric {
 	case "state":
-		if exp := asString(entry["expect"]); exp != "" {
+		if exp := cfgval.AsString(entry["expect"]); exp != "" {
 			if exp != "up" && exp != "down" {
 				return nil, "net state expect must be up or down"
 			}
 			c.expect = exp
-		} else if asString(entry["on"]) == "change" {
+		} else if cfgval.AsString(entry["on"]) == "change" {
 			c.onChange = true
 		} else {
 			return nil, "net state requires expect: up|down or on: change"
 		}
 	case "speed":
-		if asString(entry["on"]) != "change" {
+		if cfgval.AsString(entry["on"]) != "change" {
 			return nil, "net speed requires on: change"
 		}
 		c.onChange = true
 	case "errors":
-		c.counters = stringArray(entry["counters"])
+		c.counters = cfgval.StringArray(entry["counters"])
 		if len(c.counters) == 0 {
 			c.counters = []string{"rx_errors", "tx_errors"}
 		}
@@ -532,11 +533,11 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		if !ok {
 			return nil, "net errors requires a delta {op, value}"
 		}
-		op := asString(delta["op"])
+		op := cfgval.AsString(delta["op"])
 		if !validDiskOp(op) {
 			return nil, "net errors delta has an invalid op"
 		}
-		v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
+		v, err := strconv.ParseFloat(cfgval.String(delta["value"]), 64)
 		if err != nil {
 			return nil, "net errors delta value must be numeric"
 		}
@@ -553,7 +554,7 @@ func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if err != nil {
 		return nil, "load check: " + err.Error()
 	}
-	return loadCheck{base: b, preds: preds, perCPU: asBool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
+	return loadCheck{base: b, preds: preds, perCPU: cfgval.Bool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
 }
 
 // buildFdsCheck builds an open file-descriptors check.
@@ -597,11 +598,11 @@ func buildOomCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	// delta is optional; the default fires on any OOM kill (> 0).
 	op, value := ">", 0.0
 	if d, ok := entry["delta"].(map[string]any); ok {
-		op = asString(d["op"])
+		op = cfgval.AsString(d["op"])
 		if !validDiskOp(op) {
 			return nil, "oom delta has an invalid op"
 		}
-		v, err := strconv.ParseFloat(scalarString(d["value"]), 64)
+		v, err := strconv.ParseFloat(cfgval.String(d["value"]), 64)
 		if err != nil {
 			return nil, "oom delta value must be numeric"
 		}
@@ -612,8 +613,8 @@ func buildOomCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildCertCheck builds a TLS/PEM certificate check (host or path).
 func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	host := asString(entry["host"])
-	path := asString(entry["path"])
+	host := cfgval.AsString(entry["host"])
+	path := cfgval.AsString(entry["path"])
 	switch {
 	case host == "" && path == "":
 		return nil, "cert check requires a host or a path"
@@ -621,15 +622,15 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, "cert check: host and path are mutually exclusive"
 	}
 	port := "443"
-	if p, ok := intField(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry["port"]); ok {
 		port = strconv.Itoa(p)
 	}
-	serverName := asString(entry["server_name"])
+	serverName := cfgval.AsString(entry["server_name"])
 	if serverName == "" {
 		serverName = host
 	}
 	days := 0
-	if v, ok := intField(entry["expires_in_days"]); ok {
+	if v, ok := cfgval.Int(entry["expires_in_days"]); ok {
 		days = v
 	}
 	verify := true
@@ -643,9 +644,9 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		serverName:     serverName,
 		path:           path,
 		expiresInDays:  days,
-		onAlgoChange:   asBool(entry["on_algorithm_change"]),
-		onIssuerChange: asBool(entry["on_issuer_change"]),
-		onChange:       asBool(entry["on_change"]),
+		onAlgoChange:   cfgval.Bool(entry["on_algorithm_change"]),
+		onIssuerChange: cfgval.Bool(entry["on_issuer_change"]),
+		onChange:       cfgval.Bool(entry["on_change"]),
 		verify:         verify,
 		sampler:        deps.CertSampler,
 	}, ""
@@ -653,16 +654,16 @@ func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildSqliteCheck builds a SQLite integrity check.
 func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "sqlite check requires a path"
 	}
-	return sqliteCheck{base: b, path: path, quick: asBool(entry["quick"])}, ""
+	return sqliteCheck{base: b, path: path, quick: cfgval.Bool(entry["quick"])}, ""
 }
 
 // buildSwapCheck builds a swap usage or io check.
 func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	metric := asString(entry["metric"])
+	metric := cfgval.AsString(entry["metric"])
 	c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
 	switch metric {
 	case "usage":
@@ -676,11 +677,11 @@ func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		if !ok {
 			return nil, "swap io requires a delta {op, value}"
 		}
-		op := asString(delta["op"])
+		op := cfgval.AsString(delta["op"])
 		if !validDiskOp(op) {
 			return nil, "swap io delta has an invalid op"
 		}
-		v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
+		v, err := strconv.ParseFloat(cfgval.String(delta["value"]), 64)
 		if err != nil {
 			return nil, "swap io delta value must be numeric"
 		}
@@ -693,18 +694,18 @@ func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildICMPCheck builds an ICMP ping state/latency check.
 func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	host := asString(entry["host"])
+	host := cfgval.AsString(entry["host"])
 	if host == "" {
 		return nil, "icmp check requires a host"
 	}
 	count := 3
-	if v, ok := intField(entry["count"]); ok {
+	if v, ok := cfgval.Int(entry["count"]); ok {
 		if v <= 0 {
 			return nil, "icmp count must be a positive integer"
 		}
 		count = v
 	}
-	metric := asString(entry["metric"])
+	metric := cfgval.AsString(entry["metric"])
 	allIf, iwarn := parseInterfaceMatch(entry)
 	if iwarn != "" {
 		return nil, "icmp check: " + iwarn
@@ -712,29 +713,29 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 	switch metric {
 	case "state":
-		if exp := asString(entry["expect"]); exp != "" {
+		if exp := cfgval.AsString(entry["expect"]); exp != "" {
 			if exp != "up" && exp != "down" {
 				return nil, "icmp state expect must be up or down"
 			}
 			c.expect = exp
-		} else if asString(entry["on"]) == "change" {
+		} else if cfgval.AsString(entry["on"]) == "change" {
 			c.onChange = true
 		} else {
 			return nil, "icmp state requires expect: up|down or on: change"
 		}
 	case "latency":
 		if th, ok := entry["threshold"].(map[string]any); ok {
-			op := asString(th["op"])
+			op := cfgval.AsString(th["op"])
 			if !validDiskOp(op) {
 				return nil, "icmp latency threshold has an invalid op"
 			}
-			v, err := strconv.ParseFloat(scalarString(th["value"]), 64)
+			v, err := strconv.ParseFloat(cfgval.String(th["value"]), 64)
 			if err != nil {
 				return nil, "icmp latency threshold value must be numeric"
 			}
 			c.hasThreshold, c.op, c.value = true, op, v
 		} else if ch, ok := entry["change"].(map[string]any); ok {
-			d, err := strconv.ParseFloat(scalarString(ch["delta"]), 64)
+			d, err := strconv.ParseFloat(cfgval.String(ch["delta"]), 64)
 			if err != nil {
 				return nil, "icmp latency change delta must be numeric"
 			}
@@ -750,15 +751,15 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildSizeCheck builds a path-growth check over a time window.
 func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := asString(entry["path"])
+	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "size check requires a path"
 	}
-	growBy, err := parseSize(scalarString(entry["grow_by"]))
+	growBy, err := parseSize(cfgval.String(entry["grow_by"]))
 	if err != nil || growBy <= 0 {
 		return nil, "size check requires a positive grow_by (e.g. 1GB)"
 	}
-	window := durationOr(entry["within"], 0)
+	window := cfgval.DurationOr(entry["within"], 0)
 	if window <= 0 {
 		return nil, "size check requires a positive within (e.g. 1h)"
 	}
@@ -769,7 +770,7 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 // proxy, "http://[user:pass@]squid:3128"). It returns the parsed URL, or a
 // warning when the value is malformed. A nil URL with no warning means no proxy.
 func parseProxyURL(entry map[string]any) (*url.URL, string) {
-	s := asString(entry["proxy"])
+	s := cfgval.AsString(entry["proxy"])
 	if s == "" {
 		return nil, ""
 	}
@@ -817,18 +818,18 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 		verify = v
 	}
 	days := 0
-	if v, ok := intField(entry["cert_expires_in_days"]); ok {
+	if v, ok := cfgval.Int(entry["cert_expires_in_days"]); ok {
 		days = v
 	}
 	hc.certHost = u.Hostname()
 	hc.certOpts = certOptions{
 		expiresInDays:  days,
 		verify:         verify,
-		onAlgoChange:   asBool(entry["cert_on_algorithm_change"]),
-		onIssuerChange: asBool(entry["cert_on_issuer_change"]),
-		onChange:       asBool(entry["cert_on_change"]),
+		onAlgoChange:   cfgval.Bool(entry["cert_on_algorithm_change"]),
+		onIssuerChange: cfgval.Bool(entry["cert_on_issuer_change"]),
+		onChange:       cfgval.Bool(entry["cert_on_change"]),
 	}
-	if asBool(entry["http3"]) {
+	if cfgval.Bool(entry["http3"]) {
 		// Read the leaf over QUIC too; http3 populates resp.TLS so the same
 		// certificate logic applies. TLS 1.3 is enforced by QUIC.
 		hc.certClient = &http.Client{Transport: &http3.Transport{
@@ -860,9 +861,9 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	b := base{
 		name:    name,
 		service: deps.Service,
-		timeout: durationOr(entry["timeout"], deps.DefaultTimeout),
+		timeout: cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
 	}
-	check, warn := buildCheck(asString(entry["type"]), b, entry, runner, client, deps)
+	check, warn := buildCheck(cfgval.AsString(entry["type"]), b, entry, runner, client, deps)
 	if warn != "" {
 		return nil, errors.New(warn)
 	}
@@ -896,40 +897,6 @@ func disabled(entry map[string]any) bool {
 	return ok && !b
 }
 
-func asString(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-// scalarString renders a YAML scalar as a string. A metric `value` is logically
-// a string (section 14) but a bare number like `0` decodes as an int, so it must
-// be stringified before parsing.
-func scalarString(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	case uint64:
-		return strconv.FormatUint(t, 10)
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case bool:
-		return strconv.FormatBool(t)
-	case nil:
-		return ""
-	default:
-		return fmt.Sprintf("%v", t)
-	}
-}
-
-func asBool(v any) bool {
-	b, _ := v.(bool)
-	return b
-}
-
 // parseJSONAssertions reads the expect_json mapping into ordered assertions: a
 // scalar value is an equality check; a {op, value} mapping is an operator check.
 func parseJSONAssertions(v any) []jsonAssertion {
@@ -941,41 +908,13 @@ func parseJSONAssertions(v any) []jsonAssertion {
 	for _, path := range slices.Sorted(maps.Keys(m)) {
 		raw := m[path]
 		if cond, ok := raw.(map[string]any); ok {
-			op := asString(cond["op"])
+			op := cfgval.AsString(cond["op"])
 			if op == "" {
 				op = "=="
 			}
-			out = append(out, jsonAssertion{path: path, op: op, value: scalarString(cond["value"])})
+			out = append(out, jsonAssertion{path: path, op: op, value: cfgval.String(cond["value"])})
 		} else {
-			out = append(out, jsonAssertion{path: path, op: "==", value: scalarString(raw)})
-		}
-	}
-	return out
-}
-
-// stringMap converts a YAML mapping to map[string]string, stringifying scalar
-// values (so header/JSON-assertion values may be written as numbers or booleans).
-func stringMap(v any) map[string]string {
-	m, ok := v.(map[string]any)
-	if !ok || len(m) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(m))
-	for k, val := range m {
-		out[k] = scalarString(val)
-	}
-	return out
-}
-
-func stringArray(v any) []string {
-	list, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(list))
-	for _, e := range list {
-		if s := asString(e); s != "" {
-			out = append(out, s)
+			out = append(out, jsonAssertion{path: path, op: "==", value: cfgval.String(raw)})
 		}
 	}
 	return out
@@ -989,11 +928,11 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 	}
 	// Operator form: {op, value} (e.g. status < 500).
 	if cond, ok := v.(map[string]any); ok {
-		op := asString(cond["op"])
+		op := cfgval.AsString(cond["op"])
 		if !validCompareOp(op) {
 			return statusMatcher{}, fmt.Errorf("expect_status op must be one of ==, !=, >, >=, <, <=, =~")
 		}
-		return statusMatcher{op: op, value: scalarString(cond["value"])}, nil
+		return statusMatcher{op: op, value: cfgval.String(cond["value"])}, nil
 	}
 	var m statusMatcher
 	var items []any
@@ -1003,11 +942,11 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 		items = []any{v}
 	}
 	for _, item := range items {
-		if n, ok := intField(item); ok {
+		if n, ok := cfgval.Int(item); ok {
 			m.codes = append(m.codes, n)
 			continue
 		}
-		s := strings.TrimSpace(asString(item))
+		s := strings.TrimSpace(cfgval.AsString(item))
 		if len(s) == 3 && (s[1] == 'x' || s[1] == 'X') && (s[2] == 'x' || s[2] == 'X') && s[0] >= '1' && s[0] <= '5' {
 			m.classes = append(m.classes, int(s[0]-'0'))
 			continue
@@ -1015,36 +954,4 @@ func parseStatusMatcher(v any) (statusMatcher, error) {
 		return statusMatcher{}, fmt.Errorf("invalid expect_status %q", s)
 	}
 	return m, nil
-}
-
-// intField parses a field that may be a YAML int, float or string (a resolved
-// FlexInt, section 10).
-func intField(v any) (int, bool) {
-	switch t := v.(type) {
-	case int:
-		return t, true
-	case int64:
-		return int(t), true
-	case uint64:
-		return int(t), true
-	case float64:
-		return int(t), true
-	case string:
-		n, err := strconv.Atoi(strings.TrimSpace(t))
-		return n, err == nil
-	default:
-		return 0, false
-	}
-}
-
-func durationOr(v any, fallback time.Duration) time.Duration {
-	s := asString(v)
-	if s == "" {
-		return fallback
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return fallback
-	}
-	return d
 }

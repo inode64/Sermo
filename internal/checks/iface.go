@@ -1,6 +1,9 @@
 package checks
 
-import "fmt"
+import (
+	"fmt"
+	"sermo/internal/cfgval"
+)
 
 // parseInterfaces reads the optional `interface` field: a single identifier
 // (name/IP/MAC) or a list of them. An empty/absent value means default routing.
@@ -14,7 +17,7 @@ func parseInterfaces(v any) []string {
 	case []any:
 		out := make([]string, 0, len(t))
 		for _, e := range t {
-			if s := asString(e); s != "" {
+			if s := cfgval.AsString(e); s != "" {
 				out = append(out, s)
 			}
 		}
@@ -27,7 +30,7 @@ func parseInterfaces(v any) []string {
 // parseInterfaceMatch reads `interface_match` (any|all, default any → false).
 // The bool reports whether ALL listed interfaces must succeed.
 func parseInterfaceMatch(entry map[string]any) (all bool, warn string) {
-	switch m := asString(entry["interface_match"]); m {
+	switch m := cfgval.AsString(entry["interface_match"]); m {
 	case "", "any":
 		return false, ""
 	case "all":

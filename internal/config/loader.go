@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/cfgval"
 	"sort"
 	"strings"
 
@@ -102,10 +103,10 @@ func loadGlobal(path string) (Global, error) {
 		g.Defaults = map[string]any{}
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
-		g.Profiles = stringList(paths["profiles"])
-		g.Enabled = stringList(paths["enabled"])
-		g.Runtime = scalarString(paths["runtime"])
-		g.State = scalarString(paths["state"])
+		g.Profiles = cfgval.StringList(paths["profiles"])
+		g.Enabled = cfgval.StringList(paths["enabled"])
+		g.Runtime = cfgval.String(paths["runtime"])
+		g.State = cfgval.String(paths["state"])
 	}
 	resolveConfigPaths(path, &g)
 	return g, nil
@@ -234,8 +235,8 @@ func loadDocument(path string) (*Document, error) {
 		body = map[string]any{}
 	}
 	return &Document{
-		Kind: scalarString(body["kind"]),
-		Name: scalarString(body["name"]),
+		Kind: cfgval.String(body["kind"]),
+		Name: cfgval.String(body["name"]),
 		Path: path,
 		Body: body,
 	}, nil
@@ -281,24 +282,6 @@ func DisplayName(body map[string]any, fallback string) string {
 		return s
 	}
 	return fallback
-}
-
-func stringList(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
 }
 
 func isYAML(name string) bool {
