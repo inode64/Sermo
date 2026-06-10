@@ -34,7 +34,7 @@ config_subst = sed -e 's|\.\./profiles|$(SERMO_DATADIR)/profiles|g' -e 's|/usr/s
 tmpfiles_subst = sed -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
-        install install-bin install-profiles install-config install-state install-tmpfiles install-systemd install-openrc \
+        install install-bin install-profiles install-config install-tmpfiles install-systemd install-openrc \
         uninstall
 
 all: build
@@ -82,9 +82,10 @@ clean:
 	rm -rf $(BIN)
 	rm -f coverage.out coverage.html
 
-# Full install: binaries, profiles, sample config, state dir, tmpfiles.d, and
-# both init systems.
-install: install-bin install-profiles install-config install-state install-tmpfiles install-systemd install-openrc
+# Full install: binaries, profiles, sample config, tmpfiles.d, and both init
+# systems. The persistent state directory is intentionally not created here;
+# tmpfiles.d creates it with the same policy as the runtime directory.
+install: install-bin install-profiles install-config install-tmpfiles install-systemd install-openrc
 
 install-bin: build
 	$(INSTALL) -Dm755 $(BIN)/sermoctl $(DESTDIR)$(bindir)/sermoctl
@@ -108,11 +109,6 @@ install-config:
 		$(config_subst) configs/sermo.yml > $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
 		chmod 644 $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
 	fi
-
-# Create the persistent state directory (the daemon creates sermo.db inside it on
-# first run). 0700 (owner-only, root) — matches the tmpfiles.d/openrc config.
-install-state:
-	$(INSTALL) -d -m 700 $(DESTDIR)$(SERMO_STATEDIR)
 
 # systemd-tmpfiles config that creates /run/sermo and the state dir at 0700.
 # Apply on a live system with: systemd-tmpfiles --create sermo.conf
