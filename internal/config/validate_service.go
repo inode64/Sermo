@@ -72,7 +72,7 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		}
 		switch typ := cfgval.String(entry["type"]); typ {
 		case "pidfile":
-			if cfgval.String(entry["path"]) == "" {
+			if len(cfgval.StringList(entry["path"])) == 0 {
 				add("%s.path is required for a pidfile selector", path)
 			}
 		case "command_match":

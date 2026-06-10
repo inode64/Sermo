@@ -116,6 +116,33 @@ func TestDiscoverBuildsProcessTree(t *testing.T) {
 	}
 }
 
+func TestDiscoverPidfileCandidates(t *testing.T) {
+	dir := t.TempDir()
+	good := filepath.Join(dir, "real.pid")
+	if err := os.WriteFile(good, []byte("100\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(dir, "absent.pid") // never created
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 110, Exe: "/opt/sermo-test/mysqld", ExeOK: true},
+	}}
+	d := Discoverer{Reader: reader}
+
+	// First candidate is absent; discovery falls through to the second, no warning.
+	procs, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Paths: []string{missing, good}}})
+	if len(warns) != 0 {
+		t.Fatalf("a working fallback candidate must not warn: %v", warns)
+	}
+	if got := pidsOf(procs); len(got) != 1 || got[0] != 100 {
+		t.Fatalf("pids = %v, want [100]", got)
+	}
+
+	// No candidate works -> exactly one (last) warning.
+	if _, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Paths: []string{missing, missing}}}); len(warns) != 1 {
+		t.Errorf("all-missing candidates should yield one warning, got %v", warns)
+	}
+}
+
 func TestDiscoverPidfile(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := filepath.Join(dir, "mysqld.pid")
@@ -127,7 +154,7 @@ func TestDiscoverPidfile(t *testing.T) {
 	}}
 	d := Discoverer{Reader: reader}
 
-	procs, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Path: pidfile}})
+	procs, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Paths: []string{pidfile}}})
 	if len(warns) != 0 {
 		t.Fatalf("warnings = %v", warns)
 	}
@@ -147,7 +174,7 @@ func TestDiscoverPidfileDeadPIDWarns(t *testing.T) {
 	}
 	d := Discoverer{Reader: fakeReader{ids: map[int]Identity{}}}
 
-	procs, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Path: pidfile}})
+	procs, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Paths: []string{pidfile}}})
 	if len(procs) != 0 {
 		t.Fatalf("dead pid should yield no process, got %v", pidsOf(procs))
 	}

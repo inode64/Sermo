@@ -39,11 +39,11 @@ const (
 
 // Selector is one entry of a service's `processes` section.
 type Selector struct {
-	Name string // the map key, used as the discovered process Role
-	Type string // pidfile | command_match
-	Path string // pidfile
-	Exe  string // command_match
-	User string // command_match
+	Name  string   // the map key, used as the discovered process Role
+	Type  string   // pidfile | command_match
+	Paths []string // pidfile: candidate paths, tried in order (first running pid wins)
+	Exe   string   // command_match
+	User  string   // command_match
 }
 
 // Identity is the raw per-process data read from /proc. ExeOK is false when the
