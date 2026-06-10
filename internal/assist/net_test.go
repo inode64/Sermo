@@ -78,7 +78,8 @@ func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
 func TestNetAssistantRequiresNotifier(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil
-	script := strings.Join([]string{"1", "1", "1"}, "\n") + "\n"
+	// Select default notify, but no global default is configured.
+	script := strings.Join([]string{"1", "1", "1", "2"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (netAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a net watch with no notifier must error (no hook/expand offered)")
