@@ -448,6 +448,7 @@ watches can notify different targets.
 ```yaml
 notifiers:
   ops-email:                 # the name referenced by then.notify
+    enabled: true             # optional; defaults to true
     type: email
     dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
@@ -478,6 +479,11 @@ The set of notifier **types is pluggable** — new transports (`teams`, …) are
 added without touching watches or rules (each registers a builder in
 `internal/notify`). A new transport looks the same: a `type` plus its own
 fields, addressed by name.
+
+Set **`enabled: false`** on any notifier to keep it defined but skip it when a
+watch or rule generates a notification. This is useful for temporarily muting a
+target or staging credentials. Disabled notifiers may still be referenced by
+`notify` selections; they simply do not receive delivery attempts.
 
 `none` is a **reserved keyword** and cannot be used as a notifier name.
 
