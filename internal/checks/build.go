@@ -164,6 +164,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildRaidCheck(b, entry)
 	case "edac":
 		return buildEdacCheck(b, entry)
+	case "config":
+		return buildConfigCheck(b, entry, runner)
 	case "fds":
 		return buildFdsCheck(b, entry, deps)
 	case "conntrack":
@@ -376,7 +378,11 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check expect_stderr " + warn
 	}
-	return commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr}, ""
+	c := commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr}
+	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
+		c.state = &cmdState{}
+	}
+	return c, ""
 }
 
 // buildServiceCheck builds a check on a service-manager unit's expected state.
@@ -626,6 +632,20 @@ func buildEdacCheck(b base, entry map[string]any) (Check, string) {
 		return nil, "edac check: " + err.Error()
 	}
 	return edacCheck{base: b, preds: preds}, ""
+}
+
+// buildConfigCheck builds a configuration validity/change check.
+func buildConfigCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	argv := cfgval.StringArray(entry["command"])
+	paths := cfgval.StringList(entry["path"])
+	if len(argv) == 0 && len(paths) == 0 {
+		return nil, "config check requires a command and/or path"
+	}
+	c := configCheck{base: b, runner: runner, argv: argv, paths: paths}
+	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
+		c.state = &cmdState{}
+	}
+	return c, ""
 }
 
 // buildFdsCheck builds an open file-descriptors check.

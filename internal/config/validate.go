@@ -260,6 +260,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateServiceField(tree, add)
 	validateCommands(tree, add)
 	validateRuleWindow(tree, add)
+	validateServiceMonitors(tree, notifiers, add)
 	validateRules(tree, notifiers, add)
 
 	return issues

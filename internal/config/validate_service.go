@@ -11,6 +11,31 @@ import (
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 
+// validateServiceMonitors validates the per-service `version:`/`config:` monitor
+// blocks: their `on_change.notify` selection must reference defined notifiers (or
+// the `none` sentinel). The version/config commands themselves are reused from
+// the profile (commands.version / preflight.config) and validated there.
+func validateServiceMonitors(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
+	for _, key := range []string{"version", "config"} {
+		block, ok := tree[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		oc, present := block["on_change"]
+		if !present {
+			continue
+		}
+		ocMap, ok := oc.(map[string]any)
+		if !ok {
+			add("%s.on_change must be a mapping", key)
+			continue
+		}
+		if _, present := ocMap["notify"]; present {
+			validateNotifySelection(key+".on_change.notify", cfgval.StringList(ocMap["notify"]), notifiers, add)
+		}
+	}
+}
+
 func validateStopPolicy(tree map[string]any, add addFunc) {
 	sp, ok := tree["stop_policy"].(map[string]any)
 	if !ok {

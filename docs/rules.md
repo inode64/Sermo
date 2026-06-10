@@ -10,7 +10,8 @@ which reuse the same schema). MVP types:
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
 | `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
-| `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`, array form only |
+| `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; `on_change` alerts when its output changes (e.g. a version), array form only |
+| `config`      | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
 | `service`     | the backend status equals `expect` (active/inactive/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `binary`      | a path exists and is executable                                    |
@@ -110,6 +111,53 @@ checks:
 
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available on
 a watch hook (`then.hook`) to validate the hook command's result.
+
+### Service health conditions (version / state / config)
+
+A `kind: service` can enable three standard health monitors with two short
+declarative blocks — **`version:`** and **`config:`** — that **reuse the version
+and config commands the profile already defines** (`commands.version` and
+`preflight.config`). Sermo synthesizes a per-service monitor (a watch, built once
+so change detection persists) from each:
+
+```yaml
+# profile (e.g. apache.yml) — already defines these, unchanged:
+commands:
+  version: { command: [apachectl, -v] }
+preflight:
+  config: { type: command, command: [apachectl, configtest] }
+
+# service (apps-enabled/apache.yml) — opt into the monitors:
+kind: service
+uses: apache
+version:
+  on_change: { notify: [ops-email] }      # alert when the version changes
+config:
+  on_change: { notify: [ops-email] }      # alert when the config is invalid…
+  path: [/etc/apache2/apache2.conf]       # …or (optional) when this file changes
+```
+
+- **Version changed** — `version.on_change` runs the profile's version command and
+  alerts (notifying the listed notifiers) when its output changes — an unexpected
+  upgrade/downgrade. Needs `commands.version` (or `preflight.version`) in the
+  profile.
+- **Config invalid / changed** — `config.on_change` runs the profile's
+  `preflight.config` test and alerts when it **fails** (invalid config); with a
+  `path` it also alerts when a config file changes. A **custom `preflight:`** on
+  the service replaces the profile's `preflight.config`, and the monitor then uses
+  that command.
+- **State not errored** — the existing `service` check covers this: it alerts when
+  the unit is not in the expected state (`failed`/`unknown`) or the backend cannot
+  be queried.
+  ```yaml
+  checks:
+    state: { type: service, expect: active }
+  ```
+
+`on_change.notify` follows the usual notify precedence (omit to inherit the global
+`notify` default, or `none` to suppress). The underlying `command` (`on_change`)
+and `config` check types can also be used directly in `watches:` when you want a
+hook or a non-profile command.
 
 ### Egress interface (`interface`)
 
