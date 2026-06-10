@@ -56,9 +56,10 @@ resumes it. While paused, the daemon runs no checks, rules or remediation for th
 service — useful during maintenance so a deliberate stop is not "remediated" by an
 automatic restart. The pause is a marker file under `<paths.runtime>/paused`, so
 it persists across daemon restarts until cleared. `sermoctl status SERVICE` shows
-`monitoring=paused` (and `"paused": true` in `--json`). Pausing only affects
-Sermo's monitoring; it does not stop the service itself, and manual `sermoctl`
-actions still work.
+the single operator state `running` or `stopped` while monitoring is paused
+(`"state": "running"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
+affects Sermo's monitoring; it does not stop the service itself, and manual
+`sermoctl` actions still work.
 
 ## System metrics
 

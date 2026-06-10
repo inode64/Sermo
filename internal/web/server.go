@@ -37,6 +37,7 @@ type Service struct {
 	DisplayName      string   `json:"display_name"`
 	Backend          string   `json:"backend"`
 	Unit             string   `json:"unit"`
+	State            string   `json:"state"`
 	Status           string   `json:"status"`
 	Interval         string   `json:"interval,omitempty"` // resolved per-service cycle cadence (own interval or engine default)
 	Enabled          bool     `json:"enabled"`            // false when service document has `enabled: false`
@@ -60,6 +61,7 @@ type Watch struct {
 	CheckType        string           `json:"check_type,omitempty"`
 	Summary          string           `json:"summary,omitempty"`
 	Interval         string           `json:"interval,omitempty"`
+	State            string           `json:"state"`
 	Enabled          bool             `json:"enabled"`
 	Monitor          string           `json:"monitor,omitempty"` // enabled | disabled | previous
 	Monitored        bool             `json:"monitored"`

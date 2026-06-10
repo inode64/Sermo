@@ -269,58 +269,79 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		return exitSuccess
 	}
 
-	fmt.Fprintf(a.Stdout, "%s %s backend=%s service=%s%s\n",
-		status.Service, status.Status, status.Backend, status.Unit, formatMonitoringClause(mon))
+	state := app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "")
+	fmt.Fprintf(a.Stdout, "%s state=%s backend=%s service=%s%s\n",
+		status.Service, state, status.Backend, status.Unit, formatStateMetadata(mon))
 	return exitSuccess
 }
 
 // monitorView is the persisted monitoring metadata shown by status and monitor.
 type monitorView struct {
-	Paused    bool
-	Source    string
-	ChangedAt string // RFC3339 when set
+	Configured bool
+	Enabled    bool
+	Paused     bool
+	Source     string
+	ChangedAt  string // RFC3339 when set
+}
+
+func (m monitorView) Monitored() bool {
+	return m.Configured && m.Enabled && !m.Paused
 }
 
 // serviceMonitorState reads a service's monitoring row from the state store. It is
 // best-effort: status works without config, so a missing config or store yields
 // an empty view (not paused).
 func (a App) serviceMonitorState(opts options) monitorView {
+	view := monitorView{Enabled: true}
 	globalPath := opts.config
 	if globalPath == "" {
 		globalPath = config.DefaultGlobalPath
 	}
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
-		return monitorView{}
+		return view
+	}
+	if _, ok := cfg.Services[opts.service()]; ok {
+		view.Configured = true
+		if resolved, errs := cfg.Resolve(opts.service()); len(errs) == 0 {
+			if enabled, ok := resolved.Tree["enabled"].(bool); ok && !enabled {
+				view.Enabled = false
+				view.Paused = true
+			}
+			if mode, _ := resolved.Tree["monitor"].(string); mode == config.MonitorDisabled {
+				view.Paused = true
+			}
+		}
 	}
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
-		return monitorView{}
+		return view
 	}
 	defer store.Close()
 	rec, found, err := store.MonitorState(opts.service())
 	if err != nil || !found {
-		return monitorView{}
+		return view
 	}
-	view := monitorView{Paused: !rec.Active, Source: rec.Source}
+	view.Paused = !rec.Active
+	view.Source = rec.Source
 	if !rec.UpdatedAt.IsZero() {
 		view.ChangedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
 	}
 	return view
 }
 
-func formatMonitoringClause(mon monitorView) string {
-	if !mon.Paused {
-		return ""
-	}
-	clause := " monitoring=paused"
+func formatStateMetadata(mon monitorView) string {
+	var parts []string
 	if mon.Source != "" {
-		clause += " source=" + mon.Source
+		parts = append(parts, "source="+mon.Source)
 	}
 	if mon.ChangedAt != "" {
-		clause += " changed=" + mon.ChangedAt
+		parts = append(parts, "changed="+mon.ChangedAt)
 	}
-	return clause
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, " ")
 }
 
 func (a App) runIsActive(ctx context.Context, opts options) int {
@@ -940,6 +961,7 @@ func (a App) reportError(opts options, msg string) {
 
 type statusJSON struct {
 	Service          string `json:"service"`
+	State            string `json:"state"`
 	Backend          string `json:"backend"`
 	Status           string `json:"status"`
 	Unit             string `json:"unit"`
@@ -962,6 +984,7 @@ func defaultTimeout(command string) time.Duration {
 func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 	out := statusJSON{
 		Service: status.Service,
+		State:   app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), ""),
 		Backend: string(status.Backend),
 		Status:  string(status.Status),
 		Unit:    status.Unit,
