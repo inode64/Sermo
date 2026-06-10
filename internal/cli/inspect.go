@@ -91,7 +91,7 @@ func (a App) showResolvedService(opts options, cfg *config.Config, name string) 
 	return a.renderTree(opts, resolved)
 }
 
-// cloneService writes a new enabled service that clones SOURCE.
+// cloneService writes a new included service that clones SOURCE.
 func (a App) cloneService(opts options, cfg *config.Config, source, target string) int {
 	if _, ok := cfg.Services[source]; !ok {
 		a.reportError(opts, fmt.Sprintf("unknown source service %q", source))
@@ -101,12 +101,12 @@ func (a App) cloneService(opts options, cfg *config.Config, source, target strin
 		a.reportError(opts, fmt.Sprintf("target service %q already exists", target))
 		return exitRuntimeError
 	}
-	if len(cfg.Global.Enabled) == 0 {
-		a.reportError(opts, "no enabled services directory configured (paths.enabled)")
+	if len(cfg.Global.Includes) == 0 {
+		a.reportError(opts, "no include directory configured (paths.includes)")
 		return exitRuntimeError
 	}
 
-	dir := cfg.Global.Enabled[0]
+	dir := cfg.Global.Includes[0]
 	path := filepath.Join(dir, target+".yml")
 	content := fmt.Sprintf("kind: service\nname: %s\nclone: %s\n", target, source)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: generated profile YAML is non-sensitive (0644)

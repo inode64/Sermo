@@ -27,9 +27,9 @@ paths:
   profiles:
     - /usr/share/sermo/profiles
   # Relative to this file's directory (configs/).
-  enabled:
+  includes:
     - apps-enabled
-    # Wizard-generated watches are added as separate enabled directories, e.g.
+    # Wizard-generated watches are added as separate include directories, e.g.
     # - volume
     # - net
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.

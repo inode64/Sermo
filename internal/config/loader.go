@@ -58,9 +58,9 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	if len(profileDirs) == 0 {
 		profileDirs = []string{"/usr/share/sermo/profiles", "/etc/sermo/apps-available"}
 	}
-	enabledDirs := global.Enabled
-	if len(enabledDirs) == 0 {
-		enabledDirs = []string{"/etc/sermo/apps-enabled"}
+	includeDirs := global.Includes
+	if len(includeDirs) == 0 {
+		includeDirs = []string{"/etc/sermo/apps-enabled"}
 	}
 
 	for _, dir := range profileDirs {
@@ -68,8 +68,8 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 			return nil, err
 		}
 	}
-	for _, dir := range enabledDirs {
-		if err := cfg.loadEnabledDir(dir); err != nil {
+	for _, dir := range includeDirs {
+		if err := cfg.loadIncludeDir(dir); err != nil {
 			return nil, err
 		}
 	}
@@ -104,7 +104,10 @@ func loadGlobal(path string) (Global, error) {
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
 		g.Profiles = cfgval.StringList(paths["profiles"])
-		g.Enabled = cfgval.StringList(paths["enabled"])
+		g.Includes = cfgval.StringList(paths["includes"])
+		if len(g.Includes) == 0 {
+			g.Includes = cfgval.StringList(paths["enabled"])
+		}
 		g.Runtime = cfgval.String(paths["runtime"])
 		g.State = cfgval.String(paths["state"])
 	}
@@ -129,14 +132,14 @@ func absProfileDirs(dirs []string) []string {
 	return out
 }
 
-// resolveConfigPaths makes profiles/enabled/runtime/state paths absolute. Relative
+// resolveConfigPaths makes profiles/includes/runtime/state paths absolute. Relative
 // entries are resolved against the global config file's directory so a tree like
-// configs/sermo.yml with `enabled: [apps-enabled]` loads configs/apps-enabled
+// configs/sermo.yml with `includes: [apps-enabled]` loads configs/apps-enabled
 // when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Profiles = resolvePathList(base, g.Profiles)
-	g.Enabled = resolvePathList(base, g.Enabled)
+	g.Includes = resolvePathList(base, g.Includes)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
 	}
@@ -172,7 +175,7 @@ func (c *Config) loadDir(dir string) error {
 	return c.loadCategoryDir(dir, "", false)
 }
 
-func (c *Config) loadEnabledDir(dir string) error {
+func (c *Config) loadIncludeDir(dir string) error {
 	return c.loadCategoryDir(dir, "", true)
 }
 
@@ -205,7 +208,7 @@ func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool
 			return err
 		}
 		if allowGlobalFragments {
-			handled, err := c.mergeEnabledGlobalFragment(doc)
+			handled, err := c.mergeIncludedGlobalFragment(doc)
 			if err != nil {
 				return err
 			}
@@ -228,7 +231,7 @@ func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool
 	return nil
 }
 
-func (c *Config) mergeEnabledGlobalFragment(doc *Document) (bool, error) {
+func (c *Config) mergeIncludedGlobalFragment(doc *Document) (bool, error) {
 	if doc.Kind != "" {
 		return false, nil
 	}

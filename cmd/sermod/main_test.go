@@ -25,7 +25,7 @@ func TestRunRejectsInvalidConfig(t *testing.T) {
   interval: notaduration
 paths:
   profiles: [%s]
-  enabled: [%s]
+  includes: [%s]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -63,7 +63,7 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 		t.Fatal("expected non-empty watches section in repo default config")
 	}
 	if len(cfg.Services) == 0 {
-		t.Fatalf("expected enabled services from %q, got none (check paths.profiles/enabled are relative to the config file)", global)
+		t.Fatalf("expected included services from %q, got none (check paths.profiles/includes are relative to the config file)", global)
 	}
 
 	collector := metrics.New(metrics.OSReader{})
