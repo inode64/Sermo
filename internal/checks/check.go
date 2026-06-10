@@ -14,6 +14,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"sermo/internal/conn"
 )
 
 // Result is the observable outcome of one check (section 12).
@@ -32,6 +34,18 @@ type Result struct {
 type Check interface {
 	Name() string
 	Run(ctx context.Context) Result
+}
+
+// IsHealthType reports whether OK==true means the check is healthy. Host watches
+// invert these checks and fire on failure; condition-style checks fire on OK.
+func IsHealthType(typ string) bool {
+	switch typ {
+	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws":
+		return true
+	default:
+		_, ok := conn.Lookup(typ)
+		return ok
+	}
 }
 
 // Built pairs a check with whether its failure is optional (a warning) or

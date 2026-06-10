@@ -135,12 +135,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 // watch over it fires its hook on failure rather than on OK (the alert condition
 // for disk/load/metric/count and the other threshold checks).
 func isHealthCheckType(typ string) bool {
-	switch typ {
-	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "libraries", "config":
-		return true
-	default:
-		return false
-	}
+	return checks.IsHealthType(typ)
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp) into one
