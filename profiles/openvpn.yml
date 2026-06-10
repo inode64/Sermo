@@ -3,7 +3,11 @@ name: openvpn
 display_name: "OpenVPN"
 service: openvpn
 variables:
+  port: 1194
   binary: "/usr/sbin/openvpn"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  port: { type: openvpn, port: "${port}" }

@@ -3,8 +3,12 @@ name: ssh
 display_name: "OpenSSH"
 service: ssh
 variables:
+  port: 22
   binary: "/usr/bin/ssh"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

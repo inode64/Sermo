@@ -4,8 +4,12 @@ display_name: "Bacula Director"
 description: "Backup director Server"
 service: bacula-dir
 variables:
+  port: 9101
   binary: "/usr/sbin/bacula-dir"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

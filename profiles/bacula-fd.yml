@@ -4,8 +4,12 @@ display_name: "Bacula File Daemon"
 description: "Backup file Server"
 service: bacula-fd
 variables:
+  port: 9102
   binary: "/usr/sbin/bacula-fd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+
+checks:
+  port: { type: tcp, port: "${port}" }
