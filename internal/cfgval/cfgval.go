@@ -7,6 +7,7 @@ package cfgval
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +115,40 @@ func Int(v any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// ByteSize parses a scalar byte size. It accepts raw bytes ("1048576") or a
+// K/M/G/T suffix using binary units; a trailing B or iB is also accepted
+// ("5G", "5GB", "5GiB"). Negative and empty values are rejected.
+func ByteSize(v any) (uint64, bool) {
+	s := strings.TrimSpace(String(v))
+	if s == "" {
+		return 0, false
+	}
+	upper := strings.ToUpper(s)
+	unit := float64(1)
+	for _, suffix := range []struct {
+		text string
+		mult float64
+	}{
+		{"TIB", 1 << 40}, {"TB", 1 << 40}, {"T", 1 << 40},
+		{"GIB", 1 << 30}, {"GB", 1 << 30}, {"G", 1 << 30},
+		{"MIB", 1 << 20}, {"MB", 1 << 20}, {"M", 1 << 20},
+		{"KIB", 1 << 10}, {"KB", 1 << 10}, {"K", 1 << 10},
+		{"B", 1},
+	} {
+		if strings.HasSuffix(upper, suffix.text) {
+			unit = suffix.mult
+			s = strings.TrimSpace(s[:len(s)-len(suffix.text)])
+			break
+		}
+	}
+	n, err := strconv.ParseFloat(s, 64)
+	bytes := n * unit
+	if err != nil || n < 0 || math.IsNaN(bytes) || math.IsInf(bytes, 0) || bytes > float64(^uint64(0)) {
+		return 0, false
+	}
+	return uint64(bytes), true
 }
 
 // Bool returns v when it is a bool, or false otherwise.

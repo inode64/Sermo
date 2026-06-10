@@ -520,7 +520,7 @@ func watchConditions(check map[string]any) []web.WatchCondition {
 		return nil
 	}
 	var out []web.WatchCondition
-	for _, field := range []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
+	for _, field := range []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
 		m, ok := check[field].(map[string]any)
 		if !ok {
 			continue
@@ -564,7 +564,8 @@ func diskWatchInfo(w *webWatch, b *WebBackend) *web.DiskWatchInfo {
 	} else {
 		info.TotalBytes = st.TotalBytes
 		info.FreeBytes = st.FreeBytes
-		if st.TotalBytes >= st.FreeBytes {
+		info.UsedBytes = st.UsedBytes
+		if info.UsedBytes == 0 && st.TotalBytes >= st.FreeBytes {
 			info.UsedBytes = st.TotalBytes - st.FreeBytes
 		}
 		info.UsedPct = st.UsedPct

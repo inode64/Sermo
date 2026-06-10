@@ -153,6 +153,34 @@ func TestInt(t *testing.T) {
 	}
 }
 
+func TestByteSize(t *testing.T) {
+	cases := []struct {
+		in   any
+		want uint64
+		ok   bool
+	}{
+		{"1024", 1024, true},
+		{1024, 1024, true},
+		{"1K", 1 << 10, true},
+		{"1KB", 1 << 10, true},
+		{"1KiB", 1 << 10, true},
+		{"1.5G", 1536 << 20, true},
+		{"2T", 2 << 40, true},
+		{"0", 0, true},
+		{"", 0, false},
+		{"-1G", 0, false},
+		{"NaN", 0, false},
+		{"10P", 0, false},
+		{true, 0, false},
+	}
+	for _, c := range cases {
+		got, ok := ByteSize(c.in)
+		if got != c.want || ok != c.ok {
+			t.Errorf("ByteSize(%#v) = (%d, %v), want (%d, %v)", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
 func TestBool(t *testing.T) {
 	if !Bool(true) {
 		t.Error("Bool(true) = false")

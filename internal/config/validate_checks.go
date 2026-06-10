@@ -25,11 +25,33 @@ func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["path"]) == "" {
 		add("%s.path is required for a disk check", prefix)
 	}
-	preds := validatePresentThresholds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
+	preds := validateDiskPredicates(prefix, fields, add)
 	hasMount := validateMountConditions(prefix, fields, add)
 	if preds == 0 && !hasMount {
-		add("%s requires a space/inode predicate (used_pct/free_pct/inodes_*) and/or a mount condition (mounted/fstype/options/device)", prefix)
+		add("%s requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted/fstype/options/device)", prefix)
 	}
+}
+
+func validateDiskPredicates(prefix string, fieldsMap map[string]any, add addFunc) int {
+	preds := 0
+	for _, field := range []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
+		raw, present := fieldsMap[field]
+		if !present {
+			continue
+		}
+		preds++
+		m, ok := raw.(map[string]any)
+		if !ok {
+			add("%s.%s must be a mapping {op, value}", prefix, field)
+			continue
+		}
+		if field == "used_bytes" || field == "free_bytes" {
+			validateOpByteSize(prefix+"."+field, m, add)
+			continue
+		}
+		validateOpNumeric(prefix+"."+field, m, add)
+	}
+	return preds
 }
 
 // validateMountConditions validates the optional mount fields of a disk check and
@@ -89,6 +111,15 @@ func validateOpNumeric(label string, m map[string]any, add addFunc) {
 	}
 	if !isNumeric(cfgval.String(m["value"])) {
 		add("%s value %q must be numeric", label, cfgval.String(m["value"]))
+	}
+}
+
+func validateOpByteSize(label string, m map[string]any, add addFunc) {
+	if !isValidDiskOp(cfgval.String(m["op"])) {
+		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
+	}
+	if _, ok := cfgval.ByteSize(m["value"]); !ok {
+		add("%s value %q must be a byte size (e.g. 10G, 500M)", label, cfgval.String(m["value"]))
 	}
 }
 

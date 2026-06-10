@@ -94,6 +94,38 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	}
 }
 
+func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
+	// Select volume 1; free-space size condition 10G; for 2; notifier ops-email.
+	script := strings.Join([]string{"1", "3", "10G", "2", "2", "n"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := volumeAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	check := entry["check"].(map[string]any)
+	free := check["free_bytes"].(map[string]any)
+	if free["op"] != "<" || free["value"] != "10G" {
+		t.Fatalf("free_bytes = %v", free)
+	}
+}
+
+func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
+	// Select volume 1; used-space size condition 100G; for 2; notifier ops-email.
+	script := strings.Join([]string{"1", "4", "100G", "2", "2", "n"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := volumeAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	check := entry["check"].(map[string]any)
+	used := check["used_bytes"].(map[string]any)
+	if used["op"] != ">=" || used["value"] != "100G" {
+		t.Fatalf("used_bytes = %v", used)
+	}
+}
+
 func TestVolumeAssistantNoActionErrors(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil // no notifiers configured

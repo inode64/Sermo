@@ -93,6 +93,7 @@ watches:
       type: disk
       path: /
       used_pct: { op: ">=", value: 90 }
+      free_bytes: { op: "<", value: 10G }       # absolute threshold, supports K/M/G/T
       inodes_used_pct: { op: ">=", value: 90 }   # also catch inode exhaustion
     for: { cycles: 3 }
     then:
@@ -169,7 +170,7 @@ watches:
       type: disk
       path: /data
       mounted: true                 # also: fstype: ext4, options: [rw], device: /dev/sdb1
-      used_pct: { op: ">=", value: 90 }
+      free_bytes: { op: "<", value: 20G }
     then:
       notify: [ops-email]
   # Watch for accumulating zombie processes (a parent not reaping its children).
