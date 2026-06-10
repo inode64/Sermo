@@ -94,6 +94,7 @@ type webWatch struct {
 	notifiers     []string
 	notifierCount int
 	check         map[string]any
+	expand        *ExpandSpec
 }
 
 // webNotifier is a configured notification target (used by watches).
@@ -107,28 +108,30 @@ type webNotifier struct {
 // the shared snapshots, and start/stop/restart through the same safe operation
 // engine the workers use.
 type WebBackend struct {
-	order          []string
-	entries        map[string]*webEntry
-	watchOrder     []string
-	watches        map[string]*webWatch
-	notifierOrder  []string
-	notifiers      map[string]*webNotifier
-	store          MonitorStore
-	snapshots      *Snapshots
-	sla            SLAReader
-	events         *EventLog
-	remediation    *RemediationRegistry
-	ruleWindows    *RuleWindowRegistry
-	cfg            *config.Config
-	diagStore      diag.Store
-	host           diag.Host
-	measure        MeasurementReader
-	collector      *metrics.Collector
-	diskUsage      checks.DiskUsageFunc
-	mountSampler   checks.MountSamplerFunc
-	emit           func(Event)
-	opGate         *OpGate
-	defaultTimeout time.Duration
+	order            []string
+	entries          map[string]*webEntry
+	watchOrder       []string
+	watches          map[string]*webWatch
+	notifierOrder    []string
+	notifiers        map[string]*webNotifier
+	store            MonitorStore
+	snapshots        *Snapshots
+	sla              SLAReader
+	events           *EventLog
+	remediation      *RemediationRegistry
+	ruleWindows      *RuleWindowRegistry
+	cfg              *config.Config
+	diagStore        diag.Store
+	host             diag.Host
+	measure          MeasurementReader
+	collector        *metrics.Collector
+	diskUsage        checks.DiskUsageFunc
+	mountSampler     checks.MountSamplerFunc
+	expander         VolumeExpander
+	emit             func(Event)
+	opGate           *OpGate
+	defaultTimeout   time.Duration
+	operationTimeout time.Duration
 }
 
 // NewWebBackend resolves services for the web UI. All services present in the
@@ -146,7 +149,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		cfg: cfg, host: diag.OSHost{},
 		collector: deps.Collector,
 		diskUsage: deps.DiskUsage, mountSampler: deps.MountSampler,
-		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
+		expander: configuredVolumeExpander(deps),
+		emit:     deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout, operationTimeout: deps.OperationTimeout,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
@@ -220,6 +224,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			hasHook := false
 			var hookCommand []string
 			var notifierNames []string
+			var expand *ExpandSpec
 			if then, ok := entry["then"].(map[string]any); ok {
 				if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
 					if cmd := h["command"]; cmd != nil {
@@ -228,6 +233,11 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 					}
 				}
 				notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), deps.GlobalNotify)
+				if parsed, err := parseExpand(then, ctype); err != nil {
+					warnings = append(warnings, "watch "+name+": "+err.Error())
+				} else {
+					expand = parsed
+				}
 			}
 			ww := &webWatch{
 				name:          name,
@@ -241,6 +251,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				notifiers:     notifierNames,
 				notifierCount: len(notifierNames),
 				check:         checkMap(entry),
+				expand:        expand,
 			}
 			wb.watches[name] = ww
 			wb.watchOrder = append(wb.watchOrder, name)
@@ -478,6 +489,9 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			Conditions:    watchConditions(w.check),
 			Disk:          disk,
 		}
+		if w.expand != nil {
+			ww.Expand = &web.WatchExpand{ByBytes: w.expand.By}
+		}
 		if !w.disabled && b.store != nil {
 			if rec, found, err := b.store.MonitorState(watchMonitorKey(name)); err == nil && found {
 				ww.Monitored = rec.Active
@@ -490,7 +504,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		// Compute last activity for this watch from the event log (best effort)
 		if b.events != nil {
 			for _, e := range b.events.Recent("", 200) { // small scan is fine for UI
-				if e.Watch == name && (e.Kind == "hook" || e.Kind == "notify" || e.Kind == "hook-failed" || e.Kind == "notify-failed") {
+				if e.Watch == name && isWatchActivityKind(e.Kind) {
 					ww.LastActivity = e.Time.Format(time.RFC3339)
 					ww.LastActivityKind = e.Kind
 					break
@@ -500,6 +514,15 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		out = append(out, ww)
 	}
 	return out
+}
+
+func isWatchActivityKind(kind string) bool {
+	switch kind {
+	case "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func checkMap(entry map[string]any) map[string]any {
@@ -1413,6 +1436,59 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 	return web.ActionResult{OK: r.OK(), Message: msg}
 }
 
+// ExpandWatch runs a configured disk watch's then.expand action on demand.
+func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionResult {
+	w := b.watches[name]
+	if w == nil {
+		msg := fmt.Sprintf("unknown watch %q", name)
+		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if w.disabled {
+		msg := fmt.Sprintf("watch %q is disabled in configuration", name)
+		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if w.checkType != "disk" {
+		msg := fmt.Sprintf("watch %q is %q, not disk", name, w.checkType)
+		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if w.expand == nil {
+		msg := fmt.Sprintf("watch %q has no then.expand action configured", name)
+		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	path := cfgval.AsString(w.check["path"])
+	if path == "" {
+		msg := fmt.Sprintf("watch %q disk check has no path", name)
+		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	expander := b.expander
+	if expander == nil {
+		msg := "volume expander is unavailable"
+		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+
+	timeout := b.operationTimeout
+	if timeout <= 0 {
+		timeout = operation.DefaultOperationTimeout
+	}
+	opCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	res, err := expander.ExpandPath(opCtx, path, w.expand.By)
+	if err != nil {
+		msg := err.Error()
+		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	msg := expandSuccessMessage(path, res)
+	b.emitWatchExpandEvent(name, "expand", "ok", msg)
+	return web.ActionResult{OK: true, Message: msg}
+}
+
 // SetMonitored enables or disables monitoring for a service.
 func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool) error {
 	action := "monitor"
@@ -1521,6 +1597,19 @@ func (b *WebBackend) emitWatchMonitorEvent(watch, action, kind, status, message 
 		Watch:   watch,
 		Kind:    kind,
 		Action:  action,
+		Status:  status,
+		Message: message,
+	})
+}
+
+func (b *WebBackend) emitWatchExpandEvent(watch, kind, status, message string) {
+	if b.emit == nil {
+		return
+	}
+	b.emit(Event{
+		Watch:   watch,
+		Kind:    kind,
+		Action:  "expand",
 		Status:  status,
 		Message: message,
 	})
