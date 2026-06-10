@@ -14,6 +14,7 @@ type fakeBackend struct {
 	services        []Service
 	operated        []string // "name/action"
 	monitored       map[string]bool
+	watchMonitored  map[string]bool
 	failOp          bool
 	seriesSince     time.Duration
 	eventLimit      int
@@ -139,6 +140,13 @@ func (f *fakeBackend) SetMonitored(_ context.Context, name string, monitored boo
 		f.monitored = map[string]bool{}
 	}
 	f.monitored[name] = monitored
+	return nil
+}
+func (f *fakeBackend) SetWatchMonitored(_ context.Context, name string, monitored bool) error {
+	if f.watchMonitored == nil {
+		f.watchMonitored = map[string]bool{}
+	}
+	f.watchMonitored[name] = monitored
 	return nil
 }
 func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult, bool) {
@@ -568,6 +576,21 @@ func TestMonitorActions(t *testing.T) {
 	h.ServeHTTP(rec, postReq("/api/services/web/monitor"))
 	if rec.Code != http.StatusOK || b.monitored["web"] != true {
 		t.Fatalf("monitor: code=%d monitored=%v", rec.Code, b.monitored)
+	}
+}
+
+func TestWatchMonitorActions(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/watches/disk-root/unmonitor"))
+	if rec.Code != http.StatusOK || b.watchMonitored["disk-root"] != false {
+		t.Fatalf("watch unmonitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/watches/disk-root/monitor"))
+	if rec.Code != http.StatusOK || b.watchMonitored["disk-root"] != true {
+		t.Fatalf("watch monitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
 	}
 }
 

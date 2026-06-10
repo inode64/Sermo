@@ -209,3 +209,11 @@ func (h *WebBackendHolder) SetMonitored(ctx context.Context, name string, monito
 	}
 	return nil
 }
+
+// SetWatchMonitored toggles a host watch's monitoring through the active backend.
+func (h *WebBackendHolder) SetWatchMonitored(ctx context.Context, name string, monitored bool) error {
+	if b := h.backend(); b != nil {
+		return b.SetWatchMonitored(ctx, name, monitored)
+	}
+	return nil
+}
