@@ -69,7 +69,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		}
 	}
 	for _, dir := range enabledDirs {
-		if err := cfg.loadDir(dir); err != nil {
+		if err := cfg.loadEnabledDir(dir); err != nil {
 			return nil, err
 		}
 	}
@@ -169,10 +169,14 @@ func resolveConfigPath(base, p string) string {
 // missing directory is not an error (a host may not have user profiles), but an
 // unreadable one is.
 func (c *Config) loadDir(dir string) error {
-	return c.loadCategoryDir(dir, "")
+	return c.loadCategoryDir(dir, "", false)
 }
 
-func (c *Config) loadCategoryDir(dir, category string) error {
+func (c *Config) loadEnabledDir(dir string) error {
+	return c.loadCategoryDir(dir, "", true)
+}
+
+func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -200,6 +204,15 @@ func (c *Config) loadCategoryDir(dir, category string) error {
 		if err != nil {
 			return err
 		}
+		if allowGlobalFragments {
+			handled, err := c.mergeEnabledGlobalFragment(doc)
+			if err != nil {
+				return err
+			}
+			if handled {
+				continue
+			}
+		}
 		doc.Category = effectiveCategory(category)
 		c.add(doc)
 	}
@@ -208,11 +221,42 @@ func (c *Config) loadCategoryDir(dir, category string) error {
 		if sub == "" {
 			sub = categoryFromDir(name) // only the top level names a category
 		}
-		if err := c.loadCategoryDir(filepath.Join(dir, name), sub); err != nil {
+		if err := c.loadCategoryDir(filepath.Join(dir, name), sub, allowGlobalFragments); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (c *Config) mergeEnabledGlobalFragment(doc *Document) (bool, error) {
+	if doc.Kind != "" {
+		return false, nil
+	}
+	raw, present := doc.Body["watches"]
+	if !present {
+		return false, nil
+	}
+	for key := range doc.Body {
+		if key != "watches" {
+			return true, fmt.Errorf("%s: enabled watch fragments only support top-level watches, got %q", doc.Path, key)
+		}
+	}
+	watches, ok := raw.(map[string]any)
+	if !ok {
+		return true, fmt.Errorf("%s: watches must be a mapping", doc.Path)
+	}
+	dst, _ := c.Global.Raw["watches"].(map[string]any)
+	if dst == nil {
+		dst = map[string]any{}
+	}
+	for name, entry := range watches {
+		if _, exists := dst[name]; exists {
+			return true, fmt.Errorf("%s: watch %q is already defined", doc.Path, name)
+		}
+		dst[name] = entry
+	}
+	c.Global.Raw["watches"] = dst
+	return true, nil
 }
 
 func effectiveCategory(category string) string {
