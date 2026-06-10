@@ -81,14 +81,20 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 		}
 	}
 	s.notifiers = chooseNotifiers(p, env)
-	if !hasNotifyAction(s.notifiers) {
+	if !hasEffectiveNotifyAction(s.notifiers, env) {
 		return s, fmt.Errorf("a net watch needs at least one notifier; none chosen for %s", label)
 	}
 	return s, nil
 }
 
 func buildNetWatch(iface Iface, s netSettings) map[string]any {
-	newThen := func() map[string]any { return map[string]any{"notify": s.notifiers} }
+	newThen := func() map[string]any {
+		then := map[string]any{}
+		if len(s.notifiers) > 0 {
+			then["notify"] = s.notifiers
+		}
+		return then
+	}
 	metrics := map[string]any{}
 	for _, m := range s.metrics {
 		switch m {

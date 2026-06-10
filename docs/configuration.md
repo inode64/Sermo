@@ -491,7 +491,8 @@ Each site then **overrides** the default — the per-site choice always wins:
 
 `none` cannot be combined with notifier names in the same list. With a global
 default set, a watch that only runs a hook (no `notify`) also sends to the default
-targets; add `notify: none` to silence just that watch.
+targets; a watch may also omit `then.notify` entirely and rely only on the
+default. Add `notify: none` to silence just that watch.
 
 ## Host watches
 
@@ -508,12 +509,14 @@ a service.
 > link state / errors / speed to watch). Run with no argument to choose from the list. It prints the
 > generated `watches:` block and offers to merge it into the global config
 > (writing a `.bak` first); then `sermoctl reload`. New assistant types can be
-> added over time. When asked for notification targets, choose `none` to generate
-> `notify: [none]` and suppress any global `notify` default for that watch.
+> added over time. When asked for notification targets, leave the watch on the
+> global default to omit `then.notify`; choose `none` only to generate
+> `notify: [none]` and suppress that default for the watch.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
-`notify` list, an `expand` (disk only), or any combination (at least one is
-required):
+`notify` list, an `expand` (disk only), or any combination. If the top-level
+`notify` default is set, `then.notify` is optional: omitting it inherits the
+default, and a watch with no local action can omit `then` entirely.
 
 ```yaml
 watches:

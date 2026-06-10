@@ -97,7 +97,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
 		s.cooldown = p.Ask("Minimum time between expansions (cooldown)", "30m")
 	}
-	if !hasNotifyAction(s.notifiers) && !s.expand {
+	if !hasEffectiveNotifyAction(s.notifiers, env) && !s.expand {
 		return s, fmt.Errorf("a watch needs at least one notifier or auto-expand; none chosen for %s", label)
 	}
 	return s, nil
@@ -129,18 +129,25 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	return entry
 }
 
-// chooseNotifiers asks which configured notifiers to alert. Selecting "none"
-// writes the reserved notify sentinel so the generated watch does not inherit a
-// global notify default. With no configured notifiers it returns nil without
+// chooseNotifiers asks which configured notifiers to alert. Returning nil means
+// "leave notify unset" so runtime inherits the global notify default. Selecting
+// "none" writes the reserved sentinel so the generated watch suppresses that
+// default. With no configured notifiers and no default it returns nil without
 // prompting.
 func chooseNotifiers(p *Prompt, env Env) []string {
-	if len(env.Notifiers) == 0 {
-		p.printf("  (no notifiers are configured; alerts will rely on the action below)\n")
+	hasDefault := len(env.DefaultNotify) > 0
+	if len(env.Notifiers) == 0 && !hasDefault {
+		p.printf("  (no notifiers/default notify are configured; alerts will rely on the action below)\n")
 		return nil
 	}
-	options := make([]string, 0, len(env.Notifiers)+1)
+	options := make([]string, 0, len(env.Notifiers)+2)
 	options = append(options, "none (do not notify)")
 	options = append(options, env.Notifiers...)
+	defaultIndex := -1
+	if hasDefault {
+		defaultIndex = len(options)
+		options = append(options, "global default ("+strings.Join(env.DefaultNotify, ", ")+")")
+	}
 	idx := p.MultiChoose("Notify which targets?", options)
 	if slices.Contains(idx, 0) {
 		if len(idx) == len(options) {
@@ -149,18 +156,33 @@ func chooseNotifiers(p *Prompt, env Env) []string {
 			return []string{notifyNone}
 		}
 	}
-	if len(idx) == 0 {
-		return []string{notifyNone}
-	}
 	out := make([]string, 0, len(idx))
+	inheritDefault := false
 	for _, i := range idx {
+		if i == defaultIndex {
+			inheritDefault = true
+			continue
+		}
 		out = append(out, env.Notifiers[i-1])
+	}
+	if len(out) == 0 && inheritDefault {
+		return nil
+	}
+	if len(out) == 0 {
+		return []string{notifyNone}
 	}
 	return out
 }
 
 func hasNotifyAction(names []string) bool {
 	return len(names) > 0 && !slices.Contains(names, notifyNone)
+}
+
+func hasEffectiveNotifyAction(names []string, env Env) bool {
+	if slices.Contains(names, notifyNone) {
+		return false
+	}
+	return hasNotifyAction(names) || (len(names) == 0 && len(env.DefaultNotify) > 0)
 }
 
 // askPercent reads a percentage, accepting either "10" or "10%".

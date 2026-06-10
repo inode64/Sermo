@@ -367,6 +367,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 
 	good := validateRawGlobal(t, map[string]any{
 		"notifiers": notifiers,
+		"notify":    []any{"ops-email"},
 		"watches": map[string]any{
 			"disk-root": map[string]any{
 				"check": diskCheck,
@@ -376,6 +377,13 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  map[string]any{"notify": []any{"none"}, "expand": map[string]any{"by": "5G"}},
 			},
+			"disk-inherit": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{},
+			},
+			"disk-inherit-without-then": map[string]any{
+				"check": diskCheck,
+			},
 		},
 	})
 	if w := watchIssues(good); len(w) != 0 {
@@ -384,6 +392,7 @@ func TestValidateNotifyReferences(t *testing.T) {
 
 	bad := validateRawGlobal(t, map[string]any{
 		"notifiers": notifiers,
+		"notify":    []any{"ops-email"},
 		"watches": map[string]any{
 			"disk-root": map[string]any{
 				"check": diskCheck,
@@ -397,16 +406,33 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  map[string]any{"notify": []any{"none"}},
 			},
+			"bad-then": map[string]any{
+				"check": diskCheck,
+				"then":  "notify me",
+			},
 		},
 	})
 	for _, w := range []string{
 		"watches.disk-root.then.notify references unknown notifier \"ghost\"",
-		"watches.no-action.then requires a hook, notify and/or expand",
 		"watches.no-action-none.then requires a hook, notify and/or expand",
+		"watches.bad-then.then must be a mapping",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
 		}
+	}
+
+	noDefault := validateRawGlobal(t, map[string]any{
+		"notifiers": notifiers,
+		"watches": map[string]any{
+			"no-action": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{},
+			},
+		},
+	})
+	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify and/or expand") {
+		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
 }
 

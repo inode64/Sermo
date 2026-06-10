@@ -17,9 +17,10 @@ type Iface struct {
 // Env carries the host facts and config an assistant needs, injected so the
 // assistants are testable without touching the real host or config.
 type Env struct {
-	Notifiers []string                 // names from the config's `notifiers:` section
-	Volumes   func() ([]Volume, error) // candidate disk volumes
-	Ifaces    func() ([]Iface, error)  // host network interfaces
+	Notifiers     []string                 // names from the config's `notifiers:` section
+	DefaultNotify []string                 // top-level `notify` default; nil means no inherited notification
+	Volumes       func() ([]Volume, error) // candidate disk volumes
+	Ifaces        func() ([]Iface, error)  // host network interfaces
 }
 
 // Result is what an assistant produced: a fragment to merge under `watches:`
