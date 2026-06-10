@@ -35,7 +35,9 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 // injectBuiltinVariables makes the document's identity available for ${...}
 // expansion: ${name} (the resolved service name), ${display_name} (the
 // display_name field, falling back to name), ${service} (the primary unit),
-// ${host} (the detected hostname) and ${port} (the top-level `port:` field, when
+// ${host} (the detected hostname), ${init} (the detected init system),
+// ${user} (the Sermo user, a fallback for service accounts), ${pidfile} (the
+// conventional /run/<unit>.pid) and ${port} (the top-level `port:` field, when
 // set). They let profiles parameterize strings — e.g. a tcp check
 // port: "${port}" or message: "${display_name} backup is running".
 // Injected after validateVariableValues so a display_name carrying its own
@@ -53,6 +55,17 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	}
 	if _, ok := vars["host"]; !ok {
 		vars["host"] = detectedHost
+	}
+	if _, ok := vars["init"]; !ok {
+		vars["init"] = detectedInit
+	}
+	if _, ok := vars["user"]; !ok {
+		vars["user"] = detectedUser
+	}
+	// ${pidfile} falls back to the conventional /run/<unit>.pid; an explicit
+	// `pidfile` variable always wins.
+	if _, ok := vars["pidfile"]; !ok {
+		vars["pidfile"] = "/run/" + vars["service"] + ".pid"
 	}
 	// ${port} mirrors the top-level `port:` field; unlike the others it has no
 	// fallback, so it is injected only when the field is set — leaving ${port}
