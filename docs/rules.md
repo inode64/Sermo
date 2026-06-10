@@ -21,6 +21,7 @@ which reuse the same schema). MVP types:
 | `disk`        | a filesystem's space/inode predicates hold (used_pct/free_pct/inodes_*)|
 | `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
+| `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
@@ -1154,9 +1155,10 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
 - a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
 
-The host-resource checks (`disk`, `load`, `fds`, `conntrack`, `entropy`, `zombies`,
-`oom`, `cert`) are condition-style — `OK == true` means there is a problem — so in
-rules `active: {check: x}` fires on it, and as a watch the hook fires on it.
+The host-resource checks (`disk`, `load`, `hdparm`, `fds`, `conntrack`, `entropy`,
+`zombies`, `oom`, `cert`) are condition-style — `OK == true` means there is a
+problem — so in rules `active: {check: x}` fires on it, and as a watch the hook
+fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `binary`, `libraries`) are the opposite (`OK == true` is healthy), so as a watch
 they fire the hook on **failure**.
@@ -1167,6 +1169,38 @@ metric) and the multi-target watches (`file`, `process`, one event/hook per
 changed path or matching pid). `service`/`metric`/`process` checks need per-service
 context (backend status, a metric sampler, process discovery) and so are not
 available as standalone watches.
+
+### Disk throughput (`hdparm`)
+
+The `hdparm` check times a disk's read throughput and alerts when it crosses a
+threshold — useful to catch a **gradually degrading** drive. It runs `hdparm` on
+`device` and exposes two MB/s values: **`read`** (buffered disk reads, `hdparm -t`
+— the real device speed) and **`cached`** (cached reads, `hdparm -T` — memory/cache
+throughput). Predicates are `{op, value}` in **MB/s**; at least one of `read`/
+`cached` is required, and **only the timings a predicate needs are run** (a
+`cached`-only check skips the slow buffered pass).
+
+```yaml
+watches:
+  disk-speed:
+    interval: 24h                       # hdparm -t reads ~3s and adds I/O — run rarely
+    check:
+      type: hdparm
+      device: /dev/sda
+      timeout: 30s                      # give the benchmark room
+      read:   { op: "<", value: 100 }   # alert when buffered reads drop below 100 MB/s
+      cached: { op: "<", value: 3000 }  # optional: cache/memory throughput
+    then:
+      notify: [ops-email]
+```
+
+Like the other host-resource checks it is **condition-style**: a predicate
+expresses the *alerting* condition (e.g. `read < 100`), so the watch hook/notify
+fires when it holds. **`hdparm` needs root** (raw device access); without it the
+check fails with hdparm's error. Because `-t` reads from the platter for a few
+seconds and adds real I/O load, schedule it on a **long `interval`** (e.g. `24h`)
+with a generous `timeout`. The measured `read`/`cached` are placed in the result
+data (and the `SERMO_READ`/`SERMO_CACHED` hook variables).
 
 ### Autofs
 

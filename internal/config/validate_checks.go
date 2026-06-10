@@ -392,6 +392,17 @@ func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
 	validateThresholdPreds(prefix, fields, []string{"load1", "load5", "load15"}, add)
 }
 
+// validateHdparmFields validates an hdparm check: a required device and at least
+// one of the read/cached {op, value} throughput predicates.
+func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["device"]) == "" {
+		add("%s.device is required for an hdparm check", prefix)
+	}
+	if validatePresentThresholds(prefix, fields, []string{"read", "cached"}, add) == 0 {
+		add("%s requires at least one of read/cached {op, value}", prefix)
+	}
+}
+
 func isValidDiskOp(op string) bool {
 	switch op {
 	case ">=", ">", "<=", "<", "==", "!=":
@@ -470,7 +481,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+	"disk", "autofs", "load", "hdparm", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -567,6 +578,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateAutofsFields(path, entry, add)
 		case "load":
 			validateLoadFields(path, entry, add)
+		case "hdparm":
+			validateHdparmFields(path, entry, add)
 		case "fds":
 			validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
 		case "conntrack":
