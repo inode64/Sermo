@@ -203,13 +203,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			if ce, ok := entry["check"].(map[string]any); ok {
 				ctype = cfgval.AsString(ce["type"])
 			}
-			// Determine polarity from check type (same logic as watch_build.go isHealthCheckType / FireOnFail)
-			switch ctype {
-			case "tcp", "http", "command", "service", "file_exists":
-				fireOnFail = true // health-style: fire when NOT ok
-			default:
-				fireOnFail = false // condition-style: fire when ok (threshold crossed)
-			}
+			fireOnFail = isHealthCheckType(ctype)
 			iv := durationField(entry["interval"])
 			if iv <= 0 {
 				iv = 30 * time.Second
