@@ -107,12 +107,7 @@ func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields [
 			add("%s.%s must be a mapping {op, value}", prefix, field)
 			continue
 		}
-		if !isValidDiskOp(cfgval.String(m["op"])) {
-			add("%s.%s has an invalid op %q", prefix, field, cfgval.String(m["op"]))
-		}
-		if !isNumeric(cfgval.String(m["value"])) {
-			add("%s.%s value %q must be numeric", prefix, field, cfgval.String(m["value"]))
-		}
+		validateOpNumeric(prefix+"."+field, m, add)
 	}
 	return preds
 }
@@ -138,12 +133,7 @@ func validateOomFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.delta must be a mapping {op, value}", prefix)
 		return
 	}
-	if !isValidDiskOp(cfgval.String(m["op"])) {
-		add("%s.delta has an invalid op %q", prefix, cfgval.String(m["op"]))
-	}
-	if !isNumeric(cfgval.String(m["value"])) {
-		add("%s.delta value %q must be numeric", prefix, cfgval.String(m["value"]))
-	}
+	validateOpNumeric(prefix+".delta", m, add)
 }
 
 // validateCheckGate validates a check's interdependency fields: `requires` is a
