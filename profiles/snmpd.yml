@@ -3,7 +3,11 @@ name: snmpd
 display_name: "Net-SNMP Daemon"
 service: snmpd
 variables:
+  port: 161
   binary: "/usr/sbin/snmpd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }
+
+checks:
+  port: { type: snmp, port: "${port}" }
