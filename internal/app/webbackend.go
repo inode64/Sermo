@@ -462,6 +462,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			Summary:       watchSummary(w, disk),
 			Interval:      iv,
 			Enabled:       !w.disabled,
+			Monitored:     !w.disabled,
 			FireOnFail:    w.fireOnFail,
 			HasHook:       w.hasHook,
 			HookCommand:   slices.Clone(w.hookCommand),
@@ -469,6 +470,15 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			NotifierCount: w.notifierCount,
 			Conditions:    watchConditions(w.check),
 			Disk:          disk,
+		}
+		if !w.disabled && b.store != nil {
+			if rec, found, err := b.store.MonitorState(watchMonitorKey(name)); err == nil && found {
+				ww.Monitored = rec.Active
+				ww.MonitorSource = rec.Source
+				if !rec.UpdatedAt.IsZero() {
+					ww.MonitorChangedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
+				}
+			}
 		}
 		// Compute last activity for this watch from the event log (best effort)
 		if b.events != nil {
@@ -1439,12 +1449,69 @@ func (b *WebBackend) SetMonitored(_ context.Context, name string, monitored bool
 	return nil
 }
 
+// SetWatchMonitored enables or disables monitoring for a host watch.
+func (b *WebBackend) SetWatchMonitored(_ context.Context, name string, monitored bool) error {
+	action := "monitor"
+	if !monitored {
+		action = "unmonitor"
+	}
+	if _, ok := b.watches[name]; !ok {
+		msg := fmt.Sprintf("unknown watch %q", name)
+		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	if b.store == nil {
+		msg := "monitoring state is unavailable"
+		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	key := watchMonitorKey(name)
+	priorActive, found, err := b.store.Active(key)
+	if err != nil {
+		msg := fmt.Sprintf("%s failed: %v", action, err)
+		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	if err := b.store.SetActive(key, monitored, state.SourceWeb); err != nil {
+		msg := fmt.Sprintf("%s failed: %v", action, err)
+		b.emitWatchMonitorEvent(name, action, "error", "", msg)
+		return fmt.Errorf("%s", msg)
+	}
+	if found && priorActive == monitored {
+		msg := "already monitored"
+		if !monitored {
+			msg = "already paused"
+		}
+		b.emitWatchMonitorEvent(name, action, "suppressed", "", msg)
+		return nil
+	}
+	msg := "monitoring resumed"
+	if !monitored {
+		msg = "monitoring paused"
+	}
+	b.emitWatchMonitorEvent(name, action, "action", "ok", msg)
+	return nil
+}
+
 func (b *WebBackend) emitMonitorEvent(service, action, kind, status, message string) {
 	if b.emit == nil {
 		return
 	}
 	b.emit(Event{
 		Service: service,
+		Kind:    kind,
+		Action:  action,
+		Status:  status,
+		Message: message,
+	})
+}
+
+func (b *WebBackend) emitWatchMonitorEvent(watch, action, kind, status, message string) {
+	if b.emit == nil {
+		return
+	}
+	b.emit(Event{
+		Watch:   watch,
 		Kind:    kind,
 		Action:  action,
 		Status:  status,

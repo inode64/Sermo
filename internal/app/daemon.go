@@ -492,6 +492,10 @@ func monitorPaused(store MonitorStore, name string) func() bool {
 	}
 }
 
+func watchMonitorKey(name string) string {
+	return "watch:" + name
+}
+
 // metricSampler returns a per-cycle metric reader for a service, or nil when the
 // service references no metrics (so the daemon does not read /proc every cycle
 // for nothing). Service metrics are sampled over the discovered process set;

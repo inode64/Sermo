@@ -161,9 +161,9 @@ A per-check `interval` **cannot be shorter than the resolution** and should be a
 
 ## Web UI
 
-The daemon can serve a small web dashboard to view services and act on them —
-monitor/unmonitor and start/stop/restart — over the same safe operation engine
-the CLI uses.
+The daemon can serve a small web dashboard to view services and host watches.
+Admins can monitor/unmonitor both, and can start/stop/restart services over the
+same safe operation engine the CLI uses.
 
 **The web UI is only activated when `web.port` is explicitly defined.** If the
 `web:` block is omitted, or if a `web:` block is present without a `port` key
@@ -288,6 +288,9 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
 malformed lock files under `<paths.runtime>/locks`),
+`GET /api/watches` (configured host watches, their current monitor/paused state,
+conditions, notifications and recent activity),
+`POST /api/watches/{name}/{action}` where action is `monitor` or `unmonitor`,
 `GET /api/locks` (named runtime locks with TTL remaining, owner status,
 created age, blocked actions and release eligibility),
 `POST /api/locks/{service}/release?name=NAME` (admin-only, CSRF-protected,

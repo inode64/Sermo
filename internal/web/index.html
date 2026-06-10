@@ -185,7 +185,7 @@
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <div class="table-wrap">
   <table class="watch-table">
-    <thead><tr><th>Name</th><th>Type</th><th>Summary</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th></tr></thead>
+    <thead><tr><th>Name</th><th>Type</th><th>Summary</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th><th>Actions</th></tr></thead>
     <tbody id="watch-rows"></tbody>
   </table>
   </div>
@@ -1267,6 +1267,13 @@ function watchSummaryCell(w) {
   return w.summary ? esc(w.summary) : "—";
 }
 
+function watchMonitorHint(w) {
+  const bits = [];
+  if (w.monitor_source) bits.push(`source=${esc(w.monitor_source)}`);
+  if (w.monitor_changed_at) bits.push(esc(w.monitor_changed_at));
+  return bits.length ? ` <span class="muted">(${bits.join(" · ")})</span>` : "";
+}
+
 function renderConditionRows(conditions) {
   const list = conditions || [];
   if (!list.length) return '<div class="muted" style="margin:.2rem 0 .6rem">No configured predicates.</div>';
@@ -1327,9 +1334,12 @@ function renderWatches(watches) {
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${list.length})`;
   const rows = list.map((w) => {
-    const state = w.enabled
+    const configState = w.enabled
       ? '<span class="pill">enabled</span>'
       : '<span class="pill">disabled</span>';
+    const monitorState = w.enabled
+      ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}`
+      : '<span class="muted">disabled</span>';
     const polarity = w.fire_on_fail
       ? '<span class="muted">on fail</span>'
       : '<span class="muted">on threshold</span>';
@@ -1344,6 +1354,13 @@ function renderWatches(watches) {
     const key = "wat:" + w.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
+    const actions = !w.enabled
+      ? '<span class="muted">disabled in config</span>'
+      : (me.can_act
+        ? (w.monitored
+          ? `<button data-watch="${esc(w.name)}" data-watch-action="unmonitor">unmonitor</button>`
+          : `<button data-watch="${esc(w.name)}" data-watch-action="monitor">monitor</button>`)
+        : '<span class="muted">read-only</span>');
     const row = `<tr class="clickable" data-exp-key="${esc(key)}">
       <td>${chev}${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
@@ -1353,14 +1370,15 @@ function renderWatches(watches) {
       <td>${hook}</td>
       <td>${notif}</td>
       <td>${last}</td>
-      <td>${state}</td>
+      <td>${configState}<br>${monitorState}</td>
+      <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="9">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No watches.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="10" class="muted">No watches.</td></tr>`;
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
 }
 
@@ -1380,7 +1398,8 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Type</span><br><b>${esc(w.check_type || "")}</b></div>
     <div><span class="muted">Interval</span><br><b>${esc(w.interval || "")}</b></div>
     <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
-    <div><span class="muted">State</span><br>${w.enabled ? 'enabled' : '<span class="muted">disabled</span>'}</div>
+    <div><span class="muted">Config</span><br>${w.enabled ? 'enabled' : '<span class="muted">disabled</span>'}</div>
+    <div><span class="muted">Monitoring</span><br>${w.enabled ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}` : '<span class="muted">disabled</span>'}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
   </div>`;
@@ -1701,6 +1720,23 @@ async function act(name, action) {
   }
   load();
   if (current) detail(current);
+}
+
+async function actWatch(name, action) {
+  $("#err").textContent = "";
+  try {
+    const res = await fetch(`api/watches/${encodeURIComponent(name)}/${action}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) {
+      throw new Error(body.message || ("HTTP " + res.status));
+    }
+  } catch (e) {
+    $("#err").textContent = `${action} watch ${name}: ${e.message}`;
+  }
+  load();
 }
 
 let confirmResolve = null;
@@ -2411,6 +2447,12 @@ function initDelegatedHandlers() {
     const serviceAction = closestFrom(e, "[data-service-action][data-service]");
     if (serviceAction) {
       act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "");
+      return;
+    }
+
+    const watchAction = closestFrom(e, "[data-watch-action][data-watch]");
+    if (watchAction) {
+      actWatch(watchAction.dataset.watch || "", watchAction.dataset.watchAction || "");
       return;
     }
 
