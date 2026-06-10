@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"time"
@@ -271,8 +272,12 @@ func scalarString(v any) string {
 		return strconv.FormatUint(t, 10)
 	case float64:
 		return strconv.FormatFloat(t, 'f', -1, 64)
-	default:
+	case bool:
+		return strconv.FormatBool(t)
+	case nil:
 		return ""
+	default:
+		return fmt.Sprintf("%v", t)
 	}
 }
 

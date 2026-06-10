@@ -124,537 +124,63 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
 	switch typ {
 	case "tcp":
-		port, ok := intField(entry["port"])
-		if !ok {
-			return nil, "tcp check requires a numeric port"
-		}
-		host := asString(entry["host"])
-		if host == "" {
-			host = "127.0.0.1"
-		}
-		all, iwarn := parseInterfaceMatch(entry)
-		if iwarn != "" {
-			return nil, "tcp check: " + iwarn
-		}
-		return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: all, port: port}, ""
-
+		return buildTCPCheck(b, entry)
 	case "ports":
-		host := asString(entry["host"])
-		if host == "" {
-			host = "127.0.0.1"
-		}
-		ports, err := parsePortSpec(asString(entry["ports"]))
-		if err != nil {
-			return nil, "ports check: " + err.Error()
-		}
-		expect := asString(entry["expect"])
-		if expect == "" {
-			expect = "open"
-		}
-		if expect != "open" && expect != "closed" && expect != "any" {
-			return nil, "ports check: expect must be open, closed or any"
-		}
-		match := asString(entry["match"])
-		if match == "" {
-			match = "all"
-		}
-		if match != "all" && match != "any" && match != "none" {
-			return nil, "ports check: match must be all, any or none"
-		}
-		allIf, iwarn := parseInterfaceMatch(entry)
-		if iwarn != "" {
-			return nil, "ports check: " + iwarn
-		}
-		return &portsCheck{
-			base:           b,
-			host:           host,
-			ifaces:         parseInterfaces(entry["interface"]),
-			ifaceAll:       allIf,
-			ports:          ports,
-			expect:         expect,
-			match:          match,
-			onChange:       asBool(entry["on_change"]),
-			connectTimeout: durationOr(entry["connect_timeout"], 0),
-		}, ""
-
+		return buildPortsCheck(b, entry)
 	case "http":
-		rawURL := asString(entry["url"])
-		if rawURL == "" {
-			return nil, "http check requires a url"
-		}
-		method := strings.ToUpper(asString(entry["method"]))
-		if method == "" {
-			method = http.MethodGet
-		}
-		expect, err := parseStatusMatcher(entry["expect_status"])
-		if err != nil {
-			return nil, "http check: " + err.Error()
-		}
-		var body []byte
-		contentType := ""
-		if j, ok := entry["json"]; ok && j != nil {
-			raw, err := json.Marshal(j)
-			if err != nil {
-				return nil, "http check: invalid json body: " + err.Error()
-			}
-			body, contentType = raw, "application/json"
-		} else if s := asString(entry["body"]); s != "" {
-			body = []byte(s)
-		}
-		reqClient := client
-		proxyURL, pwarn := parseProxyURL(entry)
-		if pwarn != "" {
-			return nil, pwarn
-		}
-		if asBool(entry["http3"]) {
-			// HTTP/3 runs over QUIC (always TLS 1.3) and cannot use an HTTP
-			// forward proxy. The transport never falls back to TCP, so a failure
-			// to reach the endpoint over QUIC fails (alerts) the check.
-			if u, err := url.Parse(rawURL); err != nil || u.Scheme != "https" {
-				return nil, "http check: http3 requires an https url"
-			}
-			if proxyURL != nil {
-				return nil, "http check: http3 and proxy are mutually exclusive"
-			}
-			reqClient = &http.Client{Transport: &http3.Transport{}}
-		} else if proxyURL != nil {
-			tr := http.DefaultTransport.(*http.Transport).Clone()
-			tr.Proxy = http.ProxyURL(proxyURL)
-			reqClient = &http.Client{Transport: tr}
-		}
-		// interface: egress the HTTP request (and any proxy connection) through a
-		// specific interface by binding the transport's dialer. The http client has
-		// one fixed transport, so it honors a single interface (the first listed).
-		if ifaces := parseInterfaces(entry["interface"]); len(ifaces) > 0 {
-			if asBool(entry["http3"]) {
-				return nil, "http check: http3 and interface are mutually exclusive"
-			}
-			tr := http.DefaultTransport.(*http.Transport).Clone()
-			if proxyURL != nil {
-				tr.Proxy = http.ProxyURL(proxyURL)
-			}
-			tr.DialContext = conn.BindDialer(ifaces[0]).DialContext
-			reqClient = &http.Client{Transport: tr}
-		}
-		hc := &httpCheck{
-			base:        b,
-			client:      reqClient,
-			url:         rawURL,
-			method:      method,
-			headers:     stringMap(entry["headers"]),
-			body:        body,
-			contentType: contentType,
-			expect:      expect,
-			expectJSON:  parseJSONAssertions(entry["expect_json"]),
-		}
-		// expect_body is either a substring (string form) or an {op, value}
-		// operator comparison against the trimmed body.
-		switch eb := entry["expect_body"].(type) {
-		case string:
-			hc.expectBody = eb
-		case map[string]any:
-			op := asString(eb["op"])
-			if !validCompareOp(op) {
-				return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, =~"
-			}
-			hc.bodyOp, hc.bodyValue = op, scalarString(eb["value"])
-		}
-		lop, lval, lwarn := parseExpectLatency(entry)
-		if lwarn != "" {
-			return nil, "http " + lwarn
-		}
-		hc.latencyOp, hc.latencyValue = lop, lval
-		if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
-			return nil, warn
-		}
-		return hc, ""
-
+		return buildHTTPCheck(b, entry, client)
 	case "command":
-		argv := stringArray(entry["command"])
-		if len(argv) == 0 {
-			return nil, "command check requires a non-empty command array"
-		}
-		expect := 0
-		if v, ok := intField(entry["expect_exit"]); ok {
-			expect = v
-		}
-		return commandCheck{base: b, runner: runner, argv: argv, expectExit: expect}, ""
-
+		return buildCommandCheck(b, entry, runner)
 	case "service":
-		expect := asString(entry["expect"])
-		if expect == "" {
-			return nil, "service check requires expect"
-		}
-		if deps.Status == nil {
-			return nil, "service check needs backend detection, unavailable here"
-		}
-		return serviceCheck{base: b, expect: expect, status: deps.Status}, ""
-
+		return buildServiceCheck(b, entry, deps)
 	case "file_exists":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "file_exists check requires a path"
-		}
-		return fileExistsCheck{base: b, path: path}, ""
-
+		return buildFileExistsCheck(b, entry)
 	case "binary":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "binary check requires a path"
-		}
-		return binaryCheck{base: b, path: path}, ""
-
+		return buildBinaryCheck(b, entry)
 	case "libraries":
-		binary := asString(entry["binary"])
-		if binary == "" {
-			return nil, "libraries check requires a binary"
-		}
-		return librariesCheck{base: b, runner: runner, binary: binary}, ""
-
+		return buildLibrariesCheck(b, entry, runner)
 	case "metric":
-		name := asString(entry["name"])
-		if name == "" {
-			return nil, "metric check requires a name"
-		}
-		scope := asString(entry["scope"])
-		if scope == "" {
-			scope = "service"
-		}
-		op := asString(entry["op"])
-		if op == "" {
-			return nil, "metric check requires an op"
-		}
-		if deps.Metrics == nil {
-			return nil, "metric check needs a metric source, unavailable here"
-		}
-		return metricCheck{base: b, scope: scope, metric: name, op: op, value: scalarString(entry["value"]), source: deps.Metrics}, ""
-
+		return buildMetricCheck(b, entry, deps)
 	case "process":
-		exe := asString(entry["exe"])
-		user := asString(entry["user"])
-		if exe == "" && user == "" {
-			return nil, "process check requires exe and/or user"
-		}
-		if deps.Processes == nil {
-			return nil, "process check needs process discovery, unavailable here"
-		}
-		expect := asString(entry["state"])
-		if expect == "" {
-			expect = "running"
-		}
-		return processCheck{base: b, exe: exe, user: user, expect: expect, observe: deps.Processes}, ""
-
+		return buildProcessCheck(b, entry, deps)
 	case "count":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "count check requires a path"
-		}
-		kind := asString(entry["of"])
-		if kind == "" {
-			kind = countAny
-		}
-		if !validCountKind(kind) {
-			return nil, "count check `of` must be file, dir, symlink or any"
-		}
-		op := asString(entry["op"])
-		if !validDiskOp(op) {
-			return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
-		}
-		val, err := strconv.ParseFloat(scalarString(entry["value"]), 64)
-		if err != nil {
-			return nil, "count check value must be numeric"
-		}
-		return countCheck{base: b, path: path, kind: kind, recursive: asBool(entry["recursive"]), op: op, value: val}, ""
-
+		return buildCountCheck(b, entry)
 	case "disk":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "disk check requires a path"
-		}
-		preds, err := parseDiskPreds(entry)
-		if err != nil {
-			return nil, "disk check: " + err.Error()
-		}
-		mount := parseMountCond(entry)
-		if len(preds) == 0 && !mount.active {
-			return nil, "disk check requires a space/inode predicate and/or a mount condition (mounted/fstype/options/device)"
-		}
-		return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
-
+		return buildDiskCheck(b, entry, deps)
 	case "autofs":
-		path := asString(entry["path"])
-		op, value := "", 0.0
-		if m, ok := entry["count"].(map[string]any); ok {
-			op = asString(m["op"])
-			if !validDiskOp(op) {
-				return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
-			}
-			v, err := strconv.ParseFloat(scalarString(m["value"]), 64)
-			if err != nil {
-				return nil, "autofs check count value must be numeric"
-			}
-			value = v
-		}
-		if path != "" && op != "" {
-			return nil, "autofs check: path and count are mutually exclusive"
-		}
-		return autofsCheck{base: b, path: path, op: op, value: value, sampler: deps.MountSampler}, ""
-
+		return buildAutofsCheck(b, entry, deps)
 	case "net":
-		iface := asString(entry["interface"])
-		if iface == "" {
-			return nil, "net check requires an interface"
-		}
-		metric := asString(entry["metric"])
-		c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
-		switch metric {
-		case "state":
-			if exp := asString(entry["expect"]); exp != "" {
-				if exp != "up" && exp != "down" {
-					return nil, "net state expect must be up or down"
-				}
-				c.expect = exp
-			} else if asString(entry["on"]) == "change" {
-				c.onChange = true
-			} else {
-				return nil, "net state requires expect: up|down or on: change"
-			}
-		case "speed":
-			if asString(entry["on"]) != "change" {
-				return nil, "net speed requires on: change"
-			}
-			c.onChange = true
-		case "errors":
-			c.counters = stringArray(entry["counters"])
-			if len(c.counters) == 0 {
-				c.counters = []string{"rx_errors", "tx_errors"}
-			}
-			delta, ok := entry["delta"].(map[string]any)
-			if !ok {
-				return nil, "net errors requires a delta {op, value}"
-			}
-			op := asString(delta["op"])
-			if !validDiskOp(op) {
-				return nil, "net errors delta has an invalid op"
-			}
-			v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
-			if err != nil {
-				return nil, "net errors delta value must be numeric"
-			}
-			c.op, c.value = op, v
-		default:
-			return nil, "net check metric must be state, speed or errors"
-		}
-		return c, ""
-
+		return buildNetCheck(b, entry, deps)
 	case "load":
-		preds, err := parseLoadPreds(entry)
-		if err != nil {
-			return nil, "load check: " + err.Error()
-		}
-		return loadCheck{base: b, preds: preds, perCPU: asBool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
-
+		return buildLoadCheck(b, entry, deps)
 	case "fds":
-		preds, err := parseFdsPreds(entry)
-		if err != nil {
-			return nil, "fds check: " + err.Error()
-		}
-		return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
-
+		return buildFdsCheck(b, entry, deps)
 	case "conntrack":
-		preds, err := parseConntrackPreds(entry)
-		if err != nil {
-			return nil, "conntrack check: " + err.Error()
-		}
-		return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
-
+		return buildConntrackCheck(b, entry, deps)
 	case "entropy":
-		op, value, err := parseEntropyThreshold(entry)
-		if err != nil {
-			return nil, "entropy check: " + err.Error()
-		}
-		return entropyCheck{base: b, op: op, value: value, sampler: deps.EntropySampler}, ""
-
+		return buildEntropyCheck(b, entry, deps)
 	case "zombies":
-		op, value, err := parseZombieThreshold(entry)
-		if err != nil {
-			return nil, "zombies check: " + err.Error()
-		}
-		return zombieCheck{base: b, op: op, value: value, sampler: deps.ZombieSampler}, ""
-
+		return buildZombieCheck(b, entry, deps)
 	case "oom":
-		// delta is optional; the default fires on any OOM kill (> 0).
-		op, value := ">", 0.0
-		if d, ok := entry["delta"].(map[string]any); ok {
-			op = asString(d["op"])
-			if !validDiskOp(op) {
-				return nil, "oom delta has an invalid op"
-			}
-			v, err := strconv.ParseFloat(scalarString(d["value"]), 64)
-			if err != nil {
-				return nil, "oom delta value must be numeric"
-			}
-			value = v
-		}
-		return &oomCheck{base: b, op: op, value: value, sampler: deps.OomSampler}, ""
-
+		return buildOomCheck(b, entry, deps)
 	case "cert":
-		host := asString(entry["host"])
-		path := asString(entry["path"])
-		switch {
-		case host == "" && path == "":
-			return nil, "cert check requires a host or a path"
-		case host != "" && path != "":
-			return nil, "cert check: host and path are mutually exclusive"
-		}
-		port := "443"
-		if p, ok := intField(entry["port"]); ok {
-			port = strconv.Itoa(p)
-		}
-		serverName := asString(entry["server_name"])
-		if serverName == "" {
-			serverName = host
-		}
-		days := 0
-		if v, ok := intField(entry["expires_in_days"]); ok {
-			days = v
-		}
-		verify := true
-		if v, ok := entry["verify"].(bool); ok {
-			verify = v
-		}
-		return &certCheck{
-			base:           b,
-			host:           host,
-			port:           port,
-			serverName:     serverName,
-			path:           path,
-			expiresInDays:  days,
-			onAlgoChange:   asBool(entry["on_algorithm_change"]),
-			onIssuerChange: asBool(entry["on_issuer_change"]),
-			onChange:       asBool(entry["on_change"]),
-			verify:         verify,
-			sampler:        deps.CertSampler,
-		}, ""
-
+		return buildCertCheck(b, entry, deps)
 	case "sqlite", "sqlite3":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "sqlite check requires a path"
-		}
-		return sqliteCheck{base: b, path: path, quick: asBool(entry["quick"])}, ""
-
+		return buildSqliteCheck(b, entry)
 	case "swap":
-		metric := asString(entry["metric"])
-		c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
-		switch metric {
-		case "usage":
-			preds, err := parseSwapPreds(entry)
-			if err != nil {
-				return nil, "swap usage: " + err.Error()
-			}
-			c.preds = preds
-		case "io":
-			delta, ok := entry["delta"].(map[string]any)
-			if !ok {
-				return nil, "swap io requires a delta {op, value}"
-			}
-			op := asString(delta["op"])
-			if !validDiskOp(op) {
-				return nil, "swap io delta has an invalid op"
-			}
-			v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
-			if err != nil {
-				return nil, "swap io delta value must be numeric"
-			}
-			c.op, c.value = op, v
-		default:
-			return nil, "swap check metric must be usage or io"
-		}
-		return c, ""
-
+		return buildSwapCheck(b, entry, deps)
 	case "icmp":
-		host := asString(entry["host"])
-		if host == "" {
-			return nil, "icmp check requires a host"
-		}
-		count := 3
-		if v, ok := intField(entry["count"]); ok {
-			if v <= 0 {
-				return nil, "icmp count must be a positive integer"
-			}
-			count = v
-		}
-		metric := asString(entry["metric"])
-		allIf, iwarn := parseInterfaceMatch(entry)
-		if iwarn != "" {
-			return nil, "icmp check: " + iwarn
-		}
-		c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
-		switch metric {
-		case "state":
-			if exp := asString(entry["expect"]); exp != "" {
-				if exp != "up" && exp != "down" {
-					return nil, "icmp state expect must be up or down"
-				}
-				c.expect = exp
-			} else if asString(entry["on"]) == "change" {
-				c.onChange = true
-			} else {
-				return nil, "icmp state requires expect: up|down or on: change"
-			}
-		case "latency":
-			if th, ok := entry["threshold"].(map[string]any); ok {
-				op := asString(th["op"])
-				if !validDiskOp(op) {
-					return nil, "icmp latency threshold has an invalid op"
-				}
-				v, err := strconv.ParseFloat(scalarString(th["value"]), 64)
-				if err != nil {
-					return nil, "icmp latency threshold value must be numeric"
-				}
-				c.hasThreshold, c.op, c.value = true, op, v
-			} else if ch, ok := entry["change"].(map[string]any); ok {
-				d, err := strconv.ParseFloat(scalarString(ch["delta"]), 64)
-				if err != nil {
-					return nil, "icmp latency change delta must be numeric"
-				}
-				c.hasChange, c.delta = true, d
-			} else {
-				return nil, "icmp latency requires threshold {op, value} or change {delta}"
-			}
-		default:
-			return nil, "icmp check metric must be state or latency"
-		}
-		return c, ""
-
+		return buildICMPCheck(b, entry, deps)
 	case "sql":
 		return buildSQLCheck(b, entry)
-
 	case "mongodb-query":
 		return buildMongoCheck(b, entry)
-
 	case "influxdb-query":
 		return buildInfluxCheck(b, entry)
-
 	case "websocket", "ws":
 		return buildWebsocketCheck(b, entry)
-
 	case "size":
-		path := asString(entry["path"])
-		if path == "" {
-			return nil, "size check requires a path"
-		}
-		growBy, err := parseSize(scalarString(entry["grow_by"]))
-		if err != nil || growBy <= 0 {
-			return nil, "size check requires a positive grow_by (e.g. 1GB)"
-		}
-		window := durationOr(entry["within"], 0)
-		if window <= 0 {
-			return nil, "size check requires a positive within (e.g. 1h)"
-		}
-		return &sizeCheck{base: b, path: path, growBy: growBy, window: window, sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
-
+		return buildSizeCheck(b, entry, deps)
 	case "":
 		return nil, "missing type"
 	default:
@@ -666,6 +192,577 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		}
 		return nil, fmt.Sprintf("unsupported type %q", typ)
 	}
+}
+
+// buildTCPCheck builds a tcp connectivity check.
+func buildTCPCheck(b base, entry map[string]any) (Check, string) {
+	port, ok := intField(entry["port"])
+	if !ok {
+		return nil, "tcp check requires a numeric port"
+	}
+	host := asString(entry["host"])
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	all, iwarn := parseInterfaceMatch(entry)
+	if iwarn != "" {
+		return nil, "tcp check: " + iwarn
+	}
+	return tcpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: all, port: port}, ""
+}
+
+// buildPortsCheck builds a multi-port open/closed check.
+func buildPortsCheck(b base, entry map[string]any) (Check, string) {
+	host := asString(entry["host"])
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	ports, err := parsePortSpec(asString(entry["ports"]))
+	if err != nil {
+		return nil, "ports check: " + err.Error()
+	}
+	expect := asString(entry["expect"])
+	if expect == "" {
+		expect = "open"
+	}
+	if expect != "open" && expect != "closed" && expect != "any" {
+		return nil, "ports check: expect must be open, closed or any"
+	}
+	match := asString(entry["match"])
+	if match == "" {
+		match = "all"
+	}
+	if match != "all" && match != "any" && match != "none" {
+		return nil, "ports check: match must be all, any or none"
+	}
+	allIf, iwarn := parseInterfaceMatch(entry)
+	if iwarn != "" {
+		return nil, "ports check: " + iwarn
+	}
+	return &portsCheck{
+		base:           b,
+		host:           host,
+		ifaces:         parseInterfaces(entry["interface"]),
+		ifaceAll:       allIf,
+		ports:          ports,
+		expect:         expect,
+		match:          match,
+		onChange:       asBool(entry["on_change"]),
+		connectTimeout: durationOr(entry["connect_timeout"], 0),
+	}, ""
+}
+
+// buildHTTPCheck builds an http(s) check, configuring proxy, http3 and interface
+// egress on a per-check client when requested.
+func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, string) {
+	rawURL := asString(entry["url"])
+	if rawURL == "" {
+		return nil, "http check requires a url"
+	}
+	method := strings.ToUpper(asString(entry["method"]))
+	if method == "" {
+		method = http.MethodGet
+	}
+	expect, err := parseStatusMatcher(entry["expect_status"])
+	if err != nil {
+		return nil, "http check: " + err.Error()
+	}
+	var body []byte
+	contentType := ""
+	if j, ok := entry["json"]; ok && j != nil {
+		raw, err := json.Marshal(j)
+		if err != nil {
+			return nil, "http check: invalid json body: " + err.Error()
+		}
+		body, contentType = raw, "application/json"
+	} else if s := asString(entry["body"]); s != "" {
+		body = []byte(s)
+	}
+	reqClient := client
+	proxyURL, pwarn := parseProxyURL(entry)
+	if pwarn != "" {
+		return nil, pwarn
+	}
+	if asBool(entry["http3"]) {
+		// HTTP/3 runs over QUIC (always TLS 1.3) and cannot use an HTTP
+		// forward proxy. The transport never falls back to TCP, so a failure
+		// to reach the endpoint over QUIC fails (alerts) the check.
+		if u, err := url.Parse(rawURL); err != nil || u.Scheme != "https" {
+			return nil, "http check: http3 requires an https url"
+		}
+		if proxyURL != nil {
+			return nil, "http check: http3 and proxy are mutually exclusive"
+		}
+		reqClient = &http.Client{Transport: &http3.Transport{}}
+	} else if proxyURL != nil {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.Proxy = http.ProxyURL(proxyURL)
+		reqClient = &http.Client{Transport: tr}
+	}
+	// interface: egress the HTTP request (and any proxy connection) through a
+	// specific interface by binding the transport's dialer. The http client has
+	// one fixed transport, so it honors a single interface (the first listed).
+	if ifaces := parseInterfaces(entry["interface"]); len(ifaces) > 0 {
+		if asBool(entry["http3"]) {
+			return nil, "http check: http3 and interface are mutually exclusive"
+		}
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		if proxyURL != nil {
+			tr.Proxy = http.ProxyURL(proxyURL)
+		}
+		tr.DialContext = conn.BindDialer(ifaces[0]).DialContext
+		reqClient = &http.Client{Transport: tr}
+	}
+	hc := &httpCheck{
+		base:        b,
+		client:      reqClient,
+		url:         rawURL,
+		method:      method,
+		headers:     stringMap(entry["headers"]),
+		body:        body,
+		contentType: contentType,
+		expect:      expect,
+		expectJSON:  parseJSONAssertions(entry["expect_json"]),
+	}
+	// expect_body is either a substring (string form) or an {op, value}
+	// operator comparison against the trimmed body.
+	switch eb := entry["expect_body"].(type) {
+	case string:
+		hc.expectBody = eb
+	case map[string]any:
+		op := asString(eb["op"])
+		if !validCompareOp(op) {
+			return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, =~"
+		}
+		hc.bodyOp, hc.bodyValue = op, scalarString(eb["value"])
+	}
+	lop, lval, lwarn := parseExpectLatency(entry)
+	if lwarn != "" {
+		return nil, "http " + lwarn
+	}
+	hc.latencyOp, hc.latencyValue = lop, lval
+	if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {
+		return nil, warn
+	}
+	return hc, ""
+}
+
+// buildCommandCheck builds a check that runs a command and asserts its exit code.
+func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	argv := stringArray(entry["command"])
+	if len(argv) == 0 {
+		return nil, "command check requires a non-empty command array"
+	}
+	expect := 0
+	if v, ok := intField(entry["expect_exit"]); ok {
+		expect = v
+	}
+	return commandCheck{base: b, runner: runner, argv: argv, expectExit: expect}, ""
+}
+
+// buildServiceCheck builds a check on a service-manager unit's expected state.
+func buildServiceCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	expect := asString(entry["expect"])
+	if expect == "" {
+		return nil, "service check requires expect"
+	}
+	if deps.Status == nil {
+		return nil, "service check needs backend detection, unavailable here"
+	}
+	return serviceCheck{base: b, expect: expect, status: deps.Status}, ""
+}
+
+// buildFileExistsCheck builds a check that a path exists.
+func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
+	path := asString(entry["path"])
+	if path == "" {
+		return nil, "file_exists check requires a path"
+	}
+	return fileExistsCheck{base: b, path: path}, ""
+}
+
+// buildBinaryCheck builds a check on a binary's fingerprint.
+func buildBinaryCheck(b base, entry map[string]any) (Check, string) {
+	path := asString(entry["path"])
+	if path == "" {
+		return nil, "binary check requires a path"
+	}
+	return binaryCheck{base: b, path: path}, ""
+}
+
+// buildLibrariesCheck builds a check on a binary's shared-library dependencies.
+func buildLibrariesCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	binary := asString(entry["binary"])
+	if binary == "" {
+		return nil, "libraries check requires a binary"
+	}
+	return librariesCheck{base: b, runner: runner, binary: binary}, ""
+}
+
+// buildMetricCheck builds a check comparing a sampled metric to a threshold.
+func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	name := asString(entry["name"])
+	if name == "" {
+		return nil, "metric check requires a name"
+	}
+	scope := asString(entry["scope"])
+	if scope == "" {
+		scope = "service"
+	}
+	op := asString(entry["op"])
+	if op == "" {
+		return nil, "metric check requires an op"
+	}
+	if deps.Metrics == nil {
+		return nil, "metric check needs a metric source, unavailable here"
+	}
+	return metricCheck{base: b, scope: scope, metric: name, op: op, value: scalarString(entry["value"]), source: deps.Metrics}, ""
+}
+
+// buildProcessCheck builds a check on processes matching an exe/user selector.
+func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	exe := asString(entry["exe"])
+	user := asString(entry["user"])
+	if exe == "" && user == "" {
+		return nil, "process check requires exe and/or user"
+	}
+	if deps.Processes == nil {
+		return nil, "process check needs process discovery, unavailable here"
+	}
+	expect := asString(entry["state"])
+	if expect == "" {
+		expect = "running"
+	}
+	return processCheck{base: b, exe: exe, user: user, expect: expect, observe: deps.Processes}, ""
+}
+
+// buildCountCheck builds a check on the number of entries under a path.
+func buildCountCheck(b base, entry map[string]any) (Check, string) {
+	path := asString(entry["path"])
+	if path == "" {
+		return nil, "count check requires a path"
+	}
+	kind := asString(entry["of"])
+	if kind == "" {
+		kind = countAny
+	}
+	if !validCountKind(kind) {
+		return nil, "count check `of` must be file, dir, symlink or any"
+	}
+	op := asString(entry["op"])
+	if !validDiskOp(op) {
+		return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
+	}
+	val, err := strconv.ParseFloat(scalarString(entry["value"]), 64)
+	if err != nil {
+		return nil, "count check value must be numeric"
+	}
+	return countCheck{base: b, path: path, kind: kind, recursive: asBool(entry["recursive"]), op: op, value: val}, ""
+}
+
+// buildDiskCheck builds a disk space/inode and/or mount check.
+func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	path := asString(entry["path"])
+	if path == "" {
+		return nil, "disk check requires a path"
+	}
+	preds, err := parseDiskPreds(entry)
+	if err != nil {
+		return nil, "disk check: " + err.Error()
+	}
+	mount := parseMountCond(entry)
+	if len(preds) == 0 && !mount.active {
+		return nil, "disk check requires a space/inode predicate and/or a mount condition (mounted/fstype/options/device)"
+	}
+	return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
+}
+
+// buildAutofsCheck builds an autofs automounter check.
+func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	path := asString(entry["path"])
+	op, value := "", 0.0
+	if m, ok := entry["count"].(map[string]any); ok {
+		op = asString(m["op"])
+		if !validDiskOp(op) {
+			return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
+		}
+		v, err := strconv.ParseFloat(scalarString(m["value"]), 64)
+		if err != nil {
+			return nil, "autofs check count value must be numeric"
+		}
+		value = v
+	}
+	if path != "" && op != "" {
+		return nil, "autofs check: path and count are mutually exclusive"
+	}
+	return autofsCheck{base: b, path: path, op: op, value: value, sampler: deps.MountSampler}, ""
+}
+
+// buildNetCheck builds a network-interface state/speed/errors check.
+func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	iface := asString(entry["interface"])
+	if iface == "" {
+		return nil, "net check requires an interface"
+	}
+	metric := asString(entry["metric"])
+	c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
+	switch metric {
+	case "state":
+		if exp := asString(entry["expect"]); exp != "" {
+			if exp != "up" && exp != "down" {
+				return nil, "net state expect must be up or down"
+			}
+			c.expect = exp
+		} else if asString(entry["on"]) == "change" {
+			c.onChange = true
+		} else {
+			return nil, "net state requires expect: up|down or on: change"
+		}
+	case "speed":
+		if asString(entry["on"]) != "change" {
+			return nil, "net speed requires on: change"
+		}
+		c.onChange = true
+	case "errors":
+		c.counters = stringArray(entry["counters"])
+		if len(c.counters) == 0 {
+			c.counters = []string{"rx_errors", "tx_errors"}
+		}
+		delta, ok := entry["delta"].(map[string]any)
+		if !ok {
+			return nil, "net errors requires a delta {op, value}"
+		}
+		op := asString(delta["op"])
+		if !validDiskOp(op) {
+			return nil, "net errors delta has an invalid op"
+		}
+		v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
+		if err != nil {
+			return nil, "net errors delta value must be numeric"
+		}
+		c.op, c.value = op, v
+	default:
+		return nil, "net check metric must be state, speed or errors"
+	}
+	return c, ""
+}
+
+// buildLoadCheck builds a system load-average check.
+func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, err := parseLoadPreds(entry)
+	if err != nil {
+		return nil, "load check: " + err.Error()
+	}
+	return loadCheck{base: b, preds: preds, perCPU: asBool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
+}
+
+// buildFdsCheck builds an open file-descriptors check.
+func buildFdsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, err := parseFdsPreds(entry)
+	if err != nil {
+		return nil, "fds check: " + err.Error()
+	}
+	return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
+}
+
+// buildConntrackCheck builds a netfilter conntrack-table check.
+func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, err := parseConntrackPreds(entry)
+	if err != nil {
+		return nil, "conntrack check: " + err.Error()
+	}
+	return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
+}
+
+// buildEntropyCheck builds an available-entropy check.
+func buildEntropyCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	op, value, err := parseEntropyThreshold(entry)
+	if err != nil {
+		return nil, "entropy check: " + err.Error()
+	}
+	return entropyCheck{base: b, op: op, value: value, sampler: deps.EntropySampler}, ""
+}
+
+// buildZombieCheck builds a zombie-process count check.
+func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	op, value, err := parseZombieThreshold(entry)
+	if err != nil {
+		return nil, "zombies check: " + err.Error()
+	}
+	return zombieCheck{base: b, op: op, value: value, sampler: deps.ZombieSampler}, ""
+}
+
+// buildOomCheck builds an OOM-kill delta check (defaults to firing on any kill).
+func buildOomCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	// delta is optional; the default fires on any OOM kill (> 0).
+	op, value := ">", 0.0
+	if d, ok := entry["delta"].(map[string]any); ok {
+		op = asString(d["op"])
+		if !validDiskOp(op) {
+			return nil, "oom delta has an invalid op"
+		}
+		v, err := strconv.ParseFloat(scalarString(d["value"]), 64)
+		if err != nil {
+			return nil, "oom delta value must be numeric"
+		}
+		value = v
+	}
+	return &oomCheck{base: b, op: op, value: value, sampler: deps.OomSampler}, ""
+}
+
+// buildCertCheck builds a TLS/PEM certificate check (host or path).
+func buildCertCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	host := asString(entry["host"])
+	path := asString(entry["path"])
+	switch {
+	case host == "" && path == "":
+		return nil, "cert check requires a host or a path"
+	case host != "" && path != "":
+		return nil, "cert check: host and path are mutually exclusive"
+	}
+	port := "443"
+	if p, ok := intField(entry["port"]); ok {
+		port = strconv.Itoa(p)
+	}
+	serverName := asString(entry["server_name"])
+	if serverName == "" {
+		serverName = host
+	}
+	days := 0
+	if v, ok := intField(entry["expires_in_days"]); ok {
+		days = v
+	}
+	verify := true
+	if v, ok := entry["verify"].(bool); ok {
+		verify = v
+	}
+	return &certCheck{
+		base:           b,
+		host:           host,
+		port:           port,
+		serverName:     serverName,
+		path:           path,
+		expiresInDays:  days,
+		onAlgoChange:   asBool(entry["on_algorithm_change"]),
+		onIssuerChange: asBool(entry["on_issuer_change"]),
+		onChange:       asBool(entry["on_change"]),
+		verify:         verify,
+		sampler:        deps.CertSampler,
+	}, ""
+}
+
+// buildSqliteCheck builds a SQLite integrity check.
+func buildSqliteCheck(b base, entry map[string]any) (Check, string) {
+	path := asString(entry["path"])
+	if path == "" {
+		return nil, "sqlite check requires a path"
+	}
+	return sqliteCheck{base: b, path: path, quick: asBool(entry["quick"])}, ""
+}
+
+// buildSwapCheck builds a swap usage or io check.
+func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	metric := asString(entry["metric"])
+	c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
+	switch metric {
+	case "usage":
+		preds, err := parseSwapPreds(entry)
+		if err != nil {
+			return nil, "swap usage: " + err.Error()
+		}
+		c.preds = preds
+	case "io":
+		delta, ok := entry["delta"].(map[string]any)
+		if !ok {
+			return nil, "swap io requires a delta {op, value}"
+		}
+		op := asString(delta["op"])
+		if !validDiskOp(op) {
+			return nil, "swap io delta has an invalid op"
+		}
+		v, err := strconv.ParseFloat(scalarString(delta["value"]), 64)
+		if err != nil {
+			return nil, "swap io delta value must be numeric"
+		}
+		c.op, c.value = op, v
+	default:
+		return nil, "swap check metric must be usage or io"
+	}
+	return c, ""
+}
+
+// buildICMPCheck builds an ICMP ping state/latency check.
+func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	host := asString(entry["host"])
+	if host == "" {
+		return nil, "icmp check requires a host"
+	}
+	count := 3
+	if v, ok := intField(entry["count"]); ok {
+		if v <= 0 {
+			return nil, "icmp count must be a positive integer"
+		}
+		count = v
+	}
+	metric := asString(entry["metric"])
+	allIf, iwarn := parseInterfaceMatch(entry)
+	if iwarn != "" {
+		return nil, "icmp check: " + iwarn
+	}
+	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
+	switch metric {
+	case "state":
+		if exp := asString(entry["expect"]); exp != "" {
+			if exp != "up" && exp != "down" {
+				return nil, "icmp state expect must be up or down"
+			}
+			c.expect = exp
+		} else if asString(entry["on"]) == "change" {
+			c.onChange = true
+		} else {
+			return nil, "icmp state requires expect: up|down or on: change"
+		}
+	case "latency":
+		if th, ok := entry["threshold"].(map[string]any); ok {
+			op := asString(th["op"])
+			if !validDiskOp(op) {
+				return nil, "icmp latency threshold has an invalid op"
+			}
+			v, err := strconv.ParseFloat(scalarString(th["value"]), 64)
+			if err != nil {
+				return nil, "icmp latency threshold value must be numeric"
+			}
+			c.hasThreshold, c.op, c.value = true, op, v
+		} else if ch, ok := entry["change"].(map[string]any); ok {
+			d, err := strconv.ParseFloat(scalarString(ch["delta"]), 64)
+			if err != nil {
+				return nil, "icmp latency change delta must be numeric"
+			}
+			c.hasChange, c.delta = true, d
+		} else {
+			return nil, "icmp latency requires threshold {op, value} or change {delta}"
+		}
+	default:
+		return nil, "icmp check metric must be state or latency"
+	}
+	return c, ""
+}
+
+// buildSizeCheck builds a path-growth check over a time window.
+func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	path := asString(entry["path"])
+	if path == "" {
+		return nil, "size check requires a path"
+	}
+	growBy, err := parseSize(scalarString(entry["grow_by"]))
+	if err != nil || growBy <= 0 {
+		return nil, "size check requires a positive grow_by (e.g. 1GB)"
+	}
+	window := durationOr(entry["within"], 0)
+	if window <= 0 {
+		return nil, "size check requires a positive within (e.g. 1h)"
+	}
+	return &sizeCheck{base: b, path: path, growBy: growBy, window: window, sampler: deps.SizeSampler, clock: time.Now, state: &sizeState{}}, ""
 }
 
 // parseProxyURL reads the optional `proxy` field of an http check (e.g. a Squid
@@ -819,6 +916,8 @@ func scalarString(v any) string {
 		return strconv.FormatUint(t, 10)
 	case float64:
 		return strconv.FormatFloat(t, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(t)
 	case nil:
 		return ""
 	default:
