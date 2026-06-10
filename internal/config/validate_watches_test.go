@@ -604,11 +604,11 @@ func TestValidateEntropyWatch(t *testing.T) {
 }
 
 func TestValidateDiskMountWatch(t *testing.T) {
-	// A disk watch can carry mount conditions (mount + space in one entry).
+	// A disk watch can carry a mount condition (mount + space in one entry).
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"data-mount": map[string]any{
-				"check": map[string]any{"type": "disk", "path": "/data", "mounted": true, "fstype": "ext4"},
+				"check": map[string]any{"type": "disk", "path": "/data", "mounted": true},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
@@ -623,10 +623,30 @@ func TestValidateDiskMountWatch(t *testing.T) {
 				"check": map[string]any{"type": "disk", "path": "/data"}, // no predicate, no mount condition
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
+			"old-mount-controls": map[string]any{
+				"check": map[string]any{
+					"type":    "storage",
+					"path":    "/data",
+					"mounted": true,
+					"fstype":  "ext4",
+					"device":  "/dev/sdb1",
+					"options": []any{"rw"},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
 		},
 	})
 	if !hasIssue(bad, "watches.m.check requires a space/inode predicate") {
 		t.Fatalf("expected combined-requirement issue, got %v", bad)
+	}
+	for _, want := range []string{
+		"watches.old-mount-controls.check.fstype is not supported for a storage check",
+		"watches.old-mount-controls.check.device is not supported for a storage check",
+		"watches.old-mount-controls.check.options is not supported for a storage check",
+	} {
+		if !hasIssue(bad, want) {
+			t.Fatalf("missing issue %q in %v", want, bad)
+		}
 	}
 }
 
