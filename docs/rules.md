@@ -52,6 +52,7 @@ which reuse the same schema). MVP types:
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
+| `docker`      | the Docker Engine answers `/info`, exposing container counts (running/paused/stopped), images and a container's state/health for `expect`/`on_change` (see Database) |
 | `unifi` / `unifi-controller` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
 | `influxdb` / `influx` | an InfluxDB server answers `/health` (or `/ping`) and reports its version on 8086 (see Database) |
 | `prometheus` / `prom` | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
@@ -661,6 +662,39 @@ Protocols, in the order of the table above:
   `on_change` tracks `ups.status`; for the upsd software version use
   `on_version_change`. Because `ups.status` is a space-separated flag list (e.g.
   `OL CHRG`), match it with `=~` rather than `==`.
+- `docker` — the Docker Engine API. By default it talks to the local Unix socket
+  `/var/run/docker.sock`; set `host` (and `port`, default 2375 / 2376 with `tls`)
+  for a TCP daemon, or `socket` for a non-default path. No `user`. It GETs `/info`
+  (proving the daemon is up), reports the engine `version` (pair with
+  `on_version_change`), and exposes counts: **`containers`**,
+  **`containers.running`**, `containers.paused`, `containers.stopped`, `images`,
+  and `warnings` (number of daemon warnings). Set **`container`** (name or id) to
+  also read that container's `container.status` (`running`/`exited`/`restarting`/…),
+  `container.health` (`healthy`/`unhealthy`/`starting`/`none`), `container.running`,
+  `container.restartcount` and `container.exitcode`; `on_change` then alerts on its
+  state/health transitions. An unknown container fails the check.
+
+  ```yaml
+  checks:
+    docker:
+      type: docker                            # local socket by default
+      expect:
+        containers.running: { op: ">=", value: 4 }  # alert if fewer than 4 are up
+        containers.stopped: { op: "==", value: 0 }  # alert on any stopped container
+        warnings: { op: "==", value: 0 }            # alert on daemon warnings
+    web-container:
+      type: docker
+      container: web                          # watch one container
+      on_change: true                         # alert on status/health transitions
+      expect:
+        container.health: { op: "==", value: healthy }
+        container.restartcount: { op: "<", value: 5 } # alert on a restart loop
+  ```
+
+  Most interesting conditions: `containers.running` (expected services up),
+  `containers.stopped` (crashed/exited containers), per-`container` `status`/`health`
+  and `restartcount` (restart loops), `warnings`, and `on_version_change` for engine
+  upgrades.
 - `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is **optional**.
   It first runs an SMB2 `NEGOTIATE` (proving the server is up) and reports the
   negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/`3.0.2`/`3.1.1` —
@@ -1019,7 +1053,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp, nut/ups/upsd
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp, nut/ups/upsd, docker
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
