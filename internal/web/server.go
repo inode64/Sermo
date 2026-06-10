@@ -160,6 +160,8 @@ type Check struct {
 	Message  string `json:"message,omitempty"`
 	Ran      bool   `json:"ran"`          // false if not observed yet
 	At       string `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)
+	// Metrics are the check's graphable named series (time-series), if any.
+	Metrics []CheckMetric `json:"metrics,omitempty"`
 }
 
 // SLAWindow is a service's availability over one rolling window. Ratio is nil
@@ -286,13 +288,22 @@ type MetricSummary struct {
 	Max   float64 `json:"max"`
 }
 
-// MetricSeries is a check's latency history plus its summary for one window.
+// MetricSeries is a check's metric history plus its summary for one window. Metric
+// is empty for the built-in latency series, or the named metric (e.g. "read").
 type MetricSeries struct {
 	Check   string        `json:"check"`
+	Metric  string        `json:"metric,omitempty"`
 	Since   string        `json:"since"`
 	Unit    string        `json:"unit"`
 	Summary MetricSummary `json:"summary"`
 	Points  []MetricPoint `json:"points"`
+}
+
+// CheckMetric is a graphable named metric a check publishes (for the detail UI to
+// know which series to fetch and draw, with its unit).
+type CheckMetric struct {
+	Name string `json:"name"`
+	Unit string `json:"unit"`
 }
 
 // Finding is one diagnostic result (level: error|warning|info).
@@ -366,7 +377,7 @@ type Backend interface {
 	Series(ctx context.Context, name string, since time.Duration) ([]SeriesPoint, bool)
 	// Metrics returns a check's latency summary and per-minute history over since;
 	// ok is false for unknown service names.
-	Metrics(ctx context.Context, name, check string, since time.Duration) (MetricSeries, bool)
+	Metrics(ctx context.Context, name, check, metric string, since time.Duration) (MetricSeries, bool)
 	// Events returns up to limit recent events, newest first (the global feed).
 	Events(ctx context.Context, limit int) []Event
 	// Diagnostics runs config/host/database consistency checks and returns the
@@ -775,7 +786,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "check query parameter is required"})
 		return
 	}
-	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, seriesSince(r))
+	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, r.URL.Query().Get("metric"), seriesSince(r))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service or check"})
 		return

@@ -1200,7 +1200,10 @@ fires when it holds. **`hdparm` needs root** (raw device access); without it the
 check fails with hdparm's error. Because `-t` reads from the platter for a few
 seconds and adds real I/O load, schedule it on a **long `interval`** (e.g. `24h`)
 with a generous `timeout`. The measured `read`/`cached` are placed in the result
-data (and the `SERMO_READ`/`SERMO_CACHED` hook variables).
+data (and the `SERMO_READ`/`SERMO_CACHED` hook variables), and are **recorded as a
+time series and graphed** in the service detail (web UI) so you can spot **gradual
+degradation** of a drive over time. (This per-check named-metric graphing is
+generic: any check that publishes numeric `Result.Data` fields can opt in.)
 
 ### Autofs
 
