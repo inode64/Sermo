@@ -121,7 +121,7 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	if watches, ok := raw["watches"].(map[string]any); ok {
-		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), add)
+		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), NotifyDefault(raw), add)
 	}
 
 	cooldown, present := defaultsCooldown(cfg.Global.Defaults)

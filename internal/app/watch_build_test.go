@@ -81,6 +81,32 @@ func TestBuildWatchesDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesDiskInheritsGlobalNotifyWithoutThen(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"disk-root": map[string]any{
+			"check": map[string]any{
+				"type":     "disk",
+				"path":     "/",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{
+		DefaultTimeout: time.Second,
+		GlobalNotify:   []string{"ops"},
+		Notifiers:      map[string]notify.Notifier{"ops": &fakeNotifier{name: "ops"}},
+	}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if len(watches[0].Notifiers) != 1 || watches[0].Notifiers[0].Name() != "ops" {
+		t.Fatalf("watch should inherit global notifier, got %v", watches[0].Notifiers)
+	}
+}
+
 func TestBuildWatchesNotifyNoneWithoutActionWarns(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
@@ -95,6 +121,32 @@ func TestBuildWatchesNotifyNoneWithoutActionWarns(t *testing.T) {
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
 	if len(watches) != 0 || len(warns) == 0 {
 		t.Fatalf("notify none without hook/expand must warn and not build: watches=%d warns=%v", len(watches), warns)
+	}
+}
+
+func TestBuildWatchesFileInheritsGlobalNotifyWithoutThen(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"app-data": map[string]any{
+			"check": map[string]any{
+				"type": "file",
+				"path": "/var/lib/app",
+				"size": map[string]any{"on": "change"},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{
+		DefaultTimeout: time.Second,
+		GlobalNotify:   []string{"ops"},
+		Notifiers:      map[string]notify.Notifier{"ops": &fakeNotifier{name: "ops"}},
+	}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if watches[0].Cycle == nil {
+		t.Fatal("file watch must wire a Cycle override")
 	}
 }
 

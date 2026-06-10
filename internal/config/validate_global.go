@@ -10,7 +10,7 @@ import (
 )
 
 // validateWatches checks each host-watch entry: a known check type with valid
-// thresholds and a non-empty hook command (spec 2026-06-06-host-watches-disk).
+// thresholds and a local action or inherited global notify default.
 // validateWeb checks the global `web` block. The UI is enabled only when `port`
 // is set to an integer in 1..65535; a `web` block without `port` (or with port
 // omitted) is valid and leaves the dashboard disabled, matching sermod.

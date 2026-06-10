@@ -39,7 +39,7 @@ type Watch struct {
 	Hook      HookSpec
 	Runner    HookRunner
 	// Notifiers receive a notification when the watch fires (the resolved
-	// `then.notify` targets). A watch must have a hook and/or at least one notifier.
+	// `then.notify` targets, or the inherited global default).
 	Notifiers []notify.Notifier
 	Interval  time.Duration
 	Now       func() time.Time
