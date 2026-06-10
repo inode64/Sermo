@@ -77,6 +77,17 @@ func (e *Evaluator) Eval(ctx context.Context, node map[string]any) (bool, error)
 	return false, fmt.Errorf("condition has no recognized operator")
 }
 
+// condMap asserts a condition operand is a mapping, returning a "<label> must be
+// a mapping" error otherwise. It collapses the assertion repeated by every leaf
+// evaluator into one call.
+func condMap(v any, label string) (map[string]any, error) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s must be a mapping", label)
+	}
+	return m, nil
+}
+
 func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error) {
 	items, ok := v.([]any)
 	if !ok || len(items) == 0 {
@@ -104,9 +115,9 @@ func (e *Evaluator) evalList(ctx context.Context, v any, and bool) (bool, error)
 // probe resolves a failed/active operand: either {check: name} from the cache,
 // or an inline {<type>: params} probe built and run once (memoized).
 func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return checks.Result{}, fmt.Errorf("probe must be a mapping")
+	m, err := condMap(v, "probe")
+	if err != nil {
+		return checks.Result{}, err
 	}
 	if ref := asString(m["check"]); ref != "" {
 		res, ok := e.Cache[ref]
@@ -124,9 +135,9 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 }
 
 func (e *Evaluator) evalFile(ctx context.Context, v any) (bool, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return false, fmt.Errorf("file condition must be a mapping")
+	m, err := condMap(v, "file condition")
+	if err != nil {
+		return false, err
 	}
 	path := asString(m["path"])
 	if path == "" {
@@ -144,9 +155,9 @@ func (e *Evaluator) evalFile(ctx context.Context, v any) (bool, error) {
 }
 
 func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return false, fmt.Errorf("service condition must be a mapping")
+	m, err := condMap(v, "service condition")
+	if err != nil {
+		return false, err
 	}
 	state := asString(m["state"])
 	if state == "" {
@@ -163,9 +174,9 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 // exe/user selector equals the requested state (default running, section 14).
 // With no process source it is false.
 func (e *Evaluator) evalProcess(v any) (bool, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return false, fmt.Errorf("process condition must be a mapping")
+	m, err := condMap(v, "process condition")
+	if err != nil {
+		return false, err
 	}
 	if e.Deps.Processes == nil {
 		return false, nil
@@ -181,9 +192,9 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 // (section 14). With no metric source, or a not-ready rate metric, it is false
 // so a remediation never fires on an unavailable value.
 func (e *Evaluator) evalMetric(v any) (bool, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return false, fmt.Errorf("metric condition must be a mapping")
+	m, err := condMap(v, "metric condition")
+	if err != nil {
+		return false, err
 	}
 	if e.Deps.Metrics == nil {
 		return false, nil
@@ -203,9 +214,9 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 // baseline (section 14). With no Changed source it is false, so a remediation
 // never fires on an unavailable signal.
 func (e *Evaluator) evalChanged(v any) (bool, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return false, fmt.Errorf("changed condition must be a mapping")
+	m, err := condMap(v, "changed condition")
+	if err != nil {
+		return false, err
 	}
 	path := asString(m["path"])
 	if path == "" {
@@ -219,9 +230,9 @@ func (e *Evaluator) evalChanged(v any) (bool, error) {
 
 // evalInline builds and runs a leaf check whose truth is the check's OK.
 func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return false, fmt.Errorf("%s condition must be a mapping", typ)
+	m, err := condMap(v, typ+" condition")
+	if err != nil {
+		return false, err
 	}
 	entry := map[string]any{"type": typ}
 	for k, val := range m {
