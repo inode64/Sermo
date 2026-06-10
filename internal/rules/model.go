@@ -61,6 +61,11 @@ type Rule struct {
 	Within  *WithinWindow
 	Actions []Action // all actions in order (post-MVP multi-action then)
 	Blocks  []string
+	// Notify selects which notifiers receive this rule's alert messages: explicit
+	// names, the `none` sentinel to suppress, or empty to inherit the global
+	// default. Resolution and delivery happen in the worker (the rules package has
+	// no notifier dependency).
+	Notify []string
 }
 
 // Primary is the action other code treats as the rule's main one: the operation
@@ -167,6 +172,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			Within:  withinWin,
 			Actions: actions,
 			Blocks:  cfgval.StringList(entry["blocks"]),
+			Notify:  cfgval.StringList(entry["notify"]),
 		})
 	}
 	return rules, warnings

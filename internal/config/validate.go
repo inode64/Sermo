@@ -116,6 +116,10 @@ func validateGlobal(cfg *Config) []Issue {
 	notifiers, _ := raw["notifiers"].(map[string]any)
 	validateNotifiers(notifiers, add)
 
+	if _, present := raw["notify"]; present {
+		validateNotifySelection("notify", cfgval.StringList(raw["notify"]), notifierNames(notifiers), add)
+	}
+
 	if watches, ok := raw["watches"].(map[string]any); ok {
 		validateWatches(watches, filepath.Join(cfg.Global.RuntimeDir(), "locks"), notifierNames(notifiers), add)
 	}
@@ -190,6 +194,8 @@ func validDocumentName(name string) bool {
 
 func validateServices(cfg *Config) []Issue {
 	var issues []Issue
+	notifiers, _ := cfg.Global.Raw["notifiers"].(map[string]any)
+	defined := notifierNames(notifiers)
 	for _, name := range cfg.ServiceNames {
 		if name == "" {
 			continue
@@ -201,12 +207,12 @@ func validateServices(cfg *Config) []Issue {
 		if resolved.Tree == nil {
 			continue
 		}
-		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir())...)
+		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined)...)
 	}
 	return issues
 }
 
-func validateResolved(name string, tree map[string]any, runtime string) []Issue {
+func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
@@ -254,7 +260,7 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 	validateServiceField(tree, add)
 	validateCommands(tree, add)
 	validateRuleWindow(tree, add)
-	validateRules(tree, add)
+	validateRules(tree, notifiers, add)
 
 	return issues
 }

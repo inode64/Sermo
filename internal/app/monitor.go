@@ -171,6 +171,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	}
 	notifiers, warns := notify.Build(notifiersRaw(cfg))
 	m.deps.Notifiers = notifiers
+	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	for _, w := range warns {
 		m.Logger.Warn("reload notifiers", "warning", w)
 	}

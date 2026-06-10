@@ -90,6 +90,10 @@ type Deps struct {
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier
+	// GlobalNotify is the top-level `notify` default selection (notifier names): the
+	// fallback for any notify site (watch or rule alert) that declares none of its
+	// own. Empty means no default. See config.NotifyDefault.
+	GlobalNotify []string
 	// Snapshots collects each service's latest check results for the web detail
 	// view. Optional: nil disables publishing.
 	Snapshots *Snapshots
@@ -185,16 +189,18 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	recordMeasurement := measurementRecorder(deps, name, tree)
 
 	worker := &Worker{
-		Service:     name,
-		Rules:       ruleSet,
-		Policy:      rules.ParsePolicy(tree),
-		State:       &rules.RemediationState{},
-		Remediation: deps.Remediation,
-		RuleWindows: deps.RuleWindows,
-		CheckDeps:   checkDeps,
-		Interval:    durationField(tree["interval"]),
-		Gates:       parseCheckGates(tree),
-		Sample:      sampleMetrics,
+		Service:      name,
+		Rules:        ruleSet,
+		Policy:       rules.ParsePolicy(tree),
+		State:        &rules.RemediationState{},
+		Notifiers:    deps.Notifiers,
+		GlobalNotify: deps.GlobalNotify,
+		Remediation:  deps.Remediation,
+		RuleWindows:  deps.RuleWindows,
+		CheckDeps:    checkDeps,
+		Interval:     durationField(tree["interval"]),
+		Gates:        parseCheckGates(tree),
+		Sample:       sampleMetrics,
 		Operate: func(ctx context.Context, action string) operation.Result {
 			switch action {
 			case "start":

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -108,7 +109,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Check:      check,
 		Window:     rules.ParseWindowRule(entry),
 		Hook:       hook,
-		Notifiers:  resolveNotifiers(names, deps.Notifiers),
+		Notifiers:  resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		FireOnFail: isHealthCheckType(typ),
@@ -182,7 +183,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Check:     check,
 			Window:    rules.ParseWindowRule(mEntry),
 			Hook:      hook,
-			Notifiers: resolveNotifiers(names, deps.Notifiers),
+			Notifiers: resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
 			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:  interval,
 			Now:       deps.Now,
@@ -213,7 +214,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		recursive: boolField(checkEntry["recursive"]),
 		cond:      cond,
 		hook:      hook,
-		notifiers: resolveNotifiers(names, deps.Notifiers),
+		notifiers: resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
 	}
@@ -248,7 +249,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		match:     ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])},
 		cond:      cond,
 		hook:      hook,
-		notifiers: resolveNotifiers(names, deps.Notifiers),
+		notifiers: resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		now:       deps.Now,
 		emit:      deps.Emit,
@@ -434,6 +435,19 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 		}
 	}
 	return out
+}
+
+// effectiveNotify applies notify precedence (per-site over global): an explicit
+// site selection wins, the `none` sentinel suppresses all delivery, and an
+// omitted selection inherits the global default.
+func effectiveNotify(site, global []string) []string {
+	if slices.Contains(site, "none") {
+		return nil
+	}
+	if len(site) > 0 {
+		return site
+	}
+	return global
 }
 
 func sortedWatchNames(m map[string]any) []string {

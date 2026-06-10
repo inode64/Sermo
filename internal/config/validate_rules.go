@@ -103,7 +103,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 	}
 }
 
-func validateRules(tree map[string]any, add addFunc) {
+func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFunc) {
 	ruleMap, ok := tree["rules"].(map[string]any)
 	if !ok {
 		return
@@ -117,6 +117,10 @@ func validateRules(tree map[string]any, add addFunc) {
 		if !ok {
 			add("%s must be a mapping", path)
 			continue
+		}
+
+		if _, present := entry["notify"]; present {
+			validateNotifySelection(path+".notify", cfgval.StringList(entry["notify"]), notifiers, add)
 		}
 
 		rtype := cfgval.String(entry["type"])

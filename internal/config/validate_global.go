@@ -42,8 +42,16 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
+// notifyNone is the reserved notify sentinel: a notify selection of `none`
+// suppresses delivery, and no notifier may take it as a name.
+const notifyNone = "none"
+
 func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
+		if name == notifyNone {
+			add("notifiers.%s: %q is a reserved keyword and cannot name a notifier", name, notifyNone)
+			continue
+		}
 		entry, ok := notifiers[name].(map[string]any)
 		if !ok {
 			add("notifiers.%s must be a mapping", name)
@@ -87,18 +95,45 @@ func notifierNames(notifiers map[string]any) map[string]struct{} {
 	return names
 }
 
-// validateNotifyRefs checks that every `then.notify` name in a watch (entry-level
-// and per-metric) refers to a defined notifier.
+// NotifyDefault returns the global default notifier names from the top-level
+// `notify` key: the listed names, or nil when the key is absent or set to the
+// `none` sentinel. It is the fallback for any notify site that declares no
+// selection of its own.
+func NotifyDefault(raw map[string]any) []string {
+	names := cfgval.StringList(raw["notify"])
+	if slices.Contains(names, notifyNone) {
+		return nil
+	}
+	return names
+}
+
+// validateNotifySelection validates a notify selection (a global `notify`, a
+// watch `then.notify`, or a rule `notify`): every name must be a defined notifier
+// or the `none` sentinel, and `none` cannot be combined with real names.
+func validateNotifySelection(prefix string, names []string, defined map[string]struct{}, add func(string, ...any)) {
+	if slices.Contains(names, notifyNone) && len(names) > 1 {
+		add("%s: %q cannot be combined with notifier names", prefix, notifyNone)
+	}
+	for _, ref := range names {
+		if ref == notifyNone {
+			continue
+		}
+		if _, ok := defined[ref]; !ok {
+			add("%s references unknown notifier %q", prefix, ref)
+		}
+	}
+}
+
+// validateNotifyRefs checks every `then.notify` selection in a watch (entry-level
+// and per-metric) against the defined notifiers and the `none` sentinel.
 func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]struct{}, add func(string, ...any)) {
 	check := func(prefix string, then any) {
 		t, ok := then.(map[string]any)
 		if !ok {
 			return
 		}
-		for _, ref := range cfgval.StringList(t["notify"]) {
-			if _, ok := notifiers[ref]; !ok {
-				add("%s.then.notify references unknown notifier %q", prefix, ref)
-			}
+		if _, present := t["notify"]; present {
+			validateNotifySelection(prefix+".then.notify", cfgval.StringList(t["notify"]), notifiers, add)
 		}
 	}
 	check("watches."+name, entry["then"])
