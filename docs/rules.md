@@ -57,6 +57,7 @@ which reuse the same schema). MVP types:
 | `prometheus` / `prom` | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
+| `nut` / `ups` / `upsd` | NUT's upsd answers `VER`; with credentials it authenticates (`LOGIN`), and a named UPS exposes `ups.status` (see Database) |
 | `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
 | `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
@@ -627,6 +628,14 @@ Protocols, in the order of the table above:
 - `spamd` (alias `spamassassin`) — default port 783 (TCP), or a Unix socket via
   `socket`. No auth. Sends a SPAMC/SPAMD `PING` and verifies spamd answers
   `SPAMD/<v> 0 PONG`. Result data: the SPAMD protocol version.
+- `nut` (aliases `ups`, `upsd`) — NUT (Network UPS Tools) upsd; default port 3493
+  (TCP), `tls` supported (implicit TLS — upsd's `STARTTLS` upgrade is not used).
+  `user`/`password` are **optional**: anonymously it sends `VER` and reports the
+  upsd `version` (pair with `on_version_change`). Set **`query`** to a UPS name to
+  read its `ups.status` into the result (assert it with e.g.
+  `expect: { "ups.status": "OL" }`); with credentials it also `LOGIN`-s to that
+  UPS to verify access (`USERNAME`/`PASSWORD` alone are not checked by upsd). An
+  unknown UPS name fails the check.
 - `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is **optional**.
   It first runs an SMB2 `NEGOTIATE` (proving the server is up) and reports the
   negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/`3.0.2`/`3.1.1` —
@@ -985,7 +994,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp, nut/ups/upsd
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
