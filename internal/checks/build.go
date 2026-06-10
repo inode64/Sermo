@@ -358,7 +358,15 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
 		expect = v
 	}
-	return commandCheck{base: b, runner: runner, argv: argv, expectExit: expect}, ""
+	stdout, warn := ParseOutputMatcher(entry["expect_stdout"])
+	if warn != "" {
+		return nil, "command check expect_stdout " + warn
+	}
+	stderr, warn := ParseOutputMatcher(entry["expect_stderr"])
+	if warn != "" {
+		return nil, "command check expect_stderr " + warn
+	}
+	return commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr}, ""
 }
 
 // buildServiceCheck builds a check on a service-manager unit's expected state.

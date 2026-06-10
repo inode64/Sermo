@@ -383,6 +383,18 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 			return HookSpec{}, nil, fmt.Errorf("hook requires a non-empty command")
 		}
 		hook = HookSpec{Command: cmd, Timeout: durationField(h["timeout"])}
+		if v, ok := cfgval.Int(h["expect_exit"]); ok {
+			hook.ExpectExit = &v
+		}
+		stdout, warn := checks.ParseOutputMatcher(h["expect_stdout"])
+		if warn != "" {
+			return HookSpec{}, nil, fmt.Errorf("hook expect_stdout %s", warn)
+		}
+		stderr, warn := checks.ParseOutputMatcher(h["expect_stderr"])
+		if warn != "" {
+			return HookSpec{}, nil, fmt.Errorf("hook expect_stderr %s", warn)
+		}
+		hook.Stdout, hook.Stderr = stdout, stderr
 	}
 	return hook, cfgval.StringArray(then["notify"]), nil
 }

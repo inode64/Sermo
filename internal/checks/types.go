@@ -315,13 +315,16 @@ func (m statusMatcher) String() string {
 	return strings.Join(parts, ",")
 }
 
-// commandCheck runs a command and compares its exit code (section 12). The
-// command is always an argv array, never a shell string (section 30/34).
+// commandCheck runs a command and compares its exit code, and optionally its
+// stdout/stderr, to expectations (section 12). The command is always an argv
+// array, never a shell string (section 30/34).
 type commandCheck struct {
 	base
 	runner     execx.Runner
 	argv       []string
 	expectExit int
+	stdout     OutputMatcher
+	stderr     OutputMatcher
 }
 
 func (c commandCheck) Run(ctx context.Context) Result {
@@ -330,14 +333,20 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	defer cancel()
 
 	res, _ := c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
-	ok := res.ExitCode == c.expectExit
-	msg := fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit)
-	if !ok {
+	if res.ExitCode != c.expectExit {
+		msg := fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit)
 		if stderr := firstLine(res.Stderr); stderr != "" {
 			msg += ": " + stderr
 		}
+		return c.result(false, msg, start)
 	}
-	return c.result(ok, msg, start)
+	if ok, detail := c.stdout.Match(res.Stdout); !ok {
+		return c.result(false, fmt.Sprintf("exit %d; stdout %s", res.ExitCode, detail), start)
+	}
+	if ok, detail := c.stderr.Match(res.Stderr); !ok {
+		return c.result(false, fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail), start)
+	}
+	return c.result(true, fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit), start)
 }
 
 // serviceCheck compares the service's backend status to an expected value
