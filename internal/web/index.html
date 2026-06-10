@@ -12,10 +12,14 @@
   table { border-collapse: collapse; width: 100%; }
   th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #8884; }
   th { font-weight: 600; }
-  .table-wrap { width: 100%; overflow-x: auto; }
+  .table-wrap { width: 100%; overflow: auto; max-height: calc(100vh - 13rem); }
   .services-table { min-width: 76rem; font-size: .82rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
   .services-table th, .services-table td { padding: .26rem .42rem; vertical-align: top; }
   .services-table th { color: #888; white-space: nowrap; }
+  .services-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; }
+  .services-table th.sortable { cursor: pointer; }
+  .services-table th.sortable:hover { color: #444; }
+  .sort-ind { font-size: .7rem; }
   .services-table td { white-space: nowrap; }
   .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; }
   .services-table .svc-sub { margin-left: 1.15rem; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
@@ -151,7 +155,17 @@
   <div class="table-wrap">
   <table class="services-table">
     <thead>
-      <tr><th>Service</th><th>Unit</th><th>Status</th><th>Checks</th><th>Interval</th><th>Policy</th><th>Locks</th><th>Last event</th><th>Next remediation</th><th>Monitoring</th><th class="actions">Actions</th></tr>
+      <tr>
+        <th class="sortable" data-sort="name" onclick="setSvcSort('name')">Service<span class="sort-ind" data-si="name"></span></th>
+        <th>Unit</th>
+        <th class="sortable" data-sort="status" onclick="setSvcSort('status')">Status<span class="sort-ind" data-si="status"></span></th>
+        <th class="sortable" data-sort="checks" onclick="setSvcSort('checks')">Checks<span class="sort-ind" data-si="checks"></span></th>
+        <th>Interval</th><th>Policy</th><th>Locks</th>
+        <th class="sortable" data-sort="last" onclick="setSvcSort('last')">Last event<span class="sort-ind" data-si="last"></span></th>
+        <th>Next remediation</th>
+        <th class="sortable" data-sort="monitoring" onclick="setSvcSort('monitoring')">Monitoring<span class="sort-ind" data-si="monitoring"></span></th>
+        <th class="actions">Actions</th>
+      </tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
@@ -908,6 +922,48 @@ function serviceMatches(s) {
 }
 
 function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); }
+
+// Column sort: null key keeps the default failing-first order; clicking a header
+// sorts by it (ascending), and clicking the same header again flips direction.
+let svcSort = { key: "", dir: 1 };
+const svcSortKeys = {
+  name: (s) => (s.name || "").toLowerCase(),
+  status: (s) => (s.status || "").toLowerCase(),
+  checks: (s) => s.checks_failing || 0,
+  last: (s) => (s.last_event && s.last_event.time) || "",
+  monitoring: (s) => (!s.enabled ? 2 : s.monitored ? 0 : 1),
+};
+function setSvcSort(key) {
+  if (svcSort.key === key) svcSort.dir = -svcSort.dir;
+  else { svcSort.key = key; svcSort.dir = 1; }
+  renderServices();
+}
+function updateSortIndicators() {
+  document.querySelectorAll(".sort-ind").forEach((el) => {
+    el.textContent = el.dataset.si === svcSort.key ? (svcSort.dir > 0 ? " ▲" : " ▼") : "";
+  });
+}
+
+// renderFilterCounts annotates each status-filter button with how many services
+// match it, for at-a-glance triage.
+function renderFilterCounts() {
+  const s = allServices || [];
+  const low = (x) => (x.status || "").toLowerCase();
+  const c = {
+    all: s.length,
+    active: s.filter((x) => low(x) === "active").length,
+    inactive: s.filter((x) => low(x) === "inactive").length,
+    failed: s.filter((x) => low(x) === "failed").length,
+    monitored: s.filter((x) => x.enabled && x.monitored).length,
+    paused: s.filter((x) => x.enabled && !x.monitored).length,
+    disabled: s.filter((x) => !x.enabled).length,
+  };
+  document.querySelectorAll("#svc-filters button").forEach((b) => {
+    const f = b.dataset.f;
+    if (c[f] !== undefined) b.innerHTML = `${f} <span class="muted">${c[f]}</span>`;
+  });
+}
+
 function setSvcStatus(v) {
   svcStatus = v;
   document.querySelectorAll("#svc-filters button").forEach((b) =>
@@ -924,9 +980,16 @@ function render(services) {
 
 function renderServices() {
   const total = (allServices || []).length;
+  renderFilterCounts();
   const list = (allServices || []).filter(serviceMatches);
-  // Failing services first (stable sort keeps the backend order within groups).
-  list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
+  if (svcSort.key && svcSortKeys[svcSort.key]) {
+    const f = svcSortKeys[svcSort.key];
+    list.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * svcSort.dir; });
+  } else {
+    // Default: failing services first (stable sort keeps backend order in groups).
+    list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
+  }
+  updateSortIndicators();
   const cnt = $("#svc-count");
   if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all") ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((s) => {
