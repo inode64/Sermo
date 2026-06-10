@@ -78,8 +78,13 @@
   .watch-table { min-width: 72rem; font-size: .88rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
-  .usagebar { display: inline-block; width: 8rem; height: .55rem; background: #8883; border-radius: .3rem; overflow: hidden; vertical-align: middle; }
-  .usagebar > span { display: block; height: 100%; }
+  .usagebar { position: relative; display: inline-grid; place-items: center; width: 8.8rem; height: 1rem; background: #8882; border: 1px solid #8885; border-radius: 999px; overflow: hidden; vertical-align: middle; box-sizing: border-box; }
+  .usagebar-fill { position: absolute; inset: 0; width: 100%; transform-origin: left center; transform: scaleX(0); }
+  .usagebar.usage-ok .usagebar-fill { background: #2da44e; }
+  .usagebar.usage-warn .usagebar-fill { background: #d4a72c; }
+  .usagebar.usage-high .usagebar-fill { background: #fb8500; }
+  .usagebar.usage-crit .usagebar-fill { background: #cf222e; }
+  .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: CanvasText; text-shadow: 0 1px 0 Canvas, 0 -1px 0 Canvas, 1px 0 0 Canvas, -1px 0 0 Canvas; }
   .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
   #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
@@ -1237,9 +1242,29 @@ function usageColor(pct) {
   return "#1a7f37";
 }
 
+function usageLevel(pct) {
+  pct = pctClamp(pct);
+  if (pct >= 95) return "usage-crit";
+  if (pct >= 90) return "usage-high";
+  if (pct >= 75) return "usage-warn";
+  return "usage-ok";
+}
+
 function usageBar(pct) {
   const p = pctClamp(pct);
-  return `<span class="usagebar" title="${fmtPct(p)} used"><span style="width:${p.toFixed(1)}%; background:${usageColor(p)}"></span></span>`;
+  const ratio = (p / 100).toFixed(4);
+  const label = fmtPct(p);
+  return `<span class="usagebar ${usageLevel(p)}" title="${label} used" aria-label="${label} used"><span class="usagebar-fill" style="transform:scaleX(${ratio})"></span><span class="usagebar-label">${label}</span></span>`;
+}
+
+function diskUsedPct(d) {
+  if (!d) return 0;
+  const used = Number(d.used_bytes);
+  const total = Number(d.total_bytes);
+  if (Number.isFinite(used) && Number.isFinite(total) && total > 0) return pctClamp((used / total) * 100);
+  const free = Number(d.free_bytes);
+  if (Number.isFinite(free) && Number.isFinite(total) && total > 0) return pctClamp(((total - free) / total) * 100);
+  return pctClamp(d.used_pct);
 }
 
 function notifierNames(w) {
@@ -1261,8 +1286,9 @@ function watchSummaryCell(w) {
     }
     const fs = d.filesystem ? ` · ${esc(d.filesystem)}` : "";
     const mount = d.mount_point ? ` · ${esc(d.mount_point)}` : "";
+    const usedPct = diskUsedPct(d);
     return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
-      <div>${usageBar(d.used_pct)} <b>${fmtPct(d.used_pct)}</b> used <span class="muted">· ${fmtBytes(d.free_bytes)} free (${fmtPct(d.free_pct)})</span></div>`;
+      <div>${usageBar(usedPct)} <b>${fmtPct(usedPct)}</b> used <span class="muted">· ${fmtBytes(d.free_bytes)} free (${fmtPct(d.free_pct)})</span></div>`;
   }
   return w.summary ? esc(w.summary) : "—";
 }
@@ -1295,6 +1321,7 @@ function renderConditionRows(conditions) {
 
 function renderDiskWatch(d) {
   if (!d) return "";
+  const usedPct = diskUsedPct(d);
   const fs = d.filesystem || "unknown";
   const mount = d.mounted
     ? `<code>${esc(d.mount_point || "")}</code>`
@@ -1316,7 +1343,7 @@ function renderDiskWatch(d) {
     <div><span class="muted">Filesystem</span><br><code>${esc(fs)}</code></div>
     <div><span class="muted">Device</span><br>${device}</div>
     <div><span class="muted">Total</span><br><b>${fmtBytes(d.total_bytes)}</b></div>
-    <div><span class="muted">Used</span><br>${usageBar(d.used_pct)} <b>${fmtBytes(d.used_bytes)}</b> (${fmtPct(d.used_pct)})</div>
+    <div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b> (${fmtPct(usedPct)})</div>
     <div><span class="muted">Free</span><br><b>${fmtBytes(d.free_bytes)}</b> (${fmtPct(d.free_pct)})</div>
     <div><span class="muted">Inodes</span><br>${inodes}</div>
     <div><span class="muted">Options</span><br>${options}</div>
