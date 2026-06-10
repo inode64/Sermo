@@ -524,109 +524,131 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			add("%s has no type", path)
 			continue
 		}
-		if _, known := knownCheckTypes[typ]; !known {
-			// A connection-protocol check (mysql, …): the type names a protocol
-			// in the conn registry, validated generically below.
-			if proto, isProto := conn.Lookup(typ); isProto {
-				validateConnFields(path, entry, proto.RequiresUser(), add)
-				validateInterfaceFields(path, entry, add)
-				continue
-			}
+		if !validateSingleShotCheckFields(path, typ, entry, locksDir, add) {
 			add("%s has unknown type %q", path, typ)
 			continue
 		}
-		validateInterfaceFields(path, entry, add)
-		switch typ {
-		case "http":
-			validateHTTPFields(path, entry, add)
-		case "ports":
-			validatePortsFields(path, entry, add)
-		case "command":
-			if !isStringArray(entry["command"]) {
-				add("%s command must be an array, not a shell string", path)
-			}
-			if v, present := entry["expect_exit"]; present {
-				if _, ok := cfgval.Int(v); !ok {
-					add("%s expect_exit must be an integer", path)
-				}
-			}
-			validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
-			validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
-		case "service":
-			if st := cfgval.String(entry["expect"]); st != "" {
-				if _, ok := serviceStates[st]; !ok {
-					add("%s expect %q is not one of active, inactive, failed, unknown", path, st)
-				}
-			}
-		case "process":
-			if st := cfgval.String(entry["state"]); st != "" {
-				if _, ok := processStates[st]; !ok {
-					add("%s state %q is not one of running, zombie, absent", path, st)
-				}
-			}
-		case "file_exists":
-			if p := cfgval.String(entry["path"]); p != "" && underDir(p, locksDir) {
-				add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
-			}
-		case "metric":
-			validateMetric(entry, path, true, add)
-		case "count":
-			validateCount(entry, path, add)
-		case "disk":
-			validateDiskFields(path, entry, add)
-		case "autofs":
-			validateAutofsFields(path, entry, add)
-		case "load":
-			validateLoadFields(path, entry, add)
-		case "hdparm":
-			validateHdparmFields(path, entry, add)
-		case "sensors":
-			if validatePresentThresholds(path, entry, []string{"temp", "fan", "voltage"}, add) == 0 {
-				add("%s requires at least one of temp/fan/voltage {op, value}", path)
-			}
-		case "smart":
-			validateSmartFields(path, entry, add)
-		case "raid":
-			validatePresentThresholds(path, entry, []string{"degraded", "recovering", "arrays"}, add)
-		case "edac":
-			validatePresentThresholds(path, entry, []string{"ce", "ue"}, add)
-		case "config":
-			_, hasCmd := entry["command"]
-			_, hasPath := entry["path"]
-			if !hasCmd && !hasPath {
-				add("%s requires a command and/or path", path)
-			}
-			if hasCmd && !isStringArray(entry["command"]) {
-				add("%s command must be an array, not a shell string", path)
-			}
-		case "fds":
-			validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
-		case "conntrack":
-			validateThresholdPreds(path, entry, []string{"used_pct", "free", "count"}, add)
-		case "entropy":
-			validateEntropyFields(path, entry, add)
-		case "zombies":
-			validateZombieFields(path, entry, add)
-		case "oom":
-			validateOomFields(path, entry, add)
-		case "cert":
-			validateCertFields(path, entry, add)
-		case "sqlite", "sqlite3":
-			if cfgval.String(entry["path"]) == "" {
-				add("%s.path is required for a sqlite check", path)
-			}
-		case "sql":
-			validateSQLFields(path, entry, add)
-		case "mongodb-query":
-			validateMongoFields(path, entry, add)
-		case "influxdb-query":
-			validateInfluxFields(path, entry, add)
-		case "size":
-			validateSizeFields(path, entry, add)
-		case "websocket", "ws":
-			validateWebsocketFields(path, entry, add)
-		}
 	}
+}
+
+func validateSingleShotCheckFields(path, typ string, entry map[string]any, locksDir string, add addFunc) bool {
+	if _, known := knownCheckTypes[typ]; !known {
+		// A connection-protocol check (mysql, …): the type names a protocol in
+		// the conn registry, validated generically below.
+		if proto, isProto := conn.Lookup(typ); isProto {
+			validateConnFields(path, entry, proto.RequiresUser(), add)
+			validateInterfaceFields(path, entry, add)
+			return true
+		}
+		return false
+	}
+	validateInterfaceFields(path, entry, add)
+	switch typ {
+	case "tcp":
+		if _, ok := cfgval.Int(entry["port"]); !ok {
+			add("%s.port is required and must be numeric for a tcp check", path)
+		}
+	case "http":
+		validateHTTPFields(path, entry, add)
+	case "ports":
+		validatePortsFields(path, entry, add)
+	case "command":
+		if !isStringArray(entry["command"]) {
+			add("%s command must be an array, not a shell string", path)
+		}
+		if v, present := entry["expect_exit"]; present {
+			if _, ok := cfgval.Int(v); !ok {
+				add("%s expect_exit must be an integer", path)
+			}
+		}
+		validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
+		validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
+	case "service":
+		if st := cfgval.String(entry["expect"]); st != "" {
+			if _, ok := serviceStates[st]; !ok {
+				add("%s expect %q is not one of active, inactive, failed, unknown", path, st)
+			}
+		}
+	case "process":
+		if st := cfgval.String(entry["state"]); st != "" {
+			if _, ok := processStates[st]; !ok {
+				add("%s state %q is not one of running, zombie, absent", path, st)
+			}
+		}
+	case "file_exists":
+		p := cfgval.String(entry["path"])
+		if p == "" {
+			add("%s.path is required for a file_exists check", path)
+		} else if underDir(p, locksDir) {
+			add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
+		}
+	case "binary":
+		if cfgval.String(entry["path"]) == "" {
+			add("%s.path is required for a binary check", path)
+		}
+	case "libraries":
+		if cfgval.String(entry["binary"]) == "" {
+			add("%s.binary is required for a libraries check", path)
+		}
+	case "metric":
+		validateMetric(entry, path, true, add)
+	case "count":
+		validateCount(entry, path, add)
+	case "disk":
+		validateDiskFields(path, entry, add)
+	case "autofs":
+		validateAutofsFields(path, entry, add)
+	case "load":
+		validateLoadFields(path, entry, add)
+	case "hdparm":
+		validateHdparmFields(path, entry, add)
+	case "sensors":
+		if validatePresentThresholds(path, entry, []string{"temp", "fan", "voltage"}, add) == 0 {
+			add("%s requires at least one of temp/fan/voltage {op, value}", path)
+		}
+	case "smart":
+		validateSmartFields(path, entry, add)
+	case "raid":
+		validatePresentThresholds(path, entry, []string{"degraded", "recovering", "arrays"}, add)
+	case "edac":
+		validatePresentThresholds(path, entry, []string{"ce", "ue"}, add)
+	case "config":
+		_, hasCmd := entry["command"]
+		_, hasPath := entry["path"]
+		if !hasCmd && !hasPath {
+			add("%s requires a command and/or path", path)
+		}
+		if hasCmd && !isStringArray(entry["command"]) {
+			add("%s command must be an array, not a shell string", path)
+		}
+	case "fds":
+		validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
+	case "conntrack":
+		validateThresholdPreds(path, entry, []string{"used_pct", "free", "count"}, add)
+	case "entropy":
+		validateEntropyFields(path, entry, add)
+	case "zombies":
+		validateZombieFields(path, entry, add)
+	case "oom":
+		validateOomFields(path, entry, add)
+	case "cert":
+		validateCertFields(path, entry, add)
+	case "sqlite", "sqlite3":
+		if cfgval.String(entry["path"]) == "" {
+			add("%s.path is required for a sqlite check", path)
+		}
+	case "sql":
+		validateSQLFields(path, entry, add)
+	case "mongodb-query":
+		validateMongoFields(path, entry, add)
+	case "influxdb-query":
+		validateInfluxFields(path, entry, add)
+	case "size":
+		validateSizeFields(path, entry, add)
+	case "websocket", "ws":
+		validateWebsocketFields(path, entry, add)
+	}
+	return true
 }
 
 // validateWebsocketFields validates a websocket check: a required url with a
