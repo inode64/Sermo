@@ -143,7 +143,8 @@
       <button data-f="inactive" onclick="setSvcStatus('inactive')">inactive</button>
       <button data-f="failed" onclick="setSvcStatus('failed')">failed</button>
       <button data-f="monitored" onclick="setSvcStatus('monitored')">monitored</button>
-      <button data-f="unmonitored" onclick="setSvcStatus('unmonitored')">unmonitored</button>
+      <button data-f="paused" onclick="setSvcStatus('paused')">paused</button>
+      <button data-f="disabled" onclick="setSvcStatus('disabled')">disabled</button>
     </span>
     <span id="svc-count" class="muted"></span>
   </div>
@@ -671,7 +672,7 @@ function summarizeSLA(points) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | active | inactive | failed | monitored | unmonitored
+let svcStatus = "all"; // all | active | inactive | failed | monitored | paused | disabled
 let allWatches = [];
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
@@ -896,8 +897,9 @@ function serviceMatches(s) {
     case "active":      return st === "active";
     case "inactive":    return st === "inactive";
     case "failed":      return st === "failed";
-    case "monitored":   return !!s.monitored;
-    case "unmonitored": return !s.monitored;
+    case "monitored":   return s.enabled && !!s.monitored;
+    case "paused":      return s.enabled && !s.monitored;
+    case "disabled":    return !s.enabled;
     default:            return true; // "all"
   }
 }
@@ -936,17 +938,21 @@ function renderServices() {
       mon = '<span class="pill">disabled</span>';
       actions = '<span class="muted">disabled in config</span>';
     } else {
-      mon = s.monitored
+      // The monitor/unmonitor toggle lives in the Monitoring column (next to the
+      // state pill), so it is not repeated in Actions.
+      const toggle = me.can_act
+        ? (s.monitored
+            ? `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
+            : `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','monitor')">monitor</button>`)
+        : "";
+      mon = (s.monitored
         ? '<span class="pill">monitored</span>'
-        : `<span class="pill">paused</span>${monitorHint(s)}`;
+        : `<span class="pill">paused</span>${monitorHint(s)}`) + (toggle ? " " + toggle : "");
       const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
           <button ${busy || st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
           <button ${busy || stopped ? "disabled" : ""} onclick="act('${esc(s.name)}','stop')">stop</button>
-          <button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','restart')">restart</button>
-          ${s.monitored
-            ? `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
-            : `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
+          <button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','restart')">restart</button>`
         : '<span class="muted">read-only</span>';
     }
     const label = s.display_name && s.display_name !== s.name
