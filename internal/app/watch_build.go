@@ -88,7 +88,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 }
 
 // buildSingleWatch builds the standard one-Watch-per-entry shape: an inline check
-// plus the entry's top-level then.hook. It serves the host-resource checks
+// plus the entry's top-level actions. It serves the host-resource checks
 // (disk/load/…) and any single-shot service check (tcp/http/…) used as a watch.
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
@@ -101,16 +101,20 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	then, _ := entry["then"].(map[string]any)
+	then, err := thenMap(entry)
+	if err != nil {
+		return nil, "watch " + name + ": " + err.Error()
+	}
 	hook, names, err := parseActions(then)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
+	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
 	expand, err := parseExpand(then, typ)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	if len(hook.Command) == 0 && !hasNotifyAction(names) && expand == nil {
+	if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) && expand == nil {
 		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
 	}
 	w := &Watch{
@@ -119,7 +123,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Check:      check,
 		Window:     rules.ParseWindowRule(entry),
 		Hook:       hook,
-		Notifiers:  resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
+		Notifiers:  resolveNotifiers(effectiveNames, deps.Notifiers),
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		FireOnFail: isHealthCheckType(typ),
@@ -141,8 +145,8 @@ func isHealthCheckType(typ string) bool {
 	return checks.IsHealthType(typ)
 }
 
-// buildMetricWatches expands one multi-metric watch entry (net/icmp) into one
-// Watch per metric, each with its own check, window and hook. The per-metric
+// buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
+// one Watch per metric, each with its own check, window and actions. The per-metric
 // check entry is the watch's base check fields plus metric:<key> plus the
 // metric block's condition keys (everything except then/for/within). Builder-set
 // keys (type, host/interface, count, metric) take precedence over the block.
@@ -186,13 +190,18 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
 		}
+		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+		if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) {
+			warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
+			continue
+		}
 		out = append(out, &Watch{
 			Name:      name,
 			CheckType: cfgval.AsString(checkEntry["type"]),
 			Check:     check,
 			Window:    rules.ParseWindowRule(mEntry),
 			Hook:      hook,
-			Notifiers: resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
+			Notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
 			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:  interval,
 			Now:       deps.Now,
@@ -217,13 +226,17 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
+	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) {
+		return nil, "watch " + name + ": then requires a hook and/or notify"
+	}
 	fw := &fileWatcher{
 		name:      name,
 		path:      cfgval.AsString(checkEntry["path"]),
 		recursive: boolField(checkEntry["recursive"]),
 		cond:      cond,
 		hook:      hook,
-		notifiers: resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
+		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
 	}
@@ -253,12 +266,16 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
+	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) {
+		return nil, "watch " + name + ": then requires a hook and/or notify"
+	}
 	pw := &procWatcher{
 		name:      name,
 		match:     ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])},
 		cond:      cond,
 		hook:      hook,
-		notifiers: resolveNotifiers(effectiveNotify(names, deps.GlobalNotify), deps.Notifiers),
+		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		now:       deps.Now,
 		emit:      deps.Emit,
@@ -366,27 +383,34 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 }
 
 // parseThen reads a `then` block into an optional hook and an optional list of
-// notifier names. A then block must declare a hook and/or at least one real
-// notifier; the reserved `none` sentinel suppresses delivery and does not count
-// as an action.
+// notifier names. A missing block means no per-watch action was declared; callers
+// decide whether a global notify default makes that valid.
 func parseThen(entry map[string]any) (HookSpec, []string, error) {
-	then, ok := entry["then"].(map[string]any)
-	if !ok {
-		return HookSpec{}, nil, fmt.Errorf("missing then")
-	}
-	hook, names, err := parseActions(then)
+	then, err := thenMap(entry)
 	if err != nil {
 		return HookSpec{}, nil, err
 	}
-	if len(hook.Command) == 0 && !hasNotifyAction(names) {
-		return HookSpec{}, nil, fmt.Errorf("then requires a hook and/or notify")
+	if then == nil {
+		return HookSpec{}, nil, nil
 	}
-	return hook, names, nil
+	return parseActions(then)
+}
+
+func thenMap(entry map[string]any) (map[string]any, error) {
+	raw, present := entry["then"]
+	if !present {
+		return nil, nil
+	}
+	then, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("then must be a mapping")
+	}
+	return then, nil
 }
 
 // parseActions reads the hook and notify targets from a `then` block without
-// requiring that at least one is present (the caller enforces that, so an
-// expand-only `then` is allowed). It errors only on a malformed hook.
+// requiring that at least one is present. The caller enforces action presence
+// after applying the global notify default. It errors only on a malformed hook.
 func parseActions(then map[string]any) (HookSpec, []string, error) {
 	var hook HookSpec
 	if h, ok := then["hook"].(map[string]any); ok {

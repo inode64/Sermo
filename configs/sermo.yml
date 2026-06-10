@@ -82,6 +82,10 @@ notifiers:
     type: slack
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
 
+# Default notification targets for watches/rules that omit notify. Uncomment to
+# avoid repeating then.notify everywhere. Use per-watch notify: [none] to suppress.
+# notify: [ops-email]
+
 # Host watches: monitor host resources (disk, …) independently of services and,
 # when a threshold is crossed, run a hook command and/or notify named targets.
 # Disabled by default.

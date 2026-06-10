@@ -60,6 +60,21 @@ func TestNetAssistantStateDownOnly(t *testing.T) {
 	}
 }
 
+func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
+	// Select eth0; only state; any change; inherit global notify.
+	script := strings.Join([]string{"1", "1", "1", "4"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	state := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)
+	then := state["then"].(map[string]any)
+	if _, hasNotify := then["notify"]; hasNotify {
+		t.Fatalf("notify should be omitted to inherit global default: %v", then)
+	}
+}
+
 func TestNetAssistantRequiresNotifier(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil

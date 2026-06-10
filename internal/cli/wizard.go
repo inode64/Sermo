@@ -99,9 +99,10 @@ func (a App) wizardEnv(cfg *config.Config) assist.Env {
 		return a.wizardEnvFunc(cfg)
 	}
 	return assist.Env{
-		Notifiers: notifierNames(cfg),
-		Volumes:   listVolumes,
-		Ifaces:    listIfaces,
+		Notifiers:     notifierNames(cfg),
+		DefaultNotify: config.NotifyDefault(cfg.Global.Raw),
+		Volumes:       listVolumes,
+		Ifaces:        listIfaces,
 	}
 }
 

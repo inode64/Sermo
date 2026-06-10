@@ -23,6 +23,12 @@ func testEnv() Env {
 	}
 }
 
+func testEnvWithDefaultNotify() Env {
+	env := testEnv()
+	env.DefaultNotify = []string{"ops-email"}
+	return env
+}
+
 func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	// Select volume 1 (/mnt/backup); free space condition, 10%; for 3 cycles;
 	// notifier ops-email; enable expand 5G cooldown 30m.
@@ -159,6 +165,24 @@ func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 	used := check["used_bytes"].(map[string]any)
 	if used["op"] != ">=" || used["value"] != "100G" {
 		t.Fatalf("used_bytes = %v", used)
+	}
+}
+
+func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
+	// Select volume 1; free 10; for 3; inherit global notify; no expand.
+	script := strings.Join([]string{"1", "1", "10", "3", "4", "n"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := volumeAssistant{}.Run(p, testEnvWithDefaultNotify())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	then := entry["then"].(map[string]any)
+	if _, hasNotify := then["notify"]; hasNotify {
+		t.Fatalf("notify should be omitted to inherit global default: %v", then)
+	}
+	if _, hasExpand := then["expand"]; hasExpand {
+		t.Fatalf("expand should not be present: %v", then)
 	}
 }
 
