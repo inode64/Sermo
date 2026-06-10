@@ -403,6 +403,16 @@ func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
+// validateSmartFields validates a smart check: a required device and any of the
+// optional {op, value} attribute predicates (without one, it alerts on a failed
+// SMART health verdict).
+func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["device"]) == "" {
+		add("%s.device is required for a smart check", prefix)
+	}
+	validatePresentThresholds(prefix, fields, []string{"temperature", "reallocated", "wear", "power_on_hours"}, add)
+}
+
 func isValidDiskOp(op string) bool {
 	switch op {
 	case ">=", ">", "<=", "<", "==", "!=":
@@ -481,7 +491,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "autofs", "load", "hdparm", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+	"disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -580,6 +590,16 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validateLoadFields(path, entry, add)
 		case "hdparm":
 			validateHdparmFields(path, entry, add)
+		case "sensors":
+			if validatePresentThresholds(path, entry, []string{"temp", "fan", "voltage"}, add) == 0 {
+				add("%s requires at least one of temp/fan/voltage {op, value}", path)
+			}
+		case "smart":
+			validateSmartFields(path, entry, add)
+		case "raid":
+			validatePresentThresholds(path, entry, []string{"degraded", "recovering", "arrays"}, add)
+		case "edac":
+			validatePresentThresholds(path, entry, []string{"ce", "ue"}, add)
 		case "fds":
 			validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
 		case "conntrack":
