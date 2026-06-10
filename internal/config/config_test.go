@@ -301,6 +301,77 @@ watches:
 	}
 }
 
+func TestLoadEnabledWatchFragments(t *testing.T) {
+	root := t.TempDir()
+	enabled := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(filepath.Join(enabled, "volume"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(`
+paths:
+  enabled: [enabled]
+defaults:
+  policy: { cooldown: 5m }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "volume", "disk-root.yml"), []byte(`
+watches:
+  disk-root:
+    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+    then:
+      hook: { command: [/bin/true] }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	if _, ok := watches["disk-root"]; !ok {
+		t.Fatalf("watch fragment not loaded: %v", watches)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("fragment config should validate, got %v", issues)
+	}
+}
+
+func TestLoadEnabledWatchFragmentRejectsDuplicate(t *testing.T) {
+	root := t.TempDir()
+	enabled := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(`
+paths:
+  enabled: [enabled]
+watches:
+  disk-root:
+    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+    then:
+      hook: { command: [/bin/true] }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "disk-root.yml"), []byte(`
+watches:
+  disk-root:
+    check: { type: disk, path: /, used_pct: { op: ">=", value: 95 } }
+    then:
+      hook: { command: [/bin/true] }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "disk-root" is already defined`) {
+		t.Fatalf("Load() error = %v, want duplicate watch", err)
+	}
+}
+
 func TestValidateGlobalErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
