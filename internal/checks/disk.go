@@ -18,6 +18,7 @@ import (
 type DiskStats struct {
 	UsedPct    float64
 	FreePct    float64
+	UsedBytes  uint64
 	FreeBytes  uint64
 	TotalBytes uint64
 
@@ -33,7 +34,7 @@ type DiskUsageFunc func(path string) (DiskStats, error)
 
 // diskPred is one threshold predicate on a computed disk field.
 type diskPred struct {
-	field string // used_pct | free_pct | inodes_used_pct | inodes_free_pct | inodes_free
+	field string // used_pct | free_pct | used_bytes | free_bytes | inodes_used_pct | inodes_free_pct | inodes_free
 	op    string // >= > <= < == !=
 	value float64
 }
@@ -93,7 +94,13 @@ func (c diskCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("statfs %s: %v", c.path, err), start)
 	}
-	values := map[string]float64{"used_pct": st.UsedPct, "free_pct": st.FreePct}
+	usedBytes := diskUsedBytes(st)
+	values := map[string]float64{
+		"used_pct":   st.UsedPct,
+		"free_pct":   st.FreePct,
+		"used_bytes": float64(usedBytes),
+		"free_bytes": float64(st.FreeBytes),
+	}
 	// Inode fields are only comparable when the filesystem reports inodes; on a
 	// 0-inode filesystem an inode predicate is "unknown" and so cannot hold (the
 	// level check is an AND), which keeps it from misfiring.
@@ -112,6 +119,7 @@ func (c diskCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
 	data["used_pct"] = st.UsedPct
 	data["free_pct"] = st.FreePct
+	data["used_bytes"] = usedBytes
 	data["free_bytes"] = st.FreeBytes
 	data["total_bytes"] = st.TotalBytes
 	data["inodes_used_pct"] = st.InodesUsedPct
@@ -127,6 +135,16 @@ func (c diskCheck) Run(_ context.Context) Result {
 	}
 	res.Data = data
 	return res
+}
+
+func diskUsedBytes(st DiskStats) uint64 {
+	if st.UsedBytes > 0 {
+		return st.UsedBytes
+	}
+	if st.TotalBytes >= st.FreeBytes {
+		return st.TotalBytes - st.FreeBytes
+	}
+	return 0
 }
 
 func compareFloat(a float64, op string, b float64) bool {
@@ -175,7 +193,8 @@ func statfsUsage(path string) (DiskStats, error) {
 	}
 
 	return DiskStats{
-		UsedPct: usedPct, FreePct: freePct, FreeBytes: free, TotalBytes: total,
+		UsedPct: usedPct, FreePct: freePct,
+		UsedBytes: used, FreeBytes: free, TotalBytes: total,
 		InodesUsedPct: inUsedPct, InodesFreePct: inFreePct,
 		InodesFree: inodesFree, InodesTotal: inodesTotal,
 	}, nil
@@ -205,18 +224,34 @@ func parseDiskPreds(entry map[string]any) ([]diskPred, error) {
 		if !validDiskOp(op) {
 			return nil, fmt.Errorf("%s has invalid op %q", field, op)
 		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
+		val, err := parseDiskPredValue(field, m["value"])
 		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
+			return nil, err
 		}
 		preds = append(preds, diskPred{field: field, op: op, value: val})
 	}
 	return preds, nil
 }
 
+func parseDiskPredValue(field string, raw any) (float64, error) {
+	value := cfgval.String(raw)
+	if field == "used_bytes" || field == "free_bytes" {
+		n, ok := cfgval.ByteSize(raw)
+		if !ok {
+			return 0, fmt.Errorf("%s value %q is not a byte size (e.g. 10G)", field, value)
+		}
+		return float64(n), nil
+	}
+	val, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
+	}
+	return val, nil
+}
+
 // diskPredFields are the predicate fields a disk check accepts: block space and
 // inode accounting. Shared with config validation so both stay in step.
-var diskPredFields = []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
+var diskPredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 
 func validDiskOp(op string) bool {
 	switch op {

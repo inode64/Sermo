@@ -502,9 +502,9 @@ a service.
 
 > **Tip — generate watches interactively.** `sermoctl wizard` walks you through
 > creating watches: `sermoctl wizard volume` for disk checks (pick volumes, set
-> the notify threshold, and optionally enable auto-expand) and `sermoctl wizard
-> net` for network interfaces (pick interfaces and which of link state / errors /
-> speed to watch). Run with no argument to choose from the list. It prints the
+> the notify threshold as a percent or size, and optionally enable auto-expand)
+> and `sermoctl wizard net` for network interfaces (pick interfaces and which of
+> link state / errors / speed to watch). Run with no argument to choose from the list. It prints the
 > generated `watches:` block and offers to merge it into the global config
 > (writing a `.bak` first); then `sermoctl reload`. New assistant types can be
 > added over time. When asked for notification targets, choose `none` to generate
@@ -631,10 +631,11 @@ watches:
 
 The `disk` check reads filesystem usage for `path` and is true when every present
 predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
-`used_pct`, `free_pct` — and **inodes** — `inodes_used_pct`, `inodes_free_pct`,
-`inodes_free` (absolute count). Inode predicates catch the "disk full" that `df`
-hides: a filesystem out of inodes (millions of tiny files) rejects new files while
-bytes are still free.
+`used_pct`, `free_pct`, `used_bytes`, `free_bytes` — and **inodes** —
+`inodes_used_pct`, `inodes_free_pct`, `inodes_free` (absolute count).
+`*_bytes.value` accepts raw bytes or `K`/`M`/`G`/`T` suffixes, e.g. `10G`.
+Inode predicates catch the "disk full" that `df` hides: a filesystem out of
+inodes (millions of tiny files) rejects new files while bytes are still free.
 
 ```yaml
 watches:
@@ -643,6 +644,7 @@ watches:
       type: disk
       path: /
       used_pct: { op: ">=", value: 90 }        # block space
+      free_bytes: { op: "<", value: 10G }       # absolute free space
       inodes_used_pct: { op: ">=", value: 90 }  # inode table
     then:
       hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }

@@ -497,7 +497,7 @@ func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}
 	mount := parseMountCond(entry)
 	if len(preds) == 0 && !mount.active {
-		return nil, "disk check requires a space/inode predicate and/or a mount condition (mounted/fstype/options/device)"
+		return nil, "disk check requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted/fstype/options/device)"
 	}
 	return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
 }

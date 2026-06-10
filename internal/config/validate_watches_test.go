@@ -253,6 +253,37 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 	}
 }
 
+func TestValidateDiskBytePredicates(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-bytes": map[string]any{
+				"check": map[string]any{
+					"type":       "disk",
+					"path":       "/",
+					"free_bytes": map[string]any{"op": "<", "value": "10G"},
+					"used_bytes": map[string]any{"op": ">=", "value": "100G"},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("byte predicates should be valid, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-bytes": map[string]any{
+				"check": map[string]any{"type": "disk", "path": "/", "free_bytes": map[string]any{"op": "<", "value": "lots"}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, "watches.disk-bytes.check.free_bytes value \"lots\" must be a byte size") {
+		t.Fatalf("expected invalid byte-size issue, got %v", bad)
+	}
+}
+
 func TestValidateNotifiers(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"notifiers": map[string]any{
