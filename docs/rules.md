@@ -10,7 +10,7 @@ which reuse the same schema). MVP types:
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
 | `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
-| `command`     | the command exits with `expect_exit` (default 0), array form only  |
+| `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`, array form only |
 | `service`     | the backend status equals `expect` (active/inactive/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `binary`      | a path exists and is executable                                    |
@@ -85,6 +85,24 @@ which reuse the same schema). MVP types:
 
 The `disk` check also verifies the **mount** of its `path` — see
 [Disk and mount](configuration.md#host-watches).
+
+The `command` check asserts the command's outcome: `expect_exit` (default 0) and
+optional `expect_stdout` / `expect_stderr` matchers — a plain string requires that
+substring, or an `{op, value}` mapping compares the trimmed output (`== != > >= <
+<= =~`):
+
+```yaml
+checks:
+  queue-drained:
+    type: command
+    command: [/usr/local/bin/queue-depth]
+    expect_exit: 0
+    expect_stdout: { op: "<", value: 100 }   # fewer than 100 items queued
+    expect_stderr: ""                         # nothing written to stderr
+```
+
+The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available on
+a watch hook (`then.hook`) to validate the hook command's result.
 
 ### Egress interface (`interface`)
 

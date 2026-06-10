@@ -105,6 +105,13 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 		if v, present := hook["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("%s.then.hook.timeout %q must be a valid positive duration", prefix, cfgval.String(v))
 		}
+		if v, present := hook["expect_exit"]; present {
+			if _, ok := cfgval.Int(v); !ok {
+				add("%s.then.hook.expect_exit must be an integer", prefix)
+			}
+		}
+		validateOutputExpectation(prefix+".then.hook", "expect_stdout", hook["expect_stdout"], add)
+		validateOutputExpectation(prefix+".then.hook", "expect_stderr", hook["expect_stderr"], add)
 	}
 }
 
