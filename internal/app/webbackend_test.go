@@ -111,6 +111,33 @@ func TestWebBackendViewInterval(t *testing.T) {
 	}
 }
 
+func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"binary": map[string]any{"check": map[string]any{"type": "binary"}},
+			"count":  map[string]any{"check": map[string]any{"type": "count"}},
+			"ports":  map[string]any{"check": map[string]any{"type": "ports"}},
+		},
+	}}}
+
+	b, warns := NewWebBackend(cfg, Deps{})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	got := map[string]bool{}
+	for _, w := range b.Watches(context.Background()) {
+		got[w.Name] = w.FireOnFail
+	}
+	for _, name := range []string{"binary", "ports"} {
+		if !got[name] {
+			t.Fatalf("%s watch should be health-style: %v", name, got)
+		}
+	}
+	if got["count"] {
+		t.Fatalf("count watch should be condition-style: %v", got)
+	}
+}
+
 func TestWebBackendDetailAtTimestamp(t *testing.T) {
 	t0 := time.Date(2026, 6, 7, 12, 30, 0, 0, time.UTC)
 	t1 := t0.Add(time.Minute)
