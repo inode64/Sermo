@@ -326,7 +326,11 @@ func TestValidateNotifiers(t *testing.T) {
 				"type":    "slack",
 				"webhook": "https://hooks.slack.com/services/T/B/x",
 			},
+			"staged": map[string]any{
+				"enabled": false,
+			},
 		},
+		"notify": []any{"staged"},
 	})
 	for _, i := range good {
 		if strings.Contains(i.Msg, "notifiers.") {
@@ -343,6 +347,7 @@ func TestValidateNotifiers(t *testing.T) {
 			"bad-webhook": map[string]any{"type": "slack", "webhook": "ftp://x"},
 			"bad-type":    map[string]any{"type": "smoke-signal"},
 			"no-type":     map[string]any{"dsn": "smtp://x"},
+			"bad-enabled": map[string]any{"enabled": "false", "type": "slack", "webhook": "https://hooks.example/x"},
 		},
 	})
 	for _, w := range []string{
@@ -353,6 +358,7 @@ func TestValidateNotifiers(t *testing.T) {
 		"notifiers.bad-webhook.webhook must be an http(s) URL",
 		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, slack)",
 		"notifiers.no-type.type is required",
+		"notifiers.bad-enabled.enabled must be a boolean",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)

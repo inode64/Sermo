@@ -35,6 +35,13 @@ type Notifier interface {
 	Send(ctx context.Context, msg Message) error
 }
 
+// Enabled reports whether a notifier config entry should be active. Omitted
+// `enabled` defaults to true; schema validation reports non-boolean values.
+func Enabled(entry map[string]any) bool {
+	enabled, ok := entry["enabled"].(bool)
+	return !ok || enabled
+}
+
 // builders maps a notifier `type` to its constructor. Register new transports
 // here (e.g. "slack", "teams").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
@@ -55,6 +62,9 @@ func Build(raw map[string]any) (map[string]Notifier, []string) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "notifier "+name+": not a mapping")
+			continue
+		}
+		if !Enabled(entry) {
 			continue
 		}
 		typ, _ := entry["type"].(string)

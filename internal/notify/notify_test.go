@@ -29,6 +29,20 @@ func TestBuildEmptyIsNoop(t *testing.T) {
 	}
 }
 
+func TestBuildSkipsDisabledNotifier(t *testing.T) {
+	notifiers, warns := Build(map[string]any{
+		"ops-email": map[string]any{
+			"enabled": false,
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("disabled notifier should not warn, got %v", warns)
+	}
+	if len(notifiers) != 0 {
+		t.Fatalf("disabled notifier should not be built, got %v", notifiers)
+	}
+}
+
 func TestSupportedTypes(t *testing.T) {
 	got := SupportedTypes()
 	if len(got) != 2 || got[0] != "email" || got[1] != "slack" {

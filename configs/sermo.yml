@@ -75,14 +75,16 @@ web:
   # guest: false                 # set true to allow anonymous read-only access
 
 # Named notification targets, referenced by name from a watch's then.notify.
-# Pluggable by type (email now; slack/teams/… can be added). Disabled until used.
+# Pluggable by type (email now; slack/teams/… can be added). Used only when referenced.
 notifiers:
   ops-email:
+    enabled: true
     type: email
     dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com, oncall@example.com]
   team-slack:
+    # enabled: false  # keep configured but skip delivery attempts
     type: slack
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
 

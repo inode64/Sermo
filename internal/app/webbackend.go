@@ -18,6 +18,7 @@ import (
 	"sermo/internal/diag"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
+	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -99,8 +100,9 @@ type webWatch struct {
 
 // webNotifier is a configured notification target (used by watches).
 type webNotifier struct {
-	name string
-	typ  string
+	name    string
+	typ     string
+	enabled bool
 }
 
 // WebBackend implements web.Backend over the daemon's services: status from the
@@ -263,7 +265,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
 			typ := cfgval.AsString(entry["type"])
-			wn := &webNotifier{name: name, typ: typ}
+			wn := &webNotifier{name: name, typ: typ, enabled: notify.Enabled(entry)}
 			wb.notifiers[name] = wn
 			wb.notifierOrder = append(wb.notifierOrder, name)
 		}
@@ -649,8 +651,9 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 			continue
 		}
 		out = append(out, web.Notifier{
-			Name: n.name,
-			Type: n.typ,
+			Name:    n.name,
+			Type:    n.typ,
+			Enabled: n.enabled,
 		})
 	}
 	return out

@@ -272,6 +272,34 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	}
 }
 
+func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"notifiers": map[string]any{
+			"muted": map[string]any{"enabled": false, "type": "slack", "webhook": "https://hooks.example/x"},
+			"ops":   map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y", "to": []any{"a@b"}},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	got := b.Notifiers(context.Background())
+	if len(got) != 2 {
+		t.Fatalf("notifiers = %+v, want 2 entries", got)
+	}
+	byName := map[string]web.Notifier{}
+	for _, n := range got {
+		byName[n.Name] = n
+	}
+	if !byName["ops"].Enabled {
+		t.Fatalf("ops should default enabled: %+v", byName["ops"])
+	}
+	if byName["muted"].Enabled {
+		t.Fatalf("muted should be disabled: %+v", byName["muted"])
+	}
+}
+
 func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{

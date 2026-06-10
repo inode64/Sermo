@@ -57,6 +57,14 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 			add("notifiers.%s must be a mapping", name)
 			continue
 		}
+		if v, present := entry["enabled"]; present {
+			if _, ok := v.(bool); !ok {
+				add("notifiers.%s.enabled must be a boolean", name)
+			}
+		}
+		if enabled, ok := entry["enabled"].(bool); ok && !enabled {
+			continue
+		}
 		switch cfgval.String(entry["type"]) {
 		case "email":
 			dsn := cfgval.String(entry["dsn"])

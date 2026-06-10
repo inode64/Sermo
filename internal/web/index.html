@@ -242,7 +242,7 @@
 <details id="notifiers-section" style="display:none">
   <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
   <table>
-    <thead><tr><th>Name</th><th>Type</th></tr></thead>
+    <thead><tr><th>Name</th><th>Type</th><th>State</th></tr></thead>
     <tbody id="notifier-rows"></tbody>
   </table>
   <p class="muted" style="font-size:.8rem">Named targets that watches can notify (email, slack, ...).</p>
@@ -1702,8 +1702,13 @@ function renderNotifiers(notifiers) {
   }
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${notifiers.length})`;
-  const rows = notifiers.map((n) => `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td></tr>`);
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="2" class="muted">No notifiers.</td></tr>`;
+  const rows = notifiers.map((n) => {
+    const enabled = n.enabled !== false;
+    const state = enabled ? "enabled" : "disabled";
+    const cls = enabled ? "state-monitorized" : "state-disabled";
+    return `<tr><td>${esc(n.name)}</td><td>${esc(n.type)}</td><td class="${cls}">${state}</td></tr>`;
+  });
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="3" class="muted">No notifiers.</td></tr>`;
 }
 
 function renderDaemon(info) {
