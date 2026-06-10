@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -44,7 +45,7 @@ func (c autofsCheck) Run(_ context.Context) Result {
 	data := map[string]any{"count": len(points), "value": len(points), "mountpoints": strings.Join(points, ",")}
 
 	if c.path != "" {
-		ok := containsString(points, c.path)
+		ok := slices.Contains(points, c.path)
 		msg := "autofs mountpoint " + c.path + " is active"
 		if !ok {
 			msg = "autofs mountpoint " + c.path + " is not active"

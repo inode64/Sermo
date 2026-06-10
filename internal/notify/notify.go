@@ -12,6 +12,8 @@ package notify
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 )
 
@@ -49,7 +51,7 @@ func Build(raw map[string]any) (map[string]Notifier, []string) {
 		return out, nil
 	}
 	var warnings []string
-	for _, name := range sortedKeys(raw) {
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "notifier "+name+": not a mapping")
@@ -79,15 +81,6 @@ func SupportedTypes() []string {
 	}
 	sort.Strings(types)
 	return types
-}
-
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func stringList(v any) []string {

@@ -3,6 +3,7 @@ package checks
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -76,7 +77,7 @@ func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool,
 		problems = append(problems, fmt.Sprintf("device %s (want %s)", info.Device, m.device))
 	}
 	for _, opt := range m.options {
-		if !containsString(info.Options, opt) {
+		if !slices.Contains(info.Options, opt) {
 			problems = append(problems, "missing option "+opt)
 		}
 	}
@@ -116,13 +117,4 @@ func unescapeMount(s string) string {
 	}
 	r := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`)
 	return r.Replace(s)
-}
-
-func containsString(list []string, v string) bool {
-	for _, e := range list {
-		if e == v {
-			return true
-		}
-	}
-	return false
 }

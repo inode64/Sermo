@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -264,12 +265,12 @@ func lineDiff(base, other string) (removed, added []string) {
 	baseSet := lineCount(base)
 	otherSet := lineCount(other)
 	for _, l := range strings.Split(strings.TrimRight(base, "\n"), "\n") {
-		if otherSet[l] == 0 && !contains(removed, l) {
+		if otherSet[l] == 0 && !slices.Contains(removed, l) {
 			removed = append(removed, l)
 		}
 	}
 	for _, l := range strings.Split(strings.TrimRight(other, "\n"), "\n") {
-		if baseSet[l] == 0 && !contains(added, l) {
+		if baseSet[l] == 0 && !slices.Contains(added, l) {
 			added = append(added, l)
 		}
 	}
@@ -282,13 +283,4 @@ func lineCount(s string) map[string]int {
 		out[l]++
 	}
 	return out
-}
-
-func contains(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
 }

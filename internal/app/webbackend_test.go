@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -291,7 +292,7 @@ checks:
 	}
 	wantSources := []string{globalPath, profilePath, webPath}
 	for _, want := range wantSources {
-		if !containsLine(rendered.SourceFiles, want) {
+		if !slices.Contains(rendered.SourceFiles, want) {
 			t.Fatalf("source files = %v, missing %s", rendered.SourceFiles, want)
 		}
 	}
