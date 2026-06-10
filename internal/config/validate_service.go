@@ -111,6 +111,13 @@ func validateCommands(tree map[string]any, add addFunc) {
 		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("commands.%s timeout %q must be a valid positive duration", name, cfgval.String(v))
 		}
+		if v, present := entry["expect_exit"]; present {
+			if _, ok := cfgval.Int(v); !ok {
+				add("commands.%s expect_exit must be an integer", name)
+			}
+		}
+		validateOutputExpectation("commands."+name, "expect_stdout", entry["expect_stdout"], add)
+		validateOutputExpectation("commands."+name, "expect_stderr", entry["expect_stderr"], add)
 	}
 }
 

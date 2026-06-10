@@ -1,0 +1,54 @@
+package config
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+// TestValidateCommandsExpectations checks that a named command validates its
+// expect_exit and expect_stdout/expect_stderr matchers.
+func TestValidateCommandsExpectations(t *testing.T) {
+	var issues []string
+	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
+
+	tree := map[string]any{"commands": map[string]any{
+		"version": map[string]any{
+			"command":       []any{"/bin/tool"},
+			"expect_exit":   "nope",                                   // not an int
+			"expect_stdout": map[string]any{"op": "=>", "value": "1"}, // invalid op
+			"expect_stderr": 42,                                       // wrong shape
+		},
+	}}
+	validateCommands(tree, add)
+
+	joined := strings.Join(issues, "\n")
+	for _, want := range []string{
+		"commands.version expect_exit must be an integer",
+		"commands.version.expect_stdout op",
+		"commands.version.expect_stderr must be a string substring or an {op, value} mapping",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing issue %q in:\n%s", want, joined)
+		}
+	}
+}
+
+// TestValidateCommandsValid accepts a well-formed command with output matchers.
+func TestValidateCommandsValid(t *testing.T) {
+	var issues []string
+	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
+
+	tree := map[string]any{"commands": map[string]any{
+		"version": map[string]any{
+			"command":       []any{"/bin/tool", "--version"},
+			"expect_exit":   0,
+			"expect_stdout": "v1.",
+			"expect_stderr": map[string]any{"op": "==", "value": ""},
+		},
+	}}
+	validateCommands(tree, add)
+	if len(issues) != 0 {
+		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
