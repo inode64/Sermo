@@ -189,10 +189,13 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
 		t.Fatalf("dashboard did not receive CSP nonce attributes")
 	}
-	for _, want := range []string{"usagebar-fill", "usagebar-label", "function diskUsedPct"} {
+	for _, want := range []string{"usagebar-fill", "usagebar-label", "function diskUsedPct", `style="width:${width}%"`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("dashboard missing disk usage UI marker %q", want)
 		}
+	}
+	if strings.Contains(rec.Body.String(), "transform:scaleX") {
+		t.Fatal("dashboard disk usage bar should use width growth, not transform growth")
 	}
 	for _, inlineHandler := range []string{"onclick=", "onchange=", "oninput=", "onkeydown="} {
 		if strings.Contains(rec.Body.String(), inlineHandler) {

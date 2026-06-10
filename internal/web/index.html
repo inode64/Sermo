@@ -79,7 +79,7 @@
   .watch-table th, .watch-table td { vertical-align: top; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
   .usagebar { position: relative; display: inline-grid; place-items: center; width: 8.8rem; height: 1rem; background: #8882; border: 1px solid #8885; border-radius: 999px; overflow: hidden; vertical-align: middle; box-sizing: border-box; }
-  .usagebar-fill { position: absolute; inset: 0; width: 100%; transform-origin: left center; transform: scaleX(0); }
+  .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; transition: width .2s ease; }
   .usagebar.usage-ok .usagebar-fill { background: #2da44e; }
   .usagebar.usage-warn .usagebar-fill { background: #d4a72c; }
   .usagebar.usage-high .usagebar-fill { background: #fb8500; }
@@ -1252,9 +1252,9 @@ function usageLevel(pct) {
 
 function usageBar(pct) {
   const p = pctClamp(pct);
-  const ratio = (p / 100).toFixed(4);
+  const width = p.toFixed(2);
   const label = fmtPct(p);
-  return `<span class="usagebar ${usageLevel(p)}" title="${label} used" aria-label="${label} used"><span class="usagebar-fill" style="transform:scaleX(${ratio})"></span><span class="usagebar-label">${label}</span></span>`;
+  return `<span class="usagebar ${usageLevel(p)}" title="${label} used" aria-label="${label} used"><span class="usagebar-fill" style="width:${width}%"></span><span class="usagebar-label">${label}</span></span>`;
 }
 
 function diskUsedPct(d) {
@@ -1288,7 +1288,7 @@ function watchSummaryCell(w) {
     const mount = d.mount_point ? ` · ${esc(d.mount_point)}` : "";
     const usedPct = diskUsedPct(d);
     return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
-      <div>${usageBar(usedPct)} <b>${fmtPct(usedPct)}</b> used <span class="muted">· ${fmtBytes(d.free_bytes)} free (${fmtPct(d.free_pct)})</span></div>`;
+      <div>${usageBar(usedPct)} used <span class="muted">· ${fmtBytes(d.free_bytes)} free (${fmtPct(d.free_pct)})</span></div>`;
   }
   return w.summary ? esc(w.summary) : "—";
 }
@@ -1343,7 +1343,7 @@ function renderDiskWatch(d) {
     <div><span class="muted">Filesystem</span><br><code>${esc(fs)}</code></div>
     <div><span class="muted">Device</span><br>${device}</div>
     <div><span class="muted">Total</span><br><b>${fmtBytes(d.total_bytes)}</b></div>
-    <div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b> (${fmtPct(usedPct)})</div>
+    <div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
     <div><span class="muted">Free</span><br><b>${fmtBytes(d.free_bytes)}</b> (${fmtPct(d.free_pct)})</div>
     <div><span class="muted">Inodes</span><br>${inodes}</div>
     <div><span class="muted">Options</span><br>${options}</div>
