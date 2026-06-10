@@ -48,12 +48,12 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry, ok := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry, ok := res.Watches["storage-mnt-backup"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected watch disk-mnt-backup, got %v", res.Watches)
+		t.Fatalf("expected watch storage-mnt-backup, got %v", res.Watches)
 	}
 	check := entry["check"].(map[string]any)
-	if check["type"] != "disk" || check["path"] != "/mnt/backup" {
+	if check["type"] != "storage" || check["path"] != "/mnt/backup" {
 		t.Fatalf("check = %v", check)
 	}
 	fp := check["free_pct"].(map[string]any)
@@ -85,7 +85,7 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-root"].(map[string]any)
+	entry := res.Watches["storage-root"].(map[string]any)
 	check := entry["check"].(map[string]any)
 	up := check["used_pct"].(map[string]any)
 	if up["op"] != ">=" || up["value"] != 90 {
@@ -108,7 +108,7 @@ func TestVolumeAssistantPercentSuffix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-root"].(map[string]any)
+	entry := res.Watches["storage-root"].(map[string]any)
 	check := entry["check"].(map[string]any)
 	up := check["used_pct"].(map[string]any)
 	if up["op"] != ">=" || up["value"] != "90%" {
@@ -124,7 +124,7 @@ func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry := res.Watches["storage-mnt-backup"].(map[string]any)
 	check := entry["check"].(map[string]any)
 	free := check["free_bytes"].(map[string]any)
 	if free["op"] != "<" || free["value"] != "10G" {
@@ -141,7 +141,7 @@ func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry := res.Watches["storage-mnt-backup"].(map[string]any)
 	check := entry["check"].(map[string]any)
 	used := check["used_bytes"].(map[string]any)
 	if used["value"] != "100G" {
@@ -160,7 +160,7 @@ func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry := res.Watches["storage-mnt-backup"].(map[string]any)
 	check := entry["check"].(map[string]any)
 	used := check["used_bytes"].(map[string]any)
 	if used["op"] != ">=" || used["value"] != "100G" {
@@ -176,7 +176,7 @@ func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry := res.Watches["storage-mnt-backup"].(map[string]any)
 	then := entry["then"].(map[string]any)
 	if _, hasNotify := then["notify"]; hasNotify {
 		t.Fatalf("notify should be omitted to inherit global default: %v", then)
@@ -207,7 +207,7 @@ func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry := res.Watches["storage-mnt-backup"].(map[string]any)
 	then := entry["then"].(map[string]any)
 	if _, hasNotify := then["notify"]; hasNotify {
 		t.Fatalf("default should omit notify even without a configured global default: %v", then)
@@ -225,7 +225,7 @@ func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	entry := res.Watches["storage-mnt-backup"].(map[string]any)
 	then := entry["then"].(map[string]any)
 	notify := then["notify"].([]string)
 	if len(notify) != 1 || notify[0] != "none" {

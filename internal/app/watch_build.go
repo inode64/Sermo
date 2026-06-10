@@ -94,10 +94,10 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 
 // buildSingleWatch builds the standard one-Watch-per-entry shape: an inline check
 // plus the entry's top-level actions. It serves the host-resource checks
-// (disk/load/…) and any single-shot service check (tcp/http/…) used as a watch.
+// (storage/load/…) and any single-shot service check (tcp/http/…) used as a watch.
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	typ := cfgval.AsString(checkEntry["type"])
+	typ := canonicalWatchCheckType(cfgval.AsString(checkEntry["type"]))
 	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
 		DefaultTimeout: deps.DefaultTimeout,
 		DiskUsage:      deps.DiskUsage,
@@ -144,6 +144,13 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	return w, ""
 }
 
+func canonicalWatchCheckType(typ string) string {
+	if typ == "disk" {
+		return "storage"
+	}
+	return typ
+}
+
 func configuredVolumeExpander(deps Deps) VolumeExpander {
 	if deps.VolumeExpander != nil {
 		return deps.VolumeExpander
@@ -157,7 +164,7 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 
 // isHealthCheckType reports whether a check type's OK==true means "healthy", so a
 // watch over it fires its hook on failure rather than on OK (the alert condition
-// for disk/load/metric/count and the other threshold checks).
+// for storage/load/metric/count and the other threshold checks).
 func isHealthCheckType(typ string) bool {
 	return checks.IsHealthType(typ)
 }
@@ -455,15 +462,15 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 	return hook, cfgval.StringList(then["notify"]), nil
 }
 
-// parseExpand reads a `then.expand` disk-expansion action. It is only valid on a
-// disk watch, since the action grows the volume backing the checked path.
+// parseExpand reads a `then.expand` storage-expansion action. It is only valid on
+// a storage watch, since the action grows the volume backing the checked path.
 func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 	raw, ok := then["expand"].(map[string]any)
 	if !ok {
 		return nil, nil
 	}
-	if checkType != "disk" {
-		return nil, fmt.Errorf("then.expand is only valid on a disk watch, not %q", checkType)
+	if !isStorageCheckType(checkType) {
+		return nil, fmt.Errorf("then.expand is only valid on a storage watch, not %q", checkType)
 	}
 	by := cfgval.AsString(raw["by"])
 	if by == "" {
@@ -477,6 +484,10 @@ func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 		return nil, fmt.Errorf("then.expand by must be positive")
 	}
 	return &ExpandSpec{By: n}, nil
+}
+
+func isStorageCheckType(typ string) bool {
+	return typ == "storage" || typ == "disk"
 }
 
 // resolveNotifiers maps notifier names to the configured notifiers, skipping

@@ -92,10 +92,10 @@ type Deps struct {
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler
-	// DiskUsage reports filesystem usage for disk checks and web watch summaries.
+	// DiskUsage reports filesystem usage for storage checks and web watch summaries.
 	// Optional: nil uses statfs.
 	DiskUsage checks.DiskUsageFunc
-	// MountSampler reads the mount table for disk/autofs checks and web watch
+	// MountSampler reads the mount table for storage/autofs checks and web watch
 	// summaries. Optional: nil reads /proc/mounts.
 	MountSampler checks.MountSamplerFunc
 	// Notifiers are the configured delivery targets (email, …) addressable by name
@@ -129,7 +129,7 @@ type Deps struct {
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
-	// VolumeExpander grows disk-watch filesystems for `then.expand`. Optional:
+	// VolumeExpander grows storage-watch filesystems for `then.expand`. Optional:
 	// nil uses volume.Expander with ExecxRunner. Tests inject a fake so no real
 	// LVM/filesystem commands run.
 	VolumeExpander VolumeExpander

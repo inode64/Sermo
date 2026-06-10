@@ -47,7 +47,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	}
 
 	// The generated block was printed.
-	if !strings.Contains(out.String(), "disk-mnt-backup") || !strings.Contains(out.String(), "free_pct") {
+	if !strings.Contains(out.String(), "storage-mnt-backup") || !strings.Contains(out.String(), "free_pct") {
 		t.Fatalf("generated YAML not shown: %s", out.String())
 	}
 	// The global config only points paths.includes at the wizard directory; the
@@ -56,7 +56,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(merged), "disk-mnt-backup") {
+	if strings.Contains(string(merged), "storage-mnt-backup") {
 		t.Fatalf("watch should not be in global config: %s", merged)
 	}
 	if !strings.Contains(string(merged), "includes:") || !strings.Contains(string(merged), "volume") {
@@ -65,12 +65,12 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if !strings.Contains(string(merged), "interval: 30s") {
 		t.Fatalf("merge dropped existing config: %s", merged)
 	}
-	watchPath := filepath.Join(tmp, "volume", "disk-mnt-backup.yml")
+	watchPath := filepath.Join(tmp, "volume", "storage-mnt-backup.yml")
 	watchFile, err := os.ReadFile(watchPath)
 	if err != nil {
 		t.Fatalf("watch file not written: %v", err)
 	}
-	if !strings.Contains(string(watchFile), "watches:") || !strings.Contains(string(watchFile), "disk-mnt-backup") || !strings.Contains(string(watchFile), "free_pct") {
+	if !strings.Contains(string(watchFile), "watches:") || !strings.Contains(string(watchFile), "storage-mnt-backup") || !strings.Contains(string(watchFile), "free_pct") {
 		t.Fatalf("watch fragment wrong: %s", watchFile)
 	}
 	loaded, err := config.Load(cfgPath)
@@ -78,7 +78,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 		t.Fatalf("load merged config: %v", err)
 	}
 	watches, _ := loaded.Global.Raw["watches"].(map[string]any)
-	if _, ok := watches["disk-mnt-backup"]; !ok {
+	if _, ok := watches["storage-mnt-backup"]; !ok {
 		t.Fatalf("loaded config did not include generated watch: %v", watches)
 	}
 	bak, err := os.ReadFile(cfgPath + ".bak")
@@ -109,14 +109,14 @@ func TestRunWizardUnknownAssistant(t *testing.T) {
 func TestWizardRejectsLoadedWatchCollision(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("watches:\n  disk-root: {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("watches:\n  storage-root: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ensureNoWatchCollisions(cfg, map[string]any{"disk-root": map[string]any{}}); err == nil {
+	if err := ensureNoWatchCollisions(cfg, map[string]any{"storage-root": map[string]any{}}); err == nil {
 		t.Fatal("merging a watch that already exists must error")
 	}
 }
@@ -130,10 +130,10 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(tmp, "volume"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "volume", "disk-root.yml"), []byte("watches: {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "volume", "storage-root.yml"), []byte("watches: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"disk-root": map[string]any{}}); err == nil {
+	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{}}); err == nil {
 		t.Fatal("existing watch file must not be overwritten")
 	}
 }
@@ -144,7 +144,7 @@ func TestMergeWizardWatchesMigratesLegacyEnabledPath(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [apps-enabled]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"disk-root": map[string]any{"then": map[string]any{"notify": []any{"ops"}}}})
+	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"then": map[string]any{"notify": []any{"ops"}}}})
 	if err != nil {
 		t.Fatalf("mergeWizardWatches: %v", err)
 	}

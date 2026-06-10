@@ -33,9 +33,9 @@ func watchIssues(issues []Issue) []Issue {
 func TestValidateWatchesGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-root": map[string]any{
+			"storage-root": map[string]any{
 				"monitor": "previous",
-				"check":   map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"check":   map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
 				"then":    map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
 			},
 		},
@@ -462,8 +462,8 @@ func TestValidateServiceCheckAsWatch(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(badExpand, "watches.load.then.expand is only valid on a disk watch") {
-		t.Fatalf("non-disk expand should be rejected: %v", badExpand)
+	if !hasIssue(badExpand, "watches.load.then.expand is only valid on a storage watch") {
+		t.Fatalf("non-storage expand should be rejected: %v", badExpand)
 	}
 
 	bad := validateRawGlobal(t, map[string]any{

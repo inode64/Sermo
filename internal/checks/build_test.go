@@ -77,6 +77,7 @@ func TestIsHealthType(t *testing.T) {
 		{"ws", true},
 		{"mysql", true},
 		{"mariadb", true},
+		{"storage", false},
 		{"disk", false},
 		{"cert", false},
 		{"count", false},
