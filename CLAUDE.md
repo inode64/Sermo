@@ -1,5 +1,21 @@
 # Sermo — project conventions
 
+## Reuse and shared behavior
+
+Before adding a new helper, parser, validator, runner or web/backend adapter,
+look for existing code that already solves the same problem and extend it when
+that keeps the ownership boundary clear. Do not duplicate validation, parsing,
+comparison, notification, monitoring or action-dispatch logic across `sermod`,
+`sermoctl`, web, watches and daemons.
+
+When a new check, option, monitor flag, notification behavior or web action is
+generally useful to both host `watches:` and service daemons, implement it for
+both surfaces in the same change unless there is a documented reason not to. If
+the feature intentionally applies only to one surface, document that limitation
+where the dispatch/validation decision lives and in the user docs. Keep
+`docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml` in
+step with YAML behavior.
+
 ## Code formatting (Go)
 
 **Every Go file must be `gofmt`-clean after any modification.** Run `gofmt` on a

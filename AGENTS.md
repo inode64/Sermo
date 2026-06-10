@@ -221,6 +221,26 @@ Follow these rules:
 9. Avoid global mutable state.
 10. Avoid package names that conflict with standard concepts, such as `init`.
 
+## Reuse and shared behavior
+
+Treat reuse as a project rule, not just a style preference.
+
+1. Before adding a new helper, parser, validator, runner or UI/backend adapter,
+   search for existing code that already solves the same problem and extend it
+   when that keeps the ownership boundary clear.
+2. Do not duplicate validation, parsing, comparison, notification, monitoring or
+   action dispatch logic across `sermod`, `sermoctl`, web, watches and daemons.
+   Prefer one shared implementation with narrow adapters at the edges.
+3. When a new check, option, monitor flag, notification behavior or web action is
+   generally useful to both host `watches:` and service daemons, implement it for
+   both surfaces in the same change unless there is a documented reason not to.
+4. If a feature intentionally applies only to watches or only to daemons, state
+   that limitation in code comments where the dispatch/validation decision lives
+   and in the user docs.
+5. Keep examples and documentation in step with shared behavior: update
+   `docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml`
+   whenever the YAML surface changes.
+
 ## Native Go, not external processes
 
 **Always implement functionality with native Go — the standard library, or
