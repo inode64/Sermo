@@ -925,6 +925,36 @@ policy:
 	}
 }
 
+func TestOSSelectorListBranch(t *testing.T) {
+	old := detectedOS
+	detectedOS = "gentoo"
+	defer func() { detectedOS = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"profiles/db.yml": `
+kind: profile
+name: db
+processes:
+  main:
+    type: pidfile
+    path:
+      os:
+        gentoo: [/run/db1.pid, /run/db.pid]
+        default: [/run/db.pid]
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	main := nested(t, cfg.Profiles["db"].Body, "processes", "main")
+	got, _ := main["path"].([]any)
+	if len(got) != 2 || got[0] != "/run/db1.pid" {
+		t.Errorf("path = %v, want the gentoo candidate list", main["path"])
+	}
+}
+
 func TestOSVariableBaked(t *testing.T) {
 	old := detectedOS
 	detectedOS = "debian"

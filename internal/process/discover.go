@@ -60,22 +60,33 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		}
 	}
 
-	// 1. pidfiles.
+	// 1. pidfiles. Candidate paths (e.g. per-OS variants) are tried in order; the
+	// first that points at a running process wins. Only when none do is the most
+	// relevant failure reported.
 	for _, sel := range selectors {
 		if sel.Type != SelectorPidfile {
 			continue
 		}
-		pid, err := readPidfile(sel.Path)
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("pidfile %q (%s): %v", sel.Path, sel.Name, err))
-			continue
+		var lastWarn string
+		matched := false
+		for _, path := range sel.Paths {
+			pid, err := readPidfile(path)
+			if err != nil {
+				lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
+				continue
+			}
+			id, ok := snapshot[pid]
+			if !ok {
+				lastWarn = fmt.Sprintf("pidfile %q (%s) references pid %d which is not running", path, sel.Name, pid)
+				continue
+			}
+			add(id, sel.Name, sourcePidfile)
+			matched = true
+			break
 		}
-		id, ok := snapshot[pid]
-		if !ok {
-			warnings = append(warnings, fmt.Sprintf("pidfile %q (%s) references pid %d which is not running", sel.Path, sel.Name, pid))
-			continue
+		if !matched && lastWarn != "" {
+			warnings = append(warnings, lastWarn)
 		}
-		add(id, sel.Name, sourcePidfile)
 	}
 
 	// 2. command_match across the snapshot.
@@ -273,8 +284,8 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		sel := Selector{Name: name, Type: cfgval.AsString(entry["type"])}
 		switch sel.Type {
 		case SelectorPidfile:
-			sel.Path = cfgval.AsString(entry["path"])
-			if sel.Path == "" {
+			sel.Paths = cfgval.StringList(entry["path"])
+			if len(sel.Paths) == 0 {
 				warnings = append(warnings, fmt.Sprintf("pidfile selector %q has no path", name))
 				continue
 			}

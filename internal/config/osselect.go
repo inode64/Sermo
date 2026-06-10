@@ -74,7 +74,13 @@ func collapseOS(v any, osID string) any {
 		}
 		if selector != nil {
 			if branch := selectOSBranch(selector, osID); branch != nil {
-				out = mergeMaps(out, collapseOS(branch, osID).(map[string]any))
+				if bm, ok := branch.(map[string]any); ok {
+					out = mergeMaps(out, collapseOS(bm, osID).(map[string]any))
+				} else if len(out) == 0 {
+					// A list/scalar branch (e.g. os-specific pidfile path
+					// candidates) replaces the value when `os:` is the only key.
+					return collapseOS(branch, osID)
+				}
 			}
 		}
 		return out
@@ -88,12 +94,14 @@ func collapseOS(v any, osID string) any {
 	}
 }
 
-// selectOSBranch returns the block for osID, else a `default` block, else nil.
-func selectOSBranch(selector map[string]any, osID string) map[string]any {
-	if b, ok := selector[osID].(map[string]any); ok {
+// selectOSBranch returns the branch for osID, else a `default` branch, else nil.
+// The branch may be a map (merged into the parent) or a list/scalar (which
+// replaces the parent value when `os:` is the only key).
+func selectOSBranch(selector map[string]any, osID string) any {
+	if b, ok := selector[osID]; ok {
 		return b
 	}
-	if b, ok := selector["default"].(map[string]any); ok {
+	if b, ok := selector["default"]; ok {
 		return b
 	}
 	return nil
