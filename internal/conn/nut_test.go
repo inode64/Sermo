@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"net"
@@ -33,17 +34,19 @@ func TestNUTVersion(t *testing.T) {
 	}
 }
 
-func TestParseNUTVar(t *testing.T) {
-	if v, ok := parseNUTVar(`VAR myups ups.status "OL CHRG"`); !ok || v != "OL CHRG" {
-		t.Errorf("got %q/%v, want \"OL CHRG\"/true", v, ok)
+func TestParseNUTVarLine(t *testing.T) {
+	name, val, ok := parseNUTVarLine(`VAR myups ups.status "OL CHRG"`)
+	if !ok || name != "ups.status" || val != "OL CHRG" {
+		t.Errorf("got (%q,%q,%v), want (ups.status, OL CHRG, true)", name, val, ok)
 	}
-	if _, ok := parseNUTVar("ERR UNKNOWN-UPS"); ok {
+	if _, _, ok := parseNUTVarLine("END LIST VAR myups"); ok {
 		t.Error("a non-VAR line must not parse")
 	}
 }
 
-func TestNUTHandshakeAnonymous(t *testing.T) {
-	conn := rw{in: strings.NewReader("Network UPS Tools upsd 2.8.0 - http://x/\n"), out: &bytes.Buffer{}}
+func TestNUTHandshakeAnonymousNoUPS(t *testing.T) {
+	// VER, then LIST UPS with zero UPSes -> stays at liveness, no LIST VAR.
+	conn := rw{in: strings.NewReader("Network UPS Tools upsd 2.8.0\nBEGIN LIST UPS\nEND LIST UPS\n"), out: &bytes.Buffer{}}
 	res, err := nutHandshake(conn, Config{})
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
@@ -51,46 +54,69 @@ func TestNUTHandshakeAnonymous(t *testing.T) {
 	if res.Version != "2.8.0" {
 		t.Fatalf("version = %q, want 2.8.0", res.Version)
 	}
-	if strings.Contains(conn.out.String(), "USERNAME") {
-		t.Fatalf("anonymous check must not authenticate: %q", conn.out.String())
+	if _, ok := res.Extra["ups.status"]; ok {
+		t.Errorf("no UPS selected, should expose no variables: %v", res.Extra)
 	}
 }
 
-func TestNUTHandshakeAuthAndStatus(t *testing.T) {
-	replies := "Network UPS Tools upsd 2.8.0\n" + // VER
+func TestNUTHandshakeAutoDetectSingleUPS(t *testing.T) {
+	in := "Network UPS Tools upsd 2.8.0\n" +
+		"BEGIN LIST UPS\nUPS apc \"APC Back-UPS\"\nEND LIST UPS\n" +
+		"BEGIN LIST VAR apc\nVAR apc ups.status \"OL\"\nVAR apc battery.charge \"100\"\nEND LIST VAR apc\n"
+	conn := rw{in: strings.NewReader(in), out: &bytes.Buffer{}}
+	res, err := nutHandshake(conn, Config{}) // no ups configured -> auto-detect apc
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	if res.Extra["ups"] != "apc" {
+		t.Errorf("ups = %q, want apc", res.Extra["ups"])
+	}
+	if res.Extra["ups.status"] != "OL" || res.Extra["battery.charge"] != "100" {
+		t.Errorf("variables not exposed: %v", res.Extra)
+	}
+	if res.Extra["fingerprint"] != "OL" {
+		t.Errorf("fingerprint = %q, want OL (drives on_change)", res.Extra["fingerprint"])
+	}
+}
+
+func TestNUTHandshakeAuthAndVars(t *testing.T) {
+	in := "Network UPS Tools upsd 2.8.0\n" + // VER
 		"OK\n" + // USERNAME
 		"OK\n" + // PASSWORD
 		"OK\n" + // LOGIN
-		"VAR myups ups.status \"OL\"\n" // GET VAR
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
+		"BEGIN LIST VAR myups\nVAR myups ups.status \"OB DISCHRG\"\nVAR myups battery.charge \"55\"\nEND LIST VAR myups\n"
+	conn := rw{in: strings.NewReader(in), out: &bytes.Buffer{}}
 	res, err := nutHandshake(conn, Config{User: "mon", Password: "secret", Query: "myups"})
 	if err != nil {
 		t.Fatalf("handshake: %v", err)
 	}
 	sent := conn.out.String()
-	for _, want := range []string{"USERNAME mon", "PASSWORD secret", "LOGIN myups", "GET VAR myups ups.status", "LOGOUT"} {
+	for _, want := range []string{"USERNAME mon", "PASSWORD secret", "LOGIN myups", "LIST VAR myups", "LOGOUT"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("missing %q in sent commands:\n%s", want, sent)
 		}
 	}
-	if res.Extra["ups.status"] != "OL" {
-		t.Errorf("ups.status = %q, want OL", res.Extra["ups.status"])
+	if strings.Contains(sent, "LIST UPS") {
+		t.Errorf("explicit ups must skip auto-detect: %s", sent)
+	}
+	if res.Extra["ups.status"] != "OB DISCHRG" || res.Extra["battery.charge"] != "55" {
+		t.Errorf("variables = %v", res.Extra)
 	}
 }
 
 func TestNUTHandshakeLoginDenied(t *testing.T) {
-	replies := "Network UPS Tools upsd 2.8.0\n" + "OK\n" + "OK\n" + "ERR ACCESS-DENIED\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
+	in := "Network UPS Tools upsd 2.8.0\n" + "OK\n" + "OK\n" + "ERR ACCESS-DENIED\n"
+	conn := rw{in: strings.NewReader(in), out: &bytes.Buffer{}}
 	if _, err := nutHandshake(conn, Config{User: "mon", Password: "bad", Query: "myups"}); err == nil {
 		t.Fatal("a denied LOGIN must fail")
 	}
 }
 
 func TestNUTHandshakeUnknownUPS(t *testing.T) {
-	replies := "Network UPS Tools upsd 2.8.0\n" + "ERR UNKNOWN-UPS\n"
-	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}
+	in := "Network UPS Tools upsd 2.8.0\n" + "ERR UNKNOWN-UPS\n"
+	conn := rw{in: strings.NewReader(in), out: &bytes.Buffer{}}
 	if _, err := nutHandshake(conn, Config{Query: "ghost"}); err == nil {
-		t.Fatal("an UNKNOWN-UPS status read must fail")
+		t.Fatal("an UNKNOWN-UPS LIST VAR must fail")
 	}
 }
 
@@ -113,12 +139,24 @@ func TestNUTProbeAgainstFakeServer(t *testing.T) {
 			return
 		}
 		defer func() { _ = c.Close() }()
-		buf := make([]byte, 64)
-		n, _ := c.Read(buf)
-		if !strings.HasPrefix(string(buf[:n]), "VER") {
-			return
+		br := bufio.NewReader(c)
+		for {
+			line, err := br.ReadString('\n')
+			if err != nil {
+				return
+			}
+			switch cmd := strings.TrimSpace(line); {
+			case cmd == "VER":
+				_, _ = c.Write([]byte("Network UPS Tools upsd 2.8.0 - http://x/\n"))
+			case cmd == "LIST UPS":
+				_, _ = c.Write([]byte("BEGIN LIST UPS\nUPS apc \"APC\"\nEND LIST UPS\n"))
+			case strings.HasPrefix(cmd, "LIST VAR"):
+				_, _ = c.Write([]byte("BEGIN LIST VAR apc\nVAR apc ups.status \"OL\"\nVAR apc battery.charge \"100\"\nEND LIST VAR apc\n"))
+			case cmd == "LOGOUT":
+				_, _ = c.Write([]byte("OK Goodbye\n"))
+				return
+			}
 		}
-		_, _ = c.Write([]byte("Network UPS Tools upsd 2.8.0 - http://x/\n"))
 	}()
 
 	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
@@ -129,5 +167,8 @@ func TestNUTProbeAgainstFakeServer(t *testing.T) {
 	}
 	if res.Version != "2.8.0" {
 		t.Fatalf("version = %q, want 2.8.0", res.Version)
+	}
+	if res.Extra["ups.status"] != "OL" || res.Extra["battery.charge"] != "100" {
+		t.Fatalf("variables not exposed: %v", res.Extra)
 	}
 }
