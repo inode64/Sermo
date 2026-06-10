@@ -173,7 +173,7 @@ func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {
 	b := &WebBackend{
 		watchOrder: []string{"disk-root"},
 		watches: map[string]*webWatch{
-			"disk-root": {name: "disk-root", checkType: "disk"},
+			"disk-root": {name: "disk-root", checkType: "disk", monitorMode: "previous"},
 		},
 		store: store,
 	}
@@ -183,5 +183,8 @@ func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {
 	}
 	if watches[0].Monitored || watches[0].MonitorSource != "web" || watches[0].MonitorChangedAt != at.Format(time.RFC3339) {
 		t.Fatalf("watch monitoring state = %+v", watches[0])
+	}
+	if watches[0].Monitor != "previous" {
+		t.Fatalf("watch monitor mode = %q, want previous", watches[0].Monitor)
 	}
 }

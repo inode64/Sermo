@@ -11,6 +11,13 @@ import (
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
 
+func validateMonitorMode(path string, mode any, add addFunc) {
+	s, isStr := mode.(string)
+	if _, ok := validMonitorModes[s]; !isStr || !ok {
+		add("%s %q is not one of enabled, disabled, previous", path, cfgval.String(mode))
+	}
+}
+
 // validateServiceMonitors validates the per-service `version:`/`config:` monitor
 // blocks: their `on_change.notify` selection must reference defined notifiers (or
 // the `none` sentinel). The version/config commands themselves are reused from

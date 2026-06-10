@@ -141,6 +141,33 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	}
 }
 
+func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
+	store := newFakeStore()
+	if err := store.SetActive(watchMonitorKey("disk-root"), false, state.SourceConfig); err != nil {
+		t.Fatalf("SetActive: %v", err)
+	}
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"disk-root": map[string]any{
+				"monitor": config.MonitorDisabled,
+				"check":   map[string]any{"type": "disk", "path": "/"},
+			},
+		},
+	}}}
+
+	b, warns := NewWebBackend(cfg, Deps{Monitor: store})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches", len(watches))
+	}
+	if watches[0].Monitor != config.MonitorDisabled || watches[0].Monitored {
+		t.Fatalf("watch monitor view = %+v", watches[0])
+	}
+}
+
 func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{

@@ -32,9 +32,9 @@ reboot. `paths.locks` is **not** supported.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
-is what lets a service's `monitor: previous` flag restore its last monitoring
-state. The schema is versioned and migrated forward automatically, so future
-features can add tables without a manual upgrade.
+is what lets a service's or watch's `monitor: previous` flag restore its last
+monitoring state. The schema is versioned and migrated forward automatically, so
+future features can add tables without a manual upgrade.
 
 Both directories are created **0700, owner root**. On systemd they come from the
 shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -288,8 +288,8 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
 malformed lock files under `<paths.runtime>/locks`),
-`GET /api/watches` (configured host watches, their current monitor/paused state,
-conditions, notifications and recent activity),
+`GET /api/watches` (configured host watches, their `monitor` mode, current
+monitor/paused state, conditions, notifications and recent activity),
 `POST /api/watches/{name}/{action}` where action is `monitor` or `unmonitor`,
 `GET /api/locks` (named runtime locks with TTL remaining, owner status,
 created age, blocked actions and release eligibility),
@@ -370,9 +370,10 @@ only when it actually runs, so the average is not skewed.
 
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
-`GET /api/services` expose `monitor_source` and `monitor_changed_at` so a paused
-service shows who paused it and when. Operations take the per-service operation
-lock, so they never overlap a worker's action on the same service.
+`GET /api/services` / `GET /api/watches` expose `monitor_source` and
+`monitor_changed_at` so a paused service or watch shows who paused it and when.
+Operations take the per-service operation lock, so they never overlap a worker's
+action on the same service.
 
 Because the daemon runs as root, the UI is hardened: it binds to loopback by
 default, supports auth (above), sets HTTP timeouts, and requires an
@@ -524,6 +525,7 @@ default, and a watch with no local action can omit `then` entirely.
 ```yaml
 watches:
   disk-root:
+    monitor: previous                  # enabled (default) | disabled | previous
     check: { type: disk, path: /, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops-email]                # send to these notifiers
@@ -532,6 +534,14 @@ watches:
 
 Use `notify: [none]` when a watch has another action (for example `expand`) but
 must not send notifications or inherit the global `notify` default.
+
+A watch supports the same top-level `monitor` flag as a service/profile:
+`enabled` (the default) forces monitoring on at daemon start/reload, `disabled`
+builds the watch but starts it paused, and `previous` restores the last persisted
+runtime state. This is distinct from `enabled: false`, which disables the watch
+entry structurally and no runtime watch is built. Use `monitor: disabled` when
+you want the watch visible in the web UI and available for an admin to resume
+with **monitor**.
 
 These conventions keep the per-type sections below short:
 
@@ -707,7 +717,7 @@ separately.
 ```yaml
 watches:
   net-eth0:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: net, interface: eth0 }
     metrics:
@@ -753,7 +763,7 @@ share state and fire separately.
 ```yaml
 watches:
   ping-gw:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: icmp, host: 8.8.8.8, count: 3 }   # count optional, default 3
     metrics:
@@ -798,7 +808,7 @@ heavy paging in/out, a classic sign of memory pressure).
 ```yaml
 watches:
   swap:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: swap }
     metrics:
@@ -829,7 +839,7 @@ machine size.
 ```yaml
 watches:
   load:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: load
@@ -944,7 +954,7 @@ per changed entry.
 ```yaml
 watches:
   app-data:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: file
@@ -994,7 +1004,7 @@ absent state.)
 ```yaml
 watches:
   hot-workers:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: process

@@ -223,10 +223,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	}
 
 	if mode, present := tree["monitor"]; present {
-		s, isStr := mode.(string)
-		if _, ok := validMonitorModes[s]; !isStr || !ok {
-			add("monitor %q is not one of enabled, disabled, previous", cfgval.String(mode))
-		}
+		validateMonitorMode("monitor", mode, add)
 	}
 
 	cooldown, present := policyCooldown(tree)

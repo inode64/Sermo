@@ -70,8 +70,8 @@ const DefaultRuntime = "/run/sermo"
 // lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
 const DefaultState = "/var/lib/sermo"
 
-// Monitor modes for a service's per-service `monitor` flag. They set the
-// daemon's startup behavior:
+// Monitor modes for a service/watch `monitor` flag. They set the daemon's
+// startup behavior:
 //   - MonitorEnabled : always monitor on startup (the default)
 //   - MonitorDisabled: never monitor
 //   - MonitorPrevious: restore the persisted runtime state from the last run
@@ -81,8 +81,8 @@ const (
 	MonitorPrevious = "previous"
 )
 
-// MonitorMode returns a resolved service's `monitor` flag, defaulting to
-// MonitorEnabled so services are monitored unless told otherwise.
+// MonitorMode returns a resolved entry's `monitor` flag, defaulting to
+// MonitorEnabled so services/watches are monitored unless told otherwise.
 func MonitorMode(tree map[string]any) string {
 	if v, ok := tree["monitor"].(string); ok && v != "" {
 		return v

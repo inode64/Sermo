@@ -61,6 +61,7 @@ type Watch struct {
 	Summary          string           `json:"summary,omitempty"`
 	Interval         string           `json:"interval,omitempty"`
 	Enabled          bool             `json:"enabled"`
+	Monitor          string           `json:"monitor,omitempty"` // enabled | disabled | previous
 	Monitored        bool             `json:"monitored"`
 	MonitorSource    string           `json:"monitor_source,omitempty"`
 	MonitorChangedAt string           `json:"monitor_changed_at,omitempty"`

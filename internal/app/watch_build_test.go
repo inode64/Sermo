@@ -107,25 +107,50 @@ func TestBuildWatchesDiskInheritsGlobalNotifyWithoutThen(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesUsesPersistedWatchPause(t *testing.T) {
-	store := newFakeStore()
-	store.active[watchMonitorKey("disk-root")] = false
-	cfg := cfgWithWatches(map[string]any{
-		"disk-root": map[string]any{
-			"check": map[string]any{
-				"type":     "disk",
-				"path":     "/",
-				"used_pct": map[string]any{"op": ">=", "value": 90},
-			},
-			"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
-		},
-	})
-	watches, warns := BuildWatches(cfg, Deps{Monitor: store, DefaultTimeout: time.Second}, 30*time.Second)
-	if len(warns) != 0 || len(watches) != 1 {
-		t.Fatalf("watches=%d warnings=%v", len(watches), warns)
+func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
+	tests := []struct {
+		name          string
+		mode          any
+		initialFound  bool
+		initialActive bool
+		wantActive    bool
+		wantPaused    bool
+	}{
+		{name: "default enabled forces active", initialFound: true, initialActive: false, wantActive: true},
+		{name: "explicit enabled forces active", mode: config.MonitorEnabled, initialFound: true, initialActive: false, wantActive: true},
+		{name: "disabled forces paused", mode: config.MonitorDisabled, initialFound: true, initialActive: true, wantActive: false, wantPaused: true},
+		{name: "previous preserves paused state", mode: config.MonitorPrevious, initialFound: true, initialActive: false, wantActive: false, wantPaused: true},
+		{name: "previous first run defaults active", mode: config.MonitorPrevious, wantActive: true},
 	}
-	if watches[0].IsPaused == nil || !watches[0].IsPaused() {
-		t.Fatalf("watch should be paused from store")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := newFakeStore()
+			if tt.initialFound {
+				store.active[watchMonitorKey("disk-root")] = tt.initialActive
+			}
+			entry := map[string]any{
+				"check": map[string]any{
+					"type":     "disk",
+					"path":     "/",
+					"used_pct": map[string]any{"op": ">=", "value": 90},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			}
+			if tt.mode != nil {
+				entry["monitor"] = tt.mode
+			}
+			cfg := cfgWithWatches(map[string]any{"disk-root": entry})
+			watches, warns := BuildWatches(cfg, Deps{Monitor: store, DefaultTimeout: time.Second}, 30*time.Second)
+			if len(warns) != 0 || len(watches) != 1 {
+				t.Fatalf("watches=%d warnings=%v", len(watches), warns)
+			}
+			if got := store.active[watchMonitorKey("disk-root")]; got != tt.wantActive {
+				t.Fatalf("stored active = %v, want %v", got, tt.wantActive)
+			}
+			if got := watches[0].IsPaused != nil && watches[0].IsPaused(); got != tt.wantPaused {
+				t.Fatalf("paused = %v, want %v", got, tt.wantPaused)
+			}
+		})
 	}
 }
 

@@ -3,8 +3,8 @@
 //
 // Unlike the runtime locks and pause markers under /run (tmpfs, wiped on
 // reboot), this store survives reboots. That durability is what lets the
-// `monitor: previous` flag restore a service's last monitoring state across a
-// daemon restart or a full reboot.
+// `monitor: previous` flag restore a service's or watch's last monitoring state
+// across a daemon restart or a full reboot.
 //
 // The schema is versioned through PRAGMA user_version and migrated forward on
 // Open, so future features (action history, metric retention, audit trails) add
@@ -25,9 +25,9 @@ import (
 // Filename is the database file name placed under the state directory.
 const Filename = "sermo.db"
 
-// Sources record who last changed a service's monitoring state, for inspection.
+// Sources record who last changed a monitoring state row, for inspection.
 const (
-	SourceConfig = "config" // daemon applied the service's `monitor` flag
+	SourceConfig = "config" // daemon applied an entry's `monitor` flag
 	SourceCLI    = "cli"    // operator ran monitor/unmonitor
 	SourceDaemon = "daemon" // daemon changed it autonomously
 	SourceWeb    = "web"    // operator used the web UI
@@ -154,15 +154,15 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-// MonitorRecord is one service's persisted monitoring state.
+// MonitorRecord is one persisted monitoring state row.
 type MonitorRecord struct {
 	Active    bool
 	Source    string
 	UpdatedAt time.Time
 }
 
-// MonitorState returns a service's persisted monitoring row. found is false when
-// the service has no recorded state yet.
+// MonitorState returns a persisted monitoring row. found is false when the entry
+// has no recorded state yet.
 func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 	var active int
 	var source, updated string
@@ -183,8 +183,8 @@ func (s *Store) MonitorState(service string) (MonitorRecord, bool, error) {
 	}
 }
 
-// Active reports whether monitoring is currently active for a service. found is
-// false when the service has no recorded state yet (the caller decides the
+// Active reports whether monitoring is currently active for an entry. found is
+// false when the entry has no recorded state yet (the caller decides the
 // default — typically "monitor on").
 func (s *Store) Active(service string) (active, found bool, err error) {
 	var v int
@@ -199,8 +199,8 @@ func (s *Store) Active(service string) (active, found bool, err error) {
 	}
 }
 
-// SetActive records a service's monitoring state, upserting the row. source
-// notes who set it (SourceConfig, SourceCLI, SourceDaemon) for inspection.
+// SetActive records an entry's monitoring state, upserting the row. source notes
+// who set it (SourceConfig, SourceCLI, SourceDaemon, SourceWeb) for inspection.
 func (s *Store) SetActive(service string, active bool, source string) error {
 	v := 0
 	if active {

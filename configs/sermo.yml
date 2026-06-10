@@ -88,10 +88,11 @@ notifiers:
 
 # Host watches: monitor host resources (disk, …) independently of services and,
 # when a threshold is crossed, run a hook command and/or notify named targets.
-# Disabled by default.
+# Paused by default: each watch is built and visible in the web UI, but it does
+# not run until an admin monitors it or the YAML changes to `monitor: enabled`.
 watches:
   disk-root:
-    enabled: false
+    monitor: disabled
     interval: 1m
     check:
       type: disk
@@ -106,7 +107,7 @@ watches:
         command: [/usr/local/bin/sermo-alert-disk.sh, "/"]
         timeout: 10s
   net-eth0:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: net, interface: eth0 }
     metrics:
@@ -127,7 +128,7 @@ watches:
           hook:
             command: [/usr/local/bin/sermo-net-errors.sh, eth0]
   ping-gw:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: icmp, host: 8.8.8.8, count: 3 }
     metrics:
@@ -143,7 +144,7 @@ watches:
             command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
   # Watch system load average (per-core, so the thresholds are machine-agnostic).
   load:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: load
@@ -156,7 +157,7 @@ watches:
         command: [/usr/local/bin/sermo-load-alert.sh]
   # Watch system file descriptors against the kernel fs.file-max limit.
   fds:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: fds
@@ -168,7 +169,7 @@ watches:
   # Disk check with mount verification: alert if /data is not mounted (or not as
   # expected) and/or its space crosses a threshold — one entry, no duplicated path.
   data-fs:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: disk
@@ -179,7 +180,7 @@ watches:
       notify: [ops-email]
   # Watch for accumulating zombie processes (a parent not reaping its children).
   zombies:
-    enabled: false
+    monitor: disabled
     interval: 1m
     check:
       type: zombies
@@ -191,7 +192,7 @@ watches:
   # Watch a TLS certificate: alert before expiry, on invalid chain, or on an
   # algorithm/issuer change.
   api-cert:
-    enabled: false
+    monitor: disabled
     interval: 1h
     check:
       type: cert
@@ -203,7 +204,7 @@ watches:
       notify: [ops-email]
   # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
   entropy:
-    enabled: false
+    monitor: disabled
     interval: 1m
     check:
       type: entropy
@@ -214,7 +215,7 @@ watches:
         command: [/usr/local/bin/sermo-entropy-alert.sh]
   # Watch the netfilter conntrack table (drops new connections when full).
   conntrack:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: conntrack
@@ -225,7 +226,7 @@ watches:
         command: [/usr/local/bin/sermo-conntrack-alert.sh]
   # Watch kernel OOM kills: fire whenever the out-of-memory killer reaps a process.
   oom:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: oom }          # no delta -> fires on any kill (> 0)
     then:
@@ -233,7 +234,7 @@ watches:
         command: [/usr/local/bin/sermo-oom-alert.sh]
   # Watch system swap: usage filling up and/or heavy paging (thrashing).
   swap:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check: { type: swap }
     metrics:
@@ -250,7 +251,7 @@ watches:
   # Watch a file or directory tree for attribute changes (size, permissions,
   # owner, deletion). Fires the hook once per change; recursive walks the subtree.
   app-data:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: file
@@ -267,7 +268,7 @@ watches:
   # Watch processes by name: fire a hook per matching PID that has been alive at
   # least `for` and/or crosses a CPU/memory/IO threshold (edge-triggered per PID).
   hot-workers:
-    enabled: false
+    monitor: disabled
     interval: 30s
     check:
       type: process
