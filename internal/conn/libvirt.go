@@ -16,8 +16,13 @@ func init() { Register(libvirtProtocol{}, "libvirtd") }
 // libvirtProtocol probes a libvirt daemon (libvirtd) natively over its RPC
 // protocol using the pure-Go github.com/digitalocean/go-libvirt client. It opens
 // a connection (CONNECT_OPEN) to a driver URI and reads the daemon's libvirt
-// version; both succeeding proves libvirtd is up and answering RPC. No write
-// operation is performed.
+// version; both succeeding proves libvirtd is up and answering RPC. It then reads
+// (best-effort, since the connection already proved liveness) the domain counts —
+// `domains.active` (running VMs), `domains.inactive`, `domains` (total) — and node
+// capacity (`node.cpus`, `node.memory_mb`), so an operator can alert on them with
+// `expect`. With a `domain` selected it also reports that VM's `domain.state`
+// (running/paused/shutoff/…) and `domain.running`, and tracks its state with
+// `on_change`. No write operation is performed.
 //
 // Transport is selected by the config: a `socket` path (or the default when
 // neither socket nor host is set) uses the local Unix socket; a `host` selects
@@ -63,7 +68,7 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	ch := make(chan probeOut, 1)
 	go func() {
-		res, err := libvirtProbe(l, uri, mode)
+		res, err := libvirtProbe(l, uri, mode, cfg.Params["domain"])
 		ch <- probeOut{res, err}
 	}()
 	select {
@@ -74,8 +79,9 @@ func (libvirtProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 }
 
-// libvirtProbe opens the connection, reads the version (and hostname) and closes.
-func libvirtProbe(l *libvirt.Libvirt, uri, mode string) (Result, error) {
+// libvirtProbe opens the connection, reads the version (and hostname), domain
+// counts, node capacity and an optional single domain's state, then closes.
+func libvirtProbe(l *libvirt.Libvirt, uri, mode, domain string) (Result, error) {
 	if err := l.ConnectToURI(libvirt.ConnectURI(uri)); err != nil {
 		return Result{}, err
 	}
@@ -90,7 +96,61 @@ func libvirtProbe(l *libvirt.Libvirt, uri, mode string) (Result, error) {
 	if hostname, err := l.ConnectGetHostname(); err == nil && hostname != "" {
 		extra["hostname"] = hostname
 	}
+
+	// Domain counts and node capacity are best-effort: the connect + version above
+	// already proved liveness, so a driver that rejects these still reports up.
+	if active, err := l.ConnectNumOfDomains(); err == nil {
+		extra["domains.active"] = strconv.Itoa(int(active))
+		if inactive, err := l.ConnectNumOfDefinedDomains(); err == nil {
+			extra["domains.inactive"] = strconv.Itoa(int(inactive))
+			extra["domains"] = strconv.Itoa(int(active) + int(inactive))
+		}
+	}
+	if _, mem, cpus, _, _, _, _, _, err := l.NodeGetInfo(); err == nil {
+		extra["node.cpus"] = strconv.Itoa(int(cpus))
+		extra["node.memory_mb"] = strconv.FormatUint(mem/1024, 10) // NodeGetInfo memory is KiB
+	}
+
+	// Optional single-domain state — fails the check when the VM is unknown.
+	if domain != "" {
+		dom, err := l.DomainLookupByName(domain)
+		if err != nil {
+			return Result{}, fmt.Errorf("domain %q: %w", domain, err)
+		}
+		state, _, err := l.DomainGetState(dom, 0)
+		if err != nil {
+			return Result{}, fmt.Errorf("domain %q state: %w", domain, err)
+		}
+		s := libvirtDomainState(state)
+		extra["domain"] = domain
+		extra["domain.state"] = s
+		extra["domain.running"] = strconv.FormatBool(libvirt.DomainState(state) == libvirt.DomainRunning)
+		extra["fingerprint"] = s // on_change tracks the VM's state
+	}
+
 	return Result{Version: version, Extra: extra}, nil
+}
+
+// libvirtDomainState maps a libvirt DomainState code to a stable lower-case name.
+func libvirtDomainState(s int32) string {
+	switch libvirt.DomainState(s) {
+	case libvirt.DomainRunning:
+		return "running"
+	case libvirt.DomainBlocked:
+		return "blocked"
+	case libvirt.DomainPaused:
+		return "paused"
+	case libvirt.DomainShutdown:
+		return "shutdown"
+	case libvirt.DomainShutoff:
+		return "shutoff"
+	case libvirt.DomainCrashed:
+		return "crashed"
+	case libvirt.DomainPmsuspended:
+		return "pmsuspended"
+	default:
+		return "nostate"
+	}
 }
 
 // libvirtTransport decides the transport, dial address and connect URI from the

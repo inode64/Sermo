@@ -48,7 +48,7 @@ which reuse the same schema). MVP types:
 | `rsync` / `rsyncd` | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
 | `dhcp` / `dhcpd` | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
-| `libvirt` / `libvirtd` | a libvirt daemon answers RPC (opens a connection and reports its version) (see Database) |
+| `libvirt` / `libvirtd` | a libvirt daemon answers RPC; exposes VM counts (`domains.active`…), node capacity and a VM's state for `expect`/`on_change` (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
 | `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
@@ -546,17 +546,32 @@ Protocols, in the order of the table above:
   `host` to use plain **TCP** (default port 16509). TLS/SASL is not supported.
   **Connect URI:** `query` selects the driver, default `qemu:///system` (e.g.
   `lxc:///`, `xen://`). No auth — local socket access is governed by the socket's
-  permissions/polkit. Result data: the libvirt version, connect URI, transport and
-  daemon hostname. Uses `github.com/digitalocean/go-libvirt`.
+  permissions/polkit. Uses `github.com/digitalocean/go-libvirt`.
+
+  Beyond liveness it exposes variables for conditions (best-effort — a driver that
+  rejects them still reports up): **`domains.active`** (running VMs),
+  `domains.inactive`, `domains` (total), and node capacity `node.cpus`,
+  `node.memory_mb`. Set **`domain`** to a VM name to also read its `domain.state`
+  (`running`/`paused`/`shutoff`/`crashed`/…) and `domain.running`; `on_change` then
+  alerts on that VM's state transitions, and an unknown domain fails the check.
+  Result data also carries the libvirt version, connect URI, transport and hostname.
 
   ```yaml
   checks:
     libvirt-local:
       type: libvirt              # dials /var/run/libvirt/libvirt-sock
+      expect:
+        domains.active: { op: ">=", value: 3 }   # alert if fewer than 3 VMs are running
     libvirt-tcp:
       type: libvirt
       host: 10.0.0.4             # plain TCP on 16509
       query: "qemu:///system"    # optional connect URI (default qemu:///system)
+    db-vm:
+      type: libvirt
+      domain: db01               # watch a single VM
+      on_change: true            # alert on its state transitions
+      expect:
+        domain.state: { op: "==", value: running }
   ```
 - `dbus` — connects to a D-Bus daemon and completes its SASL auth +
   `org.freedesktop.DBus.Hello` handshake — which alone proves the bus is up — then
