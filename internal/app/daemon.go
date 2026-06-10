@@ -46,17 +46,21 @@ type SLAReader interface {
 	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
 }
 
-// MeasurementRecorder persists one numeric per-check observation (latency, ms) per
-// observed cycle, for the latency graph. Implemented by internal/state.Store.
+// MeasurementRecorder persists per-check observations per observed cycle: the
+// latency (ms) for measured check types, and any named metrics a check publishes
+// in Result.Data (e.g. hdparm read/cached). Implemented by internal/state.Store.
 type MeasurementRecorder interface {
 	RecordMeasurement(service, check string, valueMs float64, at time.Time) error
+	RecordMetric(service, check, metric string, value float64, at time.Time) error
 }
 
-// MeasurementReader reads a check's measurement summary and history for the web.
-// Implemented by internal/state.Store.
+// MeasurementReader reads a check's latency and named-metric summaries and history
+// for the web. Implemented by internal/state.Store.
 type MeasurementReader interface {
 	MeasurementSummary(service, check string, span time.Duration, now time.Time) (state.MeasurementStat, error)
 	MeasurementSeries(service, check string, from, to time.Time) ([]state.MeasurementPoint, error)
+	MetricSummary(service, check, metric string, span time.Duration, now time.Time) (state.MeasurementStat, error)
+	MetricSeries(service, check, metric string, from, to time.Time) ([]state.MeasurementPoint, error)
 }
 
 // measuredCheckTypes are the check types whose latency is recorded as a time
@@ -319,22 +323,64 @@ func measurementRecorder(deps Deps, name string, tree map[string]any) func(check
 	if !ok || store == nil {
 		return nil
 	}
-	measured := measuredCheckNames(tree)
-	if len(measured) == 0 {
+	measured := measuredCheckNames(tree)     // latency-graphed check names
+	graphable := graphableCheckMetrics(tree) // check name -> named metrics
+	if len(measured) == 0 && len(graphable) == 0 {
 		return nil
 	}
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
-	return func(r checks.Result) {
-		if !measured[r.Check] {
-			return
-		}
-		ms := float64(r.Latency) / float64(time.Millisecond)
-		if err := store.RecordMeasurement(name, r.Check, ms, now()); err != nil && deps.Emit != nil {
+	fail := func(err error) {
+		if err != nil && deps.Emit != nil {
 			deps.Emit(Event{Service: name, Kind: "error", Message: "record measurement: " + err.Error()})
 		}
+	}
+	return func(r checks.Result) {
+		if measured[r.Check] {
+			ms := float64(r.Latency) / float64(time.Millisecond)
+			fail(store.RecordMeasurement(name, r.Check, ms, now()))
+		}
+		for _, m := range graphable[r.Check] {
+			if v, ok := numericData(r.Data[m.Key]); ok {
+				fail(store.RecordMetric(name, r.Check, m.Key, v, now()))
+			}
+		}
+	}
+}
+
+// graphableCheckMetrics maps each configured check name to the named metrics its
+// type publishes (checks.GraphMetrics), for the recorder to persist from
+// Result.Data. Empty when no configured check declares graphable metrics.
+func graphableCheckMetrics(tree map[string]any) map[string][]checks.GraphMetric {
+	section, _ := tree["checks"].(map[string]any)
+	out := map[string][]checks.GraphMetric{}
+	for cn, raw := range section {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		typ, _ := m["type"].(string)
+		if g := checks.GraphMetrics(typ); len(g) > 0 {
+			out[cn] = g
+		}
+	}
+	return out
+}
+
+// numericData coerces a Result.Data value to a float64 (the recorder only graphs
+// numeric fields).
+func numericData(v any) (float64, bool) {
+	switch t := v.(type) {
+	case float64:
+		return t, true
+	case int:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	default:
+		return 0, false
 	}
 }
 

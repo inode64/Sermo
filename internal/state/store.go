@@ -67,6 +67,22 @@ var migrations = []string{
 		max_ms     REAL NOT NULL,
 		PRIMARY KEY (service, check_name, bucket)
 	);`,
+	// measurement_metric is the generic per-check NAMED-metric time series: any
+	// check's numeric Result.Data fields (e.g. hdparm read/cached MB/s) accumulate
+	// into one row per service+check+metric per UTC minute, mirroring `measurement`
+	// but with a metric dimension and unit-agnostic columns. Reusable by any check
+	// that declares graphable metrics.
+	`CREATE TABLE measurement_metric (
+		service    TEXT NOT NULL,
+		check_name TEXT NOT NULL,
+		metric     TEXT NOT NULL,
+		bucket     INTEGER NOT NULL,
+		n          INTEGER NOT NULL,
+		sum_v      REAL NOT NULL,
+		min_v      REAL NOT NULL,
+		max_v      REAL NOT NULL,
+		PRIMARY KEY (service, check_name, metric, bucket)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -426,6 +442,85 @@ func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
 	return res.RowsAffected()
 }
 
+// RecordMetric accumulates one observation of a named per-check metric (e.g.
+// hdparm "read" MB/s) into its current UTC-minute bucket: n+1, sum+value and the
+// running min/max. It is the generic counterpart of RecordMeasurement (latency).
+func (s *Store) RecordMetric(service, check, metric string, value float64, at time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO measurement_metric (service, check_name, metric, bucket, n, sum_v, min_v, max_v)
+		 VALUES (?, ?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(service, check_name, metric, bucket) DO UPDATE SET
+		   n     = n + 1,
+		   sum_v = sum_v + excluded.sum_v,
+		   min_v = min(min_v, excluded.min_v),
+		   max_v = max(max_v, excluded.max_v);`,
+		service, check, metric, minuteBucket(at), value, value, value,
+	)
+	return err
+}
+
+// MetricSummary returns a named metric's average/min/max and sample count over the
+// rolling window ending at now.
+func (s *Store) MetricSummary(service, check, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	var count sql.NullInt64
+	var sum, minV, maxV sql.NullFloat64
+	err := s.db.QueryRow(
+		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
+		   FROM measurement_metric WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ?;`,
+		service, check, metric, minuteBucket(now.Add(-span)),
+	).Scan(&count, &sum, &minV, &maxV)
+	if err != nil {
+		return MeasurementStat{}, err
+	}
+	stat := MeasurementStat{Count: count.Int64}
+	if count.Int64 > 0 && sum.Valid {
+		stat.Avg = sum.Float64 / float64(count.Int64)
+		stat.Min = minV.Float64
+		stat.Max = maxV.Float64
+	}
+	return stat, nil
+}
+
+// MetricSeries returns a named metric's per-minute points in [from, to), oldest
+// first (minutes with no observation are absent).
+func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) ([]MeasurementPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT bucket, n, sum_v, min_v, max_v
+		   FROM measurement_metric
+		  WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+		service, check, metric, minuteBucket(from), minuteBucket(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MeasurementPoint
+	for rows.Next() {
+		var bucket, n int64
+		var sum, minV, maxV float64
+		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
+			return nil, err
+		}
+		avg := 0.0
+		if n > 0 {
+			avg = sum / float64(n)
+		}
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
+	}
+	return out, rows.Err()
+}
+
+// PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
+func (s *Store) PruneMetrics(before time.Time) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM measurement_metric WHERE bucket < ?;`, minuteBucket(before))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when
 // the database is not "ok" (corruption), for diagnostics.
 func (s *Store) IntegrityCheck() error {
@@ -445,7 +540,8 @@ func (s *Store) IntegrityCheck() error {
 func (s *Store) TrackedServices() ([]string, error) {
 	rows, err := s.db.Query(`SELECT service FROM monitor_state
 		UNION SELECT service FROM sla_sample
-		UNION SELECT service FROM measurement ORDER BY service;`)
+		UNION SELECT service FROM measurement
+		UNION SELECT service FROM measurement_metric ORDER BY service;`)
 	if err != nil {
 		return nil, err
 	}

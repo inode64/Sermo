@@ -171,6 +171,11 @@ func run(args []string) int {
 	} else if n > 0 {
 		logger.Info("pruned old measurements", "rows", n)
 	}
+	if n, err := store.PruneMetrics(cutoff); err != nil {
+		logger.Warn("prune metrics", "error", err)
+	} else if n > 0 {
+		logger.Info("pruned old metrics", "rows", n)
+	}
 
 	collector := metrics.New(metrics.OSReader{})
 	if deps.SystemFreshness > 0 {
