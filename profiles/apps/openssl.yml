@@ -1,9 +1,0 @@
-kind: profile
-name: openssl
-display_name: "OpenSSL"
-description: "Full-strength general purpose cryptography library (including SSL and TLS)"
-variables:
-  binary: "/usr/bin/openssl"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","version"], timeout: 10s }

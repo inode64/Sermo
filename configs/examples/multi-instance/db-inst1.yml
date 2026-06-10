@@ -2,10 +2,10 @@ kind: service
 name: db-inst1
 uses: dbserver
 # Own init unit (systemd template instance or a distinct unit name). A scalar
-# `service` overrides the profile's candidates for this instance only.
+# `service` overrides the daemon's candidates for this instance only.
 service: db-inst1
 # Override only what makes this instance unique; binary, checks and rules are
-# inherited from the dbserver profile.
+# inherited from the dbserver daemon.
 variables:
   port:    3306
   pidfile: /run/dbserver/inst1.pid

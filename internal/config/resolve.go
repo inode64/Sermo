@@ -38,7 +38,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 // ${host} (the detected hostname), ${init} (the detected init system),
 // ${user} (the Sermo user, a fallback for service accounts), ${pidfile} (the
 // conventional /run/<unit>.pid) and ${port} (the top-level `port:` field, when
-// set). They let profiles parameterize strings — e.g. a tcp check
+// set). They let daemons parameterize strings — e.g. a tcp check
 // port: "${port}" or message: "${display_name} backup is running".
 // Injected after validateVariableValues so a display_name carrying its own
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
@@ -80,7 +80,7 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 // expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block
 // into one remediation rule per library that restarts the service when the
 // library file changes. Each named library is resolved to its file via the
-// matching library profile, so the generated `changed:` condition carries a
+// matching library daemon, so the generated `changed:` condition carries a
 // concrete path. The block is removed; unknown or non-library references error.
 func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	roc, ok := tree["restart_on_change"].(map[string]any)
@@ -95,12 +95,12 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 		libraries = map[string]any{}
 	}
 	for _, lib := range cfgval.StringList(roc["libraries"]) {
-		doc, ok := c.Profiles[lib]
+		doc, ok := c.Daemons[lib]
 		if !ok || doc.Category != CategoryLibrary {
-			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library profile", lib))
+			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library daemon", lib))
 			continue
 		}
-		path := profileBinary(doc.Body)
+		path := daemonBinary(doc.Body)
 		if path == "" {
 			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
 			continue
@@ -117,14 +117,14 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	return errs
 }
 
-// ResolveProfile expands a profile's own body — no service merge — so its
+// ResolveDaemon expands a daemon's own body — no service merge — so its
 // concrete values (notably the binary path and preflight commands) can be
 // inspected directly, as the `apps` command does. ${name} and ${display_name}
 // are available; the returned errors mirror Resolve's.
-func (c *Config) ResolveProfile(name string) (Resolved, []string) {
-	doc, ok := c.Profiles[name]
+func (c *Config) ResolveDaemon(name string) (Resolved, []string) {
+	doc, ok := c.Daemons[name]
 	if !ok {
-		return Resolved{Name: name}, []string{fmt.Sprintf("unknown profile %q", name)}
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown daemon %q", name)}
 	}
 	body := stripMeta(doc.Body)
 	vars := collectVariables(body)
@@ -132,6 +132,11 @@ func (c *Config) ResolveProfile(name string) (Resolved, []string) {
 	injectBuiltinVariables(vars, name, body)
 	expanded, expErrs := expandTree(body, vars)
 	return Resolved{Name: name, Tree: expanded}, append(errs, expErrs...)
+}
+
+// ResolveProfile is the legacy name for ResolveDaemon.
+func (c *Config) ResolveProfile(name string) (Resolved, []string) {
+	return c.ResolveDaemon(name)
 }
 
 // mergedService returns the merged-but-unexpanded body for a service, following
@@ -160,11 +165,11 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	} else {
 		merged = c.defaultsPerService()
 		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
-			profile, ok := c.Profiles[uses]
+			daemon, ok := c.Daemons[uses]
 			if !ok {
-				return nil, fmt.Errorf("service %q uses unknown profile %q", name, uses)
+				return nil, fmt.Errorf("service %q uses unknown daemon %q", name, uses)
 			}
-			merged = mergeMaps(merged, stripMeta(profile.Body))
+			merged = mergeMaps(merged, stripMeta(daemon.Body))
 		}
 	}
 

@@ -1,0 +1,9 @@
+kind: daemon
+name: pppd
+display_name: "PPP Daemon"
+service: pppd
+variables:
+  binary: "/usr/sbin/pppd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

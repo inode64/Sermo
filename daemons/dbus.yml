@@ -1,0 +1,10 @@
+kind: daemon
+name: dbus-daemon
+display_name: "D-Bus"
+description: "DBus Daemon"
+service: dbus-daemon
+variables:
+  binary: "/usr/bin/dbus-daemon"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

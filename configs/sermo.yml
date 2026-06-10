@@ -21,11 +21,12 @@ engine:
   startup_delay: 0
 
 paths:
-  # Packaged profile directory (installed by `make install`). When running from
+  # Packaged daemon definition directory (installed by `make install`). When running from
   # the source tree, point this elsewhere without editing the file via
-  # `sermod run --profiles ./profiles` (repeatable for multiple dirs).
-  profiles:
-    - /usr/share/sermo/profiles
+  # `sermod run --daemons ./daemons` (repeatable for multiple dirs).
+  daemons:
+    - /usr/share/sermo/daemons
+    - /etc/sermo/daemons-available
   # Relative to this file's directory (configs/).
   includes:
     - apps-enabled

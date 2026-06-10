@@ -1,8 +1,0 @@
-kind: profile
-name: git
-display_name: "Git"
-variables:
-  binary: "/usr/bin/git"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

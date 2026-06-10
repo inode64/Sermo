@@ -1,8 +1,0 @@
-kind: profile
-name: perl
-display_name: "Perl"
-variables:
-  binary: "/usr/bin/perl"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }

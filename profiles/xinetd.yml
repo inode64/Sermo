@@ -1,8 +1,0 @@
-kind: profile
-name: xinetd
-service: xinetd
-variables:
-  binary: "/usr/sbin/xinetd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-version"], timeout: 10s }

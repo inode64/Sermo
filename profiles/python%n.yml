@@ -1,9 +1,0 @@
-kind: profile
-name: python%n
-display_name: "Python ${n}"
-service: python${n}
-variables:
-  binary: "/usr/bin/python${n}"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

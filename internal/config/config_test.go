@@ -39,7 +39,7 @@ const baseGlobal = `
 engine:
   backend: auto
 paths:
-  profiles: [ @ROOT@/profiles ]
+  daemons: [ @ROOT@/daemons ]
   includes: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
@@ -50,11 +50,11 @@ defaults:
     force_kill: false
 `
 
-func TestResolveMergesDefaultsProfileOverrides(t *testing.T) {
+func TestResolveMergesDefaultsDaemonOverrides(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/apache.yml": `
-kind: profile
+		"daemons/apache.yml": `
+kind: daemon
 name: apache
 variables:
   host: 127.0.0.1
@@ -98,7 +98,7 @@ checks:
 		t.Errorf("cooldown = %v, want default 5m", got)
 	}
 	if got := cfgval.String(policy["max_actions"]); got != "3" {
-		t.Errorf("max_actions = %v, want profile 3", got)
+		t.Errorf("max_actions = %v, want daemon 3", got)
 	}
 	stop := nested(t, resolved.Tree, "stop_policy")
 	if got := cfgval.String(stop["graceful_timeout"]); got != "30s" {
@@ -142,16 +142,16 @@ variables:
 	}
 }
 
-func TestMultiInstanceProfileOverridesPerInstance(t *testing.T) {
-	// Two services share one profile (same binary, checks and rules) but each
+func TestMultiInstanceDaemonOverridesPerInstance(t *testing.T) {
+	// Two services share one daemon (same binary, checks and rules) but each
 	// overrides only the variables that make an instance unique: listen port,
 	// pidfile and config path. This is the supported pattern for running e.g.
-	// two MariaDB or php-fpm instances off a single profile — no new mechanism
+	// two MariaDB or php-fpm instances off a single daemon — no new mechanism
 	// is needed beyond `uses` + per-instance `variables`.
 	cfg, err := Load(writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/dbserver.yml": `
-kind: profile
+		"daemons/dbserver.yml": `
+kind: daemon
 name: dbserver
 service:
   systemd: [dbserver]
@@ -243,14 +243,14 @@ func TestLoadResolvesRelativePaths(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")
 	enabledDir := filepath.Join(configDir, "apps-enabled")
-	profilesDir := filepath.Join(root, "profiles")
-	for _, d := range []string{enabledDir, profilesDir} {
+	daemonsDir := filepath.Join(root, "daemons")
+	for _, d := range []string{enabledDir, daemonsDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(profilesDir, "redis.yml"), []byte(`
-kind: profile
+	if err := os.WriteFile(filepath.Join(daemonsDir, "redis.yml"), []byte(`
+kind: daemon
 name: redis
 variables: { port: 6379 }
 `), 0o644); err != nil {
@@ -267,7 +267,7 @@ uses: redis
 	if err := os.WriteFile(global, []byte(`
 engine: { backend: auto }
 paths:
-  profiles: [../profiles]
+  daemons: [../daemons]
   includes: [apps-enabled]
   runtime: /run/sermo
 defaults:
@@ -289,8 +289,8 @@ watches:
 	if got := cfg.Global.Includes[0]; got != enabledDir {
 		t.Fatalf("Includes[0] = %q, want %q", got, enabledDir)
 	}
-	if got := cfg.Global.Profiles[0]; got != profilesDir {
-		t.Fatalf("Profiles[0] = %q, want %q", got, profilesDir)
+	if got := cfg.Global.Daemons[0]; got != daemonsDir {
+		t.Fatalf("Daemons[0] = %q, want %q", got, daemonsDir)
 	}
 	if len(cfg.Services) != 1 {
 		t.Fatalf("Services = %d, want 1", len(cfg.Services))
@@ -298,6 +298,47 @@ watches:
 	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
 	if len(watches) != 1 {
 		t.Fatalf("watches in global config = %d, want 1", len(watches))
+	}
+}
+
+func TestLoadLegacyProfileAliases(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+engine: { backend: auto }
+paths:
+  profiles: [ @ROOT@/legacy-profiles ]
+  includes: [ @ROOT@/enabled ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"legacy-profiles/redis.yml": `
+kind: profile
+name: redis
+service: redis
+`,
+		"enabled/redis-main.yml": `
+kind: service
+name: redis-main
+uses: redis
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Daemons["redis"]; !ok {
+		t.Fatalf("legacy profile was not loaded as daemon")
+	}
+	if got := cfg.Daemons["redis"].Body["kind"]; got != kindDaemon {
+		t.Fatalf("legacy kind canonicalized to %v, want %q", got, kindDaemon)
+	}
+	resolved, errs := cfg.Resolve("redis-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := ServiceUnit(resolved.Tree, "redis-main"); got != "redis" {
+		t.Fatalf("unit = %q, want redis", got)
 	}
 }
 
@@ -402,7 +443,7 @@ func TestValidateGlobalErrors(t *testing.T) {
 engine:
   backend: bogus
 paths:
-  profiles: [ @ROOT@/profiles ]
+  daemons: [ @ROOT@/daemons ]
   includes: [ @ROOT@/enabled ]
   locks: /run/sermo/locks
   runtime: relative/path
@@ -590,8 +631,8 @@ func TestCollectVariablesFirstExistingPath(t *testing.T) {
 func TestBuiltinNameAndDisplayNameVariables(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/db.yml": `
-kind: profile
+		"daemons/db.yml": `
+kind: daemon
 name: db
 display_name: "MariaDB"
 rules:
@@ -605,7 +646,7 @@ rules:
       action: block
       message: "${display_name} backup is running on ${name}"
 `,
-		// Inherits the profile's display_name; name is its own.
+		// Inherits the daemon's display_name; name is its own.
 		"enabled/db-main.yml": `
 kind: service
 name: db-main
@@ -742,8 +783,8 @@ kind: service
 name: ../escape
 service: { name: mysql }
 `,
-		"profiles/bad.yml": `
-kind: profile
+		"daemons/bad.yml": `
+kind: daemon
 name: apache/main
 `,
 	})
@@ -756,7 +797,7 @@ name: apache/main
 		t.Fatalf("missing service name issue in %v", issues)
 	}
 	if !hasIssue(issues, `document name "apache/main" must be a simple name without path separators`) {
-		t.Fatalf("missing profile name issue in %v", issues)
+		t.Fatalf("missing daemon name issue in %v", issues)
 	}
 }
 
@@ -1037,8 +1078,8 @@ func TestOSSelectorCollapses(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/apache.yml": `
-kind: profile
+		"daemons/apache.yml": `
+kind: daemon
 name: apache
 service:
   os:
@@ -1065,7 +1106,7 @@ policy:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	body := cfg.Profiles["apache"].Body
+	body := cfg.Daemons["apache"].Body
 
 	// service: the os: block is replaced by the gentoo branch.
 	svc := body["service"].(map[string]any)
@@ -1096,8 +1137,8 @@ func TestOSSelectorListBranch(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/db.yml": `
-kind: profile
+		"daemons/db.yml": `
+kind: daemon
 name: db
 processes:
   main:
@@ -1112,7 +1153,7 @@ processes:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	main := nested(t, cfg.Profiles["db"].Body, "processes", "main")
+	main := nested(t, cfg.Daemons["db"].Body, "processes", "main")
 	got, _ := main["path"].([]any)
 	if len(got) != 2 || got[0] != "/run/db1.pid" {
 		t.Errorf("path = %v, want the gentoo candidate list", main["path"])
@@ -1126,8 +1167,8 @@ func TestOSVariableBaked(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/app.yml": `
-kind: profile
+		"daemons/app.yml": `
+kind: daemon
 name: app
 variables:
   binary: "/opt/${os}/bin/app"
@@ -1137,7 +1178,7 @@ variables:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := profileBinary(cfg.Profiles["app"].Body); got != "/opt/debian/bin/app" {
+	if got := daemonBinary(cfg.Daemons["app"].Body); got != "/opt/debian/bin/app" {
 		t.Errorf("baked binary = %q, want /opt/debian/bin/app", got)
 	}
 }
@@ -1156,8 +1197,8 @@ func TestArchVariableBaked(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/apps/qemu.yml": `
-kind: profile
+		"daemons/apps/qemu.yml": `
+kind: daemon
 name: qemu
 display_name: "QEMU"
 variables:
@@ -1172,12 +1213,12 @@ preflight:
 	}
 	// ${arch} is baked into the variable value (so the no-nested-variables rule
 	// never sees it) and flows through expansion.
-	if got := profileBinary(cfg.Profiles["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
+	if got := daemonBinary(cfg.Daemons["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
 		t.Errorf("baked binary = %q, want /usr/bin/qemu-system-aarch64", got)
 	}
-	resolved, errs := cfg.ResolveProfile("qemu")
+	resolved, errs := cfg.ResolveDaemon("qemu")
 	if len(errs) != 0 {
-		t.Fatalf("ResolveProfile() errors = %v", errs)
+		t.Fatalf("ResolveDaemon() errors = %v", errs)
 	}
 	bin := nested(t, resolved.Tree, "preflight", "binary")
 	if cfgval.String(bin["path"]) != "/usr/bin/qemu-system-aarch64" {
@@ -1185,12 +1226,12 @@ preflight:
 	}
 }
 
-func TestProfileCategoryFromDirectory(t *testing.T) {
+func TestDaemonCategoryFromDirectory(t *testing.T) {
 	global := writeConfig(t, map[string]string{
-		"sermo.yml":               baseGlobal,
-		"profiles/nginx.yml":      "kind: profile\nname: nginx\nservice: { name: nginx }\n",
-		"profiles/apps/git.yml":   "kind: profile\nname: git\nservice: { name: git }\n",
-		"profiles/libs/glibc.yml": "kind: profile\nname: glibc\nvariables: { binary: /lib64/libc.so.6 }\n",
+		"sermo.yml":              baseGlobal,
+		"daemons/nginx.yml":      "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
+		"daemons/apps/git.yml":   "kind: daemon\nname: git\nservice: { name: git }\n",
+		"daemons/libs/glibc.yml": "kind: daemon\nname: glibc\nvariables: { binary: /lib64/libc.so.6 }\n",
 	})
 	cfg, err := Load(global)
 	if err != nil {
@@ -1198,24 +1239,24 @@ func TestProfileCategoryFromDirectory(t *testing.T) {
 	}
 	cases := map[string]string{"nginx": CategoryService, "git": CategoryApp, "glibc": CategoryLibrary}
 	for name, want := range cases {
-		doc, ok := cfg.Profiles[name]
+		doc, ok := cfg.Daemons[name]
 		if !ok {
-			t.Fatalf("profile %q not loaded", name)
+			t.Fatalf("daemon %q not loaded", name)
 		}
 		if doc.Category != want {
 			t.Errorf("%s category = %q, want %q", name, doc.Category, want)
 		}
 	}
-	if got := cfg.ProfilesInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {
-		t.Errorf("ProfilesInCategory(app) = %v, want [git]", got)
+	if got := cfg.DaemonsInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {
+		t.Errorf("DaemonsInCategory(app) = %v, want [git]", got)
 	}
 }
 
 func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"profiles/libs/glibc.yml": `
-kind: profile
+		"daemons/libs/glibc.yml": `
+kind: daemon
 name: glibc
 display_name: "GNU C Library"
 variables:
@@ -1253,8 +1294,8 @@ restart_on_change:
 func TestRestartOnChangeUnknownLibraryErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		// nginx is a service profile, not a library: referencing it must error.
-		"profiles/nginx.yml": "kind: profile\nname: nginx\nservice: { name: nginx }\n",
+		// nginx is a service daemon, not a library: referencing it must error.
+		"daemons/nginx.yml": "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
 		"enabled/web.yml": `
 kind: service
 name: web
@@ -1360,7 +1401,7 @@ func TestDiscoverVersions(t *testing.T) {
 // TestVersionTemplateDiscoverFrom covers a template whose monitored binary is
 // generic (no ${version}); versions come from an explicit `versions.from` path,
 // and ${version} is baked into aliases. The `versions` block must not leak into
-// the materialized profile.
+// the materialized daemon.
 func TestVersionTemplateDiscoverFrom(t *testing.T) {
 	root := t.TempDir()
 	slots := filepath.Join(root, "lib")
@@ -1374,16 +1415,16 @@ func TestVersionTemplateDiscoverFrom(t *testing.T) {
 		}
 	}
 
-	profilesDir := filepath.Join(root, "profiles")
+	daemonsDir := filepath.Join(root, "daemons")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(profilesDir, 0o755); err != nil {
+	if err := os.MkdirAll(daemonsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	tmpl := fmt.Sprintf(`
-kind: profile
+kind: daemon
 name: php-fpm%%v
 display_name: "PHP-FPM ${version}"
 service:
@@ -1393,15 +1434,15 @@ versions:
 variables:
   binary: /usr/sbin/php-fpm
 `, slots)
-	if err := os.WriteFile(filepath.Join(profilesDir, "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(daemonsDir, "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { daemons: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, profilesDir, enabledDir)), 0o644); err != nil {
+`, daemonsDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1410,12 +1451,12 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("Load() error = %v", err)
 	}
 	for _, v := range []string{"7.4", "8.3"} {
-		doc, ok := cfg.Profiles["php-fpm"+v]
+		doc, ok := cfg.Daemons["php-fpm"+v]
 		if !ok {
-			t.Fatalf("expected materialized profile php-fpm%s", v)
+			t.Fatalf("expected materialized daemon php-fpm%s", v)
 		}
 		// Generic binary is preserved; version did not leak into it.
-		if got := profileBinary(doc.Body); got != "/usr/sbin/php-fpm" {
+		if got := daemonBinary(doc.Body); got != "/usr/sbin/php-fpm" {
 			t.Errorf("php-fpm%s binary = %q, want /usr/sbin/php-fpm", v, got)
 		}
 		// ${version} baked into the service unit candidate.
@@ -1423,7 +1464,7 @@ defaults: { policy: { cooldown: 5m } }
 		if got := sysd[0].(string); got != "php"+v+"-fpm" {
 			t.Errorf("php-fpm%s service unit = %q, want php%s-fpm", v, got, v)
 		}
-		// Discovery metadata stripped from the concrete profile.
+		// Discovery metadata stripped from the concrete daemon.
 		if _, present := doc.Body["versions"]; present {
 			t.Errorf("php-fpm%s still carries versions block", v)
 		}
@@ -1431,7 +1472,7 @@ defaults: { policy: { cooldown: 5m } }
 }
 
 // TestVersionTemplateMaterialization exercises a `name: foo-%v` template: it must
-// produce one profile per installed version (with ${version} baked into binary
+// produce one daemon per installed version (with ${version} baked into binary
 // and display_name), inherit a `uses` base, and drop the template itself.
 func TestVersionTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
@@ -1446,7 +1487,7 @@ func TestVersionTemplateMaterialization(t *testing.T) {
 		}
 	}
 
-	profilesDir := filepath.Join(root, "profiles")
+	daemonsDir := filepath.Join(root, "daemons")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -1461,8 +1502,8 @@ func TestVersionTemplateMaterialization(t *testing.T) {
 	}
 
 	// Rich base with a marker rule and an extra variable, to prove inheritance.
-	write(profilesDir, "php-fpm.yml", `
-kind: profile
+	write(daemonsDir, "php-fpm.yml", `
+kind: daemon
 name: php-fpm
 display_name: "PHP-FPM"
 service: { name: php-fpm }
@@ -1481,8 +1522,8 @@ rules:
       message: "${display_name} configuration is invalid"
 `)
 	// Version template inheriting the base, overriding only the binary.
-	write(profilesDir, "php-fpm-%v.yml", fmt.Sprintf(`
-kind: profile
+	write(daemonsDir, "php-fpm-%v.yml", fmt.Sprintf(`
+kind: daemon
 name: php-fpm-%%v
 uses: php-fpm
 display_name: "PHP-FPM ${version}"
@@ -1494,12 +1535,12 @@ variables:
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
 paths:
-  profiles: [ %s ]
+  daemons: [ %s ]
   includes: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, profilesDir, enabledDir)), 0o644); err != nil {
+`, daemonsDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1508,15 +1549,15 @@ defaults:
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// Template must be gone; one concrete profile per installed version present.
-	if _, ok := cfg.Profiles["php-fpm-%v"]; ok {
+	// Template must be gone; one concrete daemon per installed version present.
+	if _, ok := cfg.Daemons["php-fpm-%v"]; ok {
 		t.Errorf("template php-fpm-%%v should not be registered")
 	}
 	for _, v := range []string{"7.4", "8.3"} {
 		name := "php-fpm-" + v
-		doc, ok := cfg.Profiles[name]
+		doc, ok := cfg.Daemons[name]
 		if !ok {
-			t.Fatalf("expected materialized profile %q", name)
+			t.Fatalf("expected materialized daemon %q", name)
 		}
 		// display_name has the version baked in (no literal ${version}).
 		if got := DisplayName(doc.Body, name); got != "PHP-FPM "+v {
@@ -1524,7 +1565,7 @@ defaults:
 		}
 		// Inherited the base rule, and ${version} is baked into the binary path.
 		wantBin := fmt.Sprintf("%s/php%s/bin/php-fpm", binRoot, v)
-		if got := profileBinary(doc.Body); got != wantBin {
+		if got := daemonBinary(doc.Body); got != wantBin {
 			t.Errorf("%s binary = %q, want %q", name, got, wantBin)
 		}
 		if _, ok := nested(t, doc.Body, "rules")["block-bad-config"]; !ok {

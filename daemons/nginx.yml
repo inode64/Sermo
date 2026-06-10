@@ -1,0 +1,14 @@
+kind: daemon
+name: nginx
+display_name: "Nginx"
+service: nginx
+variables:
+  port: 80
+  binary: "/usr/sbin/nginx"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/nginx","configtest"], timeout: 30s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

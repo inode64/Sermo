@@ -137,7 +137,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 func validateDocuments(cfg *Config) []Issue {
 	var issues []Issue
-	profileCount := map[string]int{}
+	daemonCount := map[string]int{}
 	serviceCount := map[string]int{}
 
 	for _, doc := range cfg.docs {
@@ -153,12 +153,12 @@ func validateDocuments(cfg *Config) []Issue {
 			}
 		}
 		switch doc.Kind {
-		case kindProfile, kindService:
+		case kindDaemon, kindService:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected profile or service)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon or service)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected profile or service)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon or service)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -168,16 +168,16 @@ func validateDocuments(cfg *Config) []Issue {
 		if !validDocumentName(doc.Name) {
 			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("document name %q must be a simple name without path separators", doc.Name)})
 		}
-		if doc.Kind == kindProfile {
-			profileCount[doc.Name]++
+		if doc.Kind == kindDaemon {
+			daemonCount[doc.Name]++
 		} else {
 			serviceCount[doc.Name]++
 		}
 	}
 
-	for _, name := range slices.Sorted(maps.Keys(profileCount)) {
-		if profileCount[name] > 1 {
-			issues = append(issues, Issue{Scope: "profile " + name, Msg: "duplicate profile name"})
+	for _, name := range slices.Sorted(maps.Keys(daemonCount)) {
+		if daemonCount[name] > 1 {
+			issues = append(issues, Issue{Scope: "daemon " + name, Msg: "duplicate daemon name"})
 		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(serviceCount)) {

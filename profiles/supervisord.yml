@@ -1,9 +1,0 @@
-kind: profile
-name: supervisord
-display_name: "Supervisor"
-service: supervisord
-variables:
-  binary: "/usr/bin/supervisord"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

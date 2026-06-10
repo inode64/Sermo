@@ -9,7 +9,7 @@ import (
 )
 
 // archMarker is the built-in ${arch} reference, substituted with the machine
-// architecture (uname -m style: x86_64, aarch64, ...) so a profile can locate an
+// architecture (uname -m style: x86_64, aarch64, ...) so a daemon can locate an
 // arch-specific binary or library, e.g. binary: /usr/bin/qemu-system-${arch}.
 const archMarker = "${arch}"
 

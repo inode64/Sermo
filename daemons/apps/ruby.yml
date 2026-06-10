@@ -1,0 +1,9 @@
+kind: daemon
+name: ruby
+display_name: "Ruby"
+description: "An object-oriented scripting language"
+variables:
+  binary: "/usr/bin/ruby"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

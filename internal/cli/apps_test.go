@@ -63,16 +63,16 @@ func TestAppsCommand(t *testing.T) {
 		}
 	}
 
-	profilesDir := filepath.Join(root, "profiles")
-	appsDir := filepath.Join(profilesDir, "apps") // category derived from the directory
+	daemonsDir := filepath.Join(root, "daemons")
+	appsDir := filepath.Join(daemonsDir, "apps") // category derived from the directory
 	enabledDir := filepath.Join(root, "enabled")
 	for _, d := range []string{appsDir, enabledDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	writeProfile := func(file, name, display, binary string) {
-		body := fmt.Sprintf(`kind: profile
+	writeDaemon := func(file, name, display, binary string) {
+		body := fmt.Sprintf(`kind: daemon
 name: %s
 display_name: %q
 service: { name: %s }
@@ -86,16 +86,16 @@ preflight:
 			t.Fatal(err)
 		}
 	}
-	writeProfile("good.yml", "goodapp", "GoodApp", good)
-	writeProfile("bad.yml", "badapp", "BadApp", bad)
-	writeProfile("gone.yml", "goneapp", "GoneApp", missing)
+	writeDaemon("good.yml", "goodapp", "GoodApp", good)
+	writeDaemon("bad.yml", "badapp", "BadApp", bad)
+	writeDaemon("gone.yml", "goneapp", "GoneApp", missing)
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { daemons: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, profilesDir, enabledDir)), 0o644); err != nil {
+`, daemonsDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

@@ -37,7 +37,7 @@ func collectVariables(tree map[string]any) map[string]string {
 }
 
 // firstExistingPath resolves a list-valued variable to the first candidate path
-// that exists on the filesystem, stopping at the first hit. This lets a profile
+// that exists on the filesystem, stopping at the first hit. This lets a daemon
 // list alternative locations for the same binary (e.g. /lib vs /usr/lib) and
 // bind the variable to whichever is present, so the rest of the document can
 // reference it via ${name}. If none exist, it falls back to the first candidate

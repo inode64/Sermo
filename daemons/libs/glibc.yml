@@ -1,0 +1,9 @@
+kind: daemon
+name: glibc
+display_name: "GNU C Library"
+description: "Standard C library (libc); a change triggers a restart of dependent services"
+variables:
+  binary: "/lib64/libc.so.6"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}"], timeout: 10s }

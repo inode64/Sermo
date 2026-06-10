@@ -11,10 +11,10 @@ import (
 	"sermo/internal/config"
 )
 
-// runProfile dispatches `profile list` and `profile show PROFILE` (post-MVP).
-func (a App) runProfile(opts options) int {
+// runDaemon dispatches `daemon list` and `daemon show DAEMON` (post-MVP).
+func (a App) runDaemon(opts options) int {
 	if len(opts.args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: profile requires a subcommand (list|show)")
+		fmt.Fprintln(a.Stderr, "usage error: daemon requires a subcommand (list|show)")
 		return exitUsage
 	}
 	cfg, code := a.loadConfig(opts)
@@ -24,24 +24,29 @@ func (a App) runProfile(opts options) int {
 
 	switch opts.args[0] {
 	case "list":
-		a.printNamed(opts, sortedUnique(cfg.Profiles), cfg.Profiles, "profiles")
+		a.printNamed(opts, sortedUnique(cfg.Daemons), cfg.Daemons, "daemons")
 		return exitSuccess
 	case "show":
 		if len(opts.args) < 2 {
-			fmt.Fprintln(a.Stderr, "usage error: profile show requires a profile name")
+			fmt.Fprintln(a.Stderr, "usage error: daemon show requires a daemon name")
 			return exitUsage
 		}
 		name := opts.args[1]
-		doc, ok := cfg.Profiles[name]
+		doc, ok := cfg.Daemons[name]
 		if !ok {
-			a.reportError(opts, fmt.Sprintf("unknown profile %q", name))
+			a.reportError(opts, fmt.Sprintf("unknown daemon %q", name))
 			return exitRuntimeError
 		}
 		return a.renderTree(opts, config.Resolved{Name: name, Tree: doc.Body})
 	default:
-		fmt.Fprintf(a.Stderr, "usage error: unknown profile subcommand %q\n", opts.args[0])
+		fmt.Fprintf(a.Stderr, "usage error: unknown daemon subcommand %q\n", opts.args[0])
 		return exitUsage
 	}
+}
+
+// runProfile keeps the old `profile` command working as a compatibility alias.
+func (a App) runProfile(opts options) int {
+	return a.runDaemon(opts)
 }
 
 // runService dispatches `service list`, `service show SERVICE` and
@@ -109,7 +114,7 @@ func (a App) cloneService(opts options, cfg *config.Config, source, target strin
 	dir := cfg.Global.Includes[0]
 	path := filepath.Join(dir, target+".yml")
 	content := fmt.Sprintf("kind: service\nname: %s\nclone: %s\n", target, source)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: generated profile YAML is non-sensitive (0644)
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: generated service YAML is non-sensitive (0644)
 		a.reportError(opts, fmt.Sprintf("write %s: %v", path, err))
 		return exitRuntimeError
 	}

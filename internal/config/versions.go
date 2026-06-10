@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// tmplToken is a version-template placeholder. A profile name carrying one (e.g.
+// tmplToken is a version-template placeholder. A daemon name carrying one (e.g.
 // `php-fpm%v`, `python%n`) is a template: it materializes into one concrete
-// profile per discovered value. `placeholder` is replaced in the name; the body
+// daemon per discovered value. `placeholder` is replaced in the name; the body
 // uses `${variable}`; `capture` is the regex that extracts a value from a globbed
 // path, so different tokens accept different value shapes.
 type tmplToken struct {
@@ -41,19 +41,19 @@ func tokenFor(name string) *tmplToken {
 	return nil
 }
 
-// materializeVersionTemplates replaces every version-template profile with one
-// concrete profile per installed value. Multiple versions of the same
+// materializeVersionTemplates replaces every version-template daemon with one
+// concrete daemon per installed value. Multiple versions of the same
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
-// profile yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
+// daemon yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
 // template's discovery path (`versions.from`, else `binary`) with the token's
 // `${...}` wildcarded. The template itself is dropped; if nothing is installed it
-// yields nothing. A template may `uses` a base profile (e.g. php-fpm%v uses
+// yields nothing. A template may `uses` a base daemon (e.g. php-fpm%v uses
 // php-fpm) to inherit its checks, rules and processes; only the binary differs.
 func (c *Config) materializeVersionTemplates() {
 	var templates []*Document
-	for _, name := range c.ProfileNames {
+	for _, name := range c.DaemonNames {
 		if tokenFor(name) != nil {
-			if doc, ok := c.Profiles[name]; ok {
+			if doc, ok := c.Daemons[name]; ok {
 				templates = append(templates, doc)
 			}
 		}
@@ -66,7 +66,7 @@ func (c *Config) materializeVersionTemplates() {
 			inst.Category = tmpl.Category
 			c.add(inst)
 		}
-		c.dropProfile(tmpl.Name)
+		c.dropDaemon(tmpl.Name)
 	}
 }
 
@@ -80,7 +80,7 @@ func versionDiscoverySource(body map[string]any) string {
 			return from
 		}
 	}
-	return profileBinary(body)
+	return daemonBinary(body)
 }
 
 // templateBody returns the template's body folded onto its `uses` base (if any),
@@ -88,22 +88,27 @@ func versionDiscoverySource(body map[string]any) string {
 // intact for instantiateVersion to bind.
 func (c *Config) templateBody(tmpl *Document) map[string]any {
 	body := stripMeta(tmpl.Body)
-	body["kind"] = kindProfile
+	body["kind"] = kindDaemon
 	if base := cfgval.String(tmpl.Body["uses"]); base != "" {
-		if src, ok := c.Profiles[base]; ok {
+		if src, ok := c.Daemons[base]; ok {
 			body = mergeMaps(stripMeta(src.Body), body)
-			body["kind"] = kindProfile
+			body["kind"] = kindDaemon
 		}
 	}
 	return body
 }
 
-// profileBinary returns the raw (unexpanded) `binary` variable of a profile body.
-func profileBinary(body map[string]any) string {
+// daemonBinary returns the raw (unexpanded) `binary` variable of a daemon body.
+func daemonBinary(body map[string]any) string {
 	if vars, ok := body["variables"].(map[string]any); ok {
 		return cfgval.String(vars["binary"])
 	}
 	return ""
+}
+
+// profileBinary is the legacy name for daemonBinary.
+func profileBinary(body map[string]any) string {
+	return daemonBinary(body)
 }
 
 // discoverVersions globs the discovery path with the token's `${...}` replaced by
@@ -146,10 +151,10 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path string) *Document {
 	name := strings.ReplaceAll(templateName, tok.placeholder, value)
 	out := bindToken(cloneMap(body), tok.marker(), value).(map[string]any)
-	out["kind"] = kindProfile
+	out["kind"] = kindDaemon
 	out["name"] = name
-	delete(out, "versions") // discovery metadata, not part of the concrete profile
-	return &Document{Kind: kindProfile, Name: name, Path: path, Body: out}
+	delete(out, "versions") // discovery metadata, not part of the concrete daemon
+	return &Document{Kind: kindDaemon, Name: name, Path: path, Body: out}
 }
 
 // bindToken replaces every occurrence of marker in every string of the tree with
@@ -175,20 +180,27 @@ func bindToken(v any, marker, value string) any {
 	}
 }
 
-// dropProfile removes a profile (and its document) from the config, used to
+// dropDaemon removes a daemon (and its document) from the config, used to
 // retire a version template once its instances are registered.
-func (c *Config) dropProfile(name string) {
-	delete(c.Profiles, name)
-	kept := make([]string, 0, len(c.ProfileNames))
-	for _, n := range c.ProfileNames {
+func (c *Config) dropDaemon(name string) {
+	delete(c.Daemons, name)
+	keptDaemons := make([]string, 0, len(c.DaemonNames))
+	for _, n := range c.DaemonNames {
 		if n != name {
-			kept = append(kept, n)
+			keptDaemons = append(keptDaemons, n)
 		}
 	}
-	c.ProfileNames = kept
+	c.DaemonNames = keptDaemons
+	keptProfiles := make([]string, 0, len(c.ProfileNames))
+	for _, n := range c.ProfileNames {
+		if n != name {
+			keptProfiles = append(keptProfiles, n)
+		}
+	}
+	c.ProfileNames = keptProfiles
 	docs := make([]*Document, 0, len(c.docs))
 	for _, d := range c.docs {
-		if d.Kind == kindProfile && d.Name == name {
+		if d.Kind == kindDaemon && d.Name == name {
 			continue
 		}
 		docs = append(docs, d)

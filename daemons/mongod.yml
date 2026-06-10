@@ -1,0 +1,14 @@
+kind: daemon
+name: mongod
+display_name: "MongoDB"
+description: "Mongo DB"
+service: mongod
+variables:
+  port: 27017
+  binary: "/usr/bin/mongod"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

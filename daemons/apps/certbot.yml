@@ -1,0 +1,9 @@
+kind: daemon
+name: certbot
+display_name: "Certbot"
+description: "Generador de certificados"
+variables:
+  binary: "/usr/bin/certbot"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

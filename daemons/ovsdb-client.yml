@@ -1,0 +1,10 @@
+kind: daemon
+name: ovsdb-client
+display_name: "Open vSwitch Database"
+description: "OpenVsiwtch Database"
+service: ovsdb-client
+variables:
+  binary: "/usr/bin/ovsdb-client"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
