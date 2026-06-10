@@ -123,7 +123,11 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
 		w.emit(Event{Watch: w.Name, Kind: "expand-failed", Message: err.Error()})
 		return
 	}
-	w.emit(Event{Watch: w.Name, Kind: "expand", Message: fmt.Sprintf("%s: grew %s/%s by %d bytes", path, r.VG, r.LV, r.GrewBytes)})
+	w.emit(Event{Watch: w.Name, Kind: "expand", Message: expandSuccessMessage(path, r)})
+}
+
+func expandSuccessMessage(path string, r volume.Result) string {
+	return fmt.Sprintf("%s: grew %s/%s by %d bytes", path, r.VG, r.LV, r.GrewBytes)
 }
 
 func (w *Watch) emit(e Event) {

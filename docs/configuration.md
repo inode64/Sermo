@@ -600,7 +600,7 @@ These conventions keep the per-type sections below short:
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.
 
-### `then.expand` — automatic volume growth (disk watches)
+### `then.expand` — volume growth (disk watches)
 
 A `disk` watch can grow the LVM-backed filesystem under the checked path
 automatically when it runs low. The expansion is native (Sermo orchestrates it
@@ -631,6 +631,10 @@ volume is not extended on every tick while it stays low. The action runs at most
 once per cooldown window; each attempt — success or failure — starts the
 cooldown, so a failing expansion is not retried every cycle. Outcomes are
 recorded as `expand` / `expand-skipped` / `expand-failed` events.
+
+When the web UI is enabled, a disk watch with `then.expand` also shows an
+**expand** action. That manual action uses the same configured `check.path` and
+`expand.by` values from YAML; the browser does not send a path or size.
 
 `then.notify` lists notifier names (each must be defined under `notifiers`). For
 the multi-metric watches (`net`, `icmp`, `swap`) the `notify`/`hook` live in each

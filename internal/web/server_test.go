@@ -15,6 +15,7 @@ type fakeBackend struct {
 	operated        []string // "name/action"
 	monitored       map[string]bool
 	watchMonitored  map[string]bool
+	watchExpanded   []string
 	failOp          bool
 	seriesSince     time.Duration
 	eventLimit      int
@@ -149,6 +150,10 @@ func (f *fakeBackend) SetWatchMonitored(_ context.Context, name string, monitore
 	f.watchMonitored[name] = monitored
 	return nil
 }
+func (f *fakeBackend) ExpandWatch(_ context.Context, name string) ActionResult {
+	f.watchExpanded = append(f.watchExpanded, name)
+	return ActionResult{OK: true, Message: "expanded"}
+}
 func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult, bool) {
 	for _, s := range f.services {
 		if s.Name == name {
@@ -189,7 +194,7 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
 		t.Fatalf("dashboard did not receive CSP nonce attributes")
 	}
-	for _, want := range []string{"usagebar-fill", "usagebar-label", "function diskUsedPct", `style="width:${width}%"`} {
+	for _, want := range []string{"usagebar-fill", "usagebar-label", "function diskUsedPct", `style="width:${width}%"`, `data-watch-action="expand"`, "confirmWatchExpand"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Fatalf("dashboard missing disk usage UI marker %q", want)
 		}
@@ -599,6 +604,18 @@ func TestWatchMonitorActions(t *testing.T) {
 	h.ServeHTTP(rec, postReq("/api/watches/disk-root/monitor"))
 	if rec.Code != http.StatusOK || b.watchMonitored["disk-root"] != true {
 		t.Fatalf("watch monitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
+	}
+}
+
+func TestWatchExpandAction(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/watches/disk-root/expand"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("watch expand: code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(b.watchExpanded) != 1 || b.watchExpanded[0] != "disk-root" {
+		t.Fatalf("watchExpanded = %v, want disk-root", b.watchExpanded)
 	}
 }
 

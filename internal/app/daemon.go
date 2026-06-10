@@ -129,6 +129,10 @@ type Deps struct {
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
+	// VolumeExpander grows disk-watch filesystems for `then.expand`. Optional:
+	// nil uses volume.Expander with ExecxRunner. Tests inject a fake so no real
+	// LVM/filesystem commands run.
+	VolumeExpander VolumeExpander
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check

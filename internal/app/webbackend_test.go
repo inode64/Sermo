@@ -15,6 +15,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/volume"
 	web "sermo/internal/web"
 )
 
@@ -187,6 +188,7 @@ func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
 				},
 				"then": map[string]any{
 					"notify": []any{"ops", "pager"},
+					"expand": map[string]any{"by": "5G"},
 					"hook": map[string]any{
 						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"},
 					},
@@ -266,6 +268,73 @@ func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
 	}
 	if w.Disk.FreeBytes != 125 || w.Disk.UsedBytes != 875 || w.Disk.FreePct != 12.5 || w.Disk.InodesFree != 20 {
 		t.Fatalf("disk usage info = %+v", w.Disk)
+	}
+	if w.Expand == nil || w.Expand.ByBytes != 5<<30 {
+		t.Fatalf("expand info = %+v, want 5G", w.Expand)
+	}
+}
+
+func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"disk-data": map[string]any{
+				"check": map[string]any{
+					"type":     "disk",
+					"path":     "/data/app",
+					"used_pct": map[string]any{"op": ">=", "value": 90},
+				},
+				"then": map[string]any{"expand": map[string]any{"by": "5G"}},
+			},
+		},
+	}}}
+	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
+	var events []Event
+	b, warns := NewWebBackend(cfg, Deps{
+		VolumeExpander:   exp,
+		OperationTimeout: time.Second,
+		Emit:             func(e Event) { events = append(events, e) },
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	res := b.ExpandWatch(context.Background(), "disk-data")
+	if !res.OK {
+		t.Fatalf("ExpandWatch failed: %+v", res)
+	}
+	if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
+		t.Fatalf("expand calls = %v, want configured path and 5G", exp.calls)
+	}
+	if len(events) != 1 || events[0].Watch != "disk-data" || events[0].Kind != "expand" || events[0].Action != "expand" || events[0].Status != "ok" {
+		t.Fatalf("events = %+v, want successful expand event", events)
+	}
+}
+
+func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"disk-data": map[string]any{
+				"check": map[string]any{
+					"type":     "disk",
+					"path":     "/data/app",
+					"used_pct": map[string]any{"op": ">=", "value": 90},
+				},
+				"then": map[string]any{"notify": []any{"ops"}},
+			},
+		},
+	}}}
+	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 5 << 30}}
+	b, warns := NewWebBackend(cfg, Deps{VolumeExpander: exp, OperationTimeout: time.Second})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	res := b.ExpandWatch(context.Background(), "disk-data")
+	if res.OK || !strings.Contains(res.Message, "no then.expand") {
+		t.Fatalf("ExpandWatch = %+v, want missing expand rejection", res)
+	}
+	if len(exp.calls) != 0 {
+		t.Fatalf("expand must not run without then.expand, calls=%v", exp.calls)
 	}
 }
 
