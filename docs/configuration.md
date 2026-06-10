@@ -704,7 +704,8 @@ fires an inode predicate, so it cannot misread `0/0`.
 The `storage` check also verifies the **mount** of its `path`, so a filesystem's
 mount and its space are configured in one entry (no duplicated `path`). This also
 makes a space check trustworthy: a path that should be a mount but isn't would
-otherwise make `statfs` silently report the *parent* filesystem. Add any of:
+otherwise make `statfs` silently report the *parent* filesystem. Add `mounted`
+when you want to assert the path's mount state:
 
 ```yaml
 watches:
@@ -713,9 +714,6 @@ watches:
       type: storage
       path: /data
       mounted: true            # require it to be a mount point (set false to require NOT mounted)
-      fstype: ext4             # optional: expected filesystem type
-      options: [rw, noatime]   # optional: these mount options must all be present
-      device: /dev/sdb1        # optional: expected source device
       used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
     then:
       hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
@@ -723,9 +721,11 @@ watches:
 
 A storage check needs **at least one** of a space/inode predicate or a mount
 condition (mount-only is fine). The mount is checked first from `/proc/mounts`: if
-it is missing or doesn't match, the check alerts on that and the space predicates
-are skipped (their numbers would be meaningless). The result data adds `mounted`,
-`fstype`, `device` and `options`.
+it is missing when `mounted: true` (or present when `mounted: false`), the check
+alerts on that and the space predicates are skipped (their numbers would be
+meaningless). `fstype`, `device` and `options` are not configurable predicates;
+they are reported as result data and shown in the Web UI as live filesystem
+information.
 
 When the condition holds for the `for`/`within` window, the hook runs (argv only,
 never a shell) and/or the notifiers fire, with these environment variables:

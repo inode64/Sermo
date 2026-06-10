@@ -11,7 +11,7 @@ func fakeMounts(ms ...Mount) MountSamplerFunc {
 
 var dataMount = Mount{Device: "/dev/sdb1", MountPoint: "/data", FSType: "ext4", Options: []string{"rw", "noatime"}}
 
-// diskMount builds a disk check with mount conditions (and optional space preds)
+// diskMount builds a disk check with a mount condition (and optional space preds)
 // for the integrated mount tests.
 func diskMount(m mountCond, sampler MountSamplerFunc, preds ...diskPred) diskCheck {
 	return diskCheck{base: base{name: "fs"}, path: "/data", preds: preds, mount: m, mountSampler: sampler}
@@ -50,25 +50,6 @@ func TestDiskExpectUnmounted(t *testing.T) {
 	}
 }
 
-func TestDiskMountConditionsFstypeOptionsDevice(t *testing.T) {
-	bad := diskMount(mountCond{active: true, expectMount: true, fstype: "xfs"}, fakeMounts(dataMount))
-	if !bad.Run(context.Background()).OK {
-		t.Fatal("fstype mismatch must alert")
-	}
-	bad = diskMount(mountCond{active: true, expectMount: true, options: []string{"ro"}}, fakeMounts(dataMount))
-	if !bad.Run(context.Background()).OK {
-		t.Fatal("a missing option must alert")
-	}
-	bad = diskMount(mountCond{active: true, expectMount: true, device: "/dev/sda1"}, fakeMounts(dataMount))
-	if !bad.Run(context.Background()).OK {
-		t.Fatal("device mismatch must alert")
-	}
-	good := diskMount(mountCond{active: true, expectMount: true, fstype: "ext4", options: []string{"rw", "noatime"}, device: "/dev/sdb1"}, fakeMounts(dataMount))
-	if good.Run(context.Background()).OK {
-		t.Fatal("matching fstype/options/device must not alert")
-	}
-}
-
 func TestDiskMountTakesPrecedenceOverSpace(t *testing.T) {
 	// Not mounted: the space predicate must be skipped (statfs would read the
 	// parent fs); the check alerts on the mount problem, and usage is never called.
@@ -93,7 +74,7 @@ func TestDiskMountTakesPrecedenceOverSpace(t *testing.T) {
 func TestBuildDiskMountCheck(t *testing.T) {
 	// Mount-only disk check (no space predicate) builds and runs.
 	built, warns := Build(map[string]any{
-		"data": map[string]any{"type": "disk", "path": "/data", "fstype": "ext4", "options": []any{"rw"}},
+		"data": map[string]any{"type": "disk", "path": "/data", "mounted": true},
 	}, Deps{MountSampler: fakeMounts(dataMount)})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)

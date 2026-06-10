@@ -170,15 +170,15 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-fds-alert.sh]
-  # Storage check with mount verification: alert if /data is not mounted (or not as
-  # expected) and/or its space crosses a threshold — one entry, no duplicated path.
+  # Storage check with mount verification: alert if /data is not mounted and/or
+  # its space crosses a threshold — one entry, no duplicated path.
   data-fs:
     monitor: disabled
     interval: 30s
     check:
       type: storage
       path: /data
-      mounted: true                 # also: fstype: ext4, options: [rw], device: /dev/sdb1
+      mounted: true
       free_bytes: { op: "<", value: 20G }
     then:
       notify: [ops-email]

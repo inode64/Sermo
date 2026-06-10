@@ -40,7 +40,7 @@ type diskPred struct {
 }
 
 // diskCheck verifies a filesystem at path: optionally that it is mounted as
-// expected (mount conditions), and that its space/inode predicates hold. OK=true
+// expected, and that its space/inode predicates hold. OK=true
 // means an alert condition: a mount problem OR a crossed threshold. Folding mount
 // in here means a filesystem's mount and space are configured once, and a space
 // check is never fooled by an unmounted path reading the parent filesystem.

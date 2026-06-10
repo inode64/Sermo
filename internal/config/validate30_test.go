@@ -431,7 +431,7 @@ rules:
 }
 
 func TestValidateDiskMountIntegration(t *testing.T) {
-	// A storage check carries space/inode predicates and/or mount conditions in one
+	// A storage check carries space/inode predicates and/or a mounted condition in one
 	// entry (no separate mount type) — including a mount-only storage check.
 	good := validateService(t, `
 kind: service
@@ -439,7 +439,7 @@ name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  data: { type: storage, path: /data, used_pct: { op: ">=", value: 90 }, fstype: ext4, options: [rw], mounted: true }
+  data: { type: storage, path: /data, used_pct: { op: ">=", value: 90 }, mounted: true }
   mountonly: { type: storage, path: /srv, mounted: true }
 `)
 	if hasIssue(good, "checks.data") || hasIssue(good, "checks.mountonly") {
@@ -454,9 +454,13 @@ policy: { cooldown: 5m }
 checks:
   empty: { type: storage, path: /data }
   bad-mounted: { type: storage, path: /data, mounted: "yes" }
+  old-mount-controls: { type: storage, path: /data, mounted: true, fstype: ext4, device: /dev/sdb1, options: [rw] }
 `)
 	mustHave(t, bad, "checks.empty requires a space/inode predicate")
 	mustHave(t, bad, "checks.bad-mounted.mounted must be a boolean")
+	mustHave(t, bad, "checks.old-mount-controls.fstype is not supported for a storage check")
+	mustHave(t, bad, "checks.old-mount-controls.device is not supported for a storage check")
+	mustHave(t, bad, "checks.old-mount-controls.options is not supported for a storage check")
 }
 
 func TestValidateResourceServiceCheckErrors(t *testing.T) {

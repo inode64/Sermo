@@ -1,11 +1,8 @@
 package checks
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"sermo/internal/cfgval"
-	"slices"
 	"strings"
 )
 
@@ -27,24 +24,15 @@ type MountSamplerFunc func() ([]Mount, error)
 type mountCond struct {
 	active      bool
 	expectMount bool // require mounted; when false, require NOT mounted
-	fstype      string
-	device      string
-	options     []string
 }
 
-// parseMountCond reads the mount expectations from a disk check entry. Any of
-// mounted/fstype/options/device activates mount verification; `mounted` defaults
-// to true when a condition is present.
+// parseMountCond reads the mount expectation from a disk check entry. Only the
+// `mounted` predicate is configurable; filesystem type, source device and
+// options are reported as data but do not control the check.
 func parseMountCond(entry map[string]any) mountCond {
 	m := mountCond{expectMount: true}
 	if v, ok := entry["mounted"].(bool); ok {
 		m.active, m.expectMount = true, v
-	}
-	m.fstype = cfgval.AsString(entry["fstype"])
-	m.device = cfgval.AsString(entry["device"])
-	m.options = cfgval.StringArray(entry["options"])
-	if m.fstype != "" || m.device != "" || len(m.options) > 0 {
-		m.active = true
 	}
 	return m
 }
@@ -69,22 +57,6 @@ func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool,
 	}
 	if !mounted {
 		return mounted, true, "is not mounted", info
-	}
-
-	var problems []string
-	if m.fstype != "" && info.FSType != m.fstype {
-		problems = append(problems, fmt.Sprintf("fstype %s (want %s)", info.FSType, m.fstype))
-	}
-	if m.device != "" && info.Device != m.device {
-		problems = append(problems, fmt.Sprintf("device %s (want %s)", info.Device, m.device))
-	}
-	for _, opt := range m.options {
-		if !slices.Contains(info.Options, opt) {
-			problems = append(problems, "missing option "+opt)
-		}
-	}
-	if len(problems) > 0 {
-		return mounted, true, strings.Join(problems, ", "), info
 	}
 	return mounted, false, "", info
 }
