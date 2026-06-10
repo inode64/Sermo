@@ -238,13 +238,28 @@ func parseDiskPredValue(field string, raw any) (float64, error) {
 	if field == "used_bytes" || field == "free_bytes" {
 		n, ok := cfgval.ByteSize(raw)
 		if !ok {
-			return 0, fmt.Errorf("%s value %q is not a byte size (e.g. 10G)", field, value)
+			return 0, fmt.Errorf("%s value %q must include a size suffix (K, M, G or T; e.g. 10G)", field, value)
 		}
 		return float64(n), nil
+	}
+	if strings.HasSuffix(field, "_pct") {
+		return parseDiskPercentValue(field, value)
 	}
 	val, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
+	}
+	return val, nil
+}
+
+func parseDiskPercentValue(field, value string) (float64, error) {
+	s := strings.TrimSpace(value)
+	if strings.HasSuffix(s, "%") {
+		s = strings.TrimSpace(strings.TrimSuffix(s, "%"))
+	}
+	val, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s value %q is not numeric or a percentage (e.g. 90%%)", field, value)
 	}
 	return val, nil
 }

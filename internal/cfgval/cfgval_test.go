@@ -159,14 +159,16 @@ func TestByteSize(t *testing.T) {
 		want uint64
 		ok   bool
 	}{
-		{"1024", 1024, true},
-		{1024, 1024, true},
+		{"1024", 0, false},
+		{1024, 0, false},
 		{"1K", 1 << 10, true},
 		{"1KB", 1 << 10, true},
 		{"1KiB", 1 << 10, true},
+		{"1B", 1, true},
 		{"1.5G", 1536 << 20, true},
 		{"2T", 2 << 40, true},
-		{"0", 0, true},
+		{"0", 0, false},
+		{"0G", 0, true},
 		{"", 0, false},
 		{"-1G", 0, false},
 		{"NaN", 0, false},

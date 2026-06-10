@@ -502,7 +502,8 @@ a service.
 
 > **Tip — generate watches interactively.** `sermoctl wizard` walks you through
 > creating watches: `sermoctl wizard volume` for disk checks (pick volumes, set
-> the notify threshold as a percent or size, and optionally enable auto-expand)
+> the notify threshold as a percent or size (sizes require a `K`/`M`/`G`/`T`
+> suffix), and optionally enable auto-expand)
 > and `sermoctl wizard net` for network interfaces (pick interfaces and which of
 > link state / errors / speed to watch). Run with no argument to choose from the list. It prints the
 > generated `watches:` block and offers to merge it into the global config
@@ -517,7 +518,7 @@ required):
 ```yaml
 watches:
   disk-root:
-    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+    check: { type: disk, path: /, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops-email]                # send to these notifiers
       hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }   # optional
@@ -572,7 +573,7 @@ in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem grow tool —
 ```yaml
 watches:
   expand-backup:
-    check: { type: disk, path: /mnt/backup, free_pct: { op: "<", value: 10 } }
+    check: { type: disk, path: /mnt/backup, free_pct: { op: "<", value: "10%" } }
     for: { cycles: 3 }                    # confirm low for 3 cycles first
     policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
     then:
@@ -621,7 +622,7 @@ watches:
     check:
       type: disk
       path: /
-      used_pct: { op: ">=", value: 90 }   # check fires when crossed
+      used_pct: { op: ">=", value: "90%" } # check fires when crossed
     for: { cycles: 3 }     # optional window; reuses the rules engine
     then:
       hook:
@@ -633,7 +634,9 @@ The `disk` check reads filesystem usage for `path` and is true when every presen
 predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `used_pct`, `free_pct`, `used_bytes`, `free_bytes` — and **inodes** —
 `inodes_used_pct`, `inodes_free_pct`, `inodes_free` (absolute count).
-`*_bytes.value` accepts raw bytes or `K`/`M`/`G`/`T` suffixes, e.g. `10G`.
+`*_pct.value` accepts a number or an explicit `%` suffix, e.g. `90` or `90%`.
+`*_bytes.value` must include a size suffix (`K`/`M`/`G`/`T`, with optional
+`B`/`iB`), e.g. `10G`; unitless byte values such as `10` are rejected.
 Inode predicates catch the "disk full" that `df` hides: a filesystem out of
 inodes (millions of tiny files) rejects new files while bytes are still free.
 
@@ -643,9 +646,9 @@ watches:
     check:
       type: disk
       path: /
-      used_pct: { op: ">=", value: 90 }        # block space
+      used_pct: { op: ">=", value: "90%" }     # block space
       free_bytes: { op: "<", value: 10G }       # absolute free space
-      inodes_used_pct: { op: ">=", value: 90 }  # inode table
+      inodes_used_pct: { op: ">=", value: "90%" } # inode table
     then:
       hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }
 ```
@@ -670,7 +673,7 @@ watches:
       fstype: ext4             # optional: expected filesystem type
       options: [rw, noatime]   # optional: these mount options must all be present
       device: /dev/sdb1        # optional: expected source device
-      used_pct: { op: ">=", value: 90 }   # space predicate(s), optional alongside mount
+      used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
     then:
       hook: { command: [/usr/local/bin/alert-disk.sh, "/data"] }
 ```
