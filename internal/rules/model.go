@@ -121,6 +121,12 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		return nil, nil
 	}
 
+	// Fallback window applied to any rule that declares neither `for` nor
+	// `within`, from the merged `rule_window` block (section 13). Absent or
+	// default-equivalent, both are nil and rules keep the built-in immediate
+	// default.
+	fbFor, fbWithin := ParseRuleWindow(tree["rule_window"])
+
 	var rules []Rule
 	var warnings []string
 	for _, name := range sortedKeys(raw) {
@@ -143,12 +149,19 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			continue
 		}
 		actions := parseActions(thenNode)
+		forWin := ParseForWindow(entry["for"])
+		withinWin := ParseWithinWindow(entry["within"])
+		if _, hasFor := entry["for"]; !hasFor {
+			if _, hasWithin := entry["within"]; !hasWithin {
+				forWin, withinWin = fbFor, fbWithin
+			}
+		}
 		rules = append(rules, Rule{
 			Name:    name,
 			Type:    RuleType(asString(entry["type"])),
 			If:      ifNode,
-			For:     ParseForWindow(entry["for"]),
-			Within:  ParseWithinWindow(entry["within"]),
+			For:     forWin,
+			Within:  withinWin,
 			Actions: actions,
 			Blocks:  stringList(entry["blocks"]),
 		})

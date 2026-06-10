@@ -1228,6 +1228,7 @@ func validateResolved(name string, tree map[string]any, runtime string) []Issue 
 	validatePolicyExtras(tree, add)
 	validateServiceField(tree, add)
 	validateCommands(tree, add)
+	validateRuleWindow(tree, add)
 	validateRules(tree, add)
 
 	return issues
@@ -1668,6 +1669,38 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 	}
 	if !isNumeric(scalarString(entry["value"])) {
 		add("%s count check value %q must be numeric", path, scalarString(entry["value"]))
+	}
+}
+
+// validateRuleWindow checks the merged `rule_window` fallback block (section 13):
+// a positive cycles count, a known mode, and — for the within mode — a
+// min_matches that is positive and no larger than cycles.
+func validateRuleWindow(tree map[string]any, add addFunc) {
+	rw, present := tree["rule_window"]
+	if !present {
+		return
+	}
+	m, ok := rw.(map[string]any)
+	if !ok {
+		add("rule_window must be a mapping")
+		return
+	}
+	cycles, _ := scalarInt(m["cycles"])
+	if cycles <= 0 {
+		add("rule_window.cycles must be > 0")
+	}
+	switch mode := scalarString(m["mode"]); mode {
+	case "", "consecutive":
+	case "within", "sliding":
+		matches, _ := scalarInt(m["min_matches"])
+		switch {
+		case matches <= 0:
+			add("rule_window.min_matches must be > 0 for mode %q", mode)
+		case cycles > 0 && matches > cycles:
+			add("rule_window.min_matches must be <= rule_window.cycles")
+		}
+	default:
+		add("rule_window.mode %q is not one of consecutive, within", mode)
 	}
 }
 

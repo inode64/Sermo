@@ -118,6 +118,104 @@ func TestWindowDescription(t *testing.T) {
 	}
 }
 
+func TestParseRuleWindow(t *testing.T) {
+	cases := []struct {
+		name       string
+		in         any
+		wantFor    int // 0 = nil ForWindow
+		wantWithin [2]int
+	}{
+		{"absent", nil, 0, [2]int{}},
+		{"not a map", "x", 0, [2]int{}},
+		{"default 1 consecutive is a no-op", map[string]any{"cycles": 1, "mode": "consecutive"}, 0, [2]int{}},
+		{"implicit mode defaults to consecutive", map[string]any{"cycles": 1}, 0, [2]int{}},
+		{"zero cycles", map[string]any{"cycles": 0}, 0, [2]int{}},
+		{"consecutive N", map[string]any{"cycles": 3, "mode": "consecutive"}, 3, [2]int{}},
+		{"within with min_matches", map[string]any{"cycles": 15, "mode": "within", "min_matches": 5}, 0, [2]int{15, 5}},
+		{"within defaults min_matches to 1", map[string]any{"cycles": 10, "mode": "sliding"}, 0, [2]int{10, 1}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			forWin, withinWin := ParseRuleWindow(tc.in)
+			gotFor := 0
+			if forWin != nil {
+				gotFor = forWin.Cycles
+			}
+			if gotFor != tc.wantFor {
+				t.Errorf("For = %v, want cycles %d", forWin, tc.wantFor)
+			}
+			var gotWithin [2]int
+			if withinWin != nil {
+				gotWithin = [2]int{withinWin.Cycles, withinWin.MinMatches}
+			}
+			if gotWithin != tc.wantWithin {
+				t.Errorf("Within = %v, want %v", withinWin, tc.wantWithin)
+			}
+		})
+	}
+}
+
+func TestParseRulesAppliesWindowFallback(t *testing.T) {
+	tree := map[string]any{
+		"rule_window": map[string]any{"cycles": 3, "mode": "consecutive"},
+		"rules": map[string]any{
+			// inherits the fallback (declares neither for nor within)
+			"inherit": map[string]any{
+				"type": "remediation",
+				"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+				"then": map[string]any{"action": "restart"},
+			},
+			// its own `for` wins over the fallback
+			"ownfor": map[string]any{
+				"type": "remediation",
+				"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+				"for":  map[string]any{"cycles": 2},
+				"then": map[string]any{"action": "restart"},
+			},
+			// its own `within` wins over the fallback
+			"ownwithin": map[string]any{
+				"type":   "remediation",
+				"if":     map[string]any{"failed": map[string]any{"check": "http"}},
+				"within": map[string]any{"cycles": 5, "min_matches": 2},
+				"then":   map[string]any{"action": "restart"},
+			},
+		},
+	}
+	ruleSet, _ := ParseRules(tree)
+	byName := map[string]Rule{}
+	for _, r := range ruleSet {
+		byName[r.Name] = r
+	}
+	if r := byName["inherit"]; r.For == nil || r.For.Cycles != 3 || r.Within != nil {
+		t.Errorf("inherit: For=%+v Within=%+v, want For cycles 3", r.For, r.Within)
+	}
+	if r := byName["ownfor"]; r.For == nil || r.For.Cycles != 2 {
+		t.Errorf("ownfor: For=%+v, want cycles 2 (own window, not fallback)", r.For)
+	}
+	if r := byName["ownwithin"]; r.Within == nil || r.Within.Cycles != 5 || r.For != nil {
+		t.Errorf("ownwithin: For=%+v Within=%+v, want Within cycles 5", r.For, r.Within)
+	}
+}
+
+func TestParseRulesNoFallbackKeepsImmediate(t *testing.T) {
+	tree := map[string]any{
+		"rules": map[string]any{
+			"a": map[string]any{
+				"type": "remediation",
+				"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+				"then": map[string]any{"action": "restart"},
+			},
+		},
+	}
+	ruleSet, _ := ParseRules(tree)
+	if len(ruleSet) != 1 {
+		t.Fatalf("got %d rules", len(ruleSet))
+	}
+	if r := ruleSet[0]; r.For != nil || r.Within != nil {
+		t.Errorf("expected immediate default (no window), got For=%+v Within=%+v", r.For, r.Within)
+	}
+}
+
 func TestParseWindows(t *testing.T) {
 	tree := map[string]any{"rules": map[string]any{
 		"a": map[string]any{
