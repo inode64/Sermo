@@ -56,15 +56,48 @@ type Service struct {
 // the watches section is the main thing to show). Enriched with useful
 // runtime/config info for operators.
 type Watch struct {
-	Name             string `json:"name"`
-	CheckType        string `json:"check_type,omitempty"`
-	Interval         string `json:"interval,omitempty"`
-	Enabled          bool   `json:"enabled"`
-	FireOnFail       bool   `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
-	HasHook          bool   `json:"has_hook"`
-	NotifierCount    int    `json:"notifier_count"`
-	LastActivity     string `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
-	LastActivityKind string `json:"last_activity_kind,omitempty"`
+	Name             string           `json:"name"`
+	CheckType        string           `json:"check_type,omitempty"`
+	Summary          string           `json:"summary,omitempty"`
+	Interval         string           `json:"interval,omitempty"`
+	Enabled          bool             `json:"enabled"`
+	FireOnFail       bool             `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
+	HasHook          bool             `json:"has_hook"`
+	HookCommand      []string         `json:"hook_command,omitempty"`
+	Notifiers        []string         `json:"notifiers,omitempty"`
+	NotifierCount    int              `json:"notifier_count"`
+	Conditions       []WatchCondition `json:"conditions,omitempty"`
+	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
+	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
+	LastActivityKind string           `json:"last_activity_kind,omitempty"`
+}
+
+// WatchCondition is one configured watch predicate, rendered in the WebUI.
+type WatchCondition struct {
+	Field string `json:"field"`
+	Op    string `json:"op,omitempty"`
+	Value string `json:"value,omitempty"`
+}
+
+// DiskWatchInfo is live filesystem data for a disk host watch.
+type DiskWatchInfo struct {
+	Path             string   `json:"path"`
+	Mounted          bool     `json:"mounted"`
+	MountPoint       string   `json:"mount_point,omitempty"`
+	Device           string   `json:"device,omitempty"`
+	FileSystem       string   `json:"filesystem,omitempty"`
+	Options          []string `json:"options,omitempty"`
+	TotalBytes       uint64   `json:"total_bytes,omitempty"`
+	UsedBytes        uint64   `json:"used_bytes,omitempty"`
+	FreeBytes        uint64   `json:"free_bytes,omitempty"`
+	UsedPct          float64  `json:"used_pct,omitempty"`
+	FreePct          float64  `json:"free_pct,omitempty"`
+	InodesTotal      uint64   `json:"inodes_total,omitempty"`
+	InodesFree       uint64   `json:"inodes_free,omitempty"`
+	InodesUsedPct    float64  `json:"inodes_used_pct,omitempty"`
+	InodesFreePct    float64  `json:"inodes_free_pct,omitempty"`
+	SampleError      string   `json:"sample_error,omitempty"`
+	MountSampleError string   `json:"mount_sample_error,omitempty"`
 }
 
 // Notifier is a configured notification target referenced by watches.

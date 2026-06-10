@@ -112,3 +112,22 @@ func TestUnescapeMount(t *testing.T) {
 		t.Fatalf("unescapeMount = %q", got)
 	}
 }
+
+func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {
+	mounts := []Mount{
+		{Device: "/dev/root", MountPoint: "/", FSType: "ext4"},
+		{Device: "/dev/var", MountPoint: "/var", FSType: "ext4"},
+		{Device: "/dev/data", MountPoint: "/var/lib/sermo", FSType: "xfs"},
+		{Device: "/dev/other", MountPoint: "/var/lib-other", FSType: "xfs"},
+	}
+
+	got := MountForPath(mounts, "/var/lib/sermo/db/state")
+	if got == nil || got.MountPoint != "/var/lib/sermo" {
+		t.Fatalf("MountForPath deep path = %+v, want /var/lib/sermo", got)
+	}
+
+	got = MountForPath(mounts, "/var/lib-other/cache")
+	if got == nil || got.MountPoint != "/var/lib-other" {
+		t.Fatalf("MountForPath boundary path = %+v, want /var/lib-other", got)
+	}
+}
