@@ -189,17 +189,21 @@ func asString(v any) string {
 }
 
 func asStringSlice(v any) []string {
-	list, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(list))
-	for _, e := range list {
-		if s, ok := e.(string); ok {
-			out = append(out, s)
+	switch t := v.(type) {
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		if t != "" {
+			return []string{t}
 		}
 	}
-	return out
+	return nil
 }
 
 func asInt(v any) int {
