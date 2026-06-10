@@ -29,9 +29,9 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// volume assistant: select vol 1; free<10; for 3; notifier 1; no expand.
+	// volume assistant: select vol 1; free<10; for 3; notifier ops-email; no expand.
 	// then runWizard: confirm merge with "y".
-	script := strings.Join([]string{"1", "1", "10", "3", "1", "n", "y"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "2", "n", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{

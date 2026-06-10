@@ -7,13 +7,13 @@ import (
 
 func TestNetAssistantStateAndErrors(t *testing.T) {
 	// Select iface 1 (eth0; lo is filtered out); monitor state+errors;
-	// state on any change; errors threshold 100; notifier 1 (ops-email).
+	// state on any change; errors threshold 100; notifier ops-email.
 	script := strings.Join([]string{
 		"1",   // MultiChoose interfaces -> eth0
 		"1,2", // metrics: link up/down + link errors
 		"1",   // state: any change
 		"100", // errors threshold
-		"1",   // notifier ops-email
+		"2",   // notifier ops-email
 	}, "\n") + "\n"
 
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -47,8 +47,8 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 }
 
 func TestNetAssistantStateDownOnly(t *testing.T) {
-	// Select eth0; only state; "only when down"; notifier 2.
-	script := strings.Join([]string{"1", "1", "2", "2"}, "\n") + "\n"
+	// Select eth0; only state; "only when down"; notifier team-slack.
+	script := strings.Join([]string{"1", "1", "2", "3"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -67,5 +67,14 @@ func TestNetAssistantRequiresNotifier(t *testing.T) {
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (netAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a net watch with no notifier must error (no hook/expand offered)")
+	}
+}
+
+func TestNetAssistantNotifyNoneErrors(t *testing.T) {
+	// Select eth0; only state; any change; explicit none.
+	script := strings.Join([]string{"1", "1", "1", "1"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	if _, err := (netAssistant{}).Run(p, testEnv()); err == nil {
+		t.Fatal("a net watch with notify none should error because it has no other action")
 	}
 }

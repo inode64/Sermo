@@ -16,6 +16,8 @@ import (
 	"sermo/internal/volume"
 )
 
+const notifyNone = "none"
+
 // BuildWatches resolves the global `watches` section into runnable Watches, plus
 // the per-service version/config monitors synthesized from each service's
 // `version:`/`config:` blocks. Disabled or malformed entries are skipped with a
@@ -108,7 +110,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	if len(hook.Command) == 0 && len(names) == 0 && expand == nil {
+	if len(hook.Command) == 0 && !hasNotifyAction(names) && expand == nil {
 		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
 	}
 	w := &Watch{
@@ -364,7 +366,9 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 }
 
 // parseThen reads a `then` block into an optional hook and an optional list of
-// notifier names. A then block must declare a hook and/or at least one notifier.
+// notifier names. A then block must declare a hook and/or at least one real
+// notifier; the reserved `none` sentinel suppresses delivery and does not count
+// as an action.
 func parseThen(entry map[string]any) (HookSpec, []string, error) {
 	then, ok := entry["then"].(map[string]any)
 	if !ok {
@@ -374,7 +378,7 @@ func parseThen(entry map[string]any) (HookSpec, []string, error) {
 	if err != nil {
 		return HookSpec{}, nil, err
 	}
-	if len(hook.Command) == 0 && len(names) == 0 {
+	if len(hook.Command) == 0 && !hasNotifyAction(names) {
 		return HookSpec{}, nil, fmt.Errorf("then requires a hook and/or notify")
 	}
 	return hook, names, nil
@@ -404,7 +408,7 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 		}
 		hook.Stdout, hook.Stderr = stdout, stderr
 	}
-	return hook, cfgval.StringArray(then["notify"]), nil
+	return hook, cfgval.StringList(then["notify"]), nil
 }
 
 // parseExpand reads a `then.expand` disk-expansion action. It is only valid on a
@@ -442,6 +446,10 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 		}
 	}
 	return out
+}
+
+func hasNotifyAction(names []string) bool {
+	return len(names) > 0 && !slices.Contains(names, notifyNone)
 }
 
 // serviceMonitorWatches synthesizes the per-service version/config monitors from
@@ -583,7 +591,7 @@ func monitorWatch(name, checkType string, check checks.Check, notify []string, d
 // site selection wins, the `none` sentinel suppresses all delivery, and an
 // omitted selection inherits the global default.
 func effectiveNotify(site, global []string) []string {
-	if slices.Contains(site, "none") {
+	if slices.Contains(site, notifyNone) {
 		return nil
 	}
 	if len(site) > 0 {
