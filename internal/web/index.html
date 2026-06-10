@@ -592,7 +592,7 @@ function checkHealthCell(s) {
     return `<span class="bad">${esc(label)}</span>`;
   }
   if (h === "ok") return '<span class="ok">ok</span>';
-  if (h === "paused") return '<span class="muted">paused</span>';
+  if (h === "paused") return '<span class="muted">—</span>'; // state shown in the Monitoring column
   if (h === "disabled") return '<span class="muted">disabled</span>';
   if (h === "unknown") return '<span class="muted">—</span>';
   return '<span class="muted">—</span>';
@@ -619,6 +619,8 @@ function policyStateClass(state) {
 
 function policyCell(s) {
   const state = s.remediation_state || (s.enabled ? "pending" : "disabled");
+  // A paused service shows its state in the Monitoring column; don't repeat it here.
+  if (state === "paused") return '<span class="muted">—</span>';
   const cd = s.policy_cooldown ? `<div class="muted mono">${esc(s.policy_cooldown)}</div>` : "";
   return `<div class="policy-cell"><span class="${policyStateClass(state)}">${esc(state)}</span>${cd}</div>`;
 }
@@ -645,7 +647,7 @@ function nextRemediationCell(s) {
     return `<span title="${esc(fmtTime(s.next_eligible_at))}">${esc(fmtUntilShort(s.next_eligible_at))}</span>`;
   }
   if (state === "eligible") return '<span class="ok">now</span>';
-  if (state === "paused" || state === "pending") return `<span class="muted">${esc(state)}</span>`;
+  if (state === "pending") return `<span class="muted">${esc(state)}</span>`; // paused -> "—" (shown in Monitoring)
   return '<span class="muted">—</span>';
 }
 
