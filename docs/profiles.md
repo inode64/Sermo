@@ -424,12 +424,18 @@ operator last left it.
 
 ## Auxiliary commands
 
-`commands` is informational metadata (e.g. a version command). Sermo loads and
-validates it but never runs it as part of monitoring or remediation.
+`commands` is informational metadata (e.g. a version command). Sermo never runs
+it as part of monitoring or remediation; the `sermoctl apps`/`libs`/`services`
+listings run the `version` command to report a profile's version and confirm it
+runs. That run can assert its outcome, the same way a watch hook or `command`
+check does: `expect_exit` (default 0) and optional `expect_stdout`/`expect_stderr`
+matchers — a substring or an `{op, value}` comparison (`== != > >= < <= =~`).
 
 ```yaml
 commands:
   version:
     command: ["apachectl", "-v"]
     timeout: 5s
+    expect_exit: 0                                   # optional, default 0
+    expect_stdout: { op: "=~", value: "Apache/2" }   # optional: match the output
 ```
