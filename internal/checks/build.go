@@ -154,6 +154,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildNetCheck(b, entry, deps)
 	case "load":
 		return buildLoadCheck(b, entry, deps)
+	case "hdparm":
+		return buildHdparmCheck(b, entry, runner)
 	case "fds":
 		return buildFdsCheck(b, entry, deps)
 	case "conntrack":
@@ -563,6 +565,19 @@ func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, "load check: " + err.Error()
 	}
 	return loadCheck{base: b, preds: preds, perCPU: cfgval.Bool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
+}
+
+// buildHdparmCheck builds a disk-throughput check (hdparm -t/-T).
+func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	device := cfgval.AsString(entry["device"])
+	if device == "" {
+		return nil, "hdparm check requires a device"
+	}
+	preds, err := parseHdparmPreds(entry)
+	if err != nil {
+		return nil, "hdparm check: " + err.Error()
+	}
+	return hdparmCheck{base: b, runner: runner, device: device, preds: preds}, ""
 }
 
 // buildFdsCheck builds an open file-descriptors check.
