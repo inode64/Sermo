@@ -6,7 +6,10 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
+	"unicode"
 
 	"github.com/goccy/go-yaml"
 
@@ -53,15 +56,22 @@ func (a App) runWizard(_ context.Context, opts options) int {
 	fmt.Fprintf(a.Stdout, "\nGenerated configuration (%s):\n\n%s\n", res.Summary, data)
 
 	if !p.Confirm("Merge this into "+globalPath+"?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the block above under `watches:` in your config.")
+		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.enabled.")
 		return exitSuccess
 	}
-	bak, err := mergeWatches(globalPath, res.Watches)
+	if err := ensureNoWatchCollisions(cfg, res.Watches); err != nil {
+		a.reportError(opts, err.Error())
+		return exitRuntimeError
+	}
+	merged, err := mergeWizardWatches(globalPath, as.Name(), res.Watches)
 	if err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError
 	}
-	fmt.Fprintf(a.Stdout, "Merged into %s (backup: %s). Run `sermoctl reload` to apply.\n", globalPath, bak)
+	if merged.Backup != "" {
+		fmt.Fprintf(a.Stdout, "Updated %s paths.enabled (backup: %s).\n", globalPath, merged.Backup)
+	}
+	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl reload` to apply.\n", len(merged.Files), merged.Dir)
 	return exitSuccess
 }
 
@@ -145,44 +155,190 @@ func listIfaces() ([]assist.Iface, error) {
 	return out, nil
 }
 
-// mergeWatches merges fragment (watch name -> entry) into the global config's
-// `watches:` section. It writes a `.bak` of the original first and refuses to
-// overwrite an existing watch of the same name. Re-serializing drops comments
-// and may reorder keys, which is why the original is backed up.
-func mergeWatches(path string, fragment map[string]any) (string, error) {
+type wizardMergeResult struct {
+	Backup string
+	Dir    string
+	Files  []string
+}
+
+func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error {
+	if cfg == nil {
+		return nil
+	}
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	for name := range fragment {
+		if _, exists := watches[name]; exists {
+			return fmt.Errorf("watch %q already exists in loaded config; not overwriting", name)
+		}
+	}
+	return nil
+}
+
+// mergeWizardWatches writes one generated watch per YAML file under a directory
+// named after the assistant, then ensures that directory is listed in
+// paths.enabled. Enabled-dir fragments contain a top-level watches map, so the
+// loader can merge them into global watch configuration without rewriting
+// sermo.yml on every generated watch.
+func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
 	orig, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("read %s: %w", path, err)
+		return wizardMergeResult{}, fmt.Errorf("read %s: %w", path, err)
 	}
 	var root map[string]any
 	if err := yaml.Unmarshal(orig, &root); err != nil {
-		return "", fmt.Errorf("parse %s: %w", path, err)
+		return wizardMergeResult{}, fmt.Errorf("parse %s: %w", path, err)
 	}
 	if root == nil {
 		root = map[string]any{}
 	}
-	watches, _ := root["watches"].(map[string]any)
-	if watches == nil {
-		watches = map[string]any{}
-	}
-	for name, entry := range fragment {
-		if _, exists := watches[name]; exists {
-			return "", fmt.Errorf("watch %q already exists in %s; not overwriting", name, path)
-		}
-		watches[name] = entry
-	}
-	root["watches"] = watches
 
-	out, err := yaml.Marshal(root)
+	dirName := safeConfigPathName(wizard)
+	if dirName == "" {
+		dirName = "wizard"
+	}
+	base := filepath.Dir(filepath.Clean(path))
+	targetDir := filepath.Join(base, dirName)
+	relDir := dirName
+
+	var files []string
+	for _, name := range sortedMapKeys(fragment) {
+		file := filepath.Join(targetDir, watchConfigFileName(name))
+		if _, err := os.Stat(file); err == nil {
+			return wizardMergeResult{}, fmt.Errorf("watch file %s already exists; not overwriting", file)
+		} else if !os.IsNotExist(err) {
+			return wizardMergeResult{}, fmt.Errorf("stat %s: %w", file, err)
+		}
+		files = append(files, file)
+	}
+
+	changed, err := ensureEnabledPath(root, base, relDir, targetDir)
 	if err != nil {
-		return "", fmt.Errorf("render %s: %w", path, err)
+		return wizardMergeResult{}, err
 	}
-	bak := path + ".bak"
-	if err := os.WriteFile(bak, orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-		return "", fmt.Errorf("write backup %s: %w", bak, err)
+
+	var bak string
+	if changed {
+		out, err := yaml.Marshal(root)
+		if err != nil {
+			return wizardMergeResult{}, fmt.Errorf("render %s: %w", path, err)
+		}
+		bak = path + ".bak"
+		if err := os.WriteFile(bak, orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return wizardMergeResult{}, fmt.Errorf("write backup %s: %w", bak, err)
+		}
+		if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return wizardMergeResult{}, fmt.Errorf("write %s: %w", path, err)
+		}
 	}
-	if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-		return "", fmt.Errorf("write %s: %w", path, err)
+
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return wizardMergeResult{}, fmt.Errorf("create %s: %w", targetDir, err)
 	}
-	return bak, nil
+	for _, name := range sortedMapKeys(fragment) {
+		file := filepath.Join(targetDir, watchConfigFileName(name))
+		data, err := yaml.Marshal(map[string]any{"watches": map[string]any{name: fragment[name]}})
+		if err != nil {
+			return wizardMergeResult{}, fmt.Errorf("render %s: %w", file, err)
+		}
+		if err := os.WriteFile(file, data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return wizardMergeResult{}, fmt.Errorf("write %s: %w", file, err)
+		}
+	}
+	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files}, nil
+}
+
+func watchConfigFileName(name string) string {
+	base := safeConfigPathName(name)
+	if base == "" {
+		base = "watch"
+	}
+	return base + ".yml"
+}
+
+func ensureEnabledPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
+	paths, _ := root["paths"].(map[string]any)
+	if paths == nil {
+		paths = map[string]any{}
+		root["paths"] = paths
+	}
+	list, err := yamlStringList(paths["enabled"])
+	if err != nil {
+		return false, fmt.Errorf("paths.enabled must be a string or list before wizard can append")
+	}
+	if len(list) == 0 {
+		list = append(list, "apps-enabled")
+	}
+	for _, item := range list {
+		if sameConfigPath(base, item, targetDir) {
+			return false, nil
+		}
+	}
+	paths["enabled"] = append(list, relDir)
+	return true, nil
+}
+
+func yamlStringList(v any) ([]string, error) {
+	switch x := v.(type) {
+	case nil:
+		return nil, nil
+	case string:
+		if x == "" {
+			return nil, nil
+		}
+		return []string{x}, nil
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, item := range x {
+			s, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("non-string item")
+			}
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, nil
+	case []string:
+		return append([]string(nil), x...), nil
+	default:
+		return nil, fmt.Errorf("unsupported")
+	}
+}
+
+func sameConfigPath(base, item, target string) bool {
+	if item == "" {
+		return false
+	}
+	p := item
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(base, p)
+	}
+	return filepath.Clean(p) == filepath.Clean(target)
+}
+
+func sortedMapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func safeConfigPathName(name string) string {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range strings.ToLower(name) {
+		ok := unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.'
+		if ok {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-.")
 }
