@@ -9,6 +9,8 @@
 // every section instead of per-field.
 package config
 
+import "sermo/internal/cfgval"
+
 // docKind identifies the two document kinds.
 const (
 	kindProfile = "profile"
@@ -131,7 +133,7 @@ func ServiceUnit(tree map[string]any, fallback string) string {
 			return name
 		}
 		for _, backend := range []string{"systemd", "openrc"} {
-			if list := stringList(s[backend]); len(list) > 0 {
+			if list := cfgval.StringList(s[backend]); len(list) > 0 {
 				return list[0]
 			}
 		}
@@ -156,10 +158,10 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 		}
 	case map[string]any:
 		if _, ok := s["systemd"]; ok {
-			return stringList(s[backend]), false
+			return cfgval.StringList(s[backend]), false
 		}
 		if _, ok := s["openrc"]; ok {
-			return stringList(s[backend]), false
+			return cfgval.StringList(s[backend]), false
 		}
 		if name, _ := s["name"].(string); name != "" { // legacy form
 			return []string{name}, true

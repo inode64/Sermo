@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"net/smtp"
 	"net/url"
+	"sermo/internal/cfgval"
 	"strings"
 	"time"
 )
@@ -71,7 +72,7 @@ func buildEmail(name string, entry map[string]any) (Notifier, error) {
 	if from == "" {
 		return nil, errors.New("email notifier requires a from address")
 	}
-	to := stringList(entry["to"])
+	to := cfgval.StringList(entry["to"])
 	if len(to) == 0 {
 		return nil, errors.New("email notifier requires at least one to address")
 	}

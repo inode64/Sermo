@@ -5,8 +5,8 @@ import (
 	"maps"
 	"os"
 	"regexp"
+	"sermo/internal/cfgval"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -31,7 +31,7 @@ func collectVariables(tree map[string]any) map[string]string {
 		}
 		// Resolve ${env:...} in a variable value here (before nested-variable
 		// validation) so a variable can hold a secret from the environment.
-		vars[k] = expandEnvString(scalarString(v))
+		vars[k] = expandEnvString(cfgval.String(v))
 	}
 	return vars
 }
@@ -46,7 +46,7 @@ func collectVariables(tree map[string]any) map[string]string {
 func firstExistingPath(candidates []any) string {
 	var first string
 	for i, c := range candidates {
-		p := scalarString(c)
+		p := cfgval.String(c)
 		if i == 0 {
 			first = p
 		}
@@ -182,28 +182,5 @@ func expandEnvTree(v any) any {
 		return t
 	default:
 		return t
-	}
-}
-
-// scalarString renders a YAML scalar as the string Sermo uses for variables and
-// FlexInt-style fields.
-func scalarString(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	case uint64:
-		return strconv.FormatUint(t, 10)
-	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
-	case bool:
-		return strconv.FormatBool(t)
-	case nil:
-		return ""
-	default:
-		return fmt.Sprintf("%v", t)
 	}
 }

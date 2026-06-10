@@ -82,21 +82,3 @@ func SupportedTypes() []string {
 	sort.Strings(types)
 	return types
 }
-
-func stringList(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
-}

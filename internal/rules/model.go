@@ -7,6 +7,7 @@ package rules
 
 import (
 	"maps"
+	"sermo/internal/cfgval"
 	"slices"
 )
 
@@ -107,12 +108,12 @@ func parseActions(then map[string]any) []Action {
 		var out []Action
 		for _, item := range list {
 			if m, ok := item.(map[string]any); ok {
-				out = append(out, Action{Type: ActionType(asString(m["type"])), Message: asString(m["message"])})
+				out = append(out, Action{Type: ActionType(cfgval.AsString(m["type"])), Message: cfgval.AsString(m["message"])})
 			}
 		}
 		return out
 	}
-	return []Action{{Type: ActionType(asString(then["action"])), Message: asString(then["message"])}}
+	return []Action{{Type: ActionType(cfgval.AsString(then["action"])), Message: cfgval.AsString(then["message"])}}
 }
 
 // ParseRules extracts the resolved `rules` section into Rules, skipping
@@ -160,12 +161,12 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		}
 		rules = append(rules, Rule{
 			Name:    name,
-			Type:    RuleType(asString(entry["type"])),
+			Type:    RuleType(cfgval.AsString(entry["type"])),
 			If:      ifNode,
 			For:     forWin,
 			Within:  withinWin,
 			Actions: actions,
-			Blocks:  stringList(entry["blocks"]),
+			Blocks:  cfgval.StringList(entry["blocks"]),
 		})
 	}
 	return rules, warnings
@@ -178,27 +179,4 @@ func disabled(entry map[string]any) bool {
 	}
 	b, ok := v.(bool)
 	return ok && !b
-}
-
-func asString(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-func stringList(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
 }

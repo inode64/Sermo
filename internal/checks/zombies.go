@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -85,13 +86,13 @@ func parseZombieThreshold(entry map[string]any) (op string, value float64, err e
 	if !ok {
 		return "", 0, fmt.Errorf("requires count {op, value}")
 	}
-	op = asString(m["op"])
+	op = cfgval.AsString(m["op"])
 	if !validDiskOp(op) {
 		return "", 0, fmt.Errorf("count has invalid op %q", op)
 	}
-	value, perr := strconv.ParseFloat(scalarString(m["value"]), 64)
+	value, perr := strconv.ParseFloat(cfgval.String(m["value"]), 64)
 	if perr != nil {
-		return "", 0, fmt.Errorf("count value %q is not numeric", scalarString(m["value"]))
+		return "", 0, fmt.Errorf("count value %q is not numeric", cfgval.String(m["value"]))
 	}
 	return op, value, nil
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -112,31 +113,31 @@ func sqlEngineDriver(engine string) (string, bool) {
 // the engine: mysql/postgres reuse the conn DSN builders and host/port/user/
 // password/database/tls fields; sqlite opens `path` read-only.
 func buildSQLCheck(b base, entry map[string]any) (Check, string) {
-	engine := asString(entry["engine"])
+	engine := cfgval.AsString(entry["engine"])
 	driver, ok := sqlEngineDriver(engine)
 	if !ok {
 		return nil, "sql check requires an engine (mysql, mariadb, postgres, postgresql, sqlite)"
 	}
-	query := asString(entry["query"])
+	query := cfgval.AsString(entry["query"])
 	if query == "" {
 		return nil, "sql check requires a query"
 	}
-	op := asString(entry["op"])
+	op := cfgval.AsString(entry["op"])
 	if !validCompareOp(op) {
 		return nil, "sql check op must be one of ==, !=, >, >=, <, <=, =~"
 	}
-	value := scalarString(entry["value"])
+	value := cfgval.String(entry["value"])
 
 	var dsn string
 	switch driver {
 	case "sqlite":
-		path := asString(entry["path"])
+		path := cfgval.AsString(entry["path"])
 		if path == "" {
 			return nil, "sql check (sqlite) requires a path"
 		}
 		dsn = "file:" + path + "?mode=ro&_pragma=busy_timeout(2000)"
 	default:
-		if asString(entry["user"]) == "" {
+		if cfgval.AsString(entry["user"]) == "" {
 			return nil, "sql check (" + engine + ") requires a user"
 		}
 		cfg := sqlConnConfig(engine, entry)
@@ -153,10 +154,10 @@ func buildSQLCheck(b base, entry map[string]any) (Check, string) {
 // the port to the engine's standard port (via the conn registry).
 func sqlConnConfig(engine string, entry map[string]any) conn.Config {
 	cfg := conn.Config{
-		Host:     asString(entry["host"]),
-		User:     asString(entry["user"]),
-		Password: asString(entry["password"]),
-		Database: asString(entry["database"]),
+		Host:     cfgval.AsString(entry["host"]),
+		User:     cfgval.AsString(entry["user"]),
+		Password: cfgval.AsString(entry["password"]),
+		Database: cfgval.AsString(entry["database"]),
 		TLS:      tlsString(entry["tls"]),
 	}
 	if cfg.Host == "" {
@@ -165,7 +166,7 @@ func sqlConnConfig(engine string, entry map[string]any) conn.Config {
 	if proto, ok := conn.Lookup(engine); ok {
 		cfg.Port = proto.DefaultPort()
 	}
-	if p, ok := intField(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry["port"]); ok {
 		cfg.Port = p
 	}
 	return cfg

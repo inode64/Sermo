@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/cfgval"
 	"sort"
 	"strconv"
 	"strings"
@@ -269,17 +270,17 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
 			continue
 		}
-		sel := Selector{Name: name, Type: asString(entry["type"])}
+		sel := Selector{Name: name, Type: cfgval.AsString(entry["type"])}
 		switch sel.Type {
 		case SelectorPidfile:
-			sel.Path = asString(entry["path"])
+			sel.Path = cfgval.AsString(entry["path"])
 			if sel.Path == "" {
 				warnings = append(warnings, fmt.Sprintf("pidfile selector %q has no path", name))
 				continue
 			}
 		case SelectorCommandMatch:
-			sel.Exe = asString(entry["exe"])
-			sel.User = asString(entry["user"])
+			sel.Exe = cfgval.AsString(entry["exe"])
+			sel.User = cfgval.AsString(entry["user"])
 			if sel.Exe == "" || sel.User == "" {
 				warnings = append(warnings, fmt.Sprintf("command_match selector %q requires both exe and user", name))
 				continue
@@ -291,9 +292,4 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		selectors = append(selectors, sel)
 	}
 	return selectors, warnings
-}
-
-func asString(v any) string {
-	s, _ := v.(string)
-	return s
 }

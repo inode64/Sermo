@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 )
 
@@ -24,7 +25,7 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 	}
 
 	resolution := global
-	if d := parseDuration(resolved.Tree["interval"]); d > 0 {
+	if d := cfgval.Duration(resolved.Tree["interval"]); d > 0 {
 		resolution = d
 	}
 	section, _ := resolved.Tree["checks"].(map[string]any)
@@ -34,7 +35,7 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 			continue
 		}
 		scope := fmt.Sprintf("service %s check %s", name, cn)
-		if d := parseDuration(entry["interval"]); d > 0 {
+		if d := cfgval.Duration(entry["interval"]); d > 0 {
 			checkAlignment(b, scope, d, resolution)
 		}
 		diagCheckResources(b, scope, entry, host)
@@ -54,7 +55,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			continue
 		}
 		scope := "watch " + name
-		if d := parseDuration(entry["interval"]); d > 0 {
+		if d := cfgval.Duration(entry["interval"]); d > 0 {
 			checkAlignment(b, scope, d, global)
 		}
 		check, _ := entry["check"].(map[string]any)
@@ -129,18 +130,6 @@ func checkAlignment(b *builder, scope string, d, resolution time.Duration) {
 func disabled(body map[string]any) bool {
 	v, ok := body["enabled"].(bool)
 	return ok && !v
-}
-
-func parseDuration(v any) time.Duration {
-	s, ok := v.(string)
-	if !ok {
-		return 0
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0
-	}
-	return d
 }
 
 func str(v any) string {

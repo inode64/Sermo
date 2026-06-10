@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -238,19 +239,19 @@ func indexOf(list []string, v string) int {
 // connection variables (host/port/user/password/tls). `language` selects InfluxQL
 // (1.x, needs a `database`) or Flux (2.x, needs an `org` and `token`).
 func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
-	query := asString(entry["query"])
+	query := cfgval.AsString(entry["query"])
 	if query == "" {
 		return nil, "influxdb-query check requires a query"
 	}
-	op := asString(entry["op"])
+	op := cfgval.AsString(entry["op"])
 	if !validCompareOp(op) {
 		return nil, "influxdb-query check op must be one of ==, !=, >, >=, <, <=, =~"
 	}
-	value := scalarString(entry["value"])
+	value := cfgval.String(entry["value"])
 	if value == "" {
 		return nil, "influxdb-query check requires a value"
 	}
-	language := asString(entry["language"])
+	language := cfgval.AsString(entry["language"])
 	if language == "" {
 		language = "influxql"
 	}
@@ -259,11 +260,11 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 		base:     b,
 		cfg:      influxConnConfig(entry),
 		language: language,
-		database: asString(entry["database"]),
-		org:      asString(entry["org"]),
+		database: cfgval.AsString(entry["database"]),
+		org:      cfgval.AsString(entry["org"]),
 		query:    query,
-		column:   asString(entry["column"]),
-		token:    asString(entry["token"]),
+		column:   cfgval.AsString(entry["column"]),
+		token:    cfgval.AsString(entry["token"]),
 		op:       op,
 		value:    value,
 	}
@@ -289,9 +290,9 @@ func buildInfluxCheck(b base, entry map[string]any) (Check, string) {
 // the port to InfluxDB's standard port (via the conn registry).
 func influxConnConfig(entry map[string]any) conn.Config {
 	cfg := conn.Config{
-		Host:     asString(entry["host"]),
-		User:     asString(entry["user"]),
-		Password: asString(entry["password"]),
+		Host:     cfgval.AsString(entry["host"]),
+		User:     cfgval.AsString(entry["user"]),
+		Password: cfgval.AsString(entry["password"]),
 		TLS:      tlsString(entry["tls"]),
 	}
 	if cfg.Host == "" {
@@ -301,7 +302,7 @@ func influxConnConfig(entry map[string]any) conn.Config {
 	if proto, ok := conn.Lookup("influxdb"); ok {
 		cfg.Port = proto.DefaultPort()
 	}
-	if p, ok := intField(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry["port"]); ok {
 		cfg.Port = p
 	}
 	return cfg

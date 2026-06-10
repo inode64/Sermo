@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/notify"
@@ -45,7 +46,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			interval = d
 		}
 
-		switch stringField(checkEntry["type"]) {
+		switch cfgval.AsString(checkEntry["type"]) {
 		case "net", "icmp", "swap":
 			expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)
 			watches = append(watches, expanded...)
@@ -81,7 +82,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 // (disk/load/…) and any single-shot service check (tcp/http/…) used as a watch.
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	typ := stringField(checkEntry["type"])
+	typ := cfgval.AsString(checkEntry["type"])
 	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
 		DefaultTimeout: deps.DefaultTimeout,
 		DiskUsage:      nil, // statfs default
@@ -142,7 +143,7 @@ func isHealthCheckType(typ string) bool {
 func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) ([]*Watch, []string) {
 	metrics, ok := entry["metrics"].(map[string]any)
 	if !ok || len(metrics) == 0 {
-		return nil, []string{"watch " + name + ": " + stringField(checkEntry["type"]) + " check requires a non-empty metrics map"}
+		return nil, []string{"watch " + name + ": " + cfgval.AsString(checkEntry["type"]) + " check requires a non-empty metrics map"}
 	}
 	var out []*Watch
 	var warns []string
@@ -177,7 +178,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		}
 		out = append(out, &Watch{
 			Name:      name,
-			CheckType: stringField(checkEntry["type"]),
+			CheckType: cfgval.AsString(checkEntry["type"]),
 			Check:     check,
 			Window:    rules.ParseWindowRule(mEntry),
 			Hook:      hook,
@@ -195,7 +196,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 // baseline, conditions and hook) wired into a Watch through Watch.Cycle so it can
 // fire one hook per change. The Watch's check/window fields are unused.
 func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	if stringField(checkEntry["path"]) == "" {
+	if cfgval.AsString(checkEntry["path"]) == "" {
 		return nil, "watch " + name + ": file check requires a path"
 	}
 	cond, err := parseFileCond(checkEntry)
@@ -208,7 +209,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	}
 	fw := &fileWatcher{
 		name:      name,
-		path:      stringField(checkEntry["path"]),
+		path:      cfgval.AsString(checkEntry["path"]),
 		recursive: boolField(checkEntry["recursive"]),
 		cond:      cond,
 		hook:      hook,
@@ -230,7 +231,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 // state, conditions and hook) wired into a Watch through Watch.Cycle so it can
 // fire one hook per matching PID.
 func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	pname := stringField(checkEntry["name"])
+	pname := cfgval.AsString(checkEntry["name"])
 	if pname == "" {
 		return nil, "watch " + name + ": process check requires a name"
 	}
@@ -244,7 +245,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	}
 	pw := &procWatcher{
 		name:      name,
-		match:     ProcMatch{Name: pname, User: stringField(checkEntry["user"])},
+		match:     ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])},
 		cond:      cond,
 		hook:      hook,
 		notifiers: resolveNotifiers(names, deps.Notifiers),
@@ -288,7 +289,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		if !ok {
 			continue
 		}
-		op := stringField(m["op"])
+		op := cfgval.AsString(m["op"])
 		if !validThresholdOp(op) {
 			return c, fmt.Errorf("process %s requires a valid op (>=, >, <=, <, ==, !=)", t.key)
 		}
@@ -316,10 +317,10 @@ func parseProcCond(check map[string]any) (procCond, error) {
 func parseFileCond(check map[string]any) (fileCond, error) {
 	var c fileCond
 	if sz, ok := check["size"].(map[string]any); ok {
-		if stringField(sz["on"]) == "change" {
+		if cfgval.AsString(sz["on"]) == "change" {
 			c.sizeChange = true
 		} else {
-			op := stringField(sz["op"])
+			op := cfgval.AsString(sz["op"])
 			if !validThresholdOp(op) {
 				return c, fmt.Errorf("file size requires on: change or {op, value}")
 			}
@@ -331,19 +332,19 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 		}
 	}
 	if p, ok := check["permissions"].(map[string]any); ok {
-		if stringField(p["on"]) != "change" {
+		if cfgval.AsString(p["on"]) != "change" {
 			return c, fmt.Errorf("file permissions requires on: change")
 		}
 		c.permChange = true
 	}
 	if o, ok := check["owner"].(map[string]any); ok {
-		if stringField(o["on"]) != "change" {
+		if cfgval.AsString(o["on"]) != "change" {
 			return c, fmt.Errorf("file owner requires on: change")
 		}
 		c.ownerChange = true
 	}
 	if e, ok := check["existence"].(map[string]any); ok {
-		if stringField(e["on"]) != "delete" {
+		if cfgval.AsString(e["on"]) != "delete" {
 			return c, fmt.Errorf("file existence requires on: delete")
 		}
 		c.onDelete = true
@@ -377,13 +378,13 @@ func parseThen(entry map[string]any) (HookSpec, []string, error) {
 func parseActions(then map[string]any) (HookSpec, []string, error) {
 	var hook HookSpec
 	if h, ok := then["hook"].(map[string]any); ok {
-		cmd := stringArray(h["command"])
+		cmd := cfgval.StringArray(h["command"])
 		if len(cmd) == 0 {
 			return HookSpec{}, nil, fmt.Errorf("hook requires a non-empty command")
 		}
 		hook = HookSpec{Command: cmd, Timeout: durationField(h["timeout"])}
 	}
-	return hook, stringArray(then["notify"]), nil
+	return hook, cfgval.StringArray(then["notify"]), nil
 }
 
 // parseExpand reads a `then.expand` disk-expansion action. It is only valid on a
@@ -396,7 +397,7 @@ func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 	if checkType != "disk" {
 		return nil, fmt.Errorf("then.expand is only valid on a disk watch, not %q", checkType)
 	}
-	by := stringField(raw["by"])
+	by := cfgval.AsString(raw["by"])
 	if by == "" {
 		return nil, fmt.Errorf("then.expand requires a `by` size (e.g. 5G)")
 	}
@@ -430,20 +431,6 @@ func sortedWatchNames(m map[string]any) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-func stringArray(v any) []string {
-	list, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]string, 0, len(list))
-	for _, e := range list {
-		if s, ok := e.(string); ok && s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func durationField(v any) time.Duration {
@@ -481,9 +468,4 @@ func floatField(v any) (float64, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func stringField(v any) string {
-	s, _ := v.(string)
-	return s
 }

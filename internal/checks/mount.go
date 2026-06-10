@@ -3,6 +3,7 @@ package checks
 import (
 	"fmt"
 	"os"
+	"sermo/internal/cfgval"
 	"slices"
 	"strings"
 )
@@ -38,9 +39,9 @@ func parseMountCond(entry map[string]any) mountCond {
 	if v, ok := entry["mounted"].(bool); ok {
 		m.active, m.expectMount = true, v
 	}
-	m.fstype = asString(entry["fstype"])
-	m.device = asString(entry["device"])
-	m.options = stringArray(entry["options"])
+	m.fstype = cfgval.AsString(entry["fstype"])
+	m.device = cfgval.AsString(entry["device"])
+	m.options = cfgval.StringArray(entry["options"])
 	if m.fstype != "" || m.device != "" || len(m.options) > 0 {
 		m.active = true
 	}

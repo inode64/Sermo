@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 )
@@ -457,7 +458,7 @@ func TestRunConcurrentPreservesOrderAndOptional(t *testing.T) {
 
 func atoi(t *testing.T, s string) int {
 	t.Helper()
-	n, ok := intField(s)
+	n, ok := cfgval.Int(s)
 	if !ok {
 		t.Fatalf("bad int %q", s)
 	}

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
@@ -342,8 +343,8 @@ func parseCheckGates(tree map[string]any) map[string]CheckGate {
 			continue
 		}
 		gate := CheckGate{
-			Requires:        stringSlice(m["requires"]),
-			SkipWhenChanged: stringSlice(m["skip_when_changed"]),
+			Requires:        cfgval.StringList(m["requires"]),
+			SkipWhenChanged: cfgval.StringList(m["skip_when_changed"]),
 		}
 		if len(gate.Requires) > 0 || len(gate.SkipWhenChanged) > 0 {
 			gates[name] = gate
@@ -353,25 +354,6 @@ func parseCheckGates(tree map[string]any) map[string]CheckGate {
 		return nil
 	}
 	return gates
-}
-
-// stringSlice converts a YAML list (or single scalar) to a []string.
-func stringSlice(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
 }
 
 // measuredCheckNames returns the names of a service's checks whose type is graphed

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"sermo/internal/cfgval"
 	"strings"
 )
 
@@ -57,7 +58,7 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	// fallback, so it is injected only when the field is set — leaving ${port}
 	// undefined (and so a clear error) when nothing provides a port.
 	if _, ok := vars["port"]; !ok {
-		if p := scalarString(merged["port"]); p != "" {
+		if p := cfgval.String(merged["port"]); p != "" {
 			vars["port"] = p
 		}
 	}
@@ -80,7 +81,7 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	if libraries == nil {
 		libraries = map[string]any{}
 	}
-	for _, lib := range stringList(roc["libraries"]) {
+	for _, lib := range cfgval.StringList(roc["libraries"]) {
 		doc, ok := c.Profiles[lib]
 		if !ok || doc.Category != CategoryLibrary {
 			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library profile", lib))
@@ -137,7 +138,7 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	}
 
 	var merged map[string]any
-	if clone := scalarString(doc.Body["clone"]); clone != "" {
+	if clone := cfgval.String(doc.Body["clone"]); clone != "" {
 		src, err := c.mergedService(clone, append(chain, name))
 		if err != nil {
 			return nil, err
@@ -145,7 +146,7 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 		merged = src
 	} else {
 		merged = c.defaultsPerService()
-		if uses := scalarString(doc.Body["uses"]); uses != "" {
+		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
 			profile, ok := c.Profiles[uses]
 			if !ok {
 				return nil, fmt.Errorf("service %q uses unknown profile %q", name, uses)
