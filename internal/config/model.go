@@ -11,22 +11,24 @@ package config
 
 import "sermo/internal/cfgval"
 
-// docKind identifies the two document kinds.
+// docKind identifies the document kinds. `profile` is a legacy alias for
+// `daemon` kept for existing configurations.
 const (
+	kindDaemon  = "daemon"
 	kindProfile = "profile"
 	kindService = "service"
 )
 
-// Profile categories, derived from the subdirectory a profile is loaded from
-// (profiles/services, profiles/apps, profiles/libs). Files directly under a
-// profiles root default to CategoryService.
+// Daemon categories, derived from the subdirectory a daemon definition is loaded
+// from (daemons/services, daemons/apps, daemons/libs). Files directly under a
+// daemons root default to CategoryService.
 const (
 	CategoryService = "service"
 	CategoryApp     = "app"
 	CategoryLibrary = "library"
 )
 
-// categoryFromDir maps a profiles subdirectory name to a category, or "" when the
+// categoryFromDir maps a daemons subdirectory name to a category, or "" when the
 // directory is not a recognized category (its files inherit the default).
 func categoryFromDir(name string) string {
 	switch name {
@@ -54,12 +56,12 @@ var metaKeys = map[string]struct{}{
 // service (section 8). Engine-wide settings never reach individual services.
 var perServiceDefaults = []string{"stop_policy", "policy", "rule_window"}
 
-// Document is a single loaded profile or service in raw, unexpanded form.
+// Document is a single loaded daemon or service in raw, unexpanded form.
 type Document struct {
 	Kind     string
 	Name     string
 	Path     string
-	Category string // service | app | library (profiles only; from the directory)
+	Category string // service | app | library (daemons only; from the directory)
 	Body     map[string]any
 }
 
@@ -96,7 +98,8 @@ type Global struct {
 	Path     string
 	Raw      map[string]any
 	Defaults map[string]any
-	Profiles []string
+	Daemons  []string
+	Profiles []string // legacy alias for Daemons
 	Includes []string
 	Runtime  string
 	State    string
@@ -173,8 +176,10 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 // Config is the full loaded configuration set.
 type Config struct {
 	Global       Global
+	Daemons      map[string]*Document
 	Profiles     map[string]*Document
 	Services     map[string]*Document
+	DaemonNames  []string // load order, for stable reporting
 	ProfileNames []string // load order, for stable reporting
 	ServiceNames []string
 	docs         []*Document // every document in load order

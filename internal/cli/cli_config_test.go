@@ -16,7 +16,7 @@ func writeTempConfig(t *testing.T) string {
 engine:
   backend: auto
 paths:
-  profiles: [ `+root+`/profiles ]
+  daemons: [ `+root+`/daemons ]
   includes: [ `+root+`/enabled ]
 defaults:
   policy:

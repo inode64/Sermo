@@ -1,0 +1,13 @@
+kind: daemon
+name: upsd
+display_name: "NUT UPS Daemon"
+service: upsd
+variables:
+  port: 3493
+  binary: "/usr/sbin/upsd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

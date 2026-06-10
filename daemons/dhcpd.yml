@@ -1,0 +1,15 @@
+kind: daemon
+name: dhcpd
+display_name: "DHCP Server"
+description: "Servidor DHCP"
+service: dhcpd
+variables:
+  port: 67
+  binary: "/usr/sbin/dhcpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }
+
+checks:
+  port: { type: dhcp, port: "${port}" }

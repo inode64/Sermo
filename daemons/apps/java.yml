@@ -1,0 +1,8 @@
+kind: daemon
+name: java
+display_name: "Java"
+variables:
+  binary: "/usr/bin/java"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-version"], timeout: 10s }

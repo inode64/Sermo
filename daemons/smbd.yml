@@ -1,0 +1,15 @@
+kind: daemon
+name: smbd
+display_name: "Samba SMB"
+description: "Servidor de ficheros Windows - SMB"
+service: smbd
+variables:
+  port: 445
+  binary: "/usr/sbin/smbd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  config: { type: command, command: ["/usr/bin/testparm","-s"], timeout: 30s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

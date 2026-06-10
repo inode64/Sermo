@@ -15,7 +15,7 @@ import (
 
 func TestRunRejectsInvalidConfig(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"enabled", "profiles"} {
+	for _, sub := range []string{"enabled", "daemons"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -24,12 +24,12 @@ func TestRunRejectsInvalidConfig(t *testing.T) {
 	content := fmt.Sprintf(`engine:
   interval: notaduration
 paths:
-  profiles: [%s]
+  daemons: [%s]
   includes: [%s]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`, filepath.Join(dir, "profiles"), filepath.Join(dir, "enabled"))
+`, filepath.Join(dir, "daemons"), filepath.Join(dir, "enabled"))
 	if err := os.WriteFile(global, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -46,11 +46,11 @@ defaults:
 func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	global := repoConfigPath(t)
 
-	// The shipped config points paths.profiles at the installed /usr/share/sermo
-	// location, so override it to the source tree's profiles for this test —
-	// exactly what `sermod run --profiles ./profiles` does.
-	profiles := filepath.Join(filepath.Dir(filepath.Dir(global)), "profiles")
-	cfg, err := config.Load(global, config.WithProfilesDirs(profiles))
+	// The shipped config points paths.daemons at the installed /usr/share/sermo
+	// location, so override it to the source tree's daemons for this test —
+	// exactly what `sermod run --daemons ./daemons` does.
+	daemons := filepath.Join(filepath.Dir(filepath.Dir(global)), "daemons")
+	cfg, err := config.Load(global, config.WithDaemonDirs(daemons))
 	if err != nil {
 		t.Fatalf("Load(%q): %v", global, err)
 	}
@@ -63,7 +63,7 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 		t.Fatal("expected non-empty watches section in repo default config")
 	}
 	if len(cfg.Services) == 0 {
-		t.Fatalf("expected included services from %q, got none (check paths.profiles/includes are relative to the config file)", global)
+		t.Fatalf("expected included services from %q, got none (check paths.daemons/includes are relative to the config file)", global)
 	}
 
 	collector := metrics.New(metrics.OSReader{})
@@ -97,22 +97,35 @@ func TestParseArgsVerbose(t *testing.T) {
 	}
 }
 
-func TestParseArgsProfiles(t *testing.T) {
+func TestParseArgsDaemons(t *testing.T) {
 	// Both spellings, repeatable, accumulate in order.
-	parsed, err := parseArgs([]string{"run", "--profiles", "/a", "--profiles=/b"})
+	parsed, err := parseArgs([]string{"run", "--daemons", "/a", "--daemons=/b"})
 	if err != nil {
 		t.Fatalf("parseArgs: %v", err)
 	}
-	if got := parsed.profiles; len(got) != 2 || got[0] != "/a" || got[1] != "/b" {
-		t.Fatalf("profiles = %v, want [/a /b]", got)
+	if got := parsed.daemons; len(got) != 2 || got[0] != "/a" || got[1] != "/b" {
+		t.Fatalf("daemons = %v, want [/a /b]", got)
 	}
 
 	// Defaults to none.
-	if parsed, err := parseArgs([]string{"run"}); err != nil || len(parsed.profiles) != 0 {
-		t.Fatalf("parseArgs(run) profiles = %v, err = %v; want empty, nil", parsed.profiles, err)
+	if parsed, err := parseArgs([]string{"run"}); err != nil || len(parsed.daemons) != 0 {
+		t.Fatalf("parseArgs(run) daemons = %v, err = %v; want empty, nil", parsed.daemons, err)
 	}
 
 	// Missing value is an error.
+	if _, err := parseArgs([]string{"run", "--daemons"}); err == nil {
+		t.Fatal("parseArgs(--daemons) without value: want error, got nil")
+	}
+}
+
+func TestParseArgsProfilesLegacyAlias(t *testing.T) {
+	parsed, err := parseArgs([]string{"run", "--profiles", "/a", "--profiles=/b"})
+	if err != nil {
+		t.Fatalf("parseArgs legacy profiles: %v", err)
+	}
+	if got := parsed.daemons; len(got) != 2 || got[0] != "/a" || got[1] != "/b" {
+		t.Fatalf("legacy profiles alias = %v, want [/a /b]", got)
+	}
 	if _, err := parseArgs([]string{"run", "--profiles"}); err == nil {
 		t.Fatal("parseArgs(--profiles) without value: want error, got nil")
 	}

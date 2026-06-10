@@ -52,7 +52,7 @@ Read-only `sermoctl` commands (status, config, etc.) do not need root.
 ## Install
 
 `make install` honors the standard GNU directory variables and `DESTDIR`
-staging, and installs the binaries, every profile (keeping the
+staging, and installs the binaries, every daemon (keeping the
 `services/apps/libs` layout), a sample `sermo.yml`, the tmpfiles.d config, and
 both the systemd unit and the OpenRC init script (with their binary/config paths
 rewritten to match):
@@ -65,7 +65,7 @@ make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
 `bindir`, `sbindir`, `datadir`, `sysconfdir`, `TMPFILESDIR`,
 `SYSTEMD_UNITDIR`, `OPENRC_INITDIR`. Granular targets are available too:
-`install-bin`, `install-profiles`, `install-config`, `install-tmpfiles`,
+`install-bin`, `install-daemons`, `install-config`, `install-tmpfiles`,
 `install-systemd`, `install-openrc` (and `uninstall`). An existing `sermo.yml`
 is never overwritten. `make install` does not create `/var/lib/sermo`; the
 installed tmpfiles.d config owns that directory creation.
@@ -110,15 +110,15 @@ sermod run --config /etc/sermo/sermo.yml
 
 ```
 /etc/sermo/sermo.yml              global config
-/usr/share/sermo/profiles/*.yml   packaged profiles (apache, mysql, redis, ...)
-/etc/sermo/apps-available/*.yml   user profiles
+/usr/share/sermo/daemons/*.yml   packaged daemons (apache, mysql, redis, ...)
+/etc/sermo/daemons-available/*.yml   user daemons
 /etc/sermo/apps-enabled/*.yml     included service documents
 /run/sermo/locks/*.lock           named runtime locks (tmpfs, wiped on reboot)
 /run/sermo/ops/*.lock             internal operation locks
 /var/lib/sermo/sermo.db           persistent state DB (monitoring state, SLA samples; survives reboot)
 ```
 
-Example profiles and configs are under [`profiles/`](profiles/) and
+Example daemons and configs are under [`daemons/`](daemons/) and
 [`configs/`](configs/). Packaging units are under [`packaging/`](packaging/).
 
 ## Exit codes (`sermoctl`)
@@ -134,11 +134,11 @@ Example profiles and configs are under [`profiles/`](profiles/) and
 
 ## Documentation
 
-- [Configuration](docs/configuration.md) — global config, profiles, services,
+- [Configuration](docs/configuration.md) — global config, daemons, services,
   merge and variables.
 - [Rules](docs/rules.md) — checks, conditions, windows, guards, remediation
   policy.
-- [Profiles](docs/profiles.md) — writing and overriding profiles.
+- [Daemons](docs/daemons.md) — writing and overriding daemons.
 - [Safety](docs/safety.md) — the safety invariants that cannot be disabled.
 
 ## Safety in one paragraph

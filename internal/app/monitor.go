@@ -16,10 +16,11 @@ import (
 // runtime state, stops the current generation gracefully, and starts a new one.
 type Monitor struct {
 	ConfigPath string
-	// ProfileDirs mirrors `sermod --profiles`: when set, a reload overrides the
-	// config's paths.profiles with these directories so reload behaves like the
+	// DaemonDirs mirrors `sermod --daemons`: when set, a reload overrides the
+	// config's paths.daemons with these directories so reload behaves like the
 	// initial load.
-	ProfileDirs []string
+	DaemonDirs  []string
+	ProfileDirs []string // legacy alias for DaemonDirs
 	Logger      interface {
 		Info(msg string, args ...any)
 		Warn(msg string, args ...any)
@@ -87,8 +88,12 @@ func (m *Monitor) Reload() {
 	}
 
 	var loadOpts []config.Option
-	if len(m.ProfileDirs) > 0 {
-		loadOpts = append(loadOpts, config.WithProfilesDirs(m.ProfileDirs...))
+	daemonDirs := m.DaemonDirs
+	if len(daemonDirs) == 0 {
+		daemonDirs = m.ProfileDirs
+	}
+	if len(daemonDirs) > 0 {
+		loadOpts = append(loadOpts, config.WithDaemonDirs(daemonDirs...))
 	}
 	newCfg, err := config.Load(m.ConfigPath, loadOpts...)
 	if err != nil {

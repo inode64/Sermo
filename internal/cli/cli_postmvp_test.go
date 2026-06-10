@@ -15,14 +15,14 @@ func writePostMVPConfig(t *testing.T) (global, root string) {
 	global = filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  profiles: [ `+root+`/profiles ]
+  daemons: [ `+root+`/daemons ]
   includes: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy: { cooldown: 5m }
 `)
-	mustWrite(t, filepath.Join(root, "profiles", "redis.yml"), `
-kind: profile
+	mustWrite(t, filepath.Join(root, "daemons", "redis.yml"), `
+kind: daemon
 name: redis
 variables: { port: 6379 }
 checks:
@@ -50,22 +50,30 @@ func runCLI(t *testing.T, args ...string) (int, string, string) {
 	return code, stdout.String(), stderr.String()
 }
 
-func TestProfileListAndShow(t *testing.T) {
+func TestDaemonListAndShow(t *testing.T) {
 	global, _ := writePostMVPConfig(t)
 
-	code, out, _ := runCLI(t, "--config", global, "profile", "list")
+	code, out, _ := runCLI(t, "--config", global, "daemon", "list")
 	if code != exitSuccess || strings.TrimSpace(out) != "redis" {
-		t.Fatalf("profile list: code=%d out=%q", code, out)
+		t.Fatalf("daemon list: code=%d out=%q", code, out)
 	}
 
-	code, out, _ = runCLI(t, "--config", global, "profile", "show", "redis")
+	code, out, _ = runCLI(t, "--config", global, "daemon", "show", "redis")
 	if code != exitSuccess || !strings.Contains(out, "name: redis") {
-		t.Fatalf("profile show: code=%d out=%q", code, out)
+		t.Fatalf("daemon show: code=%d out=%q", code, out)
 	}
 
-	code, _, stderr := runCLI(t, "--config", global, "profile", "show", "nope")
-	if code != exitRuntimeError || !strings.Contains(stderr, "unknown profile") {
-		t.Fatalf("profile show nope: code=%d stderr=%q", code, stderr)
+	code, _, stderr := runCLI(t, "--config", global, "daemon", "show", "nope")
+	if code != exitRuntimeError || !strings.Contains(stderr, "unknown daemon") {
+		t.Fatalf("daemon show nope: code=%d stderr=%q", code, stderr)
+	}
+}
+
+func TestProfileCommandIsLegacyAlias(t *testing.T) {
+	global, _ := writePostMVPConfig(t)
+	code, out, _ := runCLI(t, "--config", global, "profile", "show", "redis")
+	if code != exitSuccess || !strings.Contains(out, "name: redis") {
+		t.Fatalf("profile legacy alias: code=%d out=%q", code, out)
 	}
 }
 

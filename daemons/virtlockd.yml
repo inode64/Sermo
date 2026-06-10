@@ -1,0 +1,9 @@
+kind: daemon
+name: virtlockd
+display_name: "libvirt Lock Daemon"
+service: virtlockd
+variables:
+  binary: "/usr/sbin/virtlockd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

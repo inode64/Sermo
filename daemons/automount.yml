@@ -1,0 +1,9 @@
+kind: daemon
+name: automount
+display_name: "Automount"
+service: automount
+variables:
+  binary: "/usr/sbin/automount"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

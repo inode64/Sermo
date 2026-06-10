@@ -486,21 +486,21 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 
 func TestWebBackendConfigRenderAndDiff(t *testing.T) {
 	root := t.TempDir()
-	profiles := filepath.Join(root, "profiles")
+	daemons := filepath.Join(root, "daemons")
 	enabled := filepath.Join(root, "enabled")
-	if err := os.MkdirAll(profiles, 0o755); err != nil {
+	if err := os.MkdirAll(daemons, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	globalPath := filepath.Join(root, "sermo.yml")
-	profilePath := filepath.Join(profiles, "web-profile.yml")
+	daemonPath := filepath.Join(daemons, "web-daemon.yml")
 	basePath := filepath.Join(enabled, "base.yml")
 	webPath := filepath.Join(enabled, "web.yml")
 	if err := os.WriteFile(globalPath, []byte(`
 paths:
-  profiles: [`+profiles+`]
+  daemons: [`+daemons+`]
   includes: [`+enabled+`]
 defaults:
   policy:
@@ -508,9 +508,9 @@ defaults:
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(profilePath, []byte(`
-kind: profile
-name: web-profile
+	if err := os.WriteFile(daemonPath, []byte(`
+kind: daemon
+name: web-daemon
 checks:
   tcp:
     type: tcp
@@ -522,7 +522,7 @@ checks:
 	if err := os.WriteFile(basePath, []byte(`
 kind: service
 name: base
-uses: web-profile
+uses: web-daemon
 service: base.service
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -530,7 +530,7 @@ service: base.service
 	if err := os.WriteFile(webPath, []byte(`
 kind: service
 name: web
-uses: web-profile
+uses: web-daemon
 service: web.service
 checks:
   tcp:
@@ -554,7 +554,7 @@ checks:
 	if !strings.Contains(rendered.Content, "web.service") || !strings.Contains(rendered.Content, "8080") {
 		t.Fatalf("rendered content missing resolved values:\n%s", rendered.Content)
 	}
-	wantSources := []string{globalPath, profilePath, webPath}
+	wantSources := []string{globalPath, daemonPath, webPath}
 	for _, want := range wantSources {
 		if !slices.Contains(rendered.SourceFiles, want) {
 			t.Fatalf("source files = %v, missing %s", rendered.SourceFiles, want)
@@ -599,7 +599,7 @@ func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	// Minimal config with a watch that has a hook. The check is a simple command that always succeeds.
 	cfgContent := `
 paths:
-  profiles: []
+  daemons: []
   includes: []
   runtime: /tmp
 defaults:

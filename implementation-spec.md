@@ -13,7 +13,7 @@ Default paths:
 
 ```text
 /etc/sermo/                 # configuration
-/usr/share/sermo/profiles/  # packaged base profiles
+/usr/share/sermo/daemons/  # packaged base daemons
 /run/sermo/                 # runtime state, locks, sockets
 /var/lib/sermo/             # persistent state, optional later
 ```
@@ -53,7 +53,7 @@ Sermo should provide:
    - start via detected backend only if the stop phase is clean
    - run postflight checks
 4. Declarative YAML configuration.
-5. Packaged base profiles for applications such as Apache, Redis, MySQL/MariaDB and PHP-FPM.
+5. Packaged base daemons for applications such as Apache, Redis, MySQL/MariaDB and PHP-FPM.
 6. User configuration by layering, overrides and clones.
 7. Monitoring rules with logical conditions: `and`, `or`, `not`.
 8. Rule windows:
@@ -153,7 +153,7 @@ sermo/
 │   │   ├── render.go
 │   │   ├── variables.go
 │   │   └── validate.go
-│   ├── profiles/
+│   ├── daemons/
 │   │   ├── registry.go
 │   │   ├── resolver.go
 │   │   └── source.go
@@ -208,7 +208,7 @@ sermo/
 │   │   └── logger.go
 │   └── execx/
 │       └── runner.go
-├── profiles/
+├── daemons/
 │   ├── apache.yml
 │   ├── mysql.yml
 │   ├── mariadb.yml
@@ -228,7 +228,7 @@ sermo/
 ├── docs/
 │   ├── configuration.md
 │   ├── rules.md
-│   ├── profiles.md
+│   ├── daemons.md
 │   └── safety.md
 ├── go.mod
 ├── go.sum
@@ -246,16 +246,16 @@ Global configuration:
 /etc/sermo/sermo.yml
 ```
 
-Packaged profiles:
+Packaged daemons:
 
 ```text
-/usr/share/sermo/profiles/*.yml
+/usr/share/sermo/daemons/*.yml
 ```
 
-User profiles:
+User daemons:
 
 ```text
-/etc/sermo/apps-available/*.yml
+/etc/sermo/daemons-available/*.yml
 ```
 
 Enabled services:
@@ -289,7 +289,7 @@ Recommended complete layout:
 │   ├── 10-defaults.yml
 │   ├── 20-company.yml
 │   └── 90-local.yml
-├── apps-available/
+├── daemons-available/
 │   ├── apache-custom.yml
 │   └── mysql-custom.yml
 ├── apps-enabled/
@@ -310,9 +310,9 @@ engine:
   default_timeout: 10s
 
 paths:
-  profiles:
-    - /usr/share/sermo/profiles
-    - /etc/sermo/apps-available
+  daemons:
+    - /usr/share/sermo/daemons
+    - /etc/sermo/daemons-available
   includes:
     - /etc/sermo/apps-enabled
   runtime: /run/sermo
@@ -371,7 +371,7 @@ explicitly in the check definition instead of using a global lock directory.
 Sermo has two document kinds:
 
 ```yaml
-kind: profile
+kind: daemon
 ```
 
 and:
@@ -380,10 +380,10 @@ and:
 kind: service
 ```
 
-A profile is a reusable base definition.
+A daemon is a reusable base definition.
 A service is a concrete monitored instance.
 
-A service may use a profile:
+A service may use a daemon:
 
 ```yaml
 kind: service
@@ -402,15 +402,15 @@ clone: redis-main
 Resolution order:
 
 ```text
-1. Load packaged profiles from /usr/share/sermo/profiles.
-2. Load user profiles from /etc/sermo/apps-available.
+1. Load packaged daemons from /usr/share/sermo/daemons.
+2. Load user daemons from /etc/sermo/daemons-available.
 3. Load global configuration and conf.d files, producing one effective `defaults`
    block (sermo.yml layered with conf.d).
 4. Load included service documents and watch fragments from `paths.includes`.
 5. Resolve each service into a flat definition, lowest precedence first:
    a. Base layer: the effective global `defaults` (its stop_policy, policy and
       rule_window). This is the lowest precedence.
-   b. Apply the `uses` profile, or the `clone` chain, merged on top of the base.
+   b. Apply the `uses` daemon, or the `clone` chain, merged on top of the base.
    c. Merge the service's own fields (overrides) on top — highest precedence.
    d. Expand ${var} variables (section 10), once, after all merging.
    e. Validate the final flattened service.
@@ -419,7 +419,7 @@ Resolution order:
 Precedence, low to high:
 
 ```text
-global defaults  <  profile (uses) or clone source  <  service overrides
+global defaults  <  daemon (uses) or clone source  <  service overrides
 ```
 
 Only the per-service parts of `defaults` merge into a service: `stop_policy`,
@@ -432,7 +432,7 @@ The effective global `defaults.policy.cooldown` is required and must be positive
 so every resolved service inherits a loop-prevention cooldown unless it overrides
 that value with another positive duration.
 
-Because variable expansion is step 5d — after every merge — a default, profile or
+Because variable expansion is step 5d — after every merge — a default, daemon or
 override may be written with `${var}` and is resolved using the variables visible
 on the final flattened service.
 
@@ -440,7 +440,7 @@ on the final flattened service.
 taken in UNEXPANDED form:
 
 ```text
-- uses copies the named profile's definition (fields and its variables) with
+- uses copies the named daemon's definition (fields and its variables) with
   `${...}` still literal.
 - clone copies the source service's merged-but-unexpanded definition: the result
   of resolving that source through its own defaults/uses/clone/overrides, but
@@ -460,11 +460,11 @@ The daemon must only work with resolved, flat service definitions.
 
 ### Document sections
 
-A profile or service may contain these top-level sections, all maps keyed by
+A daemon or service may contain these top-level sections, all maps keyed by
 name where applicable:
 
 ```text
-description   optional human-readable label for the service or profile
+description   optional human-readable label for the service or daemon
 service       backend target name and backend selector
 aliases       per-backend candidate unit names (section 11)
 variables     string variables for ${...} expansion (section 10)
@@ -483,7 +483,7 @@ included in `config render`. It is informational: the engine never acts on it. I
 is a top-level scalar (not a map), inherited and overridable like any other field.
 
 `commands` is optional, informational metadata: named commands an operator may
-want to keep with the profile (for example a version command). The MVP loads and
+want to keep with the daemon (for example a version command). The MVP loads and
 validates them (array form, optional timeout) and `sermoctl service show` may
 display them, but the engine never runs them automatically as part of monitoring
 or remediation.
@@ -582,7 +582,7 @@ For MVP, `enabled: false` is required; `delete: true` is optional.
 
 ## 10. Variables
 
-Profiles may define variables:
+Daemons may define variables:
 
 ```yaml
 variables:
@@ -622,7 +622,7 @@ Expansion is a single pass and not recursive:
 ```
 
 Expansion runs after all merging (section 8, step 5d), so a value inherited from
-a default, profile or override is expanded with the variables visible on the
+a default, daemon or override is expanded with the variables visible on the
 final flattened service.
 
 ### Typed fields and variable interaction
@@ -801,7 +801,7 @@ rc-service SERVICE restart
 ### Unit aliases
 
 The unit name differs across distributions (Apache is `apache2` on Debian,
-`httpd` on RHEL). A profile may list per-backend candidate names with `aliases`:
+`httpd` on RHEL). A daemon may list per-backend candidate names with `aliases`:
 
 ```yaml
 service:
@@ -1594,8 +1594,8 @@ When a service defines no policy, the global `defaults.policy` applies (cooldown
 `5m` in the reference config), merged in as the base layer during resolution
 (section 8, step 5a).
 
-Validation is performed on the resolved service, after defaults, profiles,
-clones, overrides and variable expansion are applied. Therefore a profile or
+Validation is performed on the resolved service, after defaults, daemons,
+clones, overrides and variable expansion are applied. Therefore a daemon or
 service document may omit `policy.cooldown` if it inherits one, but the rendered
 service must contain a positive `policy.cooldown`. A value of `0s` is invalid:
 it disables the loop-prevention mechanism and must not be used as a way to opt
@@ -1917,7 +1917,7 @@ Support two categories:
 
 1. Named runtime lock files under `<paths.runtime>/locks`
    (default `/run/sermo/locks`).
-2. External lock checks defined in service profiles.
+2. External lock checks defined in daemon definitions.
 
 MVP scope:
 
@@ -2208,9 +2208,9 @@ stop_policy:
 
 ## 22. Stop and kill policy
 
-Any `stop_policy` field omitted by a profile or service inherits from
+Any `stop_policy` field omitted by a daemon or service inherits from
 `defaults.stop_policy` in the global config, which is merged in as the base layer
-during resolution (section 8, step 5a). Profiles should still state the timeouts
+during resolution (section 8, step 5a). Daemons should still state the timeouts
 that matter for that application explicitly, so the behavior is readable without
 cross-referencing the defaults.
 
@@ -2313,8 +2313,8 @@ sermoctl config validate [SERVICE]
 sermoctl config render SERVICE
 sermoctl config diff BASE SERVICE
 
-sermoctl profile list                 # post-MVP
-sermoctl profile show PROFILE         # post-MVP
+sermoctl daemon list                 # post-MVP
+sermoctl daemon show DAEMON          # post-MVP
 
 sermoctl service list                 # post-MVP
 sermoctl service show SERVICE         # post-MVP
@@ -2387,7 +2387,7 @@ Distinction between `2` and `78`:
 
 ```text
 1. Load global config.
-2. Load and resolve profiles/services into flat definitions.
+2. Load and resolve daemons/services into flat definitions.
 3. Detect the service backend.
 4. Start the scheduler: one independent worker per enabled service.
 5. Block until SIGTERM/SIGINT, then shut down cleanly.
@@ -2476,10 +2476,10 @@ Optional foreground mode only for MVP. Packaging can run it as a normal daemon u
 
 ---
 
-## 25. Example profile: Apache
+## 25. Example daemon: Apache
 
 ```yaml
-kind: profile
+kind: daemon
 name: apache
 type: webserver
 
@@ -2604,10 +2604,10 @@ rules:
 
 ---
 
-## 27. Example profile: MySQL
+## 27. Example daemon: MySQL
 
 ```yaml
-kind: profile
+kind: daemon
 name: mysql
 type: database
 
@@ -2751,10 +2751,10 @@ rules:
 
 ---
 
-## 28. Example profile: Redis
+## 28. Example daemon: Redis
 
 ```yaml
-kind: profile
+kind: daemon
 name: redis
 type: cache
 
@@ -2880,8 +2880,8 @@ either form works.
 - YAML syntax is valid.
 - Each document has kind and name.
 - Service names are unique.
-- Profile names are unique.
-- uses points to an existing profile.
+- Daemon names are unique.
+- uses points to an existing daemon.
 - clone points to an existing service.
 - Clone cycles are rejected.
 - Variables referenced with ${...} exist.
@@ -2925,16 +2925,16 @@ either form works.
 - commands entries use array form with an optional valid duration timeout.
 - postflight uses the same entry schema and check types as preflight/checks.
 - optional, where present on a preflight, postflight or check entry, is a boolean.
-- description, where present on a service or profile, is a string scalar.
+- description, where present on a service or daemon, is a string scalar.
 - command check expect_exit, where set, is an integer.
 - file_exists checks must not point under Sermo's named runtime lock directory
   (`<paths.runtime>/locks`, default `/run/sermo/locks`); the operation engine
   already checks named runtime locks. Point guard checks at a foreign lock/flag
   file Sermo does not own.
 - defaults.policy.cooldown must be present and a valid positive duration.
-- policy.cooldown, where set in a profile or service override, must be a valid
+- policy.cooldown, where set in a daemon or service override, must be a valid
   positive duration.
-- each resolved service must have policy.cooldown > 0 after defaults, profile or
+- each resolved service must have policy.cooldown > 0 after defaults, daemon or
   clone data, overrides and variables are applied.
 - policy.max_actions, if set, must be > 0 and requires policy.max_actions_window.
 - policy.max_actions_window, if set, must be a valid positive duration.
@@ -3046,7 +3046,7 @@ internal/config:
   - clone copies the source unexpanded: a cloned variable override changes ${var}
   - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
   - metric value parsing (percentage vs absolute, invalid value rejected)
-  - global defaults merge as base layer (defaults < profile < service overrides)
+  - global defaults merge as base layer (defaults < daemon < service overrides)
   - engine settings (interval, max_parallel_checks) are not merged into services
   - reject scope: system metric used in a remediation rule
   - unknown metric name for the declared scope is rejected
@@ -3205,7 +3205,7 @@ Implement:
 ```text
 - YAML models
 - load global config
-- load profiles
+- load daemons
 - load included services and watch fragments
 - merge rules
 - variable expansion

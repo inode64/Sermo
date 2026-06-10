@@ -26,7 +26,7 @@ type appReport struct {
 	Status      string `json:"status"`
 }
 
-// runApps lists the applications (profiles under profiles/apps): which are
+// runApps lists the applications (daemons under daemons/apps): which are
 // installed (their binary is present and executable), the version their version
 // command reports, and whether they resolve without error. Only installed apps
 // are shown unless `apps all` is given.
@@ -34,13 +34,13 @@ func (a App) runApps(ctx context.Context, opts options) int {
 	return a.listCategory(ctx, opts, config.CategoryApp, "apps", "installed applications")
 }
 
-// runLibs lists the library profiles (profiles/libs) services can watch for
+// runLibs lists the library daemons (daemons/libs) services can watch for
 // changes, with the version each reports and whether it is present.
 func (a App) runLibs(ctx context.Context, opts options) int {
 	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries")
 }
 
-// runServices lists the service profiles (profiles/services and the root): which
+// runServices lists the service daemons (daemons/services and the root): which
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {
@@ -56,8 +56,8 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	}
 
 	var reports []appReport
-	for _, name := range cfg.ProfilesInCategory(category) {
-		resolved, _ := cfg.ResolveProfile(name)
+	for _, name := range cfg.DaemonsInCategory(category) {
+		resolved, _ := cfg.ResolveDaemon(name)
 		r := a.inspectApp(ctx, name, resolved)
 		if !r.Installed && !includeMissing {
 			continue
@@ -73,7 +73,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	return exitSuccess
 }
 
-// inspectApp probes a single resolved profile: it stats the binary and, when
+// inspectApp probes a single resolved daemon: it stats the binary and, when
 // present, runs the version command to capture the version and confirm it runs.
 func (a App) inspectApp(ctx context.Context, name string, resolved config.Resolved) appReport {
 	r := appReport{
@@ -149,7 +149,7 @@ func (a App) printApps(reports []appReport, empty string) {
 	_ = tw.Flush()
 }
 
-// appBinary returns the resolved binary path of a profile: its preflight `binary`
+// appBinary returns the resolved binary path of a daemon: its preflight `binary`
 // check path when present, otherwise the `binary` variable.
 func appBinary(tree map[string]any) string {
 	if pf, ok := tree["preflight"].(map[string]any); ok {
@@ -165,7 +165,7 @@ func appBinary(tree map[string]any) string {
 	return ""
 }
 
-// versionCommand is a profile's resolved version command and the expectations its
+// versionCommand is a daemon's resolved version command and the expectations its
 // result must meet: the exit code and optional stdout/stderr matchers.
 type versionCommand struct {
 	argv       []string
@@ -174,7 +174,7 @@ type versionCommand struct {
 	stderr     checks.OutputMatcher
 }
 
-// appVersionCommand returns a profile's version command and outcome expectations,
+// appVersionCommand returns a daemon's version command and outcome expectations,
 // looked up in `preflight.version` then `commands.version`. argv is nil when no
 // version command is configured.
 func appVersionCommand(tree map[string]any) versionCommand {

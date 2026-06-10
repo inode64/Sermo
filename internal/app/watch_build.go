@@ -508,7 +508,7 @@ func hasNotifyAction(names []string) bool {
 }
 
 // serviceMonitorWatches synthesizes the per-service version/config monitors from
-// each resolved service's `version:`/`config:` blocks, reusing the profile's
+// each resolved service's `version:`/`config:` blocks, reusing the daemon's
 // `commands.version` and `preflight.config`. They are built once (like host
 // watches) so their on_change detection persists across cycles.
 func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
@@ -540,7 +540,7 @@ func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.D
 }
 
 // versionMonitor synthesizes a watch that alerts when the service's reported
-// version changes, using the profile's version command (preflight.version, then
+// version changes, using the daemon's version command (preflight.version, then
 // commands.version). nil when the service declares no `version.on_change`.
 func versionMonitor(name string, tree map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	notify, ok := onChangeNotify(tree["version"])
@@ -549,7 +549,7 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	}
 	cmd := versionCommandRaw(tree)
 	if cmd == nil {
-		return nil, "service " + name + ": version monitor needs commands.version (or preflight.version) in the profile"
+		return nil, "service " + name + ": version monitor needs commands.version (or preflight.version) in the daemon"
 	}
 	check, err := checks.BuildInline(name+":version", map[string]any{"type": "command", "command": cmd, "on_change": true}, monitorDeps(deps))
 	if err != nil {
@@ -559,7 +559,7 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 }
 
 // configMonitor synthesizes a watch that alerts when the service's config is
-// invalid (the profile's preflight.config test fails) or — with a `path` — when a
+// invalid (the daemon's preflight.config test fails) or — with a `path` — when a
 // config file changes. nil when the service declares no `config.on_change`.
 func configMonitor(name string, tree map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	block, _ := tree["config"].(map[string]any)
@@ -612,7 +612,7 @@ func versionCommandRaw(tree map[string]any) any {
 }
 
 // configTestCommandRaw returns the raw config-test argv from preflight.config (the
-// profile's, or the service's custom preflight that replaced it), or nil.
+// daemon's, or the service's custom preflight that replaced it), or nil.
 func configTestCommandRaw(tree map[string]any) any {
 	if pf, ok := tree["preflight"].(map[string]any); ok {
 		if entry, ok := pf["config"].(map[string]any); ok {

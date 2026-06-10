@@ -17,7 +17,7 @@ import (
 
 func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"profiles", "enabled", "run"} {
+	for _, sub := range []string{"daemons", "enabled", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -27,12 +27,12 @@ func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	baseCfg := fmt.Sprintf(`engine:
   interval: 100ms
 paths:
-  profiles: [%[1]q]
+  daemons: [%[1]q]
   includes: [%[2]q]
   runtime: %[3]q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "profiles"), enabled, filepath.Join(dir, "run"))
+`, filepath.Join(dir, "daemons"), enabled, filepath.Join(dir, "run"))
 
 	global := filepath.Join(dir, "sermo.yml")
 	service := func(name string) string {
@@ -119,7 +119,7 @@ checks:
 
 func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	dir := t.TempDir()
-	for _, sub := range []string{"profiles", "enabled", "run"} {
+	for _, sub := range []string{"daemons", "enabled", "run"} {
 		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -129,12 +129,12 @@ func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	valid := fmt.Sprintf(`engine:
   interval: 100ms
 paths:
-  profiles: [%q]
+  daemons: [%q]
   includes: [%q]
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "profiles"), enabled, filepath.Join(dir, "run"))
+`, filepath.Join(dir, "daemons"), enabled, filepath.Join(dir, "run"))
 	if err := os.WriteFile(global, []byte(valid), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -171,12 +171,12 @@ checks:
 	invalid := fmt.Sprintf(`engine:
   interval: notaduration
 paths:
-  profiles: [%q]
+  daemons: [%q]
   includes: [%q]
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
-`, filepath.Join(dir, "profiles"), enabled, filepath.Join(dir, "run"))
+`, filepath.Join(dir, "daemons"), enabled, filepath.Join(dir, "run"))
 	if err := os.WriteFile(global, []byte(invalid), 0o644); err != nil {
 		t.Fatal(err)
 	}

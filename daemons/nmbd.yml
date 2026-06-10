@@ -1,0 +1,10 @@
+kind: daemon
+name: nmbd
+display_name: "Samba NMB"
+description: "Servidor de ficheros Windows - NMB"
+service: nmbd
+variables:
+  binary: "/usr/sbin/nmbd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
