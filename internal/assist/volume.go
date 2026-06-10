@@ -132,21 +132,18 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 // chooseNotifiers asks which configured notifiers to alert. Returning nil means
 // "leave notify unset" so runtime inherits the global notify default. Selecting
 // "none" writes the reserved sentinel so the generated watch suppresses that
-// default. With no configured notifiers and no default it returns nil without
-// prompting.
+// default. The reserved "default" choice is always offered; when no global
+// default is configured it may still be useful for expand-only watches.
 func chooseNotifiers(p *Prompt, env Env) []string {
 	hasDefault := len(env.DefaultNotify) > 0
-	if len(env.Notifiers) == 0 && !hasDefault {
-		p.printf("  (no notifiers/default notify are configured; alerts will rely on the action below)\n")
-		return nil
-	}
 	options := make([]string, 0, len(env.Notifiers)+2)
 	options = append(options, "none (do not notify)")
 	options = append(options, env.Notifiers...)
-	defaultIndex := -1
+	defaultIndex := len(options)
 	if hasDefault {
-		defaultIndex = len(options)
-		options = append(options, "global default ("+strings.Join(env.DefaultNotify, ", ")+")")
+		options = append(options, "default (inherit global notify: "+strings.Join(env.DefaultNotify, ", ")+")")
+	} else {
+		options = append(options, "default (inherit global notify; not configured)")
 	}
 	idx := p.MultiChoose("Notify which targets?", options)
 	if slices.Contains(idx, 0) {
