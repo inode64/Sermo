@@ -219,6 +219,14 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 			"check": map[string]any{"type": "count", "path": "/tmp", "op": ">", "value": 100},
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/y.sh"}}},
 		},
+		"ws": map[string]any{
+			"check": map[string]any{"type": "websocket", "url": "ws://127.0.0.1/ws"},
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/z.sh"}}},
+		},
+		"automount": map[string]any{
+			"check": map[string]any{"type": "autofs"},
+			"then":  map[string]any{"hook": map[string]any{"command": []any{"/a.sh"}}},
+		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(warns) != 0 {
@@ -230,6 +238,11 @@ func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 	}
 	if h := byName["health"]; h == nil || !h.FireOnFail {
 		t.Fatalf("a tcp (health) watch should fire on failure: %+v", h)
+	}
+	for _, name := range []string{"ws", "automount"} {
+		if h := byName[name]; h == nil || !h.FireOnFail {
+			t.Fatalf("%s health watch should fire on failure: %+v", name, h)
+		}
 	}
 	if b := byName["backlog"]; b == nil || b.FireOnFail {
 		t.Fatalf("a count (condition) watch should fire on OK, not failure: %+v", b)

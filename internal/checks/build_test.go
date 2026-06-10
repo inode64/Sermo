@@ -64,6 +64,33 @@ func TestBuildTimeoutPerCheck(t *testing.T) {
 	}
 }
 
+func TestIsHealthType(t *testing.T) {
+	tests := []struct {
+		typ  string
+		want bool
+	}{
+		{"tcp", true},
+		{"ports", true},
+		{"autofs", true},
+		{"sqlite", true},
+		{"websocket", true},
+		{"ws", true},
+		{"mysql", true},
+		{"mariadb", true},
+		{"disk", false},
+		{"cert", false},
+		{"count", false},
+		{"sql", false},
+		{"mongodb-query", false},
+		{"unknown", false},
+	}
+	for _, tt := range tests {
+		if got := IsHealthType(tt.typ); got != tt.want {
+			t.Fatalf("IsHealthType(%q) = %v, want %v", tt.typ, got, tt.want)
+		}
+	}
+}
+
 func TestEvaluate(t *testing.T) {
 	// Optional failure does not block.
 	out := Evaluate([]Result{

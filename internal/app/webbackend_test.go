@@ -114,9 +114,11 @@ func TestWebBackendViewInterval(t *testing.T) {
 func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"binary": map[string]any{"check": map[string]any{"type": "binary"}},
+			"autofs": map[string]any{"check": map[string]any{"type": "autofs"}},
 			"count":  map[string]any{"check": map[string]any{"type": "count"}},
+			"mysql":  map[string]any{"check": map[string]any{"type": "mysql"}},
 			"ports":  map[string]any{"check": map[string]any{"type": "ports"}},
+			"ws":     map[string]any{"check": map[string]any{"type": "ws"}},
 		},
 	}}}
 
@@ -128,7 +130,7 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	for _, w := range b.Watches(context.Background()) {
 		got[w.Name] = w.FireOnFail
 	}
-	for _, name := range []string{"binary", "ports"} {
+	for _, name := range []string{"autofs", "mysql", "ports", "ws"} {
 		if !got[name] {
 			t.Fatalf("%s watch should be health-style: %v", name, got)
 		}

@@ -166,41 +166,13 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 // process are excluded: they need per-service context (backend status, a metric
 // sampler, process discovery) that the watch builder does not provide.
 func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
-	switch typ {
-	case "tcp":
-		if _, ok := cfgval.Int(fields["port"]); !ok {
-			add("%s.port is required and must be numeric for a tcp check", prefix)
-		}
-	case "ports":
-		validatePortsFields(prefix, fields, add)
-	case "http":
-		validateHTTPFields(prefix, fields, add)
-	case "command":
-		if !isStringArray(fields["command"]) {
-			add("%s.command must be an array, not a shell string", prefix)
-		}
-	case "binary":
-		if cfgval.String(fields["path"]) == "" {
-			add("%s.path is required for a binary check", prefix)
-		}
-	case "libraries":
-		if cfgval.String(fields["binary"]) == "" {
-			add("%s.binary is required for a libraries check", prefix)
-		}
-	case "file_exists":
-		p := cfgval.String(fields["path"])
-		if p == "" {
-			add("%s.path is required for a file_exists check", prefix)
-		} else if underDir(p, locksDir) {
-			add("%s.path must not point under the runtime lock dir %s", prefix, locksDir)
-		}
-	case "count":
-		validateCount(fields, prefix, add)
-	default:
+	if _, serviceScoped := serviceScopedWatchExclusions[typ]; serviceScoped {
 		return false
 	}
-	return true
+	return validateSingleShotCheckFields(prefix, typ, fields, locksDir, add)
 }
+
+var serviceScopedWatchExclusions = set("service", "metric", "process")
 
 // validateSwapCheck validates a swap watch: a non-empty metrics map of usage
 // (used_pct/free_pct/free_bytes thresholds) and/or io (per-cycle delta), each

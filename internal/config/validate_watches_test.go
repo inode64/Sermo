@@ -44,6 +44,53 @@ func TestValidateWatchesGood(t *testing.T) {
 	}
 }
 
+func TestValidateWatchesSingleShotParity(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"automount": map[string]any{
+				"check": map[string]any{"type": "autofs"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/autofs.sh"}}},
+			},
+			"sqlite": map[string]any{
+				"check": map[string]any{"type": "sqlite", "path": "/var/lib/app/app.db"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/sqlite.sh"}}},
+			},
+			"smtp": map[string]any{
+				"check": map[string]any{"type": "smtp", "host": "127.0.0.1"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/smtp.sh"}}},
+			},
+			"ws": map[string]any{
+				"check": map[string]any{"type": "websocket", "url": "ws://127.0.0.1/ws"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/ws.sh"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("single-shot watches should validate, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"metric": map[string]any{
+				"check": map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"service": map[string]any{
+				"check": map[string]any{"type": "service", "expect": "active"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, want := range []string{
+		`watches.metric.check.type "metric" is not supported`,
+		`watches.service.check.type "service" is not supported`,
+	} {
+		if !hasIssue(bad, want) {
+			t.Fatalf("missing issue %q in %v", want, bad)
+		}
+	}
+}
+
 func TestValidateFileWatchGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
