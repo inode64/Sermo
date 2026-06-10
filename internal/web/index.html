@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sermo</title>
 <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7'%20fill='%231a7f37'/%3E%3C/svg%3E">
-<style>
+<style nonce="{{CSP_NONCE}}">
   :root { color-scheme: light dark; }
   body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem; }
   h1 { font-size: 1.3rem; margin: 0 0 1rem; }
@@ -118,7 +118,7 @@
   <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
   <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
     <label class="muted" style="font-size:.85rem; white-space:nowrap;">Auto-refresh
-      <select id="refresh-select" onchange="setRefresh(this.value)" style="font: inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">
+      <select id="refresh-select" style="font: inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">
         <option value="5000">5s</option>
         <option value="10000">10s</option>
         <option value="30000">30s</option>
@@ -128,7 +128,7 @@
       </select>
     </label>
     <span id="last-refresh" class="muted" style="font-size:.8rem; white-space:nowrap;"></span>
-    <button onclick="refreshNow()" title="Refresh now" style="font:inherit; padding:.1rem .45rem; border-radius:.35rem; border:1px solid #8886; background:#8881; cursor:pointer;">&#x27F3;</button>
+    <button id="refresh-now" title="Refresh now" style="font:inherit; padding:.1rem .45rem; border-radius:.35rem; border:1px solid #8886; background:#8881; cursor:pointer;">&#x27F3;</button>
   </div>
 </div>
 <div id="system-status" class="muted" style="margin:-.5rem 0 .35rem; font-size:.9rem; display:flex; gap:.5rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
@@ -141,15 +141,15 @@
 <details id="services-section" open>
   <summary>Services</summary>
   <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
-    <input id="svc-search" type="search" placeholder="filter services…  ( / )" oninput="setSvcQuery(this.value)" onkeydown="if(event.key==='Escape'){this.value='';setSvcQuery('')}">
+    <input id="svc-search" type="search" placeholder="filter services…  ( / )">
     <span id="svc-filters">
-      <button data-f="all" class="f-active" onclick="setSvcStatus('all')">all</button>
-      <button data-f="active" onclick="setSvcStatus('active')">active</button>
-      <button data-f="inactive" onclick="setSvcStatus('inactive')">inactive</button>
-      <button data-f="failed" onclick="setSvcStatus('failed')">failed</button>
-      <button data-f="monitored" onclick="setSvcStatus('monitored')">monitored</button>
-      <button data-f="paused" onclick="setSvcStatus('paused')">paused</button>
-      <button data-f="disabled" onclick="setSvcStatus('disabled')">disabled</button>
+      <button data-f="all" class="f-active">all</button>
+      <button data-f="active">active</button>
+      <button data-f="inactive">inactive</button>
+      <button data-f="failed">failed</button>
+      <button data-f="monitored">monitored</button>
+      <button data-f="paused">paused</button>
+      <button data-f="disabled">disabled</button>
     </span>
     <span id="svc-count" class="muted"></span>
   </div>
@@ -157,14 +157,14 @@
   <table class="services-table">
     <thead>
       <tr>
-        <th class="sortable" data-sort="name" onclick="setSvcSort('name')">Service<span class="sort-ind" data-si="name"></span></th>
+        <th class="sortable" data-sort="name">Service<span class="sort-ind" data-si="name"></span></th>
         <th>Unit</th>
-        <th class="sortable" data-sort="status" onclick="setSvcSort('status')">Status<span class="sort-ind" data-si="status"></span></th>
-        <th class="sortable" data-sort="checks" onclick="setSvcSort('checks')">Checks<span class="sort-ind" data-si="checks"></span></th>
+        <th class="sortable" data-sort="status">Status<span class="sort-ind" data-si="status"></span></th>
+        <th class="sortable" data-sort="checks">Checks<span class="sort-ind" data-si="checks"></span></th>
         <th>Interval</th><th>Policy</th><th>Locks</th>
-        <th class="sortable" data-sort="last" onclick="setSvcSort('last')">Last event<span class="sort-ind" data-si="last"></span></th>
+        <th class="sortable" data-sort="last">Last event<span class="sort-ind" data-si="last"></span></th>
         <th>Next remediation</th>
-        <th class="sortable" data-sort="monitoring" onclick="setSvcSort('monitoring')">Monitoring<span class="sort-ind" data-si="monitoring"></span></th>
+        <th class="sortable" data-sort="monitoring">Monitoring<span class="sort-ind" data-si="monitoring"></span></th>
         <th class="actions">Actions</th>
       </tr>
     </thead>
@@ -186,14 +186,14 @@
 <details id="events-section" open>
   <summary>Events</summary>
   <div id="event-controls">
-    <input id="event-service" type="text" placeholder="service" onkeydown="eventFilterKey(event)">
-    <input id="event-watch" type="text" placeholder="watch" onkeydown="eventFilterKey(event)">
-    <input id="event-kind" type="text" placeholder="kind" onkeydown="eventFilterKey(event)">
-    <input id="event-status" type="text" placeholder="status" onkeydown="eventFilterKey(event)">
-    <label class="muted"><input id="event-errors" type="checkbox" onchange="loadEvents()"> only errors</label>
-    <label class="muted"><input id="event-group" type="checkbox" checked onchange="renderGlobalEvents()"> group actions</label>
-    <button onclick="loadEvents()">apply</button>
-    <button onclick="clearEventFilters()">clear</button>
+    <input id="event-service" type="text" placeholder="service">
+    <input id="event-watch" type="text" placeholder="watch">
+    <input id="event-kind" type="text" placeholder="kind">
+    <input id="event-status" type="text" placeholder="status">
+    <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
+    <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
+    <button id="event-apply">apply</button>
+    <button id="event-clear">clear</button>
     <span id="event-count" class="muted"></span>
   </div>
   <table class="events"><tbody id="events"></tbody></table>
@@ -266,22 +266,22 @@
   </div>
   <div id="confirm-body" class="modal-body"></div>
   <div class="modal-foot">
-    <button onclick="closeActionConfirm(false)">cancel</button>
-    <button id="confirm-preflight-btn" onclick="runConfirmPreflight()">run preflight</button>
-    <button id="confirm-action-btn" class="danger-btn" onclick="closeActionConfirm(true)">confirm</button>
+    <button data-confirm-result="false">cancel</button>
+    <button id="confirm-preflight-btn">run preflight</button>
+    <button id="confirm-action-btn" class="danger-btn" data-confirm-result="true">confirm</button>
   </div>
 </dialog>
 
 <details id="diag-section">
   <summary>Diagnostics
-    <button onclick="event.stopPropagation(); loadDiag()">refresh</button>
-    <button id="reload-btn" onclick="event.stopPropagation(); reloadConfig()" style="display:none">reload config</button>
+    <button id="diag-refresh">refresh</button>
+    <button id="reload-btn" style="display:none">reload config</button>
     <span class="muted" style="font-weight:400; font-size:.8rem; margin-left:.5rem">SIGHUP or systemctl reload sermod</span>
   </summary>
   <table class="events"><tbody id="diag"></tbody></table>
 </details>
 
-<script>
+<script nonce="{{CSP_NONCE}}">
 const $ = (s) => document.querySelector(s);
 
 let me = { can_act: true, role: "admin", auth: false };
@@ -518,10 +518,10 @@ function toggleEventMsg(key) {
 function eventMessageHTML(e, key) {
   const msg = e.message || "";
   if (msg.length <= 160 || eventExpanded.has(key)) {
-    const btn = msg.length > 160 ? ` <button onclick="toggleEventMsg('${esc(key)}')">less</button>` : "";
+    const btn = msg.length > 160 ? ` <button data-event-toggle="${esc(key)}">less</button>` : "";
     return `<span class="event-msg">${esc(msg)}${btn}</span>`;
   }
-  return `<span class="event-msg">${esc(msg.slice(0, 160))}<span class="muted">…</span> <button onclick="toggleEventMsg('${esc(key)}')">more</button></span>`;
+  return `<span class="event-msg">${esc(msg.slice(0, 160))}<span class="muted">…</span> <button data-event-toggle="${esc(key)}">more</button></span>`;
 }
 
 function eventSubject(e) {
@@ -566,7 +566,7 @@ function renderGlobalEvents() {
     const statuses = [...new Set(g.map((e) => e.status).filter(Boolean))].join(", ");
     const groupKey = `grp:${gi}:${eventGroupKey(head)}`;
     const open = eventExpanded.has(groupKey);
-    const row = `<tr class="event-group" onclick="toggleEventMsg('${esc(groupKey)}')">
+    const row = `<tr class="event-group" data-event-toggle="${esc(groupKey)}">
       <td colspan="4"><span class="exp">${open ? '▾' : '▸'}</span>${esc(who)} <span class="muted">${esc(action)} · ${g.length} event${g.length === 1 ? "" : "s"}${statuses ? " · " + esc(statuses) : ""}</span></td>
     </tr>`;
     return row + (open ? eventRows(g, true, { prefix: "group" + gi }) : "");
@@ -829,7 +829,7 @@ function renderAttention() {
       <span class="muted">${items.length} signal${items.length === 1 ? "" : "s"}</span>
     </div>
     <div class="attn-list">${items.map((it) => `
-      <button class="attn-item ${esc(it.level)}" onclick="openPanelTarget('${esc(it.target)}')">
+      <button class="attn-item ${esc(it.level)}" data-panel-target="${esc(it.target)}">
         <div class="attn-title ${it.level === "critical" ? "bad" : "inactive"}">${esc(it.title)}</div>
         ${it.detail ? `<div class="attn-detail">${esc(it.detail)}</div>` : ""}
       </button>
@@ -1030,12 +1030,12 @@ function renderServices() {
       mon = `<span class="status ${cls}">${label}</span>${s.monitored ? "" : monitorHint(s)}`;
       const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
-          <button ${busy || st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
-          <button ${busy || stopped ? "disabled" : ""} onclick="act('${esc(s.name)}','stop')">stop</button>
-          <button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','restart')">restart</button>
+          <button ${busy || st === "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
+          <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
+          <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
           ${s.monitored
-            ? `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
-            : `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
+            ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
+            : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
         : '<span class="muted">read-only</span>';
     }
     const label = s.display_name && s.display_name !== s.name
@@ -1044,8 +1044,8 @@ function renderServices() {
     const key = "svc:" + s.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" onclick="rowClick(event, '${esc(key)}')">
+    const name = `<a class="name" data-detail-service="${esc(s.name)}">${label}</a>`;
+    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${unitCell(s)}</td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
@@ -1106,7 +1106,7 @@ window.addEventListener("hashchange", () => { hashScrolled = false; applyHash();
 // rowClick expands a row from a click anywhere on it, except on interactive
 // elements (action buttons, the detail link) which keep their own behaviour.
 function rowClick(event, key) {
-  if (event.target.closest("button, a, input, select")) return;
+  if (closestFrom(event, "button, a, input, select")) return;
   toggleExpand(key);
 }
 
@@ -1241,7 +1241,7 @@ function renderWatches(watches) {
     const key = "wat:" + w.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const row = `<tr class="clickable" onclick="rowClick(event, '${esc(key)}')">
+    const row = `<tr class="clickable" data-exp-key="${esc(key)}">
       <td>${chev}${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
       <td>${esc(w.interval || "")}</td>
@@ -1381,13 +1381,13 @@ function lockBlocks(l) {
 
 function lockReleaseButton(l) {
   if (!me.can_act || !l.releaseable) return "";
-  return `<button class="danger-btn" onclick="releaseLock('${esc(l.service || "")}', '${esc(l.name || "")}')">release</button>`;
+  return `<button class="danger-btn" data-lock-release="1" data-lock-service="${esc(l.service || "")}" data-lock-name="${esc(l.name || "")}">release</button>`;
 }
 
 function lockServiceLink(l) {
   const svc = l.service || "";
   if (!svc) return '<span class="muted">—</span>';
-  return `<a class="name" onclick="detail('${esc(svc)}')">${esc(svc)}</a>`;
+  return `<a class="name" data-detail-service="${esc(svc)}">${esc(svc)}</a>`;
 }
 
 async function releaseLock(service, name) {
@@ -1791,7 +1791,7 @@ function renderDetail(d) {
   let latency = "";
   if (measured.length) {
     const checkBtns = measured.map((c) =>
-      `<button onclick="setMetricCheck('${esc(c.name)}')"${c.name === metricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ");
+      `<button data-metric-check="${esc(c.name)}"${c.name === metricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ");
     latency = `
     <h2>Latency <span class="muted">${checkBtns} &middot; ${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
     <div id="lat-summary" class="muted">loading…</div>
@@ -1823,7 +1823,7 @@ function renderDetail(d) {
   }
 
   $("#detail").innerHTML = `
-    <button class="close" onclick="closeDetail()">close</button>
+    <button class="close" data-close-detail="1">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
     <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
     ${disabledNote}
@@ -1832,15 +1832,15 @@ function renderDetail(d) {
     <h2>Rules</h2>
     ${renderRules(d.rules)}
     <h2>Config Review <span class="muted">
-      <button onclick="loadConfigRender('${esc(d.name)}','yaml')">YAML</button>
-      <button onclick="loadConfigRender('${esc(d.name)}','json')">JSON</button>
+      <button data-config-render="${esc(d.name)}" data-config-format="yaml">YAML</button>
+      <button data-config-render="${esc(d.name)}" data-config-format="json">JSON</button>
       <select id="config-base" style="font:inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">${configBaseOptions(d.name)}</select>
-      <button onclick="loadConfigDiff('${esc(d.name)}')">diff</button>
+      <button data-config-diff="${esc(d.name)}">diff</button>
     </span></h2>
     <div id="config-meta" class="muted">loading resolved config…</div>
     <pre id="config-render" class="config-view"></pre>
     <div id="config-diff" class="muted" style="margin-top:.6rem"></div>
-    <h2>Preflight ${me.can_act ? `<button onclick="runPreflight('${esc(d.name)}')">run</button>` : '<span class="muted">admin only</span>'}</h2>
+    <h2>Preflight ${me.can_act ? `<button data-preflight-service="${esc(d.name)}">run</button>` : '<span class="muted">admin only</span>'}</h2>
     <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
@@ -1976,7 +1976,7 @@ function setMetricWin(win) { metricWindow = win; if (current) detail(current); }
 
 function winButtons(list, selected, fn) {
   return list.map(([label, val]) =>
-    `<button onclick="${fn}('${val}')"${val === selected ? ' style="background:#8883"' : ''}>${label}</button>`).join(" ");
+    `<button data-window-kind="${esc(fn)}" data-window-value="${esc(val)}"${val === selected ? ' style="background:#8883"' : ''}>${label}</button>`).join(" ");
 }
 
 async function loadMetrics(name) {
@@ -2203,6 +2203,160 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function closestFrom(event, selector) {
+  let target = event.target;
+  if (target && target.nodeType !== 1) target = target.parentElement;
+  return target && target.closest ? target.closest(selector) : null;
+}
+
+function initStaticHandlers() {
+  const refreshSelect = $("#refresh-select");
+  if (refreshSelect) refreshSelect.addEventListener("change", () => setRefresh(refreshSelect.value));
+
+  const refreshButton = $("#refresh-now");
+  if (refreshButton) refreshButton.addEventListener("click", refreshNow);
+
+  const svcSearch = $("#svc-search");
+  if (svcSearch) {
+    svcSearch.addEventListener("input", () => setSvcQuery(svcSearch.value));
+    svcSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        svcSearch.value = "";
+        setSvcQuery("");
+      }
+    });
+  }
+
+  const svcFilters = $("#svc-filters");
+  if (svcFilters) {
+    svcFilters.addEventListener("click", (e) => {
+      const btn = closestFrom(e, "button[data-f]");
+      if (btn) setSvcStatus(btn.dataset.f || "all");
+    });
+  }
+
+  document.querySelectorAll(".services-table th.sortable[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => setSvcSort(th.dataset.sort || ""));
+  });
+
+  ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
+    const el = $("#" + id);
+    if (el) el.addEventListener("keydown", eventFilterKey);
+  });
+  const onlyErrors = $("#event-errors");
+  if (onlyErrors) onlyErrors.addEventListener("change", loadEvents);
+  const groupEvents = $("#event-group");
+  if (groupEvents) groupEvents.addEventListener("change", renderGlobalEvents);
+  const eventApply = $("#event-apply");
+  if (eventApply) eventApply.addEventListener("click", loadEvents);
+  const eventClear = $("#event-clear");
+  if (eventClear) eventClear.addEventListener("click", clearEventFilters);
+
+  document.querySelectorAll("[data-confirm-result]").forEach((btn) => {
+    btn.addEventListener("click", () => closeActionConfirm(btn.dataset.confirmResult === "true"));
+  });
+  const confirmPreflight = $("#confirm-preflight-btn");
+  if (confirmPreflight) confirmPreflight.addEventListener("click", runConfirmPreflight);
+
+  const diagRefresh = $("#diag-refresh");
+  if (diagRefresh) {
+    diagRefresh.addEventListener("click", (e) => {
+      e.stopPropagation();
+      loadDiag();
+    });
+  }
+  const reloadBtn = $("#reload-btn");
+  if (reloadBtn) {
+    reloadBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      reloadConfig();
+    });
+  }
+}
+
+function initDelegatedHandlers() {
+  document.addEventListener("click", (e) => {
+    const eventToggle = closestFrom(e, "[data-event-toggle]");
+    if (eventToggle) {
+      toggleEventMsg(eventToggle.dataset.eventToggle || "");
+      return;
+    }
+
+    const panelTarget = closestFrom(e, "[data-panel-target]");
+    if (panelTarget) {
+      openPanelTarget(panelTarget.dataset.panelTarget || "");
+      return;
+    }
+
+    const serviceAction = closestFrom(e, "[data-service-action][data-service]");
+    if (serviceAction) {
+      act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "");
+      return;
+    }
+
+    const detailLink = closestFrom(e, "[data-detail-service]");
+    if (detailLink) {
+      detail(detailLink.dataset.detailService || "");
+      return;
+    }
+
+    const release = closestFrom(e, "[data-lock-release]");
+    if (release) {
+      releaseLock(release.dataset.lockService || "", release.dataset.lockName || "");
+      return;
+    }
+
+    const close = closestFrom(e, "[data-close-detail]");
+    if (close) {
+      closeDetail();
+      return;
+    }
+
+    const render = closestFrom(e, "[data-config-render]");
+    if (render) {
+      loadConfigRender(render.dataset.configRender || "", render.dataset.configFormat || "yaml");
+      return;
+    }
+
+    const diff = closestFrom(e, "[data-config-diff]");
+    if (diff) {
+      loadConfigDiff(diff.dataset.configDiff || "");
+      return;
+    }
+
+    const preflight = closestFrom(e, "[data-preflight-service]");
+    if (preflight) {
+      runPreflight(preflight.dataset.preflightService || "");
+      return;
+    }
+
+    const metricCheckBtn = closestFrom(e, "[data-metric-check]");
+    if (metricCheckBtn) {
+      setMetricCheck(metricCheckBtn.dataset.metricCheck || "");
+      return;
+    }
+
+    const windowBtn = closestFrom(e, "[data-window-kind][data-window-value]");
+    if (windowBtn) {
+      const val = windowBtn.dataset.windowValue || "";
+      switch (windowBtn.dataset.windowKind) {
+        case "setWin":
+          setWin(val);
+          break;
+        case "setMetricWin":
+          setMetricWin(val);
+          break;
+      }
+      return;
+    }
+
+    const row = closestFrom(e, "[data-exp-key]");
+    if (row) rowClick(e, row.dataset.expKey || "");
+  });
+}
+
+initStaticHandlers();
+initDelegatedHandlers();
 loadMe().then(load);
 loadDiag();
 

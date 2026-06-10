@@ -175,6 +175,17 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "<html") {
 		t.Fatalf("dashboard is not HTML: %s", rec.Body.String()[:64])
 	}
+	if strings.Contains(rec.Body.String(), "{{CSP_NONCE}}") {
+		t.Fatal("dashboard still contains the CSP nonce placeholder")
+	}
+	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
+		t.Fatalf("dashboard did not receive CSP nonce attributes")
+	}
+	for _, inlineHandler := range []string{"onclick=", "onchange=", "oninput=", "onkeydown="} {
+		if strings.Contains(rec.Body.String(), inlineHandler) {
+			t.Fatalf("dashboard contains inline handler %q", inlineHandler)
+		}
+	}
 	// The dashboard must not be cached, or an upgraded binary's new sections
 	// (e.g. host watches) stay invisible behind a stale browser copy.
 	if cc := rec.Header().Get("Cache-Control"); cc != "no-cache" {
@@ -198,6 +209,13 @@ func TestSecurityHeaders(t *testing.T) {
 	}
 	if csp := rec.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "default-src 'self'") {
 		t.Errorf("Content-Security-Policy = %q, want it to contain default-src 'self'", csp)
+	}
+	csp := rec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, "script-src 'self' 'nonce-") {
+		t.Errorf("Content-Security-Policy = %q, want script-src nonce", csp)
+	}
+	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+		t.Errorf("Content-Security-Policy = %q, script-src must not allow unsafe-inline", csp)
 	}
 }
 
