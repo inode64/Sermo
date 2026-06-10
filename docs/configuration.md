@@ -991,6 +991,24 @@ never merge into a service.
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.
 
+`defaults.rule_window` is the **fallback firing window** for any rule that
+declares neither its own `for` nor `within` (see the rules section). It accepts:
+
+```yaml
+defaults:
+  rule_window:
+    cycles: 1            # how many cycles the window spans
+    mode: consecutive    # consecutive (a `for` window) | within (a sliding window)
+    # min_matches: 1     # only for mode: within — true at least this many times
+```
+
+`cycles: 1` + `mode: consecutive` is also the built-in default (fire the moment a
+rule's condition is true), so the shipped block is a no-op kept for documentation.
+Raise `cycles` (e.g. `3`) to require N consecutive true cycles before every
+window-less rule fires, or use `mode: within` with `min_matches` for a sliding
+window. A rule's own `for`/`within` always overrides the fallback, and like the
+other per-service defaults it can be overridden per profile or service.
+
 ## Resolution order
 
 A service is resolved into a flat definition, lowest precedence first:
