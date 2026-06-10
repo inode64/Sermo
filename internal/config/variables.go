@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -63,7 +64,7 @@ func firstExistingPath(candidates []any) string {
 // ${...} (no nested variables in the MVP, section 10).
 func validateVariableValues(vars map[string]string) []string {
 	var errs []string
-	for _, name := range sortedKeys(vars) {
+	for _, name := range slices.Sorted(maps.Keys(vars)) {
 		if varRef.MatchString(vars[name]) {
 			errs = append(errs, fmt.Sprintf("variable %s references another variable in its value %q (nested variables are not allowed)", name, vars[name]))
 		}
@@ -205,13 +206,4 @@ func scalarString(v any) string {
 	default:
 		return fmt.Sprintf("%v", t)
 	}
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

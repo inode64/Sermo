@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"sort"
 	"time"
 
@@ -263,7 +265,7 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 	}
 	every := map[string]int{}
 	var warnings []string
-	for _, name := range sortedKeys(section) {
+	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok {
 			continue
@@ -299,16 +301,6 @@ func dueChecks(cycle int, built []checks.Built, every map[string]int) []checks.B
 		}
 	}
 	return due
-}
-
-// sortedKeys returns the map keys sorted, for deterministic iteration.
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 // measurementRecorder returns a hook that records a freshly-run check's latency

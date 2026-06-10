@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
@@ -297,7 +298,7 @@ func normalizeKey(m map[string]any) string {
 // safe rather than silently proceed.
 func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {
 	for _, r := range ruleSet {
-		if r.Type != RuleGuard || !contains(r.Blocks, action) {
+		if r.Type != RuleGuard || !slices.Contains(r.Blocks, action) {
 			continue
 		}
 		ok, err := ev.Eval(ctx, r.If)

@@ -2,8 +2,9 @@ package diag
 
 import (
 	"fmt"
+	"maps"
 	"math"
-	"sort"
+	"slices"
 	"time"
 
 	"sermo/internal/config"
@@ -27,7 +28,7 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 		resolution = d
 	}
 	section, _ := resolved.Tree["checks"].(map[string]any)
-	for _, cn := range sortedKeys(section) {
+	for _, cn := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[cn].(map[string]any)
 		if !ok {
 			continue
@@ -44,7 +45,7 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 // interfaces, files/directories and mount points.
 func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host) {
 	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
-	for _, name := range sortedKeys(watches) {
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		entry, ok := watches[name].(map[string]any)
 		if !ok {
 			continue
@@ -145,13 +146,4 @@ func parseDuration(v any) time.Duration {
 func str(v any) string {
 	s, _ := v.(string)
 	return s
-}
-
-func sortedKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
