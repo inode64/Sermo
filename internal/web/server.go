@@ -114,8 +114,9 @@ type DiskWatchInfo struct {
 
 // Notifier is a configured notification target referenced by watches.
 type Notifier struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Enabled bool   `json:"enabled"`
 }
 
 // DaemonInfo provides a summary of the running daemon configuration
