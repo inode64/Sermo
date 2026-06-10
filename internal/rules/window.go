@@ -1,6 +1,9 @@
 package rules
 
-import "fmt"
+import (
+	"fmt"
+	"sermo/internal/cfgval"
+)
 
 // WindowState tracks a rule's condition history across cycles so for/within
 // windows can be evaluated (section 15). One instance per rule per service,
@@ -115,7 +118,7 @@ func ParseForWindow(v any) *ForWindow {
 	if !ok {
 		return nil
 	}
-	cycles, _ := parseInt(m["cycles"])
+	cycles, _ := cfgval.Int(m["cycles"])
 	return &ForWindow{Cycles: cycles}
 }
 
@@ -126,8 +129,8 @@ func ParseWithinWindow(v any) *WithinWindow {
 	if !ok {
 		return nil
 	}
-	cycles, _ := parseInt(m["cycles"])
-	matches, _ := parseInt(m["min_matches"])
+	cycles, _ := cfgval.Int(m["cycles"])
+	matches, _ := cfgval.Int(m["min_matches"])
 	return &WithinWindow{Cycles: cycles, MinMatches: matches}
 }
 
@@ -158,13 +161,13 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 	if !ok {
 		return nil, nil
 	}
-	cycles, _ := parseInt(m["cycles"])
+	cycles, _ := cfgval.Int(m["cycles"])
 	if cycles <= 0 {
 		return nil, nil
 	}
-	switch asString(m["mode"]) {
+	switch cfgval.AsString(m["mode"]) {
 	case "within", "sliding":
-		matches, _ := parseInt(m["min_matches"])
+		matches, _ := cfgval.Int(m["min_matches"])
 		if matches <= 0 {
 			matches = 1
 		}

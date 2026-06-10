@@ -1,6 +1,9 @@
 package process
 
-import "time"
+import (
+	"sermo/internal/cfgval"
+	"time"
+)
 
 // KillSelector is a stop_policy.kill_only_if selector. A process is killable
 // only if its real UID matches one of Users AND its resolved exe exactly matches
@@ -65,14 +68,14 @@ func ParseStopPolicy(tree map[string]any) (KillPolicy, []string) {
 		policy.ForceKill = b
 	}
 	if koi, ok := sp["kill_only_if"].(map[string]any); ok {
-		policy.KillOnlyIf.Users = stringList(koi["users"])
-		policy.KillOnlyIf.ExeAny = stringList(koi["exe_any"])
+		policy.KillOnlyIf.Users = cfgval.StringList(koi["users"])
+		policy.KillOnlyIf.ExeAny = cfgval.StringList(koi["exe_any"])
 	}
 	return policy, warnings
 }
 
 func parseDuration(v any, field string, warnings *[]string) time.Duration {
-	s := asString(v)
+	s := cfgval.AsString(v)
 	if s == "" {
 		return 0
 	}
@@ -82,22 +85,4 @@ func parseDuration(v any, field string, warnings *[]string) time.Duration {
 		return 0
 	}
 	return d
-}
-
-func stringList(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
 }

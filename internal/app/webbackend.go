@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/diag"
@@ -200,7 +201,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			ctype := ""
 			fireOnFail := false
 			if ce, ok := entry["check"].(map[string]any); ok {
-				ctype = stringField(ce["type"])
+				ctype = cfgval.AsString(ce["type"])
 			}
 			// Determine polarity from check type (same logic as watch_build.go isHealthCheckType / FireOnFail)
 			switch ctype {
@@ -245,7 +246,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if raw, ok := cfg.Global.Raw["notifiers"].(map[string]any); ok && len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
-			typ := stringField(entry["type"])
+			typ := cfgval.AsString(entry["type"])
 			wn := &webNotifier{name: name, typ: typ}
 			wb.notifiers[name] = wn
 			wb.notifierOrder = append(wb.notifierOrder, name)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sermo/internal/cfgval"
 	"strings"
 	"testing"
 )
@@ -89,18 +90,18 @@ checks:
 	if got := http["url"]; got != "http://127.0.0.1:8080/" {
 		t.Errorf("url = %v, want override expanded", got)
 	}
-	if got := scalarString(http["expect_status"]); got != "200" {
+	if got := cfgval.String(http["expect_status"]); got != "200" {
 		t.Errorf("expect_status = %v, want inherited 200", got)
 	}
 	policy := nested(t, resolved.Tree, "policy")
-	if got := scalarString(policy["cooldown"]); got != "5m" {
+	if got := cfgval.String(policy["cooldown"]); got != "5m" {
 		t.Errorf("cooldown = %v, want default 5m", got)
 	}
-	if got := scalarString(policy["max_actions"]); got != "3" {
+	if got := cfgval.String(policy["max_actions"]); got != "3" {
 		t.Errorf("max_actions = %v, want profile 3", got)
 	}
 	stop := nested(t, resolved.Tree, "stop_policy")
-	if got := scalarString(stop["graceful_timeout"]); got != "30s" {
+	if got := cfgval.String(stop["graceful_timeout"]); got != "30s" {
 		t.Errorf("graceful_timeout = %v, want default 30s", got)
 	}
 }
@@ -136,7 +137,7 @@ variables:
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
 	ping := nested(t, resolved.Tree, "checks", "ping")
-	if got := scalarString(ping["port"]); got != "6380" {
+	if got := cfgval.String(ping["port"]); got != "6380" {
 		t.Errorf("cloned port = %v, want overridden 6380", got)
 	}
 }
@@ -207,10 +208,10 @@ variables:
 		if len(errs) != 0 {
 			t.Fatalf("Resolve(%s) errors = %v", name, errs)
 		}
-		if got := scalarString(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != w.port {
+		if got := cfgval.String(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != w.port {
 			t.Errorf("%s tcp.port = %q, want %q", name, got, w.port)
 		}
-		if got := scalarString(nested(t, resolved.Tree, "processes", "pidfile")["path"]); got != w.pidfile {
+		if got := cfgval.String(nested(t, resolved.Tree, "processes", "pidfile")["path"]); got != w.pidfile {
 			t.Errorf("%s pidfile.path = %q, want %q", name, got, w.pidfile)
 		}
 		cmd, _ := nested(t, resolved.Tree, "checks", "config")["command"].([]any)
@@ -562,7 +563,7 @@ rules:
 			t.Fatalf("Resolve(%q) errors = %v", service, errs)
 		}
 		then := nested(t, resolved.Tree, "rules", rule, "then")
-		if got := scalarString(then["message"]); got != want {
+		if got := cfgval.String(then["message"]); got != want {
 			t.Errorf("%s message = %q, want %q", service, got, want)
 		}
 	}
@@ -673,7 +674,7 @@ func TestMergeMapsRecursive(t *testing.T) {
 	if policy["cooldown"] != "5m" {
 		t.Errorf("cooldown = %v, want 5m", policy["cooldown"])
 	}
-	if scalarString(policy["max_actions"]) != "3" {
+	if cfgval.String(policy["max_actions"]) != "3" {
 		t.Errorf("max_actions = %v, want preserved 3", policy["max_actions"])
 	}
 	// Source must not be aliased into the result.
@@ -756,11 +757,11 @@ rules:
 		t.Fatalf("Resolve() errors = %v (runtime vars must not error)", errs)
 	}
 	// ${host} falls back to the hostname (no user-defined host variable).
-	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "myhost" {
+	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "myhost" {
 		t.Errorf("ping host = %q, want myhost", got)
 	}
 	// ${service} → the backend unit name; ${host} resolved; runtime vars deferred.
-	msg := scalarString(nested(t, resolved.Tree, "rules", "alert-down", "then")["message"])
+	msg := cfgval.String(nested(t, resolved.Tree, "rules", "alert-down", "then")["message"])
 	if !strings.Contains(msg, "nginx on myhost") {
 		t.Errorf("message = %q, want service/host substituted", msg)
 	}
@@ -789,7 +790,7 @@ checks:
 		t.Fatalf("Load() error = %v", err)
 	}
 	resolved, _ := cfg.Resolve("web")
-	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "127.0.0.1" {
+	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["host"]); got != "127.0.0.1" {
 		t.Errorf("ping host = %q, want user-defined 127.0.0.1", got)
 	}
 }
@@ -815,7 +816,7 @@ checks:
 	if len(errs) != 0 {
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
-	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "6379" {
+	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "6379" {
 		t.Errorf("ping port = %q, want 6379 (from top-level port)", got)
 	}
 }
@@ -839,7 +840,7 @@ checks:
 		t.Fatalf("Load() error = %v", err)
 	}
 	resolved, _ := cfg.Resolve("db")
-	if got := scalarString(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "7000" {
+	if got := cfgval.String(nested(t, resolved.Tree, "checks", "ping")["port"]); got != "7000" {
 		t.Errorf("ping port = %q, want user-defined 7000", got)
 	}
 }
@@ -913,13 +914,13 @@ policy:
 
 	// checks.http: branch merged with its siblings (timeout kept, url added).
 	http := nested(t, body, "checks", "http")
-	if scalarString(http["timeout"]) != "5s" || scalarString(http["url"]) != "http://localhost/gentoo" {
+	if cfgval.String(http["timeout"]) != "5s" || cfgval.String(http["url"]) != "http://localhost/gentoo" {
 		t.Errorf("checks.http = %v, want timeout 5s + gentoo url", http)
 	}
 
 	// policy: gentoo absent → the default branch applies.
 	policy := body["policy"].(map[string]any)
-	if scalarString(policy["cooldown"]) != "9m" {
+	if cfgval.String(policy["cooldown"]) != "9m" {
 		t.Errorf("policy.cooldown = %v, want default 9m", policy["cooldown"])
 	}
 }
@@ -985,7 +986,7 @@ preflight:
 		t.Fatalf("ResolveProfile() errors = %v", errs)
 	}
 	bin := nested(t, resolved.Tree, "preflight", "binary")
-	if scalarString(bin["path"]) != "/usr/bin/qemu-system-aarch64" {
+	if cfgval.String(bin["path"]) != "/usr/bin/qemu-system-aarch64" {
 		t.Errorf("resolved binary path = %v, want /usr/bin/qemu-system-aarch64", bin["path"])
 	}
 }
@@ -1046,11 +1047,11 @@ restart_on_change:
 		t.Errorf("restart_on_change should be desugared away")
 	}
 	then := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "then")
-	if scalarString(then["action"]) != "restart" {
+	if cfgval.String(then["action"]) != "restart" {
 		t.Errorf("generated rule action = %v, want restart", then["action"])
 	}
 	changed := nested(t, resolved.Tree, "rules", "restart-on-change-glibc", "if", "changed")
-	if scalarString(changed["path"]) != "/lib64/libc.so.6" {
+	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
 		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
 	}
 }
@@ -1354,7 +1355,7 @@ service: { name: php-fpm }
 		t.Fatalf("Resolve(site) errors = %v", errs)
 	}
 	then := nested(t, resolved.Tree, "rules", "block-bad-config", "then")
-	if got := scalarString(then["message"]); got != "PHP-FPM 8.3 configuration is invalid" {
+	if got := cfgval.String(then["message"]); got != "PHP-FPM 8.3 configuration is invalid" {
 		t.Errorf("message = %q, want %q", got, "PHP-FPM 8.3 configuration is invalid")
 	}
 }

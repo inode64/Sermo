@@ -3,6 +3,7 @@ package checks
 import (
 	"fmt"
 	"regexp"
+	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 )
@@ -62,9 +63,9 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 	if !ok {
 		return "", "", ""
 	}
-	op = asString(lat["op"])
+	op = cfgval.AsString(lat["op"])
 	if !validCompareOp(op) {
 		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, =~"
 	}
-	return op, scalarString(lat["value"]), ""
+	return op, cfgval.String(lat["value"]), ""
 }

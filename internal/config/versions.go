@@ -3,6 +3,7 @@ package config
 import (
 	"path/filepath"
 	"regexp"
+	"sermo/internal/cfgval"
 	"sort"
 	"strings"
 )
@@ -75,7 +76,7 @@ func (c *Config) materializeVersionTemplates() {
 // (e.g. /usr/sbin/php-fpm) while discovering from a slot-specific path.
 func versionDiscoverySource(body map[string]any) string {
 	if v, ok := body["versions"].(map[string]any); ok {
-		if from := scalarString(v["from"]); from != "" {
+		if from := cfgval.String(v["from"]); from != "" {
 			return from
 		}
 	}
@@ -88,7 +89,7 @@ func versionDiscoverySource(body map[string]any) string {
 func (c *Config) templateBody(tmpl *Document) map[string]any {
 	body := stripMeta(tmpl.Body)
 	body["kind"] = kindProfile
-	if base := scalarString(tmpl.Body["uses"]); base != "" {
+	if base := cfgval.String(tmpl.Body["uses"]); base != "" {
 		if src, ok := c.Profiles[base]; ok {
 			body = mergeMaps(stripMeta(src.Body), body)
 			body["kind"] = kindProfile
@@ -100,7 +101,7 @@ func (c *Config) templateBody(tmpl *Document) map[string]any {
 // profileBinary returns the raw (unexpanded) `binary` variable of a profile body.
 func profileBinary(body map[string]any) string {
 	if vars, ok := body["variables"].(map[string]any); ok {
-		return scalarString(vars["binary"])
+		return cfgval.String(vars["binary"])
 	}
 	return ""
 }

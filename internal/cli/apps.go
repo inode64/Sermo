@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 )
@@ -147,13 +147,13 @@ func (a App) printApps(reports []appReport, empty string) {
 func appBinary(tree map[string]any) string {
 	if pf, ok := tree["preflight"].(map[string]any); ok {
 		if bin, ok := pf["binary"].(map[string]any); ok {
-			if p := asString(bin["path"]); p != "" {
+			if p := cfgval.AsString(bin["path"]); p != "" {
 				return p
 			}
 		}
 	}
 	if vars, ok := tree["variables"].(map[string]any); ok {
-		return asString(vars["binary"])
+		return cfgval.AsString(vars["binary"])
 	}
 	return ""
 }
@@ -170,7 +170,7 @@ func appVersionCommand(tree map[string]any) ([]string, int) {
 		if !ok {
 			continue
 		}
-		argv := asStringSlice(entry["command"])
+		argv := cfgval.StringList(entry["command"])
 		if len(argv) == 0 {
 			continue
 		}
@@ -183,44 +183,9 @@ func appVersionCommand(tree map[string]any) ([]string, int) {
 	return nil, 0
 }
 
-func asString(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-func asStringSlice(v any) []string {
-	switch t := v.(type) {
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case string:
-		if t != "" {
-			return []string{t}
-		}
-	}
-	return nil
-}
-
 func asInt(v any) int {
-	switch t := v.(type) {
-	case int:
-		return t
-	case int64:
-		return int(t)
-	case uint64:
-		return int(t)
-	case float64:
-		return int(t)
-	case string:
-		n, _ := strconv.Atoi(t)
-		return n
-	}
-	return 0
+	n, _ := cfgval.Int(v)
+	return n
 }
 
 func firstNonEmptyLine(s string) string {

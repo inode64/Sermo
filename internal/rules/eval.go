@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/metrics"
 )
@@ -120,7 +121,7 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 	if err != nil {
 		return checks.Result{}, err
 	}
-	if ref := asString(m["check"]); ref != "" {
+	if ref := cfgval.AsString(m["check"]); ref != "" {
 		res, ok := e.Cache[ref]
 		if !ok {
 			return checks.Result{}, fmt.Errorf("unknown check %q", ref)
@@ -140,7 +141,7 @@ func (e *Evaluator) evalFile(ctx context.Context, v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	path := asString(m["path"])
+	path := cfgval.AsString(m["path"])
 	if path == "" {
 		return false, fmt.Errorf("file condition requires a path")
 	}
@@ -160,7 +161,7 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	state := asString(m["state"])
+	state := cfgval.AsString(m["state"])
 	if state == "" {
 		return false, fmt.Errorf("service condition requires a state")
 	}
@@ -182,11 +183,11 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 	if e.Deps.Processes == nil {
 		return false, nil
 	}
-	want := asString(m["state"])
+	want := cfgval.AsString(m["state"])
 	if want == "" {
 		want = "running"
 	}
-	return e.Deps.Processes(asString(m["exe"]), asString(m["user"])) == want, nil
+	return e.Deps.Processes(cfgval.AsString(m["exe"]), cfgval.AsString(m["user"])) == want, nil
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold
@@ -200,15 +201,15 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 	if e.Deps.Metrics == nil {
 		return false, nil
 	}
-	scope := asString(m["scope"])
+	scope := cfgval.AsString(m["scope"])
 	if scope == "" {
 		scope = "service"
 	}
-	reading, ok := e.Deps.Metrics(scope, asString(m["name"]))
+	reading, ok := e.Deps.Metrics(scope, cfgval.AsString(m["name"]))
 	if !ok {
 		return false, nil
 	}
-	return metrics.Compare(reading, asString(m["op"]), scalarString(m["value"]))
+	return metrics.Compare(reading, cfgval.AsString(m["op"]), cfgval.String(m["value"]))
 }
 
 // evalChanged is true when the watched file's fingerprint differs from the
@@ -219,7 +220,7 @@ func (e *Evaluator) evalChanged(v any) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	path := asString(m["path"])
+	path := cfgval.AsString(m["path"])
 	if path == "" {
 		return false, fmt.Errorf("changed condition requires a path")
 	}

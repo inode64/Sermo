@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/conn"
 )
 
@@ -186,26 +187,26 @@ func (c connCheck) evalExpect(res conn.Result) string {
 // buildConnCheck builds a connection-protocol check for a registered protocol.
 // The password arrives already resolved from ${env:...} by the config loader.
 func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, string) {
-	user := asString(entry["user"])
+	user := cfgval.AsString(entry["user"])
 	if user == "" && proto.RequiresUser() {
 		return nil, proto.Name() + " check requires a user"
 	}
-	host := asString(entry["host"])
+	host := cfgval.AsString(entry["host"])
 	if host == "" {
 		host = "127.0.0.1"
 	}
 	port := proto.DefaultPort()
-	if p, ok := intField(entry["port"]); ok {
+	if p, ok := cfgval.Int(entry["port"]); ok {
 		port = p
 	}
 	cfg := conn.Config{
 		Host:     host,
 		Port:     port,
-		Socket:   asString(entry["socket"]),
+		Socket:   cfgval.AsString(entry["socket"]),
 		User:     user,
-		Password: asString(entry["password"]),
-		Database: asString(entry["database"]),
-		Query:    asString(entry["query"]),
+		Password: cfgval.AsString(entry["password"]),
+		Database: cfgval.AsString(entry["database"]),
+		Query:    cfgval.AsString(entry["query"]),
 		TLS:      tlsString(entry["tls"]),
 		// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
 		// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
@@ -214,7 +215,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// Scoped to dhcp so it never leaks into the driver params other protocols pass
 	// through cfg.Params. Its egress interface uses the shared cfg.Interface.
 	if proto.Name() == "dhcp" {
-		if mac := asString(entry["mac"]); mac != "" {
+		if mac := cfgval.AsString(entry["mac"]); mac != "" {
 			if _, err := net.ParseMAC(mac); err != nil {
 				return nil, fmt.Sprintf("dhcp check: invalid mac %q", mac)
 			}
@@ -224,7 +225,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// openvpn defaults to UDP; `transport: tcp` selects TCP (length-prefixed
 	// framing). Scoped here so it never leaks into other protocols' params.
 	if proto.Name() == "openvpn" {
-		if tr := strings.ToLower(asString(entry["transport"])); tr != "" {
+		if tr := strings.ToLower(cfgval.AsString(entry["transport"])); tr != "" {
 			if tr != "udp" && tr != "tcp" {
 				return nil, fmt.Sprintf("openvpn check: transport must be udp or tcp, got %q", tr)
 			}
@@ -235,12 +236,12 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// defaults it to the target database, then admin. Scoped here so it never leaks
 	// into other protocols' params.
 	if proto.Name() == "mongodb" {
-		if as := asString(entry["auth_source"]); as != "" {
+		if as := cfgval.AsString(entry["auth_source"]); as != "" {
 			cfg.Params = map[string]string{"auth_source": as}
 		}
 	}
 	// libvirt defaults to the local Unix socket; an explicit host selects TCP.
-	if proto.Name() == "libvirt" && cfg.Socket == "" && asString(entry["host"]) == "" {
+	if proto.Name() == "libvirt" && cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
 		cfg.Socket = "/var/run/libvirt/libvirt-sock"
 	}
 	// acpid is socket-only; default to its well-known event socket.
@@ -259,7 +260,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// (socket path or full address), stored in Socket so the check message shows
 	// it instead of host:port.
 	if proto.Name() == "dbus" || proto.Name() == "avahi" {
-		cfg.Socket = conn.DBusAddress(asString(entry["socket"]), asString(entry["query"]))
+		cfg.Socket = conn.DBusAddress(cfgval.AsString(entry["socket"]), cfgval.AsString(entry["query"]))
 	}
 	c := connCheck{base: b, proto: proto, cfg: cfg, probe: proto.Probe}
 	// Optional response assertions: a mapping of field -> value | {op, value},
@@ -276,8 +277,8 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		return nil, proto.Name() + " check: " + lwarn
 	}
 	c.latencyOp, c.latencyValue = lop, lval
-	c.onChange = asBool(entry["on_change"])
-	c.onVersionChange = asBool(entry["on_version_change"])
+	c.onChange = cfgval.Bool(entry["on_change"])
+	c.onVersionChange = cfgval.Bool(entry["on_version_change"])
 	if c.onChange || c.onVersionChange {
 		c.state = &connState{}
 	}
