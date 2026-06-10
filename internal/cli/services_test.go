@@ -41,7 +41,7 @@ preflight: { binary: { type: binary, path: "${binary}" } }
 	write(filepath.Join(appsDir, "git.yml"), "kind: profile\nname: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], enabled: [ %s ], runtime: /run/sermo }
+paths: { profiles: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, profilesDir, enabledDir))
 	global := filepath.Join(root, "sermo.yml")

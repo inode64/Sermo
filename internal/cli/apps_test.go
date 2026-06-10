@@ -93,7 +93,7 @@ preflight:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], enabled: [ %s ], runtime: /run/sermo }
+paths: { profiles: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, profilesDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)

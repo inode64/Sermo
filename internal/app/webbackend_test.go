@@ -432,7 +432,7 @@ func TestWebBackendConfigRenderAndDiff(t *testing.T) {
 	if err := os.WriteFile(globalPath, []byte(`
 paths:
   profiles: [`+profiles+`]
-  enabled: [`+enabled+`]
+  includes: [`+enabled+`]
 defaults:
   policy:
     cooldown: 5m
@@ -531,7 +531,7 @@ func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	cfgContent := `
 paths:
   profiles: []
-  enabled: []
+  includes: []
   runtime: /tmp
 defaults:
   policy:

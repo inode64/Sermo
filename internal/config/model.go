@@ -97,7 +97,7 @@ type Global struct {
 	Raw      map[string]any
 	Defaults map[string]any
 	Profiles []string
-	Enabled  []string
+	Includes []string
 	Runtime  string
 	State    string
 }

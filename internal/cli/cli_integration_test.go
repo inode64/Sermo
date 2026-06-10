@@ -110,7 +110,7 @@ func TestIntegrationRestartViaFakeSystemctl(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
-  enabled: [ `+root+`/enabled ]
+  includes: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy: { cooldown: 5m }
@@ -145,7 +145,7 @@ func TestIntegrationRestartBlockedByGuard(t *testing.T) {
 	}
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
-  enabled: [ `+root+`/enabled ]
+  includes: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy: { cooldown: 5m }

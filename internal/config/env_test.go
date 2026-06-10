@@ -72,7 +72,7 @@ checks:
 func TestGlobalEnvSecret(t *testing.T) {
 	t.Setenv("SMTP_DSN", "smtp://user:pw@mail.example.com:587")
 	global := writeConfig(t, map[string]string{"sermo.yml": `
-paths: { enabled: [ @ROOT@/enabled ] }
+paths: { includes: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 notifiers:
   ops:

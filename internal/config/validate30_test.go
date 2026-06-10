@@ -36,7 +36,7 @@ engine:
   max_parallel_checks: 0
   max_parallel_operations: -1
 paths:
-  enabled: [ @ROOT@/enabled ]
+  includes: [ @ROOT@/enabled ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -61,7 +61,7 @@ func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
 engine:
   operation_timeout: 90s
 paths:
-  enabled: [ @ROOT@/enabled ]
+  includes: [ @ROOT@/enabled ]
 defaults:
   policy: { cooldown: 5m }
 `})

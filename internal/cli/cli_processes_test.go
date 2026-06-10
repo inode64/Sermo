@@ -18,7 +18,7 @@ func writeProcessConfig(t *testing.T, pidfile string) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  enabled: [ `+root+`/enabled ]
+  includes: [ `+root+`/enabled ]
 defaults:
   policy:
     cooldown: 5m

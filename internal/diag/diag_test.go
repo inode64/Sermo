@@ -63,7 +63,7 @@ func has(r Result, level Level, substr string) bool {
 
 const baseGlobal = `
 engine: { backend: auto, interval: 30s }
-paths: { enabled: [ @ROOT@/enabled ], state: @ROOT@/state }
+paths: { includes: [ @ROOT@/enabled ], state: @ROOT@/state }
 defaults: { policy: { cooldown: 5m } }
 `
 
