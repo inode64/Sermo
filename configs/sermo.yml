@@ -36,16 +36,6 @@ paths:
   state: /var/lib/sermo
 
 defaults:
-  # Fallback firing window for any rule that declares neither `for` nor `within`.
-  # `cycles: 1` + `mode: consecutive` is also the built-in default (fire the
-  # moment a rule's condition is true), so these values are a no-op shown for
-  # documentation. Raise `cycles` (e.g. 3) to require N consecutive true cycles,
-  # or set `mode: within` with `min_matches` for a sliding window, and every rule
-  # without its own window inherits it.
-  rule_window:
-    cycles: 1
-    mode: consecutive
-
   stop_policy:
     graceful_timeout: 30s
     term_timeout: 15s
