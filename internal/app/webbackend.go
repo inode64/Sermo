@@ -1653,8 +1653,8 @@ func (b *WebBackend) configSources(name string) []string {
 			addService(clone)
 		}
 		if uses := webScalarString(doc.Body["uses"]); uses != "" {
-			if profile := b.cfg.Profiles[uses]; profile != nil {
-				add(profile.Path)
+			if daemon := b.cfg.Daemons[uses]; daemon != nil {
+				add(daemon.Path)
 			}
 		}
 		add(doc.Path)

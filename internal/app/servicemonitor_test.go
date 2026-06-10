@@ -33,7 +33,7 @@ func TestVersionMonitor(t *testing.T) {
 		t.Errorf("notifiers = %v (want ops)", w.Notifiers)
 	}
 
-	// version.on_change but no version command in the profile -> warning.
+	// version.on_change but no version command in the daemon -> warning.
 	noCmd := map[string]any{"version": map[string]any{"on_change": map[string]any{}}}
 	if _, warn := versionMonitor("x", noCmd, monitorTestDeps(), time.Minute); warn == "" {
 		t.Error("a missing version command should warn")

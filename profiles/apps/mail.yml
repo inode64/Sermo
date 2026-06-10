@@ -1,9 +1,0 @@
-kind: profile
-name: mail
-display_name: "Mail"
-variables:
-  binary: "/usr/bin/mail"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-  config: { type: command, command: ["${binary}","-v","-e"], timeout: 30s }

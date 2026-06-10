@@ -16,11 +16,11 @@ import (
 
 func TestSLACommandReportsWindows(t *testing.T) {
 	root := t.TempDir()
-	profilesDir := filepath.Join(root, "profiles")
+	daemonsDir := filepath.Join(root, "daemons")
 	enabledDir := filepath.Join(root, "enabled")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{profilesDir, enabledDir, runDir, stateDir} {
+	for _, d := range []string{daemonsDir, enabledDir, runDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -30,13 +30,13 @@ func TestSLACommandReportsWindows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(profilesDir, "nginx.yml"), "kind: profile\nname: nginx\nservice: { name: nginx }\n")
+	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: { name: nginx }\n")
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], includes: [ %s ], runtime: %s, state: %s }
+paths: { daemons: [ %s ], includes: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, profilesDir, enabledDir, runDir, stateDir))
+`, daemonsDir, enabledDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	// Seed three recent samples: two up, one down -> ~66.67% across every window.
@@ -100,10 +100,10 @@ defaults: { policy: { cooldown: 5m } }
 
 func TestSLASeriesCommand(t *testing.T) {
 	root := t.TempDir()
-	profilesDir := filepath.Join(root, "profiles")
+	daemonsDir := filepath.Join(root, "daemons")
 	enabledDir := filepath.Join(root, "enabled")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{profilesDir, enabledDir, stateDir} {
+	for _, d := range []string{daemonsDir, enabledDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -113,13 +113,13 @@ func TestSLASeriesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(profilesDir, "nginx.yml"), "kind: profile\nname: nginx\nservice: { name: nginx }\n")
+	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: { name: nginx }\n")
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], includes: [ %s ], state: %s }
+paths: { daemons: [ %s ], includes: [ %s ], state: %s }
 defaults: { policy: { cooldown: 5m } }
-`, profilesDir, enabledDir, stateDir))
+`, daemonsDir, enabledDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	store, err := state.Open(filepath.Join(stateDir, state.Filename))

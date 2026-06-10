@@ -1,9 +1,0 @@
-kind: profile
-name: beam-%v
-display_name: "Erlang BEAM ${version}"
-service: beam
-variables:
-  binary: "/usr/lib64/erlang/erts-${version}/bin/beam"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

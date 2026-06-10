@@ -1,0 +1,13 @@
+kind: daemon
+name: slapd
+display_name: "OpenLDAP (slapd)"
+service: slapd
+variables:
+  port: 389
+  binary: "/usr/bin/openldap/slapd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-VVV"], expect_exit: 1, timeout: 10s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

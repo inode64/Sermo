@@ -1,6 +1,6 @@
 kind: service
 name: webapp
-# A self-contained service (no profile): monitor any HTTP endpoint and restart
+# A self-contained service (no daemon): monitor any HTTP endpoint and restart
 # its unit when it stays unhealthy. `service` names the init unit to control.
 service: my-webapp
 

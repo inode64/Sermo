@@ -1,9 +1,0 @@
-kind: profile
-name: lvm
-display_name: "LVM"
-service: lvm
-variables:
-  binary: "/sbin/lvm"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","version"], timeout: 10s }

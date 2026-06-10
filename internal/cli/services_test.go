@@ -12,11 +12,11 @@ import (
 
 func TestServicesCommand(t *testing.T) {
 	root := t.TempDir()
-	profilesDir := filepath.Join(root, "profiles") // root profiles → category service
-	appsDir := filepath.Join(profilesDir, "apps")
+	daemonsDir := filepath.Join(root, "daemons") // root daemons → category service
+	appsDir := filepath.Join(daemonsDir, "apps")
 	enabledDir := filepath.Join(root, "enabled")
 	binDir := filepath.Join(root, "bin")
-	for _, d := range []string{profilesDir, appsDir, enabledDir, binDir} {
+	for _, d := range []string{daemonsDir, appsDir, enabledDir, binDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -30,20 +30,20 @@ func TestServicesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A service-category profile (root) and an app-category profile (apps/).
-	write(filepath.Join(profilesDir, "nginx.yml"), fmt.Sprintf(`kind: profile
+	// A service-category daemon (root) and an app-category daemon (apps/).
+	write(filepath.Join(daemonsDir, "nginx.yml"), fmt.Sprintf(`kind: daemon
 name: nginx
 display_name: "Nginx"
 service: { name: nginx }
 variables: { binary: %q }
 preflight: { binary: { type: binary, path: "${binary}" } }
 `, nginx))
-	write(filepath.Join(appsDir, "git.yml"), "kind: profile\nname: git\nvariables: { binary: /bin/git }\n")
+	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { daemons: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, profilesDir, enabledDir))
+`, daemonsDir, enabledDir))
 	global := filepath.Join(root, "sermo.yml")
 
 	var out bytes.Buffer
@@ -56,6 +56,6 @@ defaults: { policy: { cooldown: 5m } }
 		t.Errorf("services should list the installed service Nginx:\n%s", got)
 	}
 	if strings.Contains(got, "git") {
-		t.Errorf("services must not list app-category profiles:\n%s", got)
+		t.Errorf("services must not list app-category daemons:\n%s", got)
 	}
 }

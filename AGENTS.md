@@ -92,7 +92,7 @@ sermo/
 │   │   ├── render.go
 │   │   ├── variables.go
 │   │   └── validate.go
-│   ├── profiles/
+│   ├── daemons/
 │   │   ├── registry.go
 │   │   ├── resolver.go
 │   │   └── source.go
@@ -147,7 +147,7 @@ sermo/
 │   │   └── logger.go
 │   └── execx/
 │       └── runner.go
-├── profiles/
+├── daemons/
 │   ├── apache.yml
 │   ├── mysql.yml
 │   ├── mariadb.yml
@@ -167,7 +167,7 @@ sermo/
 ├── docs/
 │   ├── configuration.md
 │   ├── rules.md
-│   ├── profiles.md
+│   ├── daemons.md
 │   └── safety.md
 ├── go.mod
 ├── go.sum
@@ -256,7 +256,7 @@ there is genuinely no native equivalent.
 These rules are mandatory.
 
 1. Never kill processes by name only.
-2. Never use `SIGKILL` unless the service profile explicitly allows it.
+2. Never use `SIGKILL` unless the daemon definition explicitly allows it.
 3. A `SIGKILL` policy must include a restrictive `kill_only_if` clause.
 4. Process matching must validate at least `exe` and `user`; prefer `pidfile` or `cgroup` as additional evidence. `exe` is the resolved `/proc/<pid>/exe` path matched exactly (never argv[0]/cmdline, never a substring); an unresolvable `exe` never matches. See `implementation-spec.md` section 21.
 5. Never restart, start or stop a service when a matching guard blocks the action.
@@ -270,7 +270,7 @@ These rules are mandatory.
    operator commands are exempt from cooldown but still subject to locks, guards
    and preflight.
 9. Always log whether an action was executed or blocked, and why.
-10. Database profiles must default to conservative stop policies.
+10. Database daemons must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
 12. Only residuals that exactly match `kill_only_if` are ever signaled; a residual
     that does not match (or has an unresolvable exe) is reported, never killed. Any
@@ -357,7 +357,7 @@ Sermo supports:
 
 ```text
 global config
-profiles
+daemons
 services
 clones
 overrides
@@ -392,7 +392,7 @@ checks:
     type: http
 ```
 
-A service can use a profile:
+A service can use a daemon:
 
 ```yaml
 kind: service
@@ -421,7 +421,7 @@ delete: true removes inherited item
 Resolution precedence, low to high:
 
 ```text
-global defaults  <  profile (uses) or clone source  <  service overrides
+global defaults  <  daemon (uses) or clone source  <  service overrides
 ```
 
 The global `defaults` block (stop_policy, policy, rule_window) is merged in as the
@@ -430,7 +430,7 @@ Engine-wide settings (interval, max_parallel_checks, default_timeout, backend) a
 daemon config and are NOT merged into services. Variable expansion runs once,
 after all merging. See `implementation-spec.md` section 8.
 The effective `defaults.policy.cooldown` is required and must be positive, and a
-service/profile override may only replace it with another positive duration.
+service/daemon override may only replace it with another positive duration.
 `paths.runtime` is the single runtime root (default `/run/sermo`). Named runtime
 locks live under `<paths.runtime>/locks` and operation locks under
 `<paths.runtime>/ops`. Do not use `paths.locks` or `/etc/sermo/locks.d` in the
@@ -584,7 +584,7 @@ a guard must list the actions it blocks under `blocks:`.
 Safe restart flow:
 
 ```text
-1. Load resolved service profile.
+1. Load resolved service definition.
 2. Detect backend.
 3. defer: emit exactly one event from the final result (registered first).
 4. Acquire internal operation lock at `<paths.runtime>/ops/<service>.lock`
@@ -664,7 +664,7 @@ Required test areas:
 
 ```text
 config merge
-profile uses resolution
+daemon uses resolution
 service clone resolution
 cycle detection
 variable expansion
