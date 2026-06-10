@@ -291,6 +291,20 @@ func validJSONOp(op string) bool {
 	}
 }
 
+// validateOutputExpectation validates an expect_stdout/expect_stderr field, shared
+// by the command check and watch hooks: a string substring, an {op, value}
+// comparison with a valid operator, or absent. Any other shape is rejected.
+func validateOutputExpectation(prefix, field string, v any, add addFunc) {
+	switch t := v.(type) {
+	case nil, string:
+		// absent or a substring expectation — always valid
+	case map[string]any:
+		validateOpValue(prefix, field, t, add)
+	default:
+		add("%s.%s must be a string substring or an {op, value} mapping", prefix, field)
+	}
+}
+
 // validateOpValue validates an {op, value} comparison mapping (shared by the
 // http response comparisons): op must be a known comparison operator, and value
 // must be numeric for ordering ops and a valid regexp for =~.
@@ -525,6 +539,8 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 					add("%s expect_exit must be an integer", path)
 				}
 			}
+			validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
+			validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
 		case "service":
 			if st := cfgval.String(entry["expect"]); st != "" {
 				if _, ok := serviceStates[st]; !ok {
