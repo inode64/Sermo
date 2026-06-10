@@ -57,7 +57,7 @@ which reuse the same schema). MVP types:
 | `prometheus` / `prom` | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
-| `nut` / `ups` / `upsd` | NUT's upsd answers `VER`; with credentials it authenticates (`LOGIN`), and a named UPS exposes `ups.status` (see Database) |
+| `nut` / `ups` / `upsd` | NUT's upsd answers `VER`; a UPS exposes its variables (status, battery charge/runtime, load, voltages) for `expect`/`on_change` (see Database) |
 | `smb` / `samba` / `cifs` | an SMB/CIFS server negotiates (and, with credentials, authenticates) (see Database) |
 | `acpid`       | the ACPI event daemon accepts a connection on its Unix socket (see Database) |
 | `fail2ban`    | fail2ban-server accepts a connection on its control socket (see Database) |
@@ -631,11 +631,36 @@ Protocols, in the order of the table above:
 - `nut` (aliases `ups`, `upsd`) — NUT (Network UPS Tools) upsd; default port 3493
   (TCP), `tls` supported (implicit TLS — upsd's `STARTTLS` upgrade is not used).
   `user`/`password` are **optional**: anonymously it sends `VER` and reports the
-  upsd `version` (pair with `on_version_change`). Set **`query`** to a UPS name to
-  read its `ups.status` into the result (assert it with e.g.
-  `expect: { "ups.status": "OL" }`); with credentials it also `LOGIN`-s to that
-  UPS to verify access (`USERNAME`/`PASSWORD` alone are not checked by upsd). An
-  unknown UPS name fails the check.
+  upsd `version` (pair with `on_version_change`). With credentials it `LOGIN`-s to
+  the UPS to verify access (`USERNAME`/`PASSWORD` alone are not checked by upsd).
+
+  Set **`ups`** to the device name (or omit it when the server has a single UPS —
+  it is auto-detected) to read its variables into the result, where you alert on
+  them with `expect` or on state changes with `on_change`. Exposed variables
+  (when present): `ups.status` (the power/battery state — `OL` online, `OB` on
+  battery, `LB` low battery, `RB` replace battery, `CHRG`/`DISCHRG` …), `ups.load`,
+  `ups.temperature`, `ups.power`/`ups.realpower`, `battery.charge`,
+  `battery.charge.low`, `battery.runtime`/`battery.runtime.low`, `battery.voltage`,
+  `input.voltage`, `input.frequency`, `output.voltage`, `ups.mfr`, `ups.model`. An
+  unknown `ups` fails the check.
+
+  ```yaml
+  checks:
+    ups:
+      type: nut
+      host: 192.168.1.10
+      ups: myups                              # omit to auto-detect a single UPS
+      user: monuser                           # optional (verifies access via LOGIN)
+      password: ${env:NUT_PASS}
+      on_change: true                         # alert on any ups.status transition
+      expect:
+        ups.status: { op: "=~", value: "OL" }  # alert when not online (use =~: status is "OL CHRG")
+        battery.charge: { op: ">", value: 30 } # alert when charge drops to 30%
+  ```
+
+  `on_change` tracks `ups.status`; for the upsd software version use
+  `on_version_change`. Because `ups.status` is a space-separated flag list (e.g.
+  `OL CHRG`), match it with `=~` rather than `==`.
 - `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is **optional**.
   It first runs an SMB2 `NEGOTIATE` (proving the server is up) and reports the
   negotiated **dialect** as the `version` (`2.0.2`/`2.1`/`3.0`/`3.0.2`/`3.1.1` —
