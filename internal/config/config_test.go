@@ -772,6 +772,75 @@ rules:
 	}
 }
 
+func TestBuiltinInitUserPidfileVars(t *testing.T) {
+	oldInit, oldUser := detectedInit, detectedUser
+	detectedInit, detectedUser = "openrc", "sermo"
+	defer func() { detectedInit, detectedUser = oldInit, oldUser }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/db.yml": `
+kind: service
+name: db
+service: { name: postgresql }
+processes:
+  main: { type: pidfile, path: "${pidfile}" }
+checks:
+  who: { type: command, command: ["id", "-u", "${user}"] }
+  init: { type: command, command: ["echo", "${init}"] }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("db")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := cfgval.String(nested(t, resolved.Tree, "processes", "main")["path"]); got != "/run/postgresql.pid" {
+		t.Errorf("${pidfile} = %q, want /run/postgresql.pid", got)
+	}
+	who, _ := nested(t, resolved.Tree, "checks", "who")["command"].([]any)
+	if len(who) != 3 || who[2] != "sermo" {
+		t.Errorf("${user} = %v, want sermo", who)
+	}
+	in, _ := nested(t, resolved.Tree, "checks", "init")["command"].([]any)
+	if len(in) != 2 || in[1] != "openrc" {
+		t.Errorf("${init} = %v, want openrc", in)
+	}
+}
+
+func TestUserVariableOverridesBuiltinUserPidfile(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/db.yml": `
+kind: service
+name: db
+service: { name: postgresql }
+variables:
+  user: postgres
+  pidfile: /run/postgresql/main.pid
+processes:
+  main: { type: pidfile, path: "${pidfile}" }
+checks:
+  who: { type: command, command: ["id", "${user}"] }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, _ := cfg.Resolve("db")
+	if got := cfgval.String(nested(t, resolved.Tree, "processes", "main")["path"]); got != "/run/postgresql/main.pid" {
+		t.Errorf("pidfile = %q, want the explicit variable", got)
+	}
+	who, _ := nested(t, resolved.Tree, "checks", "who")["command"].([]any)
+	if len(who) != 2 || who[1] != "postgres" {
+		t.Errorf("user = %v, want explicit postgres", who)
+	}
+}
+
 func TestUserHostVariableOverridesBuiltin(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

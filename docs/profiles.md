@@ -117,8 +117,9 @@ An explicit `variables` entry of the same name always takes precedence over a
 built-in. `${arch}`/`${os}` are baked **on load** (everywhere — variable values
 and `versions.from` discovery paths included); the rest resolve per service, and
 the runtime ones (`${date}`/`${event}`/`${action}`) only in rule `message:`
-strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` environment variables
-override the matching built-in (handy for testing or building config off-host).
+strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_INIT` /
+`SERMO_USER` environment variables override the matching built-in (handy for
+testing or building config off-host).
 
 | Variable          | Value                                   | Resolved        |
 |-------------------|-----------------------------------------|-----------------|
@@ -126,6 +127,9 @@ override the matching built-in (handy for testing or building config off-host).
 | `${display_name}` | the display name (falls back to name)   | resolution      |
 | `${service}`      | the service's primary unit name         | resolution      |
 | `${host}`         | hostname (`SERMO_HOST` override)        | resolution¹     |
+| `${init}`         | detected init system (`SERMO_INIT`)     | resolution      |
+| `${user}`         | Sermo's user (`SERMO_USER` override)    | resolution⁴     |
+| `${pidfile}`      | conventional `/run/<unit>.pid`          | resolution⁴     |
 | `${port}`         | the top-level `port:` field (when set)  | resolution³     |
 | `${arch}`         | machine architecture (`SERMO_ARCH`)     | load (baked)    |
 | `${os}`           | os-release id (`SERMO_OS`)              | load (baked)    |
@@ -135,6 +139,11 @@ override the matching built-in (handy for testing or building config off-host).
 
 ¹ `${host}` only applies when the profile does not define a `host` variable (a
 bind address like `127.0.0.1`); an explicit `host` always wins.
+
+⁴ `${user}` and `${pidfile}` are fallbacks: a profile's own `user` (a service
+account such as `www-data`) or `pidfile` variable always wins. They pair with the
+pidfile selector — e.g. `processes.main: { type: pidfile, path: "${pidfile}" }` —
+and the `command_match` user — `user: "${user}"`.
 
 ² `${date}`/`${event}`/`${action}` are substituted when the worker emits a rule
 message, so they belong in `message:` strings — e.g.
