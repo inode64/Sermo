@@ -131,6 +131,20 @@ func ParseWithinWindow(v any) *WithinWindow {
 	return &WithinWindow{Cycles: cycles, MinMatches: matches}
 }
 
+// ParseWindow parses an entry's `for`/`within` sub-blocks into their windows.
+// Shared by the rules parser and the host-watch builder so both read a window the
+// same way.
+func ParseWindow(entry map[string]any) (*ForWindow, *WithinWindow) {
+	return ParseForWindow(entry["for"]), ParseWithinWindow(entry["within"])
+}
+
+// ParseWindowRule returns a Rule carrying only the for/within window from entry —
+// the shape host watches use to reuse the rules window machinery.
+func ParseWindowRule(entry map[string]any) Rule {
+	forWin, withinWin := ParseWindow(entry)
+	return Rule{For: forWin, Within: withinWin}
+}
+
 // ParseRuleWindow parses the global/per-service `rule_window` fallback block
 // ({cycles, mode, min_matches}) into the equivalent for/within window, applied by
 // ParseRules to any rule that declares neither `for` nor `within` (section 13).

@@ -149,8 +149,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			continue
 		}
 		actions := parseActions(thenNode)
-		forWin := ParseForWindow(entry["for"])
-		withinWin := ParseWithinWindow(entry["within"])
+		forWin, withinWin := ParseWindow(entry)
 		if _, hasFor := entry["for"]; !hasFor {
 			if _, hasWithin := entry["within"]; !hasWithin {
 				forWin, withinWin = fbFor, fbWithin
