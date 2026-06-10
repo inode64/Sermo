@@ -23,6 +23,29 @@ func (c stubCheck) Run(context.Context) checks.Result {
 	return checks.Result{Check: c.name, OK: c.ok, Data: c.data}
 }
 
+type countingCheck struct {
+	calls int
+}
+
+func (c *countingCheck) Name() string { return "counting" }
+func (c *countingCheck) Run(context.Context) checks.Result {
+	c.calls++
+	return checks.Result{Check: "counting", OK: true}
+}
+
+func TestWatchPausedSkipsCheck(t *testing.T) {
+	check := &countingCheck{}
+	w := &Watch{
+		Name:     "disk-root",
+		Check:    check,
+		IsPaused: func() bool { return true },
+	}
+	w.RunCycle(context.Background())
+	if check.calls != 0 {
+		t.Fatalf("paused watch ran check %d times", check.calls)
+	}
+}
+
 func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	var calls int
 	var env map[string]string

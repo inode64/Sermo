@@ -107,6 +107,28 @@ func TestBuildWatchesDiskInheritsGlobalNotifyWithoutThen(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesUsesPersistedWatchPause(t *testing.T) {
+	store := newFakeStore()
+	store.active[watchMonitorKey("disk-root")] = false
+	cfg := cfgWithWatches(map[string]any{
+		"disk-root": map[string]any{
+			"check": map[string]any{
+				"type":     "disk",
+				"path":     "/",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
+			},
+			"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{Monitor: store, DefaultTimeout: time.Second}, 30*time.Second)
+	if len(warns) != 0 || len(watches) != 1 {
+		t.Fatalf("watches=%d warnings=%v", len(watches), warns)
+	}
+	if watches[0].IsPaused == nil || !watches[0].IsPaused() {
+		t.Fatalf("watch should be paused from store")
+	}
+}
+
 func TestBuildWatchesNotifyNoneWithoutActionWarns(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{

@@ -61,6 +61,9 @@ type Watch struct {
 	Summary          string           `json:"summary,omitempty"`
 	Interval         string           `json:"interval,omitempty"`
 	Enabled          bool             `json:"enabled"`
+	Monitored        bool             `json:"monitored"`
+	MonitorSource    string           `json:"monitor_source,omitempty"`
+	MonitorChangedAt string           `json:"monitor_changed_at,omitempty"`
 	FireOnFail       bool             `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
 	HasHook          bool             `json:"has_hook"`
 	HookCommand      []string         `json:"hook_command,omitempty"`
@@ -430,6 +433,8 @@ type Backend interface {
 	Preflight(ctx context.Context, name string) (PreflightResult, bool)
 	// SetMonitored pauses (false) or resumes (true) monitoring of a service.
 	SetMonitored(ctx context.Context, name string, monitored bool) error
+	// SetWatchMonitored pauses (false) or resumes (true) monitoring of a host watch.
+	SetWatchMonitored(ctx context.Context, name string, monitored bool) error
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
 	// HostMetrics returns current system-level metrics (memory, cpu, load averages).
@@ -499,6 +504,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/whoami", s.handleWhoami)
 	mux.HandleFunc("GET /api/services", s.handleServices)
 	mux.HandleFunc("GET /api/watches", s.handleWatches)
+	mux.HandleFunc("POST /api/watches/{name}/{action}", s.handleWatchAction)
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/host", s.handleHost)
@@ -957,6 +963,20 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "unknown action " + action})
 	}
+}
+
+func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	action := r.PathValue("action")
+	if !monitorActions[action] {
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "unknown action " + action})
+		return
+	}
+	if err := s.Backend.SetWatchMonitored(r.Context(), name, action == "monitor"); err != nil {
+		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, ActionResult{OK: true})
 }
 
 func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
