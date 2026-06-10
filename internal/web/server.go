@@ -65,7 +65,7 @@ type Watch struct {
 	Monitored        bool             `json:"monitored"`
 	MonitorSource    string           `json:"monitor_source,omitempty"`
 	MonitorChangedAt string           `json:"monitor_changed_at,omitempty"`
-	FireOnFail       bool             `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/disk)
+	FireOnFail       bool             `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/storage)
 	HasHook          bool             `json:"has_hook"`
 	HookCommand      []string         `json:"hook_command,omitempty"`
 	Notifiers        []string         `json:"notifiers,omitempty"`
@@ -84,12 +84,12 @@ type WatchCondition struct {
 	Value string `json:"value,omitempty"`
 }
 
-// WatchExpand is the configured manual/automatic disk growth action.
+// WatchExpand is the configured manual/automatic storage growth action.
 type WatchExpand struct {
 	ByBytes int64 `json:"by_bytes"`
 }
 
-// DiskWatchInfo is live filesystem data for a disk host watch.
+// DiskWatchInfo is live filesystem data for a storage host watch.
 type DiskWatchInfo struct {
 	Path             string   `json:"path"`
 	Mounted          bool     `json:"mounted"`
@@ -442,7 +442,7 @@ type Backend interface {
 	SetMonitored(ctx context.Context, name string, monitored bool) error
 	// SetWatchMonitored pauses (false) or resumes (true) monitoring of a host watch.
 	SetWatchMonitored(ctx context.Context, name string, monitored bool) error
-	// ExpandWatch runs a configured disk watch's `then.expand` action on demand.
+	// ExpandWatch runs a configured storage watch's `then.expand` action on demand.
 	ExpandWatch(ctx context.Context, name string) ActionResult
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo

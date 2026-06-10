@@ -21,7 +21,7 @@ type VolumeExpander interface {
 	ExpandPath(ctx context.Context, path string, by int64) (volume.Result, error)
 }
 
-// ExpandSpec is a watch's native disk-expansion action (`then.expand`): grow the
+// ExpandSpec is a watch's native storage-expansion action (`then.expand`): grow the
 // volume backing the checked path by up to By bytes (capped to the volume
 // group's free space).
 type ExpandSpec struct {
@@ -33,7 +33,7 @@ type ExpandSpec struct {
 // It is independent of services and does not use the operation engine.
 type Watch struct {
 	Name      string
-	CheckType string // e.g. "disk"; for SERMO_CHECK_TYPE (Result.Check is the watch name)
+	CheckType string // e.g. "storage"; for SERMO_CHECK_TYPE (Result.Check is the watch name)
 	Check     checks.Check
 	Window    rules.Rule // carries only For/Within; used by rules.WindowState.Fires
 	Hook      HookSpec
@@ -53,13 +53,13 @@ type Watch struct {
 	Cycle func(ctx context.Context)
 	// FireOnFail inverts the trigger: the hook fires when the check is NOT OK,
 	// instead of when it is. Health checks (tcp/http/…) are healthy at OK==true, so
-	// as a watch they alert on failure; condition checks (disk/load/…) alert at
+	// as a watch they alert on failure; condition checks (storage/load/…) alert at
 	// OK==true (threshold crossed) and leave this false.
 	FireOnFail bool
 
-	// Expand, when set, runs a native disk-expansion action on a firing cycle,
+	// Expand, when set, runs a native storage-expansion action on a firing cycle,
 	// gated by Policy so it does not run every cycle while the volume stays low.
-	// It is meant for `disk` watches; the target path comes from the check
+	// It is meant for `storage` watches; the target path comes from the check
 	// Result's "path" data.
 	Expand   *ExpandSpec
 	Expander VolumeExpander
@@ -102,7 +102,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 }
 
-// runExpand performs the native disk-expansion action on a firing cycle, gated
+// runExpand performs the native storage-expansion action on a firing cycle, gated
 // by Policy. The action is attempted at most once per cooldown window even while
 // the volume stays low; an attempt (success or failure) records the time so a
 // failing expansion is not retried every cycle.

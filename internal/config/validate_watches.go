@@ -29,7 +29,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		cp := "watches." + name + ".check"
 		switch cfgval.String(check["type"]) {
-		case "disk":
+		case "storage", "disk":
 			validateDiskFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, true, defaultNotify, add)
 		case "net":
@@ -85,7 +85,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 }
 
 // validateHookBlock validates a `then` action block: a hook and/or a notify list
-// (at least one), or a disk-only expand action. The hook command (when present)
+// (at least one), or a storage-only expand action. The hook command (when present)
 // must be a non-empty array with a valid optional timeout. Notifier-name
 // references are checked separately by validateNotifyRefs (which has the
 // configured notifier set).
@@ -106,7 +106,7 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 	notify := cfgval.StringList(then["notify"])
 	_, hasExpand := then["expand"].(map[string]any)
 	if hasExpand && !allowExpand {
-		add("%s.then.expand is only valid on a disk watch", prefix)
+		add("%s.then.expand is only valid on a storage watch", prefix)
 	}
 	if !hasHook && !hasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand {
 		add("%s.then requires a hook, notify and/or expand", prefix)

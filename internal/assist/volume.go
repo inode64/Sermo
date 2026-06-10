@@ -11,12 +11,14 @@ import (
 
 const notifyNone = "none"
 
-// volumeAssistant creates `disk` watches: a free/used-space threshold with
+// volumeAssistant creates `storage` watches: a free/used-space threshold with
 // notifications and an optional native auto-expand action.
 type volumeAssistant struct{}
 
-func (volumeAssistant) Name() string  { return "volume" }
-func (volumeAssistant) Title() string { return "Disk volume checks (free space, optional auto-expand)" }
+func (volumeAssistant) Name() string { return "volume" }
+func (volumeAssistant) Title() string {
+	return "Storage volume checks (free space, optional auto-expand)"
+}
 
 func (volumeAssistant) Run(p *Prompt, env Env) (Result, error) {
 	vols, err := env.Volumes()
@@ -24,7 +26,7 @@ func (volumeAssistant) Run(p *Prompt, env Env) (Result, error) {
 		return Result{}, fmt.Errorf("list volumes: %w", err)
 	}
 	if len(vols) == 0 {
-		return Result{}, fmt.Errorf("no disk volumes found to monitor")
+		return Result{}, fmt.Errorf("no storage volumes found to monitor")
 	}
 	labels := make([]string, len(vols))
 	for i, v := range vols {
@@ -52,9 +54,9 @@ func (volumeAssistant) Run(p *Prompt, env Env) (Result, error) {
 			}
 			s = &t
 		}
-		watches[watchName("disk", v.Mountpoint)] = buildVolWatch(v, *s)
+		watches[watchName("storage", v.Mountpoint)] = buildVolWatch(v, *s)
 	}
-	return Result{Watches: watches, Summary: fmt.Sprintf("%d disk watch(es)", len(watches))}, nil
+	return Result{Watches: watches, Summary: fmt.Sprintf("%d storage watch(es)", len(watches))}, nil
 }
 
 // volSettings are the answers gathered for one (or all) volume(s).
@@ -105,7 +107,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 
 func buildVolWatch(v Volume, s volSettings) map[string]any {
 	check := map[string]any{
-		"type": "disk",
+		"type": "storage",
 		"path": v.Mountpoint,
 		s.metric: map[string]any{
 			"op":    s.op,
@@ -220,7 +222,7 @@ func validSize(s string) bool {
 }
 
 // watchName derives a stable watch name from a mount path, e.g. "/mnt/backup"
-// -> "disk-mnt-backup", "/" -> "disk-root".
+// -> "storage-mnt-backup", "/" -> "storage-root".
 func watchName(prefix, path string) string {
 	s := strings.Trim(path, "/")
 	if s == "" {

@@ -71,7 +71,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			if p := str(check["path"]); p != "" && !host.PathExists(p) {
 				b.add(LevelWarning, scope, "path %q does not exist", p)
 			}
-		case "disk":
+		case "storage", "disk":
 			diagDiskResources(b, scope, check, host)
 		}
 	}
@@ -80,7 +80,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 // diagCheckResources flags missing paths referenced by a service check.
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
 	switch str(entry["type"]) {
-	case "disk":
+	case "storage", "disk":
 		diagDiskResources(b, scope, entry, host)
 	case "count":
 		if p := str(entry["path"]); p != "" && !host.PathExists(p) {
@@ -89,7 +89,7 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 	}
 }
 
-// diagDiskResources flags a disk check's path when it is missing, and a configured
+// diagDiskResources flags a storage check's path when it is missing, and a configured
 // mount that is not currently mounted.
 func diagDiskResources(b *builder, scope string, fields map[string]any, host Host) {
 	p := str(fields["path"])

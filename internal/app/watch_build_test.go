@@ -16,11 +16,11 @@ func cfgWithWatches(raw map[string]any) *config.Config {
 	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw}}}
 }
 
-func TestBuildWatchesDiskExpandAction(t *testing.T) {
+func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{
 			"check": map[string]any{
-				"type":     "disk",
+				"type":     "storage",
 				"path":     "/mnt/backup",
 				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
@@ -45,9 +45,12 @@ func TestBuildWatchesDiskExpandAction(t *testing.T) {
 	if w.Policy.Cooldown != 30*time.Minute {
 		t.Fatalf("policy cooldown = %v, want 30m", w.Policy.Cooldown)
 	}
+	if w.CheckType != "storage" {
+		t.Fatalf("check type = %q, want storage", w.CheckType)
+	}
 }
 
-func TestBuildWatchesDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
+func TestBuildWatchesLegacyDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{
 			"check": map[string]any{
@@ -75,6 +78,9 @@ func TestBuildWatchesDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 	if watches[0].Expand == nil {
 		t.Fatalf("expand not parsed: %+v", watches[0])
+	}
+	if watches[0].CheckType != "storage" {
+		t.Fatalf("legacy disk type should be canonicalized to storage, got %q", watches[0].CheckType)
 	}
 	if len(watches[0].Notifiers) != 0 {
 		t.Fatalf("notify none must suppress global default, got %v", watches[0].Notifiers)
@@ -197,7 +203,7 @@ func TestBuildWatchesFileInheritsGlobalNotifyWithoutThen(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesExpandRejectedOnNonDisk(t *testing.T) {
+func TestBuildWatchesExpandRejectedOnNonStorage(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad-expand": map[string]any{
 			"check": map[string]any{"type": "load", "load1": map[string]any{"op": ">=", "value": 10}},
@@ -206,15 +212,15 @@ func TestBuildWatchesExpandRejectedOnNonDisk(t *testing.T) {
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
 	if len(watches) != 0 || len(warns) == 0 {
-		t.Fatalf("then.expand on a non-disk watch must warn and not build: watches=%d warns=%v", len(watches), warns)
+		t.Fatalf("then.expand on a non-storage watch must warn and not build: watches=%d warns=%v", len(watches), warns)
 	}
 }
 
-func TestBuildWatchesBuildsDisk(t *testing.T) {
+func TestBuildWatchesBuildsStorage(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
-		"disk-root": map[string]any{
+		"storage-root": map[string]any{
 			"check": map[string]any{
-				"type":     "disk",
+				"type":     "storage",
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
@@ -230,7 +236,7 @@ func TestBuildWatchesBuildsDisk(t *testing.T) {
 		t.Fatalf("expected 1 watch, got %d", len(watches))
 	}
 	w := watches[0]
-	if w.Name != "disk-root" || w.Interval != 30*time.Second {
+	if w.Name != "storage-root" || w.CheckType != "storage" || w.Interval != 30*time.Second {
 		t.Fatalf("unexpected watch: %+v", w)
 	}
 	if w.Window.For == nil || w.Window.For.Cycles != 3 {

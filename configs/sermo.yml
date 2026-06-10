@@ -89,16 +89,16 @@ notifiers:
 # avoid repeating then.notify everywhere. Use per-watch notify: [none] to suppress.
 # notify: [ops-email]
 
-# Host watches: monitor host resources (disk, …) independently of services and,
+# Host watches: monitor host resources (storage, …) independently of services and,
 # when a threshold is crossed, run a hook command and/or notify named targets.
 # Paused by default: each watch is built and visible in the web UI, but it does
 # not run until an admin monitors it or the YAML changes to `monitor: enabled`.
 watches:
-  disk-root:
+  storage-root:
     monitor: disabled
     interval: 1m
     check:
-      type: disk
+      type: storage
       path: /
       used_pct: { op: ">=", value: "90%" }
       free_bytes: { op: "<", value: 10G }       # absolute threshold, requires K/M/G/T
@@ -107,7 +107,7 @@ watches:
     then:
       notify: [ops-email, team-slack]            # email the on-call list and post to Slack
       hook:
-        command: [/usr/local/bin/sermo-alert-disk.sh, "/"]
+        command: [/usr/local/bin/sermo-alert-storage.sh, "/"]
         timeout: 10s
   net-eth0:
     monitor: disabled
@@ -169,13 +169,13 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-fds-alert.sh]
-  # Disk check with mount verification: alert if /data is not mounted (or not as
+  # Storage check with mount verification: alert if /data is not mounted (or not as
   # expected) and/or its space crosses a threshold — one entry, no duplicated path.
   data-fs:
     monitor: disabled
     interval: 30s
     check:
-      type: disk
+      type: storage
       path: /data
       mounted: true                 # also: fstype: ext4, options: [rw], device: /dev/sdb1
       free_bytes: { op: "<", value: 20G }

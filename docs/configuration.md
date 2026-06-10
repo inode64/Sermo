@@ -509,7 +509,7 @@ when a threshold is crossed. They are daemon configuration; they never merge int
 a service.
 
 > **Tip — generate watches interactively.** `sermoctl wizard` walks you through
-> creating watches: `sermoctl wizard volume` for disk checks (pick volumes, set
+> creating watches: `sermoctl wizard volume` for storage checks (pick volumes, set
 > the notify threshold as a percent or size (sizes require a `K`/`M`/`G`/`T`
 > suffix), and optionally enable auto-expand)
 > and `sermoctl wizard net` for network interfaces (pick interfaces and which of
@@ -523,18 +523,18 @@ a service.
 > `notify: [none]` and suppress that default for the watch.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
-`notify` list, an `expand` (disk only), or any combination. If the top-level
+`notify` list, an `expand` (storage only), or any combination. If the top-level
 `notify` default is set, `then.notify` is optional: omitting it inherits the
 default, and a watch with no local action can omit `then` entirely.
 
 ```yaml
 watches:
-  disk-root:
+  storage-root:
     monitor: previous                  # enabled (default) | disabled | previous
-    check: { type: disk, path: /, used_pct: { op: ">=", value: "90%" } }
+    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops-email]                # send to these notifiers
-      hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }   # optional
+      hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }   # optional
 ```
 
 Use `notify: [none]` when a watch has another action (for example `expand`) but
@@ -552,11 +552,11 @@ Include directories may contain either service documents or watch fragments. A
 watch fragment is a normal YAML file with a top-level `watches:` map:
 
 ```yaml
-# /etc/sermo/volume/disk-root.yml
+# /etc/sermo/volume/storage-root.yml
 watches:
-  disk-root:
+  storage-root:
     monitor: previous
-    check: { type: disk, path: /, used_pct: { op: ">=", value: "90%" } }
+    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops-email]
 ```
@@ -591,7 +591,7 @@ These conventions keep the per-type sections below short:
 
   The same `expect_exit` / `expect_stdout` / `expect_stderr` fields work on a
   `command` check (see [Checks](rules.md#checks)).
-- **Evaluation model.** A **level check** (`disk`, `load`, `fds`, `conntrack`,
+- **Evaluation model.** A **level check** (`storage`, `load`, `fds`, `conntrack`,
   `entropy`, `zombies`, swap `usage`) fires when **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
   at least one, and add `for: { cycles: N }` to require N consecutive cycles. A
@@ -600,9 +600,9 @@ These conventions keep the per-type sections below short:
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.
 
-### `then.expand` — volume growth (disk watches)
+### `then.expand` — volume growth (storage watches)
 
-A `disk` watch can grow the LVM-backed filesystem under the checked path
+A `storage` watch can grow the LVM-backed filesystem under the checked path
 automatically when it runs low. The expansion is native (Sermo orchestrates it
 in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem grow tool —
 `resize2fs`, `xfs_growfs` or `btrfs` — which have no Go API):
@@ -610,7 +610,7 @@ in Go, invoking only `lvs`/`vgs`/`lvextend` and the filesystem grow tool —
 ```yaml
 watches:
   expand-backup:
-    check: { type: disk, path: /mnt/backup, free_pct: { op: "<", value: "10%" } }
+    check: { type: storage, path: /mnt/backup, free_pct: { op: "<", value: "10%" } }
     for: { cycles: 3 }                    # confirm low for 3 cycles first
     policy: { cooldown: 30m }             # at most one expansion per 30m (see below)
     then:
@@ -632,7 +632,7 @@ once per cooldown window; each attempt — success or failure — starts the
 cooldown, so a failing expansion is not retried every cycle. Outcomes are
 recorded as `expand` / `expand-skipped` / `expand-failed` events.
 
-When the web UI is enabled, a disk watch with `then.expand` also shows an
+When the web UI is enabled, a storage watch with `then.expand` also shows an
 **expand** action. That manual action uses the same configured `check.path` and
 `expand.by` values from YAML; the browser does not send a path or size.
 
@@ -643,7 +643,7 @@ subject/body carry the watch's message and the same `SERMO_*` fields a hook
 receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
-host-resource ones below (`disk`, `load`, `fds`, `conntrack`, `entropy`,
+host-resource ones below (`storage`, `load`, `fds`, `conntrack`, `entropy`,
 `zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
 `command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`,
 `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
@@ -657,21 +657,21 @@ types below are watch-only because they fire one hook per metric/target.
 
 ```yaml
 watches:
-  disk-root:
+  storage-root:
     enabled: true          # optional, default true
     interval: 1m           # optional, default engine.interval
     check:
-      type: disk
+      type: storage
       path: /
       used_pct: { op: ">=", value: "90%" } # check fires when crossed
     for: { cycles: 3 }     # optional window; reuses the rules engine
     then:
       hook:
-        command: [/usr/local/bin/alert-disk.sh, "/"]
+        command: [/usr/local/bin/alert-storage.sh, "/"]
         timeout: 10s       # optional, default engine.default_timeout
 ```
 
-The `disk` check reads filesystem usage for `path` and is true when every present
+The `storage` check reads filesystem usage for `path` and is true when every present
 predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `used_pct`, `free_pct`, `used_bytes`, `free_bytes` — and **inodes** —
 `inodes_used_pct`, `inodes_free_pct`, `inodes_free` (absolute count).
@@ -680,18 +680,20 @@ predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `B`/`iB`), e.g. `10G`; unitless byte values such as `10` are rejected.
 Inode predicates catch the "disk full" that `df` hides: a filesystem out of
 inodes (millions of tiny files) rejects new files while bytes are still free.
+Older configs may still use `type: disk`; Sermo treats it as a legacy alias for
+`type: storage`.
 
 ```yaml
 watches:
-  disk-root:
+  storage-root:
     check:
-      type: disk
+      type: storage
       path: /
       used_pct: { op: ">=", value: "90%" }     # block space
       free_bytes: { op: "<", value: 10G }       # absolute free space
       inodes_used_pct: { op: ">=", value: "90%" } # inode table
     then:
-      hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }
+      hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }
 ```
 
 A filesystem that does not report inodes (`inodes_total == 0`, e.g. btrfs) never
@@ -699,7 +701,7 @@ fires an inode predicate, so it cannot misread `0/0`.
 
 #### Mount conditions
 
-The `disk` check also verifies the **mount** of its `path`, so a filesystem's
+The `storage` check also verifies the **mount** of its `path`, so a filesystem's
 mount and its space are configured in one entry (no duplicated `path`). This also
 makes a space check trustworthy: a path that should be a mount but isn't would
 otherwise make `statfs` silently report the *parent* filesystem. Add any of:
@@ -708,7 +710,7 @@ otherwise make `statfs` silently report the *parent* filesystem. Add any of:
 watches:
   data:
     check:
-      type: disk
+      type: storage
       path: /data
       mounted: true            # require it to be a mount point (set false to require NOT mounted)
       fstype: ext4             # optional: expected filesystem type
@@ -716,10 +718,10 @@ watches:
       device: /dev/sdb1        # optional: expected source device
       used_pct: { op: ">=", value: "90%" } # space predicate(s), optional alongside mount
     then:
-      hook: { command: [/usr/local/bin/alert-disk.sh, "/data"] }
+      hook: { command: [/usr/local/bin/alert-storage.sh, "/data"] }
 ```
 
-A disk check needs **at least one** of a space/inode predicate or a mount
+A storage check needs **at least one** of a space/inode predicate or a mount
 condition (mount-only is fine). The mount is checked first from `/proc/mounts`: if
 it is missing or doesn't match, the check alerts on that and the space predicates
 are skipped (their numbers would be meaningless). The result data adds `mounted`,
@@ -810,7 +812,7 @@ The two metrics and their conditions:
   to fire on any transition, or `expect: up` / `expect: down` to fire whenever the
   state **is** the expected value.
 - **`latency`** — round-trip time in milliseconds. Use either
-  `threshold: {op, value}` (same operator set as disk) to fire when the RTT
+  `threshold: {op, value}` (same operator set as storage) to fire when the RTT
   crosses a fixed bound, **or** `change: {delta}` to fire on an abrupt jump
   (`|rtt − rtt_prev| > delta`); set exactly one. Latency conditions only apply
   while the host is reachable; an unreachable cycle never fires latency and never
@@ -998,7 +1000,7 @@ watches:
 The conditions (declare at least one):
 
 - **`size`** — either `{ on: change }` (fire whenever the byte size differs from
-  the last cycle) or a threshold `{op, value}` (same operator set as disk). The
+  the last cycle) or a threshold `{op, value}` (same operator set as storage). The
   threshold is **edge-triggered**: it fires once when the size crosses into the
   condition and re-arms only after it drops back out — not every cycle while
   breached.
@@ -1218,8 +1220,8 @@ It reports, as `error` / `warning` / `info` findings:
   global resolution** (`engine.interval`) or below it, so they will be rounded
   (see [per-check interval](#per-check-interval)).
 - **Host resources** — referenced things that **do not exist on this host**:
-  network interfaces (`net` watches), files/directories (`disk`/`count` checks,
-  `file` watches) and **mount points** (a `disk` check with mount conditions whose
+  network interfaces (`net` watches), files/directories (`storage`/`count` checks,
+  `file` watches) and **mount points** (a `storage` check with mount conditions whose
   path is not currently mounted).
 
 `diagnose` exits `78` when any **error** finding is present; warnings alone exit

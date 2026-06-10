@@ -19,7 +19,7 @@ which reuse the same schema). MVP types:
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
 | `count`       | the number of entries in a directory satisfies `op value` (see Count)|
-| `disk`        | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T) |
+| `storage`     | a filesystem's space/inode predicates hold (`*_pct` accepts `%`; `*_bytes` requires K/M/G/T); `disk` is accepted as a legacy alias |
 | `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
@@ -91,8 +91,8 @@ which reuse the same schema). MVP types:
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
 | `websocket` / `ws` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
-The `disk` check also verifies the **mount** of its `path` — see
-[Disk and mount](configuration.md#host-watches).
+The `storage` check also verifies the **mount** of its `path` — see
+[storage and mount](configuration.md#host-watches).
 
 The `command` check asserts the command's outcome: `expect_exit` (default 0) and
 optional `expect_stdout` / `expect_stderr` matchers — a plain string requires that
@@ -1207,7 +1207,7 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
 - a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
 
-The host-resource checks (`disk`, `load`, `hdparm`, `sensors`, `smart`, `raid`,
+The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid`,
 `edac`, `fds`, `conntrack`, `entropy`, `zombies`, `oom`, `cert`) are
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
@@ -1324,7 +1324,7 @@ The `autofs` check verifies the autofs **automounter** (`automount`) is active.
 autofs has no socket or port — the daemon talks to the kernel over an internal
 pipe — so the liveness signal is the **mount table**: while `automount` runs it
 maintains its configured map roots as `autofs`-type mountpoints in
-`/proc/mounts` (they disappear when the daemon stops). Unlike `disk`/`count`,
+`/proc/mounts` (they disappear when the daemon stops). Unlike `storage`/`count`,
 this is a **health** check: it passes (OK) when the automounter is active as
 configured, and fails when it is not.
 

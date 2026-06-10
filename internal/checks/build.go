@@ -42,7 +42,7 @@ type Deps struct {
 	// Processes reports the observed state (running/zombie/absent) of processes
 	// matching an exe/user selector, for `process` checks.
 	Processes func(exe, user string) string
-	// DiskUsage reports filesystem usage for `disk` checks. Nil uses statfs.
+	// DiskUsage reports filesystem usage for `storage` checks. Nil uses statfs.
 	DiskUsage DiskUsageFunc
 	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
 	NetSampler NetSamplerFunc
@@ -146,7 +146,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildProcessCheck(b, entry, deps)
 	case "count":
 		return buildCountCheck(b, entry)
-	case "disk":
+	case "disk", "storage":
 		return buildDiskCheck(b, entry, deps)
 	case "autofs":
 		return buildAutofsCheck(b, entry, deps)
@@ -485,19 +485,19 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	return countCheck{base: b, path: path, kind: kind, recursive: cfgval.Bool(entry["recursive"]), op: op, value: val}, ""
 }
 
-// buildDiskCheck builds a disk space/inode and/or mount check.
+// buildDiskCheck builds a storage space/inode and/or mount check.
 func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	path := cfgval.AsString(entry["path"])
 	if path == "" {
-		return nil, "disk check requires a path"
+		return nil, "storage check requires a path"
 	}
 	preds, err := parseDiskPreds(entry)
 	if err != nil {
-		return nil, "disk check: " + err.Error()
+		return nil, "storage check: " + err.Error()
 	}
 	mount := parseMountCond(entry)
 	if len(preds) == 0 && !mount.active {
-		return nil, "disk check requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted/fstype/options/device)"
+		return nil, "storage check requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted/fstype/options/device)"
 	}
 	return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
 }
