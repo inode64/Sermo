@@ -99,7 +99,7 @@ install-profiles:
 	done
 
 # Install the global config (kept if one already exists) and create the
-# available/enabled service directories.
+# available/included service directories.
 install-config:
 	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/apps-available $(DESTDIR)$(SERMO_CONFDIR)/apps-enabled
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
