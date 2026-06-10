@@ -313,7 +313,7 @@ paths:
   profiles:
     - /usr/share/sermo/profiles
     - /etc/sermo/apps-available
-  enabled:
+  includes:
     - /etc/sermo/apps-enabled
   runtime: /run/sermo
 
@@ -406,7 +406,7 @@ Resolution order:
 2. Load user profiles from /etc/sermo/apps-available.
 3. Load global configuration and conf.d files, producing one effective `defaults`
    block (sermo.yml layered with conf.d).
-4. Load enabled services from /etc/sermo/apps-enabled.
+4. Load included service documents and watch fragments from `paths.includes`.
 5. Resolve each service into a flat definition, lowest precedence first:
    a. Base layer: the effective global `defaults` (its stop_policy, policy and
       rule_window). This is the lowest precedence.
@@ -3206,7 +3206,7 @@ Implement:
 - YAML models
 - load global config
 - load profiles
-- load enabled services
+- load included services and watch fragments
 - merge rules
 - variable expansion
 - config validate

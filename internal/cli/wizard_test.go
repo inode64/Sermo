@@ -50,7 +50,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if !strings.Contains(out.String(), "disk-mnt-backup") || !strings.Contains(out.String(), "free_pct") {
 		t.Fatalf("generated YAML not shown: %s", out.String())
 	}
-	// The global config only points paths.enabled at the wizard directory; the
+	// The global config only points paths.includes at the wizard directory; the
 	// watch itself is written as a separate enabled fragment.
 	merged, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -59,8 +59,8 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if strings.Contains(string(merged), "disk-mnt-backup") {
 		t.Fatalf("watch should not be in global config: %s", merged)
 	}
-	if !strings.Contains(string(merged), "enabled:") || !strings.Contains(string(merged), "volume") {
-		t.Fatalf("paths.enabled not updated: %s", merged)
+	if !strings.Contains(string(merged), "includes:") || !strings.Contains(string(merged), "volume") {
+		t.Fatalf("paths.includes not updated: %s", merged)
 	}
 	if !strings.Contains(string(merged), "interval: 30s") {
 		t.Fatalf("merge dropped existing config: %s", merged)
@@ -124,7 +124,7 @@ func TestWizardRejectsLoadedWatchCollision(t *testing.T) {
 func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [volume]\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  includes: [volume]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Mkdir(filepath.Join(tmp, "volume"), 0o755); err != nil {
@@ -135,5 +135,27 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	}
 	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"disk-root": map[string]any{}}); err == nil {
 		t.Fatal("existing watch file must not be overwritten")
+	}
+}
+
+func TestMergeWizardWatchesMigratesLegacyEnabledPath(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [apps-enabled]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"disk-root": map[string]any{"then": map[string]any{"notify": []any{"ops"}}}})
+	if err != nil {
+		t.Fatalf("mergeWizardWatches: %v", err)
+	}
+	if merged.Backup == "" {
+		t.Fatal("legacy enabled path migration should rewrite global config")
+	}
+	data, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "enabled:") || !strings.Contains(string(data), "includes:") || !strings.Contains(string(data), "apps-enabled") || !strings.Contains(string(data), "volume") {
+		t.Fatalf("legacy path not migrated to includes: %s", data)
 	}
 }

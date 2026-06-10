@@ -28,7 +28,7 @@ func TestMonitorReloadPreservesWorkerState(t *testing.T) {
   interval: 100ms
 paths:
   profiles: [%[1]q]
-  enabled: [%[2]q]
+  includes: [%[2]q]
   runtime: %[3]q
 defaults:
   policy: { cooldown: 1m }
@@ -130,7 +130,7 @@ func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
   interval: 100ms
 paths:
   profiles: [%q]
-  enabled: [%q]
+  includes: [%q]
   runtime: %q
 defaults:
   policy: { cooldown: 1m }
@@ -172,7 +172,7 @@ checks:
   interval: notaduration
 paths:
   profiles: [%q]
-  enabled: [%q]
+  includes: [%q]
   runtime: %q
 defaults:
   policy: { cooldown: 1m }

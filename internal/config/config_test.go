@@ -40,7 +40,7 @@ engine:
   backend: auto
 paths:
   profiles: [ @ROOT@/profiles ]
-  enabled: [ @ROOT@/enabled ]
+  includes: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
   policy:
@@ -268,7 +268,7 @@ uses: redis
 engine: { backend: auto }
 paths:
   profiles: [../profiles]
-  enabled: [apps-enabled]
+  includes: [apps-enabled]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -286,8 +286,8 @@ watches:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := cfg.Global.Enabled[0]; got != enabledDir {
-		t.Fatalf("Enabled[0] = %q, want %q", got, enabledDir)
+	if got := cfg.Global.Includes[0]; got != enabledDir {
+		t.Fatalf("Includes[0] = %q, want %q", got, enabledDir)
 	}
 	if got := cfg.Global.Profiles[0]; got != profilesDir {
 		t.Fatalf("Profiles[0] = %q, want %q", got, profilesDir)
@@ -301,7 +301,31 @@ watches:
 	}
 }
 
-func TestLoadEnabledWatchFragments(t *testing.T) {
+func TestLoadLegacyEnabledPathAlias(t *testing.T) {
+	root := t.TempDir()
+	includeDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(includeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(`
+paths:
+  enabled: [enabled]
+defaults:
+  policy: { cooldown: 5m }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.Global.Includes) != 1 || cfg.Global.Includes[0] != includeDir {
+		t.Fatalf("Includes = %v, want [%s]", cfg.Global.Includes, includeDir)
+	}
+}
+
+func TestLoadIncludedWatchFragments(t *testing.T) {
 	root := t.TempDir()
 	enabled := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(filepath.Join(enabled, "volume"), 0o755); err != nil {
@@ -310,7 +334,7 @@ func TestLoadEnabledWatchFragments(t *testing.T) {
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
 paths:
-  enabled: [enabled]
+  includes: [enabled]
 defaults:
   policy: { cooldown: 5m }
 `), 0o644); err != nil {
@@ -339,7 +363,7 @@ watches:
 	}
 }
 
-func TestLoadEnabledWatchFragmentRejectsDuplicate(t *testing.T) {
+func TestLoadIncludedWatchFragmentRejectsDuplicate(t *testing.T) {
 	root := t.TempDir()
 	enabled := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabled, 0o755); err != nil {
@@ -348,7 +372,7 @@ func TestLoadEnabledWatchFragmentRejectsDuplicate(t *testing.T) {
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
 paths:
-  enabled: [enabled]
+  includes: [enabled]
 watches:
   disk-root:
     check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
@@ -379,7 +403,7 @@ engine:
   backend: bogus
 paths:
   profiles: [ @ROOT@/profiles ]
-  enabled: [ @ROOT@/enabled ]
+  includes: [ @ROOT@/enabled ]
   locks: /run/sermo/locks
   runtime: relative/path
 defaults:
@@ -411,7 +435,7 @@ security:
 func TestValidateWebBlock(t *testing.T) {
 	goodGlobal := writeConfig(t, map[string]string{"sermo.yml": `
 web: { address: 127.0.0.1, port: 9797 }
-paths: { enabled: [ @ROOT@/enabled ] }
+paths: { includes: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 `})
 	cfg, err := Load(goodGlobal)
@@ -426,7 +450,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	badGlobal := writeConfig(t, map[string]string{"sermo.yml": `
 web: { port: 70000, address: 5 }
-paths: { enabled: [ @ROOT@/enabled ] }
+paths: { includes: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 `})
 	cfg, err = Load(badGlobal)
@@ -443,7 +467,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	disabledGlobal := writeConfig(t, map[string]string{"sermo.yml": `
 web: { address: 127.0.0.1 }
-paths: { enabled: [ @ROOT@/enabled ] }
+paths: { includes: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 `})
 	cfg, err = Load(disabledGlobal)
@@ -1375,7 +1399,7 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { profiles: [ %s ], enabled: [ %s ], runtime: /run/sermo }
+paths: { profiles: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, profilesDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -1471,7 +1495,7 @@ variables:
 engine: { backend: auto }
 paths:
   profiles: [ %s ]
-  enabled: [ %s ]
+  includes: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }

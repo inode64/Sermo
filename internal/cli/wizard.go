@@ -56,7 +56,7 @@ func (a App) runWizard(_ context.Context, opts options) int {
 	fmt.Fprintf(a.Stdout, "\nGenerated configuration (%s):\n\n%s\n", res.Summary, data)
 
 	if !p.Confirm("Merge this into "+globalPath+"?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.enabled.")
+		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.includes.")
 		return exitSuccess
 	}
 	if err := ensureNoWatchCollisions(cfg, res.Watches); err != nil {
@@ -69,7 +69,7 @@ func (a App) runWizard(_ context.Context, opts options) int {
 		return exitRuntimeError
 	}
 	if merged.Backup != "" {
-		fmt.Fprintf(a.Stdout, "Updated %s paths.enabled (backup: %s).\n", globalPath, merged.Backup)
+		fmt.Fprintf(a.Stdout, "Updated %s paths.includes (backup: %s).\n", globalPath, merged.Backup)
 	}
 	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl reload` to apply.\n", len(merged.Files), merged.Dir)
 	return exitSuccess
@@ -176,7 +176,7 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 
 // mergeWizardWatches writes one generated watch per YAML file under a directory
 // named after the assistant, then ensures that directory is listed in
-// paths.enabled. Enabled-dir fragments contain a top-level watches map, so the
+// paths.includes. Included watch fragments contain a top-level watches map, so the
 // loader can merge them into global watch configuration without rewriting
 // sermo.yml on every generated watch.
 func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
@@ -211,7 +211,7 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		files = append(files, file)
 	}
 
-	changed, err := ensureEnabledPath(root, base, relDir, targetDir)
+	changed, err := ensureIncludesPath(root, base, relDir, targetDir)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
@@ -255,26 +255,55 @@ func watchConfigFileName(name string) string {
 	return base + ".yml"
 }
 
-func ensureEnabledPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
+func ensureIncludesPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
 	paths, _ := root["paths"].(map[string]any)
 	if paths == nil {
 		paths = map[string]any{}
 		root["paths"] = paths
 	}
-	list, err := yamlStringList(paths["enabled"])
+	list, err := yamlStringList(paths["includes"])
 	if err != nil {
-		return false, fmt.Errorf("paths.enabled must be a string or list before wizard can append")
+		return false, fmt.Errorf("paths.includes must be a string or list before wizard can append")
+	}
+	legacy, err := yamlStringList(paths["enabled"])
+	if err != nil {
+		return false, fmt.Errorf("paths.enabled must be a string or list before wizard can migrate it to includes")
+	}
+	changed := false
+	if len(legacy) > 0 {
+		list = appendUniqueStrings(list, legacy...)
+		delete(paths, "enabled")
+		changed = true
 	}
 	if len(list) == 0 {
 		list = append(list, "apps-enabled")
 	}
 	for _, item := range list {
 		if sameConfigPath(base, item, targetDir) {
-			return false, nil
+			if changed {
+				paths["includes"] = list
+			}
+			return changed, nil
 		}
 	}
-	paths["enabled"] = append(list, relDir)
+	paths["includes"] = append(list, relDir)
 	return true, nil
+}
+
+func appendUniqueStrings(list []string, values ...string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(list)+len(values))
+	for _, item := range append(list, values...) {
+		if item == "" {
+			continue
+		}
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
+		out = append(out, item)
+	}
+	return out
 }
 
 func yamlStringList(v any) ([]string, error) {

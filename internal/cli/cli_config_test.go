@@ -17,7 +17,7 @@ engine:
   backend: auto
 paths:
   profiles: [ `+root+`/profiles ]
-  enabled: [ `+root+`/enabled ]
+  includes: [ `+root+`/enabled ]
 defaults:
   policy:
     cooldown: 5m
@@ -77,7 +77,7 @@ func TestConfigValidateReportsErrors(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
-  enabled: [ `+root+`/enabled ]
+  includes: [ `+root+`/enabled ]
 defaults:
   policy:
     cooldown: 5m
