@@ -94,6 +94,22 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	}
 }
 
+func TestVolumeAssistantPercentSuffix(t *testing.T) {
+	// Select volume 2 (/), used-space condition 90%, for 1, notifier team-slack, no expand.
+	script := strings.Join([]string{"2", "2", "90%", "1", "3", "n"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := volumeAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry := res.Watches["disk-root"].(map[string]any)
+	check := entry["check"].(map[string]any)
+	up := check["used_pct"].(map[string]any)
+	if up["op"] != ">=" || up["value"] != "90%" {
+		t.Fatalf("used_pct = %v", up)
+	}
+}
+
 func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 	// Select volume 1; free-space size condition 10G; for 2; notifier ops-email.
 	script := strings.Join([]string{"1", "3", "10G", "2", "2", "n"}, "\n") + "\n"
@@ -107,6 +123,26 @@ func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 	free := check["free_bytes"].(map[string]any)
 	if free["op"] != "<" || free["value"] != "10G" {
 		t.Fatalf("free_bytes = %v", free)
+	}
+}
+
+func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
+	// Select volume 1; size condition first tries unitless 100, then valid 100G.
+	script := strings.Join([]string{"1", "4", "100", "100G", "2", "2", "n"}, "\n") + "\n"
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := volumeAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	entry := res.Watches["disk-mnt-backup"].(map[string]any)
+	check := entry["check"].(map[string]any)
+	used := check["used_bytes"].(map[string]any)
+	if used["value"] != "100G" {
+		t.Fatalf("used_bytes = %v", used)
+	}
+	if !strings.Contains(out.String(), "use a size like 5G, 500M or 2T") {
+		t.Fatalf("expected suffix prompt after unitless size, got %q", out.String())
 	}
 }
 

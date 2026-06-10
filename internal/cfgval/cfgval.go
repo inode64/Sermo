@@ -117,9 +117,10 @@ func Int(v any) (int, bool) {
 	}
 }
 
-// ByteSize parses a scalar byte size. It accepts raw bytes ("1048576") or a
-// K/M/G/T suffix using binary units; a trailing B or iB is also accepted
-// ("5G", "5GB", "5GiB"). Negative and empty values are rejected.
+// ByteSize parses a scalar byte size. It requires an explicit suffix using
+// binary units: K/M/G/T, with optional trailing B or iB ("5G", "5GB", "5GiB").
+// Unitless values are rejected so disk thresholds cannot be confused with
+// percentage thresholds.
 func ByteSize(v any) (uint64, bool) {
 	s := strings.TrimSpace(String(v))
 	if s == "" {
@@ -127,6 +128,7 @@ func ByteSize(v any) (uint64, bool) {
 	}
 	upper := strings.ToUpper(s)
 	unit := float64(1)
+	hasUnit := false
 	for _, suffix := range []struct {
 		text string
 		mult float64
@@ -139,9 +141,13 @@ func ByteSize(v any) (uint64, bool) {
 	} {
 		if strings.HasSuffix(upper, suffix.text) {
 			unit = suffix.mult
+			hasUnit = true
 			s = strings.TrimSpace(s[:len(s)-len(suffix.text)])
 			break
 		}
+	}
+	if !hasUnit {
+		return 0, false
 	}
 	n, err := strconv.ParseFloat(s, 64)
 	bytes := n * unit

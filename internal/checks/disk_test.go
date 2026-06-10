@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -134,6 +135,40 @@ func TestBuildDiskByteSizeCheck(t *testing.T) {
 	}
 	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
 		t.Fatal("byte-sized disk check should build and fire below threshold")
+	}
+}
+
+func TestBuildDiskPercentSuffixCheck(t *testing.T) {
+	section := map[string]any{
+		"d": map[string]any{
+			"type":     "disk",
+			"path":     "/",
+			"used_pct": map[string]any{"op": ">=", "value": "90%"},
+		},
+	}
+	built, warns := Build(section, Deps{DiskUsage: fakeDisk(92, 8, 9<<30, 100<<30)})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
+		t.Fatal("percent-suffixed disk check should build and fire above threshold")
+	}
+}
+
+func TestBuildDiskByteSizeCheckRejectsUnitless(t *testing.T) {
+	section := map[string]any{
+		"d": map[string]any{
+			"type":       "disk",
+			"path":       "/",
+			"free_bytes": map[string]any{"op": "<", "value": 10},
+		},
+	}
+	built, warns := Build(section, Deps{DiskUsage: fakeDisk(92, 8, 9<<30, 100<<30)})
+	if len(built) != 0 {
+		t.Fatalf("expected no built checks, got %d", len(built))
+	}
+	if len(warns) != 1 || !strings.Contains(warns[0], "must include a size suffix") {
+		t.Fatalf("expected suffix warning, got %v", warns)
 	}
 }
 

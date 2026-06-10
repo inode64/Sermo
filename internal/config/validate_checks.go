@@ -49,6 +49,10 @@ func validateDiskPredicates(prefix string, fieldsMap map[string]any, add addFunc
 			validateOpByteSize(prefix+"."+field, m, add)
 			continue
 		}
+		if strings.HasSuffix(field, "_pct") {
+			validateOpPercent(prefix+"."+field, m, add)
+			continue
+		}
 		validateOpNumeric(prefix+"."+field, m, add)
 	}
 	return preds
@@ -119,8 +123,25 @@ func validateOpByteSize(label string, m map[string]any, add addFunc) {
 		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
 	}
 	if _, ok := cfgval.ByteSize(m["value"]); !ok {
-		add("%s value %q must be a byte size (e.g. 10G, 500M)", label, cfgval.String(m["value"]))
+		add("%s value %q must include a size suffix (K, M, G or T; e.g. 10G, 500M)", label, cfgval.String(m["value"]))
 	}
+}
+
+func validateOpPercent(label string, m map[string]any, add addFunc) {
+	if !isValidDiskOp(cfgval.String(m["op"])) {
+		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
+	}
+	if !isPercentValue(cfgval.String(m["value"])) {
+		add("%s value %q must be numeric or a percentage (e.g. 90%%)", label, cfgval.String(m["value"]))
+	}
+}
+
+func isPercentValue(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.HasSuffix(s, "%") {
+		s = strings.TrimSpace(strings.TrimSuffix(s, "%"))
+	}
+	return isNumeric(s)
 }
 
 // validatePresentThresholds validates the present {op, value} predicates among

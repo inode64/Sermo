@@ -271,6 +271,22 @@ func TestValidateDiskBytePredicates(t *testing.T) {
 		t.Fatalf("byte predicates should be valid, got %v", w)
 	}
 
+	percent := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-percent": map[string]any{
+				"check": map[string]any{
+					"type":     "disk",
+					"path":     "/",
+					"used_pct": map[string]any{"op": ">=", "value": "90%"},
+				},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(percent); len(w) != 0 {
+		t.Fatalf("percent-suffixed predicate should be valid, got %v", w)
+	}
+
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"disk-bytes": map[string]any{
@@ -279,8 +295,20 @@ func TestValidateDiskBytePredicates(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.disk-bytes.check.free_bytes value \"lots\" must be a byte size") {
+	if !hasIssue(bad, "watches.disk-bytes.check.free_bytes value \"lots\" must include a size suffix") {
 		t.Fatalf("expected invalid byte-size issue, got %v", bad)
+	}
+
+	unitless := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"disk-bytes": map[string]any{
+				"check": map[string]any{"type": "disk", "path": "/", "free_bytes": map[string]any{"op": "<", "value": 10}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(unitless, "watches.disk-bytes.check.free_bytes value \"10\" must include a size suffix") {
+		t.Fatalf("expected missing suffix issue, got %v", unitless)
 	}
 }
 

@@ -5,6 +5,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"sermo/internal/cfgval"
 )
 
 const notifyNone = "none"
@@ -77,10 +79,10 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 	}) {
 	case 0:
 		s.metric, s.op = "free_pct", "<"
-		s.value = p.AskInt("Alert when free space drops below (%)", 10)
+		s.value = askPercent(p, "Alert when free space drops below", 10)
 	case 1:
 		s.metric, s.op = "used_pct", ">="
-		s.value = p.AskInt("Alert when used space reaches/exceeds (%)", 90)
+		s.value = askPercent(p, "Alert when used space reaches/exceeds", 90)
 	case 2:
 		s.metric, s.op = "free_bytes", "<"
 		s.value = askSize(p, "Alert when free space drops below (e.g. 10G)", "10G")
@@ -161,6 +163,25 @@ func hasNotifyAction(names []string) bool {
 	return len(names) > 0 && !slices.Contains(names, notifyNone)
 }
 
+// askPercent reads a percentage, accepting either "10" or "10%".
+func askPercent(p *Prompt, question string, def int) any {
+	for {
+		v := strings.TrimSpace(p.Ask(question+" (%)", strconv.Itoa(def)))
+		if v == "" {
+			return def
+		}
+		if strings.HasSuffix(v, "%") {
+			n := strings.TrimSpace(strings.TrimSuffix(v, "%"))
+			if _, err := strconv.ParseFloat(n, 64); err == nil {
+				return v
+			}
+		} else if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+		p.printf("  use a percentage like 10 or 10%%\n")
+	}
+}
+
 // askSize reads a size like 5G, re-prompting on an obviously bad value.
 func askSize(p *Prompt, question, def string) string {
 	for {
@@ -172,24 +193,11 @@ func askSize(p *Prompt, question, def string) string {
 	}
 }
 
-// validSize reports whether s looks like a byte size (digits with an optional
-// K/M/G/T suffix); the runtime does the authoritative parse.
+// validSize reports whether s is a byte size with an explicit suffix (K/M/G/T,
+// with optional B/iB). The runtime does the authoritative parse.
 func validSize(s string) bool {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return false
-	}
-	last := s[len(s)-1]
-	if last < '0' || last > '9' {
-		switch last {
-		case 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'b', 'B':
-			s = s[:len(s)-1]
-		default:
-			return false
-		}
-	}
-	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
-	return err == nil && f > 0
+	n, ok := cfgval.ByteSize(s)
+	return ok && n > 0
 }
 
 // watchName derives a stable watch name from a mount path, e.g. "/mnt/backup"
