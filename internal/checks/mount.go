@@ -3,6 +3,7 @@ package checks
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sermo/internal/cfgval"
 	"slices"
 	"strings"
@@ -108,6 +109,39 @@ func defaultMountSampler() ([]Mount, error) {
 		})
 	}
 	return out, nil
+}
+
+// DefaultMounts reads the host mount table from /proc/mounts.
+func DefaultMounts() ([]Mount, error) {
+	return defaultMountSampler()
+}
+
+// MountForPath returns the deepest mount containing path, or nil when none is
+// known. It is useful for operator views where a disk check points at a
+// directory below the actual mountpoint.
+func MountForPath(mounts []Mount, path string) *Mount {
+	cleanPath := filepath.Clean(path)
+	var best *Mount
+	for i := range mounts {
+		mp := filepath.Clean(mounts[i].MountPoint)
+		if !pathUnderMount(cleanPath, mp) {
+			continue
+		}
+		if best == nil || len(mp) > len(filepath.Clean(best.MountPoint)) {
+			best = &mounts[i]
+		}
+	}
+	return best
+}
+
+func pathUnderMount(path, mountPoint string) bool {
+	if mountPoint == "." || path == "." {
+		return false
+	}
+	if mountPoint == "/" {
+		return strings.HasPrefix(path, "/")
+	}
+	return path == mountPoint || strings.HasPrefix(path, mountPoint+"/")
 }
 
 // unescapeMount decodes the octal escapes /proc/mounts uses for space, tab,

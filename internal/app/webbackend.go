@@ -43,7 +43,9 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 			}
 			return st.Status, nil
 		},
-		Processes: discoverer.ObserveState,
+		Processes:    discoverer.ObserveState,
+		DiskUsage:    deps.DiskUsage,
+		MountSampler: deps.MountSampler,
 	}
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{
@@ -87,7 +89,10 @@ type webWatch struct {
 	disabled      bool
 	fireOnFail    bool
 	hasHook       bool
+	hookCommand   []string
+	notifiers     []string
 	notifierCount int
+	check         map[string]any
 }
 
 // webNotifier is a configured notification target (used by watches).
@@ -118,6 +123,8 @@ type WebBackend struct {
 	host           diag.Host
 	measure        MeasurementReader
 	collector      *metrics.Collector
+	diskUsage      checks.DiskUsageFunc
+	mountSampler   checks.MountSamplerFunc
 	emit           func(Event)
 	opGate         *OpGate
 	defaultTimeout time.Duration
@@ -137,7 +144,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
 		cfg: cfg, host: diag.OSHost{},
 		collector: deps.Collector,
-		emit:      deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
+		diskUsage: deps.DiskUsage, mountSampler: deps.MountSampler,
+		emit: deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
@@ -209,18 +217,16 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				iv = 30 * time.Second
 			}
 			hasHook := false
+			var hookCommand []string
+			var notifierNames []string
 			if then, ok := entry["then"].(map[string]any); ok {
 				if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
 					if cmd := h["command"]; cmd != nil {
-						hasHook = true
+						hookCommand = cfgval.StringArray(cmd)
+						hasHook = len(hookCommand) > 0
 					}
 				}
-			}
-			notifierCount := 0
-			if then, ok := entry["then"].(map[string]any); ok {
-				if ns, ok := then["notify"].([]any); ok {
-					notifierCount = len(ns)
-				}
+				notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), deps.GlobalNotify)
 			}
 			ww := &webWatch{
 				name:          name,
@@ -229,7 +235,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				disabled:      disabled,
 				fireOnFail:    fireOnFail,
 				hasHook:       hasHook,
-				notifierCount: notifierCount,
+				hookCommand:   hookCommand,
+				notifiers:     notifierNames,
+				notifierCount: len(notifierNames),
+				check:         checkMap(entry),
 			}
 			wb.watches[name] = ww
 			wb.watchOrder = append(wb.watchOrder, name)
@@ -443,14 +452,23 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			continue
 		}
 		iv := formatInterval(w.interval)
+		var disk *web.DiskWatchInfo
+		if w.checkType == "disk" {
+			disk = diskWatchInfo(w, b)
+		}
 		ww := web.Watch{
 			Name:          w.name,
 			CheckType:     w.checkType,
+			Summary:       watchSummary(w, disk),
 			Interval:      iv,
 			Enabled:       !w.disabled,
 			FireOnFail:    w.fireOnFail,
 			HasHook:       w.hasHook,
+			HookCommand:   slices.Clone(w.hookCommand),
+			Notifiers:     slices.Clone(w.notifiers),
 			NotifierCount: w.notifierCount,
+			Conditions:    watchConditions(w.check),
+			Disk:          disk,
 		}
 		// Compute last activity for this watch from the event log (best effort)
 		if b.events != nil {
@@ -465,6 +483,115 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		out = append(out, ww)
 	}
 	return out
+}
+
+func checkMap(entry map[string]any) map[string]any {
+	check, _ := entry["check"].(map[string]any)
+	return check
+}
+
+func watchSummary(w *webWatch, disk *web.DiskWatchInfo) string {
+	if w == nil {
+		return ""
+	}
+	if w.checkType == "disk" && disk != nil {
+		if disk.SampleError != "" {
+			return disk.Path + ": " + disk.SampleError
+		}
+		fs := disk.FileSystem
+		if fs == "" {
+			fs = "filesystem"
+		}
+		return fmt.Sprintf("%s: %.1f%% free (%d bytes) on %s", disk.Path, disk.FreePct, disk.FreeBytes, fs)
+	}
+	conds := watchConditions(w.check)
+	if len(conds) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(conds))
+	for _, c := range conds {
+		parts = append(parts, strings.TrimSpace(c.Field+" "+c.Op+" "+c.Value))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func watchConditions(check map[string]any) []web.WatchCondition {
+	if check == nil {
+		return nil
+	}
+	var out []web.WatchCondition
+	for _, field := range []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
+		m, ok := check[field].(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, web.WatchCondition{
+			Field: field,
+			Op:    cfgval.AsString(m["op"]),
+			Value: cfgval.String(m["value"]),
+		})
+	}
+	if v, ok := check["mounted"].(bool); ok {
+		out = append(out, web.WatchCondition{Field: "mounted", Op: "==", Value: fmt.Sprintf("%t", v)})
+	}
+	for _, field := range []string{"fstype", "device"} {
+		if v := cfgval.String(check[field]); v != "" {
+			out = append(out, web.WatchCondition{Field: field, Op: "==", Value: v})
+		}
+	}
+	if opts := cfgval.StringList(check["options"]); len(opts) > 0 {
+		out = append(out, web.WatchCondition{Field: "options", Op: "contains", Value: strings.Join(opts, ",")})
+	}
+	return out
+}
+
+func diskWatchInfo(w *webWatch, b *WebBackend) *web.DiskWatchInfo {
+	if w == nil || w.check == nil {
+		return nil
+	}
+	path := cfgval.String(w.check["path"])
+	if path == "" {
+		return nil
+	}
+	info := &web.DiskWatchInfo{Path: path}
+
+	usage := b.diskUsage
+	if usage == nil {
+		usage = checks.DefaultDiskUsage
+	}
+	if st, err := usage(path); err != nil {
+		info.SampleError = err.Error()
+	} else {
+		info.TotalBytes = st.TotalBytes
+		info.FreeBytes = st.FreeBytes
+		if st.TotalBytes >= st.FreeBytes {
+			info.UsedBytes = st.TotalBytes - st.FreeBytes
+		}
+		info.UsedPct = st.UsedPct
+		info.FreePct = st.FreePct
+		info.InodesTotal = st.InodesTotal
+		info.InodesFree = st.InodesFree
+		info.InodesUsedPct = st.InodesUsedPct
+		info.InodesFreePct = st.InodesFreePct
+	}
+
+	mountSampler := b.mountSampler
+	if mountSampler == nil {
+		mountSampler = checks.DefaultMounts
+	}
+	mounts, err := mountSampler()
+	if err != nil {
+		info.MountSampleError = err.Error()
+		return info
+	}
+	if mount := checks.MountForPath(mounts, path); mount != nil {
+		info.Mounted = true
+		info.MountPoint = mount.MountPoint
+		info.Device = mount.Device
+		info.FileSystem = mount.FSType
+		info.Options = slices.Clone(mount.Options)
+	}
+	return info
 }
 
 // Notifiers returns the configured notification targets.

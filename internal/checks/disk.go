@@ -181,6 +181,11 @@ func statfsUsage(path string) (DiskStats, error) {
 	}, nil
 }
 
+// DefaultDiskUsage reports disk usage using the host statfs implementation.
+func DefaultDiskUsage(path string) (DiskStats, error) {
+	return statfsUsage(path)
+}
+
 // parseDiskPreds reads the space/inode predicates from a disk entry (each
 // {op, value}). The set may be empty — a disk check is valid with only mount
 // conditions — so the "at least one of predicate/mount" requirement is enforced
