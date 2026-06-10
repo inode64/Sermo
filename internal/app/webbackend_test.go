@@ -435,7 +435,12 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 		order: []string{"mysql", "web"},
 		entries: map[string]*webEntry{
 			"mysql": {displayName: "MySQL", unit: "mysqld", backend: "systemd", disabled: true},
-			"web":   {displayName: "Web", unit: "nginx", backend: "systemd"},
+			"web": {
+				displayName: "Web",
+				unit:        "nginx",
+				backend:     "systemd",
+				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
 		},
 	}
 
@@ -449,12 +454,12 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 
 	dis := byName["mysql"]
-	if dis.Enabled || dis.Status != "disabled" || dis.Monitored {
-		t.Fatalf("disabled service = %+v, want Enabled=false, Status=disabled, Monitored=false", dis)
+	if dis.Enabled || dis.Status != "disabled" || dis.State != TargetStateDisabled || dis.Monitored {
+		t.Fatalf("disabled service = %+v, want Enabled=false, Status=disabled, State=disabled, Monitored=false", dis)
 	}
 
 	en := byName["web"]
-	if !en.Enabled || en.Status == "disabled" {
+	if !en.Enabled || en.Status == "disabled" || en.State != TargetStateMonitorized {
 		t.Fatalf("normal service = %+v, want Enabled=true", en)
 	}
 
