@@ -17,8 +17,8 @@
   .services-table th, .services-table td { padding: .26rem .42rem; vertical-align: top; }
   .services-table th { color: #888; white-space: nowrap; }
   .services-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; }
-  .services-table th.sortable { cursor: pointer; }
-  .services-table th.sortable:hover { color: #444; }
+  .services-table th.sortable, .watch-table th.sortable { cursor: pointer; }
+  .services-table th.sortable:hover, .watch-table th.sortable:hover { color: #444; }
   .sort-ind { font-size: .7rem; }
   .services-table td { white-space: nowrap; }
   .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; }
@@ -68,7 +68,7 @@
   summary::before { content: "\25B8"; color: #888; margin-right: .4rem; font-size: .9em; }
   details[open] > summary::before { content: "\25BE"; }
   summary > button { font-weight: 400; }
-  #rows tr:hover td { background: #8881; }
+  #rows tr:hover td, #watch-rows tr:hover td { background: #8881; }
   #rows tr.row-failing td { background: #cf222e1f; }
   tr.clickable { cursor: pointer; }
   .exp { color: #888; margin-right: .35rem; user-select: none; font-size: .9em; }
@@ -77,6 +77,7 @@
   .slabar > span { display: block; height: 100%; }
   .watch-table { min-width: 72rem; font-size: .88rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
+  .watch-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; color: #888; white-space: nowrap; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
   .usagebar { position: relative; display: inline-grid; place-items: center; width: 8.8rem; height: 1rem; background: #8882; border: 1px solid #8885; border-radius: 999px; overflow: hidden; vertical-align: middle; box-sizing: border-box; }
   .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; transition: width .2s ease; }
@@ -87,8 +88,8 @@
   .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: CanvasText; text-shadow: 0 1px 0 Canvas, 0 -1px 0 Canvas, 1px 0 0 Canvas, -1px 0 0 Canvas; }
   .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
-  #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
-  #svc-filters button.f-active { background: #8883; font-weight: 600; }
+  #svc-controls input, #watch-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
+  #svc-filters button.f-active, #watch-filters button.f-active { background: #8883; font-weight: 600; }
   #topbar { position: sticky; top: 0; z-index: 5; background: Canvas; padding: 1.5rem 1.5rem .35rem; margin: -1.5rem -1.5rem .5rem; border-bottom: 1px solid #8884; }
   dialog { color: CanvasText; background: Canvas; border: 1px solid #8886; border-radius: .5rem; padding: 0; max-width: min(44rem, calc(100vw - 2rem)); width: 44rem; }
   dialog::backdrop { background: rgba(0,0,0,.45); }
@@ -188,9 +189,33 @@
 
 <details id="watches-section" open style="display:none">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
+  <div id="watch-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="watch-search" type="search" placeholder="filter watches…">
+    <span id="watch-filters">
+      <button data-wf="all" class="f-active">all</button>
+      <button data-wf="monitored">monitored</button>
+      <button data-wf="paused">paused</button>
+      <button data-wf="disabled">disabled</button>
+      <button data-wf="hook">hook</button>
+      <button data-wf="notify">notify</button>
+      <button data-wf="expand">expand</button>
+    </span>
+    <span id="watch-count" class="muted"></span>
+  </div>
   <div class="table-wrap">
   <table class="watch-table">
-    <thead><tr><th>Name</th><th>Type</th><th>Summary</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th><th>Actions</th></tr></thead>
+    <thead><tr>
+      <th class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
+      <th class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
+      <th class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
+      <th class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
+      <th class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
+      <th>Actions</th>
+    </tr></thead>
     <tbody id="watch-rows"></tbody>
   </table>
   </div>
@@ -721,6 +746,8 @@ let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | active | inactive | failed | monitored | paused | disabled
 let allWatches = [];
+let watchQuery = "";
+let watchStatus = "all"; // all | monitored | paused | disabled | hook | notify | expand
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
@@ -955,6 +982,39 @@ function serviceMatches(s) {
 
 function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); }
 
+function compareSortValues(a, b) {
+  if (a == null) a = "";
+  if (b == null) b = "";
+  if (typeof a === "number" && typeof b === "number") {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  if (typeof a === "boolean") a = a ? 1 : 0;
+  if (typeof b === "boolean") b = b ? 1 : 0;
+  if (typeof a === "number" && typeof b === "number") {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+}
+
+function sortedBy(list, sort, sortKeys, fallbackKey) {
+  const f = sortKeys[sort.key];
+  if (!sort.key || !f) return list;
+  const fallback = sortKeys[fallbackKey || "name"];
+  list.sort((a, b) => {
+    const primary = compareSortValues(f(a), f(b)) * sort.dir;
+    if (primary !== 0) return primary;
+    return fallback ? compareSortValues(fallback(a), fallback(b)) : 0;
+  });
+  return list;
+}
+
+function renderFilterButtonCounts(selector, counts) {
+  document.querySelectorAll(`${selector} button`).forEach((b) => {
+    const key = b.dataset.f || b.dataset.wf;
+    if (counts[key] !== undefined) b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
+  });
+}
+
 // Column sort: null key keeps the default failing-first order; clicking a header
 // sorts by it (ascending), and clicking the same header again flips direction.
 let svcSort = { key: "", dir: 1 };
@@ -971,7 +1031,7 @@ function setSvcSort(key) {
   renderServices();
 }
 function updateSortIndicators() {
-  document.querySelectorAll(".sort-ind").forEach((el) => {
+  document.querySelectorAll(".sort-ind[data-si]").forEach((el) => {
     el.textContent = el.dataset.si === svcSort.key ? (svcSort.dir > 0 ? " ▲" : " ▼") : "";
   });
 }
@@ -990,10 +1050,7 @@ function renderFilterCounts() {
     paused: s.filter((x) => x.enabled && !x.monitored).length,
     disabled: s.filter((x) => !x.enabled).length,
   };
-  document.querySelectorAll("#svc-filters button").forEach((b) => {
-    const f = b.dataset.f;
-    if (c[f] !== undefined) b.innerHTML = `${f} <span class="muted">${c[f]}</span>`;
-  });
+  renderFilterButtonCounts("#svc-filters", c);
 }
 
 function setSvcStatus(v) {
@@ -1016,8 +1073,7 @@ function renderServices() {
   renderFilterCounts();
   const list = (allServices || []).filter(serviceMatches);
   if (svcSort.key && svcSortKeys[svcSort.key]) {
-    const f = svcSortKeys[svcSort.key];
-    list.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * svcSort.dir; });
+    sortedBy(list, svcSort, svcSortKeys, "name");
   } else {
     // Default: failing services first (stable sort keeps backend order in groups).
     list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
@@ -1304,6 +1360,148 @@ function watchMonitorMode(w) {
   return w && w.monitor ? w.monitor : "enabled";
 }
 
+function watchHasNotify(w) {
+  return notifierNames(w).length > 0 || (w && Number(w.notifier_count || 0) > 0);
+}
+
+function watchHasExpand(w) {
+  return !!(w && w.expand && Number(w.expand.by_bytes) > 0);
+}
+
+function watchStateText(w) {
+  if (!w || !w.enabled) return "disabled";
+  return w.monitored ? "monitored" : "paused";
+}
+
+function watchStateRank(w) {
+  if (!w || !w.enabled) return 2;
+  return w.monitored ? 0 : 1;
+}
+
+function watchSummaryText(w) {
+  if (!w) return "";
+  const d = w.disk;
+  if (d) {
+    return [
+      d.path,
+      d.filesystem,
+      d.mount_point,
+      d.device,
+      d.mounted ? "mounted" : "not mounted",
+      d.sample_error,
+      d.mount_sample_error,
+      d.free_bytes != null ? fmtBytes(d.free_bytes) + " free" : "",
+      fmtPct(diskUsedPct(d)) + " used",
+    ].filter(Boolean).join(" ");
+  }
+  return w.summary || "";
+}
+
+function watchSearchText(w) {
+  const conditions = (w.conditions || []).map((c) => `${c.field || ""} ${c.op || ""} ${c.value || ""}`).join(" ");
+  return [
+    w.name,
+    w.check_type,
+    watchSummaryText(w),
+    w.interval,
+    w.fire_on_fail ? "on fail" : "on threshold",
+    w.has_hook ? "hook" : "",
+    (w.hook_command || []).join(" "),
+    notifierNames(w).join(" "),
+    watchHasNotify(w) ? "notify notifiers" : "",
+    watchHasExpand(w) ? "expand" : "",
+    watchStateText(w),
+    watchMonitorMode(w),
+    w.last_activity_kind,
+    conditions,
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function watchMatches(w) {
+  if (watchQuery && !watchSearchText(w).includes(watchQuery)) return false;
+  switch (watchStatus) {
+    case "monitored": return !!(w && w.enabled && w.monitored);
+    case "paused":    return !!(w && w.enabled && !w.monitored);
+    case "disabled":  return !!(w && !w.enabled);
+    case "hook":      return !!(w && w.has_hook);
+    case "notify":    return watchHasNotify(w);
+    case "expand":    return watchHasExpand(w);
+    default:           return true;
+  }
+}
+
+function setWatchQuery(v) {
+  watchQuery = (v || "").trim().toLowerCase();
+  renderWatches();
+}
+
+function setWatchStatus(v) {
+  watchStatus = v || "all";
+  document.querySelectorAll("#watch-filters button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.wf === watchStatus));
+  renderWatches();
+}
+
+function renderWatchFilterCounts() {
+  const w = allWatches || [];
+  renderFilterButtonCounts("#watch-filters", {
+    all: w.length,
+    monitored: w.filter((x) => x.enabled && x.monitored).length,
+    paused: w.filter((x) => x.enabled && !x.monitored).length,
+    disabled: w.filter((x) => !x.enabled).length,
+    hook: w.filter((x) => x.has_hook).length,
+    notify: w.filter(watchHasNotify).length,
+    expand: w.filter(watchHasExpand).length,
+  });
+}
+
+function parseDurationSeconds(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return 0;
+  let total = 0;
+  let matched = false;
+  const re = /(\d+(?:\.\d+)?)(ms|s|m|h)/g;
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    matched = true;
+    const n = parseFloat(m[1]);
+    switch (m[2]) {
+      case "ms": total += n / 1000; break;
+      case "s": total += n; break;
+      case "m": total += n * 60; break;
+      case "h": total += n * 3600; break;
+    }
+  }
+  if (matched) return total;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+let watchSort = { key: "", dir: 1 };
+const watchSortKeys = {
+  name: (w) => (w.name || "").toLowerCase(),
+  type: (w) => (w.check_type || "").toLowerCase(),
+  summary: (w) => watchSummaryText(w).toLowerCase(),
+  interval: (w) => parseDurationSeconds(w.interval),
+  polarity: (w) => w.fire_on_fail ? "fail" : "threshold",
+  hook: (w) => w.has_hook ? 1 : 0,
+  notifiers: (w) => notifierNames(w).join(" ").toLowerCase() || Number(w.notifier_count || 0),
+  last: (w) => w.last_activity || "",
+  state: watchStateRank,
+};
+
+function setWatchSort(key) {
+  if (watchSort.key === key) watchSort.dir = -watchSort.dir;
+  else { watchSort.key = key; watchSort.dir = 1; }
+  renderWatches();
+}
+
+function updateWatchSortIndicators() {
+  document.querySelectorAll(".sort-ind[data-wi]").forEach((el) => {
+    el.textContent = el.dataset.wi === watchSort.key ? (watchSort.dir > 0 ? " ▲" : " ▼") : "";
+  });
+}
+
 function renderConditionRows(conditions) {
   const list = conditions || [];
   if (!list.length) return '<div class="muted" style="margin:.2rem 0 .6rem">No configured predicates.</div>';
@@ -1355,15 +1553,24 @@ function renderWatches(watches) {
   const section = $("#watches-section");
   const tbody = $("#watch-rows");
   const cnt = $("#watches-count");
+  const filterCount = $("#watch-count");
   if (!section || !tbody) return;
-  const list = allWatches || [];
-  if (list.length === 0) {
+  const total = (allWatches || []).length;
+  if (total === 0) {
     section.style.display = "none";
     if (cnt) cnt.textContent = "";
+    if (filterCount) filterCount.textContent = "";
     return;
   }
   section.style.display = "block";
-  if (cnt) cnt.textContent = `(${list.length})`;
+  if (cnt) cnt.textContent = `(${total})`;
+  renderWatchFilterCounts();
+  const list = (allWatches || []).filter(watchMatches);
+  if (watchSort.key && watchSortKeys[watchSort.key]) {
+    sortedBy(list, watchSort, watchSortKeys, "name");
+  }
+  updateWatchSortIndicators();
+  if (filterCount) filterCount.textContent = (watchQuery || watchStatus !== "all") ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((w) => {
     const mode = watchMonitorMode(w);
     const configState = w.enabled
@@ -1416,7 +1623,9 @@ function renderWatches(watches) {
       : "";
     return row + expRow;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="10" class="muted">No watches.</td></tr>`;
+  tbody.innerHTML = rows.join("") || (watchQuery || watchStatus !== "all"
+    ? `<tr><td colspan="10" class="muted">No watches match the filter.</td></tr>`
+    : `<tr><td colspan="10" class="muted">No watches.</td></tr>`);
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
 }
 
@@ -2445,6 +2654,29 @@ function initStaticHandlers() {
 
   document.querySelectorAll(".services-table th.sortable[data-sort]").forEach((th) => {
     th.addEventListener("click", () => setSvcSort(th.dataset.sort || ""));
+  });
+
+  const watchSearch = $("#watch-search");
+  if (watchSearch) {
+    watchSearch.addEventListener("input", () => setWatchQuery(watchSearch.value));
+    watchSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        watchSearch.value = "";
+        setWatchQuery("");
+      }
+    });
+  }
+
+  const watchFilters = $("#watch-filters");
+  if (watchFilters) {
+    watchFilters.addEventListener("click", (e) => {
+      const btn = closestFrom(e, "button[data-wf]");
+      if (btn) setWatchStatus(btn.dataset.wf || "all");
+    });
+  }
+
+  document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
+    th.addEventListener("click", () => setWatchSort(th.dataset.watchSort || ""));
   });
 
   ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
