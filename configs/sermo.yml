@@ -92,9 +92,9 @@ watches:
     check:
       type: disk
       path: /
-      used_pct: { op: ">=", value: 90 }
-      free_bytes: { op: "<", value: 10G }       # absolute threshold, supports K/M/G/T
-      inodes_used_pct: { op: ">=", value: 90 }   # also catch inode exhaustion
+      used_pct: { op: ">=", value: "90%" }
+      free_bytes: { op: "<", value: 10G }       # absolute threshold, requires K/M/G/T
+      inodes_used_pct: { op: ">=", value: "90%" } # also catch inode exhaustion
     for: { cycles: 3 }
     then:
       notify: [ops-email, team-slack]            # email the on-call list and post to Slack
