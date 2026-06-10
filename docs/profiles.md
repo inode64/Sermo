@@ -187,6 +187,25 @@ policy:
 Siblings of `os:` are preserved and the selected branch merges over them. `os` is
 reserved as a selector key wherever its value is a map.
 
+A branch may also be a **list or scalar** instead of a map. When `os:` is the only
+key in its parent, the selected branch *replaces* the value (rather than merging),
+which is handy for OS-specific candidate lists such as pidfile paths:
+
+```yaml
+processes:
+  main:
+    type: pidfile
+    path:                       # the resolved value becomes the OS's list
+      os:
+        fedora: [/run/postgres.pid]
+        gentoo: [/run/postgres${port}.pid, /run/postgres.pid]
+        default: [/run/postgres.pid]
+```
+
+A **pidfile** selector's `path` accepts a single path or a **list of candidates**;
+discovery tries them in order and uses the first that points at a running process
+(so per-OS or versioned pidfile locations all resolve without personal config).
+
 ## Versioned profiles
 
 Some applications ship one binary per version and several can be installed at

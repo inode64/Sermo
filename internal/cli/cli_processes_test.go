@@ -57,7 +57,7 @@ func TestProcessesUsesSelectorsAndReports(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	if len(gotSelectors) != 1 || gotSelectors[0].Type != process.SelectorPidfile || gotSelectors[0].Path != "/run/mysqld/mysqld.pid" {
+	if len(gotSelectors) != 1 || gotSelectors[0].Type != process.SelectorPidfile || len(gotSelectors[0].Paths) != 1 || gotSelectors[0].Paths[0] != "/run/mysqld/mysqld.pid" {
 		t.Fatalf("selectors passed to Discover = %+v", gotSelectors)
 	}
 	out := stdout.String()
