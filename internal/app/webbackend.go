@@ -788,6 +788,9 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		if seen && !cs.At.IsZero() {
 			ch.At = cs.At.UTC().Format(time.RFC3339)
 		}
+		for _, m := range checks.GraphMetrics(e.checkTypes[cn]) {
+			ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
+		}
 		d.Checks = append(d.Checks, ch)
 	}
 
@@ -1114,36 +1117,61 @@ func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
 }
 
 // Metrics returns a check's measured metric series over the window.
-func (b *WebBackend) Metrics(_ context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {
+func (b *WebBackend) Metrics(_ context.Context, name, check, metric string, since time.Duration) (web.MetricSeries, bool) {
 	e := b.entries[name]
-	if e == nil {
-		return web.MetricSeries{}, false
-	}
-	if e.disabled {
+	if e == nil || e.disabled {
 		return web.MetricSeries{}, false
 	}
 	typ, ok := e.checkTypes[check]
-	if !ok || !measuredCheckTypes[typ] {
+	if !ok {
 		return web.MetricSeries{}, false
 	}
-	out := web.MetricSeries{Check: check, Since: since.String(), Unit: "ms"}
+	now := time.Now()
+
+	// metric == "" is the built-in latency series; otherwise a named metric the
+	// check type declares (e.g. hdparm read/cached).
+	if metric == "" {
+		if !measuredCheckTypes[typ] {
+			return web.MetricSeries{}, false
+		}
+		out := web.MetricSeries{Check: check, Since: since.String(), Unit: "ms"}
+		if b.measure == nil {
+			return out, true
+		}
+		if stat, err := b.measure.MeasurementSummary(name, check, since, now); err == nil {
+			out.Summary = web.MetricSummary{Count: stat.Count, Avg: stat.Avg, Min: stat.Min, Max: stat.Max}
+		}
+		points, err := b.measure.MeasurementSeries(name, check, now.Add(-since), now)
+		if err == nil {
+			out.Points = measurementPoints(points)
+		}
+		return out, true
+	}
+
+	unit := checks.GraphMetricUnit(typ, metric)
+	if unit == "" {
+		return web.MetricSeries{}, false // not a declared metric for this check type
+	}
+	out := web.MetricSeries{Check: check, Metric: metric, Since: since.String(), Unit: unit}
 	if b.measure == nil {
 		return out, true
 	}
-	now := time.Now()
-	if stat, err := b.measure.MeasurementSummary(name, check, since, now); err == nil {
+	if stat, err := b.measure.MetricSummary(name, check, metric, since, now); err == nil {
 		out.Summary = web.MetricSummary{Count: stat.Count, Avg: stat.Avg, Min: stat.Min, Max: stat.Max}
 	}
-	points, err := b.measure.MeasurementSeries(name, check, now.Add(-since), now)
-	if err == nil {
-		out.Points = make([]web.MetricPoint, 0, len(points))
-		for _, p := range points {
-			out.Points = append(out.Points, web.MetricPoint{
-				Start: p.Start.Format(time.RFC3339), N: p.N, Avg: p.Avg, Min: p.Min, Max: p.Max,
-			})
-		}
+	if points, err := b.measure.MetricSeries(name, check, metric, now.Add(-since), now); err == nil {
+		out.Points = measurementPoints(points)
 	}
 	return out, true
+}
+
+// measurementPoints converts store points to the web shape.
+func measurementPoints(points []state.MeasurementPoint) []web.MetricPoint {
+	out := make([]web.MetricPoint, 0, len(points))
+	for _, p := range points {
+		out = append(out, web.MetricPoint{Start: p.Start.Format(time.RFC3339), N: p.N, Avg: p.Avg, Min: p.Min, Max: p.Max})
+	}
+	return out
 }
 
 // Events returns the most recent events, newest first.

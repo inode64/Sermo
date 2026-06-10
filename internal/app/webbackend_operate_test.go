@@ -81,16 +81,16 @@ func TestWebBackendMetricsRejectsUnknownCheck(t *testing.T) {
 			},
 		},
 	}
-	if _, ok := b.Metrics(context.Background(), "web", "ghost", time.Hour); ok {
+	if _, ok := b.Metrics(context.Background(), "web", "ghost", "", time.Hour); ok {
 		t.Fatal("unknown check name must not be accepted")
 	}
-	if _, ok := b.Metrics(context.Background(), "web", "cmd", time.Hour); ok {
+	if _, ok := b.Metrics(context.Background(), "web", "cmd", "", time.Hour); ok {
 		t.Fatal("non-measured check type must not be accepted")
 	}
-	if _, ok := b.Metrics(context.Background(), "missing", "http", time.Hour); ok {
+	if _, ok := b.Metrics(context.Background(), "missing", "http", "", time.Hour); ok {
 		t.Fatal("unknown service must not be accepted")
 	}
-	if _, ok := b.Metrics(context.Background(), "web", "http", time.Hour); !ok {
+	if _, ok := b.Metrics(context.Background(), "web", "http", "", time.Hour); !ok {
 		t.Fatal("configured measured check must be accepted")
 	}
 }

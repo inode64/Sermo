@@ -110,7 +110,7 @@ func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) (
 	}
 	return nil, false
 }
-func (f *fakeBackend) Metrics(_ context.Context, name, check string, since time.Duration) (MetricSeries, bool) {
+func (f *fakeBackend) Metrics(_ context.Context, name, check, _ string, since time.Duration) (MetricSeries, bool) {
 	for _, s := range f.services {
 		if s.Name == name {
 			f.metricCheck, f.metricSince = check, since

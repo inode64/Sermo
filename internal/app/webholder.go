@@ -147,9 +147,9 @@ func (h *WebBackendHolder) Series(ctx context.Context, name string, since time.D
 }
 
 // Metrics returns a check's metric series from the active backend.
-func (h *WebBackendHolder) Metrics(ctx context.Context, name, check string, since time.Duration) (web.MetricSeries, bool) {
+func (h *WebBackendHolder) Metrics(ctx context.Context, name, check, metric string, since time.Duration) (web.MetricSeries, bool) {
 	if b := h.backend(); b != nil {
-		return b.Metrics(ctx, name, check, since)
+		return b.Metrics(ctx, name, check, metric, since)
 	}
 	return web.MetricSeries{}, false
 }
