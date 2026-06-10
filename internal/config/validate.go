@@ -306,28 +306,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 
 		validateNotifyRefs(name, entry, notifiers, add)
-		validateWatchWindow(name, entry, add)
-	}
-}
-
-// validateWatchWindow checks the optional for/within window on a watch entry:
-// for.cycles and within.cycles must be positive integers and within.min_matches
-// (if present) a non-negative integer (spec 2026-06-06-host-watches-disk §5).
-func validateWatchWindow(name string, entry map[string]any, add func(string, ...any)) {
-	if f, ok := entry["for"].(map[string]any); ok {
-		if c, _ := scalarInt(f["cycles"]); c <= 0 {
-			add("watches.%s.for.cycles must be a positive integer", name)
-		}
-	}
-	if wn, ok := entry["within"].(map[string]any); ok {
-		if c, _ := scalarInt(wn["cycles"]); c <= 0 {
-			add("watches.%s.within.cycles must be a positive integer", name)
-		}
-		if raw, present := wn["min_matches"]; present {
-			if m, _ := scalarInt(raw); m < 0 {
-				add("watches.%s.within.min_matches must be a non-negative integer", name)
-			}
-		}
+		validateWindow("watches."+name, entry, add)
 	}
 }
 
@@ -447,7 +426,7 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 			add("%s is not a supported net metric (state, speed, errors)", prefix)
 		}
 		validateHookBlock(prefix, m, add)
-		validateMetricWindow(prefix, m, add)
+		validateWindow(prefix, m, add)
 	}
 }
 
@@ -861,7 +840,7 @@ func validateSwapCheck(name string, entry map[string]any, add func(string, ...an
 			add("%s is not a supported swap metric (usage, io)", prefix)
 		}
 		validateHookBlock(prefix, m, add)
-		validateMetricWindow(prefix, m, add)
+		validateWindow(prefix, m, add)
 	}
 }
 
@@ -930,7 +909,7 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 			add("%s is not a supported icmp metric (state, latency)", prefix)
 		}
 		validateHookBlock(prefix, m, add)
-		validateMetricWindow(prefix, m, add)
+		validateWindow(prefix, m, add)
 	}
 }
 
@@ -1015,22 +994,32 @@ func validateProcessWatch(name string, check, entry map[string]any, add func(str
 	validateHookBlock("watches."+name, entry, add)
 }
 
-// validateMetricWindow validates a per-metric for/within window using the same
-// rules as validateWatchWindow but with a metric-scoped prefix.
-func validateMetricWindow(prefix string, m map[string]any, add func(string, ...any)) {
-	if f, ok := m["for"].(map[string]any); ok {
+// validateWindow checks an optional for/within firing window at the dotted prefix,
+// shared by rules, host watches and per-metric sub-watches. A window may declare
+// at most one of for/within; for.cycles and within.cycles must be positive; and
+// within.min_matches must be positive and no larger than within.cycles.
+func validateWindow(prefix string, entry map[string]any, add addFunc) {
+	_, hasFor := entry["for"]
+	_, hasWithin := entry["within"]
+	if hasFor && hasWithin {
+		add("%s cannot define both for and within", prefix)
+	}
+	if f, ok := entry["for"].(map[string]any); ok {
 		if c, _ := scalarInt(f["cycles"]); c <= 0 {
-			add("%s.for.cycles must be a positive integer", prefix)
+			add("%s.for.cycles must be > 0", prefix)
 		}
 	}
-	if wn, ok := m["within"].(map[string]any); ok {
-		if c, _ := scalarInt(wn["cycles"]); c <= 0 {
-			add("%s.within.cycles must be a positive integer", prefix)
+	if wn, ok := entry["within"].(map[string]any); ok {
+		cycles, _ := scalarInt(wn["cycles"])
+		matches, _ := scalarInt(wn["min_matches"])
+		if cycles <= 0 {
+			add("%s.within.cycles must be > 0", prefix)
 		}
-		if raw, present := wn["min_matches"]; present {
-			if mm, _ := scalarInt(raw); mm < 0 {
-				add("%s.within.min_matches must be a non-negative integer", prefix)
-			}
+		if matches <= 0 {
+			add("%s.within.min_matches must be > 0", prefix)
+		}
+		if cycles > 0 && matches > cycles {
+			add("%s.within.min_matches must be <= within.cycles", prefix)
 		}
 	}
 }
@@ -1907,29 +1896,7 @@ func validateRules(tree map[string]any, add addFunc) {
 			add("%s only guard rules may set blocks", path)
 		}
 
-		_, hasFor := entry["for"]
-		_, hasWithin := entry["within"]
-		if hasFor && hasWithin {
-			add("%s cannot define both for and within", path)
-		}
-		if f, ok := entry["for"].(map[string]any); ok {
-			if c, _ := scalarInt(f["cycles"]); c <= 0 {
-				add("%s for.cycles must be > 0", path)
-			}
-		}
-		if wn, ok := entry["within"].(map[string]any); ok {
-			cycles, _ := scalarInt(wn["cycles"])
-			matches, _ := scalarInt(wn["min_matches"])
-			if cycles <= 0 {
-				add("%s within.cycles must be > 0", path)
-			}
-			if matches <= 0 {
-				add("%s within.min_matches must be > 0", path)
-			}
-			if cycles > 0 && matches > cycles {
-				add("%s within.min_matches must be <= within.cycles", path)
-			}
-		}
+		validateWindow(path, entry, add)
 
 		if hasIf {
 			validateCondition(ifNode, path+".if", checkNames, systemMetricChecks, rtype == "alert", add)
