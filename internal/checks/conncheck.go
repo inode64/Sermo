@@ -257,9 +257,16 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Socket = "/var/run/docker.sock"
 		}
 	}
-	// libvirt defaults to the local Unix socket; an explicit host selects TCP.
-	if proto.Name() == "libvirt" && cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
-		cfg.Socket = "/var/run/libvirt/libvirt-sock"
+	// libvirt defaults to the local Unix socket; an explicit host selects TCP. An
+	// optional `domain` selects a single VM whose state to read (the connect URI
+	// stays in cfg.Query, so the VM name is carried in cfg.Params).
+	if proto.Name() == "libvirt" {
+		if cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
+			cfg.Socket = "/var/run/libvirt/libvirt-sock"
+		}
+		if d := cfgval.AsString(entry["domain"]); d != "" {
+			cfg.Params = map[string]string{"domain": d}
+		}
 	}
 	// acpid is socket-only; default to its well-known event socket.
 	if proto.Name() == "acpid" && cfg.Socket == "" {
