@@ -1202,8 +1202,15 @@ rules:
     if: { ... }       # condition tree
     for: { cycles: 3 }            # consecutive cycles (optional)
     within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
-    then: { action: restart }
+    notify: [ops-email]           # who gets this rule's alert messages (optional)
+    then: { action: alert, message: "http is down" }
 ```
+
+A rule's **`notify`** selects which notifiers receive its `alert` messages,
+overriding the global default ([Notifications](configuration.md#default-selection-and-precedence)):
+an explicit list wins, `notify: none` suppresses, and omitting it inherits the
+global `notify` default. It applies to the rule's alert messages; remediation
+operations are reported as events, not notifications.
 
 Conditions form a logical tree with `and`/`or`/`not` and leaves:
 

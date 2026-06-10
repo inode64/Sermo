@@ -9,11 +9,74 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 )
 
 var t0 = time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
+
+func TestEffectiveNotify(t *testing.T) {
+	g := []string{"ops"}
+	if got := effectiveNotify(nil, g); len(got) != 1 || got[0] != "ops" {
+		t.Errorf("omitted should inherit global: %v", got)
+	}
+	if got := effectiveNotify([]string{"oncall"}, g); len(got) != 1 || got[0] != "oncall" {
+		t.Errorf("explicit should override global: %v", got)
+	}
+	if got := effectiveNotify([]string{"none"}, g); got != nil {
+		t.Errorf("none should suppress: %v", got)
+	}
+	if got := effectiveNotify([]string{"none", "oncall"}, g); got != nil {
+		t.Errorf("none should win and suppress: %v", got)
+	}
+}
+
+func alertRuleTree(notify any) map[string]any {
+	rule := map[string]any{
+		"type": "alert",
+		"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+		"then": map[string]any{"action": "alert", "message": "http is down"},
+	}
+	if notify != nil {
+		rule["notify"] = notify
+	}
+	return map[string]any{"rules": map[string]any{"warn-down": rule}}
+}
+
+func TestCycleAlertNotifiesGlobalDefault(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil) // rule declares no notify
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"} // inherited
+
+	w.RunCycle(context.Background())
+
+	if len(n.msgs) != 1 {
+		t.Fatalf("alert should notify the inherited global default, got %d messages", len(n.msgs))
+	}
+	if _, ok := h.eventOf("notify"); !ok {
+		t.Errorf("expected a notify event: %+v", h.events)
+	}
+}
+
+func TestCycleAlertNotifyNoneSuppresses(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree("none"), rules.Policy{}, nil) // notify: none
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+
+	w.RunCycle(context.Background())
+
+	if len(n.msgs) != 0 {
+		t.Fatalf("notify: none must suppress delivery, got %d messages", len(n.msgs))
+	}
+	if _, ok := h.eventOf("alert"); !ok {
+		t.Errorf("alert event should still be emitted: %+v", h.events)
+	}
+}
 
 type workerHarness struct {
 	cache    map[string]checks.Result

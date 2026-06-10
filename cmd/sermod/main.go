@@ -149,6 +149,7 @@ func run(args []string) int {
 		Monitor:         store,
 		SLA:             store,
 		Notifiers:       notifiers,
+		GlobalNotify:    config.NotifyDefault(cfg.Global.Raw),
 		Snapshots:       app.NewSnapshots(),
 		Remediation:     app.NewRemediationRegistry(),
 		RuleWindows:     app.NewRuleWindowRegistry(),
