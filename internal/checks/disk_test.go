@@ -121,6 +121,26 @@ func TestBuildDiskCheck(t *testing.T) {
 	}
 }
 
+func TestBuildStorageCheck(t *testing.T) {
+	section := map[string]any{
+		"d": map[string]any{
+			"type":     "storage",
+			"path":     "/",
+			"used_pct": map[string]any{"op": ">=", "value": 90},
+		},
+	}
+	built, warns := Build(section, Deps{DiskUsage: fakeDisk(92, 8, 80, 1000)})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(built) != 1 {
+		t.Fatalf("expected 1 built check, got %d", len(built))
+	}
+	if !built[0].Check.Run(context.Background()).OK {
+		t.Fatal("expected storage check to fire above threshold")
+	}
+}
+
 func TestBuildDiskByteSizeCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{

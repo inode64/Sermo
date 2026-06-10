@@ -408,7 +408,7 @@ checks:
 }
 
 func TestValidateResourceChecksAsServiceChecks(t *testing.T) {
-	// Host-resource checks (disk/load/…) are usable in a service's checks: and
+	// Host-resource checks (storage/load/…) are usable in a service's checks: and
 	// referenceable from rules, just like tcp/http/metric.
 	issues := validateService(t, `
 kind: service
@@ -416,7 +416,7 @@ name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  rootfs: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+  rootfs: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
   sysload: { type: load, per_cpu: true, load5: { op: ">", value: 2 } }
   oomkills: { type: oom }
 rules:
@@ -431,19 +431,19 @@ rules:
 }
 
 func TestValidateDiskMountIntegration(t *testing.T) {
-	// A disk check carries space/inode predicates and/or mount conditions in one
-	// entry (no separate mount type) — including a mount-only disk check.
+	// A storage check carries space/inode predicates and/or mount conditions in one
+	// entry (no separate mount type) — including a mount-only storage check.
 	good := validateService(t, `
 kind: service
 name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  data: { type: disk, path: /data, used_pct: { op: ">=", value: 90 }, fstype: ext4, options: [rw], mounted: true }
-  mountonly: { type: disk, path: /srv, mounted: true }
+  data: { type: storage, path: /data, used_pct: { op: ">=", value: 90 }, fstype: ext4, options: [rw], mounted: true }
+  mountonly: { type: storage, path: /srv, mounted: true }
 `)
 	if hasIssue(good, "checks.data") || hasIssue(good, "checks.mountonly") {
-		t.Fatalf("valid disk+mount checks flagged: %v", good)
+		t.Fatalf("valid storage+mount checks flagged: %v", good)
 	}
 
 	bad := validateService(t, `
@@ -452,8 +452,8 @@ name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  empty: { type: disk, path: /data }
-  bad-mounted: { type: disk, path: /data, mounted: "yes" }
+  empty: { type: storage, path: /data }
+  bad-mounted: { type: storage, path: /data, mounted: "yes" }
 `)
 	mustHave(t, bad, "checks.empty requires a space/inode predicate")
 	mustHave(t, bad, "checks.bad-mounted.mounted must be a boolean")
@@ -466,10 +466,10 @@ name: svc
 service: { name: x }
 policy: { cooldown: 5m }
 checks:
-  rootfs: { type: disk }
+  rootfs: { type: storage }
   sysload: { type: load }
 `)
-	mustHave(t, issues, "checks.rootfs.path is required for a disk check")
+	mustHave(t, issues, "checks.rootfs.path is required for a storage check")
 	mustHave(t, issues, "checks.sysload requires at least one of load1/load5/load15")
 }
 

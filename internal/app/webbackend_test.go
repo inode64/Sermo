@@ -169,13 +169,13 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	}
 }
 
-func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
+func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"disk-data": map[string]any{
+			"storage-data": map[string]any{
 				"interval": "45s",
 				"check": map[string]any{
-					"type":     "disk",
+					"type":     "storage",
 					"path":     "/data/app",
 					"fstype":   "xfs",
 					"device":   "/dev/mapper/data",
@@ -232,7 +232,7 @@ func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
 	if usagePath != "/data/app" || !mountSampled {
 		t.Fatalf("samplers not called as expected: usagePath=%q mountSampled=%v", usagePath, mountSampled)
 	}
-	if w.Name != "disk-data" || w.Interval != "45s" || w.CheckType != "disk" {
+	if w.Name != "storage-data" || w.Interval != "45s" || w.CheckType != "storage" {
 		t.Fatalf("watch identity = %+v", w)
 	}
 	if !slices.Equal(w.Notifiers, []string{"ops", "pager"}) {
@@ -261,7 +261,7 @@ func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
 		t.Fatalf("mount conditions = %+v", cond)
 	}
 	if w.Disk == nil {
-		t.Fatal("disk watch should include live disk info")
+		t.Fatal("storage watch should include live filesystem info")
 	}
 	if w.Disk.MountPoint != "/data" || w.Disk.Device != "/dev/mapper/data" || w.Disk.FileSystem != "xfs" {
 		t.Fatalf("disk mount info = %+v", w.Disk)
@@ -277,9 +277,9 @@ func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
 func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"disk-data": map[string]any{
+			"storage-data": map[string]any{
 				"check": map[string]any{
-					"type":     "disk",
+					"type":     "storage",
 					"path":     "/data/app",
 					"used_pct": map[string]any{"op": ">=", "value": 90},
 				},
@@ -298,14 +298,14 @@ func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 
-	res := b.ExpandWatch(context.Background(), "disk-data")
+	res := b.ExpandWatch(context.Background(), "storage-data")
 	if !res.OK {
 		t.Fatalf("ExpandWatch failed: %+v", res)
 	}
 	if !slices.Equal(exp.calls, []string{"/data/app:5368709120"}) {
 		t.Fatalf("expand calls = %v, want configured path and 5G", exp.calls)
 	}
-	if len(events) != 1 || events[0].Watch != "disk-data" || events[0].Kind != "expand" || events[0].Action != "expand" || events[0].Status != "ok" {
+	if len(events) != 1 || events[0].Watch != "storage-data" || events[0].Kind != "expand" || events[0].Action != "expand" || events[0].Status != "ok" {
 		t.Fatalf("events = %+v, want successful expand event", events)
 	}
 }
@@ -313,9 +313,9 @@ func TestWebBackendExpandWatchUsesConfiguredPathAndSize(t *testing.T) {
 func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"disk-data": map[string]any{
+			"storage-data": map[string]any{
 				"check": map[string]any{
-					"type":     "disk",
+					"type":     "storage",
 					"path":     "/data/app",
 					"used_pct": map[string]any{"op": ">=", "value": 90},
 				},
@@ -329,7 +329,7 @@ func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 
-	res := b.ExpandWatch(context.Background(), "disk-data")
+	res := b.ExpandWatch(context.Background(), "storage-data")
 	if res.OK || !strings.Contains(res.Message, "no then.expand") {
 		t.Fatalf("ExpandWatch = %+v, want missing expand rejection", res)
 	}
@@ -338,12 +338,12 @@ func TestWebBackendExpandWatchRejectsUnconfiguredAction(t *testing.T) {
 	}
 }
 
-func TestWebBackendDiskWatchReportsSamplerErrors(t *testing.T) {
+func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"disk-data": map[string]any{
+			"storage-data": map[string]any{
 				"check": map[string]any{
-					"type":     "disk",
+					"type":     "storage",
 					"path":     "/data",
 					"free_pct": map[string]any{"op": "<", "value": 15},
 				},

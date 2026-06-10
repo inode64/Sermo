@@ -214,7 +214,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			ctype := ""
 			fireOnFail := false
 			if ce, ok := entry["check"].(map[string]any); ok {
-				ctype = cfgval.AsString(ce["type"])
+				ctype = canonicalWatchCheckType(cfgval.AsString(ce["type"]))
 			}
 			fireOnFail = isHealthCheckType(ctype)
 			iv := durationField(entry["interval"])
@@ -466,7 +466,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		}
 		iv := formatInterval(w.interval)
 		var disk *web.DiskWatchInfo
-		if w.checkType == "disk" {
+		if isStorageCheckType(w.checkType) {
 			disk = diskWatchInfo(w, b)
 		}
 		monitorMode := w.monitorMode
@@ -534,7 +534,7 @@ func watchSummary(w *webWatch, disk *web.DiskWatchInfo) string {
 	if w == nil {
 		return ""
 	}
-	if w.checkType == "disk" && disk != nil {
+	if isStorageCheckType(w.checkType) && disk != nil {
 		if disk.SampleError != "" {
 			return disk.Path + ": " + disk.SampleError
 		}
@@ -1436,7 +1436,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 	return web.ActionResult{OK: r.OK(), Message: msg}
 }
 
-// ExpandWatch runs a configured disk watch's then.expand action on demand.
+// ExpandWatch runs a configured storage watch's then.expand action on demand.
 func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionResult {
 	w := b.watches[name]
 	if w == nil {
@@ -1449,8 +1449,8 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	if w.checkType != "disk" {
-		msg := fmt.Sprintf("watch %q is %q, not disk", name, w.checkType)
+	if !isStorageCheckType(w.checkType) {
+		msg := fmt.Sprintf("watch %q is %q, not storage", name, w.checkType)
 		b.emitWatchExpandEvent(name, "expand-skipped", "blocked", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}
@@ -1461,7 +1461,7 @@ func (b *WebBackend) ExpandWatch(ctx context.Context, name string) web.ActionRes
 	}
 	path := cfgval.AsString(w.check["path"])
 	if path == "" {
-		msg := fmt.Sprintf("watch %q disk check has no path", name)
+		msg := fmt.Sprintf("watch %q storage check has no path", name)
 		b.emitWatchExpandEvent(name, "expand-failed", "failed", msg)
 		return web.ActionResult{OK: false, Message: msg}
 	}

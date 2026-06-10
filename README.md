@@ -12,7 +12,7 @@ It ships two binaries:
   `diagnose` for config/host/database consistency).
 - **`sermod`** — the daemon: one independent worker per service that runs
   checks, evaluates rules, and drives remediation through the same safe
-  operation engine `sermoctl` uses. It also runs **host watches** (disk space,
+  operation engine `sermoctl` uses. It also runs **host watches** (storage space,
   inodes and mount, load average, swap — usage and paging IO — kernel OOM kills,
   file descriptors, the netfilter conntrack table, kernel entropy, zombie
   processes, TLS certificates — expiry, validity and algorithm/issuer changes —

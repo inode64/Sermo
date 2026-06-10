@@ -16,14 +16,14 @@ import (
 	"sermo/internal/conn"
 )
 
-// validateDiskFields validates a disk check's fields at prefix (the dotted path
-// to the fields container, e.g. "watches.disk-root.check" or "checks.root").
-// Shared by host watches and service checks. A disk check verifies space/inodes
+// validateDiskFields validates a storage check's fields at prefix (the dotted path
+// to the fields container, e.g. "watches.storage-root.check" or "checks.root").
+// Shared by host watches and service checks. A storage check verifies space/inodes
 // and/or the mount (mounted/fstype/options/device), so at least one of the two
 // must be present.
 func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["path"]) == "" {
-		add("%s.path is required for a disk check", prefix)
+		add("%s.path is required for a storage check", prefix)
 	}
 	preds := validateDiskPredicates(prefix, fields, add)
 	hasMount := validateMountConditions(prefix, fields, add)
@@ -58,7 +58,7 @@ func validateDiskPredicates(prefix string, fieldsMap map[string]any, add addFunc
 	return preds
 }
 
-// validateMountConditions validates the optional mount fields of a disk check and
+// validateMountConditions validates the optional mount fields of a storage check and
 // reports whether any was present (a boolean mounted, string fstype/device, or a
 // string-list options).
 func validateMountConditions(prefix string, fields map[string]any, add addFunc) bool {
@@ -528,12 +528,12 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 
 // knownCheckTypes are the single-shot check types valid in a service's
 // checks:/preflight:/postflight: sections (and referenceable from rules). The
-// host-resource checks (disk…oom) are shared with host watches; the multi-target
+// host-resource checks (storage/disk…oom) are shared with host watches; the multi-target
 // watch types (net, icmp, swap, file, process) stay watch-only because they fire
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -646,7 +646,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateMetric(entry, path, true, add)
 	case "count":
 		validateCount(entry, path, add)
-	case "disk":
+	case "storage", "disk":
 		validateDiskFields(path, entry, add)
 	case "autofs":
 		validateAutofsFields(path, entry, add)
