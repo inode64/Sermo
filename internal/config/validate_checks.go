@@ -491,7 +491,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
-	"disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+	"disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -600,6 +600,15 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 			validatePresentThresholds(path, entry, []string{"degraded", "recovering", "arrays"}, add)
 		case "edac":
 			validatePresentThresholds(path, entry, []string{"ce", "ue"}, add)
+		case "config":
+			_, hasCmd := entry["command"]
+			_, hasPath := entry["path"]
+			if !hasCmd && !hasPath {
+				add("%s requires a command and/or path", path)
+			}
+			if hasCmd && !isStringArray(entry["command"]) {
+				add("%s command must be an array, not a shell string", path)
+			}
 		case "fds":
 			validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
 		case "conntrack":
