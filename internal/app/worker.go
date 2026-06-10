@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
 )
@@ -61,6 +62,13 @@ type Worker struct {
 	Publish func(cache map[string]checks.Result, ran map[string]bool)
 	Now     func() time.Time
 	Emit    func(Event)
+
+	// Notifiers are the configured delivery targets, addressable by name from a
+	// rule's `notify`. Optional: nil means a rule alert only emits an event.
+	Notifiers map[string]notify.Notifier
+	// GlobalNotify is the top-level `notify` default a rule alert inherits when it
+	// declares no `notify` of its own (see config.NotifyDefault).
+	GlobalNotify []string
 
 	// Remediation publishes the policy gating view for the web detail. Optional.
 	Remediation *RemediationRegistry
@@ -236,7 +244,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		op, hasOp := r.OperationAction()
 		if !hasOp {
 			// A remediation rule with no operation (alert-only) just notifies.
-			w.emitAlerts(r)
+			w.emitAlerts(ctx, r)
 			continue
 		}
 		action := string(op)
@@ -260,7 +268,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 
 		// All actions of this rule run together: alerts notify, then the operation.
-		w.emitAlerts(r)
+		w.emitAlerts(ctx, r)
 		result := w.Operate(ctx, action)
 		if result.RecordsRemediation() {
 			w.State.Record(now(), w.Policy)
@@ -282,14 +290,35 @@ func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator) {
 			continue
 		}
 		if w.fires(ctx, ev, r) {
-			w.emitAlerts(r)
+			w.emitAlerts(ctx, r)
 		}
 	}
 }
 
-func (w *Worker) emitAlerts(r rules.Rule) {
+// emitAlerts emits each of a rule's alert messages as an `alert` event and, when
+// the rule resolves to one or more notifiers (its own `notify`, or the global
+// default it inherits, unless suppressed with `none`), delivers each message to
+// them best-effort.
+func (w *Worker) emitAlerts(ctx context.Context, r rules.Rule) {
+	notifiers := resolveNotifiers(effectiveNotify(r.Notify, w.GlobalNotify), w.Notifiers)
 	for _, msg := range r.AlertMessages() {
 		w.emit(Event{Kind: "alert", Rule: r.Name, Message: msg})
+		for _, n := range notifiers {
+			if err := n.Send(ctx, alertMessage(w.Service, r.Name, msg)); err != nil {
+				w.emit(Event{Kind: "notify-failed", Rule: r.Name, Message: n.Name() + ": " + err.Error()})
+			} else {
+				w.emit(Event{Kind: "notify", Rule: r.Name, Message: "notified " + n.Name()})
+			}
+		}
+	}
+}
+
+// alertMessage builds the notification for a rule's alert message.
+func alertMessage(service, rule, msg string) notify.Message {
+	return notify.Message{
+		Subject: fmt.Sprintf("[sermo] %s: %s", service, msg),
+		Body:    msg,
+		Fields:  map[string]string{"SERMO_SERVICE": service, "SERMO_RULE": rule},
 	}
 }
 

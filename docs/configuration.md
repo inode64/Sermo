@@ -470,6 +470,29 @@ added without touching watches or rules (each registers a builder in
 `internal/notify`). A new transport looks the same: a `type` plus its own
 fields, addressed by name.
 
+`none` is a **reserved keyword** and cannot be used as a notifier name.
+
+### Default selection and precedence
+
+A top-level **`notify`** key sets the default notifiers that apply to every notify
+site (a watch's `then.notify` and a rule's `notify`) — so you configure routing
+once instead of repeating it on every watch and rule:
+
+```yaml
+notify: [ops-email]      # default for every site that declares none of its own
+# notify: none           # (or omit the key) for no default
+```
+
+Each site then **overrides** the default — the per-site choice always wins:
+
+- an explicit list (`notify: [team-slack]`) replaces the default for that site;
+- `notify: none` suppresses delivery for that site (even when a default exists);
+- omitting `notify` inherits the global default.
+
+`none` cannot be combined with notifier names in the same list. With a global
+default set, a watch that only runs a hook (no `notify`) also sends to the default
+targets; add `notify: none` to silence just that watch.
+
 ## Host watches
 
 `watches` monitor host-level resources independently of any service and run a
