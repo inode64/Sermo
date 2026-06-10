@@ -11,14 +11,40 @@ import (
 
 func init() { Register(nutProtocol{}, "ups", "upsd") }
 
+// nutInterestingVars are the upsd variables exposed in the probe Result (and so
+// to `expect`, hooks as SERMO_*, and the web detail) when a UPS is selected. They
+// cover the operationally useful signals — power/battery state, charge and
+// runtime, load, voltages, temperature — plus identity. `ups.status` is also
+// mirrored into the change fingerprint so `on_change` alerts on state transitions
+// (e.g. OL -> OB DISCHRG -> OB LB).
+var nutInterestingVars = []string{
+	"ups.status",
+	"ups.load",
+	"ups.temperature",
+	"ups.power",
+	"ups.realpower",
+	"battery.charge",
+	"battery.charge.low",
+	"battery.runtime",
+	"battery.runtime.low",
+	"battery.voltage",
+	"input.voltage",
+	"input.frequency",
+	"output.voltage",
+	"ups.mfr",
+	"ups.model",
+}
+
 // nutProtocol probes a NUT (Network UPS Tools) upsd server over its line-based
 // TCP protocol (default 3493). Anonymously it asks `VER` for the server version;
-// with credentials it authenticates with USERNAME/PASSWORD and, when a UPS name
-// is given (the `query` field), LOGIN-s to it to verify access. When a UPS is
-// named it also reads `ups.status` into the result so an operator can assert it
-// with `expect`. TLS, when requested, is implicit (operator sets `tls: true`);
-// upsd's STARTTLS upgrade is not used, matching the other natively-probed
-// protocols.
+// with credentials it authenticates with USERNAME/PASSWORD and, when a UPS is
+// selected, LOGIN-s to it to verify access. For the selected UPS it reads the
+// device variables (status, battery charge/runtime, load, voltages, …) into the
+// result so an operator can alert on them with `expect` (e.g. battery.charge) or
+// on state changes with `on_change`. The UPS is the `ups` field, or — when a
+// single UPS is configured on the server — auto-detected. TLS, when requested, is
+// implicit (operator sets `tls: true`); upsd's STARTTLS upgrade is not used,
+// matching the other natively-probed protocols.
 type nutProtocol struct{}
 
 // Name returns the canonical type token.
@@ -49,8 +75,9 @@ func (nutProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 }
 
 // nutHandshake runs the upsd exchange over rw (split out so it is testable with a
-// pipe): VER for liveness/version, optional USERNAME/PASSWORD/LOGIN, and an
-// optional ups.status read when a UPS is named.
+// pipe): VER for liveness/version, UPS selection (explicit `query`/`ups` or a
+// single auto-detected device), optional USERNAME/PASSWORD/LOGIN, and the device
+// variables for the selected UPS.
 func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
 
@@ -67,9 +94,16 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	res := Result{Version: nutVersion(ver), Extra: map[string]string{"server": ver}}
 
 	ups := cfg.Query
+	if ups == "" {
+		// Auto-detect a single configured UPS so the common one-UPS host needs no
+		// `ups` field. Zero or several UPSes leave the check at VER liveness.
+		if names, err := nutListUPS(rw, br); err == nil && len(names) == 1 {
+			ups = names[0]
+		}
+	}
 
-	// USERNAME/PASSWORD are not validated by upsd on their own; LOGIN to the named
-	// UPS is what actually verifies the credentials and access.
+	// USERNAME/PASSWORD are not validated by upsd on their own; LOGIN to the
+	// selected UPS is what actually verifies the credentials and access.
 	if cfg.User != "" {
 		if err := nutCmdOK(rw, br, "USERNAME "+cfg.User); err != nil {
 			return Result{}, fmt.Errorf("username: %w", err)
@@ -85,31 +119,84 @@ func nutHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		}
 	}
 
-	// When a UPS is named, expose ups.status so an operator can `expect` it. An
-	// UNKNOWN-UPS error means the configured UPS does not exist (a real problem);
-	// other errors (the variable is unsupported) are tolerated.
 	if ups != "" {
-		if err := writeNUT(rw, "GET VAR "+ups+" ups.status"); err != nil {
-			return Result{}, err
-		}
-		line, err := readNUTLine(br)
+		res.Extra["ups"] = ups
+		vars, err := nutListVars(rw, br, ups)
 		if err != nil {
-			return Result{}, fmt.Errorf("get ups.status: %w", err)
+			return Result{}, fmt.Errorf("list vars: %w", err)
 		}
-		switch {
-		case strings.HasPrefix(line, "VAR "):
-			if v, ok := parseNUTVar(line); ok {
-				res.Extra["ups.status"] = v
+		for _, key := range nutInterestingVars {
+			if v, ok := vars[key]; ok {
+				res.Extra[key] = v
 			}
-		case strings.HasPrefix(line, "ERR"):
-			if e := nutErr(line); strings.Contains(e, "UNKNOWN-UPS") {
-				return Result{}, fmt.Errorf("UPS %q: %s", ups, e)
-			}
+		}
+		if status, ok := vars["ups.status"]; ok {
+			res.Extra["fingerprint"] = status // drives on_change (state transitions)
 		}
 	}
 
 	_ = writeNUT(rw, "LOGOUT") // best effort
 	return res, nil
+}
+
+// nutListUPS returns the UPS names from `LIST UPS`.
+func nutListUPS(rw io.ReadWriter, br *bufio.Reader) ([]string, error) {
+	if err := writeNUT(rw, "LIST UPS"); err != nil {
+		return nil, err
+	}
+	first, err := readNUTLine(br)
+	if err != nil {
+		return nil, err
+	}
+	if strings.HasPrefix(first, "ERR") {
+		return nil, errors.New(nutErr(first))
+	}
+	if !strings.HasPrefix(first, "BEGIN LIST UPS") {
+		return nil, fmt.Errorf("unexpected reply: %s", first)
+	}
+	var names []string
+	for {
+		line, err := readNUTLine(br)
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(line, "END LIST UPS") {
+			return names, nil
+		}
+		if f := strings.Fields(line); len(f) >= 2 && f[0] == "UPS" {
+			names = append(names, f[1])
+		}
+	}
+}
+
+// nutListVars returns every variable for ups from `LIST VAR <ups>`.
+func nutListVars(rw io.ReadWriter, br *bufio.Reader, ups string) (map[string]string, error) {
+	if err := writeNUT(rw, "LIST VAR "+ups); err != nil {
+		return nil, err
+	}
+	first, err := readNUTLine(br)
+	if err != nil {
+		return nil, err
+	}
+	if strings.HasPrefix(first, "ERR") {
+		return nil, errors.New(nutErr(first))
+	}
+	if !strings.HasPrefix(first, "BEGIN LIST VAR") {
+		return nil, fmt.Errorf("unexpected reply: %s", first)
+	}
+	vars := map[string]string{}
+	for {
+		line, err := readNUTLine(br)
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(line, "END LIST VAR") {
+			return vars, nil
+		}
+		if name, val, ok := parseNUTVarLine(line); ok {
+			vars[name] = val
+		}
+	}
 }
 
 // writeNUT sends a single newline-terminated command.
@@ -162,7 +249,28 @@ func nutVersion(line string) string {
 	return v
 }
 
-// parseNUTVar extracts the quoted value from a `VAR <ups> <var> "<value>"` reply.
+// parseNUTVarLine parses a `VAR <ups> <var> "<value>"` reply into the variable
+// name and its value.
+func parseNUTVarLine(line string) (name, value string, ok bool) {
+	if !strings.HasPrefix(line, "VAR ") {
+		return "", "", false
+	}
+	q := strings.IndexByte(line, '"')
+	if q < 0 {
+		return "", "", false
+	}
+	head := strings.Fields(line[:q]) // VAR <ups> <var>
+	if len(head) < 3 {
+		return "", "", false
+	}
+	v, ok := parseNUTVar(line)
+	if !ok {
+		return "", "", false
+	}
+	return head[2], v, true
+}
+
+// parseNUTVar extracts the quoted value from a `VAR …"<value>"` reply.
 func parseNUTVar(line string) (string, bool) {
 	i := strings.IndexByte(line, '"')
 	j := strings.LastIndexByte(line, '"')
