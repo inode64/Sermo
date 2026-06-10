@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	sermoapp "sermo/internal/app"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 )
@@ -109,7 +110,7 @@ func TestStatusShowsPauseSource(t *testing.T) {
 		t.Fatalf("status exit = %d", code)
 	}
 	line := strings.TrimSpace(out.String())
-	if !strings.Contains(line, "monitoring=paused") || !strings.Contains(line, "source="+state.SourceCLI) {
+	if !strings.Contains(line, "state=running") || !strings.Contains(line, "source="+state.SourceCLI) {
 		t.Fatalf("status line = %q", line)
 	}
 	if !strings.Contains(line, "changed=") {
@@ -124,8 +125,37 @@ func TestStatusShowsPauseSource(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &st); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !st.Paused || st.MonitorSource != state.SourceCLI || st.MonitorChangedAt == "" {
+	if st.State != sermoapp.TargetStateRunning || !st.Paused || st.MonitorSource != state.SourceCLI || st.MonitorChangedAt == "" {
 		t.Fatalf("status json = %+v", st)
+	}
+}
+
+func TestStatusShowsDisabledState(t *testing.T) {
+	root, global := monitorTestConfig(t)
+	if err := os.WriteFile(filepath.Join(root, "enabled", "web.yml"), []byte("kind: service\nname: web\nuses: nginx\nenabled: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := monitorTestApp(root, nil)
+
+	var out bytes.Buffer
+	app.Stdout = &out
+	if code := app.Run(context.Background(), []string{"--config", global, "status", "web"}); code != exitSuccess {
+		t.Fatalf("status exit = %d", code)
+	}
+	if line := strings.TrimSpace(out.String()); !strings.Contains(line, "state=disabled") {
+		t.Fatalf("status line = %q", line)
+	}
+
+	out.Reset()
+	if code := app.Run(context.Background(), []string{"--config", global, "--json", "status", "web"}); code != exitSuccess {
+		t.Fatalf("status json exit = %d", code)
+	}
+	var st statusJSON
+	if err := json.Unmarshal(out.Bytes(), &st); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if st.State != sermoapp.TargetStateDisabled {
+		t.Fatalf("status json state = %q, want %q", st.State, sermoapp.TargetStateDisabled)
 	}
 }
 

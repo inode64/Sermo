@@ -61,7 +61,7 @@ func TestWebBackendViewCheckHealth(t *testing.T) {
 	}
 
 	svc := b.view(context.Background(), "web", b.entries["web"])
-	if svc.CheckHealth != "failing" || svc.ChecksFailing != 1 {
+	if svc.CheckHealth != "failing" || svc.ChecksFailing != 1 || svc.State != TargetStateFailed {
 		t.Fatalf("service = %+v, want failing with 1", svc)
 	}
 }
@@ -89,7 +89,7 @@ func TestWebBackendViewCheckHealthPaused(t *testing.T) {
 	}
 
 	svc := b.view(context.Background(), "web", b.entries["web"])
-	if svc.CheckHealth != "paused" || svc.ChecksFailing != 0 {
+	if svc.CheckHealth != "paused" || svc.ChecksFailing != 0 || svc.State != TargetStateStopped {
 		t.Fatalf("paused service = %+v, want check_health=paused", svc)
 	}
 }

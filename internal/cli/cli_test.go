@@ -107,7 +107,7 @@ func TestStatusCommandText(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "mysql active backend=systemd service=mysql.service" {
+	if got := strings.TrimSpace(stdout.String()); got != "mysql state=running backend=systemd service=mysql.service" {
 		t.Fatalf("stdout = %q", got)
 	}
 }
@@ -123,7 +123,7 @@ func TestStatusCommandJSON(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	want := `{"service":"mysql","backend":"systemd","status":"active","unit":"mysql.service","paused":false}`
+	want := `{"service":"mysql","state":"running","backend":"systemd","status":"active","unit":"mysql.service","paused":false}`
 	if got := strings.TrimSpace(stdout.String()); got != want {
 		t.Fatalf("stdout = %q, want %q", got, want)
 	}

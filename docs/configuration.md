@@ -270,7 +270,8 @@ Notes:
   native TLS). Restrict access there too (allow-lists, SSO) if needed.
 - Never publish port `9797` directly; only the proxy should connect to it.
 
-Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, status,
+Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, `state`
+(`disabled`, `running`, `stopped`, `monitorized`, `failed`), backend status,
 `check_health` and `checks_failing` for required checks, `active_locks` when
 named runtime locks are blocking, monitored,
 `monitor_source`, `monitor_changed_at`, backend, unit, `policy_cooldown`,
@@ -291,8 +292,8 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
 malformed lock files under `<paths.runtime>/locks`),
-`GET /api/watches` (configured host watches, their `monitor` mode, current
-monitor/paused state, conditions, notifications and recent activity),
+`GET /api/watches` (configured host watches, their single `state`, `monitor`
+mode, conditions, notifications and recent activity),
 `POST /api/watches/{name}/{action}` where action is `monitor` or `unmonitor`,
 `GET /api/locks` (named runtime locks with TTL remaining, owner status,
 created age, blocked actions and release eligibility),
@@ -373,8 +374,9 @@ only when it actually runs, so the average is not skewed.
 
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
-`GET /api/services` / `GET /api/watches` expose `monitor_source` and
-`monitor_changed_at` so a paused service or watch shows who paused it and when.
+`GET /api/services` / `GET /api/watches` expose `state`, `monitor_source` and
+`monitor_changed_at` so a stopped unmonitored service or watch shows who paused
+it and when.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service.
 

@@ -313,6 +313,7 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 	}
 	if e.disabled {
 		svc.Status = "disabled"
+		svc.State = ServiceState(false, false, svc.Status, "")
 		svc.Monitored = false
 		svc.CheckHealth = ""
 		svc.RemediationState = "disabled"
@@ -345,6 +346,7 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 		svc.ActiveLocks = locks
 	}
 	b.decorateRemediation(name, &svc)
+	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth)
 	return svc
 }
 
@@ -511,9 +513,17 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 				}
 			}
 		}
+		ww.State = WatchState(ww.Enabled, ww.Monitored, watchViewFailed(ww))
 		out = append(out, ww)
 	}
 	return out
+}
+
+func watchViewFailed(w web.Watch) bool {
+	if WatchActivityFailed(w.LastActivityKind) {
+		return true
+	}
+	return w.Disk != nil && (w.Disk.SampleError != "" || w.Disk.MountSampleError != "")
 }
 
 func isWatchActivityKind(kind string) bool {

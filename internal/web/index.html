@@ -33,6 +33,11 @@
   .active { color: #1a7f37; }
   .inactive, .unknown { color: #9a6700; }
   .failed, .error { color: #cf222e; }
+  .target-state { font-weight: 700; }
+  .state-disabled, .state-stopped { color: #888; }
+  .state-running { color: #4f8cc9; }
+  .state-monitorized { color: #1a7f37; }
+  .state-failed { color: #cf222e; }
   .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid #8886; }
   .actions button { margin-right: .25rem; cursor: pointer; }
   button { font: inherit; padding: .2rem .55rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; }
@@ -157,12 +162,11 @@
     <input id="svc-search" type="search" placeholder="filter services…  ( / )">
     <span id="svc-filters">
       <button data-f="all" class="f-active">all</button>
-      <button data-f="active">active</button>
-      <button data-f="inactive">inactive</button>
-      <button data-f="failed">failed</button>
-      <button data-f="monitored">monitored</button>
-      <button data-f="paused">paused</button>
       <button data-f="disabled">disabled</button>
+      <button data-f="running">running</button>
+      <button data-f="stopped">stopped</button>
+      <button data-f="monitorized">monitorized</button>
+      <button data-f="failed">failed</button>
     </span>
     <span id="svc-count" class="muted"></span>
   </div>
@@ -172,12 +176,10 @@
       <tr>
         <th class="sortable" data-sort="name">Service<span class="sort-ind" data-si="name"></span></th>
         <th>Unit</th>
-        <th class="sortable" data-sort="status">Status<span class="sort-ind" data-si="status"></span></th>
-        <th class="sortable" data-sort="checks">Checks<span class="sort-ind" data-si="checks"></span></th>
+        <th class="sortable" data-sort="state">State<span class="sort-ind" data-si="state"></span></th>
         <th>Interval</th><th>Policy</th><th>Locks</th>
         <th class="sortable" data-sort="last">Last event<span class="sort-ind" data-si="last"></span></th>
         <th>Next remediation</th>
-        <th class="sortable" data-sort="monitoring">Monitoring<span class="sort-ind" data-si="monitoring"></span></th>
         <th class="actions">Actions</th>
       </tr>
     </thead>
@@ -193,12 +195,11 @@
     <input id="watch-search" type="search" placeholder="filter watches…">
     <span id="watch-filters">
       <button data-wf="all" class="f-active">all</button>
-      <button data-wf="monitored">monitored</button>
-      <button data-wf="paused">paused</button>
       <button data-wf="disabled">disabled</button>
-      <button data-wf="hook">hook</button>
-      <button data-wf="notify">notify</button>
-      <button data-wf="expand">expand</button>
+      <button data-wf="running">running</button>
+      <button data-wf="stopped">stopped</button>
+      <button data-wf="monitorized">monitorized</button>
+      <button data-wf="failed">failed</button>
     </span>
     <span id="watch-count" class="muted"></span>
   </div>
@@ -661,7 +662,7 @@ function checkHealthCell(s) {
     return `<span class="bad">${esc(label)}</span>`;
   }
   if (h === "ok") return '<span class="ok">ok</span>';
-  if (h === "paused") return '<span class="muted">—</span>'; // state shown in the Monitoring column
+  if (h === "paused") return '<span class="muted">—</span>'; // state shown in the State column
   if (h === "disabled") return '<span class="muted">disabled</span>';
   if (h === "unknown") return '<span class="muted">—</span>';
   return '<span class="muted">—</span>';
@@ -689,7 +690,7 @@ function policyStateClass(state) {
 
 function policyCell(s) {
   const state = s.remediation_state || (s.enabled ? "pending" : "disabled");
-  // A paused service shows its state in the Monitoring column; don't repeat it here.
+  // A paused service shows its state in the State column; don't repeat it here.
   if (state === "paused") return '<span class="muted">—</span>';
   const cd = s.policy_cooldown ? `<div class="muted mono">${esc(s.policy_cooldown)}</div>` : "";
   return `<div class="policy-cell"><span class="${policyStateClass(state)}">${esc(state)}</span>${cd}</div>`;
@@ -717,7 +718,7 @@ function nextRemediationCell(s) {
     return `<span title="${esc(fmtTime(s.next_eligible_at))}">${esc(fmtUntilShort(s.next_eligible_at))}</span>`;
   }
   if (state === "eligible") return '<span class="ok">now</span>';
-  if (state === "pending") return `<span class="muted">${esc(state)}</span>`; // paused -> "—" (shown in Monitoring)
+  if (state === "pending") return `<span class="muted">${esc(state)}</span>`; // paused -> "—" (shown in State)
   return '<span class="muted">—</span>';
 }
 
@@ -744,10 +745,10 @@ function summarizeSLA(points) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | active | inactive | failed | monitored | paused | disabled
+let svcStatus = "all"; // all | disabled | running | stopped | monitorized | failed
 let allWatches = [];
 let watchQuery = "";
-let watchStatus = "all"; // all | monitored | paused | disabled | hook | notify | expand
+let watchStatus = "all"; // all | disabled | running | stopped | monitorized | failed
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
@@ -760,11 +761,48 @@ let latestActivity = null;
 let latestReady = null;
 let latestDiagnostics = [];
 
-function isFailing(s) { return s.enabled && s.check_health === "failing"; }
+function targetStateClass(state) {
+  switch (state) {
+    case "disabled": return "state-disabled";
+    case "running": return "state-running";
+    case "stopped": return "state-stopped";
+    case "monitorized": return "state-monitorized";
+    case "failed": return "state-failed";
+    default: return "muted";
+  }
+}
+
+function stateBadge(state) {
+  const st = state || "stopped";
+  return `<span class="target-state ${targetStateClass(st)}">${esc(st)}</span>`;
+}
+
+function stateRank(state) {
+  switch (state) {
+    case "disabled": return 0;
+    case "running": return 1;
+    case "stopped": return 2;
+    case "monitorized": return 3;
+    case "failed": return 4;
+    default: return 5;
+  }
+}
+
+function deriveServiceState(s) {
+  if (!s || !s.enabled) return "disabled";
+  const backend = (s.status || "").toLowerCase();
+  if (!s.monitored) return backend === "active" ? "running" : "stopped";
+  if (backend !== "active" || s.check_health === "failing") return "failed";
+  return "monitorized";
+}
+
+function serviceState(s) {
+  return (s && s.state) || deriveServiceState(s);
+}
+
+function isFailing(s) { return serviceState(s) === "failed"; }
 function isServiceAttention(s) {
-  if (!s || s.enabled === false) return false;
-  const st = (s.status || "").toLowerCase();
-  return st === "failed" || s.check_health === "failing";
+  return serviceState(s) === "failed";
 }
 function openPanelTarget(target) {
   if (target === "failed-services") {
@@ -965,17 +1003,15 @@ function renderOperationLive() {
 
 function serviceMatches(s) {
   if (svcQuery) {
-    const hay = `${s.name || ""} ${s.display_name || ""} ${s.unit || ""}`.toLowerCase();
+    const hay = `${s.name || ""} ${s.display_name || ""} ${s.unit || ""} ${serviceState(s)}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
-  const st = (s.status || "").toLowerCase();
   switch (svcStatus) {
-    case "active":      return st === "active";
-    case "inactive":    return st === "inactive";
-    case "failed":      return st === "failed";
-    case "monitored":   return s.enabled && !!s.monitored;
-    case "paused":      return s.enabled && !s.monitored;
-    case "disabled":    return !s.enabled;
+    case "disabled":
+    case "running":
+    case "stopped":
+    case "monitorized":
+    case "failed":      return serviceState(s) === svcStatus;
     default:            return true; // "all"
   }
 }
@@ -1020,10 +1056,8 @@ function renderFilterButtonCounts(selector, counts) {
 let svcSort = { key: "", dir: 1 };
 const svcSortKeys = {
   name: (s) => (s.name || "").toLowerCase(),
-  status: (s) => (s.status || "").toLowerCase(),
-  checks: (s) => s.checks_failing || 0,
+  state: (s) => stateRank(serviceState(s)),
   last: (s) => (s.last_event && s.last_event.time) || "",
-  monitoring: (s) => (!s.enabled ? 2 : s.monitored ? 0 : 1),
 };
 function setSvcSort(key) {
   if (svcSort.key === key) svcSort.dir = -svcSort.dir;
@@ -1040,15 +1074,13 @@ function updateSortIndicators() {
 // match it, for at-a-glance triage.
 function renderFilterCounts() {
   const s = allServices || [];
-  const low = (x) => (x.status || "").toLowerCase();
   const c = {
     all: s.length,
-    active: s.filter((x) => low(x) === "active").length,
-    inactive: s.filter((x) => low(x) === "inactive").length,
-    failed: s.filter((x) => low(x) === "failed").length,
-    monitored: s.filter((x) => x.enabled && x.monitored).length,
-    paused: s.filter((x) => x.enabled && !x.monitored).length,
-    disabled: s.filter((x) => !x.enabled).length,
+    disabled: s.filter((x) => serviceState(x) === "disabled").length,
+    running: s.filter((x) => serviceState(x) === "running").length,
+    stopped: s.filter((x) => serviceState(x) === "stopped").length,
+    monitorized: s.filter((x) => serviceState(x) === "monitorized").length,
+    failed: s.filter((x) => serviceState(x) === "failed").length,
   };
   renderFilterButtonCounts("#svc-filters", c);
 }
@@ -1083,21 +1115,16 @@ function renderServices() {
   if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all") ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((s) => {
     const st = (s.status || "unknown").toLowerCase();
+    const state = serviceState(s);
     const op = liveOps.get(s.name);
     const busy = serviceBusy(s.name);
     const busyText = op
       ? `<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${esc(op.action)} ${esc(opStateText(op))} · ${opElapsed(op)}s${op.message ? ` <span class="muted">${esc(op.message)}</span>` : ""}</div>`
       : "";
-    let mon, actions;
+    let actions;
     if (!s.enabled) {
-      mon = '<span class="muted">disabled</span>';
       actions = '<span class="muted">disabled in config</span>';
     } else {
-      // Monitoring state is plain colored text (like the Status column), not a
-      // pill/button; the monitor/unmonitor toggle lives in the Actions column.
-      const cls = s.monitored ? "active" : "inactive";
-      const label = s.monitored ? "monitored" : "paused";
-      mon = `<span class="status ${cls}">${label}</span>${s.monitored ? "" : monitorHint(s)}`;
       const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
           <button ${busy || st === "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
@@ -1118,24 +1145,22 @@ function renderServices() {
     const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${unitCell(s)}</td>
-      <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
-      <td>${checkHealthCell(s)}</td>
+      <td>${stateBadge(state)}${state === "running" || state === "stopped" ? monitorHint(s) : ""}</td>
       <td>${s.interval ? esc(s.interval) : '<span class="muted">—</span>'}</td>
       <td>${policyCell(s)}</td>
       <td>${locksCell(s)}</td>
       <td>${lastEventCell(s)}</td>
       <td>${nextRemediationCell(s)}</td>
-      <td>${mon}</td>
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="11">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="9">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
   const empty = (allServices || []).length
-    ? `<tr><td colspan="11" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="11" class="muted">No services.</td></tr>`;
+    ? `<tr><td colspan="9" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="9" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows.join("") || empty;
   renderAttention();
   expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
@@ -1369,13 +1394,16 @@ function watchHasExpand(w) {
 }
 
 function watchStateText(w) {
+  if (w && w.state) return w.state;
   if (!w || !w.enabled) return "disabled";
-  return w.monitored ? "monitored" : "paused";
+  if (!w.monitored) return "stopped";
+  const failedActivity = (w.last_activity_kind || "").endsWith("-failed");
+  const diskFailed = w.disk && (w.disk.sample_error || w.disk.mount_sample_error);
+  return failedActivity || diskFailed ? "failed" : "monitorized";
 }
 
 function watchStateRank(w) {
-  if (!w || !w.enabled) return 2;
-  return w.monitored ? 0 : 1;
+  return stateRank(watchStateText(w));
 }
 
 function watchSummaryText(w) {
@@ -1420,12 +1448,11 @@ function watchSearchText(w) {
 function watchMatches(w) {
   if (watchQuery && !watchSearchText(w).includes(watchQuery)) return false;
   switch (watchStatus) {
-    case "monitored": return !!(w && w.enabled && w.monitored);
-    case "paused":    return !!(w && w.enabled && !w.monitored);
-    case "disabled":  return !!(w && !w.enabled);
-    case "hook":      return !!(w && w.has_hook);
-    case "notify":    return watchHasNotify(w);
-    case "expand":    return watchHasExpand(w);
+    case "disabled":
+    case "running":
+    case "stopped":
+    case "monitorized":
+    case "failed":    return watchStateText(w) === watchStatus;
     default:           return true;
   }
 }
@@ -1446,12 +1473,11 @@ function renderWatchFilterCounts() {
   const w = allWatches || [];
   renderFilterButtonCounts("#watch-filters", {
     all: w.length,
-    monitored: w.filter((x) => x.enabled && x.monitored).length,
-    paused: w.filter((x) => x.enabled && !x.monitored).length,
-    disabled: w.filter((x) => !x.enabled).length,
-    hook: w.filter((x) => x.has_hook).length,
-    notify: w.filter(watchHasNotify).length,
-    expand: w.filter(watchHasExpand).length,
+    disabled: w.filter((x) => watchStateText(x) === "disabled").length,
+    running: w.filter((x) => watchStateText(x) === "running").length,
+    stopped: w.filter((x) => watchStateText(x) === "stopped").length,
+    monitorized: w.filter((x) => watchStateText(x) === "monitorized").length,
+    failed: w.filter((x) => watchStateText(x) === "failed").length,
   });
 }
 
@@ -1572,13 +1598,7 @@ function renderWatches(watches) {
   updateWatchSortIndicators();
   if (filterCount) filterCount.textContent = (watchQuery || watchStatus !== "all") ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((w) => {
-    const mode = watchMonitorMode(w);
-    const configState = w.enabled
-      ? `<span class="pill">enabled</span><br><span class="muted">monitor: ${esc(mode)}</span>`
-      : '<span class="pill">disabled</span>';
-    const monitorState = w.enabled
-      ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}`
-      : '<span class="muted">disabled</span>';
+    const state = watchStateText(w);
     const polarity = w.fire_on_fail
       ? '<span class="muted">on fail</span>'
       : '<span class="muted">on threshold</span>';
@@ -1615,7 +1635,7 @@ function renderWatches(watches) {
       <td>${hook}</td>
       <td>${notif}</td>
       <td>${last}</td>
-      <td>${configState}<br>${monitorState}</td>
+      <td>${stateBadge(state)}${state === "stopped" ? watchMonitorHint(w) : ""}</td>
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
@@ -1634,6 +1654,7 @@ function renderWatches(watches) {
 function renderWatchExpansion(w, events) {
   w = w || {};
   const mode = watchMonitorMode(w);
+  const state = watchStateText(w);
   const polarity = w.fire_on_fail ? "on fail" : "on threshold";
   const names = notifierNames(w);
   const notifiers = names.length
@@ -1649,9 +1670,8 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Type</span><br><b>${esc(w.check_type || "")}</b></div>
     <div><span class="muted">Interval</span><br><b>${esc(w.interval || "")}</b></div>
     <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
-    <div><span class="muted">Config</span><br>${w.enabled ? 'enabled' : '<span class="muted">disabled</span>'}</div>
+    <div><span class="muted">State</span><br>${stateBadge(state)}${state === "stopped" ? watchMonitorHint(w) : ""}</div>
     <div><span class="muted">Monitor flag</span><br><code>${esc(mode)}</code></div>
-    <div><span class="muted">Monitoring</span><br>${w.enabled ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}` : '<span class="muted">disabled</span>'}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Expand</span><br>${expand}</div>
@@ -2086,8 +2106,7 @@ function renderActionConfirm() {
     <p style="margin-top:0">${esc(warning)}</p>
     <div class="modal-grid">
       <div class="muted">Unit</div><div><code>${esc(d.unit || "")}</code></div>
-      <div class="muted">Status</div><div class="status ${esc((d.status || "unknown").toLowerCase())}">${esc(d.status || "unknown")}</div>
-      <div class="muted">Monitoring</div><div>${d.monitored ? "monitored" : "paused"}${d.enabled === false ? ' <span class="bad">disabled</span>' : ""}</div>
+      <div class="muted">State</div><div>${stateBadge(serviceState(d))}</div>
       <div class="muted">Named locks</div><div>${lockLine}</div>
       <div class="muted">Guards</div><div><span class="muted">evaluated by the operation engine before ${esc(ctx.action || "action")}</span></div>
       <div class="muted">Preflight</div><div>${preState}</div>
@@ -2229,20 +2248,16 @@ function renderDetail(d) {
   }
 
   $("#detail").style.display = "block";
-  let mon, disabledNote = "";
+  const st = serviceState(d);
+  let disabledNote = "";
   if (!d.enabled) {
-    mon = '<span class="pill">disabled</span>';
     disabledNote = `<p class="muted" style="color:#cf222e">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`;
-  } else {
-    mon = d.monitored
-      ? '<span class="pill">monitored</span>'
-      : `<span class="pill">paused</span>${monitorHint(d)}`;
   }
 
   $("#detail").innerHTML = `
     <button class="close" data-close-detail="1">close</button>
     <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
-    <p class="muted" style="margin-top:-.25rem">Monitoring: ${mon}</p>
+    <p class="muted" style="margin-top:-.25rem">State: ${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</p>
     ${disabledNote}
     <h2>Remediation</h2>
     <p>${renderRemediation(d.remediation)}</p>
