@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
 	"sermo/internal/volume"
@@ -138,9 +139,20 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if expand != nil {
 		w.Expand = expand
 		w.Policy = rules.ParsePolicy(entry)
-		w.Expander = volume.Expander{Runner: deps.ExecxRunner}
+		w.Expander = configuredVolumeExpander(deps)
 	}
 	return w, ""
+}
+
+func configuredVolumeExpander(deps Deps) VolumeExpander {
+	if deps.VolumeExpander != nil {
+		return deps.VolumeExpander
+	}
+	runner := deps.ExecxRunner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	return volume.Expander{Runner: runner}
 }
 
 // isHealthCheckType reports whether a check type's OK==true means "healthy", so a

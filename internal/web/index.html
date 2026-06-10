@@ -1386,13 +1386,19 @@ function renderWatches(watches) {
     const key = "wat:" + w.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const actions = !w.enabled
+    const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
+      ? `<button data-watch="${esc(w.name)}" data-watch-action="expand">expand ${esc(fmtBytes(w.expand.by_bytes))}</button>`
+      : "";
+    const monitorBtn = !w.enabled
       ? '<span class="muted">disabled in config</span>'
       : (me.can_act
         ? (w.monitored
           ? `<button data-watch="${esc(w.name)}" data-watch-action="unmonitor">unmonitor</button>`
           : `<button data-watch="${esc(w.name)}" data-watch-action="monitor">monitor</button>`)
         : '<span class="muted">read-only</span>');
+    const actions = !w.enabled
+      ? '<span class="muted">disabled in config</span>'
+      : [expandBtn, monitorBtn].filter(Boolean).join(" ");
     const row = `<tr class="clickable" data-exp-key="${esc(key)}">
       <td>${chev}${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
@@ -1424,6 +1430,9 @@ function renderWatchExpansion(w, events) {
   const notifiers = names.length
     ? names.map((n) => `<code>${esc(n)}</code>`).join(" ")
     : '<span class="muted">none</span>';
+  const expand = w.expand && Number(w.expand.by_bytes) > 0
+    ? `<b>${fmtBytes(w.expand.by_bytes)}</b>`
+    : '<span class="muted">none</span>';
   const hook = (w.hook_command || []).length
     ? `<code>${esc((w.hook_command || []).join(" "))}</code>`
     : (w.has_hook ? '<span class="muted">configured</span>' : '<span class="muted">none</span>');
@@ -1436,6 +1445,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Monitoring</span><br>${w.enabled ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}` : '<span class="muted">disabled</span>'}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
+    <div><span class="muted">Expand</span><br>${expand}</div>
   </div>`;
   const disk = renderDiskWatch(w.disk);
   const conditions = renderConditionRows(w.conditions || []);
@@ -1757,6 +1767,7 @@ async function act(name, action) {
 }
 
 async function actWatch(name, action) {
+  if (action === "expand" && !confirmWatchExpand(name)) return;
   $("#err").textContent = "";
   try {
     const res = await fetch(`api/watches/${encodeURIComponent(name)}/${action}`, {
@@ -1771,6 +1782,13 @@ async function actWatch(name, action) {
     $("#err").textContent = `${action} watch ${name}: ${e.message}`;
   }
   load();
+}
+
+function confirmWatchExpand(name) {
+  const w = (allWatches || []).find((item) => item && item.name === name) || {};
+  const by = w.expand && Number(w.expand.by_bytes) > 0 ? fmtBytes(w.expand.by_bytes) : "the configured amount";
+  const path = w.disk && w.disk.path ? ` on ${w.disk.path}` : "";
+  return confirm(`Expand "${name}"${path} by ${by}?`);
 }
 
 let confirmResolve = null;

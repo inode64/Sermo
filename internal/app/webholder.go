@@ -217,3 +217,11 @@ func (h *WebBackendHolder) SetWatchMonitored(ctx context.Context, name string, m
 	}
 	return nil
 }
+
+// ExpandWatch runs a configured disk-watch expansion through the active backend.
+func (h *WebBackendHolder) ExpandWatch(ctx context.Context, name string) web.ActionResult {
+	if b := h.backend(); b != nil {
+		return b.ExpandWatch(ctx, name)
+	}
+	return web.ActionResult{OK: false, Message: "web backend unavailable"}
+}

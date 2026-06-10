@@ -72,6 +72,7 @@ type Watch struct {
 	NotifierCount    int              `json:"notifier_count"`
 	Conditions       []WatchCondition `json:"conditions,omitempty"`
 	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
+	Expand           *WatchExpand     `json:"expand,omitempty"`
 	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
 	LastActivityKind string           `json:"last_activity_kind,omitempty"`
 }
@@ -81,6 +82,11 @@ type WatchCondition struct {
 	Field string `json:"field"`
 	Op    string `json:"op,omitempty"`
 	Value string `json:"value,omitempty"`
+}
+
+// WatchExpand is the configured manual/automatic disk growth action.
+type WatchExpand struct {
+	ByBytes int64 `json:"by_bytes"`
 }
 
 // DiskWatchInfo is live filesystem data for a disk host watch.
@@ -160,7 +166,7 @@ type HostMetric struct {
 	Ready    bool    `json:"ready"`
 }
 
-// ActionResult is the outcome of an operation (start/stop/restart).
+// ActionResult is the outcome of a state-changing web action.
 type ActionResult struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message,omitempty"`
@@ -436,6 +442,8 @@ type Backend interface {
 	SetMonitored(ctx context.Context, name string, monitored bool) error
 	// SetWatchMonitored pauses (false) or resumes (true) monitoring of a host watch.
 	SetWatchMonitored(ctx context.Context, name string, monitored bool) error
+	// ExpandWatch runs a configured disk watch's `then.expand` action on demand.
+	ExpandWatch(ctx context.Context, name string) ActionResult
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
 	// HostMetrics returns current system-level metrics (memory, cpu, load averages).
@@ -451,9 +459,10 @@ type Backend interface {
 	MonitoringStatus(ctx context.Context) MonitoringStatus
 }
 
-// operateActions and monitorActions are the action verbs the API accepts.
+// operateActions, monitorActions and watchOperateActions are the action verbs the API accepts.
 var operateActions = map[string]bool{"start": true, "stop": true, "restart": true}
 var monitorActions = map[string]bool{"monitor": true, "unmonitor": true}
+var watchOperateActions = map[string]bool{"expand": true}
 
 // defaultOperationTimeout matches operation.DefaultOperationTimeout when sermod
 // does not set OperationTimeout on the server.
@@ -969,6 +978,15 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	action := r.PathValue("action")
+	if watchOperateActions[action] {
+		res := s.Backend.ExpandWatch(s.operateContext(), name)
+		status := http.StatusOK
+		if !res.OK {
+			status = http.StatusConflict
+		}
+		writeJSON(w, status, res)
+		return
+	}
 	if !monitorActions[action] {
 		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "unknown action " + action})
 		return
