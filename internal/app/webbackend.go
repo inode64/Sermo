@@ -87,6 +87,7 @@ type webWatch struct {
 	checkType     string
 	interval      time.Duration
 	disabled      bool
+	monitorMode   string
 	fireOnFail    bool
 	hasHook       bool
 	hookCommand   []string
@@ -233,6 +234,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				checkType:     ctype,
 				interval:      iv,
 				disabled:      disabled,
+				monitorMode:   config.MonitorMode(entry),
 				fireOnFail:    fireOnFail,
 				hasHook:       hasHook,
 				hookCommand:   hookCommand,
@@ -456,13 +458,18 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w.checkType == "disk" {
 			disk = diskWatchInfo(w, b)
 		}
+		monitorMode := w.monitorMode
+		if monitorMode == "" {
+			monitorMode = config.MonitorEnabled
+		}
 		ww := web.Watch{
 			Name:          w.name,
 			CheckType:     w.checkType,
 			Summary:       watchSummary(w, disk),
 			Interval:      iv,
 			Enabled:       !w.disabled,
-			Monitored:     !w.disabled,
+			Monitor:       monitorMode,
+			Monitored:     !w.disabled && monitorMode != config.MonitorDisabled,
 			FireOnFail:    w.fireOnFail,
 			HasHook:       w.hasHook,
 			HookCommand:   slices.Clone(w.hookCommand),

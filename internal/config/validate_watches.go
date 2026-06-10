@@ -15,6 +15,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			add("watches.%s must be a mapping", name)
 			continue
 		}
+		if mode, present := entry["monitor"]; present {
+			validateMonitorMode("watches."+name+".monitor", mode, add)
+		}
 		if v, ok := entry["enabled"].(bool); ok && !v {
 			continue
 		}

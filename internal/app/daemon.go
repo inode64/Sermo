@@ -23,7 +23,7 @@ import (
 )
 
 // MonitorStore is the persistent monitoring-state store the daemon consults to
-// decide whether a service is actively monitored. It is implemented by
+// decide whether a service or watch is actively monitored. It is implemented by
 // internal/state.Store; kept as an interface so workers can be tested without a
 // database. A nil store means "always monitor" (no persistence).
 type MonitorStore interface {
@@ -82,8 +82,9 @@ type Deps struct {
 	Sleep       func(time.Duration)
 	Now         func() time.Time
 	Emit        func(Event)
-	// Monitor persists per-service monitoring state (active/paused) across daemon
-	// restarts and reboots. Optional: nil means every service is always monitored.
+	// Monitor persists per-entry monitoring state (active/paused) across daemon
+	// restarts and reboots. Optional: nil means every service/watch is always
+	// monitored.
 	Monitor MonitorStore
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
@@ -453,24 +454,32 @@ func healthRecorder(deps Deps, name string) func(up bool) {
 //   - disabled: force monitoring off
 //   - previous: keep the persisted state; first run defaults to on
 func applyMonitorMode(store MonitorStore, name, mode string) string {
+	return applyMonitorModeFor(store, "service "+name, name, mode)
+}
+
+func applyWatchMonitorMode(store MonitorStore, name, mode string) string {
+	return applyMonitorModeFor(store, "watch "+name, watchMonitorKey(name), mode)
+}
+
+func applyMonitorModeFor(store MonitorStore, label, key, mode string) string {
 	if store == nil {
 		return ""
 	}
 	var err error
 	switch mode {
 	case config.MonitorDisabled:
-		err = store.SetActive(name, false, state.SourceConfig)
+		err = store.SetActive(key, false, state.SourceConfig)
 	case config.MonitorPrevious:
-		if _, found, e := store.Active(name); e != nil {
+		if _, found, e := store.Active(key); e != nil {
 			err = e
 		} else if !found {
-			err = store.SetActive(name, true, state.SourceConfig)
+			err = store.SetActive(key, true, state.SourceConfig)
 		}
 	default: // MonitorEnabled
-		err = store.SetActive(name, true, state.SourceConfig)
+		err = store.SetActive(key, true, state.SourceConfig)
 	}
 	if err != nil {
-		return "service " + name + ": persist monitor state: " + err.Error()
+		return label + ": persist monitor state: " + err.Error()
 	}
 	return ""
 }

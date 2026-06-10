@@ -56,6 +56,10 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			interval = d
 		}
 
+		if w := applyWatchMonitorMode(deps.Monitor, name, config.MonitorMode(entry)); w != "" {
+			warnings = append(warnings, w)
+		}
+
 		switch cfgval.AsString(checkEntry["type"]) {
 		case "net", "icmp", "swap":
 			expanded, warns := buildMetricWatches(name, entry, checkEntry, deps, interval)

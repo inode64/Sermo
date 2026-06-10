@@ -450,6 +450,9 @@ The live state is toggled at runtime with `sermoctl monitor <svc>` /
 survives reboots, a `previous` service comes back up in whatever state an
 operator last left it.
 
+Host watches use the same `monitor: enabled | disabled | previous` values under
+the global `watches:` section; see [configuration](configuration.md#host-watches).
+
 ## Auxiliary commands
 
 `commands` is informational metadata (e.g. a version command). Sermo never runs
