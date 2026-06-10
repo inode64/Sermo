@@ -151,7 +151,7 @@
   <div class="table-wrap">
   <table class="services-table">
     <thead>
-      <tr><th>Service</th><th>Backend unit</th><th>Status</th><th>Checks</th><th>Interval</th><th>Policy</th><th>Locks</th><th>Last event</th><th>Next remediation</th><th>Monitoring</th><th class="actions">Actions</th></tr>
+      <tr><th>Service</th><th>Unit</th><th>Status</th><th>Checks</th><th>Interval</th><th>Policy</th><th>Locks</th><th>Last event</th><th>Next remediation</th><th>Monitoring</th><th class="actions">Actions</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
@@ -599,9 +599,10 @@ function checkHealthCell(s) {
 }
 
 function unitCell(s) {
-  const backend = s.backend ? `<span class="muted">${esc(s.backend)}</span>` : '<span class="muted">—</span>';
+  // The init backend is system-wide (shown once in the daemon status), so the
+  // per-row cell shows only the unit.
   const unit = s.unit ? `<span class="mono" title="${esc(s.unit)}">${esc(s.unit)}</span>` : '<span class="muted">—</span>';
-  return `<div class="unit-cell">${backend} ${unit}</div>`;
+  return `<div class="unit-cell">${unit}</div>`;
 }
 
 function policyStateClass(state) {
@@ -1558,7 +1559,6 @@ function renderActionConfirm() {
   $("#confirm-body").innerHTML = `
     <p style="margin-top:0">${esc(warning)}</p>
     <div class="modal-grid">
-      <div class="muted">Backend</div><div>${esc(d.backend || "unknown")}</div>
       <div class="muted">Unit</div><div><code>${esc(d.unit || "")}</code></div>
       <div class="muted">Status</div><div class="status ${esc((d.status || "unknown").toLowerCase())}">${esc(d.status || "unknown")}</div>
       <div class="muted">Monitoring</div><div>${d.monitored ? "monitored" : "paused"}${d.enabled === false ? ' <span class="bad">disabled</span>' : ""}</div>
