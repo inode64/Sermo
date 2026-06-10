@@ -574,14 +574,6 @@ func watchConditions(check map[string]any) []web.WatchCondition {
 	if v, ok := check["mounted"].(bool); ok {
 		out = append(out, web.WatchCondition{Field: "mounted", Op: "==", Value: fmt.Sprintf("%t", v)})
 	}
-	for _, field := range []string{"fstype", "device"} {
-		if v := cfgval.String(check[field]); v != "" {
-			out = append(out, web.WatchCondition{Field: field, Op: "==", Value: v})
-		}
-	}
-	if opts := cfgval.StringList(check["options"]); len(opts) > 0 {
-		out = append(out, web.WatchCondition{Field: "options", Op: "contains", Value: strings.Join(opts, ",")})
-	}
 	return out
 }
 

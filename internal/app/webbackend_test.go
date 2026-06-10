@@ -177,9 +177,7 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 				"check": map[string]any{
 					"type":     "storage",
 					"path":     "/data/app",
-					"fstype":   "xfs",
-					"device":   "/dev/mapper/data",
-					"options":  []any{"rw", "noatime"},
+					"mounted":  true,
 					"free_pct": map[string]any{"op": "<", "value": 15},
 					"free_bytes": map[string]any{
 						"op":    "<",
@@ -244,8 +242,8 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	if w.Summary == "" || !strings.Contains(w.Summary, "/data/app") || !strings.Contains(w.Summary, "xfs") {
 		t.Fatalf("summary = %q, want path and filesystem", w.Summary)
 	}
-	if len(w.Conditions) != 5 {
-		t.Fatalf("conditions = %+v, want free_pct/free_bytes/fstype/device/options", w.Conditions)
+	if len(w.Conditions) != 3 {
+		t.Fatalf("conditions = %+v, want free_pct/free_bytes/mounted", w.Conditions)
 	}
 	cond := map[string]web.WatchCondition{}
 	for _, c := range w.Conditions {
@@ -257,8 +255,8 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	if cond["free_bytes"].Op != "<" || cond["free_bytes"].Value != "10G" {
 		t.Fatalf("free_bytes condition = %+v", cond["free_bytes"])
 	}
-	if cond["fstype"].Value != "xfs" || cond["device"].Value != "/dev/mapper/data" || cond["options"].Value != "rw,noatime" {
-		t.Fatalf("mount conditions = %+v", cond)
+	if cond["mounted"].Op != "==" || cond["mounted"].Value != "true" {
+		t.Fatalf("mounted condition = %+v", cond["mounted"])
 	}
 	if w.Disk == nil {
 		t.Fatal("storage watch should include live filesystem info")

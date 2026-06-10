@@ -19,8 +19,7 @@ import (
 // validateDiskFields validates a storage check's fields at prefix (the dotted path
 // to the fields container, e.g. "watches.storage-root.check" or "checks.root").
 // Shared by host watches and service checks. A storage check verifies space/inodes
-// and/or the mount (mounted/fstype/options/device), so at least one of the two
-// must be present.
+// and/or whether the path is mounted, so at least one of the two must be present.
 func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["path"]) == "" {
 		add("%s.path is required for a storage check", prefix)
@@ -28,7 +27,7 @@ func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	preds := validateDiskPredicates(prefix, fields, add)
 	hasMount := validateMountConditions(prefix, fields, add)
 	if preds == 0 && !hasMount {
-		add("%s requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted/fstype/options/device)", prefix)
+		add("%s requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted)", prefix)
 	}
 }
 
@@ -58,9 +57,8 @@ func validateDiskPredicates(prefix string, fieldsMap map[string]any, add addFunc
 	return preds
 }
 
-// validateMountConditions validates the optional mount fields of a storage check and
-// reports whether any was present (a boolean mounted, string fstype/device, or a
-// string-list options).
+// validateMountConditions validates the optional mount predicate of a storage
+// check and reports whether it was present.
 func validateMountConditions(prefix string, fields map[string]any, add addFunc) bool {
 	active := false
 	if v, present := fields["mounted"]; present {
@@ -69,16 +67,9 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 			add("%s.mounted must be a boolean", prefix)
 		}
 	}
-	if cfgval.String(fields["fstype"]) != "" {
-		active = true
-	}
-	if cfgval.String(fields["device"]) != "" {
-		active = true
-	}
-	if v, present := fields["options"]; present {
-		active = true
-		if !isStringArray(v) {
-			add("%s.options must be a non-empty list of strings", prefix)
+	for _, field := range []string{"fstype", "device", "options"} {
+		if _, present := fields[field]; present {
+			add("%s.%s is not supported for a storage check; use mounted to verify the mount point", prefix, field)
 		}
 	}
 	return active
