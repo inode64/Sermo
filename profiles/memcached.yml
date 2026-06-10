@@ -3,7 +3,11 @@ name: memcached
 display_name: "Memcached"
 service: memcached
 variables:
+  port: 11211
   binary: "/usr/bin/memcached"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+
+checks:
+  port: { type: tcp, port: "${port}" }

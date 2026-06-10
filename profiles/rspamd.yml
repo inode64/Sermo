@@ -3,8 +3,12 @@ name: rspamd
 display_name: "Rspamd"
 service: rspamd
 variables:
+  port: 11334
   binary: "/usr/bin/rspamd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }
   config: { type: command, command: ["/usr/bin/rspamadm","configtest"], timeout: 30s }
+
+checks:
+  port: { type: tcp, port: "${port}" }
