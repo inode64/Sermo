@@ -240,6 +240,13 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Params = map[string]string{"auth_source": as}
 		}
 	}
+	// nut takes an optional `ups` (the UPS to read variables from / LOGIN to),
+	// carried in cfg.Query; absent, the probe auto-detects a single configured UPS.
+	if proto.Name() == "nut" {
+		if u := cfgval.AsString(entry["ups"]); u != "" {
+			cfg.Query = u
+		}
+	}
 	// libvirt defaults to the local Unix socket; an explicit host selects TCP.
 	if proto.Name() == "libvirt" && cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
 		cfg.Socket = "/var/run/libvirt/libvirt-sock"
