@@ -34,8 +34,9 @@ func TestValidateWatchesGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"disk-root": map[string]any{
-				"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
-				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
+				"monitor": "previous",
+				"check":   map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"then":    map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
 			},
 		},
 	})
@@ -858,6 +859,7 @@ func TestValidateWatchesBad(t *testing.T) {
 		"within cycles -1":       {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": -1}},
 		"within min 0":           {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": 5, "min_matches": 0}},
 		"both for within":        {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 3}, "within": map[string]any{"cycles": 5, "min_matches": 2}},
+		"bad monitor":            {"monitor": "paused", "check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"hook bad expect_exit":   {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}, "expect_exit": "nope"}}},
 		"hook bad expect_stdout": {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}, "expect_stdout": map[string]any{"op": "=>", "value": "1"}}}},
 	}

@@ -1274,6 +1274,10 @@ function watchMonitorHint(w) {
   return bits.length ? ` <span class="muted">(${bits.join(" · ")})</span>` : "";
 }
 
+function watchMonitorMode(w) {
+  return w && w.monitor ? w.monitor : "enabled";
+}
+
 function renderConditionRows(conditions) {
   const list = conditions || [];
   if (!list.length) return '<div class="muted" style="margin:.2rem 0 .6rem">No configured predicates.</div>';
@@ -1334,8 +1338,9 @@ function renderWatches(watches) {
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${list.length})`;
   const rows = list.map((w) => {
+    const mode = watchMonitorMode(w);
     const configState = w.enabled
-      ? '<span class="pill">enabled</span>'
+      ? `<span class="pill">enabled</span><br><span class="muted">monitor: ${esc(mode)}</span>`
       : '<span class="pill">disabled</span>';
     const monitorState = w.enabled
       ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}`
@@ -1386,6 +1391,7 @@ function renderWatches(watches) {
 // activity (hooks/notifies fired), reusing the inline expansion mechanism.
 function renderWatchExpansion(w, events) {
   w = w || {};
+  const mode = watchMonitorMode(w);
   const polarity = w.fire_on_fail ? "on fail" : "on threshold";
   const names = notifierNames(w);
   const notifiers = names.length
@@ -1399,6 +1405,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Interval</span><br><b>${esc(w.interval || "")}</b></div>
     <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
     <div><span class="muted">Config</span><br>${w.enabled ? 'enabled' : '<span class="muted">disabled</span>'}</div>
+    <div><span class="muted">Monitor flag</span><br><code>${esc(mode)}</code></div>
     <div><span class="muted">Monitoring</span><br>${w.enabled ? `<span class="status ${w.monitored ? 'active' : 'inactive'}">${w.monitored ? 'monitored' : 'paused'}</span>${w.monitored ? "" : watchMonitorHint(w)}` : '<span class="muted">disabled</span>'}</div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
