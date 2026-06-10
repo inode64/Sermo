@@ -12,7 +12,9 @@ package web
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -486,22 +488,39 @@ func (s *Server) Handler() http.Handler {
 	return securityHeaders(s.withAuth(mux))
 }
 
+type cspNonceCtxKey struct{}
+
 // securityHeaders adds standard hardening headers to every response. The CSP
-// keeps the dashboard self-contained (no external origins); 'unsafe-inline' is
-// required because the embedded UI uses inline <script>, inline styles and
-// inline event handlers (onclick/onchange/…).
+// keeps the dashboard self-contained (no external origins). The embedded UI uses
+// a per-response nonce for its script block; style-src still permits inline
+// styles because the current single-file dashboard uses static and generated
+// style attributes.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		nonce := cspNonce()
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'unsafe-inline'; "+
-				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
+			"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; "+
+				"style-src 'self' 'nonce-"+nonce+"' 'unsafe-inline'; img-src 'self' data:; "+
 				"base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cspNonceCtxKey{}, nonce)))
 	})
+}
+
+func cspNonce() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+	return base64.RawStdEncoding.EncodeToString(b[:])
+}
+
+func cspNonceFrom(ctx context.Context) string {
+	nonce, _ := ctx.Value(cspNonceCtxKey{}).(string)
+	return nonce
 }
 
 // eventLimit reads the `limit` query param, defaulting and capping it.
@@ -657,6 +676,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "dashboard unavailable", http.StatusInternalServerError)
 		return
 	}
+	page = []byte(strings.ReplaceAll(string(page), "{{CSP_NONCE}}", cspNonceFrom(r.Context())))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// The dashboard markup/JS is embedded in the binary and changes across
 	// versions (new sections like host watches are added over time). Without a
