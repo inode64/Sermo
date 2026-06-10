@@ -941,21 +941,19 @@ function renderServices() {
       mon = '<span class="pill">disabled</span>';
       actions = '<span class="muted">disabled in config</span>';
     } else {
-      // The monitor/unmonitor toggle lives in the Monitoring column (next to the
-      // state pill), so it is not repeated in Actions.
-      const toggle = me.can_act
-        ? (s.monitored
-            ? `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
-            : `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','monitor')">monitor</button>`)
-        : "";
-      mon = (s.monitored
-        ? '<span class="pill">monitored</span>'
-        : `<span class="pill">paused</span>${monitorHint(s)}`) + (toggle ? " " + toggle : "");
+      // Monitoring state is a colored chip (green monitored / amber paused), not a
+      // control; the monitor/unmonitor toggle lives in the Actions column.
+      const cls = s.monitored ? "ok" : "inactive";
+      const label = s.monitored ? "monitored" : "paused";
+      mon = `<span class="pill ${cls}">${label}</span>${s.monitored ? "" : monitorHint(s)}`;
       const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
           <button ${busy || st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
           <button ${busy || stopped ? "disabled" : ""} onclick="act('${esc(s.name)}','stop')">stop</button>
-          <button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','restart')">restart</button>`
+          <button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','restart')">restart</button>
+          ${s.monitored
+            ? `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','unmonitor')">unmonitor</button>`
+            : `<button ${busy ? "disabled" : ""} onclick="act('${esc(s.name)}','monitor')">monitor</button>`}`
         : '<span class="muted">read-only</span>';
     }
     const label = s.display_name && s.display_name !== s.name
