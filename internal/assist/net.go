@@ -81,7 +81,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 		}
 	}
 	s.notifiers = chooseNotifiers(p, env)
-	if len(s.notifiers) == 0 {
+	if !hasNotifyAction(s.notifiers) {
 		return s, fmt.Errorf("a net watch needs at least one notifier; none chosen for %s", label)
 	}
 	return s, nil

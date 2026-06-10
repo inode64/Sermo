@@ -507,7 +507,8 @@ a service.
 > speed to watch). Run with no argument to choose from the list. It prints the
 > generated `watches:` block and offers to merge it into the global config
 > (writing a `.bak` first); then `sermoctl reload`. New assistant types can be
-> added over time.
+> added over time. When asked for notification targets, choose `none` to generate
+> `notify: [none]` and suppress any global `notify` default for that watch.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
 `notify` list, an `expand` (disk only), or any combination (at least one is
@@ -521,6 +522,9 @@ watches:
       notify: [ops-email]                # send to these notifiers
       hook: { command: [/usr/local/bin/alert-disk.sh, "/"] }   # optional
 ```
+
+Use `notify: [none]` when a watch has another action (for example `expand`) but
+must not send notifications or inherit the global `notify` default.
 
 These conventions keep the per-type sections below short:
 

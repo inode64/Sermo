@@ -8,6 +8,7 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 )
 
@@ -43,6 +44,57 @@ func TestBuildWatchesDiskExpandAction(t *testing.T) {
 	}
 	if w.Policy.Cooldown != 30*time.Minute {
 		t.Fatalf("policy cooldown = %v, want 30m", w.Policy.Cooldown)
+	}
+}
+
+func TestBuildWatchesDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"expand-backup": map[string]any{
+			"check": map[string]any{
+				"type":     "disk",
+				"path":     "/mnt/backup",
+				"free_pct": map[string]any{"op": "<", "value": 10},
+			},
+			"then": map[string]any{
+				"notify": "none",
+				"expand": map[string]any{"by": "5G"},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{
+		DefaultTimeout: time.Second,
+		ExecxRunner:    execx.CommandRunner{},
+		GlobalNotify:   []string{"ops"},
+		Notifiers:      map[string]notify.Notifier{"ops": &fakeNotifier{name: "ops"}},
+	}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if watches[0].Expand == nil {
+		t.Fatalf("expand not parsed: %+v", watches[0])
+	}
+	if len(watches[0].Notifiers) != 0 {
+		t.Fatalf("notify none must suppress global default, got %v", watches[0].Notifiers)
+	}
+}
+
+func TestBuildWatchesNotifyNoneWithoutActionWarns(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"disk-root": map[string]any{
+			"check": map[string]any{
+				"type":     "disk",
+				"path":     "/",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
+			},
+			"then": map[string]any{"notify": []any{"none"}},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(watches) != 0 || len(warns) == 0 {
+		t.Fatalf("notify none without hook/expand must warn and not build: watches=%d warns=%v", len(watches), warns)
 	}
 }
 

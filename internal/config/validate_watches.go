@@ -28,7 +28,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		switch cfgval.String(check["type"]) {
 		case "disk":
 			validateDiskFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, true, add)
 		case "net":
 			validateNetCheck(name, check, entry, add)
 		case "icmp":
@@ -37,25 +37,25 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			validateSwapCheck(name, entry, add)
 		case "load":
 			validateLoadFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "oom":
 			validateOomFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "fds":
 			validateThresholdPreds(cp, check, []string{"used_pct", "free", "allocated"}, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "conntrack":
 			validateThresholdPreds(cp, check, []string{"used_pct", "free", "count"}, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "entropy":
 			validateEntropyFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "cert":
 			validateCertFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "zombies":
 			validateZombieFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, add)
+			validateHookBlock("watches."+name, entry, false, add)
 		case "file":
 			validateFileCheck(name, check, entry, add)
 		case "process":
@@ -66,7 +66,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			// Any single-shot service check (tcp, http, command, …) can be a host
 			// watch: validate its fields and require a hook (section: unified checks).
 			if validateWatchableCheck(cp, cfgval.String(check["type"]), check, locksDir, add) {
-				validateHookBlock("watches."+name, entry, add)
+				validateHookBlock("watches."+name, entry, false, add)
 			} else {
 				add("watches.%s.check.type %q is not supported", name, cfgval.String(check["type"]))
 			}
@@ -82,10 +82,11 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 }
 
 // validateHookBlock validates a `then` action block: a hook and/or a notify list
-// (at least one). The hook command (when present) must be a non-empty array with
-// a valid optional timeout. Notifier-name references are checked separately by
-// validateNotifyRefs (which has the configured notifier set).
-func validateHookBlock(prefix string, block map[string]any, add func(string, ...any)) {
+// (at least one), or a disk-only expand action. The hook command (when present)
+// must be a non-empty array with a valid optional timeout. Notifier-name
+// references are checked separately by validateNotifyRefs (which has the
+// configured notifier set).
+func validateHookBlock(prefix string, block map[string]any, allowExpand bool, add func(string, ...any)) {
 	then, ok := block["then"].(map[string]any)
 	if !ok {
 		add("%s.then is required", prefix)
@@ -93,8 +94,12 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 	}
 	hook, hasHook := then["hook"].(map[string]any)
 	notify := cfgval.StringList(then["notify"])
-	if !hasHook && len(notify) == 0 {
-		add("%s.then requires a hook and/or notify", prefix)
+	_, hasExpand := then["expand"].(map[string]any)
+	if hasExpand && !allowExpand {
+		add("%s.then.expand is only valid on a disk watch", prefix)
+	}
+	if !hasHook && !hasNotifyAction(notify) && !hasExpand {
+		add("%s.then requires a hook, notify and/or expand", prefix)
 		return
 	}
 	if hasHook {
@@ -113,6 +118,10 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 		validateOutputExpectation(prefix+".then.hook", "expect_stdout", hook["expect_stdout"], add)
 		validateOutputExpectation(prefix+".then.hook", "expect_stderr", hook["expect_stderr"], add)
 	}
+}
+
+func hasNotifyAction(names []string) bool {
+	return len(names) > 0 && !slices.Contains(names, notifyNone)
 }
 
 // validateNetCheck validates a net interface watch: an interface and a non-empty
@@ -156,7 +165,7 @@ func validateNetCheck(name string, check, entry map[string]any, add func(string,
 		default:
 			add("%s is not a supported net metric (state, speed, errors)", prefix)
 		}
-		validateHookBlock(prefix, m, add)
+		validateHookBlock(prefix, m, false, add)
 		validateWindow(prefix, m, add)
 	}
 }
@@ -219,7 +228,7 @@ func validateSwapCheck(name string, entry map[string]any, add func(string, ...an
 		default:
 			add("%s is not a supported swap metric (usage, io)", prefix)
 		}
-		validateHookBlock(prefix, m, add)
+		validateHookBlock(prefix, m, false, add)
 		validateWindow(prefix, m, add)
 	}
 }
@@ -283,7 +292,7 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 		default:
 			add("%s is not a supported icmp metric (state, latency)", prefix)
 		}
-		validateHookBlock(prefix, m, add)
+		validateHookBlock(prefix, m, false, add)
 		validateWindow(prefix, m, add)
 	}
 }
@@ -328,7 +337,7 @@ func validateFileCheck(name string, check, entry map[string]any, add func(string
 		add("watches.%s.check requires at least one of size, permissions, owner, existence", name)
 	}
 
-	validateHookBlock("watches."+name, entry, add)
+	validateHookBlock("watches."+name, entry, false, add)
 }
 
 // validateProcessWatch validates a process watch: a name, an optional user, and
@@ -366,5 +375,5 @@ func validateProcessWatch(name string, check, entry map[string]any, add func(str
 		add("watches.%s.check requires at least one of for, cpu, memory, io, gone", name)
 	}
 
-	validateHookBlock("watches."+name, entry, add)
+	validateHookBlock("watches."+name, entry, false, add)
 }
