@@ -315,9 +315,20 @@ func (m statusMatcher) String() string {
 	return strings.Join(parts, ",")
 }
 
+// cmdState carries change-detection state across cycles for a command/config
+// check. Being a pointer it survives when the check is built once (a host watch),
+// like the conn/cert checks; rebuilt per-cycle service checks simply never prime
+// it, so on_change there is inert rather than firing spuriously.
+type cmdState struct {
+	primed bool
+	last   string
+}
+
 // commandCheck runs a command and compares its exit code, and optionally its
-// stdout/stderr, to expectations (section 12). The command is always an argv
-// array, never a shell string (section 30/34).
+// stdout/stderr, to expectations (section 12). With on_change it also alerts when
+// the command's stdout changes between cycles (e.g. a `version` command whose
+// output changed). The command is always an argv array, never a shell string
+// (section 30/34).
 type commandCheck struct {
 	base
 	runner     execx.Runner
@@ -325,6 +336,8 @@ type commandCheck struct {
 	expectExit int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
+	onChange   bool
+	state      *cmdState
 }
 
 func (c commandCheck) Run(ctx context.Context) Result {
@@ -345,6 +358,16 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if ok, detail := c.stderr.Match(res.Stderr); !ok {
 		return c.result(false, fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail), start)
+	}
+	if c.onChange && c.state != nil {
+		cur := strings.TrimSpace(res.Stdout)
+		if c.state.primed && cur != c.state.last {
+			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", firstLine(c.state.last), firstLine(cur)), start)
+			r.Data = map[string]any{"old": c.state.last, "new": cur}
+			c.state.last = cur
+			return r
+		}
+		c.state.last, c.state.primed = cur, true
 	}
 	return c.result(true, fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit), start)
 }

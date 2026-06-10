@@ -16,16 +16,23 @@ import (
 	"sermo/internal/volume"
 )
 
-// BuildWatches resolves the global `watches` section into runnable Watches.
-// Disabled or malformed entries are skipped with a warning (like BuildWorkers).
+// BuildWatches resolves the global `watches` section into runnable Watches, plus
+// the per-service version/config monitors synthesized from each service's
+// `version:`/`config:` blocks. Disabled or malformed entries are skipped with a
+// warning (like BuildWorkers).
 func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
-	raw, ok := cfg.Global.Raw["watches"].(map[string]any)
-	if !ok || len(raw) == 0 {
-		return nil, nil
-	}
-
 	var watches []*Watch
 	var warnings []string
+
+	sw, swarn := serviceMonitorWatches(cfg, deps, defaultInterval)
+	watches = append(watches, sw...)
+	warnings = append(warnings, swarn...)
+
+	raw, ok := cfg.Global.Raw["watches"].(map[string]any)
+	if !ok || len(raw) == 0 {
+		return watches, warnings
+	}
+
 	for _, name := range sortedWatchNames(raw) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
@@ -129,7 +136,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 // for disk/load/metric/count and the other threshold checks).
 func isHealthCheckType(typ string) bool {
 	switch typ {
-	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "libraries":
+	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "libraries", "config":
 		return true
 	default:
 		return false
@@ -435,6 +442,141 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 		}
 	}
 	return out
+}
+
+// serviceMonitorWatches synthesizes the per-service version/config monitors from
+// each resolved service's `version:`/`config:` blocks, reusing the profile's
+// `commands.version` and `preflight.config`. They are built once (like host
+// watches) so their on_change detection persists across cycles.
+func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
+	var watches []*Watch
+	var warnings []string
+	for _, name := range serviceNames(cfg) {
+		resolved, errs := cfg.Resolve(name)
+		if len(errs) > 0 || resolved.Tree == nil {
+			continue
+		}
+		tree := resolved.Tree
+		interval := defaultInterval
+		if d := durationField(tree["interval"]); d > 0 {
+			interval = d
+		}
+		for _, m := range []struct {
+			suffix string
+			build  func(string, map[string]any, Deps, time.Duration) (*Watch, string)
+		}{{"version", versionMonitor}, {"config", configMonitor}} {
+			w, warn := m.build(name, tree, deps, interval)
+			if warn != "" {
+				warnings = append(warnings, warn)
+			} else if w != nil {
+				watches = append(watches, w)
+			}
+		}
+	}
+	return watches, warnings
+}
+
+// versionMonitor synthesizes a watch that alerts when the service's reported
+// version changes, using the profile's version command (preflight.version, then
+// commands.version). nil when the service declares no `version.on_change`.
+func versionMonitor(name string, tree map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
+	notify, ok := onChangeNotify(tree["version"])
+	if !ok {
+		return nil, ""
+	}
+	cmd := versionCommandRaw(tree)
+	if cmd == nil {
+		return nil, "service " + name + ": version monitor needs commands.version (or preflight.version) in the profile"
+	}
+	check, err := checks.BuildInline(name+":version", map[string]any{"type": "command", "command": cmd, "on_change": true}, monitorDeps(deps))
+	if err != nil {
+		return nil, "service " + name + ": version monitor: " + err.Error()
+	}
+	return monitorWatch(name+":version", "command", check, notify, deps, interval), ""
+}
+
+// configMonitor synthesizes a watch that alerts when the service's config is
+// invalid (the profile's preflight.config test fails) or — with a `path` — when a
+// config file changes. nil when the service declares no `config.on_change`.
+func configMonitor(name string, tree map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
+	block, _ := tree["config"].(map[string]any)
+	notify, ok := onChangeNotify(tree["config"])
+	if !ok {
+		return nil, ""
+	}
+	entry := map[string]any{"type": "config", "on_change": true}
+	if cmd := configTestCommandRaw(tree); cmd != nil {
+		entry["command"] = cmd
+	}
+	if p, present := block["path"]; present {
+		entry["path"] = p
+	}
+	if entry["command"] == nil && entry["path"] == nil {
+		return nil, "service " + name + ": config monitor needs preflight.config (or a path)"
+	}
+	check, err := checks.BuildInline(name+":config", entry, monitorDeps(deps))
+	if err != nil {
+		return nil, "service " + name + ": config monitor: " + err.Error()
+	}
+	return monitorWatch(name+":config", "config", check, notify, deps, interval), ""
+}
+
+// onChangeNotify reads an `{on_change: {notify: [...]}}` block, returning the
+// notifier names and whether on_change is declared.
+func onChangeNotify(v any) ([]string, bool) {
+	block, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	oc, ok := block["on_change"].(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	return cfgval.StringList(oc["notify"]), true
+}
+
+// versionCommandRaw returns the raw version-command argv from the resolved tree
+// (preflight.version then commands.version), or nil.
+func versionCommandRaw(tree map[string]any) any {
+	for _, src := range []string{"preflight", "commands"} {
+		if section, ok := tree[src].(map[string]any); ok {
+			if entry, ok := section["version"].(map[string]any); ok && entry["command"] != nil {
+				return entry["command"]
+			}
+		}
+	}
+	return nil
+}
+
+// configTestCommandRaw returns the raw config-test argv from preflight.config (the
+// profile's, or the service's custom preflight that replaced it), or nil.
+func configTestCommandRaw(tree map[string]any) any {
+	if pf, ok := tree["preflight"].(map[string]any); ok {
+		if entry, ok := pf["config"].(map[string]any); ok {
+			return entry["command"]
+		}
+	}
+	return nil
+}
+
+// monitorDeps maps the app Deps to the checks.Deps a synthesized monitor needs.
+func monitorDeps(deps Deps) checks.Deps {
+	return checks.Deps{DefaultTimeout: deps.DefaultTimeout, Runner: deps.ExecxRunner}
+}
+
+// monitorWatch assembles a notify-only watch around a synthesized check.
+func monitorWatch(name, checkType string, check checks.Check, notify []string, deps Deps, interval time.Duration) *Watch {
+	return &Watch{
+		Name:       name,
+		CheckType:  checkType,
+		Check:      check,
+		Notifiers:  resolveNotifiers(effectiveNotify(notify, deps.GlobalNotify), deps.Notifiers),
+		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
+		Interval:   interval,
+		FireOnFail: true, // command/config are health-style: alert (notify) on failure/change
+		Now:        deps.Now,
+		Emit:       deps.Emit,
+	}
 }
 
 // effectiveNotify applies notify precedence (per-site over global): an explicit
