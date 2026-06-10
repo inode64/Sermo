@@ -1,0 +1,852 @@
+package config
+
+import (
+	"encoding/json"
+	"fmt"
+	"maps"
+	"net/url"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/dustin/go-humanize"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/conn"
+)
+
+// validateDiskFields validates a disk check's fields at prefix (the dotted path
+// to the fields container, e.g. "watches.disk-root.check" or "checks.root").
+// Shared by host watches and service checks. A disk check verifies space/inodes
+// and/or the mount (mounted/fstype/options/device), so at least one of the two
+// must be present.
+func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["path"]) == "" {
+		add("%s.path is required for a disk check", prefix)
+	}
+	preds := validatePresentThresholds(prefix, fields, []string{"used_pct", "free_pct", "inodes_used_pct", "inodes_free_pct", "inodes_free"}, add)
+	hasMount := validateMountConditions(prefix, fields, add)
+	if preds == 0 && !hasMount {
+		add("%s requires a space/inode predicate (used_pct/free_pct/inodes_*) and/or a mount condition (mounted/fstype/options/device)", prefix)
+	}
+}
+
+// validateMountConditions validates the optional mount fields of a disk check and
+// reports whether any was present (a boolean mounted, string fstype/device, or a
+// string-list options).
+func validateMountConditions(prefix string, fields map[string]any, add addFunc) bool {
+	active := false
+	if v, present := fields["mounted"]; present {
+		active = true
+		if _, ok := v.(bool); !ok {
+			add("%s.mounted must be a boolean", prefix)
+		}
+	}
+	if cfgval.String(fields["fstype"]) != "" {
+		active = true
+	}
+	if cfgval.String(fields["device"]) != "" {
+		active = true
+	}
+	if v, present := fields["options"]; present {
+		active = true
+		if !isStringArray(v) {
+			add("%s.options must be a non-empty list of strings", prefix)
+		}
+	}
+	return active
+}
+
+// validateEntropyFields validates an entropy check's required avail {op, value}
+// threshold at prefix.
+func validateEntropyFields(prefix string, fields map[string]any, add addFunc) {
+	validateThresholdMap(prefix, "avail", fields["avail"], "for an entropy check", add)
+}
+
+// validateZombieFields validates a zombies check's required count {op, value}
+// threshold at prefix.
+func validateZombieFields(prefix string, fields map[string]any, add addFunc) {
+	validateThresholdMap(prefix, "count", fields["count"], "for a zombies check", add)
+}
+
+// validateThresholdMap validates a single required {op, value} threshold field.
+func validateThresholdMap(prefix, field string, raw any, suffix string, add addFunc) {
+	m, ok := raw.(map[string]any)
+	if !ok {
+		add("%s.%s {op, value} is required %s", prefix, field, suffix)
+		return
+	}
+	validateOpNumeric(prefix+"."+field, m, add)
+}
+
+// validateOpNumeric validates an already-extracted {op, value} threshold map (a
+// disk-style comparison op and a numeric value) at the dotted label. It is the
+// shared core of every delta/threshold/predicate check.
+func validateOpNumeric(label string, m map[string]any, add addFunc) {
+	if !isValidDiskOp(cfgval.String(m["op"])) {
+		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
+	}
+	if !isNumeric(cfgval.String(m["value"])) {
+		add("%s value %q must be numeric", label, cfgval.String(m["value"]))
+	}
+}
+
+// validatePresentThresholds validates the present {op, value} predicates among
+// fields and returns how many were present (it does not require any).
+func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) int {
+	preds := 0
+	for _, field := range fields {
+		raw, present := fieldsMap[field]
+		if !present {
+			continue
+		}
+		preds++
+		m, ok := raw.(map[string]any)
+		if !ok {
+			add("%s.%s must be a mapping {op, value}", prefix, field)
+			continue
+		}
+		if !isValidDiskOp(cfgval.String(m["op"])) {
+			add("%s.%s has an invalid op %q", prefix, field, cfgval.String(m["op"]))
+		}
+		if !isNumeric(cfgval.String(m["value"])) {
+			add("%s.%s value %q must be numeric", prefix, field, cfgval.String(m["value"]))
+		}
+	}
+	return preds
+}
+
+// validateThresholdPreds validates a check whose body is a set of named threshold
+// predicates (each {op, value}), requiring at least one of fields to be present.
+// Shared by fds, conntrack and load.
+func validateThresholdPreds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) {
+	if validatePresentThresholds(prefix, fieldsMap, fields, add) == 0 {
+		add("%s requires at least one of %s", prefix, strings.Join(fields, "/"))
+	}
+}
+
+// validateOomFields validates an oom check's optional delta {op, value} (the
+// default fires on any OOM kill, so a bare oom check is valid).
+func validateOomFields(prefix string, fields map[string]any, add addFunc) {
+	delta, present := fields["delta"]
+	if !present {
+		return
+	}
+	m, ok := delta.(map[string]any)
+	if !ok {
+		add("%s.delta must be a mapping {op, value}", prefix)
+		return
+	}
+	if !isValidDiskOp(cfgval.String(m["op"])) {
+		add("%s.delta has an invalid op %q", prefix, cfgval.String(m["op"]))
+	}
+	if !isNumeric(cfgval.String(m["value"])) {
+		add("%s.delta value %q must be numeric", prefix, cfgval.String(m["value"]))
+	}
+}
+
+// validateCheckGate validates a check's interdependency fields: `requires` is a
+// list of other check names in the same section (a check may not require itself or
+// an unknown check), and `skip_when_changed` is a list of file paths.
+func validateCheckGate(path, name string, entry, section map[string]any, add addFunc) {
+	if v, present := entry["requires"]; present {
+		reqs, ok := gateStrings(v)
+		if !ok {
+			add("%s.requires must be a check name or a list of check names", path)
+		}
+		for _, dep := range reqs {
+			if dep == name {
+				add("%s.requires cannot reference itself", path)
+			} else if _, ok := section[dep]; !ok {
+				add("%s.requires references unknown check %q", path, dep)
+			}
+		}
+	}
+	if v, present := entry["skip_when_changed"]; present {
+		if _, ok := gateStrings(v); !ok {
+			add("%s.skip_when_changed must be a file path or a list of file paths", path)
+		}
+	}
+}
+
+// gateStrings accepts a scalar string or a list of strings, returning the values
+// and whether the shape is valid.
+func gateStrings(v any) ([]string, bool) {
+	switch t := v.(type) {
+	case nil:
+		return nil, true
+	case string:
+		if t == "" {
+			return nil, true
+		}
+		return []string{t}, true
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s := cfgval.String(e); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// validateHTTPFields validates an http check at prefix: a required url, and the
+// optional request (method/headers/body/json) and response-assertion fields
+// (expect_body/expect_json) shapes.
+func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["url"]) == "" {
+		add("%s.url is required for an http check", prefix)
+	}
+	if v, present := fields["method"]; present {
+		s, ok := v.(string)
+		if !ok {
+			add("%s.method must be a string", prefix)
+		} else if _, known := httpMethods[strings.ToUpper(strings.TrimSpace(s))]; !known {
+			add("%s.method %q is not a standard HTTP method (GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE, CONNECT)", prefix, s)
+		}
+	}
+	if v, present := fields["http3"]; present {
+		if h3, ok := v.(bool); !ok {
+			add("%s.http3 must be a boolean", prefix)
+		} else if h3 {
+			// HTTP/3 runs over QUIC (TLS-only) and cannot use an HTTP proxy.
+			if u := cfgval.String(fields["url"]); u != "" {
+				if parsed, err := url.Parse(u); err != nil || parsed.Scheme != "https" {
+					add("%s.http3 requires an https url", prefix)
+				}
+			}
+			if cfgval.String(fields["proxy"]) != "" {
+				add("%s.http3 and proxy are mutually exclusive", prefix)
+			}
+		}
+	}
+	if p := cfgval.String(fields["proxy"]); p != "" {
+		u, err := url.Parse(p)
+		if err != nil || u.Host == "" {
+			add("%s.proxy %q is not a valid URL", prefix, p)
+		} else {
+			switch u.Scheme {
+			case "http", "https", "socks5", "socks5h":
+			default:
+				add("%s.proxy scheme must be http, https or socks5", prefix)
+			}
+		}
+	}
+	if v, present := fields["body"]; present {
+		if _, ok := v.(string); !ok {
+			add("%s.body must be a string", prefix)
+		}
+	}
+	if v, present := fields["headers"]; present {
+		if _, ok := v.(map[string]any); !ok {
+			add("%s.headers must be a mapping", prefix)
+		}
+	}
+	if v, present := fields["expect_body"]; present {
+		switch m := v.(type) {
+		case string:
+			// substring match
+		case map[string]any:
+			validateOpValue(prefix, "expect_body", m, add)
+		default:
+			add("%s.expect_body must be a string or an {op, value} mapping", prefix)
+		}
+	}
+	if m, ok := fields["expect_status"].(map[string]any); ok {
+		validateOpValue(prefix, "expect_status", m, add)
+	}
+	if v, present := fields["expect_latency"]; present {
+		if m, ok := v.(map[string]any); ok {
+			validateOpValue(prefix, "expect_latency", m, add)
+		} else {
+			add("%s.expect_latency must be an {op, value} mapping", prefix)
+		}
+	}
+	if v, present := fields["expect_json"]; present {
+		m, ok := v.(map[string]any)
+		if !ok {
+			add("%s.expect_json must be a mapping", prefix)
+		} else {
+			for _, path := range slices.Sorted(maps.Keys(m)) {
+				if cond, ok := m[path].(map[string]any); ok {
+					if op := cfgval.String(cond["op"]); op != "" && !validJSONOp(op) {
+						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains", prefix, path, op)
+					}
+				}
+			}
+		}
+	}
+}
+
+func validJSONOp(op string) bool {
+	switch op {
+	case "==", "!=", ">", ">=", "<", "<=", "contains", "=~":
+		return true
+	default:
+		return false
+	}
+}
+
+// validateOpValue validates an {op, value} comparison mapping (shared by the
+// http response comparisons): op must be a known comparison operator, and value
+// must be numeric for ordering ops and a valid regexp for =~.
+func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
+	op := cfgval.String(m["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, label, op)
+		return
+	}
+	value := cfgval.String(m["value"])
+	switch op {
+	case ">", ">=", "<", "<=":
+		if !isNumeric(value) {
+			add("%s.%s value %q must be numeric for op %s", prefix, label, value, op)
+		}
+	case "=~":
+		if _, err := regexp.Compile(value); err != nil {
+			add("%s.%s value is not a valid regexp: %v", prefix, label, err)
+		}
+	}
+}
+
+// validatePortsFields validates a ports check at prefix: a parseable `ports` spec
+// (list + ranges) and the enumerated expect/match values.
+func validatePortsFields(prefix string, fields map[string]any, add addFunc) {
+	if err := validatePortSpec(cfgval.String(fields["ports"])); err != "" {
+		add("%s.ports %s", prefix, err)
+	}
+	if v := cfgval.String(fields["expect"]); v != "" && v != "open" && v != "closed" && v != "any" {
+		add("%s.expect must be open, closed or any", prefix)
+	}
+	if v := cfgval.String(fields["match"]); v != "" && v != "all" && v != "any" && v != "none" {
+		add("%s.match must be all, any or none", prefix)
+	}
+	if v, present := fields["on_change"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.on_change must be a boolean", prefix)
+		}
+	}
+}
+
+// validatePortSpec returns "" when spec is a valid comma-separated list of ports
+// and inclusive ranges (e.g. "80,443,1024-4000"), else a short reason.
+func validatePortSpec(spec string) string {
+	if strings.TrimSpace(spec) == "" {
+		return "is required (e.g. \"80,443,1024-4000\")"
+	}
+	found := false
+	for _, tok := range strings.Split(spec, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		lo, hi, isRange := strings.Cut(tok, "-")
+		start, err := strconv.Atoi(strings.TrimSpace(lo))
+		if err != nil {
+			return fmt.Sprintf("has an invalid port %q", tok)
+		}
+		end := start
+		if isRange {
+			end, err = strconv.Atoi(strings.TrimSpace(hi))
+			if err != nil {
+				return fmt.Sprintf("has an invalid range %q", tok)
+			}
+		}
+		if start < 1 || end > 65535 || start > end {
+			return fmt.Sprintf("range %q is out of 1..65535", tok)
+		}
+		found = true
+	}
+	if !found {
+		return "is required (e.g. \"80,443,1024-4000\")"
+	}
+	return ""
+}
+
+// validateLoadFields validates a load check at prefix: an optional boolean
+// per_cpu and at least one load1/load5/load15 threshold.
+func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
+	if v, present := fields["per_cpu"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.per_cpu must be a boolean", prefix)
+		}
+	}
+	validateThresholdPreds(prefix, fields, []string{"load1", "load5", "load15"}, add)
+}
+
+func isValidDiskOp(op string) bool {
+	switch op {
+	case ">=", ">", "<=", "<", "==", "!=":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNumeric(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
+// validateConnFields validates a connection-protocol check (mysql, …): a user
+// is required (password is optional and may come from the environment), the
+// port must be numeric when present, and tls must be a boolean or one of the
+// known string modes.
+func validateConnFields(prefix string, fields map[string]any, requireUser bool, add addFunc) {
+	if requireUser && cfgval.String(fields["user"]) == "" {
+		add("%s.user is required for a connection check", prefix)
+	}
+	if v, present := fields["port"]; present && !isNumeric(cfgval.String(v)) {
+		add("%s.port %q must be numeric", prefix, cfgval.String(v))
+	}
+	if v, present := fields["tls"]; present {
+		switch t := v.(type) {
+		case bool:
+			// fine
+		case string:
+			switch strings.ToLower(strings.TrimSpace(t)) {
+			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify", "skip_verify", "insecure",
+				// PostgreSQL sslmodes
+				"disable", "require", "prefer", "verify-ca", "verify-full":
+			default:
+				add("%s.tls %q must be a boolean, skip-verify, or a valid sslmode", prefix, t)
+			}
+		default:
+			add("%s.tls must be a boolean or a string (true/false/skip-verify)", prefix)
+		}
+	}
+	// expect: optional response assertions (field -> value | {op, value}),
+	// compared against the probe's version / Extra fields.
+	if v, present := fields["expect"]; present {
+		m, ok := v.(map[string]any)
+		if !ok {
+			add("%s.expect must be a mapping of field -> value or {op, value}", prefix)
+		} else {
+			for _, field := range slices.Sorted(maps.Keys(m)) {
+				if cond, ok := m[field].(map[string]any); ok {
+					validateOpValue(prefix, "expect."+field, cond, add)
+				}
+			}
+		}
+	}
+	if v, present := fields["expect_latency"]; present {
+		if m, ok := v.(map[string]any); ok {
+			validateOpValue(prefix, "expect_latency", m, add)
+		} else {
+			add("%s.expect_latency must be an {op, value} mapping", prefix)
+		}
+	}
+	for _, key := range []string{"on_change", "on_version_change"} {
+		if v, present := fields[key]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.%s must be a boolean", prefix, key)
+			}
+		}
+	}
+}
+
+// knownCheckTypes are the single-shot check types valid in a service's
+// checks:/preflight:/postflight: sections (and referenceable from rules). The
+// host-resource checks (disk…oom) are shared with host watches; the multi-target
+// watch types (net, icmp, swap, file, process) stay watch-only because they fire
+// per-metric/per-target rather than producing one Result. Keep this in step with
+// internal/checks buildCheck and the watch validation (section: unified checks).
+var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
+	"disk", "autofs", "load", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+var countKinds = set("any", "file", "dir", "symlink")
+
+// httpMethods are the standard HTTP request methods an http check may use.
+var httpMethods = set("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT")
+var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
+
+// compareOps is the operator set shared by the sql check and the http response
+// comparisons (expect_body / expect_status / expect_latency).
+var compareOps = set("==", "!=", ">", ">=", "<", "<=", "=~")
+
+// validateCheckSection validates a checks/preflight/postflight section: known
+// types, optional booleans, command array form, valid service/process states,
+// metric grammar, and that file_exists never points at Sermo's own lock dir.
+func validateCheckSection(tree map[string]any, section, locksDir string, add addFunc) {
+	entries, ok := tree[section].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
+		path := section + "." + name
+		entry, ok := entries[name].(map[string]any)
+		if !ok {
+			add("%s must be a mapping", path)
+			continue
+		}
+		if v, present := entry["optional"]; present {
+			if _, isBool := v.(bool); !isBool {
+				add("%s.optional must be a boolean", path)
+			}
+		}
+		// A per-check interval runs the check every N cycles (N rounded from
+		// interval/resolution). It must be a positive duration; the daemon warns at
+		// startup if it is below the resolution or not an exact multiple.
+		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("%s.interval %q must be a valid positive duration", path, cfgval.String(v))
+		}
+		validateCheckGate(path, name, entry, entries, add)
+		typ := cfgval.String(entry["type"])
+		if typ == "" {
+			add("%s has no type", path)
+			continue
+		}
+		if _, known := knownCheckTypes[typ]; !known {
+			// A connection-protocol check (mysql, …): the type names a protocol
+			// in the conn registry, validated generically below.
+			if proto, isProto := conn.Lookup(typ); isProto {
+				validateConnFields(path, entry, proto.RequiresUser(), add)
+				validateInterfaceFields(path, entry, add)
+				continue
+			}
+			add("%s has unknown type %q", path, typ)
+			continue
+		}
+		validateInterfaceFields(path, entry, add)
+		switch typ {
+		case "http":
+			validateHTTPFields(path, entry, add)
+		case "ports":
+			validatePortsFields(path, entry, add)
+		case "command":
+			if !isStringArray(entry["command"]) {
+				add("%s command must be an array, not a shell string", path)
+			}
+			if v, present := entry["expect_exit"]; present {
+				if _, ok := cfgval.Int(v); !ok {
+					add("%s expect_exit must be an integer", path)
+				}
+			}
+		case "service":
+			if st := cfgval.String(entry["expect"]); st != "" {
+				if _, ok := serviceStates[st]; !ok {
+					add("%s expect %q is not one of active, inactive, failed, unknown", path, st)
+				}
+			}
+		case "process":
+			if st := cfgval.String(entry["state"]); st != "" {
+				if _, ok := processStates[st]; !ok {
+					add("%s state %q is not one of running, zombie, absent", path, st)
+				}
+			}
+		case "file_exists":
+			if p := cfgval.String(entry["path"]); p != "" && underDir(p, locksDir) {
+				add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
+			}
+		case "metric":
+			validateMetric(entry, path, true, add)
+		case "count":
+			validateCount(entry, path, add)
+		case "disk":
+			validateDiskFields(path, entry, add)
+		case "autofs":
+			validateAutofsFields(path, entry, add)
+		case "load":
+			validateLoadFields(path, entry, add)
+		case "fds":
+			validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
+		case "conntrack":
+			validateThresholdPreds(path, entry, []string{"used_pct", "free", "count"}, add)
+		case "entropy":
+			validateEntropyFields(path, entry, add)
+		case "zombies":
+			validateZombieFields(path, entry, add)
+		case "oom":
+			validateOomFields(path, entry, add)
+		case "cert":
+			validateCertFields(path, entry, add)
+		case "sqlite", "sqlite3":
+			if cfgval.String(entry["path"]) == "" {
+				add("%s.path is required for a sqlite check", path)
+			}
+		case "sql":
+			validateSQLFields(path, entry, add)
+		case "mongodb-query":
+			validateMongoFields(path, entry, add)
+		case "influxdb-query":
+			validateInfluxFields(path, entry, add)
+		case "size":
+			validateSizeFields(path, entry, add)
+		case "websocket", "ws":
+			validateWebsocketFields(path, entry, add)
+		}
+	}
+}
+
+// validateWebsocketFields validates a websocket check: a required url with a
+// ws/wss/http/https scheme.
+func validateWebsocketFields(prefix string, fields map[string]any, add addFunc) {
+	raw := cfgval.String(fields["url"])
+	if raw == "" {
+		add("%s.url is required for a websocket check", prefix)
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		add("%s.url %q is not a valid URL", prefix, raw)
+		return
+	}
+	switch u.Scheme {
+	case "ws", "wss", "http", "https":
+	default:
+		add("%s.url scheme must be ws, wss, http or https", prefix)
+	}
+}
+
+// validateAutofsFields validates an autofs check: an optional count {op, value}
+// predicate, mutually exclusive with path.
+func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
+	count, hasCount := fields["count"].(map[string]any)
+	if !hasCount {
+		return
+	}
+	if cfgval.String(fields["path"]) != "" {
+		add("%s: path and count are mutually exclusive", prefix)
+	}
+	op := cfgval.String(count["op"])
+	if _, ok := metricOps[op]; !ok {
+		add("%s.count.op %q is not one of >, >=, <, <=, ==, !=", prefix, op)
+	}
+	if !isNumeric(cfgval.String(count["value"])) {
+		add("%s.count.value must be numeric", prefix)
+	}
+}
+
+// validateSizeFields validates a size (growth) check: a required path, a
+// positive parseable grow_by byte size and a positive within duration.
+func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["path"]) == "" {
+		add("%s.path is required for a size check", prefix)
+	}
+	gb := cfgval.String(fields["grow_by"])
+	if gb == "" {
+		add("%s.grow_by is required for a size check (e.g. 1GB)", prefix)
+	} else if n, err := humanize.ParseBytes(gb); err != nil || n == 0 {
+		add("%s.grow_by %q must be a positive size (e.g. 1GB, 500MB)", prefix, gb)
+	}
+	w := cfgval.String(fields["within"])
+	if w == "" {
+		add("%s.within is required for a size check (e.g. 1h)", prefix)
+	} else if !isPositiveDuration(w) {
+		add("%s.within %q must be a valid positive duration", prefix, w)
+	}
+}
+
+// validateMongoFields validates a mongodb-query check: a valid op and value, a
+// coherent query shape (count via collection[+filter] / aggregate via
+// collection+pipeline / command), JSON-parseable filter/pipeline/command, and a
+// result path where one is needed.
+func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
+	op := cfgval.String(fields["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+	}
+	if cfgval.String(fields["value"]) == "" {
+		add("%s.value is required for a mongodb-query check", prefix)
+	}
+
+	collection := cfgval.String(fields["collection"])
+	command := cfgval.String(fields["command"])
+	pipeline := cfgval.String(fields["pipeline"])
+	result := cfgval.String(fields["result"])
+
+	switch {
+	case command != "":
+		if collection != "" || pipeline != "" {
+			add("%s: command cannot be combined with collection/pipeline", prefix)
+		}
+		if result == "" {
+			add("%s.result is required with command", prefix)
+		}
+		if !isJSONObject(command) {
+			add("%s.command must be a JSON object", prefix)
+		}
+	case collection != "":
+		if cfgval.String(fields["database"]) == "" {
+			add("%s.database is required for a collection query", prefix)
+		}
+		if pipeline != "" {
+			if result == "" {
+				add("%s.result is required with pipeline", prefix)
+			}
+			if !isJSONArray(pipeline) {
+				add("%s.pipeline must be a JSON array", prefix)
+			}
+		} else if f := cfgval.String(fields["filter"]); f != "" && !isJSONObject(f) {
+			add("%s.filter must be a JSON object", prefix)
+		}
+	default:
+		add("%s requires a collection (+filter), a collection+pipeline, or a command", prefix)
+	}
+}
+
+// validateInterfaceFields validates the optional egress-interface selection
+// shared by network checks: `interface` is a string or a list of strings (a
+// name/IP/MAC), and `interface_match` is any|all.
+func validateInterfaceFields(prefix string, fields map[string]any, add addFunc) {
+	if v, ok := fields["interface"]; ok {
+		switch t := v.(type) {
+		case string:
+		case []any:
+			for _, e := range t {
+				if _, ok := e.(string); !ok {
+					add("%s.interface list entries must be strings (name/IP/MAC)", prefix)
+					break
+				}
+			}
+		default:
+			add("%s.interface must be a string or a list of strings (name/IP/MAC)", prefix)
+		}
+	}
+	if m := cfgval.String(fields["interface_match"]); m != "" && m != "any" && m != "all" {
+		add("%s.interface_match %q must be any or all", prefix, m)
+	}
+}
+
+// validateInfluxFields validates an influxdb-query check: a query, a valid op and
+// a value, plus the language-specific target — InfluxQL needs a `database`, Flux
+// needs an `org` and `token`.
+func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["query"]) == "" {
+		add("%s.query is required for an influxdb-query check", prefix)
+	}
+	op := cfgval.String(fields["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+	}
+	if cfgval.String(fields["value"]) == "" {
+		add("%s.value is required for an influxdb-query check", prefix)
+	}
+	language := cfgval.String(fields["language"])
+	if language == "" {
+		language = "influxql"
+	}
+	switch language {
+	case "influxql":
+		if cfgval.String(fields["database"]) == "" {
+			add("%s.database is required for an influxql query", prefix)
+		}
+	case "flux":
+		if cfgval.String(fields["org"]) == "" {
+			add("%s.org is required for a flux query", prefix)
+		}
+		if cfgval.String(fields["token"]) == "" {
+			add("%s.token is required for a flux query", prefix)
+		}
+	default:
+		add("%s.language %q must be influxql or flux", prefix, language)
+	}
+}
+
+// isJSONObject / isJSONArray report whether s is a syntactically valid JSON
+// object / array (extended-JSON for MongoDB is valid JSON syntax).
+func isJSONObject(s string) bool {
+	t := strings.TrimSpace(s)
+	return strings.HasPrefix(t, "{") && json.Valid([]byte(t))
+}
+
+func isJSONArray(s string) bool {
+	t := strings.TrimSpace(s)
+	return strings.HasPrefix(t, "[") && json.Valid([]byte(t))
+}
+
+// validateSQLFields validates a sql check: a known engine, a query, a valid op
+// and a value. For numeric ops the value must be numeric; for =~ it must be a
+// valid regexp. mysql/postgres require a user; sqlite requires a path.
+func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
+	engine := cfgval.String(fields["engine"])
+	if _, ok := sqlEngines[engine]; !ok {
+		add("%s.engine must be one of mysql, mariadb, postgres, postgresql, sqlite", prefix)
+	}
+	if cfgval.String(fields["query"]) == "" {
+		add("%s.query is required for a sql check", prefix)
+	}
+	op := cfgval.String(fields["op"])
+	if _, ok := compareOps[op]; !ok {
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+	}
+	value := cfgval.String(fields["value"])
+	switch op {
+	case ">", ">=", "<", "<=":
+		if !isNumeric(value) {
+			add("%s.value %q must be numeric for op %s", prefix, value, op)
+		}
+	case "=~":
+		if _, err := regexp.Compile(value); err != nil {
+			add("%s.value is not a valid regexp: %v", prefix, err)
+		}
+	}
+	switch engine {
+	case "sqlite", "sqlite3":
+		if cfgval.String(fields["path"]) == "" {
+			add("%s.path is required for a sqlite sql check", prefix)
+		}
+	case "mysql", "mariadb", "postgres", "postgresql":
+		if cfgval.String(fields["user"]) == "" {
+			add("%s.user is required for a %s sql check", prefix, engine)
+		}
+	}
+}
+
+// validateCertFields validates a cert check at prefix: a required host, optional
+// port (1..65535), optional positive expires_in_days, and boolean toggles. New
+// certificate conditions add here.
+func validateCertFields(prefix string, fields map[string]any, add addFunc) {
+	host := cfgval.String(fields["host"])
+	path := cfgval.String(fields["path"])
+	switch {
+	case host == "" && path == "":
+		add("%s requires a host or a path", prefix)
+	case host != "" && path != "":
+		add("%s.host and %s.path are mutually exclusive", prefix, prefix)
+	}
+	if v, present := fields["port"]; present {
+		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
+			add("%s.port must be an integer in 1..65535", prefix)
+		}
+	}
+	if v, present := fields["expires_in_days"]; present {
+		if n, ok := cfgval.Int(v); !ok || n < 1 {
+			add("%s.expires_in_days must be a positive integer", prefix)
+		}
+	}
+	for _, key := range []string{"on_algorithm_change", "on_issuer_change", "on_change", "verify"} {
+		if v, present := fields[key]; present {
+			if _, ok := v.(bool); !ok {
+				add("%s.%s must be a boolean", prefix, key)
+			}
+		}
+	}
+}
+
+// validateCount checks a count entry: a path, an optional `of` kind, an optional
+// boolean `recursive`, and a required numeric threshold (op + value).
+func validateCount(entry map[string]any, path string, add addFunc) {
+	if cfgval.String(entry["path"]) == "" {
+		add("%s count check requires a path", path)
+	}
+	if of := cfgval.String(entry["of"]); of != "" {
+		if _, ok := countKinds[of]; !ok {
+			add("%s count `of` %q is not one of any, file, dir, symlink", path, of)
+		}
+	}
+	if v, present := entry["recursive"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s count recursive must be a boolean", path)
+		}
+	}
+	if op := cfgval.String(entry["op"]); !isValidDiskOp(op) {
+		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
+	}
+	if !isNumeric(cfgval.String(entry["value"])) {
+		add("%s count check value %q must be numeric", path, cfgval.String(entry["value"]))
+	}
+}
