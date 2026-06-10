@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -137,6 +138,137 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	}
 	if got["count"] {
 		t.Fatalf("count watch should be condition-style: %v", got)
+	}
+}
+
+func TestWebBackendDiskWatchIncludesFilesystemDetails(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"disk-data": map[string]any{
+				"interval": "45s",
+				"check": map[string]any{
+					"type":     "disk",
+					"path":     "/data/app",
+					"fstype":   "xfs",
+					"device":   "/dev/mapper/data",
+					"options":  []any{"rw", "noatime"},
+					"free_pct": map[string]any{"op": "<", "value": 15},
+				},
+				"then": map[string]any{
+					"notify": []any{"ops", "pager"},
+					"hook": map[string]any{
+						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"},
+					},
+				},
+			},
+		},
+	}}}
+	usagePath := ""
+	mountSampled := false
+	b, warns := NewWebBackend(cfg, Deps{
+		DiskUsage: func(path string) (checks.DiskStats, error) {
+			usagePath = path
+			return checks.DiskStats{
+				UsedPct:       87.5,
+				FreePct:       12.5,
+				TotalBytes:    1000,
+				FreeBytes:     125,
+				InodesTotal:   100,
+				InodesFree:    20,
+				InodesUsedPct: 80,
+				InodesFreePct: 20,
+			}, nil
+		},
+		MountSampler: func() ([]checks.Mount, error) {
+			mountSampled = true
+			return []checks.Mount{
+				{Device: "/dev/root", MountPoint: "/", FSType: "ext4", Options: []string{"rw"}},
+				{Device: "/dev/mapper/data", MountPoint: "/data", FSType: "xfs", Options: []string{"rw", "noatime"}},
+			}, nil
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("got %d watches, want 1: %+v", len(watches), watches)
+	}
+	w := watches[0]
+	if usagePath != "/data/app" || !mountSampled {
+		t.Fatalf("samplers not called as expected: usagePath=%q mountSampled=%v", usagePath, mountSampled)
+	}
+	if w.Name != "disk-data" || w.Interval != "45s" || w.CheckType != "disk" {
+		t.Fatalf("watch identity = %+v", w)
+	}
+	if !slices.Equal(w.Notifiers, []string{"ops", "pager"}) {
+		t.Fatalf("notifiers = %v, want ops,pager", w.Notifiers)
+	}
+	if !slices.Equal(w.HookCommand, []string{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"}) {
+		t.Fatalf("hook command = %v", w.HookCommand)
+	}
+	if w.Summary == "" || !strings.Contains(w.Summary, "/data/app") || !strings.Contains(w.Summary, "xfs") {
+		t.Fatalf("summary = %q, want path and filesystem", w.Summary)
+	}
+	if len(w.Conditions) != 4 {
+		t.Fatalf("conditions = %+v, want free_pct/fstype/device/options", w.Conditions)
+	}
+	cond := map[string]web.WatchCondition{}
+	for _, c := range w.Conditions {
+		cond[c.Field] = c
+	}
+	if cond["free_pct"].Op != "<" || cond["free_pct"].Value != "15" {
+		t.Fatalf("free_pct condition = %+v", cond["free_pct"])
+	}
+	if cond["fstype"].Value != "xfs" || cond["device"].Value != "/dev/mapper/data" || cond["options"].Value != "rw,noatime" {
+		t.Fatalf("mount conditions = %+v", cond)
+	}
+	if w.Disk == nil {
+		t.Fatal("disk watch should include live disk info")
+	}
+	if w.Disk.MountPoint != "/data" || w.Disk.Device != "/dev/mapper/data" || w.Disk.FileSystem != "xfs" {
+		t.Fatalf("disk mount info = %+v", w.Disk)
+	}
+	if w.Disk.FreeBytes != 125 || w.Disk.UsedBytes != 875 || w.Disk.FreePct != 12.5 || w.Disk.InodesFree != 20 {
+		t.Fatalf("disk usage info = %+v", w.Disk)
+	}
+}
+
+func TestWebBackendDiskWatchReportsSamplerErrors(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"disk-data": map[string]any{
+				"check": map[string]any{
+					"type":     "disk",
+					"path":     "/data",
+					"free_pct": map[string]any{"op": "<", "value": 15},
+				},
+				"then": map[string]any{"notify": []any{"ops"}},
+			},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{
+		DiskUsage: func(string) (checks.DiskStats, error) {
+			return checks.DiskStats{}, errors.New("statfs failed")
+		},
+		MountSampler: func() ([]checks.Mount, error) {
+			return nil, errors.New("mount table failed")
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 || watches[0].Disk == nil {
+		t.Fatalf("watch disk info = %+v", watches)
+	}
+	if watches[0].Disk.SampleError != "statfs failed" || watches[0].Disk.MountSampleError != "mount table failed" {
+		t.Fatalf("disk errors = %+v", watches[0].Disk)
+	}
+	if !strings.Contains(watches[0].Summary, "statfs failed") {
+		t.Fatalf("summary = %q, want statfs error", watches[0].Summary)
 	}
 }
 

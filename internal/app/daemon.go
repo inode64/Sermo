@@ -91,6 +91,12 @@ type Deps struct {
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler
+	// DiskUsage reports filesystem usage for disk checks and web watch summaries.
+	// Optional: nil uses statfs.
+	DiskUsage checks.DiskUsageFunc
+	// MountSampler reads the mount table for disk/autofs checks and web watch
+	// summaries. Optional: nil reads /proc/mounts.
+	MountSampler checks.MountSamplerFunc
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier

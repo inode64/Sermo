@@ -75,6 +75,13 @@
   #rows tr.exp-row td { background: #8881; padding-left: 1.6rem; }
   .slabar { display: inline-block; width: 9rem; height: .55rem; background: #8883; border-radius: .3rem; overflow: hidden; vertical-align: middle; }
   .slabar > span { display: block; height: 100%; }
+  .watch-table { min-width: 72rem; font-size: .88rem; }
+  .watch-table th, .watch-table td { vertical-align: top; }
+  .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
+  .usagebar { display: inline-block; width: 8rem; height: .55rem; background: #8883; border-radius: .3rem; overflow: hidden; vertical-align: middle; }
+  .usagebar > span { display: block; height: 100%; }
+  .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
+  .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
   #svc-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
   #svc-filters button.f-active { background: #8883; font-weight: 600; }
   #topbar { position: sticky; top: 0; z-index: 5; background: Canvas; padding: 1.5rem 1.5rem .35rem; margin: -1.5rem -1.5rem .5rem; border-bottom: 1px solid #8884; }
@@ -176,10 +183,12 @@
 
 <details id="watches-section" open style="display:none">
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
-  <table>
-    <thead><tr><th>Name</th><th>Type</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th></tr></thead>
+  <div class="table-wrap">
+  <table class="watch-table">
+    <thead><tr><th>Name</th><th>Type</th><th>Summary</th><th>Interval</th><th>Polarity</th><th>Hook</th><th>Notifiers</th><th>Last activity</th><th>State</th></tr></thead>
     <tbody id="watch-rows"></tbody>
   </table>
+  </div>
   <p class="muted" style="font-size:.8rem">Host watches run independently of services and fire hooks/notifiers on thresholds or changes. See the Events log for activity.</p>
 </details>
 
@@ -1210,6 +1219,99 @@ function fmtBytes(n) {
   return (i === 0 ? n : n.toFixed(1)) + " " + u[i];
 }
 
+function fmtPct(n) {
+  n = Number(n);
+  return Number.isFinite(n) ? n.toFixed(1) + "%" : "—";
+}
+
+function pctClamp(n) {
+  n = Number(n);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+}
+
+function usageColor(pct) {
+  pct = pctClamp(pct);
+  if (pct >= 95) return "#cf222e";
+  if (pct >= 85) return "#9a6700";
+  return "#1a7f37";
+}
+
+function usageBar(pct) {
+  const p = pctClamp(pct);
+  return `<span class="usagebar" title="${fmtPct(p)} used"><span style="width:${p.toFixed(1)}%; background:${usageColor(p)}"></span></span>`;
+}
+
+function notifierNames(w) {
+  return (w && Array.isArray(w.notifiers)) ? w.notifiers.filter(Boolean) : [];
+}
+
+function notifierCell(w) {
+  const names = notifierNames(w);
+  if (names.length) return names.map((n) => `<code>${esc(n)}</code>`).join(" ");
+  return (w && w.notifier_count > 0) ? esc(String(w.notifier_count)) : "—";
+}
+
+function watchSummaryCell(w) {
+  if (!w) return "—";
+  const d = w.disk;
+  if (d) {
+    if (d.sample_error) {
+      return `<span class="bad">${esc(d.path || "")}: ${esc(d.sample_error)}</span>`;
+    }
+    const fs = d.filesystem ? ` · ${esc(d.filesystem)}` : "";
+    const mount = d.mount_point ? ` · ${esc(d.mount_point)}` : "";
+    return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
+      <div>${usageBar(d.used_pct)} <b>${fmtPct(d.used_pct)}</b> used <span class="muted">· ${fmtBytes(d.free_bytes)} free (${fmtPct(d.free_pct)})</span></div>`;
+  }
+  return w.summary ? esc(w.summary) : "—";
+}
+
+function renderConditionRows(conditions) {
+  const list = conditions || [];
+  if (!list.length) return '<div class="muted" style="margin:.2rem 0 .6rem">No configured predicates.</div>';
+  const rows = list.map((c) => `<tr>
+    <td><code>${esc(c.field || "")}</code></td>
+    <td>${esc(c.op || "")}</td>
+    <td><code>${esc(c.value || "")}</code></td>
+  </tr>`).join("");
+  return `<div class="muted" style="margin:.15rem 0 .1rem">Check predicates</div>
+    <table style="width:auto; font-size:.85rem; margin-bottom:.6rem;">
+      <thead><tr><th>Field</th><th>Op</th><th>Value</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function renderDiskWatch(d) {
+  if (!d) return "";
+  const fs = d.filesystem || "unknown";
+  const mount = d.mounted
+    ? `<code>${esc(d.mount_point || "")}</code>`
+    : '<span class="bad">not found</span>';
+  const device = d.device ? `<code>${esc(d.device)}</code>` : '<span class="muted">unknown</span>';
+  const options = (d.options || []).length
+    ? (d.options || []).map((o) => `<code>${esc(o)}</code>`).join(" ")
+    : '<span class="muted">none</span>';
+  const inodes = d.inodes_total
+    ? `${(Number(d.inodes_total) - Number(d.inodes_free || 0)).toLocaleString()} used / ${Number(d.inodes_total).toLocaleString()} total (${fmtPct(d.inodes_used_pct)} used, ${fmtPct(d.inodes_free_pct)} free)`
+    : '<span class="muted">not reported</span>';
+  const errors = [
+    d.sample_error ? `statfs: ${d.sample_error}` : "",
+    d.mount_sample_error ? `mounts: ${d.mount_sample_error}` : "",
+  ].filter(Boolean).map((m) => `<div class="bad">${esc(m)}</div>`).join("");
+  return `<div class="watch-grid">
+    <div><span class="muted">Path</span><br><code>${esc(d.path || "")}</code></div>
+    <div><span class="muted">Mount point</span><br>${mount}</div>
+    <div><span class="muted">Filesystem</span><br><code>${esc(fs)}</code></div>
+    <div><span class="muted">Device</span><br>${device}</div>
+    <div><span class="muted">Total</span><br><b>${fmtBytes(d.total_bytes)}</b></div>
+    <div><span class="muted">Used</span><br>${usageBar(d.used_pct)} <b>${fmtBytes(d.used_bytes)}</b> (${fmtPct(d.used_pct)})</div>
+    <div><span class="muted">Free</span><br><b>${fmtBytes(d.free_bytes)}</b> (${fmtPct(d.free_pct)})</div>
+    <div><span class="muted">Inodes</span><br>${inodes}</div>
+    <div><span class="muted">Options</span><br>${options}</div>
+  </div>${errors}`;
+}
+
 function renderWatches(watches) {
   if (watches) allWatches = watches;
   const section = $("#watches-section");
@@ -1232,7 +1334,8 @@ function renderWatches(watches) {
       ? '<span class="muted">on fail</span>'
       : '<span class="muted">on threshold</span>';
     const hook = w.has_hook ? '✓' : '—';
-    const notif = w.notifier_count > 0 ? w.notifier_count : '—';
+    const notif = notifierCell(w);
+    const summary = watchSummaryCell(w);
     let last = '—';
     if (w.last_activity) {
       const kind = w.last_activity_kind ? ` (${esc(w.last_activity_kind)})` : '';
@@ -1244,6 +1347,7 @@ function renderWatches(watches) {
     const row = `<tr class="clickable" data-exp-key="${esc(key)}">
       <td>${chev}${esc(w.name)}</td>
       <td>${esc(w.check_type || "")}</td>
+      <td class="watch-summary">${summary}</td>
       <td>${esc(w.interval || "")}</td>
       <td>${polarity}</td>
       <td>${hook}</td>
@@ -1252,11 +1356,11 @@ function renderWatches(watches) {
       <td>${state}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="9">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="8" class="muted">No watches.</td></tr>`;
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="9" class="muted">No watches.</td></tr>`;
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
 }
 
@@ -1265,8 +1369,24 @@ function renderWatches(watches) {
 function renderWatchExpansion(w, events) {
   w = w || {};
   const polarity = w.fire_on_fail ? "on fail" : "on threshold";
-  const cfg = `<div class="muted" style="margin:.15rem 0 .4rem">type <b>${esc(w.check_type || "")}</b> · interval <b>${esc(w.interval || "")}</b> · fires <b>${polarity}</b> · hook ${w.has_hook ? '✓' : '—'} · notifiers <b>${w.notifier_count || 0}</b> · ${w.enabled ? 'enabled' : 'disabled'}</div>`;
-  if (!events || !events.length) return cfg + '<div class="muted">No recent activity.</div>';
+  const names = notifierNames(w);
+  const notifiers = names.length
+    ? names.map((n) => `<code>${esc(n)}</code>`).join(" ")
+    : '<span class="muted">none</span>';
+  const hook = (w.hook_command || []).length
+    ? `<code>${esc((w.hook_command || []).join(" "))}</code>`
+    : (w.has_hook ? '<span class="muted">configured</span>' : '<span class="muted">none</span>');
+  const cfg = `<div class="watch-grid">
+    <div><span class="muted">Type</span><br><b>${esc(w.check_type || "")}</b></div>
+    <div><span class="muted">Interval</span><br><b>${esc(w.interval || "")}</b></div>
+    <div><span class="muted">Fires</span><br><b>${polarity}</b></div>
+    <div><span class="muted">State</span><br>${w.enabled ? 'enabled' : '<span class="muted">disabled</span>'}</div>
+    <div><span class="muted">Hook</span><br>${hook}</div>
+    <div><span class="muted">Notifies</span><br>${notifiers}</div>
+  </div>`;
+  const disk = renderDiskWatch(w.disk);
+  const conditions = renderConditionRows(w.conditions || []);
+  if (!events || !events.length) return cfg + disk + conditions + '<div class="muted">No recent activity.</div>';
   const rows = events.slice(0, 50).map((e) => {
     const detail = [e.action, e.status].filter(Boolean).map(esc).join(" ");
     return `<tr>
@@ -1275,7 +1395,7 @@ function renderWatchExpansion(w, events) {
       <td>${detail ? `<span class="muted">${detail}</span> ` : ""}${esc(e.message || "")}</td>
     </tr>`;
   }).join("");
-  return cfg + `<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
+  return cfg + disk + conditions + `<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
 }
 
 function renderNotifiers(notifiers) {

@@ -93,7 +93,8 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	typ := cfgval.AsString(checkEntry["type"])
 	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
 		DefaultTimeout: deps.DefaultTimeout,
-		DiskUsage:      nil, // statfs default
+		DiskUsage:      deps.DiskUsage,
+		MountSampler:   deps.MountSampler,
 	})
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
@@ -169,7 +170,11 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		}
 		ce["metric"] = key
 
-		check, err := checks.BuildInline(name, ce, checks.Deps{DefaultTimeout: deps.DefaultTimeout})
+		check, err := checks.BuildInline(name, ce, checks.Deps{
+			DefaultTimeout: deps.DefaultTimeout,
+			DiskUsage:      deps.DiskUsage,
+			MountSampler:   deps.MountSampler,
+		})
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
