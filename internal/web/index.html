@@ -40,6 +40,7 @@
   button:disabled { opacity: .4; cursor: not-allowed; }
   button:disabled:hover { background: #8881; }
   #err { color: #cf222e; min-height: 1.2rem; }
+  body.disconnected .table-wrap, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
   .muted { color: #8888; font-size: .85rem; }
   a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted #8888; color: inherit; }
   #detail { margin-top: 1.5rem; padding: 1rem; border: 1px solid #8884; border-radius: .5rem; display: none; }
@@ -325,14 +326,29 @@ async function loadReady() {
   }
 }
 
+// Connection state: when a fetch fails the table is dimmed and a "disconnected,
+// retrying" banner (with the age of the last good update) replaces the refresh
+// status, instead of silently showing stale data.
+let connOK = true;
+let lastLoadOk = Date.now();
+function showDisconnected() {
+  document.body.classList.add("disconnected");
+  const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
+  $("#err").textContent = "⚠ Disconnected — retrying…" + age;
+}
+
 async function load() {
   try {
     const res = await fetch("api/services");
     if (!res.ok) throw new Error("HTTP " + res.status);
     render(await res.json());
+    connOK = true;
+    lastLoadOk = Date.now();
+    document.body.classList.remove("disconnected");
     $("#err").textContent = "";
   } catch (e) {
-    $("#err").textContent = "Failed to load services: " + e.message;
+    connOK = false;
+    showDisconnected();
   }
   // Also load host watches so they are visible when services=0 (e.g. services=0, watches=2).
   try {
@@ -799,11 +815,13 @@ function renderAttention() {
   }
   if (!items.length) {
     setFavicon("ok");
+    document.title = "Sermo · services";
     box.style.display = "none";
     box.innerHTML = "";
     return;
   }
   setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
+  document.title = `(${items.length}) Sermo · services`;
   box.style.display = "block";
   box.innerHTML = `
     <div class="attn-head">
@@ -976,6 +994,7 @@ function setSvcStatus(v) {
 function render(services) {
   if (services) allServices = services;
   renderServices();
+  applyHash();
 }
 
 function renderServices() {
@@ -1001,14 +1020,14 @@ function renderServices() {
       : "";
     let mon, actions;
     if (!s.enabled) {
-      mon = '<span class="pill">disabled</span>';
+      mon = '<span class="muted">disabled</span>';
       actions = '<span class="muted">disabled in config</span>';
     } else {
-      // Monitoring state is a colored chip (green monitored / amber paused), not a
-      // control; the monitor/unmonitor toggle lives in the Actions column.
-      const cls = s.monitored ? "ok" : "inactive";
+      // Monitoring state is plain colored text (like the Status column), not a
+      // pill/button; the monitor/unmonitor toggle lives in the Actions column.
+      const cls = s.monitored ? "active" : "inactive";
       const label = s.monitored ? "monitored" : "paused";
-      mon = `<span class="pill ${cls}">${label}</span>${s.monitored ? "" : monitorHint(s)}`;
+      mon = `<span class="status ${cls}">${label}</span>${s.monitored ? "" : monitorHint(s)}`;
       const stopped = st === "inactive" || st === "failed";
       actions = me.can_act ? `
           <button ${busy || st === "active" ? "disabled" : ""} onclick="act('${esc(s.name)}','start')">start</button>
@@ -1026,7 +1045,7 @@ function renderServices() {
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" onclick="detail('${esc(s.name)}')">${label}</a>`;
-    const row = `<tr class="clickable ${isFailing(s) ? 'row-failing' : ''}" onclick="rowClick(event, '${esc(key)}')">
+    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" onclick="rowClick(event, '${esc(key)}')">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${unitCell(s)}</td>
       <td class="status ${esc(st)}">${esc(s.status || "unknown")}</td>
@@ -1056,11 +1075,33 @@ function renderServices() {
 // host watches. Keys are "svc:<name>" (process table + memory/IO + SLA) or
 // "wat:<name>" (watch config + recent activity).
 function toggleExpand(key) {
-  if (expanded.has(key)) { expanded.delete(key); delete expCache[key]; }
-  else { expanded.add(key); }
+  if (expanded.has(key)) {
+    expanded.delete(key); delete expCache[key];
+    if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
+  } else {
+    expanded.add(key);
+    if (key.startsWith("svc:")) history.replaceState(null, "", "#" + key); // shareable deep-link
+  }
   renderServices();
   renderWatches();
 }
+
+// applyHash opens/scrolls to the service named in a #svc:<name> URL fragment, so a
+// service is directly linkable. Runs after each render and on hashchange.
+let hashScrolled = false;
+function applyHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (!h.startsWith("svc:")) return;
+  const name = h.slice(4);
+  if (!(allServices || []).some((s) => s.name === name)) return;
+  if (!expanded.has(h)) { expanded.add(h); renderServices(); } // renderServices loads the expansion
+  if (!hashScrolled) {
+    const el = document.getElementById("svc-row-" + name);
+    if (el) el.scrollIntoView({ block: "center" });
+    hashScrolled = true;
+  }
+}
+window.addEventListener("hashchange", () => { hashScrolled = false; applyHash(); });
 
 // rowClick expands a row from a click anywhere on it, except on interactive
 // elements (action buttons, the detail link) which keep their own behaviour.
@@ -1590,6 +1631,13 @@ function closeActionConfirm(ok) {
   if (resolve) resolve(!!ok);
 }
 
+// A native <dialog> handles Esc/backdrop close and role=dialog/focus itself; this
+// makes sure an Esc-driven close still resolves the pending action as "cancel".
+(function initConfirmDialog() {
+  const dlg = $("#action-confirm");
+  if (dlg) dlg.addEventListener("close", () => { if (confirmResolve) closeActionConfirm(false); });
+})();
+
 function renderActionConfirm() {
   const ctx = confirmCtx || {};
   const d = ctx.detail || {};
@@ -2002,7 +2050,14 @@ function drawMetricChart(points, unit) {
     <text x="2" y="${H - pad}" font-size="10" fill="#888">0</text>
     <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${new Date(startMs).toLocaleString()}</text>
     <text x="${W - pad}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${band}${line}</svg>`;
+  // Transparent per-bucket strips carry a native <title> tooltip (value + time).
+  const bw = (W - 2 * pad) / cols;
+  const hover = pts.map((o) => {
+    const t = new Date(startMs + (o.i + 0.5) * (span / cols));
+    const tip = `${t.toLocaleString()}\navg ${(o.b.sum / o.b.n).toFixed(1)}${unit} · min ${o.b.min.toFixed(1)} · max ${o.b.max.toFixed(1)}`;
+    return `<rect x="${(x(o.i) - bw / 2).toFixed(1)}" y="${pad}" width="${bw.toFixed(1)}" height="${(H - 2 * pad).toFixed(1)}" fill="transparent"><title>${esc(tip)}</title></rect>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${band}${line}${hover}</svg>`;
 }
 
 async function loadSeries(name) {
@@ -2163,6 +2218,7 @@ function fmtSince(ms) {
   return r ? `${m}m ${r}s` : `${m}m`;
 }
 function tickRefreshAge() {
+  if (!connOK) { showDisconnected(); return; } // keep the banner's age fresh
   const el = $("#last-refresh");
   if (!el) return;
   el.textContent = lastRefresh ? `updated ${fmtSince(Date.now() - lastRefresh)} ago` : "";
@@ -2172,8 +2228,13 @@ setInterval(tickRefreshAge, 1000);
 let refreshTimer = null;
 function applyRefresh(ms) {
   if (refreshTimer) clearInterval(refreshTimer);
-  refreshTimer = ms > 0 ? setInterval(() => { load(); if (current) detail(current); }, ms) : null;
+  // Skip polling while the tab is hidden (no one is looking); a visibilitychange
+  // handler refreshes immediately when it becomes visible again.
+  refreshTimer = ms > 0 ? setInterval(() => { if (document.hidden) return; load(); if (current) detail(current); }, ms) : null;
 }
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) { load(); if (current) detail(current); }
+});
 function setRefresh(v) {
   const ms = parseInt(v, 10) || 0;
   applyRefresh(ms);
