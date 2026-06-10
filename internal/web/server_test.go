@@ -189,6 +189,11 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
 		t.Fatalf("dashboard did not receive CSP nonce attributes")
 	}
+	for _, want := range []string{"usagebar-fill", "usagebar-label", "function diskUsedPct"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("dashboard missing disk usage UI marker %q", want)
+		}
+	}
 	for _, inlineHandler := range []string{"onclick=", "onchange=", "oninput=", "onkeydown="} {
 		if strings.Contains(rec.Body.String(), inlineHandler) {
 			t.Fatalf("dashboard contains inline handler %q", inlineHandler)
