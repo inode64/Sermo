@@ -1,0 +1,209 @@
+package checks
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"sermo/internal/cfgval"
+)
+
+// SensorReading is one hwmon input: the chip name, the kind (temp/fan/in), a
+// label and the value in its natural unit (°C, RPM, V).
+type SensorReading struct {
+	Chip  string
+	Kind  string // temp | fan | in
+	Label string
+	Value float64
+}
+
+// SensorSamplerFunc reads the current hardware sensor inputs. Injected for tests;
+// the default reads /sys/class/hwmon.
+type SensorSamplerFunc func() ([]SensorReading, error)
+
+// sensorPred is one threshold predicate on a sensor aggregate field.
+type sensorPred struct {
+	field string // temp | fan | voltage
+	op    string
+	value float64
+}
+
+// sensorsCheck reads lm-sensors-style hwmon inputs and compares aggregates to
+// thresholds (a level check: OK==true means a predicate holds, i.e. the alerting
+// condition). `temp` is the hottest matching temperature (°C), `fan` the slowest
+// matching fan (RPM, to catch a stalled fan) and `voltage` the lowest matching
+// rail (V, to catch a brown-out). Optional `chip`/`label` substrings narrow which
+// inputs are considered. Temperatures are recorded as a time series for graphing.
+type sensorsCheck struct {
+	base
+	sampler SensorSamplerFunc
+	chip    string
+	label   string
+	preds   []sensorPred
+}
+
+func (c sensorsCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	sampler := c.sampler
+	if sampler == nil {
+		sampler = defaultSensorSampler
+	}
+	readings, err := sampler()
+	if err != nil {
+		return c.result(false, "sensors: "+err.Error(), start)
+	}
+
+	var temps, fans, volts []float64
+	for _, r := range readings {
+		if c.chip != "" && !strings.Contains(strings.ToLower(r.Chip), strings.ToLower(c.chip)) {
+			continue
+		}
+		if c.label != "" && !strings.Contains(strings.ToLower(r.Label), strings.ToLower(c.label)) {
+			continue
+		}
+		switch r.Kind {
+		case "temp":
+			temps = append(temps, r.Value)
+		case "fan":
+			fans = append(fans, r.Value)
+		case "in":
+			volts = append(volts, r.Value)
+		}
+	}
+	values := map[string]float64{}
+	if len(temps) > 0 {
+		values["temp"] = maxFloat(temps)
+	}
+	if len(fans) > 0 {
+		values["fan"] = minFloat(fans)
+	}
+	if len(volts) > 0 {
+		values["voltage"] = minFloat(volts)
+	}
+	if len(values) == 0 {
+		return c.result(false, "sensors: no matching inputs", start)
+	}
+
+	ok := true
+	for _, p := range c.preds {
+		v, present := values[p.field]
+		if !present || !compareFloat(v, p.op, p.value) {
+			ok = false
+		}
+	}
+
+	parts := make([]string, 0, 3)
+	for _, f := range []string{"temp", "fan", "voltage"} {
+		if v, present := values[f]; present {
+			parts = append(parts, fmt.Sprintf("%s=%.1f", f, v))
+		}
+	}
+	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
+	r.Data = map[string]any{}
+	for k, v := range values {
+		r.Data[k] = v
+	}
+	return r
+}
+
+// defaultSensorSampler reads /sys/class/hwmon.
+func defaultSensorSampler() ([]SensorReading, error) { return readHwmon("/sys/class/hwmon") }
+
+// readHwmon parses the hwmon tree at root into temperature (°C), fan (RPM) and
+// voltage (V) readings.
+func readHwmon(root string) ([]SensorReading, error) {
+	dirs, err := filepath.Glob(filepath.Join(root, "hwmon*"))
+	if err != nil {
+		return nil, err
+	}
+	var out []SensorReading
+	for _, d := range dirs {
+		chip := readTrim(filepath.Join(d, "name"))
+		out = append(out, readSensorKind(d, chip, "temp", 1000)...)
+		out = append(out, readSensorKind(d, chip, "fan", 1)...)
+		out = append(out, readSensorKind(d, chip, "in", 1000)...)
+	}
+	return out, nil
+}
+
+// readSensorKind reads every <kind>N_input under dir, scaled to its natural unit,
+// labelled by the matching <kind>N_label (or chip/input name when unlabelled).
+func readSensorKind(dir, chip, kind string, scale float64) []SensorReading {
+	files, _ := filepath.Glob(filepath.Join(dir, kind+"[0-9]*_input"))
+	var out []SensorReading
+	for _, f := range files {
+		v, err := strconv.ParseFloat(readTrim(f), 64)
+		if err != nil {
+			continue
+		}
+		base := strings.TrimSuffix(f, "_input")
+		label := readTrim(base + "_label")
+		if label == "" {
+			label = chip + "/" + filepath.Base(base)
+		}
+		out = append(out, SensorReading{Chip: chip, Kind: kind, Label: label, Value: v / scale})
+	}
+	return out
+}
+
+// readTrim reads a sysfs file and trims trailing whitespace, returning "" on error.
+func readTrim(path string) string {
+	b, err := os.ReadFile(path) //nolint:gosec // sysfs path derived from a fixed root
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func maxFloat(vs []float64) float64 {
+	m := vs[0]
+	for _, v := range vs[1:] {
+		if v > m {
+			m = v
+		}
+	}
+	return m
+}
+
+func minFloat(vs []float64) float64 {
+	m := vs[0]
+	for _, v := range vs[1:] {
+		if v < m {
+			m = v
+		}
+	}
+	return m
+}
+
+// parseSensorPreds reads the temp/fan/voltage threshold predicates ({op, value}).
+// At least one is required.
+func parseSensorPreds(entry map[string]any) ([]sensorPred, error) {
+	var preds []sensorPred
+	for _, field := range []string{"temp", "fan", "voltage"} {
+		raw, ok := entry[field]
+		if !ok {
+			continue
+		}
+		m, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
+		}
+		op := cfgval.AsString(m["op"])
+		if !validDiskOp(op) {
+			return nil, fmt.Errorf("%s has invalid op %q", field, op)
+		}
+		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
+		if err != nil {
+			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
+		}
+		preds = append(preds, sensorPred{field: field, op: op, value: val})
+	}
+	if len(preds) == 0 {
+		return nil, fmt.Errorf("requires at least one of temp/fan/voltage")
+	}
+	return preds, nil
+}

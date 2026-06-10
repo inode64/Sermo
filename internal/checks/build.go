@@ -156,6 +156,14 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildLoadCheck(b, entry, deps)
 	case "hdparm":
 		return buildHdparmCheck(b, entry, runner)
+	case "sensors":
+		return buildSensorsCheck(b, entry)
+	case "smart":
+		return buildSmartCheck(b, entry, runner)
+	case "raid":
+		return buildRaidCheck(b, entry)
+	case "edac":
+		return buildEdacCheck(b, entry)
 	case "fds":
 		return buildFdsCheck(b, entry, deps)
 	case "conntrack":
@@ -578,6 +586,46 @@ func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner) (Check,
 		return nil, "hdparm check: " + err.Error()
 	}
 	return hdparmCheck{base: b, runner: runner, device: device, preds: preds}, ""
+}
+
+// buildSensorsCheck builds a hardware-sensor check (hwmon temp/fan/voltage).
+func buildSensorsCheck(b base, entry map[string]any) (Check, string) {
+	preds, err := parseSensorPreds(entry)
+	if err != nil {
+		return nil, "sensors check: " + err.Error()
+	}
+	return sensorsCheck{base: b, chip: cfgval.AsString(entry["chip"]), label: cfgval.AsString(entry["label"]), preds: preds}, ""
+}
+
+// buildSmartCheck builds a drive SMART-health check (smartctl).
+func buildSmartCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+	device := cfgval.AsString(entry["device"])
+	if device == "" {
+		return nil, "smart check requires a device"
+	}
+	preds, err := parseSmartPreds(entry)
+	if err != nil {
+		return nil, "smart check: " + err.Error()
+	}
+	return smartCheck{base: b, runner: runner, device: device, preds: preds}, ""
+}
+
+// buildRaidCheck builds a Linux md software-RAID health check.
+func buildRaidCheck(b base, entry map[string]any) (Check, string) {
+	preds, err := parseRaidPreds(entry)
+	if err != nil {
+		return nil, "raid check: " + err.Error()
+	}
+	return raidCheck{base: b, preds: preds}, ""
+}
+
+// buildEdacCheck builds an ECC memory-error (EDAC) check.
+func buildEdacCheck(b base, entry map[string]any) (Check, string) {
+	preds, err := parseEdacPreds(entry)
+	if err != nil {
+		return nil, "edac check: " + err.Error()
+	}
+	return edacCheck{base: b, preds: preds}, ""
 }
 
 // buildFdsCheck builds an open file-descriptors check.

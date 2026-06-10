@@ -22,6 +22,10 @@ which reuse the same schema). MVP types:
 | `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
+| `sensors`     | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
+| `smart`       | a drive's SMART health/attributes (failed verdict, `reallocated`, `wear`, `temperature`) (see Hardware sensors)|
+| `raid`        | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
+| `edac`        | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
@@ -1155,10 +1159,10 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a service's `checks:`/`preflight:`/`postflight:` (and referenced from rules), and
 - a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
 
-The host-resource checks (`disk`, `load`, `hdparm`, `fds`, `conntrack`, `entropy`,
-`zombies`, `oom`, `cert`) are condition-style — `OK == true` means there is a
-problem — so in rules `active: {check: x}` fires on it, and as a watch the hook
-fires on it.
+The host-resource checks (`disk`, `load`, `hdparm`, `sensors`, `smart`, `raid`,
+`edac`, `fds`, `conntrack`, `entropy`, `zombies`, `oom`, `cert`) are
+condition-style — `OK == true` means there is a problem — so in rules
+`active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `binary`, `libraries`) are the opposite (`OK == true` is healthy), so as a watch
 they fire the hook on **failure**.
@@ -1204,6 +1208,65 @@ data (and the `SERMO_READ`/`SERMO_CACHED` hook variables), and are **recorded as
 time series and graphed** in the service detail (web UI) so you can spot **gradual
 degradation** of a drive over time. (This per-check named-metric graphing is
 generic: any check that publishes numeric `Result.Data` fields can opt in.)
+
+### Hardware sensors
+
+These checks watch physical-health signals. Like the other host-resource checks
+they are **condition-style** (a predicate is the *alerting* condition), and their
+numeric values are **recorded over time and graphed** in the service detail so you
+can spot gradual degradation (overheating, a wearing SSD, rising ECC errors).
+
+- **`sensors`** — lm-sensors-style **hwmon** inputs (no external tool; reads
+  `/sys/class/hwmon`). Aggregates: `temp` (the hottest matching temperature, °C),
+  `fan` (the slowest matching fan, RPM — catches a stalled fan) and `voltage` (the
+  lowest matching rail, V). At least one predicate is required; optional `chip` and
+  `label` substrings narrow which inputs count.
+
+  ```yaml
+  checks:
+    cpu-temp:
+      type: sensors
+      chip: coretemp                 # optional: only this chip
+      temp: { op: ">", value: 85 }   # alert when the hottest core exceeds 85 °C
+      fan: { op: "<", value: 400 }   # optional: alert on a stalled fan
+  ```
+
+- **`smart`** — a drive's **SMART** health via `smartctl -j` (needs smartmontools
+  and root). With no predicate it alerts when the overall SMART verdict is
+  **FAILED**; predicates add `temperature` (°C), `reallocated` (sector count, an
+  HDD failure sign), `wear` (SSD/NVMe percentage used) and `power_on_hours`.
+  Complements `hdparm` (throughput) with failure prediction.
+
+  ```yaml
+  checks:
+    ssd-health:
+      type: smart
+      device: /dev/nvme0
+      interval: 1h
+      reallocated: { op: ">", value: 0 }   # any reallocated sector
+      wear: { op: ">", value: 90 }         # SSD/NVMe nearly worn out
+  ```
+
+- **`raid`** — Linux **md software-RAID** from `/proc/mdstat` (native). With no
+  predicate it alerts when any array is **degraded**; predicates add `degraded`,
+  `recovering` and `arrays` counts. A host with no md arrays never alerts.
+
+  ```yaml
+  checks:
+    raid: { type: raid }                   # alert if any md array is degraded
+  ```
+
+- **`edac`** — **ECC memory errors** from the kernel EDAC subsystem (native,
+  `/sys/devices/system/edac`). `ce` is the cumulative correctable count and `ue`
+  the uncorrectable count; with no predicate it alerts on `ue > 0`. The check fails
+  when the platform exposes no EDAC controllers (so you notice ECC isn't reported).
+
+  ```yaml
+  checks:
+    ecc:
+      type: edac
+      ce: { op: ">", value: 100 }          # also alert on many correctable errors
+  ```
 
 ### Autofs
 
