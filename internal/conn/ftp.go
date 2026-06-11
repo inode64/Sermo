@@ -20,18 +20,11 @@ func (ftpProtocol) DefaultPort() int   { return 21 }
 func (ftpProtocol) RequiresUser() bool { return false }
 
 func (ftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 21
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 21)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return ftpHandshake(c, cfg)
 }
 

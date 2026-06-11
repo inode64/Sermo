@@ -21,18 +21,11 @@ func (imapProtocol) DefaultPort() int   { return 143 }
 func (imapProtocol) RequiresUser() bool { return false }
 
 func (imapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 143
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 143)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return imapHandshake(c, cfg)
 }
 

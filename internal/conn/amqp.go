@@ -34,18 +34,11 @@ var amqpHeader = []byte{'A', 'M', 'Q', 'P', 0, 0, 9, 1}
 const maxAMQPFrame = 1 << 20
 
 func (amqpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 5672
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 5672)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 
 	if _, err := c.Write(amqpHeader); err != nil {
 		return Result{}, err

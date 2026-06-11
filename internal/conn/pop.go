@@ -22,18 +22,11 @@ func (popProtocol) DefaultPort() int   { return 110 }
 func (popProtocol) RequiresUser() bool { return false }
 
 func (popProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 110
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 110)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return popHandshake(c, cfg)
 }
 

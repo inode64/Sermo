@@ -21,18 +21,11 @@ func (nntpProtocol) DefaultPort() int   { return 119 }
 func (nntpProtocol) RequiresUser() bool { return false }
 
 func (nntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 119
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 119)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return nntpHandshake(c, cfg)
 }
 

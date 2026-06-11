@@ -23,18 +23,11 @@ func (mqttProtocol) DefaultPort() int   { return 1883 }
 func (mqttProtocol) RequiresUser() bool { return false }
 
 func (mqttProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 1883
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 1883)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 
 	if _, err := c.Write(buildMQTTConnect("sermo-check", cfg.User, cfg.Password)); err != nil {
 		return Result{}, err

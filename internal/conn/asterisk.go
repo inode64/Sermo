@@ -20,18 +20,11 @@ func (asteriskProtocol) DefaultPort() int   { return 5038 }
 func (asteriskProtocol) RequiresUser() bool { return false }
 
 func (asteriskProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 5038
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 5038)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 
 	line, err := bufio.NewReader(c).ReadString('\n')
 	if err != nil && line == "" {
