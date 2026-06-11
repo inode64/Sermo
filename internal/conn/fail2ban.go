@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"net"
 )
 
 func init() { Register(fail2banProtocol{}) }
@@ -27,7 +26,7 @@ func (fail2banProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if socket == "" {
 		socket = fail2banDefaultSocket
 	}
-	c, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	c, err := dialUnix(ctx, socket)
 	if err != nil {
 		return Result{}, err
 	}

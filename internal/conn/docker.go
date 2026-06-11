@@ -117,7 +117,7 @@ func dockerClient(cfg Config) (*http.Client, string, error) {
 		socket := cfg.Socket
 		tr := &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+				return dialUnix(ctx, socket)
 			},
 		}
 		// The host in the URL is a placeholder; the socket fixes the endpoint.
