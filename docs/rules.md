@@ -53,6 +53,7 @@ which reuse the same schema). MVP types:
 | `ipp` / `cups` | an IPP server (CUPS/cupsd) answers an IPP request with a valid response (see Database) |
 | `rsync` / `rsyncd` | an rsync daemon sends its `@RSYNCD:` greeting (see Database) |
 | `dhcp` / `dhcpd` | a DHCP server answers a DHCPDISCOVER with a DHCPOFFER (see Database) |
+| `dhclient` / `dhcp-client` | a local DHCP client has UDP/68 bound in `/proc/net/udp` (see Database) |
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC; exposes VM counts (`domains.active`…), node capacity and a VM's state for `expect`/`on_change` (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
@@ -589,6 +590,15 @@ Protocols, in the order of the table above:
       type: dhcp
       host: 10.0.0.1             # unicast to a known server/relay (no interface)
   ```
+- `dhclient` (alias `dhcp-client`) — default port 68 (UDP). **Linux only.** This
+  is a local DHCP client check: `dhclient` receives offers on UDP/68 and does not
+  provide a request/response server protocol. The check reads `/proc/net/udp` and
+  passes when it finds a local UDP socket bound to `host:port` (`0.0.0.0:68` by
+  default in the packaged profile). It does not send packets and does not consume
+  a lease. Set `lease_file` (the packaged profile defaults to
+  `/var/lib/dhcp/dhclient.leases`; override it when your distribution stores ISC
+  dhclient leases elsewhere) to also require an unexpired lease. If `interface`
+  is set, the lease must belong to that interface.
 - `rspamd` — default port 11334 (the controller worker); `tls` supported (HTTPS).
   No auth. Sends `GET /ping` and expects `200` with a `pong` body — the
   unauthenticated liveness endpoint every rspamd worker exposes (point `port` at
@@ -1128,7 +1138,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp, nut/ups/upsd, docker
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)

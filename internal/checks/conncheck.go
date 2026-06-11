@@ -222,6 +222,12 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Params = map[string]string{"mac": mac}
 		}
 	}
+	// dhclient can optionally validate an active ISC dhclient lease file.
+	if proto.Name() == "dhclient" {
+		if leaseFile := cfgval.AsString(entry["lease_file"]); leaseFile != "" {
+			cfg.Query = leaseFile
+		}
+	}
 	// openvpn defaults to UDP; `transport: tcp` selects TCP (length-prefixed
 	// framing). Scoped here so it never leaks into other protocols' params.
 	if proto.Name() == "openvpn" {
