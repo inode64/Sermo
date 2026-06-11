@@ -169,6 +169,13 @@ The daemon can serve a small web dashboard to view services and host watches.
 Admins can monitor/unmonitor both, and can start/stop/restart services over the
 same safe operation engine the CLI uses.
 
+Below the services table the dashboard lists the **installed applications** (the
+catalog app daemons whose binary is present), showing each application's name and
+short version; the list is sortable by name or version, and expanding a row
+reveals the full version string, the binary's file location and its permissions.
+This is the same data the `sermoctl apps` command reports (served from
+`GET /api/applications`).
+
 **The web UI is only activated when `web.port` is explicitly defined.** If the
 `web:` block is omitted, or if a `web:` block is present without a `port` key
 (even if other keys such as `address` are set), the HTTP server is not started.

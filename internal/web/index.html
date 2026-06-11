@@ -84,6 +84,11 @@
   .watch-table { min-width: 72rem; font-size: .88rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
   .watch-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; color: #888; white-space: nowrap; }
+  .apps-table { min-width: 28rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
+  .apps-table th, .apps-table td { padding: .26rem .42rem; vertical-align: top; }
+  .apps-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; color: #888; white-space: nowrap; }
+  .apps-table th.sortable { cursor: pointer; }
+  .apps-table th.sortable:hover { color: #444; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
   .usagebar { --usage-pct: 0%; --usage-color: #2da44e; position: relative; display: inline-grid; place-items: center; width: 10.5rem; height: 1.05rem; background: #8882; border: 1px solid #8886; border-radius: 999px; overflow: hidden; vertical-align: middle; box-sizing: border-box; box-shadow: inset 0 0 0 1px #fff1; }
   .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--usage-pct); min-width: .18rem; transition: width .2s ease, background-color .2s ease; background: var(--usage-color); }
@@ -191,6 +196,24 @@
   </table>
   </div>
   <p id="ops" class="muted" style="margin:.6rem 0 0"></p>
+</details>
+
+<details id="apps-section" open style="display:none">
+  <summary>Installed applications <span id="apps-count" class="muted"></span></summary>
+  <div id="app-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="app-search" type="search" placeholder="filter applications…">
+    <span id="app-count" class="muted"></span>
+  </div>
+  <div class="table-wrap">
+  <table class="apps-table">
+    <thead><tr>
+      <th class="sortable" data-app-sort="name">Application<span class="sort-ind" data-ai="name"></span></th>
+      <th class="sortable" data-app-sort="version">Version<span class="sort-ind" data-ai="version"></span></th>
+    </tr></thead>
+    <tbody id="app-rows"></tbody>
+  </table>
+  </div>
+  <p class="muted" style="font-size:.8rem">Applications installed on the host (their binary is present). Click a row for the full version, file location and permissions.</p>
 </details>
 
 <details id="watches-section" open style="display:none">
@@ -399,6 +422,14 @@ async function load() {
     const wr = await fetch("api/watches");
     if (wr.ok) {
       renderWatches(await wr.json());
+    }
+  } catch (_) { /* non-fatal */ }
+
+  // Installed applications (name, version, binary location).
+  try {
+    const ar = await fetch("api/applications");
+    if (ar.ok) {
+      renderApps(await ar.json());
     }
   } catch (_) { /* non-fatal */ }
 
@@ -1193,6 +1224,7 @@ function toggleExpand(key) {
   }
   renderServices();
   renderWatches();
+  renderApps();
 }
 
 // applyHash opens/scrolls to the service named in a #svc:<name> URL fragment, so a
@@ -1682,6 +1714,92 @@ function renderWatches(watches) {
     ? `<tr><td colspan="10" class="muted">No watches match the filter.</td></tr>`
     : `<tr><td colspan="10" class="muted">No watches.</td></tr>`);
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
+}
+
+// ---- Installed applications ----------------------------------------------
+let allApps = [];
+let appQuery = "";
+let appSort = { key: "", dir: 1 };
+const appSortKeys = {
+  name: (a) => (a.name || "").toLowerCase(),
+  version: (a) => (a.version_short || a.version || "").toLowerCase(),
+};
+function setAppSort(key) {
+  if (appSort.key === key) appSort.dir = -appSort.dir;
+  else { appSort.key = key; appSort.dir = 1; }
+  renderApps();
+}
+function setAppQuery(q) { appQuery = q || ""; renderApps(); }
+function updateAppSortIndicators() {
+  document.querySelectorAll(".sort-ind[data-ai]").forEach((el) => {
+    el.textContent = el.dataset.ai === appSort.key ? (appSort.dir > 0 ? " ▲" : " ▼") : "";
+  });
+}
+function appMatches(a) {
+  if (!appQuery) return true;
+  const q = appQuery.toLowerCase();
+  return (a.name || "").toLowerCase().includes(q)
+    || (a.display_name || "").toLowerCase().includes(q)
+    || (a.version || "").toLowerCase().includes(q);
+}
+
+// renderApps lists the installed applications below the services table. The
+// version column shows the short version; expanding a row reveals the full
+// version string, binary location and permissions (all already in hand, so no
+// extra request is needed).
+function renderApps(apps) {
+  if (apps) allApps = apps;
+  const section = $("#apps-section");
+  const tbody = $("#app-rows");
+  const cnt = $("#apps-count");
+  const filterCount = $("#app-count");
+  if (!section || !tbody) return;
+  const total = (allApps || []).length;
+  if (total === 0) {
+    section.style.display = "none";
+    if (cnt) cnt.textContent = "";
+    if (filterCount) filterCount.textContent = "";
+    return;
+  }
+  section.style.display = "block";
+  if (cnt) cnt.textContent = `(${total})`;
+  const list = (allApps || []).filter(appMatches);
+  if (appSort.key && appSortKeys[appSort.key]) {
+    sortedBy(list, appSort, appSortKeys, "name");
+  }
+  updateAppSortIndicators();
+  if (filterCount) filterCount.textContent = appQuery ? `showing ${list.length} of ${total}` : "";
+  const rows = list.map((a) => {
+    const label = a.display_name && a.display_name !== a.name
+      ? `${esc(a.name)} <span class="muted">${esc(a.display_name)}</span>`
+      : esc(a.name);
+    const key = "app:" + a.name;
+    const open = expanded.has(key);
+    const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
+    const ver = a.version_short || a.version || "—";
+    const row = `<tr class="clickable" data-exp-key="${esc(key)}">
+      <td>${chev}${label}</td>
+      <td>${esc(ver)}</td>
+    </tr>`;
+    const expRow = open
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="2">${renderAppExpansion(a)}</td></tr>`
+      : "";
+    return row + expRow;
+  });
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="2" class="muted">No applications match the filter.</td></tr>`;
+}
+
+// renderAppExpansion shows one application's full version, binary location and
+// permissions, reusing the watch-grid layout.
+function renderAppExpansion(a) {
+  const bin = a.binary ? `<code>${esc(a.binary)}</code>` : '<span class="muted">unknown</span>';
+  const perm = a.permissions ? `<code>${esc(a.permissions)}</code>` : '<span class="muted">—</span>';
+  return `<div class="watch-grid">
+    <div><span class="muted">Version</span><br>${esc(a.version || "—")}</div>
+    <div><span class="muted">Location</span><br>${bin}</div>
+    <div><span class="muted">Permissions</span><br>${perm}</div>
+    <div><span class="muted">Status</span><br>${esc(a.status || "—")}</div>
+  </div>`;
 }
 
 // renderWatchExpansion shows a host watch's config summary and its recent
@@ -2732,6 +2850,21 @@ function initStaticHandlers() {
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
     th.addEventListener("click", () => setWatchSort(th.dataset.watchSort || ""));
+  });
+
+  const appSearch = $("#app-search");
+  if (appSearch) {
+    appSearch.addEventListener("input", () => setAppQuery(appSearch.value));
+    appSearch.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        appSearch.value = "";
+        setAppQuery("");
+      }
+    });
+  }
+
+  document.querySelectorAll(".apps-table th.sortable[data-app-sort]").forEach((th) => {
+    th.addEventListener("click", () => setAppSort(th.dataset.appSort || ""));
   });
 
   ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {

@@ -66,6 +66,14 @@ func (h *WebBackendHolder) Notifiers(ctx context.Context) []web.Notifier {
 	return nil
 }
 
+// Applications returns the installed applications from the active backend.
+func (h *WebBackendHolder) Applications(ctx context.Context) []web.Application {
+	if b := h.backend(); b != nil {
+		return b.Applications(ctx)
+	}
+	return nil
+}
+
 // DaemonInfo returns daemon and engine info from the active backend.
 func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	if b := h.backend(); b != nil {
