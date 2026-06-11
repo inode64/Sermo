@@ -6,4 +6,6 @@ variables:
   binary: "/lib64/libc.so.6"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}"], timeout: 10s }
+  # Clean version string (e.g. "glibc 2.42") vs. running the .so, which prints a
+  # long sentence. getconf ships with glibc, so it is always present.
+  version: { type: command, command: ["getconf", "GNU_LIBC_VERSION"], timeout: 10s }
