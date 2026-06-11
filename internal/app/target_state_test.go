@@ -37,8 +37,8 @@ func TestWatchState(t *testing.T) {
 		want      string
 	}{
 		{name: "disabled", enabled: false, want: TargetStateDisabled},
-		{name: "stopped", enabled: true, monitored: false, want: TargetStateStopped},
-		{name: "monitorized", enabled: true, monitored: true, want: TargetStateMonitorized},
+		{name: "unmonitorized", enabled: true, monitored: false, want: TargetStateUnmonitorized},
+		{name: "ok", enabled: true, monitored: true, want: TargetStateOK},
 		{name: "failed", enabled: true, monitored: true, failed: true, want: TargetStateFailed},
 	}
 	for _, tt := range tests {

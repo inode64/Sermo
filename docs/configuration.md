@@ -292,8 +292,9 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
 malformed lock files under `<paths.runtime>/locks`),
-`GET /api/watches` (configured host watches, their single `state`, `monitor`
-mode, conditions, notifications and recent activity),
+`GET /api/watches` (configured host watches, their single `state`
+(`disabled`, `unmonitorized`, `ok`, `failed`), `monitor` mode, conditions,
+notifications and recent activity),
 `POST /api/watches/{name}/{action}` where action is `monitor` or `unmonitor`,
 `GET /api/locks` (named runtime locks with TTL remaining, owner status,
 created age, blocked actions and release eligibility),
@@ -375,8 +376,10 @@ only when it actually runs, so the average is not skewed.
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
 `GET /api/services` / `GET /api/watches` expose `state`, `monitor_source` and
-`monitor_changed_at` so a stopped unmonitored service or watch shows who paused
-it and when.
+`monitor_changed_at` so a running/stopped unmonitored service or an
+unmonitorized watch shows who paused it and when. Host watches do not have
+service-manager `running` or `stopped` states; the dashboard filters them as
+`ok`, `failed`, `monitorized`, `unmonitorized` or `disabled`.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service.
 
