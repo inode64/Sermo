@@ -45,9 +45,7 @@ func (statdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
+	applyDeadline(ctx, c)
 
 	reply, err := rpcCallTCP(c, buildRPCNull(xid, statdProg, statdVers))
 	if err != nil {

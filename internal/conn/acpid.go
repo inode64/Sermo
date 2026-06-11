@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"net"
 )
 
 func init() { Register(acpidProtocol{}) }
@@ -28,7 +27,7 @@ func (acpidProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if socket == "" {
 		socket = acpidDefaultSocket
 	}
-	c, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	c, err := dialUnix(ctx, socket)
 	if err != nil {
 		return Result{}, err
 	}

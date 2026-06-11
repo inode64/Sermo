@@ -109,9 +109,7 @@ func smbNegotiate(ctx context.Context, addr, iface string) (dialect uint16, sign
 		return 0, false, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
+	applyDeadline(ctx, c)
 
 	req, err := buildSMBNegotiate()
 	if err != nil {
