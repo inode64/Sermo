@@ -4,12 +4,12 @@ display_name: "OpenSSH"
 service:
   systemd: [sshd, ssh]
   openrc: [sshd]
+apps: [ssh]
+
 variables:
   port: 22
   binary: "/usr/bin/sshd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
 
 checks:

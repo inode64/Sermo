@@ -1,0 +1,8 @@
+kind: app
+name: proftpd
+display_name: "ProFTPD"
+variables:
+  binary: "/usr/bin/proftpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

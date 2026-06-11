@@ -1,4 +1,4 @@
-kind: daemon
+kind: app
 name: sqlite
 display_name: "SQLite"
 variables:

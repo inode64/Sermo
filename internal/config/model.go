@@ -11,20 +11,40 @@ package config
 
 import "sermo/internal/cfgval"
 
-// docKind identifies the document kinds.
+// docKind identifies the document kinds. Catalog definitions carry a kind per
+// subdirectory — `daemon` (services), `app` (tools/runtimes), `lib` (shared
+// libraries) — so they live in separate registries and a service may share a
+// name with the app that owns its binary (e.g. `apache` daemon + `apache` app).
+// `service` is an enabled instance (apps-enabled) that `uses` a daemon.
 const (
 	kindDaemon  = "daemon"
+	kindApp     = "app"
+	kindLibrary = "lib"
 	kindService = "service"
 )
 
-// Daemon categories, derived from the subdirectory a daemon definition is loaded
-// from (catalog/services, catalog/apps, catalog/libs). Files directly under a
-// catalog root default to CategoryService.
+// Daemon categories mirror the catalog subdirectory a definition is loaded from
+// (catalog/services, catalog/apps, catalog/libs); files directly under a catalog
+// root default to CategoryService. The category tracks the kind for display and
+// category-scoped listings.
 const (
 	CategoryService = "service"
 	CategoryApp     = "app"
 	CategoryLibrary = "library"
 )
+
+// kindForCategory maps a catalog category to the document kind it is registered
+// under, so the subdirectory alone determines a definition's kind.
+func kindForCategory(category string) string {
+	switch category {
+	case CategoryApp:
+		return kindApp
+	case CategoryLibrary:
+		return kindLibrary
+	default:
+		return kindDaemon
+	}
+}
 
 // categoryFromDir maps a catalog subdirectory name to a category, or "" when the
 // directory is not a recognized category (its files inherit the default).
@@ -172,10 +192,15 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 
 // Config is the full loaded configuration set.
 type Config struct {
-	Global       Global
-	Daemons      map[string]*Document
-	Services     map[string]*Document
-	DaemonNames  []string // load order, for stable reporting
+	Global    Global
+	Daemons   map[string]*Document // kind daemon (service definitions)
+	Apps      map[string]*Document // kind app (tools/runtimes: binary + version)
+	Libraries map[string]*Document // kind lib (shared libraries)
+	Services  map[string]*Document // kind service (enabled instances)
+	// Load order per registry, for stable reporting.
+	DaemonNames  []string
+	AppNames     []string
+	LibraryNames []string
 	ServiceNames []string
 	docs         []*Document // every document in load order
 }

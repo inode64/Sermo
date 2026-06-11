@@ -2,11 +2,7 @@ kind: daemon
 name: automount
 display_name: "Automount"
 service: automount
-variables:
-  binary: "/usr/bin/automount"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+apps: [automount]
 
 checks:
   service: { type: service, expect: active }

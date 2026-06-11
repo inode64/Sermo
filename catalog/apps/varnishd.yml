@@ -1,0 +1,8 @@
+kind: app
+name: varnishd
+display_name: "Varnish"
+variables:
+  binary: "/usr/bin/varnishd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

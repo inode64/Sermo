@@ -3,14 +3,13 @@ name: dovecot
 display_name: "Dovecot"
 description: "Dovecot IMAP/POP3"
 service: dovecot
+apps: [dovecot]
+
 variables:
   host: 127.0.0.1
   port: 143
   tls_port: 993
-  binary: "/usr/bin/dovecot"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["sh","-c","/usr/bin/doveconf >/dev/null"], timeout: 30s }
 
 checks:

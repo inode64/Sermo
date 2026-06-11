@@ -1,0 +1,8 @@
+kind: app
+name: upsmon
+display_name: "NUT UPS Monitor"
+variables:
+  binary: "/usr/bin/upsmon"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -50,23 +50,32 @@ func tokenFor(name string) *tmplToken {
 // yields nothing. A template may `uses` a base daemon (e.g. php-fpm%v uses
 // php-fpm) to inherit its checks, rules and processes; only the binary differs.
 func (c *Config) materializeVersionTemplates() {
+	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
+	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
+	c.materializeRegistry(c.LibraryNames, c.Libraries, kindLibrary)
+}
+
+// materializeRegistry materializes the version templates in one registry (the
+// daemon/app/lib map), tagging each concrete instance with that kind so it is
+// indexed in the same registry as its template.
+func (c *Config) materializeRegistry(names []string, reg map[string]*Document, kind string) {
 	var templates []*Document
-	for _, name := range c.DaemonNames {
+	for _, name := range names {
 		if tokenFor(name) != nil {
-			if doc, ok := c.Daemons[name]; ok {
+			if doc, ok := reg[name]; ok {
 				templates = append(templates, doc)
 			}
 		}
 	}
 	for _, tmpl := range templates {
 		tok := tokenFor(tmpl.Name)
-		body := c.templateBody(tmpl)
+		body := c.templateBody(tmpl, kind)
 		for _, value := range discoverVersions(versionDiscoverySource(body), *tok) {
-			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path)
+			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind)
 			inst.Category = tmpl.Category
 			c.add(inst)
 		}
-		c.dropDaemon(tmpl.Name)
+		c.dropTemplate(tmpl.Name, reg, kind)
 	}
 }
 
@@ -86,13 +95,13 @@ func versionDiscoverySource(body map[string]any) string {
 // templateBody returns the template's body folded onto its `uses` base (if any),
 // with the resolution-control keys stripped. The `${...}` references are left
 // intact for instantiateVersion to bind.
-func (c *Config) templateBody(tmpl *Document) map[string]any {
+func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	body := stripMeta(tmpl.Body)
-	body["kind"] = kindDaemon
+	body["kind"] = kind
 	if base := cfgval.String(tmpl.Body["uses"]); base != "" {
 		if src, ok := c.Daemons[base]; ok {
 			body = mergeMaps(stripMeta(src.Body), body)
-			body["kind"] = kindDaemon
+			body["kind"] = kind
 		}
 	}
 	return body
@@ -143,13 +152,13 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 // token placeholder in the name becomes the value, and every `${...}` reference
 // for that token in the body (binary path, display_name, service, ...) is
 // substituted. Other `${var}` references are left for normal resolution.
-func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path string) *Document {
+func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path, kind string) *Document {
 	name := strings.ReplaceAll(templateName, tok.placeholder, value)
 	out := bindToken(cloneMap(body), tok.marker(), value).(map[string]any)
-	out["kind"] = kindDaemon
+	out["kind"] = kind
 	out["name"] = name
-	delete(out, "versions") // discovery metadata, not part of the concrete daemon
-	return &Document{Kind: kindDaemon, Name: name, Path: path, Body: out}
+	delete(out, "versions") // discovery metadata, not part of the concrete definition
+	return &Document{Kind: kind, Name: name, Path: path, Body: out}
 }
 
 // bindToken replaces every occurrence of marker in every string of the tree with
@@ -175,23 +184,35 @@ func bindToken(v any, marker, value string) any {
 	}
 }
 
-// dropDaemon removes a daemon (and its document) from the config, used to
-// retire a version template once its instances are registered.
-func (c *Config) dropDaemon(name string) {
-	delete(c.Daemons, name)
-	keptDaemons := make([]string, 0, len(c.DaemonNames))
-	for _, n := range c.DaemonNames {
-		if n != name {
-			keptDaemons = append(keptDaemons, n)
-		}
+// dropTemplate removes a version template (and its document) from its registry
+// once its concrete instances are registered.
+func (c *Config) dropTemplate(name string, reg map[string]*Document, kind string) {
+	delete(reg, name)
+	switch kind {
+	case kindDaemon:
+		c.DaemonNames = withoutString(c.DaemonNames, name)
+	case kindApp:
+		c.AppNames = withoutString(c.AppNames, name)
+	case kindLibrary:
+		c.LibraryNames = withoutString(c.LibraryNames, name)
 	}
-	c.DaemonNames = keptDaemons
 	docs := make([]*Document, 0, len(c.docs))
 	for _, d := range c.docs {
-		if d.Kind == kindDaemon && d.Name == name {
+		if d.Kind == kind && d.Name == name {
 			continue
 		}
 		docs = append(docs, d)
 	}
 	c.docs = docs
+}
+
+// withoutString returns names with every occurrence of name removed.
+func withoutString(names []string, name string) []string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if n != name {
+			out = append(out, n)
+		}
+	}
+	return out
 }

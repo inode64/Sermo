@@ -3,12 +3,10 @@ name: glusterd
 display_name: "GlusterFS"
 description: "GlusterFS"
 service: glusterd
+apps: [glusterd]
+
 variables:
   port: 24007
-  binary: "/usr/bin/glusterd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }

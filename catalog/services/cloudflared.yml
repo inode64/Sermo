@@ -8,6 +8,9 @@ service:
   systemd: [cloudflared]
   openrc: [cloudflared]
 
+# Binary + version are owned by the `cloudflared` app (same name) and linked here.
+apps: [cloudflared]
+
 variables:
   binary: /usr/bin/cloudflared
   user: cloudflared
@@ -18,11 +21,6 @@ commands:
   version:
     command: ["${binary}", "--version"]
     timeout: 10s
-
-preflight:
-  binary:
-    type: binary
-    path: "${binary}"
 
 processes:
   main:

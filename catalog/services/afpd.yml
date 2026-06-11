@@ -2,12 +2,10 @@ kind: daemon
 name: afpd
 display_name: "Netatalk AFP Daemon"
 service: afpd
+apps: [afpd]
+
 variables:
   port: 548
-  binary: "/usr/bin/afpd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }

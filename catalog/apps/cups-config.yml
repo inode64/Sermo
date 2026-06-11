@@ -1,0 +1,8 @@
+kind: app
+name: cups-config
+display_name: "CUPS"
+variables:
+  binary: "/usr/bin/cups-config"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

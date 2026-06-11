@@ -7,6 +7,11 @@ service:
   systemd: [rabbitmq-server, rabbitmq]
   openrc: [rabbitmq]
 
+# RabbitMQ runs on the Erlang VM: the runtime is owned by the `erlang` app and
+# linked here, so its binary + version checks run in this service's preflight
+# (a missing Erlang blocks start).
+apps: [erlang, rabbitmq]
+
 variables:
   binary: /usr/bin/rabbitmq-server
   ctl: /usr/bin/rabbitmqctl
@@ -19,11 +24,6 @@ variables:
 commands:
   version:
     command: ["${ctl}", "version"]
-
-preflight:
-  binary:
-    type: binary
-    path: "${binary}"
 
 processes:
   # The init script writes the wrapper PID here; the Erlang broker (beam.smp,

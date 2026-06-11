@@ -1,4 +1,4 @@
-kind: daemon
+kind: app
 name: ruby
 display_name: "Ruby"
 description: "An object-oriented scripting language"

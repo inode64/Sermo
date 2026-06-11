@@ -1,0 +1,8 @@
+kind: app
+name: node
+display_name: "Node.js"
+variables:
+  binary: "/usr/bin/node"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-v"], timeout: 10s }

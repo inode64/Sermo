@@ -221,6 +221,90 @@ variables:
 	}
 }
 
+func TestAppsLinkInjectsAppPreflight(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/java.yml": `
+kind: daemon
+name: java
+variables: { binary: /usr/bin/java }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-version"] }
+`,
+		"catalog/tomcat.yml": `
+kind: daemon
+name: tomcat
+apps: [java]
+variables: { binary: /opt/tomcat/bin/catalina.sh, port: 8080 }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+checks:
+  port: { type: tcp, port: "${port}" }
+`,
+		"enabled/tomcat-main.yml": `
+kind: service
+name: tomcat-main
+uses: tomcat
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("tomcat-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	pf := nested(t, resolved.Tree, "preflight")
+	// The linked app's checks are injected namespaced; the service's own stay.
+	if _, ok := pf["binary"]; !ok {
+		t.Errorf("service's own preflight binary missing")
+	}
+	jbin, ok := pf["app-java-binary"].(map[string]any)
+	if !ok {
+		t.Fatalf("app-java-binary not injected: %v", pf)
+	}
+	// It carries java's binary path (expanded with java's vars), not tomcat's.
+	if got := cfgval.String(jbin["path"]); got != "/usr/bin/java" {
+		t.Errorf("app-java-binary path = %q, want /usr/bin/java", got)
+	}
+	if _, ok := pf["app-java-version"]; !ok {
+		t.Errorf("app-java-version not injected: %v", pf)
+	}
+	// `apps` is consumed, not left in the resolved tree.
+	if _, ok := resolved.Tree["apps"]; ok {
+		t.Errorf("apps key should be consumed during resolution")
+	}
+}
+
+func TestAppsLinkUnknownAppErrors(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/web.yml": `
+kind: daemon
+name: web
+apps: [no-such-app]
+variables: { port: 80 }
+checks:
+  port: { type: tcp, port: "${port}" }
+`,
+		"enabled/web-main.yml": `
+kind: service
+name: web-main
+uses: web
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs := cfg.Resolve("web-main")
+	if len(errs) == 0 {
+		t.Fatal("linking an unknown app must error")
+	}
+}
+
 func TestValidateCleanConfig(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
@@ -1156,7 +1240,7 @@ func TestArchVariableBaked(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"catalog/apps/qemu.yml": `
+		"catalog/qemu.yml": `
 kind: daemon
 name: qemu
 display_name: "QEMU"
@@ -1196,14 +1280,24 @@ func TestDaemonCategoryFromDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	cases := map[string]string{"nginx": CategoryService, "git": CategoryApp, "glibc": CategoryLibrary}
-	for name, want := range cases {
-		doc, ok := cfg.Daemons[name]
+	// The subdirectory determines the kind (and registry): a catalog root file is
+	// a daemon, apps/ an app, libs/ a lib — even though each fixture declares
+	// `kind: daemon`, the loader derives it from the directory.
+	cases := []struct {
+		name, wantCat string
+		reg           map[string]*Document
+	}{
+		{"nginx", CategoryService, cfg.Daemons},
+		{"git", CategoryApp, cfg.Apps},
+		{"glibc", CategoryLibrary, cfg.Libraries},
+	}
+	for _, tc := range cases {
+		doc, ok := tc.reg[tc.name]
 		if !ok {
-			t.Fatalf("daemon %q not loaded", name)
+			t.Fatalf("%q not loaded in its registry", tc.name)
 		}
-		if doc.Category != want {
-			t.Errorf("%s category = %q, want %q", name, doc.Category, want)
+		if doc.Category != tc.wantCat {
+			t.Errorf("%s category = %q, want %q", tc.name, doc.Category, tc.wantCat)
 		}
 	}
 	if got := cfg.DaemonsInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {

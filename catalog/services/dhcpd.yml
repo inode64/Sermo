@@ -3,12 +3,11 @@ name: dhcpd
 display_name: "DHCP Server"
 description: "Servidor DHCP"
 service: dhcpd
+apps: [dhcpd]
+
 variables:
   port: 67
-  binary: "/usr/bin/dhcpd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }
 
 checks:

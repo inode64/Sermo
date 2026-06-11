@@ -1,0 +1,8 @@
+kind: app
+name: salt
+display_name: "Salt"
+variables:
+  binary: "/usr/bin/salt"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

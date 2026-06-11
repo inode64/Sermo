@@ -3,11 +3,7 @@ name: numad
 display_name: "NUMA Daemon"
 description: "Gestor NUMA"
 service: numad
-variables:
-  binary: "/usr/bin/numad"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+apps: [numad]
 
 checks:
   service: { type: service, expect: active }

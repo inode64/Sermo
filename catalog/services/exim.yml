@@ -3,14 +3,14 @@ name: exim
 display_name: "Exim"
 description: "Gestor de correo SMTP Exim"
 service: exim
+apps: [exim]
+
 variables:
   host: 127.0.0.1
   port: 25
   tls_port: 465
   binary: "/usr/bin/exim"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["${binary}","-bV"], timeout: 10s }
 
 checks:

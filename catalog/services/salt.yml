@@ -2,12 +2,10 @@ kind: daemon
 name: salt
 display_name: "Salt"
 service: salt
+apps: [salt]
+
 variables:
   port: 4505
-  binary: "/usr/bin/salt"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }

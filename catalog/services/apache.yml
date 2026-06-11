@@ -7,6 +7,9 @@ service:
   systemd: [apache2, httpd]
   openrc: [apache2, apache]
 
+# Binary + version are owned by the `apache` app (same name) and linked here.
+apps: [apache]
+
 variables:
   binary: /usr/bin/apache2
   user: www-data
