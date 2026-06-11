@@ -24,18 +24,11 @@ func (varnishProtocol) DefaultPort() int   { return 6082 }
 func (varnishProtocol) RequiresUser() bool { return false }
 
 func (varnishProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 6082
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 6082)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 
 	br := bufio.NewReader(c)
 	line, err := br.ReadString('\n')

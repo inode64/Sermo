@@ -29,18 +29,11 @@ func (redisProtocol) RequiresUser() bool { return false }
 // set, verifies the server answers PING, and reads its version. The caller's
 // context bounds the probe.
 func (redisProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 6379
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 6379)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return redisHandshake(c, cfg)
 }
 
