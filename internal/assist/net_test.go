@@ -86,6 +86,39 @@ func TestNetAssistantRequiresNotifier(t *testing.T) {
 	}
 }
 
+func TestNetAssistantNotifyByName(t *testing.T) {
+	// The shared all/none/default vocabulary works in the net wizard too:
+	// notifiers can be picked by name, and "default" inherits the global default.
+	t.Run("notifier by name", func(t *testing.T) {
+		// Select eth0; only state; any change; type the notifier name.
+		script := strings.Join([]string{"1", "1", "1", "team-slack"}, "\n") + "\n"
+		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+		res, err := netAssistant{}.Run(p, testEnv())
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		then := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)["then"].(map[string]any)
+		notify := then["notify"].([]string)
+		if len(notify) != 1 || notify[0] != "team-slack" {
+			t.Fatalf("notify = %v, want [team-slack]", notify)
+		}
+	})
+
+	t.Run("default by name", func(t *testing.T) {
+		// Select eth0; only state; any change; type "default" to inherit.
+		script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
+		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+		res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		then := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)["then"].(map[string]any)
+		if _, hasNotify := then["notify"]; hasNotify {
+			t.Fatalf("'default' should omit notify to inherit the global default: %v", then)
+		}
+	})
+}
+
 func TestNetAssistantNotifyNoneErrors(t *testing.T) {
 	// Select eth0; only state; any change; explicit none.
 	script := strings.Join([]string{"1", "1", "1", "1"}, "\n") + "\n"

@@ -58,6 +58,36 @@ func TestPromptMultiChoose(t *testing.T) {
 	}
 }
 
+func TestPromptMultiChooseByName(t *testing.T) {
+	opts := []string{"none (do not notify)", "ops-email", "default (inherit global notify)"}
+
+	// "none" / "default" select the matching always-present entries by name.
+	if got := mustMultiChoose(t, "none\n", opts); len(got) != 1 || got[0] != 0 {
+		t.Fatalf("'none' = %v, want [0]", got)
+	}
+	if got := mustMultiChoose(t, "DEFAULT\n", opts); len(got) != 1 || got[0] != 2 {
+		t.Fatalf("'default' (case-insensitive) = %v, want [2]", got)
+	}
+	if got := mustMultiChoose(t, "ops-email\n", opts); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("notifier name = %v, want [1]", got)
+	}
+
+	// An unknown name re-prompts, then a number is accepted.
+	p, out := newTestPrompt("nope\n2\n")
+	if got := p.MultiChoose("pick", opts); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("after bad name = %v, want [1]", got)
+	}
+	if strings.Count(out.String(), "pick") < 2 {
+		t.Fatalf("expected re-prompt on unknown name, output: %q", out.String())
+	}
+}
+
+func mustMultiChoose(t *testing.T, input string, opts []string) []int {
+	t.Helper()
+	p, _ := newTestPrompt(input)
+	return p.MultiChoose("pick", opts)
+}
+
 func TestPromptAskInt(t *testing.T) {
 	p, _ := newTestPrompt("\nnope\n42\n")
 	if got := p.AskInt("n", 7); got != 7 {
