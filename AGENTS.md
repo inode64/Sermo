@@ -295,6 +295,31 @@ Treat reuse as a project rule, not just a style preference.
    `docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml`
    whenever the YAML surface changes.
 
+## Web UI cohesion
+
+The web UI is a single embedded document, `internal/web/index.html` (HTML, CSS
+and JS in one file). **Before adding or changing any UI element, find the
+existing element that already solves the same problem and copy its structure,
+classes and styling exactly** — do not invent a parallel way to do the same
+thing. Cohesion across panels is a hard requirement, not a preference.
+
+Concretely, every data panel is a `<details id="{name}-section">` with a
+`<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
+and a `<table class="{name}-table">` with a sticky header. The one deliberate
+distinction:
+
+1. **Scrollable panel** — wrap the table in `<div class="table-wrap">`, which
+   adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services and
+   Host watches (long, unbounded lists).
+2. **Non-scrollable panel** — place the bare `<table>` directly inside the
+   `<details>`, no wrapper. Used by Events, Notifiers and Applications (the page
+   scrolls as a whole instead of trapping a panel in its own scrollbar).
+
+Pick the variant that matches the panel's nature and reuse it verbatim; never
+hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
+introduce a genuinely new pattern, document it here and in `CLAUDE.md` so the
+next change can follow it.
+
 ## Native Go, not external processes
 
 **Always implement functionality with native Go — the standard library, or
