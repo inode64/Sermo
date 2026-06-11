@@ -5,6 +5,19 @@ description: "Cliente DHCP"
 service: dhclient
 variables:
   binary: "/sbin/dhclient"
+  host: 0.0.0.0
+  port: 68
+  interface: ""
+  lease_file: "/var/lib/dhcp/dhclient.leases"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  protocol:
+    type: dhclient
+    host: "${host}"
+    port: "${port}"
+    interface: "${interface}"
+    lease_file: "${lease_file}"
+    timeout: 3s

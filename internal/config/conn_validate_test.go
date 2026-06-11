@@ -57,6 +57,21 @@ checks:
 	}
 }
 
+func TestValidateDHClientCheckValid(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: dhclient
+service: { name: dhclient }
+checks:
+  protocol: { type: dhclient, host: 0.0.0.0, port: 68, lease_file: /var/lib/dhcp/dhclient.leases }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.protocol") {
+			t.Fatalf("a valid dhclient check must produce no issue: %v", issues)
+		}
+	}
+}
+
 func TestValidateMySQLCheckBadTLS(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service

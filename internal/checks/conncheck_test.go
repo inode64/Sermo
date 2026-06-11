@@ -713,6 +713,31 @@ func TestBuildDHCPCheck(t *testing.T) {
 	}
 }
 
+func TestBuildDHClientCheck(t *testing.T) {
+	for _, typ := range []string{"dhclient", "dhcp-client"} {
+		built, warns := Build(map[string]any{
+			"client": map[string]any{"type": typ, "host": "0.0.0.0"},
+		}, Deps{DefaultTimeout: time.Second})
+		if len(warns) != 0 || len(built) != 1 {
+			t.Fatalf("%s check should build: warns=%v", typ, warns)
+		}
+		cc := built[0].Check.(connCheck)
+		if cc.proto.Name() != "dhclient" || cc.cfg.Port != 68 || cc.cfg.Host != "0.0.0.0" {
+			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
+		}
+	}
+
+	built, warns := Build(map[string]any{
+		"client": map[string]any{"type": "dhclient", "lease_file": "/var/lib/dhcp/dhclient.leases"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("dhclient lease_file check should build: warns=%v", warns)
+	}
+	if cc := built[0].Check.(connCheck); cc.cfg.Query != "/var/lib/dhcp/dhclient.leases" {
+		t.Fatalf("lease file query = %q", cc.cfg.Query)
+	}
+}
+
 func TestBuildSMBCheck(t *testing.T) {
 	// Anonymous (no user): builds, default port 445.
 	for _, typ := range []string{"smb", "samba", "cifs"} {
