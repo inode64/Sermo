@@ -3,11 +3,13 @@ package app
 import "strings"
 
 const (
-	TargetStateDisabled    = "disabled"
-	TargetStateRunning     = "running"
-	TargetStateStopped     = "stopped"
-	TargetStateMonitorized = "monitorized"
-	TargetStateFailed      = "failed"
+	TargetStateDisabled      = "disabled"
+	TargetStateRunning       = "running"
+	TargetStateStopped       = "stopped"
+	TargetStateOK            = "ok"
+	TargetStateMonitorized   = "monitorized"
+	TargetStateUnmonitorized = "unmonitorized"
+	TargetStateFailed        = "failed"
 )
 
 // ServiceState folds config, backend status and monitoring health into the
@@ -30,18 +32,19 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string) st
 }
 
 // WatchState folds config, monitor state and the last known watch error into the
-// same operator-facing state vocabulary used for services.
+// operator-facing state shown for host watches. Watches are not service-manager
+// units, so they do not have running/stopped states.
 func WatchState(enabled, monitored, failed bool) string {
 	if !enabled {
 		return TargetStateDisabled
 	}
 	if !monitored {
-		return TargetStateStopped
+		return TargetStateUnmonitorized
 	}
 	if failed {
 		return TargetStateFailed
 	}
-	return TargetStateMonitorized
+	return TargetStateOK
 }
 
 // WatchActivityFailed reports whether an event kind represents a failed watch
