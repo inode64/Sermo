@@ -89,6 +89,8 @@ type options struct {
 	// sla command flags
 	series bool          // emit the per-minute availability series instead of a summary
 	since  time.Duration // series lookback window (0 means the command's default)
+	// apps/libs/services flag
+	long bool // show the full raw version string instead of the short one
 }
 
 // service returns the first positional argument after the command.
@@ -1087,6 +1089,8 @@ func parseArgs(args []string) (options, error) {
 			opts.quiet = true
 		case arg == "--series":
 			opts.series = true
+		case arg == "--long":
+			opts.long = true
 		case strings.HasPrefix(arg, "--since="):
 			d, err := time.ParseDuration(strings.TrimPrefix(arg, "--since="))
 			if err != nil {
@@ -1197,7 +1201,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
 	fmt.Fprintln(w, "          diagnose | wizard [volume|net]")
-	fmt.Fprintln(w, "          apps [all] | libs [all] | services [all] | daemon list | daemon show DAEMON | service list | service show SERVICE")
+	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }

@@ -362,20 +362,29 @@ variables: { binary: "/usr/bin/python${n}" }
 
 `sermoctl apps` reports the applications described by daemons: which are
 installed (their binary is present and executable), the version their version
-command reports, and whether they resolve without error.
+command reports, and whether they resolve without error. The VERSION column
+shows the short version by default; add `--long` to show the full raw string.
 
 ```text
+APPLICATION   VERSION  STATUS
+Nginx         1.24.0   ok
+Python 3      3.11.2   ok
+Redis         -        error: /usr/bin/redis-server is not executable
+```
+
+```text
+$ sermoctl apps --long
 APPLICATION   VERSION                      STATUS
 Nginx         nginx version: nginx/1.24.0  ok
 Python 3      Python 3.11.2                ok
-Redis         -                            error: /usr/bin/redis-server is not executable
 ```
 
 Only installed applications are shown; `sermoctl apps all` also lists the rest as
-`not installed`. With version templates this lists each installed version as its
-own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` emits the structured
-`name`, `display_name`, `binary`, `version`, `version_short`, `installed`, `ok`
-and `status`.
+`not installed`. The same `--long` and `all` apply to `sermoctl libs` and
+`sermoctl services`. With version templates this lists each installed version as
+its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` is unaffected by
+`--long` — it always emits both, with the structured `name`, `display_name`,
+`binary`, `version`, `version_short`, `installed`, `ok` and `status`.
 
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
