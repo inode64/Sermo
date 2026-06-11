@@ -1,0 +1,8 @@
+kind: app
+name: avahi-daemon
+display_name: "Avahi"
+variables:
+  binary: "/usr/bin/avahi-daemon"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

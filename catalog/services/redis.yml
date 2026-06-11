@@ -7,6 +7,9 @@ service:
   systemd: [redis, redis-server]
   openrc: [redis]
 
+# Binary + version are owned by the `redis` app (same name) and linked here.
+apps: [redis]
+
 variables:
   binary: /usr/bin/redis-server
   cli: /usr/bin/redis-cli
@@ -20,10 +23,6 @@ commands:
     command: ["${binary}", "--version"]
 
 preflight:
-  binary:
-    type: binary
-    path: "${binary}"
-
   libraries:
     type: libraries
     binary: "${binary}"

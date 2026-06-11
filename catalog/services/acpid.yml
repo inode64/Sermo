@@ -2,11 +2,10 @@ kind: daemon
 name: acpid
 display_name: "ACPI Daemon"
 service: acpid
-variables:
-  binary: "/usr/bin/acpid"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
+
+# Binary + version are owned by the `acpid` app (same name, kind app) and linked
+# here, so they run in this service's preflight.
+apps: [acpid]
 
 checks:
   service: { type: service, expect: active }

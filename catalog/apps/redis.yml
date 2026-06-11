@@ -1,0 +1,8 @@
+kind: app
+name: redis
+display_name: "Redis"
+variables:
+  binary: /usr/bin/redis-server
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

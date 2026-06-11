@@ -1,0 +1,8 @@
+kind: app
+name: dhcpd
+display_name: "DHCP Server"
+variables:
+  binary: "/usr/bin/dhcpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

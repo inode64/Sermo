@@ -2,11 +2,7 @@ kind: daemon
 name: clamd
 display_name: "ClamAV Daemon"
 service: clamd
-variables:
-  binary: "/usr/bin/clamd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+apps: [clamd]
 
 checks:
   service: { type: service, expect: active }

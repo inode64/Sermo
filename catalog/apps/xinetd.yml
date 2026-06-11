@@ -1,0 +1,7 @@
+kind: app
+name: xinetd
+variables:
+  binary: "/usr/bin/xinetd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-version"], timeout: 10s }

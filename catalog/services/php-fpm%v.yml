@@ -7,6 +7,10 @@ service:
   systemd: ["php-fpm", "php${version}-fpm", "php-fpm${version}"]
   openrc: ["php-fpm", "php-fpm${version}"]
 
+# The PHP runtime is owned by the `php` app (active slot) and linked here, so its
+# binary + version checks run in this service's preflight.
+apps: [php]
+
 variables:
   binary: /usr/bin/php-fpm${version}
   user: www-data

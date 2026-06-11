@@ -137,8 +137,11 @@ func validateGlobal(cfg *Config) []Issue {
 
 func validateDocuments(cfg *Config) []Issue {
 	var issues []Issue
-	daemonCount := map[string]int{}
-	serviceCount := map[string]int{}
+	// Duplicate names are detected per kind, so a daemon and an app may share a
+	// name (e.g. the `apache` service and the `apache` app that owns its binary).
+	counts := map[string]map[string]int{
+		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindService: {},
+	}
 
 	for _, doc := range cfg.docs {
 		scope := documentScope(doc)
@@ -153,12 +156,12 @@ func validateDocuments(cfg *Config) []Issue {
 			}
 		}
 		switch doc.Kind {
-		case kindDaemon, kindService:
+		case kindDaemon, kindApp, kindLibrary, kindService:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon or service)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon, app, lib or service)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon or service)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon, app, lib or service)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -168,21 +171,14 @@ func validateDocuments(cfg *Config) []Issue {
 		if !validDocumentName(doc.Name) {
 			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("document name %q must be a simple name without path separators", doc.Name)})
 		}
-		if doc.Kind == kindDaemon {
-			daemonCount[doc.Name]++
-		} else {
-			serviceCount[doc.Name]++
-		}
+		counts[doc.Kind][doc.Name]++
 	}
 
-	for _, name := range slices.Sorted(maps.Keys(daemonCount)) {
-		if daemonCount[name] > 1 {
-			issues = append(issues, Issue{Scope: "daemon " + name, Msg: "duplicate daemon name"})
-		}
-	}
-	for _, name := range slices.Sorted(maps.Keys(serviceCount)) {
-		if serviceCount[name] > 1 {
-			issues = append(issues, Issue{Scope: "service " + name, Msg: "duplicate service name"})
+	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindService} {
+		for _, name := range slices.Sorted(maps.Keys(counts[kind])) {
+			if counts[kind][name] > 1 {
+				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})
+			}
 		}
 	}
 	return issues

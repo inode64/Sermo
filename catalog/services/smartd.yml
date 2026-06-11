@@ -3,11 +3,7 @@ name: smartd
 display_name: "S.M.A.R.T. Daemon"
 description: "Estado de los discos SMART"
 service: smartd
-variables:
-  binary: "/usr/bin/smartd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-q","onecheck"], timeout: 10s }
+apps: [smartd]
 
 checks:
   service: { type: service, expect: active }

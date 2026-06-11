@@ -1,4 +1,4 @@
-kind: daemon
+kind: app
 name: openssl
 display_name: "OpenSSL"
 description: "Full-strength general purpose cryptography library (including SSL and TLS)"

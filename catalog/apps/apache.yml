@@ -1,0 +1,8 @@
+kind: app
+name: apache
+display_name: "Apache HTTP Server"
+variables:
+  binary: /usr/bin/apache2
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["apachectl", "-v"], timeout: 10s }

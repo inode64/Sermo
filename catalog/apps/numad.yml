@@ -1,0 +1,8 @@
+kind: app
+name: numad
+display_name: "NUMA Daemon"
+variables:
+  binary: "/usr/bin/numad"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

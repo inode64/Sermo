@@ -3,12 +3,11 @@ name: cups-config
 display_name: "CUPS"
 description: "CUPSD"
 service: cups-config
+apps: [cups-config]
+
 variables:
   port: 631
-  binary: "/usr/bin/cups-config"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["/usr/bin/cupsd","-t"], timeout: 30s }
 
 checks:

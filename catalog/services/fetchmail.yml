@@ -2,11 +2,7 @@ kind: daemon
 name: fetchmail
 display_name: "Fetchmail"
 service: fetchmail
-variables:
-  binary: "/usr/bin/fetchmail"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+apps: [fetchmail]
 
 checks:
   service: { type: service, expect: active }

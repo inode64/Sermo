@@ -1,0 +1,8 @@
+kind: app
+name: memcached
+display_name: "Memcached"
+variables:
+  binary: "/usr/bin/memcached"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

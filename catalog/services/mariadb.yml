@@ -7,6 +7,9 @@ service:
   systemd: [mariadb, mysql]
   openrc: [mariadb, mysql]
 
+# Binary + version are owned by the `mariadb` app (same name) and linked here.
+apps: [mariadb]
+
 variables:
   binary: /usr/bin/mariadbd
   clientadmin: /usr/bin/mariadb-admin
@@ -20,10 +23,6 @@ commands:
     command: ["${binary}", "--version"]
 
 preflight:
-  binary:
-    type: binary
-    path: "${binary}"
-
   config:
     type: command
     command: ["${binary}", "--help", "--verbose"]

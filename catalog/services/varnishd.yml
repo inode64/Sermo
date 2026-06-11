@@ -3,12 +3,12 @@ name: varnishd
 display_name: "Varnish"
 description: "Varnish"
 service: varnishd
+apps: [varnishd]
+
 variables:
   port: 6082
   binary: "/usr/bin/varnishd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
   config: { type: command, command: ["${binary}","-C","-f","/etc/varnish/default.vcl"], timeout: 30s }
 
 checks:
