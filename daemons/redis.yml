@@ -54,6 +54,19 @@ checks:
     command: ["${cli}", "-h", "${host}", "-p", "${port}", "ping"]
     timeout: 3s
 
+  # Native RESP probe exposing role, replication, persistence and memory in its
+  # result data (assertable via expect). It asserts the last background save
+  # succeeded — reported "ok" even when persistence is disabled, so it never
+  # false-alarms. Not wired to a remediation rule: a failed save is surfaced for
+  # alerting, not fixed by a restart.
+  persistence:
+    type: redis
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+    expect:
+      rdb_last_bgsave_status: ok
+
 stop_policy:
   graceful_timeout: 30s
   term_timeout: 15s
