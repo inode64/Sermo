@@ -59,18 +59,11 @@ func (nutProtocol) RequiresUser() bool { return false }
 
 // Probe dials upsd and runs the handshake.
 func (nutProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 3493
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 3493)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return nutHandshake(c, cfg)
 }
 

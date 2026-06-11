@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 )
 
@@ -23,26 +22,11 @@ func (clamdProtocol) DefaultPort() int   { return 3310 }
 func (clamdProtocol) RequiresUser() bool { return false }
 
 func (clamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	var (
-		c   net.Conn
-		err error
-	)
-	if cfg.Socket != "" {
-		c, err = (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
-	} else {
-		port := cfg.Port
-		if port == 0 {
-			port = 3310
-		}
-		c, err = dialConn(ctx, cfg, port)
-	}
+	c, err := dialDeadline(ctx, cfg, 3310)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 
 	if _, err := io.WriteString(c, "nVERSION\n"); err != nil {
 		return Result{}, err

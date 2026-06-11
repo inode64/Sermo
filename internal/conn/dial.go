@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"net"
 	"strconv"
+	"time"
 )
 
 // dialConn opens a TCP connection to host:port, egressing through cfg.Interface
@@ -29,4 +30,41 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, "tcp", addr)
 	}
+}
+
+// applyDeadline sets the context deadline on a connection (net.Conn or
+// net.PacketConn — both satisfy the SetDeadline interface) when the context
+// carries one. A context without a deadline is a no-op. It centralizes the
+// "propagate the probe timeout to the socket" step every protocol repeats.
+func applyDeadline(ctx context.Context, c interface{ SetDeadline(time.Time) error }) {
+	if dl, ok := ctx.Deadline(); ok {
+		_ = c.SetDeadline(dl)
+	}
+}
+
+// dialDeadline opens the connection a probe needs and applies the context
+// deadline to it: cfg.Socket selects a Unix socket; otherwise it dials
+// host:port (port defaulting to defaultPort, with TLS/interface handled by
+// dialConn). The caller closes the returned connection. It folds the
+// port-default + dial + deadline prologue shared by the byte-protocol probes
+// into one call.
+func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, error) {
+	var (
+		c   net.Conn
+		err error
+	)
+	if cfg.Socket != "" {
+		c, err = (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
+	} else {
+		port := cfg.Port
+		if port == 0 {
+			port = defaultPort
+		}
+		c, err = dialConn(ctx, cfg, port)
+	}
+	if err != nil {
+		return nil, err
+	}
+	applyDeadline(ctx, c)
+	return c, nil
 }

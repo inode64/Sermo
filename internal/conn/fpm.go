@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 )
 
@@ -36,26 +35,11 @@ func (fpmProtocol) RequiresUser() bool { return false }
 // Probe dials the FPM socket (Unix when Socket is set, else TCP host:port) and
 // performs a FastCGI /ping.
 func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	var (
-		c   net.Conn
-		err error
-	)
-	if cfg.Socket != "" {
-		c, err = (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
-	} else {
-		port := cfg.Port
-		if port == 0 {
-			port = 9000
-		}
-		c, err = dialConn(ctx, cfg, port)
-	}
+	c, err := dialDeadline(ctx, cfg, 9000)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return fpmHandshake(c, "/ping")
 }
 

@@ -22,18 +22,11 @@ func (smtpProtocol) DefaultPort() int   { return 25 }
 func (smtpProtocol) RequiresUser() bool { return false }
 
 func (smtpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	port := cfg.Port
-	if port == 0 {
-		port = 25
-	}
-	c, err := dialConn(ctx, cfg, port)
+	c, err := dialDeadline(ctx, cfg, 25)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
 	return smtpHandshake(c, cfg)
 }
 
