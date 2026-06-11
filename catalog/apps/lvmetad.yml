@@ -1,8 +1,0 @@
-kind: app
-name: lvmetad
-display_name: "LVM Metadata Daemon"
-variables:
-  binary: "/usr/bin/lvmetad"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], expect_exit: 1, timeout: 10s }

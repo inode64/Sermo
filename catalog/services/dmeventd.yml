@@ -1,0 +1,7 @@
+kind: daemon
+name: dmeventd
+display_name: "Device-mapper event daemon"
+service: dmeventd
+apps: [dmeventd]
+checks:
+  service: { type: service, expect: active }
