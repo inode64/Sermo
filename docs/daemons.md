@@ -374,7 +374,31 @@ Redis         -                            error: /usr/bin/redis-server is not e
 Only installed applications are shown; `sermoctl apps all` also lists the rest as
 `not installed`. With version templates this lists each installed version as its
 own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` emits the structured
-`name`, `display_name`, `binary`, `version`, `installed`, `ok` and `status`.
+`name`, `display_name`, `binary`, `version`, `version_short`, `installed`, `ok`
+and `status`.
+
+`version` is the raw first line the version command prints (e.g. `nginx version:
+nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
+most the patchlevel (`1.30.2`), taking the first `major.minor[.patch]` token and
+dropping any further build components and suffixes (so `2.8.4.1-0+g…` becomes
+`2.8.4` and `4.2.8p18` becomes `4.2.8`). It is empty when the version line
+carries no recognizable number.
+
+A daemon may instead declare a dedicated `version_short` command (under
+`preflight` or `commands`, alongside `version`) that prints the bare version
+itself, sidestepping the regex when a tool can report it directly. Its first
+non-empty output line is then used verbatim. The packaged interpreter apps do
+this — e.g. PHP runs `php -r 'echo PHP_VERSION;'`, Python
+`python3 -c 'import platform;print(platform.python_version())'`, Node
+`node -p process.versions.node` — so their short version never depends on
+parsing. When no such command is configured (or it errors or prints nothing),
+`version_short` falls back to parsing the `version` line as above.
+
+```yaml
+preflight:
+  version:       { type: command, command: ["${binary}","-v"], timeout: 10s }
+  version_short: { type: command, command: ["${binary}","-r","echo PHP_VERSION;"], timeout: 10s }
+```
 
 A template may `uses` a base daemon to inherit its checks, processes and rules,
 overriding only the version-specific binary. The packaged `php-fpm-%v` builds on

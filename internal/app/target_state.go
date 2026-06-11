@@ -2,6 +2,8 @@ package app
 
 import "strings"
 
+// Operator-facing target states a service or watch can be reported in, as shown
+// by sermoctl and the web dashboard.
 const (
 	TargetStateDisabled      = "disabled"
 	TargetStateRunning       = "running"

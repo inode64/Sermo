@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -17,13 +18,14 @@ import (
 
 // appReport is one application's installed/version/health summary for `apps`.
 type appReport struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Binary      string `json:"binary"`
-	Version     string `json:"version"`
-	Installed   bool   `json:"installed"`
-	OK          bool   `json:"ok"`
-	Status      string `json:"status"`
+	Name         string `json:"name"`
+	DisplayName  string `json:"display_name"`
+	Binary       string `json:"binary"`
+	Version      string `json:"version"`
+	VersionShort string `json:"version_short"`
+	Installed    bool   `json:"installed"`
+	OK           bool   `json:"ok"`
+	Status       string `json:"status"`
 }
 
 // runApps lists the applications (daemons under daemons/apps): which are
@@ -99,7 +101,7 @@ func (a App) inspectApp(ctx context.Context, name string, resolved config.Resolv
 	}
 	r.Installed = true
 
-	vc := appVersionCommand(resolved.Tree)
+	vc := appVersionCommand(resolved.Tree, "version")
 	if len(vc.argv) == 0 {
 		r.OK = true
 		r.Status = "ok"
@@ -127,9 +129,30 @@ func (a App) inspectApp(ctx context.Context, name string, resolved config.Resolv
 			if r.Version == "" {
 				r.Version = firstNonEmptyLine(res.Stderr)
 			}
+			r.VersionShort = a.shortVersionFor(ctx, resolved.Tree, r.Version)
 		}
 	}
 	return r
+}
+
+// shortVersionFor resolves the app's short version. When the daemon configures a
+// `version_short` command that prints the bare version, its first non-empty
+// output line is trusted verbatim — no regex, sidestepping parsing ambiguity.
+// Otherwise (no such command, or it errors or prints nothing) it falls back to
+// parsing the raw version line with shortVersion.
+func (a App) shortVersionFor(ctx context.Context, tree map[string]any, rawVersion string) string {
+	if vc := appVersionCommand(tree, "version_short"); len(vc.argv) > 0 {
+		res, err := execx.Run(ctx, a.Runner, 5*time.Second, vc.argv[0], vc.argv[1:]...)
+		if err == nil || res.ExitCode != 0 {
+			if line := firstNonEmptyLine(res.Stdout); line != "" {
+				return line
+			}
+			if line := firstNonEmptyLine(res.Stderr); line != "" {
+				return line
+			}
+		}
+	}
+	return shortVersion(rawVersion)
 }
 
 func (a App) printApps(reports []appReport, empty string) {
@@ -174,16 +197,17 @@ type versionCommand struct {
 	stderr     checks.OutputMatcher
 }
 
-// appVersionCommand returns a daemon's version command and outcome expectations,
-// looked up in `preflight.version` then `commands.version`. argv is nil when no
-// version command is configured.
-func appVersionCommand(tree map[string]any) versionCommand {
+// appVersionCommand returns a daemon's version command and outcome expectations
+// for the named entry (`version` or `version_short`), looked up in
+// `preflight.<key>` then `commands.<key>`. argv is nil when no such command is
+// configured.
+func appVersionCommand(tree map[string]any, key string) versionCommand {
 	for _, src := range []string{"preflight", "commands"} {
 		section, ok := tree[src].(map[string]any)
 		if !ok {
 			continue
 		}
-		entry, ok := section["version"].(map[string]any)
+		entry, ok := section[key].(map[string]any)
 		if !ok {
 			continue
 		}
@@ -200,6 +224,22 @@ func appVersionCommand(tree map[string]any) versionCommand {
 		return vc
 	}
 	return versionCommand{}
+}
+
+// shortVersionRE matches the first dotted numeric version in a raw version line:
+// a `major.minor` with an optional `.patch`. By stopping at three components it
+// excludes any further build numbers (e.g. the `.1` in `2.8.4.1`) and trailing
+// suffixes (`p18`, `-P1`, `(2)`, `-MariaDB`), which keeps only the version and
+// at most the patchlevel. Requiring at least `major.minor` avoids latching onto
+// stray single digits (e.g. the `5` in perl's "perl 5, version 42 ... (v5.42.0)").
+var shortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
+
+// shortVersion reduces a raw version line (as captured in appReport.Version) to
+// just its numeric version, keeping at most three components
+// (major.minor.patch). It returns the first dotted numeric token found, or ""
+// when the line carries no recognizable version.
+func shortVersion(s string) string {
+	return shortVersionRE.FindString(s)
 }
 
 func firstNonEmptyLine(s string) string {
