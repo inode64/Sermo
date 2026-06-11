@@ -1,0 +1,8 @@
+kind: daemon
+name: lvmpolld
+display_name: "LVM poll daemon"
+service: lvmpolld
+apps: [lvmpolld]
+checks:
+  service: { type: service, expect: active }
+  lvmpolld: { type: lvmpolld, timeout: 3s }
