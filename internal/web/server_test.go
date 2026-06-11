@@ -12,6 +12,7 @@ import (
 
 type fakeBackend struct {
 	services        []Service
+	applications    []Application
 	operated        []string // "name/action"
 	monitored       map[string]bool
 	watchMonitored  map[string]bool
@@ -28,9 +29,12 @@ type fakeBackend struct {
 	releaseOK       bool
 }
 
-func (f *fakeBackend) Services(context.Context) []Service       { return f.services }
-func (f *fakeBackend) Watches(context.Context) []Watch          { return nil }
-func (f *fakeBackend) Notifiers(context.Context) []Notifier     { return nil }
+func (f *fakeBackend) Services(context.Context) []Service   { return f.services }
+func (f *fakeBackend) Watches(context.Context) []Watch      { return nil }
+func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
+func (f *fakeBackend) Applications(context.Context) []Application {
+	return f.applications
+}
 func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo    { return DaemonInfo{} }
 func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
 func (f *fakeBackend) Locks(context.Context) []Lock             { return nil }
@@ -253,6 +257,27 @@ func TestListServices(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "web" || !got[0].Monitored {
 		t.Fatalf("unexpected services: %+v", got)
+	}
+}
+
+func TestListApplications(t *testing.T) {
+	b := &fakeBackend{applications: []Application{{
+		Name: "nginx", DisplayName: "Nginx", Binary: "/usr/bin/nginx",
+		Permissions: "-rwxr-xr-x (0755)", Version: "nginx version: nginx/1.30.2",
+		VersionShort: "1.30.2", Status: "ok",
+	}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/applications", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var got []Application
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
+		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" {
+		t.Fatalf("unexpected applications: %+v", got)
 	}
 }
 

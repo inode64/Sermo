@@ -12,10 +12,12 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/diag"
+	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -654,6 +656,29 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 			Name:    n.name,
 			Type:    n.typ,
 			Enabled: n.enabled,
+		})
+	}
+	return out
+}
+
+// Applications returns the installed applications (catalog app daemons whose
+// binary is present) with their version and binary location, reusing the same
+// inspection the sermoctl `apps` listing uses so both surfaces agree.
+func (b *WebBackend) Applications(ctx context.Context) []web.Application {
+	reports := appinspect.List(ctx, execx.CommandRunner{}, b.cfg, config.CategoryApp, false)
+	if len(reports) == 0 {
+		return nil
+	}
+	out := make([]web.Application, 0, len(reports))
+	for _, r := range reports {
+		out = append(out, web.Application{
+			Name:         r.Name,
+			DisplayName:  r.DisplayName,
+			Binary:       r.Binary,
+			Permissions:  r.Permissions,
+			Version:      r.Version,
+			VersionShort: r.VersionShort,
+			Status:       r.Status,
 		})
 	}
 	return out

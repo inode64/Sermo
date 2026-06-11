@@ -53,6 +53,19 @@ type Service struct {
 	LastEvent        *Event   `json:"last_event,omitempty"`         // newest service event, when retained
 }
 
+// Application is a view of one installed application (a catalog app daemon) for
+// the dashboard: its name, version and where its binary lives. It mirrors the
+// sermoctl `apps` report so both surfaces agree.
+type Application struct {
+	Name         string `json:"name"`
+	DisplayName  string `json:"display_name"`
+	Binary       string `json:"binary"`                // resolved binary path (file location)
+	Permissions  string `json:"permissions,omitempty"` // binary mode, e.g. "-rwxr-xr-x (0755)"
+	Version      string `json:"version"`               // raw first line of the version command
+	VersionShort string `json:"version_short"`         // numeric version, at most the patchlevel
+	Status       string `json:"status"`                // ok, or an error description
+}
+
 // Watch is a view of a host watch for the dashboard (when services=0
 // the watches section is the main thing to show). Enriched with useful
 // runtime/config info for operators.
@@ -414,6 +427,9 @@ type Backend interface {
 	Watches(ctx context.Context) []Watch
 	// Notifiers returns the named notifiers configured for use by watches.
 	Notifiers(ctx context.Context) []Notifier
+	// Applications returns the installed applications (catalog app daemons whose
+	// binary is present), with their version and binary location.
+	Applications(ctx context.Context) []Application
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
 	// ConfigRender returns a fully resolved service config for operator review.
@@ -519,6 +535,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/watches", s.handleWatches)
 	mux.HandleFunc("POST /api/watches/{name}/{action}", s.handleWatchAction)
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
+	mux.HandleFunc("GET /api/applications", s.handleApplications)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/host", s.handleHost)
 	mux.HandleFunc("GET /api/locks", s.handleLocks)
@@ -749,6 +766,10 @@ func (s *Server) handleWatches(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Notifiers(r.Context()))
+}
+
+func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Applications(r.Context()))
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
