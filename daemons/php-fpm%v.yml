@@ -13,6 +13,7 @@ variables:
   host: 127.0.0.1
   port: 9000
   pidfile: /run/php/php-fpm${version}.pid
+  status_path: /status
 
 commands:
   version:
@@ -57,6 +58,17 @@ checks:
     type: tcp
     host: "${host}"
     port: "${port}"
+    timeout: 3s
+
+  # FastCGI /ping liveness plus pool metrics from the status page. Requires the
+  # pool to enable `ping.path = /ping` and `pm.status_path = ${status_path}`; the
+  # metrics (active/idle/total processes, listen queue, slow requests, …) land in
+  # the result data, assertable via expect:.
+  fpm:
+    type: fpm
+    host: "${host}"
+    port: "${port}"
+    status_path: "${status_path}"
     timeout: 3s
 
 stop_policy:

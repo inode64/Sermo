@@ -3,6 +3,7 @@ name: redis-server
 display_name: "Redis"
 service: redis-server
 variables:
+  host: 127.0.0.1
   port: 6379
   binary: "/usr/bin/redis-server"
 preflight:
@@ -11,3 +12,14 @@ preflight:
 
 checks:
   port: { type: tcp, port: "${port}" }
+
+  # Native RESP probe: PING liveness plus role, replication, persistence and
+  # memory in its result data. The expect asserts the last background save
+  # succeeded ("ok" even when persistence is off, so it never false-alarms).
+  health:
+    type: redis
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+    expect:
+      rdb_last_bgsave_status: ok

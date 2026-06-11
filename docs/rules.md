@@ -34,19 +34,19 @@ which reuse the same schema). MVP types:
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 | `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
 | `mysql` / `mariadb` | a connection to a MySQL/MariaDB server authenticates and responds (see Database) |
-| `mongodb` / `mongo` | a connection to a MongoDB server authenticates, pings and reports its version (see Database) |
+| `mongodb` / `mongo` | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
-| `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING (see Database) |
+| `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING; exposes role, replication, persistence and memory from INFO for `expect` (see Database) |
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
 | `nntp` / `nntps` | an NNTP server greets 200/201 (anonymous) and, with credentials, AUTHINFO USER/PASS succeeds (see Database) |
 | `ftp`         | an FTP server greets 220 (anonymous) and, with credentials, USER/PASS login succeeds (see Database) |
 | `ssh`         | an SSH server completes key exchange (anonymous: host key + banner); with credentials, login succeeds; `on_change` alerts on host-key change (see Database) |
-| `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong` (Unix socket or TCP, see Database) |
+| `fpm` / `php-fpm` | a PHP-FPM pool answers a FastCGI `/ping` with `pong`; an optional `status_path` exposes pool metrics for `expect` (Unix socket or TCP, see Database) |
 | `dns`         | a DNS server answers a query (NOERROR/NXDOMAIN) for `query` (see Database) |
-| `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15) (see Database) |
-| `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); `on_change` alerts on device-identity change (see Database) |
+| `ntp`         | an NTP server answers with a synchronized time (server mode, stratum 1–15); exposes leap, precision, root delay/dispersion and reference id for `expect` (see Database) |
+| `snmp`        | an SNMP agent answers a system GET (v2c community or v3 user/password); exposes sys name/contact/location/uptime for `expect`; `on_change` alerts on device-identity change (see Database) |
 | `tftp`        | a TFTP server answers an RRQ with a valid packet (DATA or ERROR) (see Database) |
 | `ldap`        | an LDAP directory accepts an anonymous bind, or a simple bind with credentials (see Database) |
 | `ajp`         | an AJP13 connector (e.g. Tomcat's 8009) answers a CPing with CPong (see Database) |
@@ -494,15 +494,22 @@ Protocols, in the order of the table above:
 - `mongodb` (alias `mongo`) — default port 27017; `tls` supported. `user` is
   **optional** (MongoDB may run without auth); with credentials it authenticates
   against `auth_source` (defaults to `database`, then `admin`). Connects, verifies
-  a `ping`, and reads the version via `buildInfo`. To run a query and compare a
-  result, see the **MongoDB query** check. Uses `go.mongodb.org/mongo-driver`.
+  a `ping`, and reads the version via `buildInfo`. A `hello` (with the legacy
+  `isMaster` as fallback) reports the replica-set `role`
+  (`primary`/`secondary`/`arbiter`/`standalone`), `set_name` and `read_only`, so
+  an `expect:` rule can assert e.g. `role == primary`. To run a query and compare
+  a result, see the **MongoDB query** check. Uses `go.mongodb.org/mongo-driver`.
 - `postgres` (alias `postgresql`) — default port 5432; `tls` supported, plus the
   PostgreSQL sslmodes (`disable`/`require`/`prefer`/`verify-ca`/`verify-full`).
   Uses `github.com/lib/pq`.
 - `redis` (alias `valkey`) — default port 6379; `tls` supported. `user` is
   **optional** (legacy `requirepass` uses a password only, or no auth at all); a
   password-only check sends `AUTH <password>`. Verifies `PING` → `PONG` over RESP
-  (no driver).
+  (no driver). A single `INFO` then reports the server `version` (pair with
+  `on_version_change`) plus health fields exposed for `expect:`: `role`,
+  `master_link_status` (replicas), `rdb_last_bgsave_status`,
+  `aof_last_write_status`, `loading`, `used_memory`, `maxmemory`,
+  `mem_fragmentation_ratio`, `connected_clients` and `uptime_seconds`.
 - `imap` — default port 143; `tls` supported (implicit TLS / IMAPS — use port
   993). `user` is **optional**: with no credentials it verifies the server greets
   `* OK`; with a user/password it performs an IMAP `LOGIN`. RFC 3501.
@@ -529,7 +536,12 @@ Protocols, in the order of the table above:
 - `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's Unix
   socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default 9000) for
   a TCP pool. No auth. Performs a FastCGI request to `/ping` and expects `pong`, so
-  the pool must have **`ping.path = /ping`** enabled.
+  the pool must have **`ping.path = /ping`** enabled. Set **`status_path`** (the
+  pool's `pm.status_path`) to additionally fetch the status page and expose pool
+  metrics for `expect:`: `pool`, `process_manager`, `active_processes`,
+  `idle_processes`, `total_processes`, `listen_queue`, `max_listen_queue`,
+  `max_active_processes`, `max_children_reached`, `slow_requests`,
+  `accepted_conn` and `uptime_seconds`.
 - `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query` (default
   `localhost`) and verifies the answer: `NOERROR`/`NXDOMAIN` pass (the server is up
   and speaking DNS); `SERVFAIL`, `REFUSED`, a timeout or a transport error fail.
@@ -538,15 +550,20 @@ Protocols, in the order of the table above:
 - `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies the
   server answers in **server mode** with a synchronized **stratum (1–15)**; a
   kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
-  data: `stratum` and the clock `offset_seconds`. RFC 5905.
+  data: `stratum`, the clock `offset_seconds`, the `leap` indicator
+  (`none`/`add-second`/`del-second`/`unsynchronized`), `precision_seconds`,
+  `root_delay_ms`, `root_dispersion_ms` and the `reference_id` (a stratum-1
+  refclock label such as `GPS`, or the upstream server's IP). So an `expect:`
+  rule can assert e.g. `leap == none` or a `root_dispersion_ms` ceiling. RFC 5905.
 - `snmp` — default port 161 (UDP). With **no `user`** it uses **SNMPv2c** with a
   community string (`password`, default `public` — the anonymous/shared-secret
   model). With a **`user`** it uses **SNMPv3 USM**: a `password` adds SHA
-  authentication (authNoPriv), otherwise noAuthNoPriv. It reads the system
-  description and object id; result data carries `sys_object_id`, `snmp_version`
-  and the description (as the version banner). Set **`on_change: true`** (on a host
-  watch) to alert when `sysObjectID` (the device identity — model/firmware)
-  changes. Uses `github.com/gosnmp/gosnmp`.
+  authentication (authNoPriv), otherwise noAuthNoPriv. It reads the system group;
+  result data carries `sys_object_id`, `snmp_version`, the description (as the
+  version banner) and — when the agent exposes them — `sys_name`, `sys_contact`,
+  `sys_location` and `sys_uptime_seconds` (assertable via `expect:`). Set
+  **`on_change: true`** (on a host watch) to alert when `sysObjectID` (the device
+  identity — model/firmware) changes. Uses `github.com/gosnmp/gosnmp`.
 - `tftp` — default port 69 (UDP). No auth. Sends a read request (RRQ) for `query`
   (default `sermo-tftp-check`) and verifies a valid TFTP packet: a `DATA` reply
   (the file is served) or an `ERROR` reply (e.g. file not found) both pass. Result
