@@ -1,0 +1,25 @@
+kind: daemon
+name: mongod
+display_name: "MongoDB"
+description: "Mongo DB"
+service: mongod
+variables:
+  host: 127.0.0.1
+  port: 27017
+  binary: "/usr/bin/mongod"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}" }
+
+  # Native probe: connects, pings and (via hello/isMaster) exposes the
+  # replica-set role, set_name and read_only flag in its result data — assertable
+  # via expect:, e.g. `role: primary` on the node that must accept writes.
+  mongodb:
+    type: mongodb
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

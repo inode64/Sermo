@@ -41,7 +41,7 @@ func run(args []string) int {
 	parsed, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "usage error: %v\n", err)
-		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--daemons DIR ...] [--verbose|-v]")
+		fmt.Fprintln(os.Stderr, "usage: sermod run [--config /etc/sermo/sermo.yml] [--catalog DIR ...] [--verbose|-v]")
 		fmt.Fprintln(os.Stderr, "       sermod version")
 		return 64
 	}
@@ -71,9 +71,9 @@ func run(args []string) int {
 	}
 
 	var loadOpts []config.Option
-	if len(parsed.daemons) > 0 {
-		loadOpts = append(loadOpts, config.WithDaemonDirs(parsed.daemons...))
-		logger.Debug("overriding daemon directories", "daemons", parsed.daemons)
+	if len(parsed.catalog) > 0 {
+		loadOpts = append(loadOpts, config.WithCatalogDirs(parsed.catalog...))
+		logger.Debug("overriding catalog directories", "catalog", parsed.catalog)
 	}
 	cfg, err := config.Load(globalPath, loadOpts...)
 	if err != nil {
@@ -272,7 +272,7 @@ func run(args []string) int {
 		StartupDelay: startupDelay,
 	}, readiness, collector, webHolder)
 	monitor.ConfigPath = globalPath
-	monitor.DaemonDirs = parsed.daemons
+	monitor.CatalogDirs = parsed.catalog
 	monitor.Logger = logger
 	monitor.Init(workers, watches)
 
@@ -294,9 +294,9 @@ type cliArgs struct {
 	command    string
 	globalPath string
 	verbose    bool
-	// daemons overrides paths.daemons from the global config. Repeatable;
-	// each --daemons adds a directory. Empty means use the config as-is.
-	daemons []string
+	// catalog overrides paths.catalog from the global config. Repeatable;
+	// each --catalog adds a directory. Empty means use the config as-is.
+	catalog []string
 }
 
 func parseArgs(args []string) (cliArgs, error) {
@@ -312,22 +312,14 @@ func parseArgs(args []string) (cliArgs, error) {
 				return cliArgs{}, fmt.Errorf("--config requires a value")
 			}
 			parsed.globalPath = args[i]
-		case strings.HasPrefix(arg, "--daemons="):
-			parsed.daemons = append(parsed.daemons, strings.TrimPrefix(arg, "--daemons="))
-		case arg == "--daemons":
+		case strings.HasPrefix(arg, "--catalog="):
+			parsed.catalog = append(parsed.catalog, strings.TrimPrefix(arg, "--catalog="))
+		case arg == "--catalog":
 			i++
 			if i >= len(args) {
-				return cliArgs{}, fmt.Errorf("--daemons requires a value")
+				return cliArgs{}, fmt.Errorf("--catalog requires a value")
 			}
-			parsed.daemons = append(parsed.daemons, args[i])
-		case strings.HasPrefix(arg, "--profiles="):
-			parsed.daemons = append(parsed.daemons, strings.TrimPrefix(arg, "--profiles="))
-		case arg == "--profiles":
-			i++
-			if i >= len(args) {
-				return cliArgs{}, fmt.Errorf("--profiles requires a value")
-			}
-			parsed.daemons = append(parsed.daemons, args[i])
+			parsed.catalog = append(parsed.catalog, args[i])
 		case arg == "--verbose" || arg == "-v":
 			parsed.verbose = true
 		case strings.HasPrefix(arg, "-"):

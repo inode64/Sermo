@@ -28,13 +28,13 @@ INSTALL ?= install
 # Render the init/unit files for the chosen paths: rewrite the binary and config
 # locations baked into the packaging templates.
 unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
-# Rewrite the daemon/config paths in the sample config to the chosen dirs.
-config_subst = sed -e 's|\.\./daemons|$(SERMO_DATADIR)/daemons|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
+# Rewrite the catalog/config paths in the sample config to the chosen dirs.
+config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
 # Rewrite the state dir in the tmpfiles config (runtime /run/sermo is fixed).
 tmpfiles_subst = sed -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
-        install install-bin install-daemons install-profiles install-config install-tmpfiles install-systemd install-openrc \
+        install install-bin install-catalog install-config install-tmpfiles install-systemd install-openrc \
         uninstall
 
 all: build
@@ -82,29 +82,26 @@ clean:
 	rm -rf $(BIN)
 	rm -f coverage.out coverage.html
 
-# Full install: binaries, daemon definitions, sample config, tmpfiles.d, and both init
+# Full install: binaries, the catalog, sample config, tmpfiles.d, and both init
 # systems. The persistent state directory is intentionally not created here;
 # tmpfiles.d creates it with the same policy as the runtime directory.
-install: install-bin install-daemons install-config install-tmpfiles install-systemd install-openrc
+install: install-bin install-catalog install-config install-tmpfiles install-systemd install-openrc
 
 install-bin: build
 	$(INSTALL) -Dm755 $(BIN)/sermoctl $(DESTDIR)$(bindir)/sermoctl
 	$(INSTALL) -Dm755 $(BIN)/sermod $(DESTDIR)$(sbindir)/sermod
 
-# Install every daemon definition preserving the services/apps/libs subdirectory layout.
-install-daemons:
-	@set -e; find daemons -type f -name '*.yml' | sed 's|^daemons/||' | while read -r f; do \
-		echo "  install daemons/$$f"; \
-		$(INSTALL) -Dm644 "daemons/$$f" "$(DESTDIR)$(SERMO_DATADIR)/daemons/$$f"; \
+# Install the whole catalog preserving the services/apps/libs subdirectory layout.
+install-catalog:
+	@set -e; find catalog -type f -name '*.yml' | sed 's|^catalog/||' | while read -r f; do \
+		echo "  install catalog/$$f"; \
+		$(INSTALL) -Dm644 "catalog/$$f" "$(DESTDIR)$(SERMO_DATADIR)/catalog/$$f"; \
 	done
-
-# Legacy target name.
-install-profiles: install-daemons
 
 # Install the global config (kept if one already exists) and create the
 # available/included service directories.
 install-config:
-	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/daemons-available $(DESTDIR)$(SERMO_CONFDIR)/apps-enabled
+	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/apps-enabled
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \
@@ -134,6 +131,6 @@ uninstall:
 	rm -f $(DESTDIR)$(bindir)/sermoctl $(DESTDIR)$(sbindir)/sermod
 	rm -f $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service $(DESTDIR)$(OPENRC_INITDIR)/sermod
 	rm -f $(DESTDIR)$(TMPFILESDIR)/sermo.conf
-	rm -rf $(DESTDIR)$(SERMO_DATADIR)/daemons
+	rm -rf $(DESTDIR)$(SERMO_DATADIR)/catalog
 	@echo "left $(DESTDIR)$(SERMO_CONFDIR) (config) in place"
 	@echo "left $(DESTDIR)$(SERMO_STATEDIR) (state database) in place"

@@ -27,7 +27,7 @@ func TestMonitorReloadPreservesWorkerState(t *testing.T) {
 	baseCfg := fmt.Sprintf(`engine:
   interval: 100ms
 paths:
-  daemons: [%[1]q]
+  catalog: [%[1]q]
   includes: [%[2]q]
   runtime: %[3]q
 defaults:
@@ -129,7 +129,7 @@ func TestMonitorReloadRejectsInvalidConfig(t *testing.T) {
 	valid := fmt.Sprintf(`engine:
   interval: 100ms
 paths:
-  daemons: [%q]
+  catalog: [%q]
   includes: [%q]
   runtime: %q
 defaults:
@@ -171,7 +171,7 @@ checks:
 	invalid := fmt.Sprintf(`engine:
   interval: notaduration
 paths:
-  daemons: [%q]
+  catalog: [%q]
   includes: [%q]
   runtime: %q
 defaults:

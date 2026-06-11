@@ -14,16 +14,16 @@ checks:
     url: "http://${host}:${port}${health_path}"
 ```
 
-The packaged daemons (`daemons/`) cover apache, mysql, mariadb, redis and
+The packaged catalog (`catalog/`) covers apache, mysql, mariadb, redis and
 php-fpm. They define variables, preflight, processes, checks, stop_policy and
 rules so a service usually only sets a few overrides.
 
 ## Categories
 
-Daemons are grouped by the subdirectory they live in under a daemons root:
+Daemons are grouped by the subdirectory they live in under a catalog root:
 
 ```
-daemons/
+catalog/
   services/   # daemon-managed long-running services (apache, nginx, mariadb, ...)
   apps/       # installed tools/runtimes (java, perl, sqlite, go, git, ...)
   libs/       # shared libraries used as restart triggers (glibc, pam)

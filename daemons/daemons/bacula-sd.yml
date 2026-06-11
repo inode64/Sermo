@@ -1,0 +1,25 @@
+kind: daemon
+name: bacula-sd
+display_name: "Bacula Storage Daemon"
+description: "Backup storage Server"
+service: bacula-sd
+variables:
+  port: 9103
+  binary: "/usr/bin/bacula-sd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }
+  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}" }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"

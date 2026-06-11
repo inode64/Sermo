@@ -1,0 +1,74 @@
+kind: daemon
+name: cloudflared
+display_name: "Cloudflare Tunnel"
+description: "Cloudflare Tunnel daemon (cloudflared)"
+type: tunnel
+
+service:
+  systemd: [cloudflared]
+  openrc: [cloudflared]
+
+variables:
+  binary: /usr/bin/cloudflared
+  user: cloudflared
+  host: 127.0.0.1
+  port: 60123
+
+commands:
+  version:
+    command: ["${binary}", "--version"]
+    timeout: 10s
+
+preflight:
+  binary:
+    type: binary
+    path: "${binary}"
+
+processes:
+  main:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  protocol:
+    type: cloudflared
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+
+stop_policy:
+  graceful_timeout: 30s
+  term_timeout: 15s
+  force_kill: false
+  kill_only_if:
+    users: ["${user}"]
+    exe_any:
+      - "${binary}"
+
+rules:
+  restart-if-inactive:
+    type: remediation
+    if:
+      failed:
+        check: service
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
+
+  restart-if-protocol-failed:
+    type: remediation
+    if:
+      failed:
+        check: protocol
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart

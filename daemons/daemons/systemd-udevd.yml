@@ -1,0 +1,13 @@
+kind: daemon
+name: systemd-udevd
+service: systemd-udevd
+variables:
+  binary:
+    - "/lib/systemd/systemd-udevd"
+    - "/usr/lib/systemd/systemd-udevd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }

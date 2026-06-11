@@ -13,7 +13,7 @@ func TestDiagnoseReportsFindings(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 engine: { backend: auto, interval: 30s }
 paths:
-  daemons: [ `+root+`/daemons ]
+  catalog: [ `+root+`/daemons ]
   includes: [ `+root+`/enabled ]
   state: `+root+`/state
 defaults: { policy: { cooldown: 5m } }

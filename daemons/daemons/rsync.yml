@@ -1,0 +1,13 @@
+kind: daemon
+name: rsync
+service: rsync
+variables:
+  port: 873
+  binary: "/usr/bin/rsync"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}" }

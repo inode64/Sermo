@@ -106,11 +106,6 @@ func daemonBinary(body map[string]any) string {
 	return ""
 }
 
-// profileBinary is the legacy name for daemonBinary.
-func profileBinary(body map[string]any) string {
-	return daemonBinary(body)
-}
-
 // discoverVersions globs the discovery path with the token's `${...}` replaced by
 // a filesystem wildcard and extracts the value that filled it from each match.
 // Values are de-duplicated and sorted for stable ordering.
@@ -191,13 +186,6 @@ func (c *Config) dropDaemon(name string) {
 		}
 	}
 	c.DaemonNames = keptDaemons
-	keptProfiles := make([]string, 0, len(c.ProfileNames))
-	for _, n := range c.ProfileNames {
-		if n != name {
-			keptProfiles = append(keptProfiles, n)
-		}
-	}
-	c.ProfileNames = keptProfiles
 	docs := make([]*Document, 0, len(c.docs))
 	for _, d := range c.docs {
 		if d.Kind == kindDaemon && d.Name == name {
