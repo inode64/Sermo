@@ -42,6 +42,21 @@ checks:
 	}
 }
 
+func TestValidateCloudflaredCheckValid(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: tunnel
+service: { name: cloudflared }
+checks:
+  protocol: { type: cloudflared, host: 127.0.0.1, port: 60123, tls: false }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.protocol") {
+			t.Fatalf("a valid cloudflared check must produce no issue: %v", issues)
+		}
+	}
+}
+
 func TestValidateMySQLCheckBadTLS(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
