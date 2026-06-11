@@ -1,0 +1,8 @@
+kind: app
+name: bareos-fd
+display_name: "Bareos File Daemon"
+variables:
+  binary: "/usr/bin/bareos-fd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

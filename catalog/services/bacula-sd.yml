@@ -3,12 +3,12 @@ name: bacula-sd
 display_name: "Bacula Storage Daemon"
 description: "Backup storage Server"
 service: bacula-sd
+apps: [bacula-sd]
+
 variables:
   port: 9103
   binary: "/usr/bin/bacula-sd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
 
 checks:

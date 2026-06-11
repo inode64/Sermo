@@ -1,11 +1,7 @@
 kind: daemon
 name: mdadm
 service: mdadm
-variables:
-  binary: "/usr/bin/mdadm"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+apps: [mdadm]
 
 checks:
   service: { type: service, expect: active }

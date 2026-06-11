@@ -71,6 +71,37 @@ The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per
 upgrade rather than every cycle. Referenced names must be `library` daemons.
 
+## App dependencies (`apps`)
+
+A service often runs on top of one or more **apps** — the runtimes/tools in
+`catalog/apps` (java, openssl, perl, …). An app owns the **binary** and
+**version** checks for that tool; it is the single source of truth, shared by
+every service that uses it. A service (or daemon definition) links the apps it
+needs with `apps:` — a list, since a service may depend on several:
+
+```yaml
+# catalog/services/tomcat-%v.yml — Tomcat runs on the JVM
+apps: [java]
+```
+
+On resolution each linked app's preflight checks are injected into the service's
+preflight under namespaced keys (`app-<name>-<check>`), carrying the app's own
+binary path and version command:
+
+```yaml
+preflight:
+  app-java-binary:  { type: binary, path: /usr/bin/java }
+  app-java-version: { type: command, command: ["/usr/bin/java", "-version"] }
+```
+
+Because they run in **preflight**, a missing or wrong-version runtime fails the
+service's preflight, which **blocks start/restart** (a preflight-failed operation
+never executes the action) — you do not start a service whose runtime is absent.
+The link is many-to-many: a service lists several apps, and one app is shared by
+every service that lists it. The service keeps its own `binary`, `version` and
+`config` checks (the **config** test is always service-specific, never moved to
+an app). Referenced names must be `app` daemons.
+
 ## Metadata fields
 
 A daemon or service may carry two optional human-facing strings:

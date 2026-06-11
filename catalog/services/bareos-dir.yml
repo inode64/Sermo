@@ -3,12 +3,12 @@ name: bareos-dir
 display_name: "Bareos Director"
 description: "Backup director Server"
 service: bareos-dir
+apps: [bareos-dir]
+
 variables:
   port: 9101
   binary: "/usr/bin/bareos-dir"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
 
 checks:

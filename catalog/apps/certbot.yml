@@ -1,4 +1,4 @@
-kind: daemon
+kind: app
 name: certbot
 display_name: "Certbot"
 description: "Generador de certificados"

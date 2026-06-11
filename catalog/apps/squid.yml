@@ -1,0 +1,8 @@
+kind: app
+name: squid
+display_name: "Squid"
+variables:
+  binary: "/usr/bin/squid"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-v"], timeout: 10s }

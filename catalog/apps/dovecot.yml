@@ -1,0 +1,8 @@
+kind: app
+name: dovecot
+display_name: "Dovecot"
+variables:
+  binary: "/usr/bin/dovecot"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

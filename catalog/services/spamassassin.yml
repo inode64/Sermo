@@ -3,12 +3,16 @@ name: spamassassin
 display_name: "SpamAssassin"
 description: "Antispam"
 service: spamassassin
+
+# SpamAssassin is a Perl application: the Perl runtime is owned by the `perl`
+# app and linked here, so its binary + version checks run in this service's
+# preflight (a missing Perl blocks start).
+apps: [perl, spamassassin]
+
 variables:
   port: 783
   binary: "/usr/bin/spamassassin"
 preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   config: { type: command, command: ["${binary}","--lint"], timeout: 30s }
 
 checks:

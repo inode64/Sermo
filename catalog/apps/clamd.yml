@@ -1,0 +1,8 @@
+kind: app
+name: clamd
+display_name: "ClamAV Daemon"
+variables:
+  binary: "/usr/bin/clamd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -2,11 +2,7 @@ kind: daemon
 name: fcron
 display_name: "Fcron"
 service: fcron
-variables:
-  binary: "/usr/libexec/fcron"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+apps: [fcron]
 
 checks:
   service: { type: service, expect: active }

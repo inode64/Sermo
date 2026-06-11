@@ -3,12 +3,10 @@ name: ntpd
 display_name: "NTP Daemon"
 description: "Network Time Protocol Daemon"
 service: ntpd
+apps: [ntpd]
+
 variables:
   port: 123
-  binary: "/usr/bin/ntpd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }

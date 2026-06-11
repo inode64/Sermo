@@ -57,7 +57,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 
 	var reports []appReport
 	for _, name := range cfg.DaemonsInCategory(category) {
-		resolved, _ := cfg.ResolveDaemon(name)
+		resolved, _ := cfg.ResolveCatalog(category, name)
 		r := a.inspectApp(ctx, name, resolved)
 		if !r.Installed && !includeMissing {
 			continue

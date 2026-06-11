@@ -3,15 +3,13 @@ name: dhclient
 display_name: "DHCP Client"
 description: "Cliente DHCP"
 service: dhclient
+apps: [dhclient]
+
 variables:
-  binary: "/usr/bin/dhclient"
   host: 0.0.0.0
   port: 68
   interface: ""
   lease_file: "/var/lib/dhcp/dhclient.leases"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }

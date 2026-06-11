@@ -1,0 +1,8 @@
+kind: app
+name: mysql
+display_name: "MySQL"
+variables:
+  binary: /usr/bin/mysqld
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

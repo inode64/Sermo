@@ -1,0 +1,8 @@
+kind: app
+name: mariadb
+display_name: "MariaDB"
+variables:
+  binary: /usr/bin/mariadbd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

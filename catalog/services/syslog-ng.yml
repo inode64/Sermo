@@ -1,11 +1,7 @@
 kind: daemon
 name: syslog-ng
 service: syslog-ng
-variables:
-  binary: "/usr/bin/syslog-ng"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+apps: [syslog-ng]
 
 checks:
   service: { type: service, expect: active }

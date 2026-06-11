@@ -2,11 +2,7 @@ kind: daemon
 name: apcsmart
 display_name: "APC Smart UPS Driver"
 service: apcsmart
-variables:
-  binary: "/lib/nut/apcsmart"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+apps: [apcsmart]
 
 checks:
   service: { type: service, expect: active }

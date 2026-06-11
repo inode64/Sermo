@@ -7,6 +7,9 @@ service:
   systemd: [mysql, mysqld]
   openrc: [mysql, mysqld]
 
+# Binary + version are owned by the `mysql` app (same name) and linked here.
+apps: [mysql]
+
 variables:
   binary: /usr/bin/mysqld
   clientadmin: /usr/bin/mysqladmin
@@ -20,10 +23,6 @@ commands:
     command: ["${binary}", "--version"]
 
 preflight:
-  binary:
-    type: binary
-    path: "${binary}"
-
   config:
     type: command
     command: ["${binary}", "--validate-config"]

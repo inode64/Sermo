@@ -1,0 +1,8 @@
+kind: app
+name: ssh
+display_name: "OpenSSH"
+variables:
+  binary: "/usr/bin/sshd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }

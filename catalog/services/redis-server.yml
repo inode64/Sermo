@@ -2,13 +2,11 @@ kind: daemon
 name: redis-server
 display_name: "Redis"
 service: redis-server
+apps: [redis-server]
+
 variables:
   host: 127.0.0.1
   port: 6379
-  binary: "/usr/bin/redis-server"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }

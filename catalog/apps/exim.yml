@@ -1,0 +1,8 @@
+kind: app
+name: exim
+display_name: "Exim"
+variables:
+  binary: "/usr/bin/exim"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

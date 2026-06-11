@@ -48,11 +48,12 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		global.Catalog = absCatalogDirs(o.catalogDirs)
 	}
 
-	daemons := map[string]*Document{}
 	cfg := &Config{
-		Global:   global,
-		Daemons:  daemons,
-		Services: map[string]*Document{},
+		Global:    global,
+		Daemons:   map[string]*Document{},
+		Apps:      map[string]*Document{},
+		Libraries: map[string]*Document{},
+		Services:  map[string]*Document{},
 	}
 
 	catalogDirs := global.Catalog
@@ -218,6 +219,12 @@ func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool
 			}
 		}
 		doc.Category = effectiveCategory(category)
+		// Catalog definitions take their kind from the subdirectory (daemon/app/
+		// lib), so each lives in its own registry; included documents keep their
+		// declared kind (service instances).
+		if !allowGlobalFragments {
+			doc.Kind = kindForCategory(doc.Category)
+		}
 		c.add(doc)
 	}
 	for _, name := range subdirs {
@@ -295,32 +302,51 @@ func loadDocument(path string) (*Document, error) {
 // indexing; duplicate-name detection is reported by validation, which sees the
 // later document's path.
 func (c *Config) add(doc *Document) {
+	index := func(m map[string]*Document, names *[]string) {
+		if _, exists := m[doc.Name]; !exists && doc.Name != "" {
+			m[doc.Name] = doc
+		}
+		*names = append(*names, doc.Name)
+	}
 	switch doc.Kind {
 	case kindDaemon:
-		if _, exists := c.Daemons[doc.Name]; !exists && doc.Name != "" {
-			c.Daemons[doc.Name] = doc
-		}
-		c.DaemonNames = append(c.DaemonNames, doc.Name)
+		index(c.Daemons, &c.DaemonNames)
+	case kindApp:
+		index(c.Apps, &c.AppNames)
+	case kindLibrary:
+		index(c.Libraries, &c.LibraryNames)
 	case kindService:
-		if _, exists := c.Services[doc.Name]; !exists && doc.Name != "" {
-			c.Services[doc.Name] = doc
-		}
-		c.ServiceNames = append(c.ServiceNames, doc.Name)
+		index(c.Services, &c.ServiceNames)
 	}
 	c.docs = append(c.docs, doc)
 }
 
-// DaemonsInCategory returns the names of daemons in a category (service | app |
-// library), sorted, for category-scoped listings such as `apps` and `libs`.
+// DaemonsInCategory returns the names of catalog definitions in a category
+// (service | app | library), sorted, for category-scoped listings such as
+// `apps` and `libs`.
 func (c *Config) DaemonsInCategory(category string) []string {
 	var names []string
-	for _, name := range c.DaemonNames {
-		if doc, ok := c.Daemons[name]; ok && doc.Category == category {
-			names = append(names, name)
-		}
+	switch category {
+	case CategoryApp:
+		names = append(names, c.AppNames...)
+	case CategoryLibrary:
+		names = append(names, c.LibraryNames...)
+	default:
+		names = append(names, c.DaemonNames...)
 	}
 	sort.Strings(names)
-	return names
+	return uniqueStrings(names)
+}
+
+// uniqueStrings returns the sorted input with adjacent duplicates removed.
+func uniqueStrings(sorted []string) []string {
+	out := sorted[:0]
+	for i, s := range sorted {
+		if i == 0 || sorted[i-1] != s {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // DisplayName returns the human-friendly `display_name` from a document body

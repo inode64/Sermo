@@ -1,4 +1,4 @@
-kind: daemon
+kind: app
 name: mail
 display_name: "Mail"
 variables:

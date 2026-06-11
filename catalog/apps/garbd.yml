@@ -1,0 +1,8 @@
+kind: app
+name: garbd
+display_name: "Galera Arbitrator"
+variables:
+  binary: "/usr/bin/garbd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-v"], timeout: 10s }

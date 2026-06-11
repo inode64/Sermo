@@ -28,6 +28,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
+	errs = append(errs, c.expandApps(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
 }
@@ -95,9 +96,9 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 		libraries = map[string]any{}
 	}
 	for _, lib := range cfgval.StringList(roc["libraries"]) {
-		doc, ok := c.Daemons[lib]
-		if !ok || doc.Category != CategoryLibrary {
-			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library daemon", lib))
+		doc, ok := c.Libraries[lib]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", lib))
 			continue
 		}
 		path := daemonBinary(doc.Body)
@@ -117,6 +118,50 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	return errs
 }
 
+// expandApps links a service (or service daemon) to one or more apps from the
+// catalog via `apps: [name, …]`. Each named app contributes its preflight
+// binary+version checks to this service under namespaced keys
+// (`app-<name>-<check>`), so a missing or wrong-version runtime fails the
+// service's preflight — which blocks start/restart. The app definition is the
+// single source of truth for the tool's binary path and version command, shared
+// across every service that lists it (many-to-many). The `apps` key is consumed
+// here. App preflight entries are already variable-expanded by ResolveDaemon, so
+// they carry concrete paths regardless of this service's own variables.
+func (c *Config) expandApps(tree map[string]any) []string {
+	_, present := tree["apps"]
+	names := cfgval.StringList(tree["apps"])
+	delete(tree, "apps")
+	if !present {
+		return nil
+	}
+
+	var errs []string
+	preflight, _ := tree["preflight"].(map[string]any)
+	if preflight == nil {
+		preflight = map[string]any{}
+	}
+	for _, name := range names {
+		doc, ok := c.Apps[name]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("apps references %q, which is not an app", name))
+			continue
+		}
+		resolved, rerrs := c.resolveDoc(doc, name)
+		if len(rerrs) > 0 {
+			errs = append(errs, rerrs...)
+			continue
+		}
+		appPre, _ := resolved.Tree["preflight"].(map[string]any)
+		for checkName, check := range appPre {
+			preflight[fmt.Sprintf("app-%s-%s", name, checkName)] = check
+		}
+	}
+	if len(preflight) > 0 {
+		tree["preflight"] = preflight
+	}
+	return errs
+}
+
 // ResolveDaemon expands a daemon's own body — no service merge — so its
 // concrete values (notably the binary path and preflight commands) can be
 // inspected directly, as the `apps` command does. ${name} and ${display_name}
@@ -126,12 +171,45 @@ func (c *Config) ResolveDaemon(name string) (Resolved, []string) {
 	if !ok {
 		return Resolved{Name: name}, []string{fmt.Sprintf("unknown daemon %q", name)}
 	}
+	return c.resolveDoc(doc, name)
+}
+
+// catalogRegistry returns the registry that holds a given category's
+// definitions (apps, libraries, else the daemon/service definitions).
+func (c *Config) catalogRegistry(category string) map[string]*Document {
+	switch category {
+	case CategoryApp:
+		return c.Apps
+	case CategoryLibrary:
+		return c.Libraries
+	default:
+		return c.Daemons
+	}
+}
+
+// ResolveCatalog expands a catalog definition from the registry for its category
+// (service | app | library). It lets category-scoped listings (`apps`, `libs`,
+// `services`) resolve a name in its own registry, since names may repeat across
+// kinds.
+func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
+	doc, ok := c.catalogRegistry(category)[name]
+	if !ok {
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown %s %q", category, name)}
+	}
+	return c.resolveDoc(doc, name)
+}
+
+// resolveDoc expands a single catalog document's own body (no service merge),
+// shared by ResolveDaemon and the `apps` linkage (which resolves app documents).
+func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
 	vars := collectVariables(body)
 	errs := validateVariableValues(vars)
 	injectBuiltinVariables(vars, name, body)
 	expanded, expErrs := expandTree(body, vars)
-	return Resolved{Name: name, Tree: expanded}, append(errs, expErrs...)
+	errs = append(errs, expErrs...)
+	errs = append(errs, c.expandApps(expanded)...)
+	return Resolved{Name: name, Tree: expanded}, errs
 }
 
 // mergedService returns the merged-but-unexpanded body for a service, following

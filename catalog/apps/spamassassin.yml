@@ -1,0 +1,8 @@
+kind: app
+name: spamassassin
+display_name: "SpamAssassin"
+variables:
+  binary: "/usr/bin/spamassassin"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -1,0 +1,8 @@
+kind: app
+name: fail2ban-server
+display_name: "Fail2ban"
+variables:
+  binary: "/usr/bin/fail2ban-server"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }

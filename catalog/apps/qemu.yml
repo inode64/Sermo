@@ -1,4 +1,4 @@
-kind: daemon
+kind: app
 name: qemu
 display_name: "QEMU"
 variables:

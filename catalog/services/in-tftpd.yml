@@ -3,12 +3,10 @@ name: in.tftpd
 display_name: "TFTP Server"
 description: "In.tftpd"
 service: in-tftpd
+apps: [in.tftpd]
+
 variables:
   port: 69
-  binary: "/usr/bin/in.tftpd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }
