@@ -59,6 +59,26 @@ func (a App) runWizard(_ context.Context, opts options) int {
 		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.includes.")
 		return exitSuccess
 	}
+	var deletes []string
+	for _, dir := range wizardCleanupDirs(globalPath, as.Name(), res.Watches) {
+		more, err := planWizardWatchDeletes(p, dir)
+		if err != nil {
+			a.reportError(opts, err.Error())
+			return exitRuntimeError
+		}
+		deletes = append(deletes, more...)
+	}
+	if err := deleteWizardWatchFiles(deletes); err != nil {
+		a.reportError(opts, err.Error())
+		return exitRuntimeError
+	}
+	if len(deletes) > 0 {
+		cfg, err = a.LoadConfig(globalPath)
+		if err != nil {
+			a.reportError(opts, fmt.Sprintf("reload config after deleting old watches failed: %v", err))
+			return exitRuntimeError
+		}
+	}
 	if err := ensureNoWatchCollisions(cfg, res.Watches); err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError
@@ -70,6 +90,9 @@ func (a App) runWizard(_ context.Context, opts options) int {
 	}
 	if merged.Backup != "" {
 		fmt.Fprintf(a.Stdout, "Updated %s paths.includes (backup: %s).\n", globalPath, merged.Backup)
+	}
+	if len(deletes) > 0 {
+		fmt.Fprintf(a.Stdout, "Deleted %d existing watch file(s).\n", len(deletes))
 	}
 	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl reload` to apply.\n", len(merged.Files), merged.Dir)
 	return exitSuccess
@@ -175,7 +198,7 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 }
 
 // mergeWizardWatches writes one generated watch per YAML file under a directory
-// named after the assistant, then ensures that directory is listed in
+// named after the generated watch type, then ensures that directory is listed in
 // paths.includes. Included watch fragments contain a top-level watches map, so the
 // loader can merge them into global watch configuration without rewriting
 // sermo.yml on every generated watch.
@@ -192,13 +215,8 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		root = map[string]any{}
 	}
 
-	dirName := safeConfigPathName(wizard)
-	if dirName == "" {
-		dirName = "wizard"
-	}
 	base := filepath.Dir(filepath.Clean(path))
-	targetDir := filepath.Join(base, dirName)
-	relDir := dirName
+	relDir, targetDir := wizardTargetDir(path, wizard, fragment)
 
 	var files []string
 	for _, name := range sortedMapKeys(fragment) {
@@ -245,6 +263,154 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		}
 	}
 	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files}, nil
+}
+
+func wizardTargetDir(path, wizard string, fragment map[string]any) (string, string) {
+	dirName := wizardConfigDirName(wizard, fragment)
+	base := filepath.Dir(filepath.Clean(path))
+	return dirName, filepath.Join(base, dirName)
+}
+
+func wizardCleanupDirs(path, wizard string, fragment map[string]any) []string {
+	_, targetDir := wizardTargetDir(path, wizard, fragment)
+	dirs := []string{targetDir}
+	legacyName := safeConfigPathName(wizard)
+	if legacyName == "" {
+		return dirs
+	}
+	legacyDir := filepath.Join(filepath.Dir(filepath.Clean(path)), legacyName)
+	if filepath.Clean(legacyDir) != filepath.Clean(targetDir) {
+		dirs = append(dirs, legacyDir)
+	}
+	return dirs
+}
+
+func wizardConfigDirName(wizard string, fragment map[string]any) string {
+	dirName := ""
+	for _, name := range sortedMapKeys(fragment) {
+		checkType := watchFragmentCheckType(fragment[name])
+		if checkType == "" {
+			continue
+		}
+		next := watchTypeDirName(checkType)
+		if dirName == "" {
+			dirName = next
+			continue
+		}
+		if dirName != next {
+			dirName = ""
+			break
+		}
+	}
+	if dirName == "" {
+		dirName = safeConfigPathName(wizard)
+	}
+	if dirName == "" {
+		dirName = "wizard"
+	}
+	return dirName
+}
+
+func watchFragmentCheckType(v any) string {
+	entry, ok := v.(map[string]any)
+	if !ok {
+		return ""
+	}
+	check, ok := entry["check"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	s, _ := check["type"].(string)
+	return s
+}
+
+func watchTypeDirName(checkType string) string {
+	switch strings.ToLower(checkType) {
+	case "storage", "disk", "mount":
+		return "storage"
+	case "net", "network", "icmp":
+		return "network"
+	default:
+		return safeConfigPathName(checkType)
+	}
+}
+
+type wizardWatchFile struct {
+	Path  string
+	Names []string
+}
+
+func planWizardWatchDeletes(p *assist.Prompt, targetDir string) ([]string, error) {
+	files, err := existingWizardWatchFiles(targetDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
+	if !p.Confirm(fmt.Sprintf("Found %d existing watch file(s) in %s. Review them for deletion?", len(files), targetDir), false) {
+		return nil, nil
+	}
+	var deletes []string
+	for _, f := range files {
+		label := f.Path
+		if len(f.Names) > 0 {
+			label += " (" + strings.Join(f.Names, ", ") + ")"
+		}
+		if p.Confirm("Delete existing watch file "+label+"?", false) {
+			deletes = append(deletes, f.Path)
+		}
+	}
+	return deletes, nil
+}
+
+func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
+	entries, err := os.ReadDir(targetDir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read existing watch directory %s: %w", targetDir, err)
+	}
+	var files []wizardWatchFile
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+		path := filepath.Join(targetDir, name)
+		files = append(files, wizardWatchFile{Path: path, Names: watchNamesInFile(path)})
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
+	return files, nil
+}
+
+func watchNamesInFile(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return nil
+	}
+	watches, _ := root["watches"].(map[string]any)
+	if len(watches) == 0 {
+		return nil
+	}
+	return sortedMapKeys(watches)
+}
+
+func deleteWizardWatchFiles(files []string) error {
+	for _, file := range files {
+		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete existing watch file %s: %w", file, err)
+		}
+	}
+	return nil
 }
 
 func watchConfigFileName(name string) string {
