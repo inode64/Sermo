@@ -1,0 +1,81 @@
+kind: daemon
+name: rabbitmq
+display_name: "RabbitMQ"
+type: queue
+
+service:
+  systemd: [rabbitmq-server, rabbitmq]
+  openrc: [rabbitmq]
+
+variables:
+  binary: /usr/bin/rabbitmq-server
+  ctl: /usr/bin/rabbitmqctl
+  diagnostics: /usr/bin/rabbitmq-diagnostics
+  user: rabbitmq
+  host: 127.0.0.1
+  port: 5672
+  pidfile: /run/rabbitmq.pid
+
+commands:
+  version:
+    command: ["${ctl}", "version"]
+
+preflight:
+  binary:
+    type: binary
+    path: "${binary}"
+
+processes:
+  # The init script writes the wrapper PID here; the Erlang broker (beam.smp,
+  # a version-specific exe under /usr/lib64/erlang) runs as a descendant and is
+  # picked up automatically. A command_match on ${binary} would not match the
+  # broker, so the pidfile is the reliable anchor.
+  pidfile:
+    type: pidfile
+    path: "${pidfile}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  amqp:
+    type: amqp
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+
+  ping:
+    type: command
+    command: ["${diagnostics}", "-q", "ping"]
+    timeout: 15s
+
+stop_policy:
+  graceful_timeout: 60s
+  term_timeout: 30s
+  force_kill: false
+  kill_only_if:
+    users: ["${user}"]
+
+rules:
+  restart-if-amqp-failed:
+    type: remediation
+    if:
+      failed:
+        check: amqp
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
+
+  restart-if-ping-failed:
+    type: remediation
+    if:
+      failed:
+        check: ping
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
