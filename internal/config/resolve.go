@@ -76,10 +76,11 @@ func expandReloadOnChange(tree map[string]any) []string {
 // injectBuiltinVariables makes the document's identity available for ${...}
 // expansion: ${name} (the resolved service name), ${display_name} (the
 // display_name field, falling back to name), ${service} (the primary unit),
-// ${host} (the detected hostname), ${init} (the detected init system),
-// ${user} (the Sermo user, a fallback for service accounts), ${pidfile} (the
-// conventional /run/<unit>.pid) and ${port} (the top-level `port:` field, when
-// set). They let daemons parameterize strings — e.g. a tcp check
+// ${host} (the detected hostname), ${hostname} (the short hostname, for
+// host-keyed systemd instance units such as ceph-mon@${hostname}), ${init} (the
+// detected init system), ${user} (the Sermo user, a fallback for service
+// accounts), ${pidfile} (the conventional /run/<unit>.pid) and ${port} (the
+// top-level `port:` field, when set). They let daemons parameterize strings — e.g. a tcp check
 // port: "${port}" or message: "${display_name} backup is running".
 // Injected after validateVariableValues so a display_name carrying its own
 // ${...} is not mistaken for a nested variable; an explicit `variables` entry of
@@ -96,6 +97,9 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	}
 	if _, ok := vars["host"]; !ok {
 		vars["host"] = detectedHost
+	}
+	if _, ok := vars["hostname"]; !ok {
+		vars["hostname"] = detectedHostname
 	}
 	if _, ok := vars["init"]; !ok {
 		vars["init"] = detectedInit

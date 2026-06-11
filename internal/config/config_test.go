@@ -1684,3 +1684,206 @@ service: { name: php-fpm }
 		t.Errorf("message = %q, want %q", got, "PHP-FPM 8.3 configuration is invalid")
 	}
 }
+
+func TestDetectHostname(t *testing.T) {
+	// SERMO_HOSTNAME is taken verbatim (like SERMO_HOST), even an FQDN.
+	t.Setenv("SERMO_HOSTNAME", "forced.example.com")
+	if got := detectHostname(); got != "forced.example.com" {
+		t.Fatalf("SERMO_HOSTNAME should be verbatim, got %q", got)
+	}
+	// Without the override, os.Hostname() is reduced to its short form, so the
+	// result never carries a domain dot.
+	t.Setenv("SERMO_HOSTNAME", "")
+	if got := detectHostname(); strings.Contains(got, ".") {
+		t.Fatalf("hostname should be short (no dot), got %q", got)
+	}
+}
+
+func TestBuiltinHostnameVar(t *testing.T) {
+	old := detectedHostname
+	detectedHostname = "radon"
+	defer func() { detectedHostname = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/mon.yml": `
+kind: service
+name: mon
+service: "ceph-mon@${hostname}"
+checks:
+  svc: { type: service, expect: active }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("mon")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	// ${hostname} fills the instance id from the short hostname.
+	if got := ServiceUnit(resolved.Tree, "mon"); got != "ceph-mon@radon" {
+		t.Errorf("service unit = %q, want ceph-mon@radon", got)
+	}
+}
+
+func TestUserHostnameVariableOverridesBuiltin(t *testing.T) {
+	old := detectedHostname
+	detectedHostname = "radon"
+	defer func() { detectedHostname = old }()
+
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/mon.yml": `
+kind: service
+name: mon
+service: "ceph-mon@${hostname}"
+variables:
+  hostname: custom-id
+checks:
+  svc: { type: service, expect: active }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, _ := cfg.Resolve("mon")
+	if got := ServiceUnit(resolved.Tree, "mon"); got != "ceph-mon@custom-id" {
+		t.Errorf("service unit = %q, want user-defined ceph-mon@custom-id", got)
+	}
+}
+
+func TestVersionTemplateCephOSD(t *testing.T) {
+	root := t.TempDir()
+	osdRoot := filepath.Join(root, "var", "lib", "ceph", "osd")
+	// Discoverable OSDs 0, 1, 3 (2 absent, to prove discovery, not a fixed range).
+	for _, id := range []string{"0", "1", "3"} {
+		if err := os.MkdirAll(filepath.Join(osdRoot, "ceph-"+id), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Catalog files take their kind from the subdirectory (services/ → daemon,
+	// apps/ → app), so the template and its app must live in the right dirs.
+	catalogDir := filepath.Join(root, "catalog")
+	enabledDir := filepath.Join(root, "enabled")
+	write := func(dir, file, content string) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(catalogDir, "apps"), "ceph-osd.yml", `
+kind: app
+name: ceph-osd
+variables: { binary: /usr/bin/ceph-osd }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`)
+	write(filepath.Join(catalogDir, "services"), "ceph-osd-%n.yml", fmt.Sprintf(`
+kind: daemon
+name: ceph-osd%%n
+display_name: "Ceph OSD ${n}"
+versions: { from: "%s/ceph-${n}" }
+service: "ceph-osd@${n}"
+apps: [ceph-osd]
+variables: { user: ceph, binary: /usr/bin/ceph-osd }
+checks: { service: { type: service, expect: active } }
+`, osdRoot))
+	// One enabled service per OSD that uses the materialized daemon.
+	write(enabledDir, "osd0.yml", "kind: service\nname: osd0\nuses: ceph-osd0\n")
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths:
+  catalog: [ %s ]
+  includes: [ %s ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	// Template gone; one concrete daemon per discovered OSD; absent id 2 not present.
+	if _, ok := cfg.Daemons["ceph-osd%n"]; ok {
+		t.Errorf("template ceph-osd%%n should not be registered")
+	}
+	if _, ok := cfg.Daemons["ceph-osd2"]; ok {
+		t.Errorf("ceph-osd2 must not exist (no /var/lib/ceph/osd/ceph-2)")
+	}
+	for _, id := range []string{"0", "1", "3"} {
+		name := "ceph-osd" + id
+		doc, ok := cfg.Daemons[name]
+		if !ok {
+			t.Fatalf("expected materialized daemon %q", name)
+		}
+		// ${n} baked into the unit name at materialization.
+		if got := ServiceUnit(doc.Body, name); got != "ceph-osd@"+id {
+			t.Errorf("%s service unit = %q, want ceph-osd@%s", name, got, id)
+		}
+	}
+	// The app link survives materialization: a service using ceph-osd0 resolves
+	// cleanly (the ceph-osd app's preflight binary check is wired in).
+	resolved, errs := cfg.Resolve("osd0")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(osd0) errors = %v", errs)
+	}
+	if _, ok := resolved.Tree["preflight"].(map[string]any); !ok {
+		t.Errorf("osd0 missing preflight from linked ceph-osd app: %v", resolved.Tree)
+	}
+}
+
+func TestVersionTemplateCephOSDNoMatch(t *testing.T) {
+	root := t.TempDir()
+	emptyRoot := filepath.Join(root, "var", "lib", "ceph", "osd") // exists, no OSDs
+	if err := os.MkdirAll(emptyRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	daemonsDir := filepath.Join(root, "daemons")
+	enabledDir := filepath.Join(root, "enabled")
+	for _, d := range []string{daemonsDir, enabledDir} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(daemonsDir, "ceph-osd-%n.yml"), []byte(fmt.Sprintf(`
+kind: daemon
+name: ceph-osd%%n
+versions: { from: "%s/ceph-${n}" }
+service: "ceph-osd@${n}"
+variables: { user: ceph, binary: /usr/bin/ceph-osd }
+checks: { service: { type: service, expect: active } }
+`, emptyRoot)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths:
+  catalog: [ %s ]
+  includes: [ %s ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`, daemonsDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() with no OSDs must not error, got %v", err)
+	}
+	for name := range cfg.Daemons {
+		if strings.HasPrefix(name, "ceph-osd") {
+			t.Errorf("no ceph-osd daemons expected with zero discovery matches, got %q", name)
+		}
+	}
+}

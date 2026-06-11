@@ -1,0 +1,35 @@
+kind: daemon
+name: ceph-osd%n
+display_name: "Ceph OSD ${n}"
+description: "Ceph object storage daemon (one per backing device). Binds dynamic ports in the 6800-7300 range across the public and cluster networks, so it is monitored by service state rather than a fixed port."
+
+# OSDs run as systemd instances keyed by the numeric OSD id (ceph-osd@0, @1, …).
+# This is a `%n` template: on the OSD host it auto-discovers every local OSD by
+# globbing its data directory (`versions.from`) and materializes one concrete
+# daemon per id (ceph-osd0, ceph-osd1, …) with ${n} filled in. On a host with no
+# OSDs it materializes nothing (no error). The operator still enables one
+# `kind: service` per OSD that `uses:` the materialized daemon.
+versions:
+  from: "/var/lib/ceph/osd/ceph-${n}"
+
+service: "ceph-osd@${n}"
+
+# Binary + version are owned by the ceph-osd app (single, non-templated) and
+# linked here; the link survives materialization for every ceph-osdN.
+apps: [ceph-osd]
+
+variables:
+  user: ceph
+  binary: /usr/bin/ceph-osd
+
+# No `processes:` block on purpose. Every OSD on a host shares the same binary
+# and user, so an exe+user match cannot isolate one instance from its siblings
+# (the process model matches on exe+user only — OSD instances are separable just
+# by their systemd cgroup, e.g. ceph-osd@1.service). Matching by exe would make a
+# restart of one OSD treat its still-running siblings as residual processes and
+# abort. Per-instance liveness therefore comes from the systemd unit below.
+
+checks:
+  service:
+    type: service
+    expect: active

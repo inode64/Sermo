@@ -1,0 +1,9 @@
+kind: app
+name: ceph-mds
+display_name: "Ceph Metadata Server"
+description: "Ceph CephFS metadata server daemon"
+variables:
+  binary: "/usr/bin/ceph-mds"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

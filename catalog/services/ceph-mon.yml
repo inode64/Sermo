@@ -1,0 +1,48 @@
+kind: daemon
+name: ceph-mon
+display_name: "Ceph Monitor"
+description: "Ceph cluster monitor: maintains the cluster maps and the paxos quorum."
+
+# Monitors run as a systemd instance keyed by the mon id, which is the short
+# hostname (e.g. ceph-mon@radon). The built-in ${hostname} fills it in
+# automatically — no per-service configuration needed. Override with a
+# `hostname` variable (or SERMO_HOSTNAME) if your mon id is not the hostname.
+service: "ceph-mon@${hostname}"
+
+# Binary + version are owned by the ceph-mon app (same name) and linked here.
+apps: [ceph-mon]
+
+variables:
+  user: ceph
+  binary: /usr/bin/ceph-mon
+  # Monitors bind their configured public address, not localhost. Point `host`
+  # at the local mon address; the v2 messenger is 3300, legacy v1 is 6789.
+  host: 127.0.0.1
+  port: 3300
+
+processes:
+  # Exactly one ceph-mon runs per host, so an exe+user match selects it
+  # unambiguously.
+  ceph-mon:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  tcp:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native Ceph messenger probe: reads the connect banner and reports the
+  # messenger version (v2 on 3300, v1 on 6789) without authenticating.
+  messenger:
+    type: ceph
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

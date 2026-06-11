@@ -1,0 +1,30 @@
+kind: daemon
+name: ceph-mds
+display_name: "Ceph Metadata Server"
+description: "Ceph MDS (CephFS metadata). Binds dynamic ports in the 6800-7300 range assigned at startup, so it is monitored by service state and process presence rather than a fixed port."
+
+# One MDS instance per host, keyed by the mds id, which is the short hostname
+# (e.g. ceph-mds@radon). The built-in ${hostname} fills it in automatically — no
+# per-service configuration needed. Override with a `hostname` variable (or
+# SERMO_HOSTNAME) if your mds id is not the hostname.
+service: "ceph-mds@${hostname}"
+
+# Binary + version are owned by the ceph-mds app (same name) and linked here.
+apps: [ceph-mds]
+
+variables:
+  user: ceph
+  binary: /usr/bin/ceph-mds
+
+processes:
+  # Assumes a single mds per host (the norm); an exe+user match then selects it
+  # unambiguously. Override if this host runs multiple mds daemons.
+  ceph-mds:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active

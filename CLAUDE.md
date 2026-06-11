@@ -54,6 +54,27 @@ notifiers**, so an expand-only or opt-out watch still has a valid pick — keep
 that invariant when adding new assistants or selection steps, and update
 `docs/configuration.md` and the wizard spec in the same change.
 
+## Catalog: instanced systemd daemons
+
+When a catalog daemon targets a systemd **instance** unit (`unit@instance`), do
+not invent a hand-typed `${id}` variable the operator must remember to set —
+derive the instance from code, reusing existing machinery:
+
+- **Single instance keyed by host** (e.g. `ceph-mon@radon`, `ceph-mds@radon`):
+  use the built-in `${hostname}` (the short hostname) — `service:
+  "ceph-mon@${hostname}"`. It resolves with zero per-service config; an explicit
+  `hostname` variable or `SERMO_HOSTNAME` overrides it. `${hostname}` is the short
+  form, distinct from `${host}` (the bind-address fallback) — see `docs/daemons.md`.
+- **Numeric multi-instance** (e.g. one OSD per device, `ceph-osd@0..N`): make the
+  daemon a `%n` version template (`name: ceph-osd%n`) with `versions: { from:
+  "/var/lib/ceph/osd/ceph-${n}" }`. `internal/config/versions.go` globs that path
+  on the host and materializes one concrete daemon per discovered id, with `${n}`
+  baked into `service: "ceph-osd@${n}"`. Honest limitation: this auto-discovers
+  daemon *definitions*; the operator still enables one `kind: service` per
+  instance (Sermo monitors services, not catalog daemons).
+
+Keep `docs/daemons.md` (built-in variable table) in step when adding a built-in.
+
 ## Code formatting (Go)
 
 **Every Go file must be `gofmt`-clean after any modification.** Run `gofmt` on a
