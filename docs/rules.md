@@ -37,6 +37,7 @@ which reuse the same schema). MVP types:
 | `mongodb` / `mongo` | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
 | `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING; exposes role, replication, persistence and memory from INFO for `expect` (see Database) |
+| `memcached` / `memcache` | a memcached server answers `stats`; exposes version, connections, hits/misses, items, bytes and evictions for `expect` (see Database) |
 | `imap`        | an IMAP server greets OK (anonymous) and, with credentials, LOGIN succeeds (see Database) |
 | `pop` / `pop3` | a POP3 server greets +OK (anonymous) and, with credentials, USER/PASS succeeds (see Database) |
 | `smtp`        | an SMTP server greets 220 + EHLO (anonymous) and, with credentials, AUTH PLAIN succeeds (see Database) |
@@ -510,6 +511,14 @@ Protocols, in the order of the table above:
   `master_link_status` (replicas), `rdb_last_bgsave_status`,
   `aof_last_write_status`, `loading`, `used_memory`, `maxmemory`,
   `mem_fragmentation_ratio`, `connected_clients` and `uptime_seconds`.
+- `memcached` (alias `memcache`) — default port 11211; `socket` supported (Unix
+  socket), `tls` supported. No auth (the ASCII text protocol). Sends a single
+  `stats` command and verifies the server answers `STAT` lines terminated by
+  `END` — proof the daemon is up. Reports the server `version` (pair with
+  `on_version_change`) plus counters exposed for `expect:`: `uptime`,
+  `curr_connections`, `total_connections`, `rejected_connections`, `cmd_get`,
+  `cmd_set`, `get_hits`, `get_misses`, `curr_items`, `total_items`, `bytes`,
+  `evictions`, `limit_maxbytes` and `threads` (all numeric, so `>`/`<`/`==` work).
 - `imap` — default port 143; `tls` supported (implicit TLS / IMAPS — use port
   993). `user` is **optional**: with no credentials it verifies the server greets
   `* OK`; with a user/password it performs an IMAP `LOGIN`. RFC 3501.
@@ -1155,7 +1164,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, memcached/memcache, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
