@@ -155,7 +155,7 @@ checks:
     url: "http://127.0.0.1/health"   # runs every cycle (30s)
   version:
     type: command
-    command: ["/usr/sbin/nginx", "-v"]
+    command: ["/usr/bin/nginx", "-v"]
     interval: 30m                     # runs every 60 cycles (30m / 30s)
 ```
 

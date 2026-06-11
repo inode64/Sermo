@@ -254,7 +254,7 @@ service:
 versions:
   from: "/usr/lib64/php${version}/bin/php-fpm"   # globbed to find versions
 variables:
-  binary: /usr/sbin/php-fpm                       # the actual binary, version-agnostic
+  binary: /usr/bin/php-fpm                        # the actual binary, version-agnostic
 ```
 
 `versions.from` is discovery-only metadata; it never appears in the materialized
@@ -293,7 +293,7 @@ command reports, and whether they resolve without error.
 APPLICATION   VERSION                      STATUS
 Nginx         nginx version: nginx/1.24.0  ok
 Python 3      Python 3.11.2                ok
-Redis         -                            error: /usr/sbin/redis-server is not executable
+Redis         -                            error: /usr/bin/redis-server is not executable
 ```
 
 Only installed applications are shown; `sermoctl apps all` also lists the rest as

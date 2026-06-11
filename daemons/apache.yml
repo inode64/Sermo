@@ -8,7 +8,7 @@ service:
   openrc: [apache2, apache]
 
 variables:
-  binary: /usr/sbin/apache2
+  binary: /usr/bin/apache2
   user: www-data
   host: 127.0.0.1
   port: 80

@@ -8,7 +8,7 @@ name: php-fpm-www
 service: php-fpm
 
 variables:
-  binary: /usr/sbin/php-fpm
+  binary: /usr/bin/php-fpm
 
 checks:
   service:

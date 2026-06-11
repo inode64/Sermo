@@ -4,7 +4,7 @@ display_name: "DHCP Client"
 description: "Cliente DHCP"
 service: dhclient
 variables:
-  binary: "/sbin/dhclient"
+  binary: "/usr/bin/dhclient"
   host: 0.0.0.0
   port: 68
   interface: ""

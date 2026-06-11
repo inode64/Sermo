@@ -5,7 +5,7 @@ description: "Varnish"
 service: varnishd
 variables:
   port: 6082
-  binary: "/usr/sbin/varnishd"
+  binary: "/usr/bin/varnishd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

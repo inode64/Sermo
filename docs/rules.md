@@ -1471,7 +1471,7 @@ if:
     - active: { check: backup-flag } # a named check passed
     - file: { path: /run/x, exists: true }
     - service: { state: active }
-    - process: { exe: /usr/sbin/mysqld, user: mysql, state: running }
+    - process: { exe: /usr/bin/mysqld, user: mysql, state: running }
     - metric: { scope: service, name: cpu, op: ">", value: 30% }
     - changed: { path: /lib64/libc.so.6 }  # the file changed since the last cycle
 ```

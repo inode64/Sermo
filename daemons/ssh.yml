@@ -1,10 +1,12 @@
 kind: daemon
 name: ssh
 display_name: "OpenSSH"
-service: ssh
+service:
+  systemd: [sshd, ssh]
+  openrc: [sshd]
 variables:
   port: 22
-  binary: "/usr/bin/ssh"
+  binary: "/usr/bin/sshd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }
