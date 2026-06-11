@@ -56,16 +56,26 @@ func TestBuildSNMPParamsV3(t *testing.T) {
 	}
 }
 
-func TestExtractSNMP(t *testing.T) {
+func TestSNMPByOIDAndString(t *testing.T) {
 	vars := []g.SnmpPDU{
 		{Name: ".1.3.6.1.2.1.1.1.0", Type: g.OctetString, Value: []byte("Linux dev 6.0")},
-		{Name: ".1.3.6.1.2.1.1.2.0", Type: g.ObjectIdentifier, Value: ".1.3.6.1.4.1.8072.3.2.10"},
+		{Name: "1.3.6.1.2.1.1.2.0", Type: g.ObjectIdentifier, Value: ".1.3.6.1.4.1.8072.3.2.10"}, // no leading dot
+		{Name: ".1.3.6.1.2.1.1.5.0", Type: g.OctetString, Value: []byte("router1")},
+		{Name: ".1.3.6.1.2.1.1.3.0", Type: g.TimeTicks, Value: uint32(123456)}, // hundredths of a second
 	}
-	descr, oid := extractSNMP(vars)
-	if descr != "Linux dev 6.0" {
-		t.Fatalf("sysDescr = %q", descr)
+	by := snmpByOID(vars)
+	if got := snmpString(by[oidSysDescr]); got != "Linux dev 6.0" {
+		t.Fatalf("sysDescr = %q", got)
 	}
-	if oid != ".1.3.6.1.4.1.8072.3.2.10" {
-		t.Fatalf("sysObjectID = %q", oid)
+	// Lookup normalizes the missing leading dot.
+	if got := snmpString(by[oidSysObjectID]); got != ".1.3.6.1.4.1.8072.3.2.10" {
+		t.Fatalf("sysObjectID = %q", got)
+	}
+	if got := snmpString(by[oidSysName]); got != "router1" {
+		t.Fatalf("sysName = %q", got)
+	}
+	// A TimeTicks value is not text, so snmpString returns "".
+	if got := snmpString(by[oidSysUpTime]); got != "" {
+		t.Fatalf("uptime via snmpString = %q, want empty", got)
 	}
 }

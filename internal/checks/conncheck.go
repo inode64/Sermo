@@ -246,6 +246,14 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Params = map[string]string{"auth_source": as}
 		}
 	}
+	// fpm takes an optional `status_path` (the pool's pm.status_path); set, the
+	// probe fetches the status page and exposes the pool metrics, carried in
+	// cfg.Query. Absent, the probe does a plain /ping liveness check.
+	if proto.Name() == "fpm" {
+		if sp := cfgval.AsString(entry["status_path"]); sp != "" {
+			cfg.Query = sp
+		}
+	}
 	// nut takes an optional `ups` (the UPS to read variables from / LOGIN to),
 	// carried in cfg.Query; absent, the probe auto-detects a single configured UPS.
 	if proto.Name() == "nut" {

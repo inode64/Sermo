@@ -3,8 +3,10 @@ package conn
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -33,44 +35,36 @@ func (fpmProtocol) DefaultPort() int   { return 9000 } // FPM over TCP
 func (fpmProtocol) RequiresUser() bool { return false }
 
 // Probe dials the FPM socket (Unix when Socket is set, else TCP host:port) and
-// performs a FastCGI /ping.
+// performs a FastCGI /ping. When a status path is configured (cfg.Query, from
+// the check's status_path — pm.status_path in the pool config), it additionally
+// fetches the pool status page and exposes its metrics in Extra.
 func (fpmProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	c, err := dialDeadline(ctx, cfg, 9000)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	return fpmHandshake(c, "/ping")
+	res, err := fpmHandshake(c, "/ping")
+	if err != nil {
+		return res, err
+	}
+	// Pool status is best effort and needs a fresh connection (FastCGI closed
+	// the first after the ping). Its metrics (active/idle processes, listen
+	// queue, slow requests, …) become assertable via expect:.
+	if cfg.Query != "" {
+		if sc, derr := dialDeadline(ctx, cfg, 9000); derr == nil {
+			defer func() { _ = sc.Close() }()
+			if stdout, _, rerr := fpmRequest(sc, cfg.Query, "json"); rerr == nil {
+				mergeFPMStatus(res.Extra, stdout)
+			}
+		}
+	}
+	return res, nil
 }
 
-// fpmHandshake sends a FastCGI request for pingPath and verifies the response
-// contains "pong".
+// fpmHandshake requests pingPath and verifies the response contains "pong".
 func fpmHandshake(rw io.ReadWriter, pingPath string) (Result, error) {
-	// FCGI_BEGIN_REQUEST: role RESPONDER, flags 0 (close after request).
-	if err := writeFCGIRecord(rw, fcgiBeginRequest, []byte{0, fcgiResponder, 0, 0, 0, 0, 0, 0}); err != nil {
-		return Result{}, err
-	}
-	params := encodeFCGIParams([][2]string{
-		{"SCRIPT_NAME", pingPath},
-		{"SCRIPT_FILENAME", pingPath},
-		{"REQUEST_METHOD", "GET"},
-		{"REQUEST_URI", pingPath},
-		{"QUERY_STRING", ""},
-		{"SERVER_PROTOCOL", "HTTP/1.1"},
-		{"GATEWAY_INTERFACE", "CGI/1.1"},
-		{"SERVER_SOFTWARE", "sermo"},
-	})
-	if err := writeFCGIRecord(rw, fcgiParams, params); err != nil {
-		return Result{}, err
-	}
-	if err := writeFCGIRecord(rw, fcgiParams, nil); err != nil { // end of params
-		return Result{}, err
-	}
-	if err := writeFCGIRecord(rw, fcgiStdin, nil); err != nil { // empty body, end of stdin
-		return Result{}, err
-	}
-
-	stdout, stderr, err := readFCGIResponse(rw)
+	stdout, stderr, err := fpmRequest(rw, pingPath, "")
 	if err != nil {
 		return Result{}, err
 	}
@@ -82,6 +76,81 @@ func fpmHandshake(rw io.ReadWriter, pingPath string) (Result, error) {
 		return Result{}, fmt.Errorf("php-fpm did not answer pong on %s (enable ping.path): %s", pingPath, detail)
 	}
 	return Result{Extra: map[string]string{"ping": "pong"}}, nil
+}
+
+// fpmRequest performs one FastCGI GET for script (with an optional query string)
+// and returns the response STDOUT and STDERR. The connection is single-use:
+// FCGI_BEGIN_REQUEST is sent with flags 0, so the server closes it afterwards.
+func fpmRequest(rw io.ReadWriter, script, query string) (stdout, stderr string, err error) {
+	// FCGI_BEGIN_REQUEST: role RESPONDER, flags 0 (close after request).
+	if err := writeFCGIRecord(rw, fcgiBeginRequest, []byte{0, fcgiResponder, 0, 0, 0, 0, 0, 0}); err != nil {
+		return "", "", err
+	}
+	uri := script
+	if query != "" {
+		uri += "?" + query
+	}
+	params := encodeFCGIParams([][2]string{
+		{"SCRIPT_NAME", script},
+		{"SCRIPT_FILENAME", script},
+		{"REQUEST_METHOD", "GET"},
+		{"REQUEST_URI", uri},
+		{"QUERY_STRING", query},
+		{"SERVER_PROTOCOL", "HTTP/1.1"},
+		{"GATEWAY_INTERFACE", "CGI/1.1"},
+		{"SERVER_SOFTWARE", "sermo"},
+	})
+	if err := writeFCGIRecord(rw, fcgiParams, params); err != nil {
+		return "", "", err
+	}
+	if err := writeFCGIRecord(rw, fcgiParams, nil); err != nil { // end of params
+		return "", "", err
+	}
+	if err := writeFCGIRecord(rw, fcgiStdin, nil); err != nil { // empty body, end of stdin
+		return "", "", err
+	}
+	return readFCGIResponse(rw)
+}
+
+// mergeFPMStatus parses a php-fpm status page (pm.status_path requested with
+// ?json) out of a FastCGI STDOUT response and copies the pool metrics into
+// extra. Best effort: a non-JSON body (status path not enabled) leaves extra
+// untouched.
+func mergeFPMStatus(extra map[string]string, stdout string) {
+	body := stdout
+	if _, after, ok := strings.Cut(stdout, "\r\n\r\n"); ok { // strip CGI headers
+		body = after
+	} else if _, after, ok := strings.Cut(stdout, "\n\n"); ok {
+		body = after
+	}
+	var s struct {
+		Pool               string `json:"pool"`
+		ProcessManager     string `json:"process manager"`
+		StartSince         int    `json:"start since"`
+		AcceptedConn       int    `json:"accepted conn"`
+		ListenQueue        int    `json:"listen queue"`
+		MaxListenQueue     int    `json:"max listen queue"`
+		IdleProcesses      int    `json:"idle processes"`
+		ActiveProcesses    int    `json:"active processes"`
+		TotalProcesses     int    `json:"total processes"`
+		MaxActiveProcesses int    `json:"max active processes"`
+		MaxChildrenReached int    `json:"max children reached"`
+		SlowRequests       int    `json:"slow requests"`
+	}
+	if json.Unmarshal([]byte(strings.TrimSpace(body)), &s) != nil {
+		return
+	}
+	putIfSet(extra, "pool", s.Pool)
+	putIfSet(extra, "process_manager", s.ProcessManager)
+	for k, v := range map[string]int{
+		"active_processes": s.ActiveProcesses, "idle_processes": s.IdleProcesses,
+		"total_processes": s.TotalProcesses, "max_active_processes": s.MaxActiveProcesses,
+		"listen_queue": s.ListenQueue, "max_listen_queue": s.MaxListenQueue,
+		"max_children_reached": s.MaxChildrenReached, "slow_requests": s.SlowRequests,
+		"accepted_conn": s.AcceptedConn, "uptime_seconds": s.StartSince,
+	} {
+		extra[k] = strconv.Itoa(v)
+	}
 }
 
 // writeFCGIRecord writes one FastCGI record (request id 1, no padding). content

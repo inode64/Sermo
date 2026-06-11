@@ -39,7 +39,50 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	// Best effort: a successful ping already proves connect + auth.
 	_ = client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildInfo", Value: 1}}).Decode(&info)
-	return Result{Version: info.Version}, nil
+
+	// Topology: hello/isMaster expose the replica-set role so an expect: rule can
+	// assert it (e.g. role == primary, set_name == rs0). Best effort; it runs
+	// pre-auth and never fails the probe.
+	role, setName, readOnly := mongoTopology(ctx, client)
+	extra := map[string]string{"role": role, "read_only": strconv.FormatBool(readOnly)}
+	putIfSet(extra, "set_name", setName)
+	return Result{Version: info.Version, Extra: extra}, nil
+}
+
+// mongoTopology runs hello (MongoDB 5.0+) — falling back to the legacy isMaster
+// on older servers — and derives the node's replica-set role plus its set name
+// and read-only flag.
+func mongoTopology(ctx context.Context, client *mongo.Client) (role, setName string, readOnly bool) {
+	var h struct {
+		IsWritablePrimary bool   `bson:"isWritablePrimary"`
+		IsMaster          bool   `bson:"ismaster"`
+		Secondary         bool   `bson:"secondary"`
+		ArbiterOnly       bool   `bson:"arbiterOnly"`
+		SetName           string `bson:"setName"`
+		ReadOnly          bool   `bson:"readOnly"`
+	}
+	if client.Database("admin").RunCommand(ctx, bson.D{{Key: "hello", Value: 1}}).Decode(&h) != nil {
+		_ = client.Database("admin").RunCommand(ctx, bson.D{{Key: "isMaster", Value: 1}}).Decode(&h)
+	}
+	return mongoRole(h.IsWritablePrimary || h.IsMaster, h.Secondary, h.ArbiterOnly, h.SetName), h.SetName, h.ReadOnly
+}
+
+// mongoRole classifies a node from its hello/isMaster flags: a member with no
+// set name is a standalone; otherwise arbiter/primary/secondary, defaulting to
+// "unknown" for a replica-set member in a transient state.
+func mongoRole(primary, secondary, arbiter bool, setName string) string {
+	switch {
+	case setName == "":
+		return "standalone"
+	case arbiter:
+		return "arbiter"
+	case primary:
+		return "primary"
+	case secondary:
+		return "secondary"
+	default:
+		return "unknown"
+	}
 }
 
 // MongoConnect builds a MongoDB client from cfg (host/port/user/password/tls and

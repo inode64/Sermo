@@ -62,6 +62,36 @@ func TestParseNTPResponse(t *testing.T) {
 	}
 }
 
+func TestNTPExtraFields(t *testing.T) {
+	b := make([]byte, 48)
+	b[0] = 0x24                                // LI=0 (none), VN=4, Mode=4
+	b[3] = 0xE9                                // precision = int8(0xE9) = -23 -> 2^-23
+	binary.BigEndian.PutUint32(b[4:8], 1<<15)  // root delay = 0.5s -> 500ms
+	binary.BigEndian.PutUint32(b[8:12], 1<<14) // root dispersion = 0.25s -> 250ms
+	copy(b[12:16], []byte{192, 168, 1, 1})     // ref id (stratum >= 2): upstream IPv4
+	f := ntpExtraFields(b, 2)
+	if f["leap"] != "none" {
+		t.Errorf("leap = %q, want none", f["leap"])
+	}
+	if f["root_delay_ms"] != "500.000" || f["root_dispersion_ms"] != "250.000" {
+		t.Errorf("root delay/disp = %q/%q", f["root_delay_ms"], f["root_dispersion_ms"])
+	}
+	if f["reference_id"] != "192.168.1.1" {
+		t.Errorf("reference_id = %q, want 192.168.1.1", f["reference_id"])
+	}
+
+	// Stratum 1: reference id is an ASCII refclock label.
+	b[0] = 0xC4 // LI=3 (unsynchronized)
+	copy(b[12:16], "GPS\x00")
+	f = ntpExtraFields(b, 1)
+	if f["reference_id"] != "GPS" {
+		t.Errorf("reference_id = %q, want GPS", f["reference_id"])
+	}
+	if f["leap"] != "unsynchronized" {
+		t.Errorf("leap = %q, want unsynchronized", f["leap"])
+	}
+}
+
 func TestNTPHealthy(t *testing.T) {
 	if !ntpHealthy(4, 1) || !ntpHealthy(4, 15) {
 		t.Fatal("server mode with stratum 1..15 must be healthy")
