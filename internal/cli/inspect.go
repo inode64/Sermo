@@ -44,11 +44,6 @@ func (a App) runDaemon(opts options) int {
 	}
 }
 
-// runProfile keeps the old `profile` command working as a compatibility alias.
-func (a App) runProfile(opts options) int {
-	return a.runDaemon(opts)
-}
-
 // runService dispatches `service list`, `service show SERVICE` and
 // `service clone SOURCE TARGET` (post-MVP).
 func (a App) runService(opts options) int {

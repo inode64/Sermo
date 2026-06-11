@@ -18,22 +18,17 @@ const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 type Option func(*loadOptions)
 
 type loadOptions struct {
-	daemonDirs []string
+	catalogDirs []string
 }
 
-// WithDaemonDirs overrides the daemon-definition search directories declared in
-// the global config's paths.daemons. Relative entries are resolved against the
-// current working directory (not the config file), since the override is a
-// caller/CLI choice. It backs `sermod --daemons` and lets tests load the
-// installed config (which points at /usr/share/sermo/daemons) while keeping
-// daemon definitions in the source tree.
-func WithDaemonDirs(dirs ...string) Option {
-	return func(o *loadOptions) { o.daemonDirs = dirs }
-}
-
-// WithProfilesDirs is the legacy name for WithDaemonDirs.
-func WithProfilesDirs(dirs ...string) Option {
-	return WithDaemonDirs(dirs...)
+// WithCatalogDirs overrides the catalog search directories (the definition
+// directories holding services/apps/libs) declared in the global config's
+// paths.catalog. Relative entries are resolved against the current working
+// directory (not the config file), since the override is a caller/CLI choice. It
+// backs `sermod --catalog` and lets tests load the installed config (which points
+// at /usr/share/sermo/catalog) while keeping definitions in the source tree.
+func WithCatalogDirs(dirs ...string) Option {
+	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
 
 // Load reads the global configuration at globalPath and every daemon and
@@ -49,29 +44,27 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(o.daemonDirs) > 0 {
-		global.Daemons = absProfileDirs(o.daemonDirs)
-		global.Profiles = global.Daemons
+	if len(o.catalogDirs) > 0 {
+		global.Catalog = absCatalogDirs(o.catalogDirs)
 	}
 
 	daemons := map[string]*Document{}
 	cfg := &Config{
 		Global:   global,
 		Daemons:  daemons,
-		Profiles: daemons,
 		Services: map[string]*Document{},
 	}
 
-	daemonDirs := global.Daemons
-	if len(daemonDirs) == 0 {
-		daemonDirs = []string{"/usr/share/sermo/daemons", "/etc/sermo/daemons-available"}
+	catalogDirs := global.Catalog
+	if len(catalogDirs) == 0 {
+		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
 	}
 	includeDirs := global.Includes
 	if len(includeDirs) == 0 {
 		includeDirs = []string{"/etc/sermo/apps-enabled"}
 	}
 
-	for _, dir := range daemonDirs {
+	for _, dir := range catalogDirs {
 		if err := cfg.loadDir(dir); err != nil {
 			return nil, err
 		}
@@ -111,11 +104,7 @@ func loadGlobal(path string) (Global, error) {
 		g.Defaults = map[string]any{}
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
-		g.Daemons = cfgval.StringList(paths["daemons"])
-		if len(g.Daemons) == 0 {
-			g.Daemons = cfgval.StringList(paths["profiles"])
-		}
-		g.Profiles = g.Daemons
+		g.Catalog = cfgval.StringList(paths["catalog"])
 		g.Includes = cfgval.StringList(paths["includes"])
 		if len(g.Includes) == 0 {
 			g.Includes = cfgval.StringList(paths["enabled"])
@@ -127,9 +116,9 @@ func loadGlobal(path string) (Global, error) {
 	return g, nil
 }
 
-// absProfileDirs cleans an override list, making relative entries absolute
+// absCatalogDirs cleans an override list, making relative entries absolute
 // against the current working directory and dropping empty ones.
-func absProfileDirs(dirs []string) []string {
+func absCatalogDirs(dirs []string) []string {
 	out := make([]string, 0, len(dirs))
 	for _, d := range dirs {
 		if d == "" {
@@ -144,14 +133,13 @@ func absProfileDirs(dirs []string) []string {
 	return out
 }
 
-// resolveConfigPaths makes daemons/includes/runtime/state paths absolute. Relative
+// resolveConfigPaths makes catalog/includes/runtime/state paths absolute. Relative
 // entries are resolved against the global config file's directory so a tree like
 // configs/sermo.yml with `includes: [apps-enabled]` loads configs/apps-enabled
 // when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
-	g.Daemons = resolvePathList(base, g.Daemons)
-	g.Profiles = g.Daemons
+	g.Catalog = resolvePathList(base, g.Catalog)
 	g.Includes = resolvePathList(base, g.Includes)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
@@ -294,23 +282,13 @@ func loadDocument(path string) (*Document, error) {
 	if body == nil {
 		body = map[string]any{}
 	}
-	kind := canonicalDocumentKind(cfgval.String(body["kind"]))
-	if kind == kindDaemon {
-		body["kind"] = kindDaemon
-	}
+	kind := cfgval.String(body["kind"])
 	return &Document{
 		Kind: kind,
 		Name: cfgval.String(body["name"]),
 		Path: path,
 		Body: body,
 	}, nil
-}
-
-func canonicalDocumentKind(kind string) string {
-	if kind == kindProfile {
-		return kindDaemon
-	}
-	return kind
 }
 
 // add indexes a document by name. The first document under each name wins for
@@ -323,7 +301,6 @@ func (c *Config) add(doc *Document) {
 			c.Daemons[doc.Name] = doc
 		}
 		c.DaemonNames = append(c.DaemonNames, doc.Name)
-		c.ProfileNames = append(c.ProfileNames, doc.Name)
 	case kindService:
 		if _, exists := c.Services[doc.Name]; !exists && doc.Name != "" {
 			c.Services[doc.Name] = doc
@@ -344,11 +321,6 @@ func (c *Config) DaemonsInCategory(category string) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// ProfilesInCategory is the legacy name for DaemonsInCategory.
-func (c *Config) ProfilesInCategory(category string) []string {
-	return c.DaemonsInCategory(category)
 }
 
 // DisplayName returns the human-friendly `display_name` from a document body

@@ -1,0 +1,12 @@
+kind: daemon
+name: virtlogd
+display_name: "libvirt Log Daemon"
+service: virtlogd
+variables:
+  binary: "/usr/bin/virtlogd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }

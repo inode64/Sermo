@@ -1,0 +1,13 @@
+kind: daemon
+name: lldpd
+display_name: "LLDP Daemon"
+description: "Link Layer Discovery Protocol"
+service: lldpd
+variables:
+  binary: "/usr/bin/lldpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }

@@ -1,0 +1,25 @@
+kind: daemon
+name: dhcpd
+display_name: "DHCP Server"
+description: "Servidor DHCP"
+service: dhcpd
+variables:
+  port: 67
+  binary: "/usr/bin/dhcpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: dhcp, port: "${port}" }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"

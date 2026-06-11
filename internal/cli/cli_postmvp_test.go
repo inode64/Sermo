@@ -15,7 +15,7 @@ func writePostMVPConfig(t *testing.T) (global, root string) {
 	global = filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  daemons: [ `+root+`/daemons ]
+  catalog: [ `+root+`/daemons ]
   includes: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
@@ -66,14 +66,6 @@ func TestDaemonListAndShow(t *testing.T) {
 	code, _, stderr := runCLI(t, "--config", global, "daemon", "show", "nope")
 	if code != exitRuntimeError || !strings.Contains(stderr, "unknown daemon") {
 		t.Fatalf("daemon show nope: code=%d stderr=%q", code, stderr)
-	}
-}
-
-func TestProfileCommandIsLegacyAlias(t *testing.T) {
-	global, _ := writePostMVPConfig(t)
-	code, out, _ := runCLI(t, "--config", global, "profile", "show", "redis")
-	if code != exitSuccess || !strings.Contains(out, "name: redis") {
-		t.Fatalf("profile legacy alias: code=%d out=%q", code, out)
 	}
 }
 

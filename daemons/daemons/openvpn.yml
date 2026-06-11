@@ -1,0 +1,14 @@
+kind: daemon
+name: openvpn
+display_name: "OpenVPN"
+service: openvpn
+variables:
+  port: 1194
+  binary: "/usr/bin/openvpn"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: openvpn, port: "${port}" }

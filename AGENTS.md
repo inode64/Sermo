@@ -147,12 +147,10 @@ sermo/
 │   │   └── logger.go
 │   └── execx/
 │       └── runner.go
-├── daemons/
-│   ├── apache.yml
-│   ├── mysql.yml
-│   ├── mariadb.yml
-│   ├── redis.yml
-│   └── php-fpm.yml
+├── catalog/
+│   ├── services/   # long-running daemons (apache.yml, mysql.yml, redis.yml, ...)
+│   ├── apps/       # tools/runtimes (java.yml, git.yml, ...)
+│   └── libs/       # shared libraries (glibc.yml, pam.yml)
 ├── configs/
 │   ├── sermo.yml
 │   └── apps-enabled/

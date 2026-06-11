@@ -39,7 +39,7 @@ const baseGlobal = `
 engine:
   backend: auto
 paths:
-  daemons: [ @ROOT@/daemons ]
+  catalog: [ @ROOT@/catalog ]
   includes: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
@@ -53,7 +53,7 @@ defaults:
 func TestResolveMergesDefaultsDaemonOverrides(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/apache.yml": `
+		"catalog/apache.yml": `
 kind: daemon
 name: apache
 variables:
@@ -150,7 +150,7 @@ func TestMultiInstanceDaemonOverridesPerInstance(t *testing.T) {
 	// is needed beyond `uses` + per-instance `variables`.
 	cfg, err := Load(writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/dbserver.yml": `
+		"catalog/dbserver.yml": `
 kind: daemon
 name: dbserver
 service:
@@ -243,13 +243,13 @@ func TestLoadResolvesRelativePaths(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")
 	enabledDir := filepath.Join(configDir, "apps-enabled")
-	daemonsDir := filepath.Join(root, "daemons")
-	for _, d := range []string{enabledDir, daemonsDir} {
+	catalogDir := filepath.Join(root, "catalog")
+	for _, d := range []string{enabledDir, catalogDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(daemonsDir, "redis.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(catalogDir, "redis.yml"), []byte(`
 kind: daemon
 name: redis
 variables: { port: 6379 }
@@ -267,7 +267,7 @@ uses: redis
 	if err := os.WriteFile(global, []byte(`
 engine: { backend: auto }
 paths:
-  daemons: [../daemons]
+  catalog: [../catalog]
   includes: [apps-enabled]
   runtime: /run/sermo
 defaults:
@@ -289,8 +289,8 @@ watches:
 	if got := cfg.Global.Includes[0]; got != enabledDir {
 		t.Fatalf("Includes[0] = %q, want %q", got, enabledDir)
 	}
-	if got := cfg.Global.Daemons[0]; got != daemonsDir {
-		t.Fatalf("Daemons[0] = %q, want %q", got, daemonsDir)
+	if got := cfg.Global.Catalog[0]; got != catalogDir {
+		t.Fatalf("Catalog[0] = %q, want %q", got, catalogDir)
 	}
 	if len(cfg.Services) != 1 {
 		t.Fatalf("Services = %d, want 1", len(cfg.Services))
@@ -298,47 +298,6 @@ watches:
 	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
 	if len(watches) != 1 {
 		t.Fatalf("watches in global config = %d, want 1", len(watches))
-	}
-}
-
-func TestLoadLegacyProfileAliases(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": `
-engine: { backend: auto }
-paths:
-  profiles: [ @ROOT@/legacy-profiles ]
-  includes: [ @ROOT@/enabled ]
-  runtime: /run/sermo
-defaults:
-  policy: { cooldown: 5m }
-`,
-		"legacy-profiles/redis.yml": `
-kind: profile
-name: redis
-service: redis
-`,
-		"enabled/redis-main.yml": `
-kind: service
-name: redis-main
-uses: redis
-`,
-	})
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if _, ok := cfg.Daemons["redis"]; !ok {
-		t.Fatalf("legacy profile was not loaded as daemon")
-	}
-	if got := cfg.Daemons["redis"].Body["kind"]; got != kindDaemon {
-		t.Fatalf("legacy kind canonicalized to %v, want %q", got, kindDaemon)
-	}
-	resolved, errs := cfg.Resolve("redis-main")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve() errors = %v", errs)
-	}
-	if got := ServiceUnit(resolved.Tree, "redis-main"); got != "redis" {
-		t.Fatalf("unit = %q, want redis", got)
 	}
 }
 
@@ -443,7 +402,7 @@ func TestValidateGlobalErrors(t *testing.T) {
 engine:
   backend: bogus
 paths:
-  daemons: [ @ROOT@/daemons ]
+  catalog: [ @ROOT@/catalog ]
   includes: [ @ROOT@/enabled ]
   locks: /run/sermo/locks
   runtime: relative/path
@@ -631,7 +590,7 @@ func TestCollectVariablesFirstExistingPath(t *testing.T) {
 func TestBuiltinNameAndDisplayNameVariables(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/db.yml": `
+		"catalog/db.yml": `
 kind: daemon
 name: db
 display_name: "MariaDB"
@@ -783,7 +742,7 @@ kind: service
 name: ../escape
 service: { name: mysql }
 `,
-		"daemons/bad.yml": `
+		"catalog/bad.yml": `
 kind: daemon
 name: apache/main
 `,
@@ -1078,7 +1037,7 @@ func TestOSSelectorCollapses(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/apache.yml": `
+		"catalog/apache.yml": `
 kind: daemon
 name: apache
 service:
@@ -1137,7 +1096,7 @@ func TestOSSelectorListBranch(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/db.yml": `
+		"catalog/db.yml": `
 kind: daemon
 name: db
 processes:
@@ -1167,7 +1126,7 @@ func TestOSVariableBaked(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/app.yml": `
+		"catalog/app.yml": `
 kind: daemon
 name: app
 variables:
@@ -1197,7 +1156,7 @@ func TestArchVariableBaked(t *testing.T) {
 
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/apps/qemu.yml": `
+		"catalog/apps/qemu.yml": `
 kind: daemon
 name: qemu
 display_name: "QEMU"
@@ -1229,9 +1188,9 @@ preflight:
 func TestDaemonCategoryFromDirectory(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml":              baseGlobal,
-		"daemons/nginx.yml":      "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
-		"daemons/apps/git.yml":   "kind: daemon\nname: git\nservice: { name: git }\n",
-		"daemons/libs/glibc.yml": "kind: daemon\nname: glibc\nvariables: { binary: /lib64/libc.so.6 }\n",
+		"catalog/nginx.yml":      "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
+		"catalog/apps/git.yml":   "kind: daemon\nname: git\nservice: { name: git }\n",
+		"catalog/libs/glibc.yml": "kind: daemon\nname: glibc\nvariables: { binary: /lib64/libc.so.6 }\n",
 	})
 	cfg, err := Load(global)
 	if err != nil {
@@ -1255,7 +1214,7 @@ func TestDaemonCategoryFromDirectory(t *testing.T) {
 func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"daemons/libs/glibc.yml": `
+		"catalog/libs/glibc.yml": `
 kind: daemon
 name: glibc
 display_name: "GNU C Library"
@@ -1295,7 +1254,7 @@ func TestRestartOnChangeUnknownLibraryErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		// nginx is a service daemon, not a library: referencing it must error.
-		"daemons/nginx.yml": "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
+		"catalog/nginx.yml": "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
 		"enabled/web.yml": `
 kind: service
 name: web
@@ -1440,7 +1399,7 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { daemons: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, daemonsDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -1535,7 +1494,7 @@ variables:
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
 paths:
-  daemons: [ %s ]
+  catalog: [ %s ]
   includes: [ %s ]
   runtime: /run/sermo
 defaults:

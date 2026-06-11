@@ -1,0 +1,26 @@
+kind: daemon
+name: varnishd
+display_name: "Varnish"
+description: "Varnish"
+service: varnishd
+variables:
+  port: 6082
+  binary: "/usr/bin/varnishd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+  config: { type: command, command: ["${binary}","-C","-f","/etc/varnish/default.vcl"], timeout: 30s }
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}" }
+  varnish: { type: varnish, port: "${port}", timeout: 3s }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"
