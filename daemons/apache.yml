@@ -12,6 +12,7 @@ variables:
   user: www-data
   host: 127.0.0.1
   port: 80
+  tls_port: 443
   health_path: /
 
 commands:
@@ -49,6 +50,16 @@ checks:
     type: http
     url: "http://${host}:${port}${health_path}"
     expect_status: 200
+    timeout: 5s
+
+  # HTTPS certificate expiry. verify:false avoids alarms on self-signed certs; a
+  # TLS/connection error is not an alert, so a host without 443 stays quiet.
+  cert:
+    type: cert
+    host: "${host}"
+    port: "${tls_port}"
+    verify: false
+    expires_in_days: 21
     timeout: 5s
 
 stop_policy:

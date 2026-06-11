@@ -10,4 +10,5 @@ preflight:
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
+  service: { type: service, expect: active }
   port: { type: openvpn, port: "${port}" }

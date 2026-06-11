@@ -11,4 +11,14 @@ preflight:
   config: { type: command, command: ["${binary}","-k","check"], timeout: 30s }
 
 checks:
+  service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"

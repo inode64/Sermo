@@ -14,6 +14,7 @@ preflight:
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
+  service: { type: service, expect: active }
   protocol:
     type: dhclient
     host: "${host}"

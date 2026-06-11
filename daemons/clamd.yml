@@ -7,3 +7,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }
+  clamd: { type: clamd, socket: /run/clamav/clamd.sock, timeout: 3s }
