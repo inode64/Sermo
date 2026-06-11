@@ -71,7 +71,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		writeJSON(a.Stdout, map[string]any{jsonKey: reports})
 		return exitSuccess
 	}
-	a.printApps(reports, empty)
+	a.printApps(reports, empty, opts.long)
 	return exitSuccess
 }
 
@@ -155,7 +155,9 @@ func (a App) shortVersionFor(ctx context.Context, tree map[string]any, rawVersio
 	return shortVersion(rawVersion)
 }
 
-func (a App) printApps(reports []appReport, empty string) {
+// printApps renders the report table. The VERSION column shows the short version
+// by default; with long set it shows the full raw version string instead.
+func (a App) printApps(reports []appReport, empty string, long bool) {
 	if len(reports) == 0 {
 		fmt.Fprintf(a.Stdout, "no %s\n", empty)
 		return
@@ -163,7 +165,13 @@ func (a App) printApps(reports []appReport, empty string) {
 	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "APPLICATION\tVERSION\tSTATUS")
 	for _, r := range reports {
-		version := r.Version
+		version := r.VersionShort
+		if long || version == "" {
+			// Full string on request, and as a fallback when no short
+			// version could be derived, so the column is never blanker
+			// than it needs to be.
+			version = r.Version
+		}
 		if version == "" {
 			version = "-"
 		}
