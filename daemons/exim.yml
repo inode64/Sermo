@@ -11,6 +11,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  config: { type: command, command: ["${binary}","-bV"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }
@@ -26,3 +27,13 @@ checks:
     verify: false
     expires_in_days: 21
     timeout: 5s
+
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"
