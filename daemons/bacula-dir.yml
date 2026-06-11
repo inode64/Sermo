@@ -5,7 +5,7 @@ description: "Backup director Server"
 service: bacula-dir
 variables:
   port: 9101
-  binary: "/usr/sbin/bacula-dir"
+  binary: "/usr/bin/bacula-dir"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

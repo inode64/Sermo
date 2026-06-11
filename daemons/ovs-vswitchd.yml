@@ -4,7 +4,7 @@ display_name: "Open vSwitch"
 description: "OpenVsiwtch Server"
 service: ovs-vswitchd
 variables:
-  binary: "/usr/sbin/ovs-vswitchd"
+  binary: "/usr/bin/ovs-vswitchd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

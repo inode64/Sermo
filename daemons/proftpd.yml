@@ -4,7 +4,7 @@ display_name: "ProFTPD"
 service: proftpd
 variables:
   port: 21
-  binary: "/usr/sbin/proftpd"
+  binary: "/usr/bin/proftpd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -8,7 +8,7 @@ service:
   openrc: [mariadb, mysql]
 
 variables:
-  binary: /usr/sbin/mariadbd
+  binary: /usr/bin/mariadbd
   clientadmin: /usr/bin/mariadb-admin
   user: mysql
   host: 127.0.0.1

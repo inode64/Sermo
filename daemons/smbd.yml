@@ -5,7 +5,7 @@ description: "Servidor de ficheros Windows - SMB"
 service: smbd
 variables:
   port: 445
-  binary: "/usr/sbin/smbd"
+  binary: "/usr/bin/smbd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

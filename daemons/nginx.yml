@@ -4,7 +4,7 @@ display_name: "Nginx"
 service: nginx
 variables:
   port: 80
-  binary: "/usr/sbin/nginx"
+  binary: "/usr/bin/nginx"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

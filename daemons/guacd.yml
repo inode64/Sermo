@@ -5,7 +5,7 @@ description: "Guacamole daemon"
 service: guacd
 variables:
   port: 4822
-  binary: "/usr/sbin/guacd"
+  binary: "/usr/bin/guacd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

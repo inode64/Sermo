@@ -8,7 +8,7 @@ service:
   openrc: ["php-fpm", "php-fpm${version}"]
 
 variables:
-  binary: /usr/sbin/php-fpm${version}
+  binary: /usr/bin/php-fpm${version}
   user: www-data
   host: 127.0.0.1
   port: 9000

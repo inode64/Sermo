@@ -15,7 +15,7 @@ service:
   openrc:  [dbserver]
 
 variables:
-  binary:  /usr/sbin/dbserverd
+  binary:  /usr/bin/dbserverd
   user:    dbserver
   host:    127.0.0.1
   port:    3306
