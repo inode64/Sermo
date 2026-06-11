@@ -19,6 +19,7 @@ import (
 type fakeManager struct {
 	stopErr   error
 	startErr  error
+	reloadErr error
 	resetErr  error
 	status    servicemgr.Status
 	statusErr error
@@ -33,6 +34,11 @@ func (m *fakeManager) Start(_ context.Context, s string) error {
 func (m *fakeManager) Stop(_ context.Context, s string) error {
 	m.calls = append(m.calls, "stop "+s)
 	return m.stopErr
+}
+
+func (m *fakeManager) Reload(_ context.Context, s string) error {
+	m.calls = append(m.calls, "reload "+s)
+	return m.reloadErr
 }
 
 func (m *fakeManager) Status(_ context.Context, s string) (servicemgr.ServiceStatus, error) {
@@ -226,6 +232,41 @@ func TestRestartIgnoresStaleNamedLock(t *testing.T) {
 	h.named = []locks.Lock{{Service: "mysql-main", State: locks.StateExpired}}
 	if res := h.restart(t); !res.OK() {
 		t.Fatalf("an expired named lock must not block: %+v", res)
+	}
+}
+
+func TestReloadRunsPreflightThenReload(t *testing.T) {
+	h := defaultHarness()
+	res := h.engine().Reload(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q, want ok", res.Status)
+	}
+	if !h.mgr.did("reload mysqld") {
+		t.Errorf("reload must call Manager.Reload; calls=%v", h.mgr.calls)
+	}
+	if h.mgr.did("stop mysqld") || h.mgr.did("start mysqld") {
+		t.Errorf("reload must not stop/start; calls=%v", h.mgr.calls)
+	}
+}
+
+func TestReloadPreflightFailedDoesNotReload(t *testing.T) {
+	h := defaultHarness()
+	h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
+	res := h.engine().Reload(context.Background())
+	if res.Status != ResultPreflightFailed {
+		t.Fatalf("status = %q, want preflight_failed", res.Status)
+	}
+	if h.mgr.did("reload mysqld") {
+		t.Error("must not reload when preflight (config) fails")
+	}
+}
+
+func TestReloadFailureSurfaces(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.reloadErr = errors.New("no ExecReload")
+	res := h.engine().Reload(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
 	}
 }
 

@@ -1,0 +1,36 @@
+kind: daemon
+name: systemd
+display_name: "systemd"
+description: "systemd system and service manager"
+service: systemd
+
+# Binary + version are owned by the same-named app (systemctl --version).
+apps: [systemd]
+
+preflight:
+  # Verify ALL unit files / systemd configuration is correct. Gates restart/start
+  # and (via the guard) reload, so a broken unit is never applied.
+  config: { type: command, command: ["systemd-analyze", "verify"], timeout: 60s }
+
+commands:
+  # Reloading systemd itself is `daemon-reload` (re-reads unit files), not a
+  # per-unit reload — so the daemon declares its own reload command.
+  reload:
+    command: ["systemctl", "daemon-reload"]
+
+# When unit files change, run `systemctl daemon-reload` (verified first by the
+# config preflight) instead of anything disruptive.
+reload_on_change:
+  paths:
+    - /etc/systemd/system
+    - /lib/systemd/system
+
+rules:
+  block-reload-if-config-invalid:
+    type: guard
+    blocks: [restart, start, reload]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid (systemd-analyze verify failed)"

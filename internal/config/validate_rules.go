@@ -42,7 +42,7 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 
 var serviceStates = set("active", "inactive", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
-var validActions = set("restart", "start", "stop", "alert", "block")
+var validActions = set("restart", "start", "stop", "reload", "alert", "block")
 var metricOps = set(">", ">=", "<", "<=", "==", "!=")
 var metricCatalog = map[string]map[string]struct{}{
 	"service": set("memory", "swap", "cpu", "cpu_thread", "process_count", "io", "io_read", "io_write", "fds", "threads"),
