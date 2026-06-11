@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"strings"
 )
 
@@ -36,14 +35,12 @@ func (lvmpolldProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if socket == "" {
 		socket = lvmpolldDefaultSocket
 	}
-	c, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	c, err := dialUnix(ctx, socket)
 	if err != nil {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
+	applyDeadline(ctx, c)
 
 	// The hello request body is a single config field; buffer framing appends the
 	// "\n##\n" delimiter (matching libdaemon's buffer_write exactly).

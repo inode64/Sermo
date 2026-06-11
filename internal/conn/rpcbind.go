@@ -49,9 +49,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
+	applyDeadline(ctx, c)
 
 	if _, err := c.Write(buildRPCNull(xid, portmapProg, portmapVers)); err != nil {
 		return Result{}, err

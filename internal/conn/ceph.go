@@ -35,9 +35,7 @@ func (cephProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	defer func() { _ = c.Close() }()
-	if dl, ok := ctx.Deadline(); ok {
-		_ = c.SetDeadline(dl)
-	}
+	applyDeadline(ctx, c)
 
 	buf := make([]byte, 8) // "ceph v2\n" / first 8 bytes of "ceph v027"
 	if _, err := io.ReadFull(c, buf); err != nil {

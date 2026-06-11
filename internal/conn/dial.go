@@ -54,7 +54,7 @@ func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, e
 		err error
 	)
 	if cfg.Socket != "" {
-		c, err = (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
+		c, err = dialUnix(ctx, cfg.Socket)
 	} else {
 		port := cfg.Port
 		if port == 0 {
@@ -67,4 +67,11 @@ func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, e
 	}
 	applyDeadline(ctx, c)
 	return c, nil
+}
+
+// dialUnix dials a Unix-domain socket. It is the one-liner the socket-only
+// probes (acpid, fail2ban, lvmpolld, docker, …) and dialDeadline share, so the
+// "&net.Dialer{}.DialContext(ctx, \"unix\", …)" incantation lives in one place.
+func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
+	return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 }
