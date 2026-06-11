@@ -249,7 +249,7 @@ discovery tries them in order and uses the first that points at a running proces
 ## Versioned daemons
 
 Some applications ship one binary per version and several can be installed at
-once (php-fpm, postgres, tomcat/catalina, erlang/beam, berkeley db). Instead of one file per
+once (php-fpm, postgres, tomcat, erlang/beam, berkeley db). Instead of one file per
 version, write a single **version template**: a daemon whose name (and filename)
 contains `%v`, with `${version}` in the binary path.
 

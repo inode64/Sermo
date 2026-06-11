@@ -61,7 +61,7 @@ what `${var}` resolves to after expansion. Same for `uses` with a profile. See
 
 A profile whose name contains `%v` (free-form version) or `%n` (plain integer) is
 a version template: it materializes into one concrete profile per installed
-version when several can coexist (php-fpm, postgres, catalina, beam, db, python).
+version when several can coexist (php-fpm, postgres, tomcat, beam, db, python).
 `%v` pairs with `${version}` and accepts `8.3`/`12.0.2`; `%n` pairs with `${n}`
 and matches only whole integers (`python%n` → `python2`, `python3`, not
 `python3.11`). The placeholder may sit anywhere in the name (`db%vsql` →
