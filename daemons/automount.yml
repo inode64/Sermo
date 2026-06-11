@@ -10,3 +10,9 @@ preflight:
 
 checks:
   service: { type: service, expect: active }
+
+  # Health of the automounter itself: while autofs runs it keeps its map roots as
+  # autofs-type mountpoints in /proc/mounts (native, zero-config). With no
+  # path/count it passes when >= 1 autofs mountpoint is present, and fails when
+  # the automounter is not maintaining its maps.
+  autofs: { type: autofs }
