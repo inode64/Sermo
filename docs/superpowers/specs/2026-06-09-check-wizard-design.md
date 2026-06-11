@@ -20,7 +20,8 @@ it into the global `sermo.yml` (a `.bak` is written first; collisions abort).
 
 - **`Prompt`** wraps an `io.Reader`+`io.Writer`; helpers re-prompt on bad input:
   `Ask(q, def)`, `Confirm(q, def)`, `Choose(q, opts)` (single, 1-based input →
-  0-based index), `MultiChoose(q, opts)` (`1,3` or `all`), `AskInt(q, def)`,
+  0-based index), `MultiChoose(q, opts)` (`1,3`, `all`, or an option name such as
+  `none`/`default`), `AskInt(q, def)`,
   `AskNonEmpty(q)`.
 - **`Env`** carries dependencies without CLI coupling:
   ```go
