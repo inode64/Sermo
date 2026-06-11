@@ -331,16 +331,25 @@ defaults: { policy: { cooldown: 5m } }
 		return stdout.String()
 	}
 
-	// Default: only installed apps, with version and status.
+	// Default: only installed apps, the short version, and status.
 	out := run("apps")
-	if !strings.Contains(out, "GoodApp") || !strings.Contains(out, "GoodApp 1.2.3") || !strings.Contains(out, "ok") {
+	if !strings.Contains(out, "GoodApp") || !strings.Contains(out, "1.2.3") || !strings.Contains(out, "ok") {
 		t.Errorf("apps missing good app row:\n%s", out)
+	}
+	if strings.Contains(out, "GoodApp 1.2.3") {
+		t.Errorf("apps should show the short version by default, not the raw string:\n%s", out)
 	}
 	if !strings.Contains(out, "BadApp") || !strings.Contains(out, "exit 3 (want 0): boom") {
 		t.Errorf("apps missing bad app error:\n%s", out)
 	}
 	if strings.Contains(out, "GoneApp") {
 		t.Errorf("apps should hide not-installed app by default:\n%s", out)
+	}
+
+	// `apps --long` shows the full raw version string instead.
+	outLong := run("apps", "--long")
+	if !strings.Contains(outLong, "GoodApp 1.2.3") {
+		t.Errorf("apps --long should show the full version string:\n%s", outLong)
 	}
 
 	// `apps all` also lists the not-installed app.
