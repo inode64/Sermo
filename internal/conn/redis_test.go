@@ -50,6 +50,34 @@ func TestRedisHandshakeNoAuth(t *testing.T) {
 	}
 }
 
+func TestRedisHandshakeExtraFields(t *testing.T) {
+	info := "# Server\r\nredis_version:7.2.4\r\nuptime_in_seconds:3600\r\n" +
+		"# Clients\r\nconnected_clients:12\r\n" +
+		"# Memory\r\nused_memory:1048576\r\nmaxmemory:0\r\nmem_fragmentation_ratio:1.20\r\n" +
+		"# Persistence\r\nloading:0\r\nrdb_last_bgsave_status:ok\r\naof_last_write_status:ok\r\n" +
+		"# Replication\r\nrole:slave\r\nmaster_link_status:up\r\n"
+	conn := rw{in: strings.NewReader("+PONG\r\n" + infoBulk(info)), out: &bytes.Buffer{}}
+
+	res, err := redisHandshake(conn, Config{})
+	if err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
+	want := map[string]string{
+		"role": "slave", "master_link_status": "up", "connected_clients": "12",
+		"used_memory": "1048576", "maxmemory": "0", "mem_fragmentation_ratio": "1.20",
+		"rdb_last_bgsave_status": "ok", "aof_last_write_status": "ok", "loading": "0",
+		"uptime_seconds": "3600",
+	}
+	for k, v := range want {
+		if res.Extra[k] != v {
+			t.Errorf("Extra[%q] = %q, want %q", k, res.Extra[k], v)
+		}
+	}
+	if res.Version != "7.2.4" {
+		t.Fatalf("version = %q, want 7.2.4", res.Version)
+	}
+}
+
 func TestRedisHandshakeAuthUserAndPassword(t *testing.T) {
 	replies := "+OK\r\n+PONG\r\n" + infoBulk("redis_version:7.0.0\r\n")
 	conn := rw{in: strings.NewReader(replies), out: &bytes.Buffer{}}

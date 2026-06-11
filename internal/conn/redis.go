@@ -67,14 +67,31 @@ func redisHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("unexpected PING reply %q", pong)
 	}
 
-	// Version: best effort; a successful PING already proves connect + auth.
-	version := ""
-	if writeRESP(rw, "INFO", "server") == nil {
+	// Server identity and health: best effort; a successful PING already proves
+	// connect + auth. A single INFO carries version plus role, replication,
+	// persistence and memory fields, each exposed in Extra so an expect: rule can
+	// assert on it (e.g. role == master, master_link_status == up,
+	// rdb_last_bgsave_status == ok).
+	res := Result{Extra: map[string]string{}}
+	if writeRESP(rw, "INFO") == nil {
 		if info, err := readRESP(br); err == nil {
-			version = redisVersion(info)
+			fields := parseRedisInfo(info)
+			res.Version = fields["redis_version"]
+			for _, k := range []string{
+				"role", "master_link_status", "connected_clients",
+				"used_memory", "maxmemory", "mem_fragmentation_ratio",
+				"rdb_last_bgsave_status", "aof_last_write_status", "loading",
+			} {
+				if v := fields[k]; v != "" {
+					res.Extra[k] = v
+				}
+			}
+			if v := fields["uptime_in_seconds"]; v != "" {
+				res.Extra["uptime_seconds"] = v
+			}
 		}
 	}
-	return Result{Version: version}, nil
+	return res, nil
 }
 
 // writeRESP encodes args as a RESP array of bulk strings.
@@ -126,12 +143,19 @@ func readRESPLine(br *bufio.Reader) (string, error) {
 	return strings.TrimRight(s, "\r\n"), err
 }
 
-// redisVersion extracts the redis_version value from an INFO reply.
-func redisVersion(info string) string {
+// parseRedisInfo parses an INFO reply — "key:value" lines, "# Section" headers
+// and blank separators — into a flat map. Section headers and blanks are
+// dropped; each field is split on its first ':'.
+func parseRedisInfo(info string) map[string]string {
+	out := map[string]string{}
 	for _, line := range strings.Split(info, "\n") {
-		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "redis_version:"); ok {
-			return strings.TrimSpace(v)
+		line = strings.TrimRight(line, "\r")
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if k, v, ok := strings.Cut(line, ":"); ok {
+			out[k] = v
 		}
 	}
-	return ""
+	return out
 }

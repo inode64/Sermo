@@ -59,6 +59,33 @@ func TestFPMHandshakeNotPong(t *testing.T) {
 	}
 }
 
+func TestFPMMergeStatus(t *testing.T) {
+	stdout := "Content-type: application/json\r\n\r\n" +
+		`{"pool":"www","process manager":"dynamic","start since":3600,"accepted conn":42,` +
+		`"listen queue":0,"max listen queue":5,"idle processes":8,"active processes":2,` +
+		`"total processes":10,"max active processes":4,"max children reached":1,"slow requests":3}`
+	extra := map[string]string{"ping": "pong"}
+	mergeFPMStatus(extra, stdout)
+	want := map[string]string{
+		"pool": "www", "process_manager": "dynamic", "active_processes": "2",
+		"idle_processes": "8", "total_processes": "10", "listen_queue": "0",
+		"max_listen_queue": "5", "max_children_reached": "1", "slow_requests": "3",
+		"accepted_conn": "42", "uptime_seconds": "3600",
+	}
+	for k, v := range want {
+		if extra[k] != v {
+			t.Errorf("extra[%q] = %q, want %q", k, extra[k], v)
+		}
+	}
+
+	// A non-JSON body (status path not enabled) must not add metric keys.
+	bad := map[string]string{"ping": "pong"}
+	mergeFPMStatus(bad, "Status: 404 Not Found\r\n\r\nAccess denied.")
+	if len(bad) != 1 {
+		t.Fatalf("non-JSON status must leave extra untouched, got %v", bad)
+	}
+}
+
 func TestFCGIParamsRoundTrip(t *testing.T) {
 	// A short name/value encodes as 1-byte lengths and round-trips.
 	enc := encodeFCGIParams([][2]string{{"SCRIPT_NAME", "/ping"}})
