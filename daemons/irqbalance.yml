@@ -6,3 +6,6 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], expect_exit: 1, timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }

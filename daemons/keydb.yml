@@ -11,6 +11,7 @@ preflight:
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }
 
 checks:
+  service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
 
   # KeyDB speaks the RESP protocol, so the native redis probe verifies liveness

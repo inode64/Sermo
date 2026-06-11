@@ -8,3 +8,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }
+  openvswitch: { type: openvswitch, socket: /var/run/openvswitch/db.sock, timeout: 3s }
