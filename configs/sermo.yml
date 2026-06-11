@@ -31,8 +31,8 @@ paths:
   includes:
     - apps-enabled
     # Wizard-generated watches are added as separate include directories, e.g.
-    # - volume
-    # - net
+    # - storage
+    # - network
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
   # Persistent state database (monitoring state, future history/metrics). Lives
