@@ -1,0 +1,23 @@
+kind: daemon
+name: fail2ban-server
+display_name: "Fail2ban"
+service: fail2ban-server
+variables:
+  binary: "/usr/bin/fail2ban-server"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+
+checks:
+  service: { type: service, expect: active }
+  fail2ban: { type: fail2ban, timeout: 3s }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"

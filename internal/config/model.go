@@ -11,24 +11,22 @@ package config
 
 import "sermo/internal/cfgval"
 
-// docKind identifies the document kinds. `profile` is a legacy alias for
-// `daemon` kept for existing configurations.
+// docKind identifies the document kinds.
 const (
 	kindDaemon  = "daemon"
-	kindProfile = "profile"
 	kindService = "service"
 )
 
 // Daemon categories, derived from the subdirectory a daemon definition is loaded
-// from (daemons/services, daemons/apps, daemons/libs). Files directly under a
-// daemons root default to CategoryService.
+// from (catalog/services, catalog/apps, catalog/libs). Files directly under a
+// catalog root default to CategoryService.
 const (
 	CategoryService = "service"
 	CategoryApp     = "app"
 	CategoryLibrary = "library"
 )
 
-// categoryFromDir maps a daemons subdirectory name to a category, or "" when the
+// categoryFromDir maps a catalog subdirectory name to a category, or "" when the
 // directory is not a recognized category (its files inherit the default).
 func categoryFromDir(name string) string {
 	switch name {
@@ -98,8 +96,7 @@ type Global struct {
 	Path     string
 	Raw      map[string]any
 	Defaults map[string]any
-	Daemons  []string
-	Profiles []string // legacy alias for Daemons
+	Catalog  []string
 	Includes []string
 	Runtime  string
 	State    string
@@ -177,10 +174,8 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 type Config struct {
 	Global       Global
 	Daemons      map[string]*Document
-	Profiles     map[string]*Document
 	Services     map[string]*Document
 	DaemonNames  []string // load order, for stable reporting
-	ProfileNames []string // load order, for stable reporting
 	ServiceNames []string
 	docs         []*Document // every document in load order
 }

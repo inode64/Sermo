@@ -134,11 +134,6 @@ func (c *Config) ResolveDaemon(name string) (Resolved, []string) {
 	return Resolved{Name: name, Tree: expanded}, append(errs, expErrs...)
 }
 
-// ResolveProfile is the legacy name for ResolveDaemon.
-func (c *Config) ResolveProfile(name string) (Resolved, []string) {
-	return c.ResolveDaemon(name)
-}
-
 // mergedService returns the merged-but-unexpanded body for a service, following
 // its uses/clone layering. chain tracks the active clone path for cycle
 // detection (section 8).

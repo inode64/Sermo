@@ -21,12 +21,12 @@ engine:
   startup_delay: 0
 
 paths:
-  # Packaged daemon definition directory (installed by `make install`). When running from
-  # the source tree, point this elsewhere without editing the file via
-  # `sermod run --daemons ./daemons` (repeatable for multiple dirs).
-  daemons:
-    - /usr/share/sermo/daemons
-    - /etc/sermo/daemons-available
+  # Packaged catalog directory — the service/app/library definitions, installed by
+  # `make install`. When running from the source tree, point this elsewhere without
+  # editing the file via `sermod run --catalog ./catalog` (repeatable for multiple dirs).
+  catalog:
+    - /usr/share/sermo/catalog
+    - /etc/sermo/catalog-available
   # Relative to this file's directory (configs/).
   includes:
     - apps-enabled

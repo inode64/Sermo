@@ -110,8 +110,8 @@ sermod run --config /etc/sermo/sermo.yml
 
 ```
 /etc/sermo/sermo.yml              global config
-/usr/share/sermo/daemons/*.yml   packaged daemons (apache, mysql, redis, ...)
-/etc/sermo/daemons-available/*.yml   user daemons
+/usr/share/sermo/catalog/{services,apps,libs}/*.yml   packaged catalog (apache, mysql, redis, ...)
+/etc/sermo/catalog-available/*.yml   user catalog definitions
 /etc/sermo/apps-enabled/*.yml     included service documents
 /run/sermo/locks/*.lock           named runtime locks (tmpfs, wiped on reboot)
 /run/sermo/ops/*.lock             internal operation locks

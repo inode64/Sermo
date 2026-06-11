@@ -1,0 +1,95 @@
+kind: daemon
+name: apache
+display_name: "Apache HTTP Server"
+type: webserver
+
+service:
+  systemd: [apache2, httpd]
+  openrc: [apache2, apache]
+
+variables:
+  binary: /usr/bin/apache2
+  user: www-data
+  host: 127.0.0.1
+  port: 80
+  tls_port: 443
+  health_path: /
+
+commands:
+  version:
+    command: ["apachectl", "-v"]
+
+preflight:
+  config:
+    type: command
+    command: ["apachectl", "configtest"]
+    timeout: 10s
+
+  libraries:
+    type: libraries
+    binary: "${binary}"
+    optional: true
+
+processes:
+  main:
+    type: command_match
+    exe: "${binary}"
+    user: root
+
+  workers:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  http:
+    type: http
+    url: "http://${host}:${port}${health_path}"
+    expect_status: 200
+    timeout: 5s
+
+  # HTTPS certificate expiry. verify:false avoids alarms on self-signed certs; a
+  # TLS/connection error is not an alert, so a host without 443 stays quiet.
+  cert:
+    type: cert
+    host: "${host}"
+    port: "${tls_port}"
+    verify: false
+    expires_in_days: 21
+    timeout: 5s
+
+stop_policy:
+  graceful_timeout: 30s
+  term_timeout: 10s
+  kill_timeout: 5s
+  force_kill: true
+  kill_only_if:
+    users: ["${user}", root]
+    exe_any:
+      - "${binary}"
+
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"
+
+  restart-if-http-failed:
+    type: remediation
+    if:
+      failed:
+        check: http
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart

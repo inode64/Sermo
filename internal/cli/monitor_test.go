@@ -35,7 +35,7 @@ func TestMonitorUnmonitorCommand(t *testing.T) {
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { daemons: [ %s ], includes: [ %s ], runtime: %s, state: %s }
+paths: { catalog: [ %s ], includes: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
 `, daemonsDir, enabledDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
@@ -180,7 +180,7 @@ func monitorTestConfig(t *testing.T) (root, global string) {
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { daemons: [ %s ], includes: [ %s ], runtime: %s, state: %s }
+paths: { catalog: [ %s ], includes: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
 `, daemonsDir, enabledDir, runDir, stateDir))
 	return root, filepath.Join(root, "sermo.yml")

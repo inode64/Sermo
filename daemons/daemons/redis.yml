@@ -1,0 +1,96 @@
+kind: daemon
+name: redis
+display_name: "Redis"
+type: cache
+
+service:
+  systemd: [redis, redis-server]
+  openrc: [redis]
+
+variables:
+  binary: /usr/bin/redis-server
+  cli: /usr/bin/redis-cli
+  user: redis
+  host: 127.0.0.1
+  port: 6379
+  pidfile: /run/redis/redis.pid
+
+commands:
+  version:
+    command: ["${binary}", "--version"]
+
+preflight:
+  binary:
+    type: binary
+    path: "${binary}"
+
+  libraries:
+    type: libraries
+    binary: "${binary}"
+
+processes:
+  pidfile:
+    type: pidfile
+    path: "${pidfile}"
+
+  redis:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  tcp:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  ping:
+    type: command
+    command: ["${cli}", "-h", "${host}", "-p", "${port}", "ping"]
+    timeout: 3s
+
+  # Native RESP probe exposing role, replication, persistence and memory in its
+  # result data (assertable via expect). It asserts the last background save
+  # succeeded — reported "ok" even when persistence is disabled, so it never
+  # false-alarms. Not wired to a remediation rule: a failed save is surfaced for
+  # alerting, not fixed by a restart.
+  persistence:
+    type: redis
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+    expect:
+      rdb_last_bgsave_status: ok
+
+stop_policy:
+  graceful_timeout: 30s
+  term_timeout: 15s
+  force_kill: false
+
+rules:
+  restart-if-tcp-failed:
+    type: remediation
+    if:
+      failed:
+        check: tcp
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart
+
+  restart-if-ping-failed:
+    type: remediation
+    if:
+      failed:
+        check: ping
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart

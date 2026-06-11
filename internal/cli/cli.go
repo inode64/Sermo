@@ -193,8 +193,6 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPreflight(ctx, opts)
 	case "daemon":
 		return a.runDaemon(opts)
-	case "profile":
-		return a.runProfile(opts) // legacy alias
 	case "apps":
 		return a.runApps(ctx, opts)
 	case "libs":

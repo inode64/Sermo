@@ -531,7 +531,7 @@ func TestWebBackendConfigRenderAndDiff(t *testing.T) {
 	webPath := filepath.Join(enabled, "web.yml")
 	if err := os.WriteFile(globalPath, []byte(`
 paths:
-  daemons: [`+daemons+`]
+  catalog: [`+daemons+`]
   includes: [`+enabled+`]
 defaults:
   policy:
@@ -630,7 +630,7 @@ func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	// Minimal config with a watch that has a hook. The check is a simple command that always succeeds.
 	cfgContent := `
 paths:
-  daemons: []
+  catalog: []
   includes: []
   runtime: /tmp
 defaults:

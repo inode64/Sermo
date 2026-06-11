@@ -1,0 +1,12 @@
+kind: daemon
+name: snmp-ups
+display_name: "SNMP UPS Driver"
+service: snmp-ups
+variables:
+  binary: "/lib/nut/snmp-ups"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+
+checks:
+  service: { type: service, expect: active }
