@@ -12,4 +12,14 @@ preflight:
   config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }
 
 checks:
+  service: { type: service, expect: active }
   port: { type: dhcp, port: "${port}" }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"

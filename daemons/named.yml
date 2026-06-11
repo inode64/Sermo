@@ -11,4 +11,14 @@ preflight:
   config: { type: command, command: ["sh","-c","/etc/init.d/named checkconfig && /etc/init.d/named checkzones"], timeout: 30s }
 
 checks:
+  service: { type: service, expect: active }
   port: { type: dns, port: "${port}" }
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"

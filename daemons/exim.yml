@@ -4,11 +4,25 @@ display_name: "Exim"
 description: "Gestor de correo SMTP Exim"
 service: exim
 variables:
+  host: 127.0.0.1
   port: 25
+  tls_port: 465
   binary: "/usr/bin/exim"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
+  service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
+  smtp: { type: smtp, port: "${port}", timeout: 3s }
+
+  # SMTPS certificate expiry. verify:false avoids alarms on self-signed internal
+  # certs; a TLS/connection error is not an alert, so a non-TLS server stays quiet.
+  cert:
+    type: cert
+    host: "${host}"
+    port: "${tls_port}"
+    verify: false
+    expires_in_days: 21
+    timeout: 5s
