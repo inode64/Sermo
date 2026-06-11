@@ -192,9 +192,9 @@ An explicit `variables` entry of the same name always takes precedence over a
 built-in. `${arch}`/`${os}` are baked **on load** (everywhere — variable values
 and `versions.from` discovery paths included); the rest resolve per service, and
 the runtime ones (`${date}`/`${event}`/`${action}`) only in rule `message:`
-strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_INIT` /
-`SERMO_USER` environment variables override the matching built-in (handy for
-testing or building config off-host).
+strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
+`SERMO_INIT` / `SERMO_USER` environment variables override the matching built-in
+(handy for testing or building config off-host).
 
 | Variable          | Value                                   | Resolved        |
 |-------------------|-----------------------------------------|-----------------|
@@ -202,6 +202,7 @@ testing or building config off-host).
 | `${display_name}` | the display name (falls back to name)   | resolution      |
 | `${service}`      | the service's primary unit name         | resolution      |
 | `${host}`         | hostname (`SERMO_HOST` override)        | resolution¹     |
+| `${hostname}`     | short hostname (`SERMO_HOSTNAME`)       | resolution⁵     |
 | `${init}`         | detected init system (`SERMO_INIT`)     | resolution      |
 | `${user}`         | Sermo's user (`SERMO_USER` override)    | resolution⁴     |
 | `${pidfile}`      | conventional `/run/<unit>.pid`          | resolution⁴     |
@@ -214,6 +215,15 @@ testing or building config off-host).
 
 ¹ `${host}` only applies when the daemon does not define a `host` variable (a
 bind address like `127.0.0.1`); an explicit `host` always wins.
+
+⁵ `${hostname}` is the **short** hostname — the first label before the first dot
+(`radon` on `radon.srvdr.com`) — distinct from `${host}` (which keeps the full
+detected hostname / bind-address fallback). Use it for systemd instance units
+keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@radon`.
+For numeric multi-instance daemons (e.g. one OSD per device) use a `%n` version
+template instead, discovering ids from a path — `versions: { from:
+"/var/lib/ceph/osd/ceph-${n}" }` materializes `ceph-osd0…N` with `service:
+"ceph-osd@${n}"`. An explicit `hostname` variable (or `SERMO_HOSTNAME`) wins.
 
 ⁴ `${user}` and `${pidfile}` are fallbacks: a daemon's own `user` (a service
 account such as `www-data`) or `pidfile` variable always wins. They pair with the
