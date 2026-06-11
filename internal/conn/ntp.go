@@ -5,8 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -65,12 +67,40 @@ func (ntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	t4u := float64(t4.UnixNano()) / 1e9
 	offset := ((t2 - t1u) + (t3 - t4u)) / 2
 
-	return Result{
-		Extra: map[string]string{
-			"stratum":        strconv.Itoa(stratum),
-			"offset_seconds": strconv.FormatFloat(offset, 'f', 6, 64),
-		},
-	}, nil
+	extra := ntpExtraFields(buf[:n], stratum)
+	extra["stratum"] = strconv.Itoa(stratum)
+	extra["offset_seconds"] = strconv.FormatFloat(offset, 'f', 6, 64)
+	return Result{Extra: extra}, nil
+}
+
+// ntpExtraFields decodes the diagnostic fields RFC 5905 carries alongside the
+// timestamps: the leap indicator, clock precision and the root delay/dispersion
+// (the server's estimated distance and error to the reference clock), plus the
+// reference identifier. b must be a full 48-byte packet (parseNTPResponse
+// validates the length first). These let an expect: rule assert sync quality,
+// e.g. leap == none or root_dispersion_ms below a threshold.
+func ntpExtraFields(b []byte, stratum int) map[string]string {
+	leap := [...]string{"none", "add-second", "del-second", "unsynchronized"}[b[0]>>6]
+	precision := math.Pow(2, float64(int8(b[3]))) // log2 seconds -> seconds
+	rootDelay := float64(binary.BigEndian.Uint32(b[4:8])) / (1 << 16)
+	rootDisp := float64(binary.BigEndian.Uint32(b[8:12])) / (1 << 16)
+	return map[string]string{
+		"leap":               leap,
+		"precision_seconds":  strconv.FormatFloat(precision, 'g', 4, 64),
+		"root_delay_ms":      strconv.FormatFloat(rootDelay*1000, 'f', 3, 64),
+		"root_dispersion_ms": strconv.FormatFloat(rootDisp*1000, 'f', 3, 64),
+		"reference_id":       ntpRefID(b[12:16], stratum),
+	}
+}
+
+// ntpRefID renders the 4-byte reference identifier: an ASCII refclock label
+// (e.g. "GPS", "PPS") for a stratum-1 server, otherwise the dotted IPv4 of the
+// upstream server it syncs from.
+func ntpRefID(b []byte, stratum int) string {
+	if stratum <= 1 {
+		return strings.TrimRight(string(b), "\x00 ")
+	}
+	return net.IP(b).String()
 }
 
 // buildNTPRequest builds a 48-byte NTPv4 client request (LI=0, VN=4, Mode=3).
