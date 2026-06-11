@@ -16,6 +16,31 @@ where the dispatch/validation decision lives and in the user docs. Keep
 `docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml` in
 step with YAML behavior.
 
+## Web UI cohesion
+
+The web UI is a single embedded document, `internal/web/index.html` (HTML, CSS
+and JS in one file). **Before adding or changing any UI element, find the
+existing element that already solves the same problem and copy its structure,
+classes and styling exactly** — do not invent a parallel way to do the same
+thing. Cohesion across panels is a hard requirement, not a preference.
+
+Concretely, every data panel is a `<details id="{name}-section">` with a
+`<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
+and a `<table class="{name}-table">` with a sticky header. The one deliberate
+distinction:
+
+- **Scrollable panel** — wrap the table in `<div class="table-wrap">`, which
+  adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services and
+  Host watches (long, unbounded lists).
+- **Non-scrollable panel** — place the bare `<table>` directly inside the
+  `<details>`, no wrapper. Used by Events, Notifiers and Applications (the page
+  scrolls as a whole instead of trapping a panel in its own scrollbar).
+
+Pick the variant that matches the panel's nature and reuse it verbatim; never
+hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
+introduce a genuinely new pattern, document it here and in `AGENTS.md` so the
+next change can follow it.
+
 ## Code formatting (Go)
 
 **Every Go file must be `gofmt`-clean after any modification.** Run `gofmt` on a
