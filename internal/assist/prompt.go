@@ -92,12 +92,14 @@ func (p *Prompt) Choose(question string, options []string) int {
 }
 
 // MultiChoose presents a numbered list and returns the chosen 0-based indices.
-// The answer is a comma/space separated list of numbers, or "all". An empty
-// answer re-prompts.
+// The answer is a comma/space separated list of numbers, the keyword "all", or a
+// single option name (its leading word, e.g. "none" or "default" in the notifier
+// menu). An empty or unrecognized answer re-prompts. This keeps one consistent
+// all/none/default vocabulary across every wizard selection.
 func (p *Prompt) MultiChoose(question string, options []string) []int {
 	for {
 		p.printList(question, options)
-		p.printf("choices (e.g. 1,3 or all): ")
+		p.printf("choices (numbers like 1,3, 'all', or a name): ")
 		ans := strings.TrimSpace(p.readLine())
 		if strings.EqualFold(ans, "all") {
 			idx := make([]int, len(options))
@@ -106,11 +108,14 @@ func (p *Prompt) MultiChoose(question string, options []string) []int {
 			}
 			return idx
 		}
+		if i, ok := matchOptionWord(ans, options); ok {
+			return []int{i}
+		}
 		idx, ok := parseIndices(ans, len(options))
 		if ok && len(idx) > 0 {
 			return idx
 		}
-		p.printf("  enter numbers between 1 and %d (e.g. 1,3) or 'all'\n", len(options))
+		p.printf("  enter numbers between 1 and %d (e.g. 1,3), 'all', or an option name\n", len(options))
 	}
 }
 
@@ -155,4 +160,33 @@ func parseIndices(s string, n int) ([]int, bool) {
 		}
 	}
 	return out, true
+}
+
+// matchOptionWord matches a single whole-word answer (case-insensitive) to the
+// option whose label begins with that word, so "none" / "default" select the
+// "none (…)" / "default (…)" entries the wizard always offers, and a bare
+// notifier/interface/volume name selects that item. It reports ok=false unless
+// exactly one option matches, so an empty, multi-token, or ambiguous answer
+// falls through to numeric parsing or a re-prompt.
+func matchOptionWord(ans string, options []string) (int, bool) {
+	if ans == "" || strings.ContainsAny(ans, ", ") {
+		return 0, false
+	}
+	match := -1
+	for i, o := range options {
+		first := o
+		if cut := strings.IndexAny(o, " ("); cut >= 0 {
+			first = o[:cut]
+		}
+		if strings.EqualFold(strings.TrimSpace(first), ans) {
+			if match >= 0 {
+				return 0, false // ambiguous
+			}
+			match = i
+		}
+	}
+	if match < 0 {
+		return 0, false
+	}
+	return match, true
 }

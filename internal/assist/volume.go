@@ -131,11 +131,15 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	return entry
 }
 
-// chooseNotifiers asks which configured notifiers to alert. Returning nil means
-// "leave notify unset" so runtime inherits the global notify default. Selecting
-// "none" writes the reserved sentinel so the generated watch suppresses that
-// default. The reserved "default" choice is always offered; when no global
-// default is configured it may still be useful for expand-only watches.
+// chooseNotifiers asks which configured notifiers to alert. The menu always
+// offers the same all/none/default vocabulary used across the wizard's
+// selections: "all" (the MultiChoose keyword) selects every configured notifier;
+// "none" writes the reserved sentinel so the generated watch suppresses any
+// inherited default; "default" leaves notify unset (returns nil) so runtime
+// inherits the global notify default. The reserved "none" and "default" choices
+// are always offered — even when the config defines no notifiers — so an
+// expand-only watch (or one that must explicitly opt out) still has a valid
+// pick. Each can be entered by number or by typing its name.
 func chooseNotifiers(p *Prompt, env Env) []string {
 	hasDefault := len(env.DefaultNotify) > 0
 	options := make([]string, 0, len(env.Notifiers)+2)

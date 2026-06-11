@@ -236,6 +236,42 @@ func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
 	}
 }
 
+func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
+	// With no notifiers configured, "none" and "default" must still be
+	// selectable (by name), so an expand-only watch can opt out or inherit.
+	base := testEnv()
+	base.Notifiers = nil // no notifiers defined in the config
+
+	t.Run("none", func(t *testing.T) {
+		// Select volume 1; free 10; for 3; type "none"; enable expand.
+		script := strings.Join([]string{"1", "1", "10", "3", "none", "y", "5G", "30m"}, "\n") + "\n"
+		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+		res, err := volumeAssistant{}.Run(p, base)
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		then := res.Watches["storage-mnt-backup"].(map[string]any)["then"].(map[string]any)
+		notify := then["notify"].([]string)
+		if len(notify) != 1 || notify[0] != "none" {
+			t.Fatalf("notify = %v, want [none]", notify)
+		}
+	})
+
+	t.Run("default", func(t *testing.T) {
+		// Select volume 1; free 10; for 3; type "default"; enable expand.
+		script := strings.Join([]string{"1", "1", "10", "3", "default", "y", "5G", "30m"}, "\n") + "\n"
+		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+		res, err := volumeAssistant{}.Run(p, base)
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		then := res.Watches["storage-mnt-backup"].(map[string]any)["then"].(map[string]any)
+		if _, hasNotify := then["notify"]; hasNotify {
+			t.Fatalf("'default' should omit notify to inherit the global default: %v", then)
+		}
+	})
+}
+
 func TestVolumeAssistantNotifyNoneWithoutExpandErrors(t *testing.T) {
 	// Select volume 1; free 10; for 3; explicit none; decline expand.
 	script := strings.Join([]string{"1", "1", "10", "3", "1", "n"}, "\n") + "\n"

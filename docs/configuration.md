@@ -540,9 +540,13 @@ a service.
 > deleting each file individually; during migration it also checks the older
 > assistant-named directories (`volume`, `net`). The wizard adds the type directory to
 > `paths.includes` in `sermo.yml` (writing a `.bak` first); then `sermoctl reload`.
-> New assistant types can be added over time. When asked for notification targets, choose `default` to omit
-> `then.notify` and inherit the global default; choose `none` to generate
-> `notify: [none]` and suppress that default for the watch.
+> New assistant types can be added over time. At any multi-select prompt you can
+> type item numbers (`1,3`), the keyword `all`, or an option's name. When asked
+> for notification targets the menu always offers the same `all` / `none` /
+> `default` vocabulary — even when the config defines no notifiers: type `all` to
+> notify every configured notifier, `default` to omit `then.notify` and inherit
+> the global default, or `none` to generate `notify: [none]` and suppress that
+> default for the watch.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
 `notify` list, an `expand` (storage only), or any combination. If the top-level
