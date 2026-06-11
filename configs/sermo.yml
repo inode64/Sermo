@@ -230,6 +230,18 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-conntrack-alert.sh]
+  # Watch a Cloudflare Tunnel metrics endpoint with the native cloudflared
+  # protocol check instead of a plain TCP port-open test.
+  cloudflared:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: cloudflared
+      host: 127.0.0.1
+      port: 60123
+    for: { cycles: 3 }
+    then:
+      notify: [ops-email]
   # Watch kernel OOM kills: fire whenever the out-of-memory killer reaps a process.
   oom:
     monitor: disabled

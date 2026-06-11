@@ -62,6 +62,7 @@ which reuse the same schema). MVP types:
 | `unifi` / `unifi-controller` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
 | `influxdb` / `influx` | an InfluxDB server answers `/health` (or `/ping`) and reports its version on 8086 (see Database) |
 | `prometheus` / `prom` | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
+| `cloudflared` / `cloudflare-tunnel` | a Cloudflare Tunnel daemon answers `/metrics` on 60123 with `cloudflared_` metrics (see Database) |
 | `clamd` / `clamav` | a ClamAV daemon answers `VERSION` with its engine version (see Database) |
 | `spamd` / `spamassassin` | the SpamAssassin daemon answers `PING` with `PONG` (see Database) |
 | `nut` / `ups` / `upsd` | NUT's upsd answers `VER`; a UPS exposes its variables (status, battery charge/runtime, load, voltages) for `expect`/`on_change` (see Database) |
@@ -211,7 +212,8 @@ checks:
 - **Where it applies.** `tcp`, `ports`, `icmp`, `websocket`, and every
   natively-dialed connection-protocol check (the TCP/UDP probes — `redis`, `imap`,
   `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`, `tftp`, …, plus the
-  `influxdb`/`prometheus` HTTP probes) honor the **full list + `interface_match`**.
+  `influxdb`/`prometheus`/`cloudflared` HTTP probes) honor the **full list +
+  `interface_match`**.
   The standalone `http` check honors a **single** interface (the first listed). It
   is **not** honored by checks that dial through a third-party library — the SQL
   drivers (`mysql`/`postgres`), `mongodb`, `ldap`, `libvirt`, and the
@@ -689,6 +691,11 @@ Protocols, in the order of the table above:
   status, reporting the server `version` (pair with `on_version_change`); on older
   servers it falls back to `/-/healthy` (liveness only). An optional `user`/
   `password` is sent as HTTP Basic auth (for a reverse proxy fronting the API).
+- `cloudflared` (alias `cloudflare-tunnel`) — Cloudflare Tunnel's local metrics
+  endpoint. Default port 60123; `tls` supported (https, plaintext by default).
+  GETs `/metrics`, requires HTTP 200, and verifies that the Prometheus text
+  contains `cloudflared_` metric names. This confirms the cloudflared daemon's own
+  endpoint is responding instead of only checking that TCP accepts connections.
 - `clamd` (alias `clamav`) — default port 3310 (TCP), or a Unix socket via `socket`
   (e.g. `/run/clamav/clamd.ctl`). No auth, no TLS. Sends the clamd `VERSION` command
   and verifies a `ClamAV <version>/…` reply. Result data: the engine `version` (the
@@ -1121,7 +1128,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp, nut/ups/upsd, docker
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, ntp, snmp, tftp, nut/ups/upsd, docker
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
