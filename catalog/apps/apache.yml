@@ -5,4 +5,8 @@ variables:
   binary: /usr/bin/apache2
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["apachectl", "-v"], timeout: 10s }
+  # Use the configured binary directly (httpd/apache2 -v), not `apachectl`: the
+  # control wrapper is named differently per distro (apachectl vs apache2ctl) and
+  # may be absent, whereas `${binary} -v` prints "Server version: Apache/X.Y.Z"
+  # to stdout on every distro, root-free.
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }
