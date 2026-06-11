@@ -1418,6 +1418,8 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 			return e.engine.Stop(ctx)
 		case "restart":
 			return e.engine.Restart(ctx)
+		case "reload":
+			return e.engine.Reload(ctx)
 		default:
 			return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action " + action}
 		}

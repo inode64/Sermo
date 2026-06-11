@@ -28,9 +28,49 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
+	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
+}
+
+// expandReloadOnChange desugars a `reload_on_change: {paths: [...]}` block into
+// one remediation rule per path that *reloads* the service (re-reads its config
+// in place, no restart) when that file changes. It is the non-disruptive analog
+// of restart_on_change, for daemons whose config can be reloaded (udev rules,
+// nginx vhosts, named zones, …). The block is removed; an empty paths list is a
+// no-op.
+func expandReloadOnChange(tree map[string]any) []string {
+	roc, ok := tree["reload_on_change"].(map[string]any)
+	if !ok {
+		if _, present := tree["reload_on_change"]; present {
+			delete(tree, "reload_on_change")
+			return []string{"reload_on_change must be a mapping with a paths list"}
+		}
+		return nil
+	}
+	delete(tree, "reload_on_change")
+
+	rules, _ := tree["rules"].(map[string]any)
+	if rules == nil {
+		rules = map[string]any{}
+	}
+	var errs []string
+	for i, p := range cfgval.StringList(roc["paths"]) {
+		if p == "" {
+			errs = append(errs, "reload_on_change.paths entry is empty")
+			continue
+		}
+		rules[fmt.Sprintf("reload-on-change-%d", i+1)] = map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"changed": map[string]any{"path": p}},
+			"then": map[string]any{"action": "reload"},
+		}
+	}
+	if len(rules) > 0 {
+		tree["rules"] = rules
+	}
+	return errs
 }
 
 // injectBuiltinVariables makes the document's identity available for ${...}

@@ -22,6 +22,7 @@ func (fakeManager) Stop(context.Context, string) error  { return nil }
 func (fakeManager) Restart(context.Context, string) error {
 	return nil
 }
+func (fakeManager) Reload(context.Context, string) error     { return nil }
 func (fakeManager) ResetState(context.Context, string) error { return nil }
 
 func TestWebBackendOperateEmitsEvent(t *testing.T) {

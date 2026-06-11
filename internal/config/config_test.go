@@ -1305,6 +1305,43 @@ func TestDaemonCategoryFromDirectory(t *testing.T) {
 	}
 }
 
+func TestReloadOnChangeDesugarsToReloadRule(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/udev.yml": `
+kind: service
+name: udev
+service: { name: systemd-udevd }
+reload_on_change:
+  paths:
+    - /etc/udev/rules.d
+    - /lib/udev/rules.d
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("udev")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["reload_on_change"]; present {
+		t.Errorf("reload_on_change should be desugared away")
+	}
+	for i, wantPath := range []string{"/etc/udev/rules.d", "/lib/udev/rules.d"} {
+		rule := fmt.Sprintf("reload-on-change-%d", i+1)
+		then := nested(t, resolved.Tree, "rules", rule, "then")
+		if cfgval.String(then["action"]) != "reload" {
+			t.Errorf("%s action = %v, want reload", rule, then["action"])
+		}
+		changed := nested(t, resolved.Tree, "rules", rule, "if", "changed")
+		if cfgval.String(changed["path"]) != wantPath {
+			t.Errorf("%s changed.path = %v, want %q", rule, changed["path"], wantPath)
+		}
+	}
+}
+
 func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
