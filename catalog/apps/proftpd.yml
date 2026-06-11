@@ -5,4 +5,4 @@ variables:
   binary: "/usr/bin/proftpd"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
