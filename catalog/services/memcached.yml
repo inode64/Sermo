@@ -1,12 +1,25 @@
 kind: daemon
 name: memcached
 display_name: "Memcached"
+description: "Memcached in-memory cache"
+type: cache
 service: memcached
 apps: [memcached]
 
 variables:
+  host: 127.0.0.1
   port: 11211
 
 checks:
   service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
+  port: { type: tcp, host: "${host}", port: "${port}", timeout: 2s }
+
+  # Native memcached probe over the ASCII text protocol: a single `stats`
+  # command proves the daemon answers and exposes the server version plus
+  # operational counters (connections, get hits/misses, items, bytes, evictions,
+  # limit_maxbytes, …) in the result data, assertable via expect:.
+  stats:
+    type: memcached
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

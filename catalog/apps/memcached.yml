@@ -1,6 +1,7 @@
 kind: app
 name: memcached
 display_name: "Memcached"
+description: "Memcached in-memory cache"
 variables:
   binary: "/usr/bin/memcached"
 preflight:
