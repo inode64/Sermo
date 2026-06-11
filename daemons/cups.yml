@@ -9,7 +9,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-  config: { type: command, command: ["/usr/sbin/cupsd","-t"], timeout: 30s }
+  config: { type: command, command: ["/usr/bin/cupsd","-t"], timeout: 30s }
 
 checks:
   port: { type: tcp, port: "${port}" }

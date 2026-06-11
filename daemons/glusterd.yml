@@ -5,7 +5,7 @@ description: "GlusterFS"
 service: glusterd
 variables:
   port: 24007
-  binary: "/usr/sbin/glusterd"
+  binary: "/usr/bin/glusterd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -5,7 +5,7 @@ description: "Dovecot IMAP/POP3"
 service: dovecot
 variables:
   port: 143
-  binary: "/usr/sbin/dovecot"
+  binary: "/usr/bin/dovecot"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -5,7 +5,7 @@ description: "In.tftpd"
 service: in-tftpd
 variables:
   port: 69
-  binary: "/usr/sbin/in.tftpd"
+  binary: "/usr/bin/in.tftpd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

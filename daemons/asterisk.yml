@@ -4,7 +4,7 @@ display_name: "Asterisk PBX"
 service: asterisk
 variables:
   port: 5038
-  binary: "/usr/sbin/asterisk"
+  binary: "/usr/bin/asterisk"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

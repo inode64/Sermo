@@ -2,7 +2,7 @@ kind: daemon
 name: xinetd
 service: xinetd
 variables:
-  binary: "/usr/sbin/xinetd"
+  binary: "/usr/bin/xinetd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-version"], timeout: 10s }

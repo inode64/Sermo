@@ -5,7 +5,7 @@ description: "Backup file Server"
 service: bareos-fd
 variables:
   port: 9102
-  binary: "/usr/sbin/bareos-fd"
+  binary: "/usr/bin/bareos-fd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

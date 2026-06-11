@@ -3,7 +3,7 @@ name: clamd
 display_name: "ClamAV Daemon"
 service: clamd
 variables:
-  binary: "/usr/sbin/clamd"
+  binary: "/usr/bin/clamd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

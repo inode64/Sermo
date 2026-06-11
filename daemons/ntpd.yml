@@ -5,7 +5,7 @@ description: "Network Time Protocol Daemon"
 service: ntpd
 variables:
   port: 123
-  binary: "/usr/sbin/ntpd"
+  binary: "/usr/bin/ntpd"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

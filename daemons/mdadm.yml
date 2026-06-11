@@ -2,7 +2,7 @@ kind: daemon
 name: mdadm
 service: mdadm
 variables:
-  binary: "/sbin/mdadm"
+  binary: "/usr/bin/mdadm"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

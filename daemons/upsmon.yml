@@ -3,7 +3,7 @@ name: upsmon
 display_name: "NUT UPS Monitor"
 service: upsmon
 variables:
-  binary: "/usr/sbin/upsmon"
+  binary: "/usr/bin/upsmon"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }
