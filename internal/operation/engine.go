@@ -18,6 +18,7 @@ import (
 type Manager interface {
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
+	Reload(ctx context.Context, service string) error
 	Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error)
 	// ResetState reconciles the init's recorded state with reality after a clean
 	// stop (systemd reset-failed, OpenRC zap).
@@ -32,14 +33,18 @@ type Engine struct {
 	Unit    string // backend unit, passed to Manager
 	Backend string
 
-	ConfigError      error
-	Manager          Manager
-	AcquireLock      func(ttl time.Duration) (release func() error, err error)
-	LockTTL          time.Duration
-	NamedLocks       func() ([]locks.Lock, error)
-	Guard            func(ctx context.Context, action string) (blocked bool, reason string, err error)
-	Preflight        func(ctx context.Context) checks.Outcome
-	Postflight       func(ctx context.Context) checks.Outcome
+	ConfigError error
+	Manager     Manager
+	AcquireLock func(ttl time.Duration) (release func() error, err error)
+	LockTTL     time.Duration
+	NamedLocks  func() ([]locks.Lock, error)
+	Guard       func(ctx context.Context, action string) (blocked bool, reason string, err error)
+	Preflight   func(ctx context.Context) checks.Outcome
+	Postflight  func(ctx context.Context) checks.Outcome
+	// ReloadFunc reloads the service's config in place. When nil the engine falls
+	// back to Manager.Reload (the backend per-unit reload); a daemon's
+	// commands.reload overrides it (e.g. `systemctl daemon-reload`).
+	ReloadFunc       func(ctx context.Context) error
 	Discover         func() ([]process.Process, error)
 	Reaper           process.Reaper
 	KillPolicy       process.KillPolicy
@@ -53,6 +58,7 @@ type plan struct {
 	preflight  bool
 	stop       bool
 	start      bool
+	reload     bool
 	postflight bool
 }
 
@@ -71,6 +77,13 @@ func (e Engine) Start(ctx context.Context) Result {
 // postflight (section 19) but still honors locks and guards.
 func (e Engine) Stop(ctx context.Context) Result {
 	return e.run(ctx, plan{action: "stop", stop: true})
+}
+
+// Reload runs preflight (the config check), asks the init system to reload the
+// service's configuration in place (no stop/start), and verifies health. It is
+// the non-disruptive remediation for daemons that reload rather than restart.
+func (e Engine) Reload(ctx context.Context) Result {
+	return e.run(ctx, plan{action: "reload", preflight: true, reload: true, postflight: true})
 }
 
 func (e Engine) run(ctx context.Context, p plan) (result Result) {
@@ -205,7 +218,30 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		}
 	}
 
-	// Step 14: required postflight (start/restart only).
+	// Reload config in place (no stop/start). Used by the reload action for
+	// daemons that re-read their configuration without a disruptive restart.
+	if p.reload {
+		reload := e.ReloadFunc
+		if reload == nil {
+			reload = func(ctx context.Context) error { return e.Manager.Reload(ctx, e.Unit) }
+		}
+		if err := reload(ctx); err != nil {
+			result.Status = ResultFailed
+			if timedOut(ctx) {
+				result.Message = "operation timed out during reload"
+			} else {
+				result.Message = "reload: " + err.Error()
+			}
+			return result
+		}
+		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
+			result.Status = ResultFailed
+			result.Message = "service failed after reload"
+			return result
+		}
+	}
+
+	// Step 14: required postflight (start/restart/reload).
 	if p.postflight && e.Postflight != nil {
 		out := e.Postflight(ctx)
 		result.Checks = append(result.Checks, out.Results...)

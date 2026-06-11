@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/locks"
 	"sermo/internal/process"
@@ -106,6 +107,7 @@ func New(c Config) Engine {
 		Guard:            guardClosure(tree, deps),
 		Preflight:        sectionRunner(tree, "preflight", deps),
 		Postflight:       sectionRunner(tree, "postflight", deps),
+		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Unit),
 		Discover:         discover,
 		Reaper:           reaper,
 		KillPolicy:       killPolicy,
@@ -113,6 +115,44 @@ func New(c Config) Engine {
 		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),
 		Emit:             c.Emit,
 	}
+}
+
+// reloadClosure builds the engine's reload step: a daemon-declared
+// `commands.reload` (e.g. `systemctl daemon-reload`, `nginx -s reload`) runs
+// through the command runner; otherwise it falls back to the backend's per-unit
+// reload (systemctl reload <unit> / rc-service <svc> reload).
+func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, unit string) func(context.Context) error {
+	if argv := reloadCommand(tree); len(argv) > 0 {
+		runner := deps.Runner
+		return func(ctx context.Context) error {
+			res, err := runner.Run(ctx, argv[0], argv[1:]...)
+			if err != nil {
+				return err
+			}
+			if res.ExitCode != 0 {
+				msg := strings.TrimSpace(res.Stderr)
+				if msg == "" {
+					msg = strings.TrimSpace(res.Stdout)
+				}
+				return fmt.Errorf("reload command exited %d: %s", res.ExitCode, msg)
+			}
+			return nil
+		}
+	}
+	return func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
+}
+
+// reloadCommand extracts the optional `commands.reload` command array.
+func reloadCommand(tree map[string]any) []string {
+	cmds, _ := tree["commands"].(map[string]any)
+	if cmds == nil {
+		return nil
+	}
+	r, _ := cmds["reload"].(map[string]any)
+	if r == nil {
+		return nil
+	}
+	return cfgval.StringArray(r["command"])
 }
 
 func hasCommandMatchSelector(selectors []process.Selector) bool {

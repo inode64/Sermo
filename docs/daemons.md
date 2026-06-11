@@ -71,6 +71,50 @@ The restart runs through the normal safe engine (guards, cooldown, max_actions),
 and the change is acknowledged once the restart succeeds, so it fires once per
 upgrade rather than every cycle. Referenced names must be `library` daemons.
 
+## Reload on config change (`reload_on_change`)
+
+Many daemons re-read their configuration **without a restart** — systemd
+(`systemctl daemon-reload`), nginx (`nginx -s reload`), named (`rndc reload`),
+rsyslog, … `reload_on_change` watches config files/directories and, when one
+changes, runs the **reload** action instead of a disruptive restart:
+
+```yaml
+# catalog/services/systemd.yml
+preflight:
+  config: { type: command, command: ["systemd-analyze", "verify"] }   # checked first
+commands:
+  reload: { command: ["systemctl", "daemon-reload"] }   # see commands.reload below
+reload_on_change:
+  paths: [/etc/systemd/system, /lib/systemd/system]
+```
+
+On resolution this desugars into one remediation rule per path:
+
+```yaml
+rules:
+  reload-on-change-1:
+    type: remediation
+    if: { changed: { path: /etc/systemd/system } }
+    then: { action: reload }
+```
+
+The **`reload`** action runs through the same safe engine as restart but in
+place: it runs **preflight first** (so an invalid config — caught by the
+service's `config` check — blocks the reload), reloads, then verifies health.
+`reload` is also a valid rule action on its own (`then: { action: reload }`) and
+is blocked by the same guards as restart/start.
+
+**What "reload" runs.** By default it is the backend per-unit reload —
+`systemctl reload <unit>` (which runs the unit's `ExecReload`, e.g. `nginx -s
+reload`) or OpenRC's init-script `reload`. A daemon can override this with its
+own **`commands.reload`** when the reload is not a per-unit operation — systemd
+itself reloads with `systemctl daemon-reload`, not `systemctl reload systemd`:
+
+```yaml
+commands:
+  reload: { command: ["systemctl", "daemon-reload"] }
+```
+
 ## App dependencies (`apps`)
 
 A service often runs on top of one or more **apps** — the runtimes/tools in

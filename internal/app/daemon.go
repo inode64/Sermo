@@ -224,6 +224,8 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 				return engine.Stop(ctx)
 			case "restart":
 				return engine.Restart(ctx)
+			case "reload":
+				return engine.Reload(ctx)
 			default:
 				return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
 			}
