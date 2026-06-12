@@ -86,8 +86,13 @@ occupying rows. Reuse one consistent **all / none / default** vocabulary:
 setting. In the notifier menu the list shows only the notifiers defined in the
 config, and the `none`/`default` keywords are **accepted even when the config
 defines no notifiers**, so an expand-only or opt-out watch still has a valid
-answer — keep that invariant when adding new assistants or selection steps,
-and update `docs/configuration.md` and the wizard spec in the same change.
+answer. When an answer would leave the watch with **no action at all** (`none`,
+or `default` with no global notify configured, and no other action like
+auto-expand), the wizard must explain why and **re-ask via the shared
+`ensureNotifyAction`** — never abort the run with a hard error, and never
+hand-roll that validation per assistant. Keep these invariants when adding new
+assistants or selection steps, and update `docs/configuration.md` and the
+wizard spec in the same change.
 
 ## Catalog: instanced systemd daemons
 
