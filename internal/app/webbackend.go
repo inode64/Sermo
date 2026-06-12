@@ -478,6 +478,10 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if isStorageCheckType(w.checkType) && !w.disabled {
 			disk = diskWatchInfo(w, b)
 		}
+		var swap *web.SwapWatchInfo
+		if w.checkType == "swap" && !w.disabled {
+			swap = swapWatchInfo(b)
+		}
 		monitorMode := w.monitorMode
 		if monitorMode == "" {
 			monitorMode = config.MonitorEnabled
@@ -497,6 +501,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			NotifierCount: w.notifierCount,
 			Conditions:    watchConditions(w.check),
 			Disk:          disk,
+			Swap:          swap,
 		}
 		if w.expand != nil {
 			ww.Expand = &web.WatchExpand{ByBytes: w.expand.By}
@@ -592,6 +597,27 @@ func watchConditions(check map[string]any) []web.WatchCondition {
 		out = append(out, web.WatchCondition{Field: "mounted", Op: "==", Value: fmt.Sprintf("%t", v)})
 	}
 	return out
+}
+
+// swapWatchInfo reads the host swap usage from the collector's cached system
+// snapshot (shared with the overview tiles, no extra probe). nil when the host
+// has no swap or no collector is wired.
+func swapWatchInfo(b *WebBackend) *web.SwapWatchInfo {
+	if b.collector == nil {
+		return nil
+	}
+	r, ok := b.collector.SampleSystem()["total_swap"]
+	if !ok || !r.HasTotal || r.Total <= 0 {
+		return nil
+	}
+	used := uint64(r.Absolute)
+	total := uint64(r.Total)
+	return &web.SwapWatchInfo{
+		TotalBytes: total,
+		UsedBytes:  used,
+		FreeBytes:  total - min(used, total),
+		UsedPct:    r.Percent,
+	}
 }
 
 func diskWatchInfo(w *webWatch, b *WebBackend) *web.DiskWatchInfo {
@@ -808,6 +834,9 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 			if r.HasAbsolute {
 				m.Absolute = r.Absolute
 			}
+			if r.HasTotal {
+				m.Total = r.Total
+			}
 			if k == "total_memory" || k == "total_swap" {
 				m.Unit = "bytes"
 			}
@@ -826,6 +855,9 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 		}
 		if r.HasAbsolute {
 			m.Absolute = r.Absolute
+		}
+		if r.HasTotal {
+			m.Total = r.Total
 		}
 		out = append(out, m)
 	}

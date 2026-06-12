@@ -76,6 +76,9 @@ func TestSampleSystemSwap(t *testing.T) {
 	if sw.Absolute != 500 || !sw.HasPercent || sw.Percent != 25 {
 		t.Errorf("total_swap = %+v, want 500 bytes / 25%%", sw)
 	}
+	if !sw.HasTotal || sw.Total != 2000 {
+		t.Errorf("total_swap capacity = %+v, want Total 2000 (the UI derives free from it)", sw)
+	}
 }
 
 func TestSampleSystemNoSwapDevice(t *testing.T) {
