@@ -26,6 +26,9 @@ var (
 	SwapUsageFields = []string{"used_pct", "free_pct", "free_bytes"}
 	// MemoryPredFields are the predicates of a memory check.
 	MemoryPredFields = []string{"used_pct", "available_pct", "available_bytes"}
+	// PressurePredFields are the predicates of a pressure (PSI) check: the
+	// rolling stall percentages of the some/full lines.
+	PressurePredFields = []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"}
 	// FdsPredFields are the predicates of an fds check.
 	FdsPredFields = []string{"used_pct", "free", "allocated"}
 	// ConntrackPredFields are the predicates of a conntrack check.

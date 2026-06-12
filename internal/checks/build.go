@@ -60,6 +60,9 @@ type Deps struct {
 	FdsSampler FdsSamplerFunc
 	// MemorySampler reads system RAM for `memory` checks. Nil reads /proc/meminfo.
 	MemorySampler MemorySamplerFunc
+	// PressureSampler reads kernel PSI for `pressure` checks. Nil reads
+	// /proc/pressure/<resource>.
+	PressureSampler PressureSamplerFunc
 	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
 	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
@@ -174,6 +177,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildFdsCheck(b, entry, deps)
 	case "memory":
 		return buildMemoryCheck(b, entry, deps)
+	case "pressure":
+		return buildPressureCheck(b, entry, deps)
 	case "conntrack":
 		return buildConntrackCheck(b, entry, deps)
 	case "entropy":
@@ -683,6 +688,21 @@ func buildMemoryCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, errs
 	}
 	return memoryCheck{base: b, preds: preds, sampler: deps.MemorySampler}, ""
+}
+
+// buildPressureCheck builds a kernel PSI stall check.
+func buildPressureCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	resource := cfgval.AsString(entry["resource"])
+	switch resource {
+	case "cpu", "memory", "io":
+	default:
+		return nil, "pressure check requires resource: cpu, memory or io"
+	}
+	preds, errs := requireLevelPreds(entry, PressurePredFields, "pressure check")
+	if errs != "" {
+		return nil, errs
+	}
+	return pressureCheck{base: b, resource: resource, preds: preds, sampler: deps.PressureSampler}, ""
 }
 
 // buildConntrackCheck builds a netfilter conntrack-table check.
