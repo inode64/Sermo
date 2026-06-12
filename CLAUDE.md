@@ -119,12 +119,16 @@ All four must report **no findings** before committing. Notes:
   readability. Document new exported symbols (the `exported` rule is on).
 - **`gosec`** is not installed standalone in `~/go/bin`, so it is run through
   golangci-lint (which bundles it) via `.golangci.yml` at the repo root — that
-  config enables only gosec. Accepted exceptions are documented there: `G115`
-  (noisy integer-overflow rule on already-bounded values) and `G306` in test
-  fixtures. By-design cases — `G204` (executing operator-configured commands)
-  and intentional `0644` writes (pidfile, generated YAML) — are suppressed at
-  the call site with `//nolint:gosec` plus a justifying comment. Keep that
-  pattern: prefer a justified inline `//nolint:gosec` over widening the config.
+  config enables only gosec and is in the **v2 format** (`version: "2"`), so the
+  `golangci-lint` binary must be v2. Accepted exceptions are documented there:
+  `G115` (noisy integer-overflow rule on already-bounded values) and, in test
+  fixtures only, `G306` (0644 temp files), `G101` (fake DSNs) and `G703`
+  (t.TempDir paths). By-design cases — `G204` (executing operator-configured
+  commands), intentional `0644` writes (pidfile, generated YAML), the bounded
+  `args[i]` reads gosec's G602 cannot follow, and the shutdown-context G118 —
+  are suppressed at the call site with `//nolint:gosec` plus a justifying
+  comment. Keep that pattern: prefer a justified inline `//nolint:gosec` over
+  widening the config.
 - Unlike `gofmt` (auto-applied per file by the Claude Code hook), these tools
   analyze the whole module and are too slow to run on every edit — run them once
   before committing, or wire them into CI / a pre-commit hook.
