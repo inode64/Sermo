@@ -6,91 +6,236 @@
 <title>Sermo</title>
 <link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7'%20fill='%231a7f37'/%3E%3C/svg%3E">
 <style nonce="{{CSP_NONCE}}">
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem; }
-  h1 { font-size: 1.3rem; margin: 0 0 1rem; }
+  /* ---- design tokens -------------------------------------------------------
+     One light/dark token set drives the whole document. Status colors stay in
+     the GitHub-ish palette the JS also emits inline (SVG fills), so both render
+     correctly on either scheme. Tints are derived with color-mix so a status
+     color needs declaring once. */
+  :root {
+    color-scheme: light dark;
+    --bg: #eef1f6;
+    --panel: #ffffff;
+    --panel-2: #f2f4f8;
+    --text: #1c2430;
+    --text-2: #677283;
+    --line: #dfe4ec;
+    --line-2: #cdd4e0;
+    --ok: #1a7f37;
+    --warn: #9a6700;
+    --crit: #cf222e;
+    --info: #0969da;
+    --accent: #0969da;
+    --radius: 12px;
+    --radius-s: 7px;
+    --shadow: 0 1px 2px rgb(16 24 40 / .05), 0 1px 3px rgb(16 24 40 / .06);
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117;
+      --panel: #151b23;
+      --panel-2: #1c232d;
+      --text: #e6ebf2;
+      --text-2: #8b96a5;
+      --line: #252e39;
+      --line-2: #313c49;
+      --ok: #3fb950;
+      --warn: #d29922;
+      --crit: #f85149;
+      --info: #4493f8;
+      --accent: #4493f8;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    margin: 0 auto; padding: 0 1.4rem 4rem; max-width: 1720px;
+    background: var(--bg); color: var(--text);
+  }
+  h1 { font-size: 1.12rem; margin: 0; display: flex; align-items: center; gap: .55rem; letter-spacing: .01em; }
+  .brand-dot { width: .95rem; height: .95rem; border-radius: 32%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); flex: none; }
+  code { font-family: var(--mono); background: var(--panel-2); border-radius: 4px; padding: .04rem .3rem; font-size: .86em; }
+  .mono { font-family: var(--mono); }
+
+  /* ---- tables -------------------------------------------------------------- */
   table { border-collapse: collapse; width: 100%; }
-  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid #8884; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); }
   th { font-weight: 600; }
-  .table-wrap { width: 100%; overflow: auto; max-height: calc(100vh - 13rem); }
-  .services-table { min-width: 76rem; font-size: .82rem; line-height: 1.25; font-variant-numeric: tabular-nums; }
-  .services-table th, .services-table td { padding: .26rem .42rem; vertical-align: top; }
-  .services-table th { color: #888; white-space: nowrap; }
-  .services-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; }
-  .services-table th.sortable, .watch-table th.sortable { cursor: pointer; }
-  .services-table th.sortable:hover, .watch-table th.sortable:hover { color: #444; }
-  .sort-ind { font-size: .7rem; }
+  thead th { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); }
+  tbody tr:last-child td { border-bottom: 0; }
+  .table-wrap { width: 100%; overflow: auto; max-height: calc(100vh - 13rem); border-radius: var(--radius-s); }
+  .services-table { min-width: 76rem; font-size: .82rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+  .services-table th, .services-table td { padding: .34rem .5rem; vertical-align: top; }
+  .services-table th { white-space: nowrap; }
+  .services-table thead th, .watch-table thead th, .apps-table thead th { position: sticky; top: 0; background: var(--panel); z-index: 4; white-space: nowrap; box-shadow: 0 1px 0 var(--line); }
+  th.sortable { cursor: pointer; }
+  th.sortable:hover { color: var(--text); }
+  .sort-ind { font-size: .7rem; color: var(--accent); }
   .services-table td { white-space: nowrap; }
-  .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; }
+  .services-table .svc-main { display: flex; align-items: baseline; gap: .25rem; min-width: 11rem; font-weight: 500; }
   .services-table .svc-sub { margin-left: 1.15rem; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .unit-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .event-cell { max-width: 15rem; overflow: hidden; text-overflow: ellipsis; }
   .services-table .policy-cell { max-width: 11rem; }
   .services-table .actions { min-width: 14rem; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  #rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
+  #rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+  tr.clickable { cursor: pointer; }
+  .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
+  tr.exp-row td { background: color-mix(in srgb, var(--text) 3.5%, transparent); padding: .7rem 1rem .85rem 1.7rem; box-shadow: inset 3px 0 0 var(--line-2); }
+
+  /* ---- status language ------------------------------------------------------
+     Pills carry a colored dot via ::before and a tint of the same color, so
+     every state reads at a glance; `state-failed` pulses like a heartbeat. */
   .count-badge { display: inline-block; min-width: 1.5rem; text-align: right; font-weight: 600; }
   .status { font-weight: 600; }
-  .active { color: #1a7f37; }
-  .inactive, .unknown { color: #9a6700; }
-  .failed, .error { color: #cf222e; }
-  .target-state { font-weight: 700; }
-  .state-disabled, .state-stopped, .state-unmonitorized { color: #888; }
-  .state-running { color: #4f8cc9; }
-  .state-ok { color: #1a7f37; }
-  .state-monitorized { color: #1a7f37; }
-  .state-failed { color: #cf222e; }
-  .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid #8886; }
-  .actions button { margin-right: .25rem; cursor: pointer; }
-  button { font: inherit; padding: .2rem .55rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; }
-  button:hover { background: #8883; }
-  button:disabled { opacity: .4; cursor: not-allowed; }
-  button:disabled:hover { background: #8881; }
-  #err { color: #cf222e; min-height: 1.2rem; }
+  .active, .ok { color: var(--ok); }
+  .inactive, .unknown { color: var(--warn); }
+  .failed, .error, .bad { color: var(--crit); }
+  .target-state {
+    display: inline-flex; align-items: center; gap: .38em;
+    padding: .1rem .55rem .1rem .45rem; border-radius: 999px;
+    font-size: .76em; font-weight: 650; letter-spacing: .01em; line-height: 1.5;
+    background: color-mix(in srgb, currentColor 11%, transparent);
+  }
+  .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
+  .state-disabled, .state-stopped, .state-unmonitorized { color: var(--text-2); }
+  .state-running { color: var(--info); }
+  .state-ok, .state-monitorized { color: var(--ok); }
+  .state-failed { color: var(--crit); }
+  .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
+  @keyframes beat { 50% { transform: scale(1.55); opacity: .55; } }
+  @media (prefers-reduced-motion: reduce) { .state-failed::before, .op-dot.running { animation: none; } }
+  .pill { display: inline-block; padding: .05rem .5rem; border-radius: 1rem; font-size: .8rem; border: 1px solid var(--line-2); }
+
+  /* ---- controls ------------------------------------------------------------ */
+  button {
+    font: inherit; font-size: .82rem; padding: .22rem .6rem; cursor: pointer;
+    border-radius: var(--radius-s); border: 1px solid var(--line-2);
+    background: var(--panel); color: var(--text);
+    transition: background .12s, border-color .12s;
+  }
+  button:hover { background: var(--panel-2); border-color: var(--text-2); }
+  button:disabled { opacity: .38; cursor: not-allowed; }
+  button:disabled:hover { background: var(--panel); border-color: var(--line-2); }
+  .actions button { margin-right: .25rem; }
+  .danger-btn { border-color: color-mix(in srgb, var(--crit) 55%, transparent); background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }
+  .danger-btn:hover { background: color-mix(in srgb, var(--crit) 20%, transparent); }
+  input[type="search"], input[type="text"], select {
+    font: inherit; font-size: .85rem; padding: .26rem .55rem; color: var(--text);
+    border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+  #svc-controls input, #watch-controls input { min-width: 13rem; }
+  #svc-filters button, #watch-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #watch-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #watch-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #err { color: var(--crit); min-height: 1.2rem; }
   body.disconnected .table-wrap, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
-  .muted { color: #8888; font-size: .85rem; }
-  a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted #8888; color: inherit; }
-  #detail { margin-top: 1.5rem; padding: 1rem; border: 1px solid #8884; border-radius: .5rem; display: none; }
-  #detail h2 { font-size: 1.05rem; margin: 0 0 .6rem; }
-  #detail table { margin-bottom: 1rem; }
-  .ok { color: #1a7f37; } .bad { color: #cf222e; }
+  .muted { color: var(--text-2); font-size: .85rem; }
+  a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
+  a.name:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ---- top bar + overview tiles --------------------------------------------
+     The topbar stays slim and sticky; the overview band underneath is the
+     at-a-glance layer: one tile per vital sign (services up, watches, alerts,
+     monitored, host gauges), each clickable to jump to its panel. */
+  #topbar {
+    position: sticky; top: 0; z-index: 6;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    padding: .8rem 1.4rem .55rem; margin: 0 -1.4rem .35rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+  .topbar-tools { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .topbar-tools label { color: var(--text-2); font-size: .82rem; white-space: nowrap; }
+  #last-refresh { font-size: .78rem; white-space: nowrap; }
+  #system-status, #statusbar { margin: .25rem 0 0; font-size: .82rem; display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; align-items: center; color: var(--text-2); }
+  #system-status b, #statusbar b { color: var(--text); font-weight: 600; }
+  #overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .65rem; margin: .8rem 0 .15rem; }
+  .tile {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: .6rem .85rem .65rem; min-width: 0;
+    text-align: left; font: inherit; color: inherit; display: block; width: 100%;
+  }
+  button.tile:hover { border-color: var(--line-2); background: var(--panel); }
+  .tile .t-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-2); display: flex; justify-content: space-between; gap: .5rem; }
+  .tile .t-value { font-size: 1.42rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; margin-top: .1rem; }
+  .tile .t-value small { font-size: .8rem; font-weight: 500; color: var(--text-2); }
+  .tile .t-sub { font-size: .76rem; color: var(--text-2); margin-top: .05rem; min-height: 1.1em; }
+  .tile.t-ok .t-value { color: var(--ok); }
+  .tile.t-warn .t-value { color: var(--warn); }
+  .tile.t-crit .t-value { color: var(--crit); }
+  .tile .usagebar { width: 100%; margin-top: .42rem; }
+
+  /* ---- panels (cards) -------------------------------------------------------
+     Every section is a <details> card: the summary is the card header, the
+     body gets the card padding. Locks + the service detail reuse the look. */
+  details, section#locks-section, #detail {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-top: .9rem; padding: 0 1.05rem;
+  }
+  details[open], section#locks-section, #detail { padding-bottom: .95rem; }
+  summary {
+    cursor: pointer; font-size: .98rem; font-weight: 650; list-style: none; user-select: none;
+    padding: .7rem 1.05rem; margin: 0 -1.05rem;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "\25B8"; color: var(--text-2); margin-right: .5rem; font-size: .85em; display: inline-block; transition: transform .15s ease; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: .65rem; }
+  summary > button { font-weight: 400; margin-left: .4rem; }
+  section#locks-section { padding-top: .15rem; }
+  section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
+  #detail { margin-top: .9rem; padding-top: .9rem; display: none; }
+  #detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
+  #detail table { margin-bottom: .6rem; }
+  #ready { margin: .6rem 0 0; }
+
+  /* ---- availability / heartbeat --------------------------------------------
+     .beats is the uptime-kuma-style strip: one segment per time bucket, green/
+     amber/red by availability, hollow when unobserved. Rendered in the service
+     expansion over the last 24h. */
+  .beats { display: flex; gap: 2px; height: 1.15rem; max-width: 46rem; margin: .25rem 0 .15rem; }
+  .beats span { flex: 1 1 0; min-width: 3px; border-radius: 2px; background: var(--line); transition: transform .08s; }
+  .beats span:hover { transform: scaleY(1.3); }
+  .beat-ok { background: var(--ok); }
+  .beat-warn { background: var(--warn); }
+  .beat-bad { background: var(--crit); }
+  .beats-meta { display: flex; justify-content: space-between; max-width: 46rem; font-size: .72rem; color: var(--text-2); margin-bottom: .55rem; }
   .sla { display: flex; gap: 1.2rem; flex-wrap: wrap; }
   .sla div { text-align: center; }
   .sla .v { font-size: 1.3rem; font-weight: 600; }
-  .close { float: right; }
-  .events { width: 100%; font-size: .9rem; }
-  .events td { vertical-align: top; }
-  .events .t { white-space: nowrap; color: #888; }
-  .kind { font-weight: 600; }
-  .kind-error, .kind-hook-failed, .kind-notify-failed { color: #cf222e; }
-  .kind-alert, .kind-suppressed { color: #9a6700; }
-  .kind-action, .kind-hook, .kind-notify, .kind-cascade { color: #1a7f37; }
-  .lvl-error { color: #cf222e; font-weight: 600; }
-  .lvl-warning { color: #9a6700; font-weight: 600; }
-  .lvl-info { color: #888; }
-  section { margin-top: 2rem; }
-  details { margin-top: 1.5rem; }
-  summary { cursor: pointer; font-size: 1.05rem; font-weight: 600; list-style: none; user-select: none; }
-  summary::-webkit-details-marker { display: none; }
-  summary::before { content: "\25B8"; color: #888; margin-right: .4rem; font-size: .9em; }
-  details[open] > summary::before { content: "\25BE"; }
-  summary > button { font-weight: 400; }
-  #rows tr:hover td, #watch-rows tr:hover td { background: #8881; }
-  #rows tr.row-failing td { background: #cf222e1f; }
-  tr.clickable { cursor: pointer; }
-  .exp { color: #888; margin-right: .35rem; user-select: none; font-size: .9em; }
-  #rows tr.exp-row td { background: #8881; padding-left: 1.6rem; }
-  .slabar { display: inline-block; width: 9rem; height: .55rem; background: #8883; border-radius: .3rem; overflow: hidden; vertical-align: middle; }
+  .slabar { display: inline-block; width: 9rem; height: .55rem; background: var(--line); border-radius: .3rem; overflow: hidden; vertical-align: middle; }
   .slabar > span { display: block; height: 100%; }
-  .watch-table { min-width: 72rem; font-size: .88rem; }
+
+  /* ---- events / diagnostics -------------------------------------------------- */
+  .events { width: 100%; font-size: .88rem; }
+  .events td { vertical-align: top; }
+  .events .t { white-space: nowrap; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .kind { font-weight: 600; }
+  .kind-error, .kind-hook-failed, .kind-notify-failed { color: var(--crit); }
+  .kind-alert, .kind-suppressed { color: var(--warn); }
+  .kind-action, .kind-hook, .kind-notify, .kind-cascade { color: var(--ok); }
+  .lvl-error { color: var(--crit); font-weight: 600; }
+  .lvl-warning { color: var(--warn); font-weight: 600; }
+  .lvl-info { color: var(--text-2); }
+  #event-controls { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; margin: .1rem 0 .6rem; }
+  #event-controls input[type="text"] { width: 8.5rem; }
+  .event-group td { background: color-mix(in srgb, var(--text) 4%, transparent); font-weight: 600; }
+  .event-msg button { margin-left: .35rem; padding: .05rem .35rem; font-size: .8rem; }
+  .close { float: right; }
+
+  /* ---- watch widgets --------------------------------------------------------- */
+  .watch-table { min-width: 72rem; font-size: .85rem; }
   .watch-table th, .watch-table td { vertical-align: top; }
-  .watch-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; color: #888; white-space: nowrap; }
   .apps-table { min-width: 28rem; font-size: .88rem; font-variant-numeric: tabular-nums; }
-  .apps-table th, .apps-table td { padding: .26rem .42rem; vertical-align: top; }
-  .apps-table thead th { position: sticky; top: 0; background: Canvas; z-index: 4; color: #888; white-space: nowrap; }
-  .apps-table th.sortable { cursor: pointer; }
-  .apps-table th.sortable:hover { color: #444; }
+  .apps-table th, .apps-table td { padding: .34rem .5rem; vertical-align: top; }
   .watch-summary { min-width: 18rem; max-width: 30rem; overflow-wrap: anywhere; }
-  .usagebar { --usage-pct: 0%; --usage-color: #2da44e; position: relative; display: inline-grid; place-items: center; width: 10.5rem; height: 1.05rem; background: #8882; border: 1px solid #8886; border-radius: 999px; overflow: hidden; vertical-align: middle; box-sizing: border-box; box-shadow: inset 0 0 0 1px #fff1; }
+  .usagebar { --usage-pct: 0%; --usage-color: var(--ok); position: relative; display: inline-grid; place-items: center; width: 10.5rem; height: 1.05rem; background: var(--line); border: 1px solid var(--line-2); border-radius: 999px; overflow: hidden; vertical-align: middle; }
   .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--usage-pct); min-width: .18rem; transition: width .2s ease, background-color .2s ease; background: var(--usage-color); }
   .usagebar-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #fff5, #fff0 48%, #0001); }
   .usagebar.usage-empty .usagebar-fill { min-width: 0; }
@@ -98,53 +243,53 @@
   .usagebar.usage-warn { --usage-color: #d4a72c; }
   .usagebar.usage-high { --usage-color: #fb8500; }
   .usagebar.usage-crit { --usage-color: #cf222e; }
-  .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: CanvasText; text-shadow: 0 1px 0 Canvas, 0 -1px 0 Canvas, 1px 0 0 Canvas, -1px 0 0 Canvas; }
+  .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: var(--text); text-shadow: 0 1px 0 var(--panel), 0 -1px 0 var(--panel), 1px 0 0 var(--panel), -1px 0 0 var(--panel); }
   .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
-  #svc-controls input, #watch-controls input { font: inherit; padding: .2rem .5rem; border-radius: .35rem; border: 1px solid #8886; background: #8881; min-width: 13rem; }
-  #svc-filters button.f-active, #watch-filters button.f-active { background: #8883; font-weight: 600; }
-  #topbar { position: sticky; top: 0; z-index: 5; background: Canvas; padding: 1.5rem 1.5rem .35rem; margin: -1.5rem -1.5rem .5rem; border-bottom: 1px solid #8884; }
-  dialog { color: CanvasText; background: Canvas; border: 1px solid #8886; border-radius: .5rem; padding: 0; max-width: min(44rem, calc(100vw - 2rem)); width: 44rem; }
-  dialog::backdrop { background: rgba(0,0,0,.45); }
-  .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid #8884; }
-  .modal-foot { border-top: 1px solid #8884; border-bottom: 0; display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
+
+  /* ---- transient banners ------------------------------------------------------ */
+  #op-live { display: none; margin: .8rem 0 0; padding: .65rem .8rem; border: 1px solid var(--line); border-left: 3px solid var(--info); border-radius: var(--radius-s); background: var(--panel); box-shadow: var(--shadow); }
+  .op-card { display: flex; gap: .6rem 1rem; align-items: baseline; flex-wrap: wrap; }
+  .op-card + .op-card { margin-top: .35rem; padding-top: .35rem; border-top: 1px solid var(--line); }
+  .op-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--warn); display: inline-block; animation: beat 1.2s ease-in-out infinite; }
+  .op-dot.ok { background: var(--ok); animation: none; }
+  .op-dot.failed { background: var(--crit); animation: none; }
+  #attention { display: none; margin: .8rem 0 0; padding: .75rem .85rem; border: 1px solid color-mix(in srgb, var(--crit) 35%, transparent); border-left: 3px solid var(--crit); border-radius: var(--radius-s); background: color-mix(in srgb, var(--crit) 7%, var(--panel)); box-shadow: var(--shadow); }
+  .attn-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: .45rem; }
+  .attn-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: .5rem; }
+  .attn-item { text-align: left; padding: .55rem .65rem; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel); cursor: pointer; }
+  .attn-item:hover { background: var(--panel-2); }
+  .attn-item.warning { border-left: 3px solid var(--warn); }
+  .attn-item.critical { border-left: 3px solid var(--crit); }
+  .attn-title { font-weight: 600; }
+  .attn-detail { margin-top: .1rem; font-size: .85rem; color: var(--text-2); overflow-wrap: anywhere; }
+
+  /* ---- dialogs / config views -------------------------------------------------- */
+  dialog { color: var(--text); background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 0; max-width: min(44rem, calc(100vw - 2rem)); width: 44rem; box-shadow: 0 12px 40px rgb(0 0 0 / .25); }
+  dialog::backdrop { background: rgba(8, 12, 18, .55); backdrop-filter: blur(2px); }
+  .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
+  .modal-foot { border-top: 1px solid var(--line); border-bottom: 0; display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap; }
   .modal-body { padding: 1rem; }
   .modal-grid { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: .35rem .9rem; font-size: .92rem; }
   .modal-grid code, .modal-body code { font-size: .85rem; overflow-wrap: anywhere; }
-  .danger-btn { border-color: #cf222e88; background: #cf222e22; }
-  .danger-btn:hover { background: #cf222e33; }
-  #op-live { display:none; margin:.5rem 0 1rem; padding:.65rem .8rem; border:1px solid #8884; border-radius:.5rem; background:#8881; }
-  .op-card { display:flex; gap:.6rem 1rem; align-items:baseline; flex-wrap:wrap; }
-  .op-card + .op-card { margin-top:.35rem; padding-top:.35rem; border-top:1px solid #8883; }
-  .op-dot { width:.55rem; height:.55rem; border-radius:50%; background:#9a6700; display:inline-block; }
-  .op-dot.ok { background:#1a7f37; }
-  .op-dot.failed { background:#cf222e; }
-  #attention { display:none; margin:.5rem 0 1rem; padding:.75rem .85rem; border:1px solid #cf222e55; border-radius:.5rem; background:#cf222e14; }
-  .attn-head { display:flex; justify-content:space-between; align-items:baseline; gap:1rem; flex-wrap:wrap; margin-bottom:.45rem; }
-  .attn-list { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr)); gap:.5rem; }
-  .attn-item { text-align:left; padding:.55rem .65rem; border:1px solid #8884; border-radius:.45rem; background:Canvas; cursor:pointer; }
-  .attn-item:hover { background:#8881; }
-  .attn-item.warning { border-color:#9a670066; }
-  .attn-item.critical { border-color:#cf222e66; }
-  .attn-title { font-weight:600; }
-  .attn-detail { margin-top:.1rem; font-size:.85rem; color:#888; overflow-wrap:anywhere; }
-  .config-view { max-height: 24rem; overflow:auto; padding:.65rem .75rem; border:1px solid #8884; border-radius:.45rem; background:#8881; white-space:pre; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  .diff-lines { margin-top:.55rem; display:grid; grid-template-columns:1fr 1fr; gap:.75rem; }
-  .diff-lines pre { margin:0; max-height:16rem; overflow:auto; padding:.55rem; border:1px solid #8884; border-radius:.45rem; background:#8881; white-space:pre-wrap; font:.8rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  @media (max-width: 760px) { .diff-lines { grid-template-columns:1fr; } }
-  #event-controls { display:flex; gap:.45rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem; }
-  #event-controls input[type="text"] { font:inherit; padding:.2rem .5rem; border-radius:.35rem; border:1px solid #8886; background:#8881; width:8.5rem; }
-  .event-group td { background:#8881; font-weight:600; }
-  .event-msg button { margin-left:.35rem; padding:.05rem .35rem; font-size:.8rem; }
+  .config-view { max-height: 24rem; overflow: auto; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel-2); white-space: pre; font: .82rem/1.45 var(--mono); }
+  .diff-lines { margin-top: .55rem; display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+  .diff-lines pre { margin: 0; max-height: 16rem; overflow: auto; padding: .55rem; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel-2); white-space: pre-wrap; font: .8rem/1.45 var(--mono); }
+  @media (max-width: 760px) { .diff-lines { grid-template-columns: 1fr; } }
+
+  /* thin scrollbars keep the dense tables tidy (both engines) */
+  .table-wrap, .config-view, .diff-lines pre { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+  .table-wrap::-webkit-scrollbar, .config-view::-webkit-scrollbar { height: 8px; width: 8px; }
+  .table-wrap::-webkit-scrollbar-thumb, .config-view::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 </style>
 </head>
 <body>
 <div id="topbar">
-<div style="display:flex; align-items:baseline; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
-  <h1>Sermo &middot; services <span id="me" class="muted" style="font-size:.8rem"></span></h1>
-  <div style="display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;">
-    <label class="muted" style="font-size:.85rem; white-space:nowrap;">Auto-refresh
-      <select id="refresh-select" style="font: inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">
+<div class="topbar-row">
+  <h1><span class="brand-dot" id="brand-dot"></span>Sermo <span id="me" class="muted"></span></h1>
+  <div class="topbar-tools">
+    <label>Auto-refresh
+      <select id="refresh-select">
         <option value="5000">5s</option>
         <option value="10000">10s</option>
         <option value="30000">30s</option>
@@ -153,19 +298,20 @@
         <option value="0">stop</option>
       </select>
     </label>
-    <span id="last-refresh" class="muted" style="font-size:.8rem; white-space:nowrap;"></span>
-    <button id="refresh-now" title="Refresh now" style="font:inherit; padding:.1rem .45rem; border-radius:.35rem; border:1px solid #8886; background:#8881; cursor:pointer;">&#x27F3;</button>
+    <span id="last-refresh" class="muted"></span>
+    <button id="refresh-now" title="Refresh now">&#x27F3;</button>
   </div>
 </div>
-<div id="system-status" class="muted" style="margin:-.5rem 0 .35rem; font-size:.9rem; display:flex; gap:.5rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
-<div id="statusbar" class="muted" style="margin:-.25rem 0 .5rem; font-size:.9rem; display:flex; gap:.75rem 1.25rem; flex-wrap:wrap; align-items:center;"></div>
+<div id="system-status"></div>
+<div id="statusbar"></div>
 </div><!-- /topbar -->
-<p id="ready" class="muted" style="margin-top:-.5rem; display:none"></p>
+<div id="overview"></div>
+<p id="ready" class="muted" style="display:none"></p>
 <div id="err"></div>
 <div id="attention"></div>
 <div id="op-live"></div>
 <details id="services-section" open>
-  <summary>Services</summary>
+  <summary>Services <span id="services-count" class="muted"></span></summary>
   <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
     <input id="svc-search" type="search" placeholder="filter services…  ( / )">
     <span id="svc-filters">
@@ -402,67 +548,35 @@ function showDisconnected() {
   $("#err").textContent = "⚠ Disconnected — retrying…" + age;
 }
 
+// load refreshes every panel in one parallel burst: the services fetch is the
+// connection signal (failure dims the page), every other endpoint degrades
+// independently to "keep the last render" on a transient error.
 async function load() {
-  try {
-    const res = await fetch("api/services");
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    render(await res.json());
+  const [services, watches, apps, notifiers, daemon, locks, activity] = await Promise.all([
+    fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
+    getJSON("api/watches", null),       // host watches (visible even when services=0)
+    getJSON("api/applications", null),  // installed applications
+    getJSON("api/notifiers", null),     // what watches can send to
+    getJSON("api/daemon", null),        // daemon / engine settings panel
+    getJSON("api/locks", null),         // global runtime locks (active and stale)
+    getJSON("api/activity", null),      // quick activity summary
+  ]);
+  if (services) {
+    render(services);
     connOK = true;
     lastLoadOk = Date.now();
     document.body.classList.remove("disconnected");
     $("#err").textContent = "";
-  } catch (e) {
+  } else {
     connOK = false;
     showDisconnected();
   }
-  // Also load host watches so they are visible when services=0 (e.g. services=0, watches=2).
-  try {
-    const wr = await fetch("api/watches");
-    if (wr.ok) {
-      renderWatches(await wr.json());
-    }
-  } catch (_) { /* non-fatal */ }
-
-  // Installed applications (name, version, binary location).
-  try {
-    const ar = await fetch("api/applications");
-    if (ar.ok) {
-      renderApps(await ar.json());
-    }
-  } catch (_) { /* non-fatal */ }
-
-  // Notifiers (what watches can send to).
-  try {
-    const nr = await fetch("api/notifiers");
-    if (nr.ok) {
-      renderNotifiers(await nr.json());
-    }
-  } catch (_) { /* non-fatal */ }
-
-  // Daemon / Engine settings panel.
-  try {
-    const dr = await fetch("api/daemon");
-    if (dr.ok) {
-      renderDaemon(await dr.json());
-    }
-  } catch (_) { /* non-fatal */ }
-
-
-  // Global runtime locks (active and stale).
-  try {
-    const lr = await fetch("api/locks");
-    if (lr.ok) {
-      renderLocks(await lr.json());
-    }
-  } catch (_) { /* non-fatal */ }
-
-  // Quick activity summary (from recent events).
-  try {
-    const ar = await fetch("api/activity");
-    if (ar.ok) {
-      renderActivity(await ar.json());
-    }
-  } catch (_) { /* non-fatal */ }
+  if (watches) renderWatches(watches);
+  if (apps) renderApps(apps);
+  if (notifiers) renderNotifiers(notifiers);
+  if (daemon) renderDaemon(daemon);
+  if (locks) renderLocks(locks);
+  if (activity) renderActivity(activity);
 
   // Always-visible status (counts, uptime, backend, ready state).
   renderStatus();
@@ -865,6 +979,12 @@ function setFavicon(status) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
   const link = $("#favicon");
   if (link) link.href = "data:image/svg+xml," + encodeURIComponent(svg);
+  // The brand dot in the topbar mirrors the same overall health color.
+  const dot = $("#brand-dot");
+  if (dot) {
+    dot.style.background = color;
+    dot.style.boxShadow = `0 0 0 3px ${color}38`;
+  }
 }
 function renderAttention() {
   const box = $("#attention");
@@ -1145,6 +1265,8 @@ function render(services) {
 
 function renderServices() {
   const total = (allServices || []).length;
+  const headCount = $("#services-count");
+  if (headCount) headCount.textContent = total ? `(${total})` : "";
   renderFilterCounts();
   const list = (allServices || []).filter(serviceMatches);
   if (svcSort.key && svcSortKeys[svcSort.key]) {
@@ -1264,7 +1386,13 @@ async function loadExpansionFor(key) {
         const mr = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(measured[0].name)}&since=${metricWindow}`);
         if (mr.ok) metrics = await mr.json();
       }
-      html = renderExpansion(d, metrics);
+      // The per-minute series feeds the 24h heartbeat strip; non-fatal if absent.
+      let beats = "";
+      try {
+        const sr = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=24h`);
+        if (sr.ok) beats = beatStrip(((await sr.json()) || {}).points || []);
+      } catch (_) { /* strip is decorative */ }
+      html = renderExpansion(d, metrics, beats);
     } else if (key.startsWith("wat:")) {
       const name = key.slice(4);
       const res = await fetch("api/events?limit=200");
@@ -1280,7 +1408,32 @@ async function loadExpansionFor(key) {
   } catch (_) { /* keep the last content on a transient error */ }
 }
 
-function renderExpansion(d, metrics) {
+// beatStrip renders the uptime-kuma-style availability strip: 48 half-hour
+// segments over the last 24h, green/amber/red by per-bucket availability and
+// hollow where nothing was observed (Sermo down or service paused).
+function beatStrip(points) {
+  const cols = 48, span = 864e5, startMs = Date.now() - span;
+  const buckets = Array.from({ length: cols }, () => ({ up: 0, total: 0 }));
+  for (const p of points || []) {
+    const t = Date.parse(p.start);
+    if (isNaN(t)) continue;
+    const i = Math.floor((t - startMs) / (span / cols));
+    if (i >= 0 && i < cols) { buckets[i].up += p.up || 0; buckets[i].total += p.total || 0; }
+  }
+  if (!buckets.some((b) => b.total > 0)) return "";
+  const segs = buckets.map((b, i) => {
+    const t = new Date(startMs + i * (span / cols));
+    if (!b.total) return `<span title="${esc(t.toLocaleTimeString())} · not observed"></span>`;
+    const r = b.up / b.total;
+    const cls = r >= 0.99 ? "beat-ok" : r >= 0.95 ? "beat-warn" : "beat-bad";
+    return `<span class="${cls}" title="${esc(t.toLocaleTimeString())} · ${(r * 100).toFixed(1)}% available"></span>`;
+  }).join("");
+  return `<div class="muted" style="margin-top:.1rem">Availability · last 24h</div>
+    <div class="beats">${segs}</div>
+    <div class="beats-meta"><span>24h ago</span><span>now</span></div>`;
+}
+
+function renderExpansion(d, metrics, beats) {
   const procs = d.processes || [];
   const pt = d.process_totals || {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
@@ -1293,6 +1446,7 @@ function renderExpansion(d, metrics) {
   const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b> · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`;
   const lat = renderLatency(metrics);
   const sla = renderSLA(d.sla);
+  const strip = beats || "";
   const procTable = procs.length
     ? `<table style="width:auto; font-size:.85rem;">
         <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
@@ -1308,7 +1462,7 @@ function renderExpansion(d, metrics) {
           <td class="muted">${p.threads || '—'}</td>
         </tr>`).join("")}</tbody></table>`
     : '<div class="muted">No processes found.</div>';
-  return totals + lat + sla + procTable;
+  return strip + totals + lat + sla + procTable;
 }
 
 // renderLatency shows a measured check's latency over the default window: the
@@ -1423,9 +1577,9 @@ function watchSummaryCell(w) {
 
 function watchMonitorHint(w) {
   const bits = [];
-  if (w.monitor_source) bits.push(`source=${esc(w.monitor_source)}`);
-  if (w.monitor_changed_at) bits.push(esc(w.monitor_changed_at));
-  return bits.length ? ` <span class="muted">(${bits.join(" · ")})</span>` : "";
+  if (w.monitor_source) bits.push(fmtMonitorSource(w.monitor_source));
+  if (w.monitor_changed_at) bits.push(fmtAge(w.monitor_changed_at));
+  return bits.length ? ` <span class="muted">${esc(bits.join(" · "))}</span>` : "";
 }
 
 function watchMonitorMode(w) {
@@ -2033,6 +2187,95 @@ function renderActivity(sum) {
   renderAttention();
 }
 
+// renderOverview fills the at-a-glance tile band under the topbar: one tile per
+// vital sign, colored by health, each clickable to jump to its panel. It runs
+// from renderStatus, which already holds every input — no extra requests.
+function renderOverview(ctx) {
+  const band = $("#overview");
+  if (!band) return;
+  const { ready, live, mon, ops, locks, hostMetrics } = ctx;
+  const svcs = allServices || [];
+  const enabled = svcs.filter((s) => s.enabled);
+  const failedSvcs = svcs.filter((s) => serviceState(s) === "failed");
+  const upSvcs = enabled.filter((s) => ["monitorized", "running", "ok"].includes(serviceState(s)));
+  const watches = allWatches || [];
+  const enabledWatches = watches.filter((w) => w && w.enabled);
+  const failedWatches = watches.filter((w) => watchStateText(w) === "failed");
+  const activeLocks = (locks || []).filter((l) => l.state === "active");
+  const alerts = failedSvcs.length + failedWatches.length + activeLocks.length;
+
+  const tile = (opts) => `
+    <button class="tile ${opts.cls || ""}" data-panel-target="${esc(opts.target || "services-section")}">
+      <span class="t-label">${esc(opts.label)}</span>
+      <div class="t-value">${opts.value}</div>
+      <div class="t-sub">${opts.sub || ""}</div>
+      ${opts.extra || ""}
+    </button>`;
+
+  const tiles = [];
+  tiles.push(tile({
+    label: "Services up",
+    value: `${upSvcs.length}<small> / ${enabled.length}</small>`,
+    cls: failedSvcs.length ? "t-crit" : (enabled.length ? "t-ok" : ""),
+    sub: failedSvcs.length
+      ? `${failedSvcs.length} failed`
+      : (enabled.length === 0 ? "none enabled" : "all healthy"),
+    target: failedSvcs.length ? "failed-services" : "services-section",
+  }));
+  if (watches.length) {
+    tiles.push(tile({
+      label: "Watches",
+      value: `${enabledWatches.length - failedWatches.length}<small> / ${enabledWatches.length}</small>`,
+      cls: failedWatches.length ? "t-crit" : "t-ok",
+      sub: failedWatches.length ? `${failedWatches.length} firing` : "quiet",
+      target: "watches-section",
+    }));
+  }
+  tiles.push(tile({
+    label: "Alerts",
+    value: String(alerts),
+    cls: alerts ? "t-crit" : "t-ok",
+    sub: alerts
+      ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
+      : "nothing on fire",
+    target: alerts ? "failed-services" : "services-section",
+  }));
+  if (mon && mon.total != null) {
+    tiles.push(tile({
+      label: "Monitored",
+      value: `${mon.monitored || 0}<small> / ${mon.total || 0}</small>`,
+      cls: (mon.paused || 0) > 0 ? "t-warn" : "",
+      sub: (mon.paused || 0) > 0 ? `${mon.paused} paused` : "",
+      target: "services-section",
+    }));
+  }
+  if (ops && ops.total) {
+    const saturated = (ops.in_use || 0) >= ops.total;
+    tiles.push(tile({
+      label: "Op slots",
+      value: `${ops.in_use || 0}<small> / ${ops.total}</small>`,
+      cls: saturated ? "t-warn" : "",
+      sub: saturated ? "saturated" : "",
+      target: "services-section",
+    }));
+  }
+  const cpu = (hostMetrics || []).find((m) => m.name === "total_cpu");
+  const mem = (hostMetrics || []).find((m) => m.name === "total_memory");
+  const load = (hostMetrics || []).find((m) => m.name === "load1");
+  if (cpu) {
+    const p = pctClamp(cpu.percent || 0);
+    tiles.push(tile({ label: "Host CPU", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p), target: "daemon-section" }));
+  }
+  if (mem) {
+    const p = pctClamp(mem.percent || 0);
+    tiles.push(tile({ label: "Host memory", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p), target: "daemon-section" }));
+  }
+  if (load && load.absolute != null) {
+    tiles.push(tile({ label: "Load 1m", value: esc(load.absolute.toFixed(2)), sub: live && live.uptime ? `up ${esc(live.uptime)}` : "", target: "daemon-section" }));
+  }
+  band.innerHTML = tiles.join("");
+}
+
 // getJSON fetches and parses one endpoint, returning dflt on any failure (network
 // error, non-2xx, bad JSON). It never throws, so one failing endpoint can't take
 // down the whole status line — each just degrades to its default for that cycle.
@@ -2109,6 +2352,7 @@ async function renderStatus() {
       parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
     }
     bar.innerHTML = parts.join(" &middot; ");
+    renderOverview({ ready, live, mon, ops, locks, hostMetrics });
 
     // Also populate the runtime part of the Daemon info panel
     const set = (id, val) => { const el = $(id); if (el) el.textContent = val || "—"; };

@@ -561,9 +561,13 @@ type cspNonceCtxKey struct{}
 
 // securityHeaders adds standard hardening headers to every response. The CSP
 // keeps the dashboard self-contained (no external origins). The embedded UI uses
-// a per-response nonce for its script block; style-src still permits inline
-// styles because the current single-file dashboard uses static and generated
-// style attributes.
+// a per-response nonce for its script block; style-src must rely on
+// 'unsafe-inline' alone — the dashboard hides sections and sizes its gauges via
+// generated style attributes, and per CSP2 the presence of a nonce in the list
+// makes browsers ignore 'unsafe-inline', silently stripping every one of them.
+// Style injection cannot exfiltrate here anyway (CSS-loaded images fall under
+// img-src, which stays 'self' + data:), while script-src keeps the real
+// boundary nonce-strict.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		nonce := cspNonce()
@@ -573,7 +577,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; script-src 'self' 'nonce-"+nonce+"'; "+
-				"style-src 'self' 'nonce-"+nonce+"' 'unsafe-inline'; img-src 'self' data:; "+
+				"style-src 'self' 'unsafe-inline'; img-src 'self' data:; "+
 				"base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), cspNonceCtxKey{}, nonce)))
 	})
