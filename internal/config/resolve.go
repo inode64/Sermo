@@ -164,9 +164,11 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 
 // expandApps links a service (or service daemon) to one or more apps from the
 // catalog via `apps: [name, …]`. Each named app contributes its preflight
-// binary+version checks to this service under namespaced keys
-// (`app-<name>-<check>`), so a missing or wrong-version runtime fails the
-// service's preflight — which blocks start/restart. The app definition is the
+// binary+version checks to this service under keys namespaced by the app name
+// (`<app>-<check>`, e.g. `restic-binary`, `backrest-version`), so when a service
+// links several apps each one's checks stay distinct and a missing or
+// wrong-version runtime fails the service's preflight — which blocks
+// start/restart. The app definition is the
 // single source of truth for the tool's binary path and version command, shared
 // across every service that lists it (many-to-many). The `apps` key is consumed
 // here. App preflight entries are already variable-expanded by ResolveDaemon, so
@@ -197,7 +199,7 @@ func (c *Config) expandApps(tree map[string]any) []string {
 		}
 		appPre, _ := resolved.Tree["preflight"].(map[string]any)
 		for checkName, check := range appPre {
-			preflight[fmt.Sprintf("app-%s-%s", name, checkName)] = check
+			preflight[fmt.Sprintf("%s-%s", name, checkName)] = check
 		}
 	}
 	if len(preflight) > 0 {
