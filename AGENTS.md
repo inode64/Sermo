@@ -427,7 +427,9 @@ config model and merge rules, variables, checks, rules, operations, locks,
 process discovery, stop policy, CLI exit codes. Its scope statements are
 historical — the web UI, notifiers, host watches and the wizard shipped long
 ago. On conflict, the instructions above and the code win. The example daemons
-it once carried live for real in `catalog/`.
+it once carried live for real in `catalog/`, and the complete annotated
+configuration example — every surface, validated by the test suite — is
+`docs/sermo-all.yml`.
 
 
 ## 8. Configuration model
@@ -530,7 +532,6 @@ name where applicable:
 ```text
 description   optional human-readable label for the service or daemon
 service       backend target name and backend selector
-aliases       per-backend candidate unit names (section 11)
 variables     string variables for ${...} expansion (section 10)
 commands      optional named auxiliary commands (below)
 preflight     checks run before dangerous actions (section 19)
@@ -547,17 +548,10 @@ included in `config render`. It is informational: the engine never acts on it. I
 is a top-level scalar (not a map), inherited and overridable like any other field.
 
 `commands` is optional, informational metadata: named commands an operator may
-want to keep with the daemon (for example a version command). The MVP loads and
-validates them (array form, optional timeout) and `sermoctl service show` may
-display them, but the engine never runs them automatically as part of monitoring
-or remediation.
-
-```yaml
-commands:
-  version:
-    command: ["apachectl", "-v"]
-    timeout: 5s
-```
+want to keep with the daemon (for example a version command — see
+`docs/sermo-all.yml`). They are loaded and validated (array form, optional
+timeout) and shown by `sermoctl service show`, but the engine never runs them
+automatically as part of monitoring or remediation.
 
 ---
 
@@ -861,39 +855,30 @@ rc-service SERVICE stop
 rc-service SERVICE restart
 ```
 
-### Unit aliases
+### Per-backend unit candidates
 
 The unit name differs across distributions (Apache is `apache2` on Debian,
-`httpd` on RHEL). A daemon may list per-backend candidate names with `aliases`:
+`httpd` on RHEL). `service` is either a single name (trusted as-is) or a
+per-backend candidate map:
 
 ```yaml
 service:
-  name: apache2
-  backend: auto
-
-aliases:
-  systemd:
-    - apache2.service
-    - httpd.service
-  openrc:
-    - apache2
-    - apache
+  systemd: [apache2, httpd]
+  openrc: [apache2, apache]
 ```
 
-Resolution, once the backend is known:
+Resolution, once the backend is known (`config.ServiceCandidates` +
+`servicemgr`'s resolver):
 
 ```text
-1. Build the candidate list: service.name first, then aliases for the active
-   backend, in order, deduplicated.
+1. Take the candidate list for the active backend, in order, deduplicated. A
+   backend with no entry has no candidates (the service is unavailable there).
 2. systemd: normalize each candidate (append `.service` if it has no unit
    suffix). openrc: use the name as-is.
 3. Pick the first candidate the backend actually knows (systemd:
    `systemctl cat`/`list-unit-files`; openrc: the init script exists). Cache it.
 4. If none resolve, fail with a clear error listing the candidates tried.
 ```
-
-All later operations on the service use the resolved name. If `aliases` is
-absent, the candidate list is just `service.name`.
 
 ---
 
@@ -950,30 +935,16 @@ daemon, not per service:
 `sermoctl` one-shot commands (`status`, `preflight`) run their checks directly
 under `default_timeout`; the global pool is a `sermod` concern.
 
-MVP check types:
+Core check types (YAML examples for every type: `docs/sermo-all.yml`,
+`configs/sermo.yml` and the field reference in `docs/rules.md`):
 
 ### TCP
 
-```yaml
-checks:
-  port-783:
-    type: tcp
-    host: 127.0.0.1
-    port: 783
-    timeout: 3s
-```
+`host` + `port` (+ optional `timeout`, `interface`).
 
 ### HTTP
 
-```yaml
-checks:
-  http:
-    type: http
-    url: http://127.0.0.1/health
-    method: GET
-    expect_status: 200
-    timeout: 5s
-```
+`url`, optional `method`, `expect_status`, `timeout`.
 
 Field defaults:
 
@@ -988,15 +959,6 @@ either, or an `{op, value}` comparison (the shared compare operators).
 
 ### Command
 
-```yaml
-checks:
-  config:
-    type: command
-    command: ["apachectl", "configtest"]
-    expect_exit: 0
-    timeout: 10s
-```
-
 `command` is array form only (never a shell string). `expect_exit` is the exit
 code that means the command succeeded — the value the application must return for
 correct operation; it defaults to `0`. The check is OK when the command's actual
@@ -1004,41 +966,19 @@ exit code equals `expect_exit`.
 
 ### Service state
 
-```yaml
-checks:
-  service:
-    type: service
-    expect: active
-```
-
 `expect` is one of the servicemgr statuses (section 11): `active`, `inactive`,
 `failed` or `unknown`. The check is OK when the resolved status equals `expect`.
 
 ### File exists
 
-Use this to detect a foreign flag/lock file written by another tool. Do not point
-it at Sermo's own lock files under `<paths.runtime>/locks/` (default
-`/run/sermo/locks/`) — the engine already checks those (section 20).
-
-```yaml
-checks:
-  backup-flag:
-    type: file_exists
-    path: /run/mysql-backup/in-progress
-```
+A `path` that must exist. Use it to detect a foreign flag/lock file written by
+another tool. Do not point it at Sermo's own lock files under
+`<paths.runtime>/locks/` (default `/run/sermo/locks/`) — the engine already
+checks those (section 20).
 
 ### Process exists
 
-```yaml
-checks:
-  mariabackup:
-    type: process
-    exe: /usr/bin/mariabackup
-    user: mysql
-    state: running
-```
-
-`state` is one of:
+`exe` + `user` selector and a `state`, one of:
 
 ```text
 running  a process matching the selector exists and is not a zombie. Default.
@@ -1051,17 +991,8 @@ resolved-exe and real-UID rules of section 21.
 
 ### Metric
 
-```yaml
-checks:
-  memory:
-    type: metric
-    scope: service        # service | system; default service
-    name: memory
-    op: ">"
-    value: 40%
-```
-
-Every metric has a **scope** that decides what it measures:
+`scope` + `name` + `op` + `value` (e.g. `{type: metric, scope: service, name:
+memory, op: ">", value: 40%}`). Every metric has a **scope** that decides what it measures:
 
 ```text
 service  (default)  measures only the monitored service: its discovered process
@@ -1375,96 +1306,16 @@ Inline `command` conditions:
 
 ## 15. Rule windows
 
-### Consecutive cycles
-
-Equivalent to:
-
-```text
-if failed host 127.0.0.1 port 783 for 3 cycles then restart
-```
-
-YAML:
+Two window forms (worked rule examples: `docs/sermo-all.yml` and
+`docs/rules.md`):
 
 ```yaml
-rules:
-  port-783-down:
-    type: remediation
-    if:
-      failed:
-        tcp:
-          host: 127.0.0.1
-          port: 783
-          timeout: 3s
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
+for:    { cycles: 3, mode: consecutive }   # true on N consecutive cycles
+within: { cycles: 15, min_matches: 5 }     # true >= M times in the last N
 ```
 
-### Single cycle CPU rule
-
-Equivalent to:
-
-```text
-if service cpu > 30% for 1 cycles then restart
-```
-
-YAML:
-
-```yaml
-rules:
-  high-cpu:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu
-        op: ">"
-        value: 30%
-    for:
-      cycles: 1
-      mode: consecutive
-    then:
-      action: restart
-```
-
-### Sliding window
-
-Equivalent to:
-
-```text
-if service memory > 40% within 15 cycles then restart
-```
-
-YAML:
-
-```yaml
-rules:
-  high-memory:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: ">"
-        value: 40%
-    within:
-      cycles: 15
-      min_matches: 1
-    then:
-      action: restart
-```
-
-More useful variant:
-
-```yaml
-within:
-  cycles: 15
-  min_matches: 5
-```
-
-This means the condition must be true at least 5 times in the last 15 cycles.
+`for` reads "the condition held for N cycles in a row"; `within` is a sliding
+window — at least `min_matches` true cycles among the last `cycles`.
 
 Go model:
 
@@ -1668,25 +1519,9 @@ rules:
       message: "Configuration invalid, restart blocked"
 ```
 
-Example: block stop/restart during backup.
-
-```yaml
-rules:
-  block-restart-during-backup:
-    type: guard
-    blocks:
-      - restart
-      - stop
-    if:
-      or:
-        - active:
-            check: backup-flag
-        - active:
-            check: mariabackup
-    then:
-      action: block
-      message: "Backup is running"
-```
+A guard over a foreign signal (backup process, flag file) works the same way:
+`blocks: [restart, stop]` with an `active:` condition — see section 20's
+external-lock example and `docs/sermo-all.yml`.
 
 Evaluation order:
 
@@ -1888,18 +1723,11 @@ preflight:
 Use `optional` for best-effort validations such as `libraries` (ldd), which can
 be unreliable; never for the authoritative config test.
 
-Special check types to implement:
+Special check types:
 
 ### binary
 
-Verifies that a path exists and is executable.
-
-```yaml
-preflight:
-  binary:
-    type: binary
-    path: /usr/sbin/mysqld
-```
+Verifies that a `path` exists and is executable.
 
 ### libraries
 
@@ -1923,37 +1751,9 @@ a warning in documentation (native ELF parsing is in TODO.md).
 
 ### command
 
-Runs a validation command with timeout.
-
-For MySQL:
-
-```yaml
-preflight:
-  config:
-    type: command
-    command: ["mysqld", "--validate-config"]
-    timeout: 15s
-```
-
-For Apache:
-
-```yaml
-preflight:
-  config:
-    type: command
-    command: ["apachectl", "configtest"]
-    timeout: 10s
-```
-
-For PHP-FPM:
-
-```yaml
-preflight:
-  config:
-    type: command
-    command: ["php-fpm", "-t"]
-    timeout: 10s
-```
+Runs a validation command with a timeout (`mysqld --validate-config`,
+`apachectl configtest`, `php-fpm -t`, …) — real per-application preflights
+live in `catalog/services/`.
 
 ---
 

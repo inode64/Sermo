@@ -5,6 +5,12 @@ Sermo has two document kinds: **daemons** (reusable base definitions) and
 sections. Include directories may also contain watch fragments with a top-level
 `watches:` map; those fragments do not use `kind:`.
 
+> **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
+> every configuration surface in one place — global config, watches, and one
+> document of each kind (daemon, app, lib, patterns, service, clone) — and is
+> validated by the test suite, so it cannot drift from the schema. The shipped
+> operational config is `configs/sermo.yml`.
+
 ## Layout
 
 ```
