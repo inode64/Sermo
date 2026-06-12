@@ -6,10 +6,12 @@ description: "Apache Kafka distribution (broker/controller, KRaft mode)"
 # Kafka ships as JVM shell launchers under <install>/bin. The runtime itself is
 # owned by the `java` app and linked from each kafka service; here we only prove
 # the distribution is installed and report its version.
+# Variables are flat (a value cannot reference another variable), so the
+# install dir is repeated in both paths — override both to relocate the
+# distribution.
 variables:
-  bindir: /opt/kafka/bin
-  binary: "${bindir}/kafka-server-start.sh"
-  topics: "${bindir}/kafka-topics.sh"
+  binary: /opt/kafka/bin/kafka-server-start.sh
+  topics: /opt/kafka/bin/kafka-topics.sh
 
 preflight:
   binary: { type: binary, path: "${binary}" }

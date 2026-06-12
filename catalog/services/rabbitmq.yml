@@ -52,8 +52,13 @@ stop_policy:
   graceful_timeout: 60s
   term_timeout: 30s
   force_kill: false
+  # exe_any is an exact-path match, so only the wrapper script is listed; the
+  # Erlang VM (beam.smp, under a version-specific erts dir) is intentionally
+  # absent and therefore never force-killable — fail-safe by design.
   kill_only_if:
     users: ["${user}"]
+    exe_any:
+      - "${binary}"
 
 rules:
   restart-if-amqp-failed:
