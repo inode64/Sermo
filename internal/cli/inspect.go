@@ -82,10 +82,9 @@ func (a App) showResolvedService(opts options, cfg *config.Config, name string) 
 	if code := a.requireService(opts, cfg, name); code != exitSuccess {
 		return code
 	}
-	resolved, errs := cfg.Resolve(name)
-	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues(name, errs))
-		return exitConfigInvalid
+	resolved, code := a.resolveService(opts, cfg, name)
+	if code != exitSuccess {
+		return code
 	}
 	return a.renderTree(opts, resolved)
 }
@@ -167,10 +166,9 @@ func (a App) renderForDiff(opts options, cfg *config.Config, name string) (strin
 	if code := a.requireService(opts, cfg, name); code != exitSuccess {
 		return "", code
 	}
-	resolved, errs := cfg.Resolve(name)
-	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues(name, errs))
-		return "", exitConfigInvalid
+	resolved, code := a.resolveService(opts, cfg, name)
+	if code != exitSuccess {
+		return "", code
 	}
 	data, err := config.RenderYAML(resolved)
 	if err != nil {
@@ -188,6 +186,17 @@ func (a App) requireService(opts options, cfg *config.Config, name string) int {
 		return exitRuntimeError
 	}
 	return exitSuccess
+}
+
+// resolveService resolves name into its flat tree, printing the scoped
+// resolution issues on failure. It returns exitSuccess when resolution is clean.
+func (a App) resolveService(opts options, cfg *config.Config, name string) (config.Resolved, int) {
+	resolved, errs := cfg.Resolve(name)
+	if len(errs) > 0 {
+		a.printIssues(opts, scopedIssues(name, errs))
+		return config.Resolved{}, exitConfigInvalid
+	}
+	return resolved, exitSuccess
 }
 
 func (a App) loadConfig(opts options) (*config.Config, int) {

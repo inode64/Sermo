@@ -15,6 +15,7 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/assist"
 	"sermo/internal/buildinfo"
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
@@ -317,7 +318,7 @@ func (a App) serviceMonitorState(opts options) monitorView {
 	if _, ok := cfg.Services[opts.service()]; ok {
 		view.Configured = true
 		if resolved, errs := cfg.Resolve(opts.service()); len(errs) == 0 {
-			if enabled, ok := resolved.Tree["enabled"].(bool); ok && !enabled {
+			if cfgval.Disabled(resolved.Tree) {
 				view.Enabled = false
 				view.Paused = true
 			}
@@ -402,10 +403,9 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if code := a.requireService(opts, cfg, service); code != exitSuccess {
 		return code
 	}
-	resolved, errs := cfg.Resolve(service)
-	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues(service, errs))
-		return exitConfigInvalid
+	resolved, code := a.resolveService(opts, cfg, service)
+	if code != exitSuccess {
+		return code
 	}
 
 	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action)
@@ -610,10 +610,9 @@ func (a App) runConfigRender(globalPath string, rest []string, opts options) int
 		return code
 	}
 
-	resolved, errs := cfg.Resolve(service)
-	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues(service, errs))
-		return exitConfigInvalid
+	resolved, code := a.resolveService(opts, cfg, service)
+	if code != exitSuccess {
+		return code
 	}
 
 	var out []byte
@@ -719,10 +718,9 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		return code
 	}
 
-	resolved, errs := cfg.Resolve(service)
-	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues(service, errs))
-		return exitConfigInvalid
+	resolved, code := a.resolveService(opts, cfg, service)
+	if code != exitSuccess {
+		return code
 	}
 
 	section, _ := resolved.Tree["preflight"].(map[string]any)
@@ -894,10 +892,9 @@ func (a App) runProcesses(opts options) int {
 		return code
 	}
 
-	resolved, errs := cfg.Resolve(service)
-	if len(errs) > 0 {
-		a.printIssues(opts, scopedIssues(service, errs))
-		return exitConfigInvalid
+	resolved, code := a.resolveService(opts, cfg, service)
+	if code != exitSuccess {
+		return code
 	}
 
 	selectors, warnings := process.ParseSelectors(resolved.Tree)
