@@ -2014,3 +2014,32 @@ checks:
 		t.Fatalf("pidfile check requires = %v, want [service]", chk["requires"])
 	}
 }
+
+func TestAdditionalUnitsAndValidation(t *testing.T) {
+	tree := map[string]any{
+		"service":      map[string]any{"systemd": []any{"docker"}, "openrc": []any{"docker"}},
+		"also_service": map[string]any{"systemd": []any{"docker.socket"}},
+	}
+	if got := AdditionalUnits(tree, "systemd"); len(got) != 1 || got[0] != "docker.socket" {
+		t.Fatalf("AdditionalUnits systemd = %v, want [docker.socket]", got)
+	}
+	if got := AdditionalUnits(tree, "openrc"); len(got) != 0 {
+		t.Fatalf("AdditionalUnits openrc = %v, want empty", got)
+	}
+}
+
+func TestValidateAlsoServiceErrors(t *testing.T) {
+	mustHave(t, validateService(t, `
+kind: service
+name: s
+service: { systemd: [docker] }
+also_service: { systemd: [docker] }
+`), "primary service unit")
+
+	mustHave(t, validateService(t, `
+kind: service
+name: s
+service: { systemd: [docker] }
+also_service: { foo: [x] }
+`), "not one of systemd, openrc")
+}

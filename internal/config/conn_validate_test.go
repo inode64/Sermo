@@ -190,3 +190,21 @@ checks:
 		}
 	}
 }
+
+func TestValidateCascadeTargets(t *testing.T) {
+	// also_apply referencing an unknown service errors.
+	mustHave(t, validateService(t, `
+kind: service
+name: web
+service: { name: x }
+also_apply: [nope]
+`), "not a configured service")
+
+	// self-reference errors.
+	mustHave(t, validateService(t, `
+kind: service
+name: web
+service: { name: x }
+also_apply: [web]
+`), "the service itself")
+}

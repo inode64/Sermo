@@ -191,6 +191,65 @@ func validateServiceField(tree map[string]any, add addFunc) {
 	}
 }
 
+// validateAlsoService checks the `also_service` field: a per-init map of
+// systemd/openrc unit lists (auxiliary units acted on with the primary). Units
+// must be non-empty and must not repeat the primary `service` unit for that
+// backend (a self-reference).
+func validateAlsoService(tree map[string]any, add addFunc) {
+	a, present := tree["also_service"]
+	if !present {
+		return
+	}
+	m, ok := a.(map[string]any)
+	if !ok {
+		add("also_service must be a per-init map (systemd/openrc)")
+		return
+	}
+	svc, _ := tree["service"].(map[string]any)
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		if k != "systemd" && k != "openrc" {
+			add("also_service key %q is not one of systemd, openrc", k)
+			continue
+		}
+		units := cfgval.StringList(m[k])
+		if len(units) == 0 {
+			add("also_service.%s must be a non-empty list", k)
+		}
+		primary := map[string]bool{}
+		if svc != nil {
+			for _, u := range cfgval.StringList(svc[k]) {
+				primary[u] = true
+			}
+		}
+		for _, u := range units {
+			if strings.TrimSpace(u) == "" {
+				add("also_service.%s contains an empty unit", k)
+			}
+			if primary[u] {
+				add("also_service.%s lists %q, which is the primary service unit", k, u)
+			}
+		}
+	}
+}
+
+// validateCascade checks `also_apply`: each entry must be a known service and not
+// the service itself. Targets receive the same action via their own operation.
+func validateCascade(name string, tree map[string]any, services map[string]struct{}, add addFunc) {
+	for _, target := range cfgval.StringList(tree["also_apply"]) {
+		if target == "" {
+			add("also_apply contains an empty service name")
+			continue
+		}
+		if target == name {
+			add("also_apply lists %q, the service itself", target)
+			continue
+		}
+		if _, ok := services[target]; !ok {
+			add("also_apply references %q, which is not a configured service", target)
+		}
+	}
+}
+
 func policyCooldown(tree map[string]any) (string, bool) {
 	policy, ok := tree["policy"].(map[string]any)
 	if !ok {

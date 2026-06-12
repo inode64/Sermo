@@ -192,6 +192,10 @@ func validateServices(cfg *Config) []Issue {
 	var issues []Issue
 	notifiers, _ := cfg.Global.Raw["notifiers"].(map[string]any)
 	defined := notifierNames(notifiers)
+	services := map[string]struct{}{}
+	for _, n := range cfg.ServiceNames {
+		services[n] = struct{}{}
+	}
 	for _, name := range cfg.ServiceNames {
 		if name == "" {
 			continue
@@ -203,12 +207,12 @@ func validateServices(cfg *Config) []Issue {
 		if resolved.Tree == nil {
 			continue
 		}
-		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined)...)
+		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services)...)
 	}
 	return issues
 }
 
-func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}) []Issue {
+func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, services map[string]struct{}) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
@@ -251,6 +255,8 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
 	validateServiceField(tree, add)
+	validateAlsoService(tree, add)
+	validateCascade(name, tree, services, add)
 	validateCommands(tree, add)
 	validateRuleWindow(tree, add)
 	validateServiceMonitors(tree, notifiers, add)
