@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/notify"
 )
 
@@ -135,7 +136,7 @@ func (w *fileWatcher) stateOf(info fs.FileInfo) fileState {
 		st.uid, st.gid = sys.Uid, sys.Gid
 	}
 	if w.cond.sizeOp != "" {
-		st.breached = compareThreshold(float64(st.size), w.cond.sizeOp, w.cond.sizeValue)
+		st.breached = cfgval.CompareFloat(float64(st.size), w.cond.sizeOp, w.cond.sizeValue)
 	}
 	return st
 }
@@ -203,33 +204,5 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 func (w *fileWatcher) emitEvent(e Event) {
 	if w.emit != nil {
 		w.emit(e)
-	}
-}
-
-func compareThreshold(a float64, op string, b float64) bool {
-	switch op {
-	case ">=":
-		return a >= b
-	case ">":
-		return a > b
-	case "<=":
-		return a <= b
-	case "<":
-		return a < b
-	case "==":
-		return a == b
-	case "!=":
-		return a != b
-	default:
-		return false
-	}
-}
-
-func validThresholdOp(op string) bool {
-	switch op {
-	case ">=", ">", "<=", "<", "==", "!=":
-		return true
-	default:
-		return false
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/process"
@@ -187,13 +188,13 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 	if c.minAge > 0 && age < c.minAge {
 		ok = false
 	}
-	if c.memOp != "" && !compareThreshold(float64(s.RSS), c.memOp, c.memValue) {
+	if c.memOp != "" && !cfgval.CompareFloat(float64(s.RSS), c.memOp, c.memValue) {
 		ok = false
 	}
 
 	if cpuPct, ready := cpuPercent(st.prevCPU, s.CPUTicks, st.prevAt, now); ready {
 		env["SERMO_CPU"] = strconv.FormatFloat(cpuPct, 'f', 2, 64)
-		if c.cpuOp != "" && !compareThreshold(cpuPct, c.cpuOp, c.cpuValue) {
+		if c.cpuOp != "" && !cfgval.CompareFloat(cpuPct, c.cpuOp, c.cpuValue) {
 			ok = false
 		}
 	} else if c.cpuOp != "" {
@@ -202,7 +203,7 @@ func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, 
 
 	if ioRate, ready := ioBytesPerSec(st.prevIO, s.IOBytes, st.hadIO, s.HasIO, st.prevAt, now); ready {
 		env["SERMO_IO"] = strconv.FormatFloat(ioRate, 'f', 0, 64)
-		if c.ioOp != "" && !compareThreshold(ioRate, c.ioOp, c.ioValue) {
+		if c.ioOp != "" && !cfgval.CompareFloat(ioRate, c.ioOp, c.ioValue) {
 			ok = false
 		}
 	} else if c.ioOp != "" {

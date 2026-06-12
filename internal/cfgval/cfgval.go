@@ -177,6 +177,28 @@ func Float(v any) (float64, bool) {
 	}
 }
 
+// CompareFloat evaluates one `a op b` comparison using the IsCompareOp
+// vocabulary; an unknown op never holds. Checks, watches and rules all
+// evaluate thresholds through this one definition.
+func CompareFloat(a float64, op string, b float64) bool {
+	switch op {
+	case ">=":
+		return a >= b
+	case ">":
+		return a > b
+	case "<=":
+		return a <= b
+	case "<":
+		return a < b
+	case "==":
+		return a == b
+	case "!=":
+		return a != b
+	default:
+		return false
+	}
+}
+
 // IsCompareOp reports whether op is one of the comparison operators every
 // {op, value} threshold accepts (>= > <= < == !=). Shared by config validation
 // and the runtime check builders so the threshold grammar cannot drift between
