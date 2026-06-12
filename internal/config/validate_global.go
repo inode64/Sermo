@@ -65,7 +65,7 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 		if enabled, ok := entry["enabled"].(bool); ok && !enabled {
 			continue
 		}
-		switch cfgval.String(entry["type"]) {
+		switch typ := cfgval.String(entry["type"]); typ {
 		case "email":
 			dsn := cfgval.String(entry["dsn"])
 			if dsn == "" {
@@ -79,17 +79,17 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 			if len(cfgval.StringList(entry["to"])) == 0 {
 				add("notifiers.%s.to must list at least one address", name)
 			}
-		case "slack":
+		case "slack", "teams":
 			wh := cfgval.String(entry["webhook"])
 			if wh == "" {
-				add("notifiers.%s.webhook is required for a slack notifier", name)
+				add("notifiers.%s.webhook is required for a %s notifier", name, typ)
 			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
 				add("notifiers.%s.webhook must be an http(s) URL", name)
 			}
 		case "":
 			add("notifiers.%s.type is required", name)
 		default:
-			add("notifiers.%s.type %q is not supported (email, slack)", name, cfgval.String(entry["type"]))
+			add("notifiers.%s.type %q is not supported (email, slack, teams)", name, typ)
 		}
 	}
 }
