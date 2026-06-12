@@ -9,6 +9,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/process"
@@ -21,12 +22,8 @@ type Config struct {
 	Service string
 	Unit    string
 	Backend string
-	// AlsoUnits are auxiliary init units (also_service) for the active backend,
-	// resolved by the caller; the engine acts on them in wrap order.
-	AlsoUnits []string
-	// StopArtifacts are the stopped-state invariants resolved by the caller.
-	StopArtifacts StopArtifacts
-	Tree          map[string]any // resolved service config
+	Tree    map[string]any // resolved service config; New derives also_service units
+	//                        and the stop_policy invariants from it
 
 	Manager          Manager
 	Locker           *locks.OperationLocker
@@ -66,6 +63,11 @@ func New(c Config) Engine {
 	}
 
 	tree := c.Tree
+	// Derive the also_service units and stop_policy invariants from the resolved
+	// tree here, consistent with how the kill policy/selectors below are parsed —
+	// callers pass only the Tree, not pre-parsed forms.
+	alsoUnits := config.AdditionalUnits(tree, c.Backend)
+	stopArtifacts := stopArtifactsFromTree(tree)
 	killPolicy, stopPolicyWarnings := process.ParseStopPolicy(tree)
 	selectors, selectorWarnings := process.ParseSelectors(tree)
 	hasCommandMatch := hasCommandMatchSelector(selectors)
@@ -97,8 +99,8 @@ func New(c Config) Engine {
 		Service:       c.Service,
 		Unit:          c.Unit,
 		Backend:       c.Backend,
-		AlsoUnits:     c.AlsoUnits,
-		StopArtifacts: c.StopArtifacts,
+		AlsoUnits:     alsoUnits,
+		StopArtifacts: stopArtifacts,
 		ConfigError:   configErr,
 		Manager:       c.Manager,
 		AcquireLock: func(t time.Duration) (func() error, error) {
@@ -124,6 +126,18 @@ func New(c Config) Engine {
 		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),
 		Emit:             c.Emit,
 	}
+}
+
+// stopArtifactsFromTree maps a resolved service's stop_policy invariants into the
+// engine's StopArtifacts form. It is the single config→engine translation of the
+// stopped-state invariants, shared by every engine build (daemon, web, CLI).
+func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
+	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
+	out := StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled}
+	for _, c := range clean {
+		out.Clean = append(out.Clean, CleanPath{Path: c.Path, Recursive: c.Recursive})
+	}
+	return out
 }
 
 // reloadClosure builds the engine's reload step. With no native reload declared
