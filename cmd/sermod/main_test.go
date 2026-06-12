@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -11,6 +15,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
+	"sermo/internal/servicemgr"
 )
 
 func TestRunRejectsInvalidConfig(t *testing.T) {
@@ -209,5 +214,105 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	bare := &config.Config{Global: config.Global{Raw: map[string]any{}}}
 	if engineString(bare, "backend") != "" || notifiersRaw(bare) != nil {
 		t.Fatal("accessors on an empty config must return zero values")
+	}
+}
+
+// TestRunSmokeLifecycle boots the whole daemon against a temp config — workers,
+// watches, state store, web server — waits until it reports ready, exercises a
+// SIGHUP reload, and shuts it down with SIGTERM expecting a clean exit. This is
+// the integration smoke for run(): the startup path no unit test covers.
+func TestRunSmokeLifecycle(t *testing.T) {
+	if _, err := servicemgr.NewDetector().Detect(context.Background(), servicemgr.BackendAuto); err != nil {
+		t.Skipf("no init backend available: %v", err)
+	}
+
+	dir := t.TempDir()
+	for _, sub := range []string{"enabled", "catalog"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	port := freeTCPPort(t)
+	global := filepath.Join(dir, "sermo.yml")
+	content := fmt.Sprintf(`engine:
+  backend: auto
+  interval: 1s
+paths:
+  catalog: [%s]
+  includes: [%s]
+  runtime: %s
+  state: %s
+defaults:
+  policy: { cooldown: 5m }
+web:
+  address: 127.0.0.1
+  port: %d
+watches:
+  smoke:
+    monitor: disabled
+    check: { type: oom }
+    then: { hook: { command: [/bin/true] } }
+`, filepath.Join(dir, "catalog"), filepath.Join(dir, "enabled"),
+		filepath.Join(dir, "runtime"), filepath.Join(dir, "state"), port)
+	if err := os.WriteFile(global, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan int, 1)
+	go func() { done <- run([]string{"run", "--config", global}) }()
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitHTTPOK(t, base+"/readyz", 15*time.Second)
+	waitHTTPOK(t, base+"/livez", 2*time.Second)
+
+	// Reload in place (same config) and require the daemon to stay ready.
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	waitHTTPOK(t, base+"/readyz", 5*time.Second)
+
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("run() exit = %d, want 0", code)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("daemon did not stop after SIGTERM")
+	}
+}
+
+// freeTCPPort grabs an ephemeral loopback port for the smoke web server.
+func freeTCPPort(t *testing.T) int {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	return port
+}
+
+// waitHTTPOK polls url until it answers 200 or the deadline passes.
+func waitHTTPOK(t *testing.T, url string, within time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		resp, err := http.Get(url) //nolint:gosec // loopback test URL
+		if err == nil {
+			ok := resp.StatusCode == http.StatusOK
+			resp.Body.Close()
+			if ok {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s not OK within %s (last err %v)", url, within, err)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
