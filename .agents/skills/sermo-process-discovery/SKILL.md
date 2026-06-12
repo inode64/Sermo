@@ -22,7 +22,7 @@ user real UID from /proc/<pid>/status, matched exactly
 `cmdline` is for display/logging only, never for matching. If `/proc/<pid>/exe`
 is unreadable or "(deleted)" (binary replaced after an upgrade), the process does
 NOT match any exe selector and is not killed — leaving an unidentifiable process
-alive beats killing the wrong one. See `implementation-spec.md` section 21.
+alive beats killing the wrong one. See `AGENTS.md` spec section 21.
 
 Prefer adding one or more of:
 

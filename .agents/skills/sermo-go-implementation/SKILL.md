@@ -75,7 +75,7 @@ failed
 ## Package guidance
 
 Use these packages. This is the full internal/ layout; it must match
-`implementation-spec.md` section 5 and AGENTS.md — do not invent or drop packages:
+`AGENTS.md` spec section 5 and AGENTS.md — do not invent or drop packages:
 
 ```text
 internal/app          daemon, scheduler and in-memory state (sermod)
