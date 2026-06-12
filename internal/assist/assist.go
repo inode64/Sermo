@@ -14,20 +14,37 @@ type Iface struct {
 	Loopback bool
 }
 
+// DaemonCandidate is a catalog daemon detected on the host that the service
+// assistant can enable, with the facts the wizard shows and confirms.
+type DaemonCandidate struct {
+	Name          string   // catalog daemon name, used as `uses:`
+	Title         string   // display name
+	Unit          string   // resolved init unit for the active backend
+	Port          int      // catalog default port (0 = none)
+	ConfigPaths   []string // config file locations that exist on the host
+	UnitPresent   bool     // the init unit exists on the active backend
+	PortListening bool     // something is listening on Port
+}
+
 // Env carries the host facts and config an assistant needs, injected so the
 // assistants are testable without touching the real host or config.
 type Env struct {
-	Notifiers     []string                 // names from the config's `notifiers:` section
-	DefaultNotify []string                 // top-level `notify` default; nil means no inherited notification
-	Volumes       func() ([]Volume, error) // candidate disk volumes
-	Ifaces        func() ([]Iface, error)  // host network interfaces
+	Notifiers     []string                          // names from the config's `notifiers:` section
+	DefaultNotify []string                          // top-level `notify` default; nil = no inherited notification
+	Backend       string                            // active init system: "systemd" | "openrc"
+	Volumes       func() ([]Volume, error)          // candidate disk volumes
+	Ifaces        func() ([]Iface, error)           // host network interfaces
+	Daemons       func() ([]DaemonCandidate, error) // catalog daemons detected as installed
+	ServiceNames  map[string]struct{}               // already-configured service names (collision check)
 }
 
 // Result is what an assistant produced: a fragment to merge under `watches:`
-// (watch name -> entry) and a short human summary.
+// (watch name -> entry) and/or as kind:service files (`Services`: service name
+// -> body), plus a short human summary.
 type Result struct {
-	Watches map[string]any
-	Summary string
+	Watches  map[string]any
+	Services map[string]any
+	Summary  string
 }
 
 // Assistant guides the user through creating one kind of watch.
@@ -39,6 +56,7 @@ type Assistant interface {
 
 // registry is the ordered set of available assistants. Add new ones here.
 var registry = []Assistant{
+	serviceAssistant{},
 	volumeAssistant{},
 	netAssistant{},
 }

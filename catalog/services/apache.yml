@@ -48,6 +48,8 @@ processes:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/apache2.pid
 
+config_files: [/etc/apache2/httpd.conf, /etc/apache2/apache2.conf, /etc/httpd/conf/httpd.conf]
+
 checks:
   service:
     type: service

@@ -15,12 +15,13 @@ import (
 
 	"sermo/internal/assist"
 	"sermo/internal/config"
+	"sermo/internal/servicemgr"
 	"sermo/internal/volume"
 )
 
 // runWizard drives the interactive assistant that generates `watches:` config.
 // `sermoctl wizard [name]` runs the named assistant, or lists them to choose.
-func (a App) runWizard(_ context.Context, opts options) int {
+func (a App) runWizard(ctx context.Context, opts options) int {
 	globalPath := opts.config
 	if globalPath == "" {
 		globalPath = config.DefaultGlobalPath
@@ -38,10 +39,13 @@ func (a App) runWizard(_ context.Context, opts options) int {
 		return code
 	}
 
-	res, err := as.Run(p, a.wizardEnv(cfg))
+	res, err := as.Run(p, a.wizardEnv(ctx, opts, cfg))
 	if err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError
+	}
+	if len(res.Services) > 0 {
+		return a.writeWizardServices(p, opts, globalPath, cfg, res)
 	}
 	if len(res.Watches) == 0 {
 		fmt.Fprintln(a.Stdout, "Nothing selected; no configuration generated.")
@@ -127,15 +131,27 @@ func (a App) wizardStdin() io.Reader {
 
 // wizardEnv builds the host facts an assistant needs. The wizardEnvFunc seam
 // lets tests supply controlled volumes/interfaces.
-func (a App) wizardEnv(cfg *config.Config) assist.Env {
+func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) assist.Env {
 	if a.wizardEnvFunc != nil {
 		return a.wizardEnvFunc(cfg)
+	}
+	backend := ""
+	if det, err := a.Detector.Detect(ctx, opts.backend); err == nil {
+		backend = string(det.Backend)
 	}
 	return assist.Env{
 		Notifiers:     notifierNames(cfg),
 		DefaultNotify: config.NotifyDefault(cfg.Global.Raw),
+		Backend:       backend,
 		Volumes:       listVolumes,
 		Ifaces:        listIfaces,
+		ServiceNames:  serviceNameSet(cfg),
+		Daemons: func() ([]assist.DaemonCandidate, error) {
+			if backend == "" {
+				return nil, nil
+			}
+			return listInstalledDaemons(ctx, cfg, servicemgr.Backend(backend))
+		},
 	}
 }
 
