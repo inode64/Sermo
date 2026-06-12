@@ -73,6 +73,15 @@ engine:
 `engine.interval` is the default cadence at which every service's checks are
 run. Each service runs all of its checks once per cycle.
 
+`engine.backend: auto` detects the init system: probe systemd (`systemctl`
+exists, `/run/systemd/system` exists, `is-system-running` usable — `degraded`
+counts as usable) and OpenRC (`rc-service` exists, `/run/openrc` exists or
+`rc-status` works). With exactly one available it is used; with both, the
+**active init system wins** (PID 1 / systemd state, else a working OpenRC) —
+never mere command presence; with neither, or an unresolvable tie, startup
+fails asking for `--backend`, `SERMO_BACKEND` or `engine.backend`. That is
+also the override order: CLI flag > environment > config > auto-detection.
+
 `engine.max_parallel_operations` limits how many safe service actions
 (`start`, `stop`, `restart`) may run at the same time across automatic
 remediation, the web UI and `sermoctl`. It is separate from

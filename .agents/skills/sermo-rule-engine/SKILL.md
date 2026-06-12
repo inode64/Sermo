@@ -36,7 +36,7 @@ rules:
 ```
 
 `RuleType`/`ActionType` constants and the `Action` struct are defined in
-`AGENTS.md` spec section 16. `block` and `alert` actions require a
+`docs/rules.md`. `block` and `alert` actions require a
 `message`; only guard rules use `action: block`, and a guard must list `blocks`.
 
 ## Condition tree
@@ -172,7 +172,7 @@ Cooldown and rate limiting are a per-service `policy` block (mandatory positive
 cooldown, optional max_actions/max_actions_window/backoff), NOT per-rule. The
 daemon checks this resolved policy before invoking the operation engine
 (evaluation order step 5). A rule may keep firing every cycle while the cooldown
-suppresses repeated execution. See `AGENTS.md` spec section 16.
+suppresses repeated execution. See `docs/rules.md`.
 
 ## Testing
 
