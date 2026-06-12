@@ -552,8 +552,10 @@ a service.
 > the notify threshold as a percent or size (sizes require a `K`/`M`/`G`/`T`
 > suffix), and optionally enable auto-expand)
 > and `sermoctl wizard net` for network interfaces (pick interfaces and which of
-> link state / errors / speed to watch). Run with no argument to choose from the
-> list. It prints the generated `watches:` block and offers to write one watch
+> link state / errors / speed to watch). There is also `sermoctl wizard service`,
+> which detects installed catalog daemons and writes `kind: service` files into
+> `apps-enabled/` to enable them (see [daemons](daemons.md)). Run with no
+> argument to choose from the list. It prints the generated `watches:` block and offers to write one watch
 > per file under a directory named after the watch type (for example
 > `/etc/sermo/storage` or `/etc/sermo/network`). If that directory already has
 > watch fragments, the wizard asks whether to review them and then asks before
