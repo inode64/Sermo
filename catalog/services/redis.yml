@@ -12,7 +12,6 @@ apps: [redis]
 
 variables:
   binary: /usr/bin/redis-server
-  cli: /usr/bin/redis-cli
   user: redis
   host: 127.0.0.1
   port: 6379
@@ -48,16 +47,21 @@ checks:
     port: "${port}"
     timeout: 2s
 
+  # Native RESP liveness: connects and verifies the server answers PING with
+  # PONG (the redis probe does AUTH+PING+INFO over a socket), so no external
+  # redis-cli is needed. This is the bare liveness check wired to the restart
+  # rule below; set password/user (and tls) here if the server requires auth.
   ping:
-    type: command
-    command: ["${cli}", "-h", "${host}", "-p", "${port}", "ping"]
+    type: redis
+    host: "${host}"
+    port: "${port}"
     timeout: 3s
 
-  # Native RESP probe exposing role, replication, persistence and memory in its
-  # result data (assertable via expect). It asserts the last background save
-  # succeeded — reported "ok" even when persistence is disabled, so it never
-  # false-alarms. Not wired to a remediation rule: a failed save is surfaced for
-  # alerting, not fixed by a restart.
+  # Same native RESP probe, but asserting the last background save succeeded
+  # (reported "ok" even when persistence is disabled, so it never false-alarms).
+  # It exposes role, replication, persistence and memory for expect. Kept
+  # separate from `ping` and NOT wired to a remediation rule: a failed save is
+  # surfaced for alerting, not fixed by a restart.
   persistence:
     type: redis
     host: "${host}"
