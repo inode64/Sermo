@@ -1,10 +1,88 @@
 package conn
 
 import (
+	"context"
+	"io"
+	"net"
+	"strconv"
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
 )
+
+func TestMySQLNoUserOptional(t *testing.T) {
+	// mysql must NOT require a user: a credential-free greeting probe is allowed.
+	p, ok := Lookup("mysql")
+	if !ok {
+		t.Fatal("mysql not registered")
+	}
+	if p.RequiresUser() {
+		t.Fatal("mysql must not require a user (greeting liveness)")
+	}
+}
+
+// buildMySQLHandshake builds an Initial Handshake Packet (protocol 10) whose
+// server_version is the given string.
+func buildMySQLHandshake(version string) []byte {
+	payload := []byte{0x0a}
+	payload = append(payload, version...)
+	payload = append(payload, 0)               // null terminator
+	payload = append(payload, 0, 0, 0, 0)      // connection id (unused by the probe)
+	hdr := []byte{byte(len(payload)), 0, 0, 0} // 3-byte LE length + seq id
+	return append(hdr, payload...)
+}
+
+// serveMySQL accepts one connection and writes reply (the server speaks first).
+func serveMySQL(t *testing.T, reply []byte) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer func() { _ = c.Close() }()
+		_, _ = c.Write(reply)
+		_, _ = io.Copy(io.Discard, c)
+	}()
+	_, portStr, _ := net.SplitHostPort(ln.Addr().String())
+	port, _ := strconv.Atoi(portStr)
+	return port
+}
+
+func TestMySQLGreeting(t *testing.T) {
+	res, err := mysqlProtocol{}.Probe(context.Background(),
+		Config{Host: "127.0.0.1", Port: serveMySQL(t, buildMySQLHandshake("11.4.2-MariaDB"))})
+	if err != nil {
+		t.Fatalf("greeting probe: %v", err)
+	}
+	if res.Version != "11.4.2-MariaDB" {
+		t.Fatalf("version = %q, want 11.4.2-MariaDB", res.Version)
+	}
+}
+
+func TestMySQLGreetingErrPacket(t *testing.T) {
+	// 0xff ERR packet: code(2, LE) + message. The server is up but refusing.
+	payload := append([]byte{0xff, 0x10, 0x04}, "Host blocked"...)
+	reply := append([]byte{byte(len(payload)), 0, 0, 0}, payload...)
+	if _, err := (mysqlProtocol{}).Probe(context.Background(),
+		Config{Host: "127.0.0.1", Port: serveMySQL(t, reply)}); err == nil {
+		t.Fatal("an ERR handshake must fail the probe")
+	}
+}
+
+func TestMySQLGreetingNotMySQL(t *testing.T) {
+	// A peer whose first packet is not a protocol-10 handshake must fail.
+	reply := []byte{0x02, 0, 0, 0, 0x99, 0x00}
+	if _, err := (mysqlProtocol{}).Probe(context.Background(),
+		Config{Host: "127.0.0.1", Port: serveMySQL(t, reply)}); err == nil {
+		t.Fatal("a non-handshake first packet must fail the probe")
+	}
+}
 
 func TestBuildDSN(t *testing.T) {
 	dsn := buildDSN(Config{
