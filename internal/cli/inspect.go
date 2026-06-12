@@ -79,9 +79,8 @@ func (a App) runService(opts options) int {
 }
 
 func (a App) showResolvedService(opts options, cfg *config.Config, name string) int {
-	if _, ok := cfg.Services[name]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", name))
-		return exitRuntimeError
+	if code := a.requireService(opts, cfg, name); code != exitSuccess {
+		return code
 	}
 	resolved, errs := cfg.Resolve(name)
 	if len(errs) > 0 {
@@ -165,9 +164,8 @@ func (a App) runConfigDiff(globalPath string, rest []string, opts options) int {
 }
 
 func (a App) renderForDiff(opts options, cfg *config.Config, name string) (string, int) {
-	if _, ok := cfg.Services[name]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", name))
-		return "", exitRuntimeError
+	if code := a.requireService(opts, cfg, name); code != exitSuccess {
+		return "", code
 	}
 	resolved, errs := cfg.Resolve(name)
 	if len(errs) > 0 {
@@ -180,6 +178,16 @@ func (a App) renderForDiff(opts options, cfg *config.Config, name string) (strin
 		return "", exitRuntimeError
 	}
 	return string(data), exitSuccess
+}
+
+// requireService reports an unknown-service error unless name is configured.
+// It returns exitSuccess when the service exists.
+func (a App) requireService(opts options, cfg *config.Config, name string) int {
+	if _, ok := cfg.Services[name]; !ok {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", name))
+		return exitRuntimeError
+	}
+	return exitSuccess
 }
 
 func (a App) loadConfig(opts options) (*config.Config, int) {

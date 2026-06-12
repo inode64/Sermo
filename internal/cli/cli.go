@@ -399,9 +399,8 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if cfg == nil {
 		return code
 	}
-	if _, ok := cfg.Services[service]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
-		return exitRuntimeError
+	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+		return code
 	}
 	resolved, errs := cfg.Resolve(service)
 	if len(errs) > 0 {
@@ -607,9 +606,8 @@ func (a App) runConfigRender(globalPath string, rest []string, opts options) int
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
 		return exitRuntimeError
 	}
-	if _, ok := cfg.Services[service]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
-		return exitRuntimeError
+	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+		return code
 	}
 
 	resolved, errs := cfg.Resolve(service)
@@ -717,9 +715,8 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	if cfg == nil {
 		return code
 	}
-	if _, ok := cfg.Services[service]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
-		return exitRuntimeError
+	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+		return code
 	}
 
 	resolved, errs := cfg.Resolve(service)
@@ -893,9 +890,8 @@ func (a App) runProcesses(opts options) int {
 	if cfg == nil {
 		return code
 	}
-	if _, ok := cfg.Services[service]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
-		return exitRuntimeError
+	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+		return code
 	}
 
 	resolved, errs := cfg.Resolve(service)

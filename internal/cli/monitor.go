@@ -29,9 +29,8 @@ func (a App) runMonitor(opts options, pause bool) int {
 	if code != exitSuccess {
 		return code
 	}
-	if _, ok := cfg.Services[service]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
-		return exitRuntimeError
+	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+		return code
 	}
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
