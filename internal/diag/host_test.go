@@ -38,19 +38,6 @@ func TestOSHostIsMountPoint(t *testing.T) {
 	}
 }
 
-func TestUnescapeMount(t *testing.T) {
-	cases := map[string]string{
-		"/plain":                    "/plain",
-		`/mnt/with\040space`:        "/mnt/with space",
-		`/mnt/tab\011nl\012bs\134x`: "/mnt/tab\tnl\nbs\\x",
-	}
-	for in, want := range cases {
-		if got := unescapeMount(in); got != want {
-			t.Errorf("unescapeMount(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestResultCounts(t *testing.T) {
 	r := Result{Findings: []Finding{
 		{Level: LevelError},

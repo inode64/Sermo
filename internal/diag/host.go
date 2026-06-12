@@ -3,7 +3,7 @@ package diag
 import (
 	"net"
 	"os"
-	"strings"
+	"sermo/internal/checks"
 )
 
 // OSHost implements Host against the real machine: the filesystem, the network
@@ -22,25 +22,17 @@ func (OSHost) InterfaceExists(name string) bool {
 	return err == nil
 }
 
-// IsMountPoint reports whether path is a mount point, per /proc/mounts.
+// IsMountPoint reports whether path is a mount point, per the shared
+// /proc/mounts parser (internal/checks owns the escaping rules).
 func (OSHost) IsMountPoint(path string) bool {
-	data, err := os.ReadFile("/proc/mounts")
+	mounts, err := checks.DefaultMounts()
 	if err != nil {
 		return false
 	}
-	for _, line := range strings.Split(string(data), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && unescapeMount(fields[1]) == path {
+	for i := range mounts {
+		if mounts[i].MountPoint == path {
 			return true
 		}
 	}
 	return false
-}
-
-// unescapeMount decodes /proc/mounts octal escapes (space/tab/newline/backslash).
-func unescapeMount(s string) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
-	return strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`).Replace(s)
 }
