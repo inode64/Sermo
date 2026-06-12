@@ -472,9 +472,9 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // knownCheckTypes are the single-shot check types valid in a service's
 // checks:/preflight:/postflight: sections (and referenceable from rules), taken
 // from the checks package so validation and the builder share one list
-// (section: unified checks). The multi-target watch types (net, icmp, swap,
-// file) stay watch-only because they fire per-metric/per-target rather than
-// producing one Result.
+// (section: unified checks). net/icmp/swap are usable here in their
+// single-metric form (an explicit `metric:` producing one Result); only their
+// multi-metric `metrics:` map shape and the `file` watch stay watch-only.
 var knownCheckTypes = set(checks.SingleShotCheckTypes...)
 var countKinds = set("any", "file", "dir", "symlink")
 
@@ -679,6 +679,23 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateDiskIOFields(path, entry, add)
 	case "conntrack":
 		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
+	case "net":
+		if cfgval.String(entry["interface"]) == "" {
+			add("%s.interface is required for a net check", path)
+		}
+		validateNetMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
+	case "icmp":
+		if cfgval.String(entry["host"]) == "" {
+			add("%s.host is required for an icmp check", path)
+		}
+		if v, present := entry["count"]; present {
+			if n, ok := cfgval.Int(v); !ok || n <= 0 {
+				add("%s.count must be a positive integer", path)
+			}
+		}
+		validateICMPMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
+	case "swap":
+		validateSwapMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
 	case "entropy":
 		validateThresholdPreds(path, entry, checks.EntropyPredFields, add)
 	case "zombies":

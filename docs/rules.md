@@ -1335,12 +1335,16 @@ The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 
-Two watch families stay watch-only because they are not single-shot: the
-multi-metric watches (`net`, `icmp`, `swap`, with a `metrics:` map and one hook per
-metric) and the multi-target watches (`file`, `process`, one event/hook per
-changed path or matching pid). `service`/`metric`/`process` checks need per-service
-context (backend status, a metric sampler, process discovery) and so are not
-available as standalone watches.
+The multi-metric watches (`net`, `icmp`, `swap`) keep their `metrics:` map shape
+(one hook per metric) watch-only, but their **single-metric form** — an explicit
+`metric:` field producing one result, e.g. `{type: net, interface: ppp0, metric:
+state, expect: up}` or `{type: icmp, host: 1.1.1.1, metric: state, expect: up}` —
+works in a service's `checks:` like any other check (used by the `pppd` catalog
+daemon to watch its uplink). The multi-target watches (`file`, `process`, one
+event/hook per changed path or matching pid) stay watch-only.
+`service`/`metric`/`process` checks need per-service context (backend status, a
+metric sampler, process discovery) and so are not available as standalone
+watches.
 
 ### Disk throughput (`hdparm`)
 
