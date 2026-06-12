@@ -3,8 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"sermo/internal/cfgval"
-	"strconv"
 	"time"
 )
 
@@ -47,21 +45,4 @@ func defaultEntropySampler() (uint64, bool) {
 		return 0, false
 	}
 	return n, true
-}
-
-// parseEntropyThreshold reads the required avail {op, value} of an entropy check.
-func parseEntropyThreshold(entry map[string]any) (op string, value float64, err error) {
-	m, ok := entry["avail"].(map[string]any)
-	if !ok {
-		return "", 0, fmt.Errorf("requires avail {op, value}")
-	}
-	op = cfgval.AsString(m["op"])
-	if !validDiskOp(op) {
-		return "", 0, fmt.Errorf("avail has invalid op %q", op)
-	}
-	value, perr := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-	if perr != nil {
-		return "", 0, fmt.Errorf("avail value %q is not numeric", cfgval.String(m["value"]))
-	}
-	return op, value, nil
 }
