@@ -10,6 +10,8 @@
 // /proc and keeping precise control over the fail-safe exe semantics.
 package process
 
+import "regexp"
+
 // Process is a discovered process belonging to a service.
 type Process struct {
 	PID     int      `json:"pid"`
@@ -42,8 +44,12 @@ type Selector struct {
 	Name  string   // the map key, used as the discovered process Role
 	Type  string   // pidfile | command_match
 	Paths []string // pidfile: candidate paths, tried in order (first running pid wins)
-	Exe   string   // command_match
-	User  string   // command_match
+	Exe   string   // command_match: exact /proc/<pid>/exe
+	Cmd   string   // command_match: RE2 regex matched against the joined cmdline (argv)
+	User  string   // command_match: real UID owner
+	Group string   // command_match: real GID owner
+
+	cmdRe *regexp.Regexp // compiled Cmd, set by ParseSelectors (matches falls back)
 }
 
 // Identity is the raw per-process data read from /proc. ExeOK is false when the
@@ -52,6 +58,7 @@ type Identity struct {
 	PID     int
 	PPID    int
 	UID     uint32
+	GID     uint32
 	User    string
 	Exe     string
 	ExeOK   bool

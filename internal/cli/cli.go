@@ -462,6 +462,13 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	return primary, primaryErr
 }
 
+// stopArtifacts maps a service's resolved stop_policy invariants into the engine
+// form (pidfile paths + files-absent globs + remove flag).
+func stopArtifacts(tree map[string]any) operation.StopArtifacts {
+	pp, ff, rm := config.StopInvariants(tree)
+	return operation.StopArtifacts{PidfilePaths: pp, Files: ff, Remove: rm}
+}
+
 // defaultOperate wires the real operation engine from a resolved service and
 // runs the requested action.
 func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
@@ -492,6 +499,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Unit:             unit,
 		Backend:          string(detection.Backend),
 		AlsoUnits:        config.AdditionalUnits(resolved.Tree, string(detection.Backend)),
+		StopArtifacts:    stopArtifacts(resolved.Tree),
 		Tree:             resolved.Tree,
 		Manager:          manager,
 		Locker:           &locker,
@@ -528,6 +536,12 @@ func (a App) printOperation(r operation.Result) {
 	switch r.Status {
 	case operation.ResultOK:
 		fmt.Fprintf(a.Stdout, "%s %s ok\n", r.Service, r.Action)
+		// A successful op may still carry a best-effort warning (an also_service
+		// unit that failed to stop, a stale artifact left behind) folded into the
+		// message after the bare "<action> ok"; surface it instead of dropping it.
+		if note := strings.TrimSpace(strings.TrimPrefix(r.Message, r.Action+" ok")); note != "" {
+			fmt.Fprintf(a.Stdout, "warning: %s\n", note)
+		}
 	case operation.ResultBlocked:
 		fmt.Fprintf(a.Stdout, "BLOCKED %s %s\n", r.Service, r.Action)
 		if r.Message != "" {

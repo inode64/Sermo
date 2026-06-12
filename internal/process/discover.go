@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sermo/internal/cfgval"
 	"sort"
 	"strconv"
@@ -13,8 +14,9 @@ import (
 // Discoverer finds a service's processes through its selectors and the process
 // tree (section 21).
 type Discoverer struct {
-	Reader      Reader
-	ResolveUser UserResolver
+	Reader       Reader
+	ResolveUser  UserResolver
+	ResolveGroup UserResolver // group-name -> GID (OSGroupResolver); for command_match group
 	// BackendPIDs reports backend-provided PIDs (systemd cgroup process set and
 	// MainPID), tried first (section 21, step 1). Optional.
 	BackendPIDs func() []int
@@ -22,7 +24,7 @@ type Discoverer struct {
 
 // NewDiscoverer returns a Discoverer backed by the host /proc and passwd db.
 func NewDiscoverer() Discoverer {
-	return Discoverer{Reader: OSReader{}, ResolveUser: OSUserResolver}
+	return Discoverer{Reader: OSReader{}, ResolveUser: OSUserResolver, ResolveGroup: OSGroupResolver}
 }
 
 // Discover applies pidfile then command_match selectors, then adds descendants
@@ -160,15 +162,44 @@ func (d Discoverer) ObserveState(exe, user string) string {
 // requires both exact resolved exe and real UID, so a partial selector never
 // matches.
 func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) bool {
-	if sel.Exe == "" || sel.User == "" {
+	// At least one strong matcher is required; a selector is never user/group-only
+	// (so a bare owner can never select unrelated processes).
+	if sel.Exe == "" && sel.Cmd == "" {
 		return false
 	}
-	if !id.ExeOK || canonicalizePath(sel.Exe) != id.Exe {
-		return false
+	if sel.Exe != "" {
+		// Fail-safe exe match: exact resolved /proc/<pid>/exe, never cmdline.
+		if !id.ExeOK || canonicalizePath(sel.Exe) != id.Exe {
+			return false
+		}
 	}
-	uid, ok := resolve(sel.User)
-	if !ok || uid != id.UID {
-		return false
+	if sel.Cmd != "" {
+		re := sel.cmdRe
+		if re == nil {
+			var err error
+			if re, err = regexp.Compile(sel.Cmd); err != nil {
+				return false
+			}
+		}
+		if !re.MatchString(strings.Join(id.Cmdline, " ")) {
+			return false
+		}
+	}
+	if sel.User != "" {
+		uid, ok := resolve(sel.User)
+		if !ok || uid != id.UID {
+			return false
+		}
+	}
+	if sel.Group != "" {
+		groupResolve := d.ResolveGroup
+		if groupResolve == nil {
+			groupResolve = OSGroupResolver
+		}
+		gid, ok := groupResolve(sel.Group)
+		if !ok || gid != id.GID {
+			return false
+		}
 	}
 	return true
 }
@@ -293,10 +324,20 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			}
 		case SelectorCommandMatch:
 			sel.Exe = cfgval.AsString(entry["exe"])
+			sel.Cmd = cfgval.AsString(entry["cmd"])
 			sel.User = cfgval.AsString(entry["user"])
-			if sel.Exe == "" || sel.User == "" {
-				warnings = append(warnings, fmt.Sprintf("command_match selector %q requires both exe and user", name))
+			sel.Group = cfgval.AsString(entry["group"])
+			if sel.Exe == "" && sel.Cmd == "" {
+				warnings = append(warnings, fmt.Sprintf("command_match selector %q requires exe or cmd", name))
 				continue
+			}
+			if sel.Cmd != "" {
+				re, err := regexp.Compile(sel.Cmd)
+				if err != nil {
+					warnings = append(warnings, fmt.Sprintf("command_match selector %q has an invalid cmd regex: %v", name, err))
+					continue
+				}
+				sel.cmdRe = re
 			}
 		default:
 			warnings = append(warnings, fmt.Sprintf("process selector %q has unknown type %q", name, sel.Type))

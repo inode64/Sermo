@@ -210,6 +210,30 @@ func AdditionalUnits(tree map[string]any, backend string) []string {
 	return cfgval.StringList(m[backend])
 }
 
+// StopInvariants reads the stopped-state invariants from `stop_policy`: the
+// pidfile path(s) that must be absent after stop (when `pidfile_absent: true`,
+// found by scanning the processes section for pidfile selectors), the
+// files/globs that must be absent (`files_absent`), and whether stale files are
+// removed (`remove_stale`). All zero when not configured.
+func StopInvariants(tree map[string]any) (pidfilePaths, files []string, remove bool) {
+	sp, ok := tree["stop_policy"].(map[string]any)
+	if !ok {
+		return nil, nil, false
+	}
+	remove, _ = sp["remove_stale"].(bool)
+	files = cfgval.StringList(sp["files_absent"])
+	if pa, _ := sp["pidfile_absent"].(bool); pa {
+		if procs, ok := tree["processes"].(map[string]any); ok {
+			for _, v := range procs {
+				if m, ok := v.(map[string]any); ok && cfgval.AsString(m["type"]) == "pidfile" {
+					pidfilePaths = append(pidfilePaths, cfgval.StringList(m["path"])...)
+				}
+			}
+		}
+	}
+	return pidfilePaths, files, remove
+}
+
 // CascadeTargets returns the additional Sermo services declared in `also_apply`,
 // which receive the same action (start/stop/restart) as this service via their
 // own guarded operation. Empty when absent.

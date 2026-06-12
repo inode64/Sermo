@@ -3,6 +3,7 @@ package operation
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -617,5 +618,38 @@ func TestAlsoServiceStopBestEffort(t *testing.T) {
 	}
 	if !h.mgr.did("start mysqld") {
 		t.Fatal("primary must still start after a best-effort also_service stop failure")
+	}
+}
+
+func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
+	dir := t.TempDir()
+	pidf := filepath.Join(dir, "svc.pid")
+	sock := filepath.Join(dir, "app.sock")
+	for _, f := range []string{pidf, sock} {
+		if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// report-only: a clean stop warns about the lingering pidfile + socket glob.
+	h := defaultHarness()
+	e := h.engine()
+	e.StopArtifacts = StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}}
+	res := e.Stop(context.Background())
+	if res.Status != ResultOK || !strings.Contains(res.Message, "stale") {
+		t.Fatalf("report-only stale artifact must warn (OK + 'stale'), got %q (%s)", res.Status, res.Message)
+	}
+	if _, err := os.Stat(sock); err != nil {
+		t.Fatal("report-only must NOT remove the file")
+	}
+	// remove: the same stop deletes the stale files.
+	h2 := defaultHarness()
+	e2 := h2.engine()
+	e2.StopArtifacts = StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}, Remove: true}
+	res2 := e2.Stop(context.Background())
+	if res2.Status != ResultOK {
+		t.Fatalf("remove stop status = %q (%s)", res2.Status, res2.Message)
+	}
+	if _, err := os.Stat(sock); !os.IsNotExist(err) {
+		t.Fatal("remove:true must delete the stale socket")
 	}
 }
