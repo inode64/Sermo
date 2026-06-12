@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
-	"sermo/internal/config"
 )
 
 // volumeAssistant creates `storage` watches: a free/used-space threshold with
@@ -19,7 +18,10 @@ func (volumeAssistant) Title() string {
 	return "Storage volume checks (free space, optional auto-expand)"
 }
 
-func (volumeAssistant) Run(p *Prompt, env Env) (Result, error) {
+func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
+	// Translate an input-closed re-prompt abort into ErrInputClosed even when
+	// Run is driven directly (the CLI also recovers at its own boundary).
+	defer Recover(&err)
 	vols, err := env.Volumes()
 	if err != nil {
 		return Result{}, fmt.Errorf("list volumes: %w", err)
@@ -98,9 +100,9 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
 		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", "30m")
 	}
-	if !config.HasEffectiveNotifyAction(s.notifiers, env.DefaultNotify) && !s.expand {
-		return s, fmt.Errorf("a watch needs at least one notifier or auto-expand; none chosen for %s", label)
-	}
+	// Auto-expand is a valid only-action; otherwise the notify answer must
+	// deliver somewhere — ensureNotifyAction re-asks until the watch acts.
+	s.notifiers = ensureNotifyAction(p, env, s.notifiers, s.expand)
 	return s, nil
 }
 
@@ -128,36 +130,6 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 		entry["policy"] = map[string]any{"cooldown": s.cooldown}
 	}
 	return entry
-}
-
-// chooseNotifiers asks which configured notifiers to alert. The numbered list
-// shows only the notifiers defined in the config; the reserved answers ride in
-// the question instead of occupying rows: "all" selects every configured
-// notifier, "none" writes the reserved sentinel so the generated watch
-// suppresses any inherited default, and "default" leaves notify unset (returns
-// nil) so the runtime inherits the global notify default. The keywords are
-// accepted even when the config defines no notifiers, so an expand-only or
-// opt-out watch still has a valid answer.
-func chooseNotifiers(p *Prompt, env Env) []string {
-	question := "Notify which targets? ('default' inherits global notify; not configured)"
-	if len(env.DefaultNotify) > 0 {
-		question = "Notify which targets? ('default' inherits global notify: " + strings.Join(env.DefaultNotify, ", ") + ")"
-	}
-	idx, kw := p.MultiChooseKeyword(question, env.Notifiers, "none", "default")
-	switch kw {
-	case "none":
-		return []string{config.NotifyNone}
-	case "default":
-		return nil
-	}
-	out := make([]string, 0, len(idx))
-	for _, i := range idx {
-		out = append(out, env.Notifiers[i])
-	}
-	if len(out) == 0 {
-		return []string{config.NotifyNone}
-	}
-	return out
 }
 
 // askPercent reads a percentage in 0..100 (the bound config validation

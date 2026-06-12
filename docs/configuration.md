@@ -569,7 +569,10 @@ a service.
 > question itself — even when the config defines no notifiers: type `all` to
 > notify every configured notifier, `default` to omit `then.notify` and inherit
 > the global default, or `none` to generate `notify: [none]` and suppress that
-> default for the watch.
+> default for the watch. If an answer would leave the watch with no action at
+> all (`none`, or `default` when no global `notify` is configured, with no
+> other action such as auto-expand), the wizard explains why and asks again
+> instead of aborting.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
 `notify` list, an `expand` (storage only), or any combination. If the top-level

@@ -78,11 +78,34 @@ func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
 func TestNetAssistantRequiresNotifier(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil
-	// Select default notify, but no global default is configured.
+	// Select default notify, but no global default is configured: the wizard
+	// re-asks (a net watch has no other action) and the script's EOF then
+	// aborts with ErrInputClosed instead of producing an inert watch.
 	script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (netAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a net watch with no notifier must error (no hook/expand offered)")
+	}
+}
+
+func TestNetAssistantDefaultWithoutGlobalReasks(t *testing.T) {
+	// The regression: choosing 'default' with no global notify configured used
+	// to abort the whole wizard with a hard error. Now it explains and re-asks,
+	// and a notifier picked on the second round succeeds.
+	script := strings.Join([]string{"1", "1", "1", "default", "1"}, "\n") + "\n"
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := netAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	then := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)["then"].(map[string]any)
+	notify := then["notify"].([]string)
+	if len(notify) != 1 || notify[0] != "ops-email" {
+		t.Fatalf("notify = %v, want [ops-email]", notify)
+	}
+	if !strings.Contains(out.String(), "no global notify default is configured") {
+		t.Fatalf("expected the re-ask explanation, got %q", out.String())
 	}
 }
 
@@ -120,7 +143,8 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 }
 
 func TestNetAssistantNotifyNoneErrors(t *testing.T) {
-	// Select eth0; only state; any change; explicit none.
+	// Select eth0; only state; any change; explicit none: the wizard re-asks
+	// (nothing else acts) and the script's EOF aborts with ErrInputClosed.
 	script := strings.Join([]string{"1", "1", "1", "none"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (netAssistant{}).Run(p, testEnv()); err == nil {

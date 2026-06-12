@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -56,6 +57,11 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	}
 
 	res, err := as.Run(p, a.wizardEnv(ctx, opts, cfg))
+	if errors.Is(err, assist.ErrInputClosed) {
+		// The assistants recover the mid-prompt EOF themselves; bubble it up to
+		// runWizard's "wizard aborted" usage exit, same as an EOF outside Run.
+		return 0, err
+	}
 	if err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError, nil

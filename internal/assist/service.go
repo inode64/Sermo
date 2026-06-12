@@ -18,7 +18,10 @@ func (serviceAssistant) Title() string {
 	return "Monitor a system service (apache, nginx, mysql, …)"
 }
 
-func (serviceAssistant) Run(p *Prompt, env Env) (Result, error) {
+func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
+	// Translate an input-closed re-prompt abort into ErrInputClosed even when
+	// Run is driven directly (the CLI also recovers at its own boundary).
+	defer Recover(&err)
 	if env.Daemons == nil {
 		return Result{}, fmt.Errorf("service detection is unavailable")
 	}
