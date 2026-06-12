@@ -58,6 +58,8 @@ type Deps struct {
 	// FdsSampler reads system file-descriptor usage for `fds` checks. Nil reads
 	// /proc/sys/fs/file-nr.
 	FdsSampler FdsSamplerFunc
+	// MemorySampler reads system RAM for `memory` checks. Nil reads /proc/meminfo.
+	MemorySampler MemorySamplerFunc
 	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
 	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
@@ -170,6 +172,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildConfigCheck(b, entry, runner)
 	case "fds":
 		return buildFdsCheck(b, entry, deps)
+	case "memory":
+		return buildMemoryCheck(b, entry, deps)
 	case "conntrack":
 		return buildConntrackCheck(b, entry, deps)
 	case "entropy":
@@ -670,6 +674,15 @@ func buildFdsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, errs
 	}
 	return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
+}
+
+// buildMemoryCheck builds a system RAM check.
+func buildMemoryCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, errs := requireLevelPreds(entry, MemoryPredFields, "memory check")
+	if errs != "" {
+		return nil, errs
+	}
+	return memoryCheck{base: b, preds: preds, sampler: deps.MemorySampler}, ""
 }
 
 // buildConntrackCheck builds a netfilter conntrack-table check.

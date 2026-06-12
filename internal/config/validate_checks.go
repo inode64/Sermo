@@ -504,7 +504,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "process", "metric", "libraries", "count",
-	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "memory", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -704,6 +704,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 	case "fds":
 		validateThresholdPreds(path, entry, checks.FdsPredFields, add)
+	case "memory":
+		validateThresholdPreds(path, entry, checks.MemoryPredFields, add)
 	case "conntrack":
 		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
 	case "entropy":
