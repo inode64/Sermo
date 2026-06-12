@@ -184,6 +184,14 @@ func IsAssertOp(op string) bool {
 	}
 }
 
+// Disabled reports whether a config entry opts out via `enabled: false`. An
+// absent or non-boolean `enabled` means enabled — the shared reading across
+// checks, rules, watches, services and diagnostics.
+func Disabled(entry map[string]any) bool {
+	b, ok := entry["enabled"].(bool)
+	return ok && !b
+}
+
 // Bool returns v when it is a bool, or false otherwise.
 func Bool(v any) bool {
 	b, _ := v.(bool)

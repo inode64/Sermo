@@ -144,7 +144,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 			warnings = append(warnings, "rule "+name+" is not a mapping")
 			continue
 		}
-		if disabled(entry) {
+		if cfgval.Disabled(entry) {
 			continue
 		}
 		ifNode, ok := entry["if"].(map[string]any)
@@ -176,13 +176,4 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		})
 	}
 	return rules, warnings
-}
-
-func disabled(entry map[string]any) bool {
-	v, ok := entry["enabled"]
-	if !ok {
-		return false
-	}
-	b, ok := v.(bool)
-	return ok && !b
 }
