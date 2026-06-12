@@ -1408,18 +1408,29 @@ async function loadExpansionFor(key) {
   } catch (_) { /* keep the last content on a transient error */ }
 }
 
-// beatStrip renders the uptime-kuma-style availability strip: 48 half-hour
-// segments over the last 24h, green/amber/red by per-bucket availability and
-// hollow where nothing was observed (Sermo down or service paused).
-function beatStrip(points) {
-  const cols = 48, span = 864e5, startMs = Date.now() - span;
-  const buckets = Array.from({ length: cols }, () => ({ up: 0, total: 0 }));
+// bucketize folds time-series points into cols buckets covering the last span
+// ms of wall time: fold(bucket, point) accumulates each point into its bucket.
+// Shared by the SLA chart, the latency chart and the heartbeat strip.
+function bucketize(points, span, cols, makeBucket, fold) {
+  const startMs = Date.now() - span;
+  const buckets = Array.from({ length: cols }, makeBucket);
   for (const p of points || []) {
     const t = Date.parse(p.start);
     if (isNaN(t)) continue;
     const i = Math.floor((t - startMs) / (span / cols));
-    if (i >= 0 && i < cols) { buckets[i].up += p.up || 0; buckets[i].total += p.total || 0; }
+    if (i >= 0 && i < cols) fold(buckets[i], p);
   }
+  return { buckets, startMs };
+}
+
+// beatStrip renders the uptime-kuma-style availability strip: 48 half-hour
+// segments over the last 24h, green/amber/red by per-bucket availability and
+// hollow where nothing was observed (Sermo down or service paused).
+function beatStrip(points) {
+  const cols = 48, span = 864e5;
+  const { buckets, startMs } = bucketize(points, span, cols,
+    () => ({ up: 0, total: 0 }),
+    (b, p) => { b.up += p.up || 0; b.total += p.total || 0; });
   if (!buckets.some((b) => b.total > 0)) return "";
   const segs = buckets.map((b, i) => {
     const t = new Date(startMs + i * (span / cols));
@@ -2855,17 +2866,12 @@ function drawMetricChart(points, unit) {
   unit = unit || "ms";
   const W = 640, H = 160, pad = 34, cols = 120;
   const span = windowMs[metricWindow] || 864e5;
-  const startMs = Date.now() - span;
-  const buckets = Array.from({ length: cols }, () => ({ n: 0, sum: 0, min: Infinity, max: -Infinity }));
-  for (const p of points) {
-    const t = Date.parse(p.start);
-    if (isNaN(t)) continue;
-    const i = Math.floor((t - startMs) / (span / cols));
-    if (i < 0 || i >= cols) continue;
-    const b = buckets[i];
-    b.n += p.n; b.sum += p.avg * p.n;
-    b.min = Math.min(b.min, p.min); b.max = Math.max(b.max, p.max);
-  }
+  const { buckets, startMs } = bucketize(points, span, cols,
+    () => ({ n: 0, sum: 0, min: Infinity, max: -Infinity }),
+    (b, p) => {
+      b.n += p.n; b.sum += p.avg * p.n;
+      b.min = Math.min(b.min, p.min); b.max = Math.max(b.max, p.max);
+    });
   let maxV = 0;
   buckets.forEach((b) => { if (b.n) maxV = Math.max(maxV, b.max); });
   if (maxV <= 0) return '<span class="muted">No data yet for this window.</span>';
@@ -2917,14 +2923,9 @@ async function loadSeries(name) {
 function drawChart(points) {
   const W = 640, H = 140, pad = 26, cols = 120;
   const span = windowMs[seriesWindow] || 864e5;
-  const startMs = Date.now() - span;
-  const buckets = Array.from({ length: cols }, () => ({ up: 0, total: 0 }));
-  for (const p of points) {
-    const t = Date.parse(p.start);
-    if (isNaN(t)) continue;
-    const i = Math.floor((t - startMs) / (span / cols));
-    if (i >= 0 && i < cols) { buckets[i].up += p.up; buckets[i].total += p.total; }
-  }
+  const { buckets, startMs } = bucketize(points, span, cols,
+    () => ({ up: 0, total: 0 }),
+    (b, p) => { b.up += p.up; b.total += p.total; });
   const bw = (W - 2 * pad) / cols;
   let bars = "", any = false;
   buckets.forEach((b, i) => {
