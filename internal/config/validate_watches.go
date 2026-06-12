@@ -196,30 +196,38 @@ func validateNetCheck(name string, check, entry map[string]any, defaultNotify []
 			add("%s must be a mapping", prefix)
 			continue
 		}
-		switch key {
-		case "state":
-			validateStateMetric(prefix, m, add)
-		case "speed":
-			if cfgval.String(m["on"]) != "change" {
-				add("%s requires on: change", prefix)
-			}
-		case "errors":
-			delta, ok := m["delta"].(map[string]any)
-			if !ok {
-				add("%s.delta {op, value} is required", prefix)
-			} else {
-				validateOpNumeric(prefix+".delta", delta, add)
-			}
-			if c, present := m["counters"]; present {
-				if list, ok := c.([]any); !ok || len(list) == 0 {
-					add("%s.counters must be a non-empty list", prefix)
-				}
-			}
-		default:
-			add("%s is not a supported net metric (state, speed, errors)", prefix)
-		}
+		validateNetMetricCondition(prefix, key, m, add)
 		validateHookBlock(prefix, m, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
+	}
+}
+
+// validateNetMetricCondition validates one net metric's condition fields:
+// state (expect/on), speed (on: change) or errors (delta + optional counters).
+// Shared by the multi-metric net watch and the single-shot net check, so the
+// condition grammar cannot drift between the two surfaces.
+func validateNetMetricCondition(prefix, metric string, m map[string]any, add addFunc) {
+	switch metric {
+	case "state":
+		validateStateMetric(prefix, m, add)
+	case "speed":
+		if cfgval.String(m["on"]) != "change" {
+			add("%s requires on: change", prefix)
+		}
+	case "errors":
+		delta, ok := m["delta"].(map[string]any)
+		if !ok {
+			add("%s.delta {op, value} is required", prefix)
+		} else {
+			validateOpNumeric(prefix+".delta", delta, add)
+		}
+		if c, present := m["counters"]; present {
+			if list, ok := c.([]any); !ok || len(list) == 0 {
+				add("%s.counters must be a non-empty list", prefix)
+			}
+		}
+	default:
+		add("%s is not a supported net metric (state, speed, errors)", prefix)
 	}
 }
 
@@ -253,21 +261,29 @@ func validateSwapCheck(name string, entry map[string]any, defaultNotify []string
 			add("%s must be a mapping", prefix)
 			continue
 		}
-		switch key {
-		case "usage":
-			validateThresholdPreds(prefix, m, checks.SwapUsageFields, add)
-		case "io":
-			delta, ok := m["delta"].(map[string]any)
-			if !ok {
-				add("%s.delta {op, value} is required", prefix)
-			} else {
-				validateOpNumeric(prefix+".delta", delta, add)
-			}
-		default:
-			add("%s is not a supported swap metric (usage, io)", prefix)
-		}
+		validateSwapMetricCondition(prefix, key, m, add)
 		validateHookBlock(prefix, m, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
+	}
+}
+
+// validateSwapMetricCondition validates one swap metric's condition fields:
+// usage (level thresholds) or io (per-cycle delta). Shared by the multi-metric
+// swap watch and the single-shot swap check, so the condition grammar cannot
+// drift between the two surfaces.
+func validateSwapMetricCondition(prefix, metric string, m map[string]any, add addFunc) {
+	switch metric {
+	case "usage":
+		validateThresholdPreds(prefix, m, checks.SwapUsageFields, add)
+	case "io":
+		delta, ok := m["delta"].(map[string]any)
+		if !ok {
+			add("%s.delta {op, value} is required", prefix)
+		} else {
+			validateOpNumeric(prefix+".delta", delta, add)
+		}
+	default:
+		add("%s is not a supported swap metric (usage, io)", prefix)
 	}
 }
 
@@ -308,31 +324,39 @@ func validateICMPCheck(name string, check, entry map[string]any, defaultNotify [
 			add("%s must be a mapping", prefix)
 			continue
 		}
-		switch key {
-		case "state":
-			validateStateMetric(prefix, m, add)
-		case "latency":
-			th, hasT := m["threshold"].(map[string]any)
-			ch, hasC := m["change"].(map[string]any)
-			if !hasT && !hasC {
-				add("%s requires threshold {op, value} or change {delta}", prefix)
-			}
-			if hasT && hasC {
-				add("%s must set only one of threshold or change", prefix)
-			}
-			if hasT {
-				validateOpNumeric(prefix+".threshold", th, add)
-			}
-			if hasC {
-				if !isNumeric(cfgval.String(ch["delta"])) {
-					add("%s.change delta %q must be numeric", prefix, cfgval.String(ch["delta"]))
-				}
-			}
-		default:
-			add("%s is not a supported icmp metric (state, latency)", prefix)
-		}
+		validateICMPMetricCondition(prefix, key, m, add)
 		validateHookBlock(prefix, m, false, defaultNotify, add)
 		validateWindow(prefix, m, add)
+	}
+}
+
+// validateICMPMetricCondition validates one icmp metric's condition fields:
+// state (expect/on) or latency (threshold xor change). Shared by the
+// multi-metric icmp watch and the single-shot icmp check, so the condition
+// grammar cannot drift between the two surfaces.
+func validateICMPMetricCondition(prefix, metric string, m map[string]any, add addFunc) {
+	switch metric {
+	case "state":
+		validateStateMetric(prefix, m, add)
+	case "latency":
+		th, hasT := m["threshold"].(map[string]any)
+		ch, hasC := m["change"].(map[string]any)
+		if !hasT && !hasC {
+			add("%s requires threshold {op, value} or change {delta}", prefix)
+		}
+		if hasT && hasC {
+			add("%s must set only one of threshold or change", prefix)
+		}
+		if hasT {
+			validateOpNumeric(prefix+".threshold", th, add)
+		}
+		if hasC {
+			if !isNumeric(cfgval.String(ch["delta"])) {
+				add("%s.change delta %q must be numeric", prefix, cfgval.String(ch["delta"]))
+			}
+		}
+	default:
+		add("%s is not a supported icmp metric (state, latency)", prefix)
 	}
 }
 

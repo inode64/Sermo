@@ -147,7 +147,7 @@ var SingleShotCheckTypes = []string{
 	"autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config",
 	"fds", "memory", "pressure", "pids", "diskio", "conntrack", "entropy",
 	"zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query",
-	"influxdb-query", "size", "websocket", "ws",
+	"influxdb-query", "size", "websocket", "ws", "net", "icmp", "swap",
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
