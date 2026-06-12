@@ -160,7 +160,10 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesNotifyNoneWithoutActionWarns(t *testing.T) {
+func TestBuildWatchesNotifyNoneIsMonitorOnly(t *testing.T) {
+	// The explicit `notify: [none]` opt-out builds the watch (state visible in
+	// the dashboard and events) with no notifiers and no warning — unlike an
+	// empty then, which stays rejected.
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
@@ -172,8 +175,11 @@ func TestBuildWatchesNotifyNoneWithoutActionWarns(t *testing.T) {
 		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
-	if len(watches) != 0 || len(warns) == 0 {
-		t.Fatalf("notify none without hook/expand must warn and not build: watches=%d warns=%v", len(watches), warns)
+	if len(watches) != 1 || len(warns) != 0 {
+		t.Fatalf("watches=%d warns=%v, want one monitor-only watch", len(watches), warns)
+	}
+	if len(watches[0].Notifiers) != 0 || len(watches[0].Hook.Command) != 0 {
+		t.Fatalf("opted-out watch must carry no notifiers/hook: %+v", watches[0])
 	}
 }
 

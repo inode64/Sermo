@@ -103,7 +103,10 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 			add("%s.then.expand.by %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", prefix, cfgval.String(expand["by"]))
 		}
 	}
-	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand {
+	// An explicit `notify: [none]` is a deliberate monitor-only watch (state in
+	// the dashboard and events, no delivery) — an action choice, not an empty
+	// then. Only a then that selects nothing at all is rejected.
+	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !NotifyOptedOut(notify) {
 		add("%s.then requires a hook, notify and/or expand", prefix)
 		return
 	}
@@ -151,7 +154,15 @@ func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
 // validation, the daemon's watch builder and the wizard so the notify-selection
 // rule lives in one place.
 func HasNotifyAction(names []string) bool {
-	return len(names) > 0 && !slices.Contains(names, NotifyNone)
+	return len(names) > 0 && !NotifyOptedOut(names)
+}
+
+// NotifyOptedOut reports whether a notify selection is the explicit `none`
+// opt-out. Unlike an empty selection (which inherits the global default and is
+// inert without one), the sentinel is a deliberate "monitor but never deliver"
+// choice — valid anywhere a notify list is, even with no other action.
+func NotifyOptedOut(names []string) bool {
+	return slices.Contains(names, NotifyNone)
 }
 
 // HasEffectiveNotifyAction reports whether a watch ends up delivering to a
@@ -159,7 +170,7 @@ func HasNotifyAction(names []string) bool {
 // inherits a non-empty defaultNotify. The `none` sentinel always suppresses
 // delivery.
 func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
-	if slices.Contains(names, NotifyNone) {
+	if NotifyOptedOut(names) {
 		return false
 	}
 	return HasNotifyAction(names) || (len(names) == 0 && len(defaultNotify) > 0)
