@@ -107,18 +107,6 @@ func (OSLookup) LookPath(name string) (string, error) {
 	return path, nil
 }
 
-// WithTimeout is a convenience wrapper around context.WithTimeout.
-//
-// It is the recommended way to prepare a context before calling Runner.Run
-// when you have a per-command timeout value. Every external command executed
-// via execx **must** have a deadline (see AGENTS.md).
-func WithTimeout(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		return context.WithCancel(parent)
-	}
-	return context.WithTimeout(parent, timeout)
-}
-
 // Run is a fortified wrapper that ensures the command runs under a deadline
 // and then delegates to r.Run.
 //

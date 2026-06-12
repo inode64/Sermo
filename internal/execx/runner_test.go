@@ -97,39 +97,6 @@ func TestOSLookup(t *testing.T) {
 	}
 }
 
-func TestWithTimeout(t *testing.T) {
-	t.Run("adds deadline when parent has none", func(t *testing.T) {
-		ctx, cancel := WithTimeout(context.Background(), 10*time.Millisecond)
-		defer cancel()
-		if _, ok := ctx.Deadline(); !ok {
-			t.Fatal("expected deadline to be set")
-		}
-	})
-
-	t.Run("zero timeout yields cancellable ctx without hard deadline", func(t *testing.T) {
-		ctx, cancel := WithTimeout(context.Background(), 0)
-		defer cancel()
-		if _, ok := ctx.Deadline(); ok {
-			t.Error("expected no deadline when timeout <= 0")
-		}
-	})
-
-	t.Run("parent deadline is respected (earlier wins)", func(t *testing.T) {
-		parent, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
-		defer cancel()
-		child, cancel2 := WithTimeout(parent, 1*time.Hour)
-		defer cancel2()
-
-		dl, ok := child.Deadline()
-		if !ok {
-			t.Fatal("child should have a deadline")
-		}
-		if time.Until(dl) > 10*time.Millisecond {
-			t.Errorf("child deadline too far in future; parent short deadline should win")
-		}
-	})
-}
-
 func TestPackageRun(t *testing.T) {
 	t.Run("applies timeout when given", func(t *testing.T) {
 		start := time.Now()
