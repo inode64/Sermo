@@ -6,7 +6,6 @@ import (
 	"maps"
 	"math"
 	"slices"
-	"sort"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -150,7 +149,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 	}
 	resolver := servicemgr.NewUnitResolver()
 
-	for _, name := range serviceNames(cfg) {
+	for _, name := range cfg.SortedServiceNames() {
 		doc := cfg.Services[name]
 		if doc == nil || cfgval.Disabled(doc.Body) {
 			continue
@@ -637,15 +636,6 @@ func scopeOf(m map[string]any) string {
 		return s
 	}
 	return "service"
-}
-
-func serviceNames(cfg *config.Config) []string {
-	names := make([]string, 0, len(cfg.Services))
-	for name := range cfg.Services {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 // HasConfiguredTargets reports whether the config declares any services or

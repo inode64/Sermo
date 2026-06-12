@@ -496,7 +496,7 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) ([]*Watch, []string) {
 	var watches []*Watch
 	var warnings []string
-	for _, name := range serviceNames(cfg) {
+	for _, name := range cfg.SortedServiceNames() {
 		resolved, errs := cfg.Resolve(name)
 		if len(errs) > 0 || resolved.Tree == nil {
 			continue
