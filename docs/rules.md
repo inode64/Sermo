@@ -28,6 +28,7 @@ which reuse the same schema). MVP types:
 | `smart`       | a drive's SMART health/attributes (failed verdict, `reallocated`, `wear`, `temperature`) (see Hardware sensors)|
 | `raid`        | a Linux md software-RAID array is degraded/recovering (`degraded`/`recovering`/`arrays`) (see Hardware sensors)|
 | `edac`        | ECC memory errors from EDAC (`ce` correctable / `ue` uncorrectable) (see Hardware sensors)|
+| `memory`      | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |

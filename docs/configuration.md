@@ -637,8 +637,9 @@ These conventions keep the per-type sections below short:
 
   The same `expect_exit` / `expect_stdout` / `expect_stderr` fields work on a
   `command` check (see [Checks](rules.md#checks)).
-- **Evaluation model.** A **level check** (`storage`, `load`, `fds`, `conntrack`,
-  `entropy`, `zombies`, swap `usage`) fires when **every present predicate holds**
+- **Evaluation model.** A **level check** (`storage`, `memory`, `load`, `fds`,
+  `conntrack`, `entropy`, `zombies`, swap `usage`) fires when **every present
+  predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
   at least one, and add `for: { cycles: N }` to require N consecutive cycles.
   Predicate values share one grammar across every level check: a `*_pct` field
@@ -693,8 +694,8 @@ subject/body carry the watch's message and the same `SERMO_*` fields a hook
 receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
-host-resource ones below (`storage`, `load`, `fds`, `conntrack`, `entropy`,
-`zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
+host-resource ones below (`storage`, `memory`, `load`, `fds`, `conntrack`,
+`entropy`, `zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
 `command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`,
 `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
 such as `mysql`/`smtp`) — can be used as a watch here, and
@@ -931,6 +932,27 @@ watches:
 Predicates: `load1`, `load5`, `load15`. Prefer `load5`/`load15` for sustained
 saturation (`load1` is spiky). Hook extras: `SERMO_LOAD1`/`SERMO_LOAD5`/
 `SERMO_LOAD15` (raw) and `SERMO_NUM_CPU`.
+
+### `memory` — system RAM
+
+A `memory` watch checks system RAM against thresholds. It is built on the
+kernel's **MemAvailable** estimate (from `/proc/meminfo`) — the memory new
+allocations can claim without swapping — so page cache and reclaimable buffers
+never read as "used". Catches the slow leak or over-packed host before the OOM
+killer does.
+
+```yaml
+check:                                   # in a watches: entry like `load` above
+  type: memory
+  used_pct: { op: ">=", value: "90%" }   # (total - available) / total
+  # available_bytes: { op: "<", value: 1G }   # absolute headroom, alternatively
+```
+
+Predicates: `used_pct`, `available_pct` (of total RAM) and `available_bytes`
+(size suffix required, e.g. `1G` — the shared size grammar). A host whose
+`/proc/meminfo` reports no total never fires. Pair with `for: { cycles: 3 }` so
+a momentary spike does not alert. Hook extras: `SERMO_TOTAL_BYTES`,
+`SERMO_AVAILABLE_BYTES`, `SERMO_USED_PCT`, `SERMO_AVAILABLE_PCT`.
 
 ### `oom` — kernel OOM kills
 
