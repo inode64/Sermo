@@ -792,27 +792,6 @@ function monitorHint(s) {
   return hint ? ` <span class="muted">${esc(hint)}</span>` : "";
 }
 
-function activeLockBadges(s) {
-  const locks = s.active_locks || [];
-  if (!locks.length) return "";
-  return locks.map((n) => ` <span class="pill inactive">lock ${esc(n)}</span>`).join("");
-}
-
-function checkHealthCell(s) {
-  if (!s.enabled) return '<span class="muted">disabled</span>';
-  const h = s.check_health || "";
-  if (h === "failing") {
-    const n = s.checks_failing || 0;
-    const label = n === 1 ? "1 failing" : n + " failing";
-    return `<span class="bad">${esc(label)}</span>`;
-  }
-  if (h === "ok") return '<span class="ok">ok</span>';
-  if (h === "paused") return '<span class="muted">—</span>'; // state shown in the State column
-  if (h === "disabled") return '<span class="muted">disabled</span>';
-  if (h === "unknown") return '<span class="muted">—</span>';
-  return '<span class="muted">—</span>';
-}
-
 function unitCell(s) {
   // The init backend is system-wide (shown once in the daemon status), so the
   // per-row cell shows only the unit.
@@ -1518,13 +1497,6 @@ function pctClamp(n) {
   n = Number(n);
   if (!Number.isFinite(n)) return 0;
   return Math.max(0, Math.min(100, n));
-}
-
-function usageColor(pct) {
-  pct = pctClamp(pct);
-  if (pct >= 95) return "#cf222e";
-  if (pct >= 85) return "#9a6700";
-  return "#1a7f37";
 }
 
 function usageLevel(pct) {
