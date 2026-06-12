@@ -266,7 +266,9 @@ func reloadPidfile(tree map[string]any) string {
 	return ""
 }
 
-// reloadCommand extracts the optional legacy `commands.reload` command array.
+// reloadCommand extracts the optional `commands.reload` command array — one of
+// the reserved commands: entries features consume (see docs/daemons.md
+// "Auxiliary commands"); the `reload:` block is the other reload mechanism.
 func reloadCommand(tree map[string]any) []string {
 	cmds, _ := tree["commands"].(map[string]any)
 	if cmds == nil {
