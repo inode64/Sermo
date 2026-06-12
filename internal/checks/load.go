@@ -3,10 +3,8 @@ package checks
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
-	"strconv"
-	"strings"
+	"sermo/internal/metrics"
 	"time"
 )
 
@@ -76,20 +74,11 @@ func (c loadCheck) Run(_ context.Context) Result {
 	return res
 }
 
-// defaultLoadSampler reads the three load averages from /proc/loadavg.
+// defaultLoadSampler reads the three load averages through the shared metrics
+// procfs reader (one /proc/loadavg parser instead of a per-package copy).
 func defaultLoadSampler() (LoadSample, error) {
-	data, err := os.ReadFile("/proc/loadavg")
-	if err != nil {
-		return LoadSample{}, err
-	}
-	fields := strings.Fields(string(data))
-	if len(fields) < 3 {
-		return LoadSample{}, fmt.Errorf("malformed /proc/loadavg")
-	}
-	l1, e1 := strconv.ParseFloat(fields[0], 64)
-	l5, e5 := strconv.ParseFloat(fields[1], 64)
-	l15, e15 := strconv.ParseFloat(fields[2], 64)
-	if e1 != nil || e5 != nil || e15 != nil {
+	l1, l5, l15, ok := metrics.OSReader{}.LoadAverages()
+	if !ok {
 		return LoadSample{}, fmt.Errorf("malformed /proc/loadavg")
 	}
 	return LoadSample{Load1: l1, Load5: l5, Load15: l15, NumCPU: runtime.NumCPU()}, nil

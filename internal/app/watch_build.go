@@ -132,7 +132,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		FireOnFail: isHealthCheckType(typ),
+		FireOnFail: checks.IsHealthType(typ),
 		Now:        deps.Now,
 		Emit:       deps.Emit,
 	}
@@ -160,13 +160,6 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 		runner = execx.CommandRunner{}
 	}
 	return volume.Expander{Runner: runner}
-}
-
-// isHealthCheckType reports whether a check type's OK==true means "healthy", so a
-// watch over it fires its hook on failure rather than on OK (the alert condition
-// for storage/load/metric/count and the other threshold checks).
-func isHealthCheckType(typ string) bool {
-	return checks.IsHealthType(typ)
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
