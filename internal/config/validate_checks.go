@@ -447,8 +447,12 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	if requireUser && cfgval.String(fields["user"]) == "" {
 		add("%s.user is required for a connection check", prefix)
 	}
-	if v, present := fields["port"]; present && !isNumeric(cfgval.String(v)) {
-		add("%s.port %q must be numeric", prefix, cfgval.String(v))
+	// The same 1..65535 range walkScalars enforces on resolved services, so a
+	// connection check behaves identically as a host watch.
+	if v, present := fields["port"]; present {
+		if n, ok := cfgval.Int(v); !ok || n < 1 || n > 65535 {
+			add("%s.port %q must be an integer in 1..65535", prefix, cfgval.String(v))
+		}
 	}
 	if v, present := fields["tls"]; present {
 		switch t := v.(type) {
@@ -619,8 +623,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	validateInterfaceFields(path, entry, add)
 	switch typ {
 	case "tcp":
-		if _, ok := cfgval.Int(entry["port"]); !ok {
-			add("%s.port is required and must be numeric for a tcp check", path)
+		if n, ok := cfgval.Int(entry["port"]); !ok || n < 1 || n > 65535 {
+			add("%s.port is required and must be a port in 1..65535 for a tcp check", path)
 		}
 	case "http":
 		validateHTTPFields(path, entry, add)

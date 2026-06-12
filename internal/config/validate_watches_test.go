@@ -1321,3 +1321,28 @@ func TestValidateDiskIOWatch(t *testing.T) {
 		t.Fatalf("valid diskio watch flagged: %v", w)
 	}
 }
+
+func TestValidateWatchPortRangeMatchesServices(t *testing.T) {
+	// A tcp/connection check used as a watch enforces the same 1..65535 port
+	// range walkScalars applies to resolved services.
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"tcp-high": map[string]any{
+				"check": map[string]any{"type": "tcp", "port": 99999},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"conn-high": map[string]any{
+				"check": map[string]any{"type": "smtp", "host": "127.0.0.1", "port": 99999},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.tcp-high.check.port is required and must be a port in 1..65535",
+		`watches.conn-high.check.port "99999" must be an integer in 1..65535`,
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
