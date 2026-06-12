@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"strings"
 )
 
 // detectedHost holds the hostname used as the ${host} fallback. Resolved once at
@@ -12,7 +11,7 @@ import (
 var detectedHost = detectHost()
 
 func detectHost() string {
-	if v := strings.TrimSpace(os.Getenv("SERMO_HOST")); v != "" {
+	if v := envOverride("SERMO_HOST"); v != "" {
 		return v
 	}
 	if h, err := os.Hostname(); err == nil && h != "" {
