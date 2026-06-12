@@ -349,7 +349,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	res, _ := c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 	if res.ExitCode != c.expectExit {
 		msg := fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit)
-		if stderr := firstLine(res.Stderr); stderr != "" {
+		if stderr := FirstNonEmptyLine(res.Stderr); stderr != "" {
 			msg += ": " + stderr
 		}
 		return c.result(false, msg, start)
@@ -362,7 +362,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if c.analyzer.Active() {
 		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {
-			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, firstLine(line)), start)
+			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, FirstNonEmptyLine(line)), start)
 			r.Optional = sev == SevWarning
 			r.Data = map[string]any{"pattern_id": id, "pattern_severity": sev.String(), "pattern_line": line}
 			return r
@@ -371,7 +371,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	if c.onChange && c.state != nil {
 		cur := strings.TrimSpace(res.Stdout)
 		if c.state.primed && cur != c.state.last {
-			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", firstLine(c.state.last), firstLine(cur)), start)
+			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", FirstNonEmptyLine(c.state.last), FirstNonEmptyLine(cur)), start)
 			r.Data = map[string]any{"old": c.state.last, "new": cur}
 			c.state.last = cur
 			return r
@@ -520,7 +520,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 		return c.result(true, c.binary+": static binary, no shared libraries", start)
 	}
 	if res.ExitCode != 0 {
-		msg := firstLine(res.Stderr)
+		msg := FirstNonEmptyLine(res.Stderr)
 		if msg == "" {
 			msg = fmt.Sprintf("ldd exit %d", res.ExitCode)
 		}
@@ -529,11 +529,14 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	return c.result(true, c.binary+": all shared libraries resolve", start)
 }
 
-func firstLine(s string) string {
-	for i, r := range s {
-		if r == '\n' {
-			return s[:i]
+// FirstNonEmptyLine returns the first non-empty line of s, trimmed — the
+// compact one-line form used in check, hook and version messages. Shared so
+// app and appinspect do not carry their own copies.
+func FirstNonEmptyLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			return t
 		}
 	}
-	return s
+	return ""
 }

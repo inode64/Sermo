@@ -49,7 +49,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	res, _ := c.runner.Run(ctx, "hdparm", args...)
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
-		if s := firstLine(res.Stderr); s != "" {
+		if s := FirstNonEmptyLine(res.Stderr); s != "" {
 			return c.result(false, "hdparm "+c.device+": "+s, start)
 		}
 		return c.result(false, "hdparm "+c.device+": "+err.Error(), start)

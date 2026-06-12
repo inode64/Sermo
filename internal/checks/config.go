@@ -36,9 +36,9 @@ func (c configCheck) Run(ctx context.Context) Result {
 		res, _ := c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 		if res.ExitCode != 0 {
 			msg := "config invalid"
-			if s := firstLine(res.Stderr); s != "" {
+			if s := FirstNonEmptyLine(res.Stderr); s != "" {
 				msg += ": " + s
-			} else if s := firstLine(res.Stdout); s != "" {
+			} else if s := FirstNonEmptyLine(res.Stdout); s != "" {
 				msg += ": " + s
 			}
 			return c.result(false, msg, start)
