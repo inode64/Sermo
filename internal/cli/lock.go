@@ -11,7 +11,7 @@ import (
 	"sermo/internal/locks"
 )
 
-// runLock dispatches the named-lock commands (post-MVP, section 20):
+// runLock dispatches the named-lock commands (spec section 20):
 //
 //	lock SERVICE [--name N] --reason R --ttl D -- COMMAND...   (hold for COMMAND)
 //	lock acquire SERVICE [--name N] --reason R --ttl D         (persistent)

@@ -296,8 +296,8 @@ These rules are mandatory.
     (checked via owner_start_ticks to survive PID reuse), is stale and must be
     reclaimed through a logged path, never silently overwritten. Named runtime
     lock files use `<service>[.<name>].lock` under `<paths.runtime>/locks`
-    (default `/run/sermo/locks`); the `sermoctl lock` commands that
-    create/release them are post-MVP. The internal operation lock uses the
+    (default `/run/sermo/locks`), managed by the `sermoctl lock` commands
+    (wrap / acquire / release). The internal operation lock uses the
     separate path `<paths.runtime>/ops/<service>.lock` so it cannot collide with
     a user lock named `op`. `paths.locks` and `/etc/sermo/locks.d` have no MVP
     semantics. See spec sections 18 and 20.
@@ -417,8 +417,6 @@ A task is not done unless:
 
 ---
 
----
-
 # Implementation specification
 
 The original implementation spec, merged here so the project keeps a single
@@ -431,133 +429,6 @@ historical — the web UI, notifiers, host watches and the wizard shipped long
 ago. On conflict, the instructions above and the code win. The example daemons
 it once carried live for real in `catalog/`.
 
-## 6. Configuration layout
-
-Global configuration:
-
-```text
-/etc/sermo/sermo.yml
-```
-
-Packaged daemons:
-
-```text
-/usr/share/sermo/daemons/*.yml
-```
-
-User daemons:
-
-```text
-/etc/sermo/daemons-available/*.yml
-```
-
-Enabled services:
-
-```text
-/etc/sermo/apps-enabled/*.yml
-```
-
-Named runtime locks:
-
-```text
-<paths.runtime>/locks/*.lock     # default: /run/sermo/locks/*.lock
-```
-
-Internal operation locks:
-
-```text
-<paths.runtime>/ops/*.lock       # default: /run/sermo/ops/*.lock
-```
-
-There is no `/etc/sermo/locks.d` in the MVP. Active locks are runtime state, not
-configuration. Any future static lock-policy directory under `/etc/sermo` must be
-introduced as an explicit post-MVP feature with separate semantics.
-
-Recommended complete layout:
-
-```text
-/etc/sermo/
-├── sermo.yml
-├── conf.d/
-│   ├── 10-defaults.yml
-│   ├── 20-company.yml
-│   └── 90-local.yml
-├── daemons-available/
-│   ├── apache-custom.yml
-│   └── mysql-custom.yml
-├── apps-enabled/
-│   ├── apache-main.yml
-│   ├── mysql-main.yml
-│   └── redis-cache.yml
-```
-
----
-
-## 7. Global configuration example
-
-```yaml
-engine:
-  backend: auto
-  interval: 30s
-  max_parallel_checks: 8
-  default_timeout: 10s
-
-paths:
-  daemons:
-    - /usr/share/sermo/daemons
-    - /etc/sermo/daemons-available
-  includes:
-    - /etc/sermo/apps-enabled
-  runtime: /run/sermo
-
-defaults:
-  rule_window:
-    cycles: 1
-    mode: consecutive
-
-  stop_policy:
-    graceful_timeout: 30s
-    term_timeout: 15s
-    kill_timeout: 5s
-    force_kill: false
-
-  policy:
-    cooldown: 5m
-
-logging:
-  level: info
-  format: text
-```
-
-Safety invariants are not configurable in YAML. In particular:
-
-```text
-- Required preflight entries always block start/restart on failure.
-- Active named runtime locks always block service actions.
-- SIGKILL is never allowed by default.
-- force_kill=true always requires a restrictive kill_only_if selector.
-```
-
-Do not add `security:` toggles such as `allow_sigkill_by_default` or
-`block_restart_on_active_lock`; validation must reject them instead of treating
-them as policy.
-
-Path semantics:
-
-```text
-paths.runtime       Runtime root directory. Default: /run/sermo.
-runtime locks       Derived from paths.runtime: <runtime>/locks.
-operation locks     Derived from paths.runtime: <runtime>/ops.
-paths.locks         Not supported in the MVP; reject it as ambiguous.
-/etc/sermo/locks.d  Not used in the MVP and never scanned for active locks.
-```
-
-Named runtime locks and internal operation locks are active runtime state. They
-must not be loaded from `/etc/sermo`, and they must never share the same
-directory. Guard checks over external lock files should name those foreign files
-explicitly in the check definition instead of using a global lock directory.
-
----
 
 ## 8. Configuration model
 
@@ -806,8 +677,7 @@ Expansion is a single pass and not recursive:
 ```text
 - Field values are expanded once against the flat variable map.
 - A variable VALUE must not itself contain `${...}`; a variable that references
-  another variable is a validation error in the MVP. (Variable-to-variable
-  references are a possible post-MVP feature with cycle detection.)
+  another variable is a validation error (see TODO.md for nested references).
 - Because variable values are literal and expansion is one pass, no `${...}` can
   legitimately survive expansion. Any `${...}` left after the pass means an
   undefined variable and is a validation error.
@@ -1113,9 +983,8 @@ expect_status  200 when omitted.
 timeout        engine.default_timeout when omitted.
 ```
 
-`expect_status` is a single status code in the MVP (a `FlexInt`, see section 10).
-A status class such as `2xx` or a list of accepted codes is a documented post-MVP
-extension; the loader should reject a non-numeric `expect_status` until then.
+`expect_status` accepts a single code (`200`), a class (`2xx`), a list of
+either, or an `{op, value}` comparison (the shared compare operators).
 
 ### Command
 
@@ -1630,33 +1499,14 @@ type WithinWindow struct {
 
 ## 16. Actions
 
-MVP actions:
+A rule's `then:` takes a single action:
 
 ```yaml
 then:
   action: restart
 ```
 
-Supported actions:
-
-```text
-restart
-start
-stop
-alert
-block
-exec
-```
-
-For MVP, implement:
-
-- `restart`
-- `start`
-- `stop`
-- `block`
-- `alert` as log-only
-
-Optional later:
+or a list:
 
 ```yaml
 then:
@@ -1666,7 +1516,8 @@ then:
     - type: restart
 ```
 
-For MVP, implement only single action.
+Implemented actions: `restart`, `start`, `stop`, `block`, `alert`.
+`exec` is reserved but not implemented (see TODO.md).
 
 Go model:
 
@@ -1690,13 +1541,13 @@ const (
     ActionExec    ActionType = "exec"
 )
 
-// Action is the resolved `then:` block of a rule. The MVP supports a single
-// action per rule; the optional multi-action form is post-MVP.
+// Action is one resolved action of a rule's `then:` block (single `action`
+// or an `actions` list).
 type Action struct {
     Type    ActionType `yaml:"action"`
     Message string     `yaml:"message,omitempty"`
 
-    // exec action only, post-MVP. Array form, never a shell string.
+    // exec action only — reserved, not implemented (TODO.md). Array form only.
     Command []string      `yaml:"command,omitempty"`
     Timeout time.Duration `yaml:"timeout,omitempty"`
 }
@@ -1732,7 +1583,7 @@ max_actions         maximum number of executed remediation actions allowed
                     inside max_actions_window. Optional for MVP.
 max_actions_window  sliding window for max_actions. Optional for MVP.
 backoff             optional exponential growth of the effective cooldown after
-                    each consecutive remediation. Optional, post-MVP.
+                    each consecutive remediation.
 ```
 
 Relationship to rule windows:
@@ -1924,8 +1775,7 @@ The internal operation lock:
   through the logged reclaim path of section 20, then acquire and proceed.
 - It is distinct from named runtime locks under `<paths.runtime>/locks`
   (section 20): those guard against external work like backups; this one guards
-  against overlapping operations. The `sermoctl lock` creation commands for
-  named runtime locks are planned post-MVP.
+  against overlapping operations.
 - It lives outside `<paths.runtime>/locks` on purpose, so it cannot collide with
   a valid named runtime lock such as `mysql.op.lock`, and the named runtime lock
   scanner must never report the operation lock as a user-held lock.
@@ -2067,7 +1917,9 @@ and fail if output contains:
 not found
 ```
 
-Important: do not run `ldd` on untrusted arbitrary user-uploaded binaries. In the MVP, this is an admin tool that reads root-managed configuration, so it is acceptable with a warning in documentation. Later, replace with safer ELF parsing.
+Important: do not run `ldd` on untrusted arbitrary user-uploaded binaries. This
+is an admin tool that reads root-managed configuration, so it is acceptable with
+a warning in documentation (native ELF parsing is in TODO.md).
 
 ### command
 
@@ -2115,14 +1967,14 @@ Support two categories:
    (default `/run/sermo/locks`).
 2. External lock checks defined in daemon definitions.
 
-MVP scope:
+Scope:
 
 ```text
 - The operation engine reads active named runtime locks and blocks service
   actions while they are active.
 - `sermoctl locks SERVICE` reports active, expired and stale named runtime locks.
-- The CLI commands that create or release named runtime locks (`sermoctl lock`,
-  `sermoctl lock acquire`, `sermoctl lock release`) are planned post-MVP.
+- `sermoctl lock` (wrap a command), `sermoctl lock acquire` and `sermoctl lock
+  release` create and release named runtime locks.
 ```
 
 The internal operation lock from section 18 is deliberately separate from this
@@ -2132,7 +1984,7 @@ serializes overlapping operations. It is not created by
 `sermoctl lock`, is not listed as a named runtime lock, and cannot be released by
 `sermoctl lock release`.
 
-Planned post-MVP CLI lock command:
+CLI lock command:
 
 ```bash
 sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mysqldump --single-transaction --all-databases
@@ -2208,11 +2060,11 @@ Reclaiming a stale lock:
 Release:
 
 ```text
-- Post-MVP: `sermoctl lock SERVICE -- COMMAND` holds the lock for the lifetime
+- `sermoctl lock SERVICE -- COMMAND` holds the lock for the lifetime
   of COMMAND and unlinks it when COMMAND exits, on any path including a signal,
   via deferred cleanup. If COMMAND is killed, the TTL still bounds the lock's
   lifetime.
-- Post-MVP: `sermoctl lock acquire` / `sermoctl lock release` manage a lock
+- `sermoctl lock acquire` / `sermoctl lock release` manage a lock
   explicitly; release unlinks the owner's lock.
 - An owner only removes its own lock; stale removal goes through the reclaim path.
 ```
@@ -2248,17 +2100,17 @@ type ActiveLock struct {
 The two lock categories are complementary, not two ways to do the same thing:
 
 ```text
-Category 1 — Sermo named runtime locks (post-MVP preferred path when you can
-wrap the work).
+Category 1 — Sermo named runtime locks (the preferred path when you can wrap
+the work).
   The operation engine blocks automatically on any active named lock for the
-  service (section 18, step 5). No rule is needed. The CLI wrapper that creates
-  these locks (`sermoctl lock ... -- COMMAND`) is post-MVP.
+  service (section 18, step 5). No rule is needed. `sermoctl lock ... -- COMMAND`
+  creates them.
 
 Category 2 — external lock CHECKS gated by a guard.
   A check (file_exists, process, ...) over a signal Sermo does NOT own: a backup
   process not represented by a Sermo named runtime lock, or a foreign lock/flag
   file written by another tool. Gate it with a guard rule.
-  Use in the MVP when the protecting job exposes a foreign signal that Sermo can
+  Use it when the protecting job exposes a foreign signal that Sermo can
   check safely.
 ```
 
@@ -2294,8 +2146,8 @@ rules:
       message: "MySQL backup is running"
 ```
 
-Post-MVP, a backup wrapped with `sermoctl lock mysql --name backup -- ...` needs
-no such guard: the named runtime lock blocks the restart on its own.
+A backup wrapped with `sermoctl lock mysql --name backup -- ...` needs no such
+guard: the named runtime lock blocks the restart on its own.
 
 ---
 
@@ -2509,40 +2361,21 @@ sermoctl config validate [SERVICE]
 sermoctl config render SERVICE
 sermoctl config diff BASE SERVICE
 
-sermoctl daemon list                 # post-MVP
-sermoctl daemon show DAEMON          # post-MVP
+sermoctl daemon list
+sermoctl daemon show DAEMON
 
-sermoctl service list                 # post-MVP
-sermoctl service show SERVICE         # post-MVP
-sermoctl service clone SOURCE TARGET  # post-MVP
+sermoctl service list
+sermoctl service show SERVICE
+sermoctl service clone SOURCE TARGET
 
-sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...  # post-MVP
-sermoctl lock acquire SERVICE --reason REASON --ttl DURATION        # post-MVP
-sermoctl lock release SERVICE                                       # post-MVP
+sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...
+sermoctl lock acquire SERVICE --reason REASON --ttl DURATION
+sermoctl lock release SERVICE
 ```
 
-This is the full planned command surface. Commands marked `# post-MVP` are not
-required for the first implementation; the authoritative MVP subset is listed
-just below. Lock creation and release commands are also post-MVP; the MVP only
-needs `sermoctl locks SERVICE` for reporting named runtime locks and the
-operation engine's lock-blocking path.
-
-MVP commands:
-
-```bash
-sermoctl backend
-sermoctl status SERVICE
-sermoctl is-active SERVICE
-sermoctl start SERVICE
-sermoctl stop SERVICE
-sermoctl restart SERVICE
-sermoctl preflight SERVICE
-sermoctl processes SERVICE
-sermoctl locks SERVICE
-sermoctl config validate [SERVICE]
-sermoctl config render SERVICE
-sermoctl config diff BASE SERVICE
-```
+The CLI has since grown beyond this core surface (`apps`, `libs`, `patterns`,
+`services`, `monitor`/`unmonitor`, `sla`, `diagnose`, `reload`, `wizard`);
+`sermoctl` with no arguments prints the authoritative usage.
 
 Exit codes:
 
@@ -2717,7 +2550,8 @@ Optional foreground mode only for MVP. Packaging can run it as a normal daemon u
   requires both an exact resolved /proc/<pid>/exe match and a real-UID match.
 - command checks and inline command conditions use array form, not shell string.
 - inline command conditions must declare a timeout.
-- then.action is one of restart, start, stop, alert, block (exec is post-MVP).
+- then.action is one of restart, start, stop, alert, block (exec is reserved;
+  see TODO.md).
 - guard rules must use action block; only guard rules may use block.
 - block and alert actions require a non-empty message.
 - type: guard requires a non-empty blocks list; non-guard rules must not set blocks.
@@ -2790,13 +2624,6 @@ Initial sink:
 log/slog to stdout/stderr
 ```
 
-Later sinks:
-
-```text
-JSON file
-syslog
-Prometheus metrics (post-MVP; client_golang only when specified)
-webhook
-```
+Future sinks (TODO.md): JSON file, syslog, Prometheus metrics, webhook.
 
 ---
