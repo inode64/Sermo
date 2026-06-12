@@ -265,21 +265,12 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		} else {
 			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
-					if op := cfgval.String(cond["op"]); op != "" && !validJSONOp(op) {
+					if op := cfgval.String(cond["op"]); op != "" && !cfgval.IsAssertOp(op) {
 						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, path, op)
 					}
 				}
 			}
 		}
-	}
-}
-
-func validJSONOp(op string) bool {
-	switch op {
-	case "==", "!=", ">", ">=", "<", "<=", "contains", "=~":
-		return true
-	default:
-		return false
 	}
 }
 
@@ -302,7 +293,7 @@ func validateOutputExpectation(prefix, field string, v any, add addFunc) {
 // must be numeric for ordering ops and a valid regexp for =~.
 func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
 	op := cfgval.String(m["op"])
-	if _, ok := compareOps[op]; !ok {
+	if !cfgval.IsAssertOp(op) {
 		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, label, op)
 		return
 	}
@@ -490,12 +481,6 @@ var countKinds = set("any", "file", "dir", "symlink")
 // httpMethods are the standard HTTP request methods an http check may use.
 var httpMethods = set("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE", "CONNECT")
 var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
-
-// compareOps is the operator set shared by the sql check and the http response
-// comparisons (expect_body / expect_status / expect_latency). It matches the
-// runtime compareValue and the expect_json operator set, so every {op, value}
-// comparison shares one vocabulary.
-var compareOps = set("==", "!=", ">", ">=", "<", "<=", "contains", "=~")
 
 // validateCheckSection validates a checks/preflight/postflight section: known
 // types, optional booleans, command array form, valid service/process states,
@@ -785,7 +770,7 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 // result path where one is needed.
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 	op := cfgval.String(fields["op"])
-	if _, ok := compareOps[op]; !ok {
+	if !cfgval.IsAssertOp(op) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	if cfgval.String(fields["value"]) == "" {
@@ -858,7 +843,7 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.query is required for an influxdb-query check", prefix)
 	}
 	op := cfgval.String(fields["op"])
-	if _, ok := compareOps[op]; !ok {
+	if !cfgval.IsAssertOp(op) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	if cfgval.String(fields["value"]) == "" {
@@ -909,7 +894,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s.query is required for a sql check", prefix)
 	}
 	op := cfgval.String(fields["op"])
-	if _, ok := compareOps[op]; !ok {
+	if !cfgval.IsAssertOp(op) {
 		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	value := cfgval.String(fields["value"])
