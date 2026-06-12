@@ -552,7 +552,11 @@ a service.
 > the notify threshold as a percent or size (sizes require a `K`/`M`/`G`/`T`
 > suffix), and optionally enable auto-expand)
 > and `sermoctl wizard net` for network interfaces (pick interfaces and which of
-> link state / errors / speed to watch). There is also `sermoctl wizard service`,
+> link state / errors / speed / IP address to watch). `sermoctl wizard uplink`
+> generates the full internet-uplink set for an interface (PPPoE, WAN port, LTE
+> modem): link state, assigned address, default route, a bound ping and DNS
+> resolution through the system resolver — the same layering the `pppd` catalog
+> daemon uses, as host watches. There is also `sermoctl wizard service`,
 > which detects installed catalog daemons and writes `kind: service` files into
 > `apps-enabled/` to enable them (see [daemons](daemons.md)). Run with no
 > argument to choose from the list. It prints the generated `watches:` block and offers to write one watch
