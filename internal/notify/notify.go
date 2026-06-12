@@ -52,7 +52,7 @@ var builders = map[string]func(name string, entry map[string]any) (Notifier, err
 }
 
 // Build constructs the named notifiers from the global `notifiers` section
-// (raw == cfg.Global.Raw["notifiers"]). Malformed or unknown-type entries are
+// (raw == cfg.Notifiers()). Malformed or unknown-type entries are
 // skipped with a warning, mirroring BuildWorkers/BuildWatches.
 func Build(raw map[string]any) (map[string]Notifier, []string) {
 	out := map[string]Notifier{}

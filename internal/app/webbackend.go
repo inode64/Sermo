@@ -263,7 +263,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	}
 
 	// Surface configured notifiers (useful to know what watches can notify to).
-	if raw, ok := cfg.Global.Raw["notifiers"].(map[string]any); ok && len(raw) > 0 {
+	if raw := cfg.Notifiers(); len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
 			typ := cfgval.AsString(entry["type"])

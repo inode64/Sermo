@@ -202,8 +202,7 @@ func validDocumentName(name string) bool {
 
 func validateServices(cfg *Config) []Issue {
 	var issues []Issue
-	notifiers, _ := cfg.Global.Raw["notifiers"].(map[string]any)
-	defined := notifierNames(notifiers)
+	defined := notifierNames(cfg.Notifiers())
 	services := map[string]struct{}{}
 	for _, n := range cfg.ServiceNames {
 		services[n] = struct{}{}
