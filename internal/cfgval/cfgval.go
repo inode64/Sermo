@@ -157,6 +157,26 @@ func ByteSize(v any) (uint64, bool) {
 	return uint64(bytes), true
 }
 
+// Float reads a numeric config value that may decode as a YAML int, float or
+// string, reporting whether it parsed.
+func Float(v any) (float64, bool) {
+	switch t := v.(type) {
+	case int:
+		return float64(t), true
+	case int64:
+		return float64(t), true
+	case uint64:
+		return float64(t), true
+	case float64:
+		return t, true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(t), 64)
+		return f, err == nil
+	default:
+		return 0, false
+	}
+}
+
 // IsCompareOp reports whether op is one of the comparison operators every
 // {op, value} threshold accepts (>= > <= < == !=). Shared by config validation
 // and the runtime check builders so the threshold grammar cannot drift between

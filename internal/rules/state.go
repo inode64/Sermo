@@ -3,7 +3,6 @@ package rules
 import (
 	"sermo/internal/cfgval"
 	"sort"
-	"strconv"
 	"time"
 )
 
@@ -216,7 +215,7 @@ func ParsePolicy(tree map[string]any) Policy {
 	if bo, ok := section["backoff"].(map[string]any); ok {
 		b := &Backoff{
 			Initial: cfgval.Duration(bo["initial"]),
-			Factor:  parseFloat(bo["factor"]),
+			Factor:  floatOrZero(bo["factor"]),
 			Max:     cfgval.Duration(bo["max"]),
 		}
 		if b.Factor <= 0 {
@@ -227,21 +226,7 @@ func ParsePolicy(tree map[string]any) Policy {
 	return p
 }
 
-func parseFloat(v any) float64 {
-	switch t := v.(type) {
-	case float64:
-		return t
-	case int:
-		return float64(t)
-	case int64:
-		return float64(t)
-	case string:
-		f, err := strconv.ParseFloat(t, 64)
-		if err != nil {
-			return 0
-		}
-		return f
-	default:
-		return 0
-	}
+func floatOrZero(v any) float64 {
+	f, _ := cfgval.Float(v)
+	return f
 }
