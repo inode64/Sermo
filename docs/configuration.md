@@ -704,7 +704,7 @@ receives.
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`, `cert`) *and* the service
 checks (`tcp`, `ports`, `http`,
-`command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`,
+`command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`, `route`,
 `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
 such as `mysql`/`smtp`) — can be used as a watch here, and
 the host-resource ones can equally be used in a service's `checks:`/rules (see

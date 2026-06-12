@@ -696,6 +696,15 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateICMPMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
 	case "swap":
 		validateSwapMetricCondition(path, cfgval.String(entry["metric"]), entry, add)
+	case "route":
+		if f := cfgval.String(entry["family"]); f != "" && f != "ipv4" && f != "ipv6" {
+			add("%s.family must be ipv4 or ipv6", path)
+		}
+		if v, present := entry["interface"]; present {
+			if _, ok := v.(string); !ok {
+				add("%s.interface must be a single interface name for a route check", path)
+			}
+		}
 	case "entropy":
 		validateThresholdPreds(path, entry, checks.EntropyPredFields, add)
 	case "zombies":

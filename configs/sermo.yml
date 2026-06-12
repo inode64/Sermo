@@ -125,6 +125,15 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
+  # Watch that the host keeps an up default route (read from /proc/net/route);
+  # `interface` additionally pins the egress device — the uplink signal a ping
+  # alone cannot give (no route vs provider down). Fires the hook on loss.
+  # uplink-route:
+  #   monitor: disabled
+  #   check: { type: route, interface: ppp0 }
+  #   then:
+  #     notify: [ops-email]
+
   # Watch system load average (per-core, so the thresholds are machine-agnostic).
   load:
     monitor: disabled
