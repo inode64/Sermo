@@ -19,8 +19,9 @@ checks:
   ip: { type: net, interface: ppp0, metric: address, expect: present }
   rt: { type: route, interface: ppp0 }
   rt6: { type: route, family: ipv6 }
+  res: { type: dns, resolvconf: true, query: example.com, expect: { rcode: NOERROR } }
 `)
-	for _, name := range []string{"checks.link", "checks.errs", "checks.ping", "checks.lat", "checks.swp", "checks.ip", "checks.rt", "checks.rt6"} {
+	for _, name := range []string{"checks.link", "checks.errs", "checks.ping", "checks.lat", "checks.swp", "checks.ip", "checks.rt", "checks.rt6", "checks.res"} {
 		if hasIssue(issues, name) {
 			t.Fatalf("valid %s must produce no issue: %v", name, issues)
 		}
@@ -48,6 +49,8 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 		"address bad expect":           {`c: { type: net, interface: ppp0, metric: address, expect: up }`, "expect must be present or absent"},
 		"route bad family":             {`c: { type: route, family: ipx }`, "family must be ipv4 or ipv6"},
 		"route list interface":         {`c: { type: route, interface: [ppp0, eth0] }`, "single interface name"},
+		"dns resolvconf not bool":      {`c: { type: dns, resolvconf: si }`, "resolvconf must be a boolean"},
+		"dns resolvconf plus host":     {`c: { type: dns, host: 1.1.1.1, resolvconf: true }`, "host and resolvconf are mutually exclusive"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -579,6 +579,15 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if proto, isProto := conn.Lookup(typ); isProto {
 			validateConnFields(path, entry, proto.RequiresUser(), add)
 			validateInterfaceFields(path, entry, add)
+			if proto.Name() == "dns" {
+				if v, present := entry["resolvconf"]; present {
+					if _, ok := v.(bool); !ok {
+						add("%s.resolvconf must be a boolean", path)
+					} else if cfgval.Bool(v) && cfgval.String(entry["host"]) != "" {
+						add("%s host and resolvconf are mutually exclusive", path)
+					}
+				}
+			}
 			return true
 		}
 		return false

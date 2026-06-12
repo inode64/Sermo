@@ -211,6 +211,17 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 		// cfg.Interface is set per-attempt by connCheck.Run from the interface set;
 		// it pins the probe's egress (SO_BINDTODEVICE) on multi-homed hosts.
 	}
+	// dns takes an optional `resolvconf: true`, querying the first nameserver of
+	// /etc/resolv.conf instead of a fixed host (with pppd's usepeerdns, the
+	// provider's resolver). Scoped here so it never leaks into other protocols.
+	if proto.Name() == "dns" {
+		if cfgval.Bool(entry["resolvconf"]) {
+			if cfgval.AsString(entry["host"]) != "" {
+				return nil, "dns check: host and resolvconf are mutually exclusive"
+			}
+			cfg.Params = map[string]string{"resolvconf": "true"}
+		}
+	}
 	// dhcp takes an optional fixed client MAC (absent -> a random anonymous MAC).
 	// Scoped to dhcp so it never leaks into the driver params other protocols pass
 	// through cfg.Params. Its egress interface uses the shared cfg.Interface.
