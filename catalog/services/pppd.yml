@@ -1,8 +1,46 @@
 kind: daemon
 name: pppd
 display_name: "PPP Daemon"
+description: "PPP daemon — PPPoE/dial-up uplink to an internet provider."
+type: tunnel
 service: pppd
 apps: [pppd]
 
+variables:
+  ppp_iface: ppp0       # PPP unit interface (pppd option `unit 0` -> ppp0)
+  probe_host: 1.1.1.1   # well-known anycast host pinged through the uplink
+
+# pppd writes /var/run/<iface>.pid for the session. Defining pidfile auto-wires
+# process-tree monitoring and a requires:[service] pidfile health check (error
+# if missing while active).
+pidfile: /run/${ppp_iface}.pid
+
+restart_on_change:
+  # Restart when a linked critical library changes on disk (e.g. a glibc
+  # security update), so the daemon picks up the new code.
+  libraries: [glibc]
+
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+
+  # Layer 1 — the PPP session interface exists and is up. Catches a dropped
+  # session (pppd running but renegotiation failed, interface gone or down).
+  link:
+    type: net
+    interface: "${ppp_iface}"
+    metric: state
+    expect: up
+
+  # Layer 3 — the provider actually routes traffic: ping a well-known host
+  # bound to the PPP interface, so a backup route (4G, second uplink) cannot
+  # mask a dead uplink. Sends 3 echoes per cycle; needs CAP_NET_RAW (sermod
+  # normally runs as root).
+  internet:
+    type: icmp
+    host: "${probe_host}"
+    interface: "${ppp_iface}"
+    metric: state
+    expect: up
+    timeout: 5s

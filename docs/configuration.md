@@ -711,8 +711,10 @@ the host-resource ones can equally be used in a service's `checks:`/rules (see
 [Checks](rules.md#checks)). A watch fires its hook on the check's **alert**
 outcome: threshold crossed for condition checks, **failure** for health checks
 (`tcp`/`http`/…), so e.g. an `http` watch alerts when the endpoint is down. The
-multi-metric (`net`, `icmp`, `swap`) and multi-target (`file`, `process`) watch
-types below are watch-only because they fire one hook per metric/target.
+multi-metric (`net`, `icmp`, `swap`) watch shape below (a `metrics:` map, one
+hook per metric) and the multi-target (`file`, `process`) types are watch-only;
+the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
+works in a service's `checks:` (see [Checks](rules.md#checks)).
 
 ```yaml
 watches:
