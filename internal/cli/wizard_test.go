@@ -31,7 +31,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 
 	// volume assistant: select vol 1; free<10; for 3; notifier ops-email; no expand.
 	// then runWizard: confirm merge with "y".
-	script := strings.Join([]string{"1", "1", "10", "3", "2", "n", "y"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "1", "n", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{
@@ -254,7 +254,7 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 
 	// volume assistant answers, then: confirm merge, review existing files, delete
 	// the one existing file.
-	script := strings.Join([]string{"1", "1", "10", "3", "2", "n", "y", "y", "y"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "1", "n", "y", "y", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{

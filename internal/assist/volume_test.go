@@ -37,7 +37,7 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 		"1",   // condition: free space below %
 		"10",  // value
 		"3",   // for cycles
-		"2",   // notifier ops-email
+		"1",   // notifier ops-email
 		"y",   // auto-expand
 		"5G",  // by
 		"30m", // cooldown
@@ -79,7 +79,7 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 
 func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90, for 1, notifier team-slack, no expand.
-	script := strings.Join([]string{"2", "2", "90", "1", "3", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"2", "2", "90", "1", "2", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -102,7 +102,7 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 
 func TestVolumeAssistantPercentSuffix(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90%, for 1, notifier team-slack, no expand.
-	script := strings.Join([]string{"2", "2", "90%", "1", "3", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"2", "2", "90%", "1", "2", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -118,7 +118,7 @@ func TestVolumeAssistantPercentSuffix(t *testing.T) {
 
 func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 	// Select volume 1; free-space size condition 10G; for 2; notifier ops-email.
-	script := strings.Join([]string{"1", "3", "10G", "2", "2", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "3", "10G", "2", "1", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -134,7 +134,7 @@ func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 
 func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
 	// Select volume 1; size condition first tries unitless 100, then valid 100G.
-	script := strings.Join([]string{"1", "4", "100", "100G", "2", "2", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "4", "100", "100G", "2", "1", "n"}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
 	res, err := volumeAssistant{}.Run(p, testEnv())
@@ -154,7 +154,7 @@ func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
 
 func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 	// Select volume 1; used-space size condition 100G; for 2; notifier ops-email.
-	script := strings.Join([]string{"1", "4", "100G", "2", "2", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "4", "100G", "2", "1", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -170,7 +170,7 @@ func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 
 func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select volume 1; free 10; for 3; inherit global notify; no expand.
-	script := strings.Join([]string{"1", "1", "10", "3", "4", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "default", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
@@ -190,7 +190,7 @@ func TestVolumeAssistantNoActionErrors(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil // no notifiers configured
 	// Select volume 1; free 10; for 3; default notify (not configured); decline expand.
-	script := strings.Join([]string{"1", "1", "10", "3", "2", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "default", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (volumeAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a watch with neither notify nor expand must error")
@@ -201,7 +201,7 @@ func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil
 	// Select volume 1; free 10; for 3; default notify (not configured); enable expand.
-	script := strings.Join([]string{"1", "1", "10", "3", "2", "y", "5G", "30m"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "default", "y", "5G", "30m"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, env)
 	if err != nil {
@@ -219,7 +219,7 @@ func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
 
 func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
 	// Select volume 1; free 10; for 3; explicit none; enable expand.
-	script := strings.Join([]string{"1", "1", "10", "3", "1", "y", "5G", "30m"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "none", "y", "5G", "30m"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -274,7 +274,7 @@ func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
 
 func TestVolumeAssistantNotifyNoneWithoutExpandErrors(t *testing.T) {
 	// Select volume 1; free 10; for 3; explicit none; decline expand.
-	script := strings.Join([]string{"1", "1", "10", "3", "1", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "10", "3", "none", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (volumeAssistant{}).Run(p, testEnv()); err == nil {
 		t.Fatal("notify none without expand should leave no action and error")

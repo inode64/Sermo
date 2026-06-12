@@ -82,6 +82,60 @@ func TestPromptMultiChooseByName(t *testing.T) {
 	}
 }
 
+func TestPromptMultiChooseKeyword(t *testing.T) {
+	opts := []string{"ops-email", "team-slack"}
+
+	t.Run("keywords return without indices", func(t *testing.T) {
+		p, _ := newTestPrompt("none\n")
+		if idx, kw := p.MultiChooseKeyword("pick", opts, "none", "default"); kw != "none" || idx != nil {
+			t.Fatalf("= (%v, %q), want (nil, none)", idx, kw)
+		}
+		p, _ = newTestPrompt("DEFAULT\n")
+		if _, kw := p.MultiChooseKeyword("pick", opts, "none", "default"); kw != "default" {
+			t.Fatalf("keyword should match case-insensitively, got %q", kw)
+		}
+	})
+
+	t.Run("numbers, names and all select options", func(t *testing.T) {
+		p, _ := newTestPrompt("2\n")
+		if idx, kw := p.MultiChooseKeyword("pick", opts, "none", "default"); kw != "" || len(idx) != 1 || idx[0] != 1 {
+			t.Fatalf("= (%v, %q), want ([1], \"\")", idx, kw)
+		}
+		p, _ = newTestPrompt("team-slack\n")
+		if idx, _ := p.MultiChooseKeyword("pick", opts, "none", "default"); len(idx) != 1 || idx[0] != 1 {
+			t.Fatalf("name = %v, want [1]", idx)
+		}
+		p, _ = newTestPrompt("all\n")
+		if idx, _ := p.MultiChooseKeyword("pick", opts, "none", "default"); len(idx) != 2 {
+			t.Fatalf("'all' = %v, want both options", idx)
+		}
+	})
+
+	t.Run("keywords do not occupy menu rows", func(t *testing.T) {
+		p, out := newTestPrompt("1\n")
+		if idx, _ := p.MultiChooseKeyword("pick", opts, "none", "default"); idx[0] != 0 {
+			t.Fatalf("1 = %v, want the first defined option", idx)
+		}
+		if s := out.String(); strings.Contains(s, "1) none") || strings.Contains(s, "3) default") {
+			t.Fatalf("reserved answers must not be listed as rows: %q", s)
+		}
+		if s := out.String(); !strings.Contains(s, "'none'") || !strings.Contains(s, "'default'") || !strings.Contains(s, "'all'") {
+			t.Fatalf("keywords must be offered in the question hint: %q", s)
+		}
+	})
+
+	t.Run("empty option list still accepts keywords", func(t *testing.T) {
+		p, out := newTestPrompt("all\nnone\n")
+		idx, kw := p.MultiChooseKeyword("pick", nil, "none", "default")
+		if kw != "none" || idx != nil {
+			t.Fatalf("= (%v, %q), want (nil, none): 'all' is meaningless without options", idx, kw)
+		}
+		if !strings.Contains(out.String(), "enter 'none' or 'default'") {
+			t.Fatalf("expected the no-options hint, got %q", out.String())
+		}
+	})
+}
+
 func mustMultiChoose(t *testing.T, input string, opts []string) []int {
 	t.Helper()
 	p, _ := newTestPrompt(input)

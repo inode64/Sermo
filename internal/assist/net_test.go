@@ -13,7 +13,7 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 		"1,2", // metrics: link up/down + link errors
 		"1",   // state: any change
 		"100", // errors threshold
-		"2",   // notifier ops-email
+		"1",   // notifier ops-email
 	}, "\n") + "\n"
 
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -48,7 +48,7 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 
 func TestNetAssistantStateDownOnly(t *testing.T) {
 	// Select eth0; only state; "only when down"; notifier team-slack.
-	script := strings.Join([]string{"1", "1", "2", "3"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "2", "2"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -62,7 +62,7 @@ func TestNetAssistantStateDownOnly(t *testing.T) {
 
 func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select eth0; only state; any change; inherit global notify.
-	script := strings.Join([]string{"1", "1", "1", "4"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
@@ -79,7 +79,7 @@ func TestNetAssistantRequiresNotifier(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil
 	// Select default notify, but no global default is configured.
-	script := strings.Join([]string{"1", "1", "1", "2"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (netAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a net watch with no notifier must error (no hook/expand offered)")
@@ -121,7 +121,7 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 
 func TestNetAssistantNotifyNoneErrors(t *testing.T) {
 	// Select eth0; only state; any change; explicit none.
-	script := strings.Join([]string{"1", "1", "1", "1"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "1", "none"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (netAssistant{}).Run(p, testEnv()); err == nil {
 		t.Fatal("a net watch with notify none should error because it has no other action")

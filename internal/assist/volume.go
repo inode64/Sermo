@@ -2,7 +2,6 @@ package assist
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -131,45 +130,29 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	return entry
 }
 
-// chooseNotifiers asks which configured notifiers to alert. The menu always
-// offers the same all/none/default vocabulary used across the wizard's
-// selections: "all" (the MultiChoose keyword) selects every configured notifier;
-// "none" writes the reserved sentinel so the generated watch suppresses any
-// inherited default; "default" leaves notify unset (returns nil) so runtime
-// inherits the global notify default. The reserved "none" and "default" choices
-// are always offered — even when the config defines no notifiers — so an
-// expand-only watch (or one that must explicitly opt out) still has a valid
-// pick. Each can be entered by number or by typing its name.
+// chooseNotifiers asks which configured notifiers to alert. The numbered list
+// shows only the notifiers defined in the config; the reserved answers ride in
+// the question instead of occupying rows: "all" selects every configured
+// notifier, "none" writes the reserved sentinel so the generated watch
+// suppresses any inherited default, and "default" leaves notify unset (returns
+// nil) so the runtime inherits the global notify default. The keywords are
+// accepted even when the config defines no notifiers, so an expand-only or
+// opt-out watch still has a valid answer.
 func chooseNotifiers(p *Prompt, env Env) []string {
-	hasDefault := len(env.DefaultNotify) > 0
-	options := make([]string, 0, len(env.Notifiers)+2)
-	options = append(options, "none (do not notify)")
-	options = append(options, env.Notifiers...)
-	defaultIndex := len(options)
-	if hasDefault {
-		options = append(options, "default (inherit global notify: "+strings.Join(env.DefaultNotify, ", ")+")")
-	} else {
-		options = append(options, "default (inherit global notify; not configured)")
+	question := "Notify which targets? ('default' inherits global notify; not configured)"
+	if len(env.DefaultNotify) > 0 {
+		question = "Notify which targets? ('default' inherits global notify: " + strings.Join(env.DefaultNotify, ", ") + ")"
 	}
-	idx := p.MultiChoose("Notify which targets?", options)
-	if slices.Contains(idx, 0) {
-		if len(idx) == len(options) {
-			idx = idx[1:]
-		} else {
-			return []string{config.NotifyNone}
-		}
+	idx, kw := p.MultiChooseKeyword(question, env.Notifiers, "none", "default")
+	switch kw {
+	case "none":
+		return []string{config.NotifyNone}
+	case "default":
+		return nil
 	}
 	out := make([]string, 0, len(idx))
-	inheritDefault := false
 	for _, i := range idx {
-		if i == defaultIndex {
-			inheritDefault = true
-			continue
-		}
-		out = append(out, env.Notifiers[i-1])
-	}
-	if len(out) == 0 && inheritDefault {
-		return nil
+		out = append(out, env.Notifiers[i])
 	}
 	if len(out) == 0 {
 		return []string{config.NotifyNone}
