@@ -395,11 +395,9 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	}
 	service := opts.service()
 
-	globalPath := opts.globalPath()
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 	if _, ok := cfg.Services[service]; !ok {
 		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
@@ -715,11 +713,9 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	}
 	service := opts.service()
 
-	globalPath := opts.globalPath()
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 	if _, ok := cfg.Services[service]; !ok {
 		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
@@ -829,11 +825,9 @@ func (a App) runLocks(opts options) int {
 		return exitUsage
 	}
 
-	globalPath := opts.globalPath()
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 
 	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
@@ -895,11 +889,9 @@ func (a App) runProcesses(opts options) int {
 	}
 	service := opts.service()
 
-	globalPath := opts.globalPath()
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 	if _, ok := cfg.Services[service]; !ok {
 		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
@@ -1033,11 +1025,9 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 // runtime dir (or the legacy OpenRC location). If no pidfile is found it falls
 // back to pidof/pgrep discovery. This works whether or not the web UI is enabled.
 func (a App) runReload(ctx context.Context, opts options) int {
-	globalPath := opts.globalPath()
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+	cfg, code := a.loadConfig(opts)
+	if cfg == nil {
+		return code
 	}
 
 	runtimeDir := cfg.Global.RuntimeDir()
