@@ -231,3 +231,25 @@ func TestDurationOr(t *testing.T) {
 		}
 	}
 }
+
+// TestCompareFloatCoversCompareOps locks the two halves of the operator
+// vocabulary together: every op IsCompareOp accepts must be implemented by
+// CompareFloat (an accepted-but-unimplemented op would silently never fire),
+// and an unknown op must neither validate nor hold.
+func TestCompareFloatCoversCompareOps(t *testing.T) {
+	for _, op := range []string{">=", ">", "<=", "<", "==", "!="} {
+		if !IsCompareOp(op) {
+			t.Fatalf("IsCompareOp(%q) = false", op)
+		}
+		// 2 op 1 and 1 op 2 cannot both be false for an implemented operator.
+		if !CompareFloat(2, op, 1) && !CompareFloat(1, op, 2) && !CompareFloat(1, op, 1) {
+			t.Fatalf("CompareFloat does not implement %q", op)
+		}
+	}
+	if IsCompareOp("=~") || CompareFloat(1, "=~", 1) {
+		t.Fatal("=~ is assertion-only: not a compare op and never holds numerically")
+	}
+	if CompareFloat(1, "nope", 1) {
+		t.Fatal("an unknown op must never hold")
+	}
+}
