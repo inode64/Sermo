@@ -36,21 +36,19 @@ func chooseNotifiers(p *Prompt, env Env) []string {
 	return out
 }
 
-// ensureNotifyAction guarantees the notifier answer leaves the watch with at
-// least one action, re-asking with an explanation instead of aborting the
-// wizard after the fact. hasOtherAction reports whether the watch already
-// carries a non-notify action (e.g. auto-expand), which makes 'none' — or
-// 'default' without a configured global notify — a valid answer. Every
-// assistant that asks for notifiers must route its requirement through this
-// helper so the validation cannot drift per wizard. On EOF the re-prompt
-// aborts with ErrInputClosed like every other Prompt loop.
+// ensureNotifyAction guarantees the notifier answer is never silently inert,
+// re-asking with an explanation instead of aborting the wizard after the
+// fact. The reserved 'none' is always accepted — it is a deliberate
+// monitor-only choice, valid with or without a global notify default. Only
+// 'default' with no global notify configured re-asks (it would generate a
+// watch the daemon rejects as having no action), unless hasOtherAction
+// reports the watch carries one (e.g. auto-expand). Every assistant that asks
+// for notifiers must route its requirement through this helper so the
+// validation cannot drift per wizard. On EOF the re-prompt aborts with
+// ErrInputClosed like every other Prompt loop.
 func ensureNotifyAction(p *Prompt, env Env, current []string, hasOtherAction bool) []string {
-	for !hasOtherAction && !config.HasEffectiveNotifyAction(current, env.DefaultNotify) {
-		if len(current) == 0 {
-			p.printf("  no global notify default is configured, so 'default' would leave this watch with no action — choose at least one notifier\n")
-		} else {
-			p.printf("  'none' would leave this watch with no action — choose at least one notifier\n")
-		}
+	for !hasOtherAction && !config.HasEffectiveNotifyAction(current, env.DefaultNotify) && !config.NotifyOptedOut(current) {
+		p.printf("  no global notify default is configured, so 'default' would leave this watch with no action — choose at least one notifier, or 'none' to monitor without notifying\n")
 		p.abortIfClosed()
 		current = chooseNotifiers(p, env)
 	}

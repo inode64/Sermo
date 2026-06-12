@@ -142,12 +142,18 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 	})
 }
 
-func TestNetAssistantNotifyNoneErrors(t *testing.T) {
-	// Select eth0; only state; any change; explicit none: the wizard re-asks
-	// (nothing else acts) and the script's EOF aborts with ErrInputClosed.
+func TestNetAssistantNotifyNoneMonitorOnly(t *testing.T) {
+	// Select eth0; only state; any change; explicit none: the reserved opt-out
+	// is always accepted and generates a monitor-only watch.
 	script := strings.Join([]string{"1", "1", "1", "none"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	if _, err := (netAssistant{}).Run(p, testEnv()); err == nil {
-		t.Fatal("a net watch with notify none should error because it has no other action")
+	res, err := netAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	then := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)["then"].(map[string]any)
+	notify := then["notify"].([]string)
+	if len(notify) != 1 || notify[0] != "none" {
+		t.Fatalf("notify = %v, want [none]", notify)
 	}
 }

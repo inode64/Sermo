@@ -88,8 +88,8 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 			s.addrAbsent = p.Choose("For the IP address, alert when…", []string{"it changes (reconnect/renumbering)", "the interface has no address"}) == 1
 		}
 	}
-	// A net watch has no non-notify action, so the answer must deliver
-	// somewhere; ensureNotifyAction re-asks until it does.
+	// ensureNotifyAction re-asks only an inert 'default'; the explicit 'none'
+	// opt-out builds a monitor-only watch and is always accepted.
 	s.notifiers = ensureNotifyAction(p, env, chooseNotifiers(p, env), false)
 	return s, nil
 }

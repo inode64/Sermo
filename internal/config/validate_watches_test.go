@@ -421,12 +421,16 @@ func TestValidateNotifyReferences(t *testing.T) {
 	})
 	for _, w := range []string{
 		"watches.disk-root.then.notify references unknown notifier \"ghost\"",
-		"watches.no-action-none.then requires a hook, notify and/or expand",
 		"watches.bad-then.then must be a mapping",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
 		}
+	}
+	// The explicit `notify: [none]` opt-out is a deliberate monitor-only watch,
+	// valid with no hook/expand and no global default.
+	if hasIssue(bad, "no-action-none") {
+		t.Fatalf("notify [none] must be a valid action choice: %v", bad)
 	}
 
 	noDefault := validateRawGlobal(t, map[string]any{

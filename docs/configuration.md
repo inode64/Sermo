@@ -532,7 +532,11 @@ notify: [ops-email]      # default for every site that declares none of its own
 Each site then **overrides** the default — the per-site choice always wins:
 
 - an explicit list (`notify: [team-slack]`) replaces the default for that site;
-- `notify: none` suppresses delivery for that site (even when a default exists);
+- `notify: none` suppresses delivery for that site — valid **anywhere a notify
+  selection is**, with or without a global default configured. A watch whose
+  only action is `notify: [none]` is a deliberate *monitor-only* watch: it
+  still runs, shows its state in the dashboard and records events, it just
+  never delivers;
 - omitting `notify` inherits the global default.
 
 `none` cannot be combined with notifier names in the same list. With a global
@@ -572,10 +576,10 @@ a service.
 > the config; the reserved answers `all` / `none` / `default` are offered in the
 > question itself — even when the config defines no notifiers: type `all` to
 > notify every configured notifier, `default` to omit `then.notify` and inherit
-> the global default, or `none` to generate `notify: [none]` and suppress that
-> default for the watch. If an answer would leave the watch with no action at
-> all (`none`, or `default` when no global `notify` is configured, with no
-> other action such as auto-expand), the wizard explains why and asks again
+> the global default, or `none` to generate `notify: [none]` and suppress
+> delivery — always accepted, with or without a global default (a monitor-only
+> watch). Only an inert `default` (no global `notify` configured, and no other
+> action such as auto-expand) makes the wizard explain why and ask again
 > instead of aborting.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
@@ -593,8 +597,10 @@ watches:
       hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }   # optional
 ```
 
-Use `notify: [none]` when a watch has another action (for example `expand`) but
-must not send notifications or inherit the global `notify` default.
+Use `notify: [none]` to suppress notifications: alongside another action (for
+example `expand`), or on its own as a monitor-only watch (state and events
+without delivery). It is always valid, whether or not a global `notify` default
+is configured.
 
 A watch supports the same top-level `monitor` flag as a service/daemon:
 `enabled` (the default) forces monitoring on at daemon start/reload, `disabled`
