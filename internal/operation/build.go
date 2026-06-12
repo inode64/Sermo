@@ -22,7 +22,9 @@ type Config struct {
 	// AlsoUnits are auxiliary init units (also_service) for the active backend,
 	// resolved by the caller; the engine acts on them in wrap order.
 	AlsoUnits []string
-	Tree      map[string]any // resolved service config
+	// StopArtifacts are the stopped-state invariants resolved by the caller.
+	StopArtifacts StopArtifacts
+	Tree          map[string]any // resolved service config
 
 	Manager          Manager
 	Locker           *locks.OperationLocker
@@ -90,12 +92,13 @@ func New(c Config) Engine {
 	}
 
 	return Engine{
-		Service:     c.Service,
-		Unit:        c.Unit,
-		Backend:     c.Backend,
-		AlsoUnits:   c.AlsoUnits,
-		ConfigError: configErr,
-		Manager:     c.Manager,
+		Service:       c.Service,
+		Unit:          c.Unit,
+		Backend:       c.Backend,
+		AlsoUnits:     c.AlsoUnits,
+		StopArtifacts: c.StopArtifacts,
+		ConfigError:   configErr,
+		Manager:       c.Manager,
 		AcquireLock: func(t time.Duration) (func() error, error) {
 			h, err := c.Locker.Acquire(c.Service, t)
 			if err != nil {

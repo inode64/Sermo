@@ -2,6 +2,7 @@ package config
 
 import (
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -63,6 +64,17 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
 		}
 	}
+	// Stopped-state invariants (verified after a clean stop).
+	for _, b := range []string{"pidfile_absent", "remove_stale"} {
+		if v, present := sp[b]; present {
+			if _, ok := v.(bool); !ok {
+				add("stop_policy.%s must be true or false", b)
+			}
+		}
+	}
+	if v, present := sp["files_absent"]; present && len(cfgval.StringList(v)) == 0 {
+		add("stop_policy.files_absent must be a non-empty list of paths/globs")
+	}
 }
 
 func validateProcesses(tree map[string]any, add addFunc) {
@@ -83,8 +95,14 @@ func validateProcesses(tree map[string]any, add addFunc) {
 				add("%s.path is required for a pidfile selector", path)
 			}
 		case "command_match":
-			if cfgval.String(entry["exe"]) == "" || cfgval.String(entry["user"]) == "" {
-				add("%s command_match requires both exe and user", path)
+			exe, cmd := cfgval.String(entry["exe"]), cfgval.String(entry["cmd"])
+			if exe == "" && cmd == "" {
+				add("%s command_match requires exe or cmd", path)
+			}
+			if cmd != "" {
+				if _, err := regexp.Compile(cmd); err != nil {
+					add("%s command_match cmd is not a valid regex: %v", path, err)
+				}
 			}
 		case "":
 			add("%s.type is required", path)

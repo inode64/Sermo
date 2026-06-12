@@ -43,7 +43,7 @@ func (OSReader) PIDs() ([]int, error) {
 
 // Identity reads PPID, real UID, resolved exe and cmdline for a process.
 func (OSReader) Identity(pid int) (Identity, bool) {
-	ppid, uid, state, ok := readStatus(pid)
+	ppid, uid, gid, state, ok := readStatus(pid)
 	if !ok {
 		return Identity{}, false
 	}
@@ -51,6 +51,7 @@ func (OSReader) Identity(pid int) (Identity, bool) {
 		PID:     pid,
 		PPID:    ppid,
 		UID:     uid,
+		GID:     gid,
 		User:    lookupUser(uid),
 		State:   state,
 		Cmdline: readCmdline(pid),
@@ -59,10 +60,10 @@ func (OSReader) Identity(pid int) (Identity, bool) {
 	return id, true
 }
 
-func readStatus(pid int) (ppid int, uid uint32, state string, ok bool) {
+func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/status")
 	if err != nil {
-		return 0, 0, "", false
+		return 0, 0, 0, "", false
 	}
 	var gotPPID, gotUID bool
 	for _, line := range strings.Split(string(data), "\n") {
@@ -82,9 +83,17 @@ func readStatus(pid int) (ppid int, uid uint32, state string, ok bool) {
 					uid, gotUID = uint32(v), true
 				}
 			}
+		case strings.HasPrefix(line, "Gid:"):
+			// real GID is the first field, like Uid; best-effort (not required).
+			fields := strings.Fields(strings.TrimPrefix(line, "Gid:"))
+			if len(fields) > 0 {
+				if v, err := strconv.ParseUint(fields[0], 10, 32); err == nil {
+					gid = uint32(v)
+				}
+			}
 		}
 	}
-	return ppid, uid, state, gotPPID && gotUID
+	return ppid, uid, gid, state, gotPPID && gotUID
 }
 
 // readExe resolves /proc/<pid>/exe. It returns ok=false when the link cannot be
@@ -132,6 +141,23 @@ func OSUserResolver(name string) (uint32, bool) {
 		return 0, false
 	}
 	return uint32(uid), true
+}
+
+// OSGroupResolver resolves a group name (or numeric gid string) to its GID via
+// the OS group database — the group analog of OSUserResolver, native Go.
+func OSGroupResolver(name string) (uint32, bool) {
+	if gid, err := strconv.ParseUint(name, 10, 32); err == nil {
+		return uint32(gid), true
+	}
+	g, err := user.LookupGroup(name)
+	if err != nil {
+		return 0, false
+	}
+	gid, err := strconv.ParseUint(g.Gid, 10, 32)
+	if err != nil {
+		return 0, false
+	}
+	return uint32(gid), true
 }
 
 // canonicalizePath resolves symlinks where possible, falling back to a lexical

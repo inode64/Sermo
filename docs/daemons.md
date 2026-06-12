@@ -356,6 +356,47 @@ also_apply: [nginx, varnish]
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.
 
+### `command_match` by cmdline / group
+
+A `command_match` selector matches a process by the **AND** of the fields you
+set; at least one of `exe`/`cmd` is required:
+
+```yaml
+processes:
+  unifi: { type: command_match, cmd: "java .*unifi", user: unifi, group: unifi }
+  mongo: { type: command_match, exe: /usr/bin/mongod, user: unifi }
+```
+
+- `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
+- `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).
+  Use it for shared binaries (`java .*unifi`, `openvpn .*tun1\.conf`) the way the
+  legacy per-service kill lists did. (The cmdline is spoofable, so a `cmd`-only
+  match still passes `stop_policy.kill_only_if` before any kill.)
+- `user` / `group` — the process real UID / GID owner.
+
+These feed monitoring **and** the residual reaper, so a richer selector lets a
+stop catch and kill more leftovers (an unkillable residual stays
+`orphan-processes`). The `process` *check* still matches by `exe`/`user` only.
+
+### Stopped-state invariants (`stop_policy`)
+
+After a **clean** stop, the engine can verify the service left nothing behind:
+
+```yaml
+stop_policy:
+  graceful_timeout: 30s
+  pidfile_absent: true                      # the declared pidfile must be gone
+  files_absent: [/run/postgresql/.s.PGSQL*] # stale sockets/locks (globs)
+  remove_stale: false                       # opt-in: delete the stale files
+```
+
+- A lingering pidfile or `files_absent` match is a **warning** (the stop still
+  succeeds, `ResultOK`) folded into the result message and surfaced in CLI/web —
+  it means the daemon crashed or left junk. Residual *processes* keep their
+  stronger `orphan-processes` (red) handling via the reaper.
+- `remove_stale: true` deletes a lingering file (the legacy `rm` behavior), only
+  re-warning if the delete fails. Default is report-only.
+
 ### `pidfile:` shorthand (selector + health check)
 
 A daemon can declare a top-level `pidfile: <path>` to wire **both** uses of a
