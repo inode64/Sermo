@@ -1976,9 +1976,6 @@ function renderWatchExpansion(w, events) {
   const notifiers = names.length
     ? names.map((n) => `<code>${esc(n)}</code>`).join(" ")
     : '<span class="muted">none</span>';
-  const expand = w.expand && Number(w.expand.by_bytes) > 0
-    ? `<b>${fmtBytes(w.expand.by_bytes)}</b>`
-    : '<span class="muted">none</span>';
   const hook = (w.hook_command || []).length
     ? `<code>${esc((w.hook_command || []).join(" "))}</code>`
     : (w.has_hook ? '<span class="muted">configured</span>' : '<span class="muted">none</span>');
@@ -1990,7 +1987,6 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Monitor flag</span><br><code>${esc(mode)}</code></div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
-    <div><span class="muted">Expand</span><br>${expand}</div>
   </div>`;
   const disk = renderDiskWatch(w.disk);
   const conditions = renderConditionRows(w.conditions || []);
