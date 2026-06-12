@@ -149,3 +149,44 @@ checks:
     expect_latency: { op: "<", value: "abc" }
 `), "must be numeric")
 }
+
+func TestValidateAnalyzeRulesShape(t *testing.T) {
+	mustHave(t, validateService(t, `
+kind: service
+name: db
+service: { name: x }
+checks:
+  config:
+    type: command
+    command: ["true"]
+    analyze: { rules: [ { id: a, match: "(", severity: warning } ] }
+`), "invalid regex")
+
+	mustHave(t, validateService(t, `
+kind: service
+name: db
+service: { name: x }
+checks:
+  config:
+    type: command
+    command: ["true"]
+    analyze: { rules: [ { id: a, match: "x", severity: fatal } ] }
+`), "severity must be")
+
+	// A valid analyze block produces no checks.config issue.
+	issues := validateService(t, `
+kind: service
+name: db
+service: { name: x }
+checks:
+  config:
+    type: command
+    command: ["true"]
+    analyze: { rules: [ { id: a, match: "(?i)deprecated", severity: warning } ] }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.config") {
+			t.Fatalf("a valid analyze block must produce no issue: %v", issues)
+		}
+	}
+}

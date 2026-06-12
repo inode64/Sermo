@@ -140,7 +140,7 @@ func validateDocuments(cfg *Config) []Issue {
 	// Duplicate names are detected per kind, so a daemon and an app may share a
 	// name (e.g. the `apache` service and the `apache` app that owns its binary).
 	counts := map[string]map[string]int{
-		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindService: {},
+		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {},
 	}
 
 	for _, doc := range cfg.docs {
@@ -156,12 +156,12 @@ func validateDocuments(cfg *Config) []Issue {
 			}
 		}
 		switch doc.Kind {
-		case kindDaemon, kindApp, kindLibrary, kindService:
+		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon, app, lib or service)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon, app, lib, patterns or service)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon, app, lib or service)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon, app, lib, patterns or service)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -174,7 +174,7 @@ func validateDocuments(cfg *Config) []Issue {
 		counts[doc.Kind][doc.Name]++
 	}
 
-	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindService} {
+	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindPatterns, kindService} {
 		for _, name := range slices.Sorted(maps.Keys(counts[kind])) {
 			if counts[kind][name] > 1 {
 				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})

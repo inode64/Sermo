@@ -17,10 +17,11 @@ import "sermo/internal/cfgval"
 // name with the app that owns its binary (e.g. `apache` daemon + `apache` app).
 // `service` is an enabled instance (apps-enabled) that `uses` a daemon.
 const (
-	kindDaemon  = "daemon"
-	kindApp     = "app"
-	kindLibrary = "lib"
-	kindService = "service"
+	kindDaemon   = "daemon"
+	kindApp      = "app"
+	kindLibrary  = "lib"
+	kindService  = "service"
+	kindPatterns = "patterns"
 )
 
 // Daemon categories mirror the catalog subdirectory a definition is loaded from
@@ -28,9 +29,10 @@ const (
 // root default to CategoryService. The category tracks the kind for display and
 // category-scoped listings.
 const (
-	CategoryService = "service"
-	CategoryApp     = "app"
-	CategoryLibrary = "library"
+	CategoryService  = "service"
+	CategoryApp      = "app"
+	CategoryLibrary  = "library"
+	CategoryPatterns = "patterns"
 )
 
 // kindForCategory maps a catalog category to the document kind it is registered
@@ -41,6 +43,8 @@ func kindForCategory(category string) string {
 		return kindApp
 	case CategoryLibrary:
 		return kindLibrary
+	case CategoryPatterns:
+		return kindPatterns
 	default:
 		return kindDaemon
 	}
@@ -56,6 +60,8 @@ func categoryFromDir(name string) string {
 		return CategoryApp
 	case "libs":
 		return CategoryLibrary
+	case "patterns":
+		return CategoryPatterns
 	default:
 		return ""
 	}
@@ -196,11 +202,13 @@ type Config struct {
 	Daemons   map[string]*Document // kind daemon (service definitions)
 	Apps      map[string]*Document // kind app (tools/runtimes: binary + version)
 	Libraries map[string]*Document // kind lib (shared libraries)
+	Patterns  map[string]*Document // kind patterns (output-analysis rule sets)
 	Services  map[string]*Document // kind service (enabled instances)
 	// Load order per registry, for stable reporting.
 	DaemonNames  []string
 	AppNames     []string
 	LibraryNames []string
+	PatternNames []string
 	ServiceNames []string
 	docs         []*Document // every document in load order
 }

@@ -516,3 +516,59 @@ func TestBuildHTTPProxyBadURL(t *testing.T) {
 		t.Fatal("a bad proxy scheme must warn")
 	}
 }
+
+// --- output pattern analysis (analyze:) ---
+
+type fakeCheck struct{ res Result }
+
+func (f fakeCheck) Name() string               { return f.res.Check }
+func (f fakeCheck) Run(context.Context) Result { return f.res }
+
+func TestRunRespectsCheckEscalatedOptional(t *testing.T) {
+	built := []Built{{Check: fakeCheck{res: Result{Check: "c", OK: false, Optional: true}}, Optional: false}}
+	got := Run(context.Background(), built, 0)
+	if !got[0].Optional {
+		t.Fatalf("a check that returns Optional:true must stay optional, got %+v", got[0])
+	}
+}
+
+func buildAnalyzeCmd(t *testing.T, out, sev string) Result {
+	t.Helper()
+	built, warns := Build(map[string]any{
+		"cfgtest": map[string]any{
+			"type":    "command",
+			"command": []any{"true"},
+			"analyze": map[string]any{"rules": []any{
+				map[string]any{"id": "r", "match": "(?i)deprecated|BACK UP DATA NOW", "severity": sev},
+			}},
+		},
+	}, Deps{DefaultTimeout: time.Second, Runner: fakeRunner{execx.Result{Stdout: out}}})
+	if len(warns) != 0 {
+		t.Fatalf("build warns=%v", warns)
+	}
+	return built[0].Check.Run(context.Background())
+}
+
+func TestCommandCheckAnalyzeWarning(t *testing.T) {
+	res := buildAnalyzeCmd(t, "X is deprecated\n", "warning")
+	if res.OK || !res.Optional {
+		t.Fatalf("warning pattern must give OK=false Optional=true, got %+v", res)
+	}
+	if res.Data["pattern_severity"] != "warning" || res.Data["pattern_id"] != "r" {
+		t.Fatalf("missing pattern data: %+v", res.Data)
+	}
+}
+
+func TestCommandCheckAnalyzeError(t *testing.T) {
+	res := buildAnalyzeCmd(t, "BACK UP DATA NOW\n", "error")
+	if res.OK || res.Optional {
+		t.Fatalf("error pattern must give OK=false Optional=false, got %+v", res)
+	}
+}
+
+func TestCommandCheckAnalyzeClean(t *testing.T) {
+	res := buildAnalyzeCmd(t, "all good\n", "warning")
+	if !res.OK {
+		t.Fatalf("no pattern match must pass, got %+v", res)
+	}
+}

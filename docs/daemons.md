@@ -27,13 +27,16 @@ catalog/
   services/   # daemon-managed long-running services (apache, nginx, mariadb, ...)
   apps/       # installed tools/runtimes (java, perl, sqlite, go, git, ...)
   libs/       # shared libraries used as restart triggers (glibc, pam)
+  patterns/   # output-analysis rule sets referenced by a check's analyze: block
 ```
 
-The directory sets the daemon's category (`service` / `app` / `library`); files
-placed directly in a daemons root default to `service`. `sermoctl services`,
-`sermoctl apps` and `sermoctl libs` list each category, showing which are
-installed, the version their version command reports, and whether they resolve
-without error (add `all` to include the not-installed).
+The directory sets the daemon's category (`service` / `app` / `library` /
+`patterns`); files placed directly in a daemons root default to `service`.
+`sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
+showing which are installed, the version their version command reports, and
+whether they resolve without error (add `all` to include the not-installed).
+`sermoctl patterns` lists the pattern sets and their rule counts (see the
+`analyze:` block in [rules.md](rules.md)).
 
 ## Library daemons
 
