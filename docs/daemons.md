@@ -727,7 +727,7 @@ A second instance is the same file with its own name/unit and variables (e.g.
 Prefer `uses` over [`clone`](#cloning) here: every instance derives from the
 *daemon* and only overrides variables. Reach for `clone` only when one instance
 should copy *another concrete service* almost verbatim. A runnable version of
-this example lives under `configs/examples/multi-instance/`.
+see `docs/sermo-all.yml` for a complete worked configuration.
 
 ## Disabling and deleting inherited entries
 

@@ -45,9 +45,10 @@ defaults:
 }
 
 // TestRepoDefaultConfigHasMonitorTargets guards the acceptance path
-// `sermod run --config ./configs/sermo.yml`: relative paths must load the
-// bundled services and the global watches section must be present (watches are
-// disabled by default, so services are what keep the daemon from exiting early).
+// `sermod run --config ./configs/sermo.yml`. The shipped config deliberately
+// enables no services (operators add their own under an include dir such as
+// `apps`), so the host watches are what must load, validate and build — they
+// are the daemon's out-of-the-box monitor targets.
 func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	global := repoConfigPath(t)
 
@@ -67,10 +68,6 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	if !ok || len(watchesRaw) == 0 {
 		t.Fatal("expected non-empty watches section in repo default config")
 	}
-	if len(cfg.Services) == 0 {
-		t.Fatalf("expected included services from %q, got none (check paths.catalog/includes are relative to the config file)", global)
-	}
-
 	collector := metrics.New(metrics.OSReader{})
 	deps := app.Deps{
 		DefaultTimeout: 10 * time.Second,
@@ -79,9 +76,12 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 	}
 	workers, workerWarns := app.BuildWorkers(cfg, deps, collector)
 	watches, watchWarns := app.BuildWatches(cfg, deps, deps.Interval)
-	if len(workers) == 0 && len(watches) == 0 {
-		t.Fatalf("no runnable workers or watches: services=%d watches_in_cfg=%d worker_warns=%v watch_warns=%v",
-			len(cfg.Services), len(watchesRaw), workerWarns, watchWarns)
+	if len(watchWarns) != 0 || len(workerWarns) != 0 {
+		t.Fatalf("shipped config must build without warnings: worker_warns=%v watch_warns=%v", workerWarns, watchWarns)
+	}
+	if len(watches) == 0 {
+		t.Fatalf("no runnable watches from the shipped config: services=%d watches_in_cfg=%d workers=%d",
+			len(cfg.Services), len(watchesRaw), len(workers))
 	}
 }
 
