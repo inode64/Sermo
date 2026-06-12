@@ -82,3 +82,19 @@ func TestValidateRulesNotifyRefs(t *testing.T) {
 		t.Errorf("expected rule notify ref issue, got: %v", issues)
 	}
 }
+
+func TestValidateTeamsNotifier(t *testing.T) {
+	issues := collect(func(add func(string, ...any)) {
+		validateNotifiers(map[string]any{
+			"ops-teams": map[string]any{"type": "teams", "webhook": "https://prod-01.westeurope.logic.azure.com/workflows/x"},
+			"no-hook":   map[string]any{"type": "teams"},
+		}, add)
+	})
+	joined := strings.Join(issues, "\n")
+	if strings.Contains(joined, "ops-teams") {
+		t.Errorf("valid teams notifier flagged: %v", issues)
+	}
+	if !strings.Contains(joined, "no-hook.webhook is required for a teams notifier") {
+		t.Errorf("expected missing-webhook issue, got: %v", issues)
+	}
+}

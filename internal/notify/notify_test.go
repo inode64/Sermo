@@ -45,8 +45,8 @@ func TestBuildSkipsDisabledNotifier(t *testing.T) {
 
 func TestSupportedTypes(t *testing.T) {
 	got := SupportedTypes()
-	if len(got) != 2 || got[0] != "email" || got[1] != "slack" {
-		t.Fatalf("SupportedTypes = %v, want [email slack]", got)
+	if len(got) != 3 || got[0] != "email" || got[1] != "slack" || got[2] != "teams" {
+		t.Fatalf("SupportedTypes = %v, want [email slack teams]", got)
 	}
 }
 

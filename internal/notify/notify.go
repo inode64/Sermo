@@ -47,6 +47,7 @@ func Enabled(entry map[string]any) bool {
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
 	"email": buildEmail,
 	"slack": buildSlack,
+	"teams": buildTeams,
 }
 
 // Build constructs the named notifiers from the global `notifiers` section
