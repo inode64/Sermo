@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/notify"
 )
 
 // validateWatches checks each host-watch entry: a known check type with valid
@@ -89,7 +90,11 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 		case "":
 			add("notifiers.%s.type is required", name)
 		default:
-			add("notifiers.%s.type %q is not supported (email, slack, teams)", name, typ)
+			// The vocabulary comes from the notify registry, so adding a
+			// transport there cannot leave validation rejecting it by drift.
+			if !slices.Contains(notify.SupportedTypes(), typ) {
+				add("notifiers.%s.type %q is not supported (%s)", name, typ, strings.Join(notify.SupportedTypes(), ", "))
+			}
 		}
 	}
 }
