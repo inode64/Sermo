@@ -33,6 +33,13 @@ checks:
     metric: state
     expect: up
 
+  # Layer 2 — the kernel still has a default route out through the PPP
+  # interface. After a failed renegotiation the interface can stay up with the
+  # route gone; ping alone cannot tell "no route" from "provider down".
+  route:
+    type: route
+    interface: "${ppp_iface}"
+
   # Layer 3 — the provider actually routes traffic: ping a well-known host
   # bound to the PPP interface, so a backup route (4G, second uplink) cannot
   # mask a dead uplink. Sends 3 echoes per cycle; needs CAP_NET_RAW (sermod
