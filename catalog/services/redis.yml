@@ -36,6 +36,8 @@ processes:
     exe: "${binary}"
     user: "${user}"
 
+config_files: [/etc/redis/redis.conf, /etc/redis.conf]
+
 checks:
   service:
     type: service

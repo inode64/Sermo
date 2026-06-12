@@ -41,6 +41,8 @@ processes:
     exe: "${binary}"
     user: "${user}"
 
+config_files: [/etc/mysql/my.cnf, /etc/my.cnf]
+
 checks:
   service:
     type: service

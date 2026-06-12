@@ -13,6 +13,8 @@ preflight:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/named/named.pid
 
+config_files: [/etc/bind/named.conf, /etc/named.conf]
+
 checks:
   service: { type: service, expect: active }
   port: { type: dns, port: "${port}" }
