@@ -2,6 +2,7 @@ package config
 
 import (
 	"maps"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -123,7 +124,9 @@ func validateCleanOnStop(raw any, add addFunc) {
 			continue
 		}
 		if recursive {
-			clean := pathClean(path)
+			// filepath.Clean also collapses ".." segments, so a path like
+			// /var/log/../.. cannot sidestep the protected-dir check.
+			clean := filepath.Clean(path)
 			_, isProtected := protectedDirs[clean]
 			if strings.ContainsAny(path, "*?[") {
 				add("stop_policy.clean_on_stop[%d] recursive path %q must not be a glob", i, path)
@@ -134,24 +137,13 @@ func validateCleanOnStop(raw any, add addFunc) {
 	}
 }
 
-// pathClean normalizes an absolute path for the protected-dir check (trailing
-// slash removed, "." segments collapsed) without importing path/filepath here.
-func pathClean(p string) string {
-	for len(p) > 1 && strings.HasSuffix(p, "/") {
-		p = p[:len(p)-1]
-	}
-	return p
-}
-
-// pathDepth counts the non-empty path components below root ("/var/cache" -> 2).
+// pathDepth counts the path components below root of a filepath.Clean'ed
+// absolute path ("/var/cache" -> 2, "/" -> 0).
 func pathDepth(p string) int {
-	n := 0
-	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {
-		if seg != "" {
-			n++
-		}
+	if p == "/" {
+		return 0
 	}
-	return n
+	return strings.Count(p, "/")
 }
 
 func validateProcesses(tree map[string]any, add addFunc) {
