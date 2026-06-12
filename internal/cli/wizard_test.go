@@ -141,7 +141,7 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 func TestMergeWizardWatchesMigratesLegacyEnabledPath(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [apps-enabled]\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [apps]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage"}, "then": map[string]any{"notify": []any{"ops"}}}})
@@ -155,7 +155,7 @@ func TestMergeWizardWatchesMigratesLegacyEnabledPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "enabled:") || !strings.Contains(string(data), "includes:") || !strings.Contains(string(data), "apps-enabled") || !strings.Contains(string(data), "storage") {
+	if strings.Contains(string(data), "enabled:") || !strings.Contains(string(data), "includes:") || !strings.Contains(string(data), "apps") || !strings.Contains(string(data), "storage") {
 		t.Fatalf("legacy path not migrated to includes: %s", data)
 	}
 }

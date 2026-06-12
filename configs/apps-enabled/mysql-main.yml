@@ -1,4 +1,0 @@
-kind: service
-name: mysql-main
-uses: mysql
-# Inherits the unit candidates from the `mysql` daemon (service: systemd/openrc).

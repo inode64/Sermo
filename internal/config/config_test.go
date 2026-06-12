@@ -326,7 +326,7 @@ service: { name: redis }
 func TestLoadResolvesRelativePaths(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "configs")
-	enabledDir := filepath.Join(configDir, "apps-enabled")
+	enabledDir := filepath.Join(configDir, "apps")
 	catalogDir := filepath.Join(root, "catalog")
 	for _, d := range []string{enabledDir, catalogDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
@@ -352,7 +352,7 @@ uses: redis
 engine: { backend: auto }
 paths:
   catalog: [../catalog]
-  includes: [apps-enabled]
+  includes: [apps]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }

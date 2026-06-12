@@ -63,7 +63,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	includeDirs := global.Includes
 	if len(includeDirs) == 0 {
-		includeDirs = []string{"/etc/sermo/apps-enabled"}
+		includeDirs = []string{"/etc/sermo/apps"}
 	}
 
 	for _, dir := range catalogDirs {
@@ -136,7 +136,7 @@ func absCatalogDirs(dirs []string) []string {
 
 // resolveConfigPaths makes catalog/includes/runtime/state paths absolute. Relative
 // entries are resolved against the global config file's directory so a tree like
-// configs/sermo.yml with `includes: [apps-enabled]` loads configs/apps-enabled
+// configs/sermo.yml with `includes: [apps]` loads configs/apps
 // when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))

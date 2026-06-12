@@ -1,4 +1,4 @@
-# Sermo global configuration.
+# Sermo minimal configuration.
 #
 # Engine-wide settings are not merged into individual services; only the
 # per-service parts of `defaults` (stop_policy, policy, rule_window) are.
@@ -29,8 +29,7 @@ paths:
     - /etc/sermo/catalog-available
   # Relative to this file's directory (configs/).
   includes:
-    - apps-enabled
-    # Wizard-generated watches are added as separate include directories, e.g.
+    # - apps
     # - storage
     # - network
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
@@ -97,9 +96,6 @@ notifiers:
     # enabled: false  # keep configured but skip delivery attempts
     type: slack
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
-  # ops-teams:
-  #   type: teams     # Microsoft Teams Workflows incoming-webhook URL
-  #   webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/..."
 
 # Default notification targets for watches/rules that omit notify. Uncomment to
 # avoid repeating then.notify everywhere. Use per-watch notify: [none] to suppress.
@@ -125,15 +121,6 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
-  # Watch that the host keeps an up default route (read from /proc/net/route);
-  # `interface` additionally pins the egress device — the uplink signal a ping
-  # alone cannot give (no route vs provider down). Fires the hook on loss.
-  # uplink-route:
-  #   monitor: disabled
-  #   check: { type: route, interface: ppp0 }
-  #   then:
-  #     notify: [ops-email]
-
   # Watch system load average (per-core, so the thresholds are machine-agnostic).
   load:
     monitor: disabled
@@ -206,19 +193,6 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-zombies-alert.sh]
-  # Watch a TLS certificate: alert before expiry, on invalid chain, or on an
-  # algorithm/issuer change.
-  api-cert:
-    monitor: disabled
-    interval: 1h
-    check:
-      type: cert
-      host: api.example.com
-      expires_in_days: 14
-      on_algorithm_change: true
-      on_issuer_change: true
-    then:
-      notify: [ops-email]
   # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
   entropy:
     monitor: disabled
@@ -241,21 +215,6 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-conntrack-alert.sh]
-  # Watch a block device's I/O rates from /proc/diskstats deltas: busy share,
-  # throughput and average request latency (the saturated-disk signal).
-  #sda-busy:
-  #  monitor: disabled
-  #  interval: 30s
-  #  check:
-  #    type: diskio
-  #    device: sda
-  #    util_pct: { op: ">=", value: 90 }
-  #    await_ms: { op: ">", value: 50 }
-  #  for: { cycles: 3 }
-  #  then:
-  #    hook:
-  #      command: [/usr/local/bin/sermo-diskio-alert.sh, sda]
-  # Watch kernel OOM kills: fire whenever the out-of-memory killer reaps a process.
   oom:
     monitor: disabled
     interval: 30s
@@ -279,21 +238,3 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-swap-io.sh]
-  # Watch processes by name: fire a hook per matching PID that has been alive at
-  # least `for` and/or crosses a CPU/memory/IO threshold (edge-triggered per PID).
-  hot-workers:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: process
-      name: myworker
-      user: www-data
-      for: 5m
-      cpu: { op: ">", value: 80 }
-      memory: { op: ">", value: 524288000 }
-      io: { op: ">", value: 10485760 }
-      gone: true                          # also fire when a tracked PID disappears
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-proc-alert.sh]
-        timeout: 10s

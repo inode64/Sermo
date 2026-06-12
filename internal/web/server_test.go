@@ -67,7 +67,7 @@ func (f *fakeBackend) ConfigRender(_ context.Context, name, format string) (Conf
 				Name:        name,
 				Format:      format,
 				Content:     "service: " + name + "\n",
-				SourceFiles: []string{"/etc/sermo/sermo.yml", "/etc/sermo/apps-enabled/" + name + ".yml"},
+				SourceFiles: []string{"/etc/sermo/sermo.yml", "/etc/sermo/apps/" + name + ".yml"},
 			}, true, nil
 		}
 	}
