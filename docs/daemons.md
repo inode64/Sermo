@@ -772,12 +772,21 @@ the global `watches:` section; see [configuration](configuration.md#host-watches
 
 ## Auxiliary commands
 
-`commands` is informational metadata (e.g. a version command). Sermo never runs
-it as part of monitoring or remediation; the `sermoctl apps`/`libs`/`services`
-listings run the `version` command to report a daemon's version and confirm it
-runs. That run can assert its outcome, the same way a watch hook or `command`
-check does: `expect_exit` (default 0) and optional `expect_stdout`/`expect_stderr`
-matchers — a substring or an `{op, value}` comparison (`== != > >= < <= contains =~`).
+`commands` declares named auxiliary commands. Sermo never runs them as generic
+checks, but the **reserved names** are consumed by features:
+
+- **`version`** (and `version_short`) — run by the `sermoctl apps`/`libs`/
+  `services` listings to report a daemon's version, and **each cycle** by the
+  `version.on_change` monitor (see [Service health conditions](rules.md#service-health-conditions-version--state--config)).
+  When both exist, `preflight.version` takes precedence over `commands.version`.
+- **`reload`** — run by the safe reload operation (`sermoctl reload <service>`
+  and `reload_on_change` rules) when the daemon reloads via a command rather
+  than its init unit.
+
+Any other entry is informational only. A run can assert its outcome, the same
+way a watch hook or `command` check does: `expect_exit` (default 0) and optional
+`expect_stdout`/`expect_stderr` matchers — a substring or an `{op, value}`
+comparison (`== != > >= < <= contains =~`).
 
 ```yaml
 commands:

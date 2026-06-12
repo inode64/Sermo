@@ -235,8 +235,18 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case "process":
 		validateState(node["process"], "state", processStates, "running, zombie, absent", path+".process", add)
 	case "file":
-		if m, ok := node["file"].(map[string]any); !ok || cfgval.String(m["path"]) == "" {
+		m, ok := node["file"].(map[string]any)
+		if !ok || cfgval.String(m["path"]) == "" {
 			add("%s.file requires a path", path)
+		}
+		if ok {
+			// `exists` defaults to true at runtime; a non-boolean (e.g. the
+			// string "false") would silently act as true.
+			if v, present := m["exists"]; present {
+				if _, isBool := v.(bool); !isBool {
+					add("%s.file.exists must be a boolean", path)
+				}
+			}
 		}
 	case "command":
 		m, _ := node["command"].(map[string]any)
