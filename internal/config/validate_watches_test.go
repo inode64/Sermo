@@ -515,7 +515,7 @@ func TestValidateZombiesWatch(t *testing.T) {
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.z.check.count {op, value} is required for a zombies check") {
+	if !hasIssue(bad, "watches.z.check requires at least one of count") {
 		t.Fatalf("expected missing-count issue, got %v", bad)
 	}
 }
@@ -599,7 +599,7 @@ func TestValidateEntropyWatch(t *testing.T) {
 		},
 	})
 	for _, w := range []string{
-		"watches.no-avail.check.avail {op, value} is required for an entropy check",
+		"watches.no-avail.check requires at least one of avail",
 		"watches.bad-op.check.avail has an invalid op",
 		"watches.bad-op.check.avail value \"x\" must be numeric",
 	} {
