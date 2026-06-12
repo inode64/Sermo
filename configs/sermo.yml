@@ -85,10 +85,10 @@ web:
   # guest: false                 # set true to allow anonymous read-only access
 
 # Named notification targets, referenced by name from a watch's then.notify.
-# Pluggable by type (email now; slack/teams/… can be added). Used only when referenced.
+# Pluggable by type (email, slack and teams are built in; new transports can be
+# added). Used only when referenced; enabled defaults to true.
 notifiers:
   ops-email:
-    enabled: true
     type: email
     dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
