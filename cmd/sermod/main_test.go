@@ -171,3 +171,43 @@ func repoConfigPath(t *testing.T) string {
 		dir = parent
 	}
 }
+
+func TestWebAuthFromConfig(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"web": map[string]any{
+			"password":       "admin-pw",
+			"guest_password": "guest-pw",
+			"guest":          true,
+		},
+	}}}
+	auth := webAuth(cfg)
+	if auth.AdminPassword != "admin-pw" || auth.GuestPassword != "guest-pw" || !auth.AnonymousGuest {
+		t.Fatalf("auth = %+v", auth)
+	}
+
+	empty := webAuth(&config.Config{Global: config.Global{Raw: map[string]any{}}})
+	if empty.AdminPassword != "" || empty.GuestPassword != "" || empty.AnonymousGuest {
+		t.Fatalf("auth without web section = %+v, want zero value", empty)
+	}
+}
+
+func TestEngineAndNotifierAccessors(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"engine":    map[string]any{"backend": "openrc", "interval": "30s"},
+		"notifiers": map[string]any{"ops": map[string]any{"type": "slack"}},
+	}}}
+	if got := engineString(cfg, "backend"); got != "openrc" {
+		t.Fatalf("engineString(backend) = %q, want openrc", got)
+	}
+	if got := engineString(cfg, "missing"); got != "" {
+		t.Fatalf("engineString(missing) = %q, want empty", got)
+	}
+	if raw := notifiersRaw(cfg); len(raw) != 1 {
+		t.Fatalf("notifiersRaw = %v, want the ops entry", raw)
+	}
+
+	bare := &config.Config{Global: config.Global{Raw: map[string]any{}}}
+	if engineString(bare, "backend") != "" || notifiersRaw(bare) != nil {
+		t.Fatal("accessors on an empty config must return zero values")
+	}
+}
