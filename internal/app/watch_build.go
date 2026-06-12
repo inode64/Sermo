@@ -117,7 +117,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil && !config.NotifyOptedOut(names) {
 		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
 	}
 	w := &Watch{
@@ -206,7 +206,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-		if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) {
+		if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) {
 			warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
 			continue
 		}
@@ -243,7 +243,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) {
 		return nil, "watch " + name + ": then requires a hook and/or notify"
 	}
 	fw := &fileWatcher{
@@ -284,7 +284,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) {
 		return nil, "watch " + name + ": then requires a hook and/or notify"
 	}
 	pw := &procWatcher{

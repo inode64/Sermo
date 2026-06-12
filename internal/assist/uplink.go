@@ -50,8 +50,8 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		probeName: p.Ask("Public DNS name to resolve through the uplink", "example.com"),
 		forCycles: p.AskInt("Require probe failures for how many cycles first?", 3),
 	}
-	// Uplink watches have no non-notify action, so the answer must deliver
-	// somewhere; ensureNotifyAction re-asks until it does.
+	// ensureNotifyAction re-asks only an inert 'default'; the explicit 'none'
+	// opt-out builds monitor-only watches and is always accepted.
 	s.notifiers = ensureNotifyAction(p, env, chooseNotifiers(p, env), false)
 
 	watches := map[string]any{}
