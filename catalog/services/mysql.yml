@@ -75,7 +75,6 @@ checks:
 stop_policy:
   graceful_timeout: 120s
   term_timeout: 60s
-  force_kill: false
   kill_only_if:
     users: ["${user}"]
     exe_any:
