@@ -590,14 +590,10 @@ func onChangeNotify(v any) ([]string, bool) {
 }
 
 // versionCommandRaw returns the raw version-command argv from the resolved tree
-// (preflight.version then commands.version), or nil.
+// (preflight.version then commands.version, via the shared resolver), or nil.
 func versionCommandRaw(tree map[string]any) any {
-	for _, src := range []string{"preflight", "commands"} {
-		if section, ok := tree[src].(map[string]any); ok {
-			if entry, ok := section["version"].(map[string]any); ok && entry["command"] != nil {
-				return entry["command"]
-			}
-		}
+	if entry := checks.VersionCommandEntry(tree, "version"); entry != nil {
+		return entry["command"]
 	}
 	return nil
 }
