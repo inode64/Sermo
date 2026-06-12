@@ -468,17 +468,6 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	return primary, primaryErr
 }
 
-// stopArtifacts maps a service's resolved stop_policy invariants into the engine
-// form (pidfile paths + files-absent globs + the clean_after_stop master flag).
-func stopArtifacts(tree map[string]any) operation.StopArtifacts {
-	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
-	out := operation.StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled}
-	for _, c := range clean {
-		out.Clean = append(out.Clean, operation.CleanPath{Path: c.Path, Recursive: c.Recursive})
-	}
-	return out
-}
-
 // defaultOperate wires the real operation engine from a resolved service and
 // runs the requested action.
 func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
@@ -509,7 +498,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Unit:             unit,
 		Backend:          string(detection.Backend),
 		AlsoUnits:        config.AdditionalUnits(resolved.Tree, string(detection.Backend)),
-		StopArtifacts:    stopArtifacts(resolved.Tree),
+		StopArtifacts:    app.BuildStopArtifacts(resolved.Tree),
 		Tree:             resolved.Tree,
 		Manager:          manager,
 		Locker:           &locker,
