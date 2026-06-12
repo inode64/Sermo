@@ -99,7 +99,7 @@ func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 		t.Fatalf("size check should build: warns=%v", warns)
 	}
 	sc, ok := built[0].Check.(*sizeCheck)
-	if !ok || sc.growBy != 1_000_000_000 || sc.window != time.Hour {
+	if !ok || sc.growBy != 1<<30 || sc.window != time.Hour {
 		t.Fatalf("built = %T %+v", built[0].Check, built[0].Check)
 	}
 	// First run baselines a small file: no alert, and it reads the real size.
