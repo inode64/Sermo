@@ -76,7 +76,7 @@ func Diagnose(cfg *config.Config, store Store, host Host) Result {
 
 	diagConfig(b, cfg)
 	diagDatabase(b, cfg, store)
-	for _, name := range sortedServiceNames(cfg) {
+	for _, name := range cfg.SortedServiceNames() {
 		diagService(b, cfg, name, gi, host)
 	}
 	diagWatches(b, cfg, gi, host)
@@ -125,15 +125,6 @@ func diagDatabase(b *builder, cfg *config.Config, store Store) {
 			b.add(LevelWarning, "database", "stored data (monitoring state, SLA, or measurements) for service %q which is no longer configured", name)
 		}
 	}
-}
-
-func sortedServiceNames(cfg *config.Config) []string {
-	names := make([]string, 0, len(cfg.Services))
-	for name := range cfg.Services {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
 
 // globalInterval reads engine.interval, defaulting to 30s.
