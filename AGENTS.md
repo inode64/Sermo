@@ -1,137 +1,20 @@
-# Sermo Agent Instructions
-
-## Project summary
-
-Sermo is a safe service monitoring and control system for Linux.
-
-- Project: `Sermo`
-- Daemon: `sermod`
-- CLI: `sermoctl`
-- Default config directory: `/etc/sermo`
-- Default runtime directory: `/run/sermo`
-- Default state directory: `/var/lib/sermo`
-- Primary target OS: Linux
-- Initial init/service backends: systemd and OpenRC
-
-Sermo must provide a portable, safe abstraction over Linux service managers. Users and scripts should be able to call `sermoctl restart mysql` without needing to know whether the system uses `systemctl` or `rc-service`.
-
-## Core goals
-
-Implement Sermo as two binaries:
-
-```text
-sermod    # daemon that monitors services and applies safe remediation
-sermoctl  # CLI wrapper for status, preflight, locks, config rendering and actions
-```
-
-The daemon and CLI must share the same internal engine for:
-
-```text
-service manager detection
-config loading and rendering
-checks
-rules
-guards
-locks
-safe start/stop/restart operations
-process discovery
-```
-
-Do not create two separate implementations of service actions.
-
-
-## Go conventions
-
-Follow these rules:
-
-1. Write idiomatic, simple Go.
-2. Use `context.Context` for every operation that can block.
-3. Every external command must have a timeout.
-4. Wrap errors with context using `fmt.Errorf("...: %w", err)`.
-5. Prefer small interfaces at package boundaries.
-6. Keep exported APIs minimal.
-7. Use table-driven tests for config, rules and safety logic.
-8. Do not panic in normal error paths.
-9. Avoid global mutable state.
-10. Avoid package names that conflict with standard concepts, such as `init`.
-
-## Code formatting (Go)
-
-**Every Go file must be `gofmt`-clean after any modification.** Run `gofmt` on a
-file whenever you change it, so the tree always conforms to the standard Go
-formatting. This keeps diffs minimal and consistent with the rest of the
-codebase.
-
-```sh
-gofmt -w <file.go>        # format one file
-gofmt -l ./internal ./cmd # list any non-conforming files (should be empty)
-```
-
-This is enforced automatically in Claude Code: a `PostToolUse` hook in
-`.claude/settings.json` runs `gofmt -w` on every `.go` file written or edited, so
-formatting never drifts. If you edit Go outside Claude Code (another editor, a
-script), run `gofmt -w` yourself before committing; configure your editor to
-"format on save" with gofmt to make this automatic.
-
-## Static analysis and linting (Go)
-
-**Every modification must pass the project's static-analysis tools before it is
-committed**, to comply with the programming standards. These complement `gofmt`
-and catch bugs, vulnerabilities, security issues, and style drift. The binaries
-live in `~/go/bin` (add it to `PATH`).
-
-Run all of them against the whole module after any change:
-
-```sh
-export PATH="$HOME/go/bin:$PATH"
-
-govulncheck ./...                 # known vulnerabilities (deps + std lib)
-staticcheck ./...                 # correctness / bug static analysis
-revive -config revive.toml ./...  # style/lint (config tuned for this repo)
-golangci-lint run                 # runs gosec (security); uses .golangci.yml
-```
-
-All four must report **no findings** before committing. Notes:
-
-- **`revive`** is driven by `revive.toml` at the repo root. It mirrors revive's
-  default rule set but disables `unused-parameter`, because many methods
-  implement interfaces (e.g. `web.Backend`) whose signature includes a `ctx`
-  the implementation legitimately ignores; renaming those to `_` hurts
-  readability. Document new exported symbols (the `exported` rule is on).
-- **`gosec`** is not installed standalone in `~/go/bin`, so it is run through
-  golangci-lint (which bundles it) via `.golangci.yml` at the repo root; that
-  config enables only gosec. Accepted exceptions are documented there: `G115`
-  (noisy integer-overflow rule on already-bounded values) and `G306` in test
-  fixtures. By-design cases, such as `G204` (executing operator-configured
-  commands) and intentional `0644` writes (pidfile, generated YAML), are
-  suppressed at the call site with `//nolint:gosec` plus a justifying comment.
-  Keep that pattern: prefer a justified inline `//nolint:gosec` over widening
-  the config.
-- Unlike `gofmt` (auto-applied per file by the Claude Code hook), these tools
-  analyze the whole module and are too slow to run on every edit. Run them once
-  before committing, or wire them into CI / a pre-commit hook.
+# Sermo — project conventions
 
 ## Reuse and shared behavior
 
-Treat reuse as a project rule, not just a style preference.
+Before adding a new helper, parser, validator, runner or web/backend adapter,
+look for existing code that already solves the same problem and extend it when
+that keeps the ownership boundary clear. Do not duplicate validation, parsing,
+comparison, notification, monitoring or action-dispatch logic across `sermod`,
+`sermoctl`, web, watches and daemons.
 
-1. Before adding a new helper, parser, validator, runner or UI/backend adapter,
-   search for existing code that already solves the same problem and extend it
-   when that keeps the ownership boundary clear.
-2. Do not duplicate validation, parsing, comparison, notification, monitoring or
-   action dispatch logic across `sermod`, `sermoctl`, web, watches and daemons.
-   Prefer one shared implementation with narrow adapters at the edges.
-3. When a new check, option, monitor flag, notification behavior or web action is
-   generally useful to both host `watches:` and service daemons, implement it for
-   both surfaces in the same change unless there is a documented reason not to.
-4. If a feature intentionally applies only to watches or only to daemons, state
-   that limitation in code comments where the dispatch/validation decision lives
-   and in the user docs.
-5. Keep examples and documentation in step with shared behavior: update
-   `docs/configuration.md`, `docs/rules.md`, `docs/sermo-all.yml`, daemon docs
-   and `configs/sermo.yml` whenever the YAML surface changes; `docs/safety.md`
-   for engine/lock/process semantics and `docs/cli.md` for commands and exit
-   codes.
+When a new check, option, monitor flag, notification behavior or web action is
+generally useful to both host `watches:` and service daemons, implement it for
+both surfaces in the same change unless there is a documented reason not to. If
+the feature intentionally applies only to one surface, document that limitation
+where the dispatch/validation decision lives and in the user docs. Keep
+`docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml` in
+step with YAML behavior.
 
 ## Web UI cohesion
 
@@ -146,17 +29,17 @@ Concretely, every data panel is a `<details id="{name}-section">` with a
 and a `<table class="{name}-table">` with a sticky header. The one deliberate
 distinction:
 
-1. **Scrollable panel** — wrap the table in `<div class="table-wrap">`, which
-   adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services (a
-   long, unbounded list).
-2. **Non-scrollable panel** — place the bare `<table>` directly inside the
-   `<details>`, no wrapper. Used by Host watches, Events, Notifiers and
-   Applications (the page scrolls as a whole instead of trapping a panel in
-   its own scrollbar).
+- **Scrollable panel** — wrap the table in `<div class="table-wrap">`, which
+  adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services (a
+  long, unbounded list).
+- **Non-scrollable panel** — place the bare `<table>` directly inside the
+  `<details>`, no wrapper. Used by Host watches, Events, Notifiers and
+  Applications (the page scrolls as a whole instead of trapping a panel in its
+  own scrollbar).
 
 Pick the variant that matches the panel's nature and reuse it verbatim; never
 hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
-introduce a genuinely new pattern, document it here and in `CLAUDE.md` so the
+introduce a genuinely new pattern, document it here and in `AGENTS.md` so the
 next change can follow it.
 
 The visual layer is a token-driven design system (June 2026 redesign):
@@ -189,28 +72,29 @@ The visual layer is a token-driven design system (June 2026 redesign):
 script-src remains nonce-strict (see `securityHeaders` in
 `internal/web/server.go`).
 
+
 ## Wizard option selection
 
-The wizard (`sermoctl wizard`, `internal/assist`) drives every selection through
-the shared `Prompt` helpers — never hand-roll a bespoke question.
-
-- Multi-selects use `Prompt.MultiChoose`: item numbers, the keyword `all`, or an
-  option's name.
-- Menus with reserved picks use `Prompt.MultiChooseKeyword`: the numbered list
-  shows **only the real options**; reserved answers ride in the question hint.
-- One vocabulary everywhere: `all` selects everything, `none` opts out,
-  `default` inherits the global setting.
-- The notifier menu lists only the notifiers defined in the config. `none` and
-  `default` are accepted even when none are defined.
-- `none` is **always valid** — with or without a global notify default — and
-  produces a monitor-only watch (`notify: [none]`: state and events, no
-  delivery). It is also rejected as a notifier name.
-- Only an inert `default` (no global notify configured, no other action like
-  auto-expand) makes the wizard explain why and re-ask, via the shared
-  `ensureNotifyAction`. Never abort with a hard error; never hand-roll that
-  validation per assistant.
-- Update `docs/configuration.md` and this section when adding assistants or
-  selection steps.
+The interactive wizard (`sermoctl wizard`, `internal/assist`) drives every
+selection through the shared `Prompt` helpers — never hand-roll a bespoke
+question. Multi-selects use `Prompt.MultiChoose` (item numbers, the keyword
+`all`, or an option's name); menus with reserved picks use
+`Prompt.MultiChooseKeyword`, where the numbered list shows **only the real
+options** and the reserved answers ride in the question hint instead of
+occupying rows. Reuse one consistent **all / none / default** vocabulary:
+`all` selects everything; `none` opts out; `default` inherits the global
+setting. In the notifier menu the list shows only the notifiers defined in the
+config, and the `none`/`default` keywords are **accepted even when the config
+defines no notifiers**, so an expand-only or opt-out watch still has a valid
+answer. The reserved `none` is **always accepted** — with or without a global
+notify default — and produces a monitor-only watch (`notify: [none]`: state and
+events, no delivery); it is also rejected as a notifier name. Only an inert
+`default` (no global notify configured, and no other action like auto-expand)
+makes the wizard explain why and **re-ask via the shared `ensureNotifyAction`**
+— never abort the run with a hard error, and never hand-roll that validation
+per assistant. Keep these invariants when adding new assistants or selection
+steps, and update `docs/configuration.md` and the wizard spec in the same
+change.
 
 ## Catalog: instanced systemd daemons
 
@@ -233,35 +117,63 @@ derive the instance from code, reusing existing machinery:
 
 Keep `docs/daemons.md` (built-in variable table) in step when adding a built-in.
 
-## Native Go, not external processes
+## Code formatting (Go)
 
-**Always implement functionality with native Go — the standard library, or
-`golang.org/x/sys` / `golang.org/x/net` — and avoid spawning external processes or
-scripts wherever possible.** Reading `/proc`/`/sys`, syscalls (statfs, uname),
-TLS/x509, SMTP, HTTP, ELF, etc. are all native; reach for `os/exec` only when
-there is genuinely no native equivalent.
+**Every Go file must be `gofmt`-clean after any modification.** Run `gofmt` on a
+file whenever you change it, so the tree always conforms to the standard Go
+formatting. This keeps diffs minimal and consistent with the rest of the codebase.
 
-- **Never use a shell.** All process execution goes through an explicit argv
-  (`execx.Runner` / `os/exec` with name+args); no `sh -c`, no string command
-  lines, so check/hook commands can't be shell-injected. Every external command
-  carries a timeout (rule 3).
-- **Justified external-process exceptions** (do not add more without a clear
-  reason, and document them here):
-  - The **service-manager backends** (`systemctl`, `rc-service`): systemd/OpenRC
-    have no native Go API in scope, and pulling in D-Bus is a heavier dependency.
-  - **User-configured commands**: `command` checks, watch `hook`s, and the
-    `sermoctl lock -- COMMAND` wrapper — running an external program is their
-    whole purpose. Argv only.
-  - The **`libraries` check's `ldd`**: it queries the dynamic loader; reimplementing
-    that from `debug/elf` would be unreliable.
-  - The **disk watch's `then.expand` action** (`internal/volume`): LVM and
-    filesystem growth have no native Go API, so it shells out to `lvs`/`vgs`/
-    `lvextend` and `resize2fs`/`xfs_growfs`/`btrfs`. The orchestration —
-    resolving the path's mount (native `/proc/mounts`) and LV, checking VG free,
-    capping the request, sequencing extend-then-grow — is all Go.
-- When you need OS information, prefer a syscall over a tool: e.g. architecture is
-  read with `unix.Uname` (not `uname -m`), filesystem usage with `syscall.Statfs`
-  (not `df`), process data from `/proc` (not `ps`).
+```sh
+gofmt -w <file.go>        # format one file
+gofmt -l ./internal ./cmd # list any non-conforming files (should be empty)
+```
+
+This is enforced automatically in Claude Code: a `PostToolUse` hook in
+`.claude/settings.json` runs `gofmt -w` on every `.go` file written or edited, so
+formatting never drifts. If you edit Go outside Claude Code (another editor, a
+script), run `gofmt -w` yourself before committing — configure your editor to
+"format on save" with gofmt to make this automatic.
+
+## Static analysis & linting (Go)
+
+**Every modification must pass the project's static-analysis tools before it is
+committed**, to comply with the programming standards. These complement `gofmt`
+and catch bugs, vulnerabilities, security issues, and style drift. The binaries
+live in `~/go/bin` (add it to `PATH`).
+
+Run all of them against the whole module after any change:
+
+```sh
+export PATH="$HOME/go/bin:$PATH"
+
+govulncheck ./...                 # known vulnerabilities (deps + std lib)
+staticcheck ./...                 # correctness / bug static analysis
+revive -config revive.toml ./...  # style/lint (config tuned for this repo)
+golangci-lint run                 # runs gosec (security); uses .golangci.yml
+```
+
+All four must report **no findings** before committing. Notes:
+
+- **`revive`** is driven by `revive.toml` at the repo root. It mirrors revive's
+  default rule set but disables `unused-parameter`, because many methods
+  implement interfaces (e.g. `web.Backend`) whose signature includes a `ctx`
+  the implementation legitimately ignores; renaming those to `_` hurts
+  readability. Document new exported symbols (the `exported` rule is on).
+- **`gosec`** is not installed standalone in `~/go/bin`, so it is run through
+  golangci-lint (which bundles it) via `.golangci.yml` at the repo root — that
+  config enables only gosec and is in the **v2 format** (`version: "2"`), so the
+  `golangci-lint` binary must be v2. Accepted exceptions are documented there:
+  `G115` (noisy integer-overflow rule on already-bounded values) and, in test
+  fixtures only, `G306` (0644 temp files), `G101` (fake DSNs) and `G703`
+  (t.TempDir paths). By-design cases — `G204` (executing operator-configured
+  commands), intentional `0644` writes (pidfile, generated YAML), the bounded
+  `args[i]` reads gosec's G602 cannot follow, and the shutdown-context G118 —
+  are suppressed at the call site with `//nolint:gosec` plus a justifying
+  comment. Keep that pattern: prefer a justified inline `//nolint:gosec` over
+  widening the config.
+- Unlike `gofmt` (auto-applied per file by the Claude Code hook), these tools
+  analyze the whole module and are too slow to run on every edit — run them once
+  before committing, or wire them into CI / a pre-commit hook.
 
 ## Security and safety invariants
 
@@ -310,86 +222,7 @@ These rules are mandatory.
     across all services is bounded by `engine.max_parallel_checks` (a separate
     global pool). See `docs/safety.md` (scheduler and concurrency).
 
-## Check types are unified across checks and watches
-
-There is **one set of check types**, shared by a service's
-`checks:`/`preflight:`/`postflight:` (referenced from rules) and by host
-`watches:` (which fire a hook). The build path is shared
-(`internal/checks.buildCheck`, used by both `Build` and `BuildInline`).
-
-**Standing rule — a new check type must land on both surfaces in one change:**
-
-- Add it to `checks.SingleShotCheckTypes` (config validation trusts that list)
-  and validate its fields in shared validators (`internal/config/`) used by both
-  the service-check and watch paths, so the grammars cannot drift.
-- Decide its firing polarity: condition-style (`OK == true` is the alert, e.g.
-  disk/load/count) vs health-style (`OK == true` is healthy, e.g. tcp/http).
-  `checks.IsHealthType` drives whether a watch fires on failure — keep it
-  current.
-- The multi-metric `metrics:` map shape of `net`/`icmp`/`swap` and the
-  multi-target `file`/`process` watches are watch-only; the single-metric form
-  of `net`/`icmp`/`swap` (an explicit `metric:` field) works in `checks:` too.
-- Update `docs/rules.md` (check-type table), `docs/configuration.md` (host
-  watches) and a `configs/sermo.yml` example in the same change.
-
-## Notifications are pluggable
-
-Notifications go to named, typed **notifiers** under the global `notifiers`
-section (`internal/notify`), referenced by name from a watch's `then.notify`
-list. A watch's `then` block may have a `hook`, a `notify` list, or both (at least
-one). Implemented transports: `email` (SMTP), `slack` (incoming webhook) and
-`teams` (Workflows incoming webhook, Adaptive Card payload).
-
-**Standing rule — keep notifiers extensible; adding a transport (discord, …) must
-not require changes outside `internal/notify` and the docs:**
-
-- Register the new type's constructor in `internal/notify` (the `builders` map)
-  and implement the `Notifier` interface (`Name`/`Type`/`Send`). Use only the Go
-  standard library where feasible (the project avoids new dependencies).
-- Add its config validation to `validateNotifiers` (`internal/config/validate_global.go`)
-  and keep `notify.SupportedTypes()` in step.
-- The watch/dispatch side is transport-agnostic (it addresses every notifier
-  through the interface) — do not special-case a transport there.
-- Update `docs/configuration.md` (Notifications) and a `configs/sermo.yml`
-  example in the same change.
-
-## Testing requirements
-
-Any change touching safety-sensitive behavior must include tests.
-
-Required test areas:
-
-```text
-config merge
-daemon uses resolution
-service clone resolution
-cycle detection
-variable expansion
-backend detection with mocked commands
-systemd degraded detection
-both-present backend detection prefers active init
-systemd service name normalization
-OpenRC status parsing
-rule engine and/or/not
-for cycles
-within cycles
-guard blocking
-preflight blocking
-postflight failure reporting
-lock blocking
-operation lock path does not collide with named runtime locks
-remediation cooldown and rate limiting
-positive resolved policy.cooldown validation
-paths.runtime lock directory derivation and paths.locks rejection
-safe restart sequencing
-restart never starts after orphan_processes
-process matching safety
-SIGKILL policy validation
-```
-
-Use fake command runners instead of running real `systemctl`, `rc-service`, `kill` or service commands in unit tests.
-
-## Before committing checklist
+## Before committing — checklist
 
 ```sh
 export PATH="$HOME/go/bin:$PATH"
@@ -400,20 +233,3 @@ staticcheck ./...                 # no findings
 revive -config revive.toml ./...  # no findings
 golangci-lint run                 # gosec: no findings (.golangci.yml)
 ```
-
-When useful, also run `go vet ./...` and `go test -race ./...`. If a command
-cannot be run, state why.
-
-## Definition of done
-
-A task is not done unless:
-
-```text
-- code compiles
-- tests were added or updated where appropriate
-- safety invariants are preserved
-- config examples remain valid
-- CLI behavior is documented when changed
-- error messages are useful to a sysadmin
-```
-
