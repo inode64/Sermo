@@ -51,6 +51,10 @@ var (
 	RaidPredFields = []string{"degraded", "recovering", "arrays"}
 	// EdacPredFields are the optional predicates of an edac check.
 	EdacPredFields = []string{"ce", "ue"}
+	// EntropyPredFields is the single required predicate of an entropy check.
+	EntropyPredFields = []string{"avail"}
+	// ZombiePredFields is the single required predicate of a zombies check.
+	ZombiePredFields = []string{"count"}
 )
 
 // parseLevelPreds reads the {op, value} predicates present in entry among
@@ -112,24 +116,6 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
 	if err != nil {
 		return "", 0, label + " delta value must be numeric"
-	}
-	return op, value, ""
-}
-
-// requireThreshold parses the single required {op, value} predicate at field
-// (entropy `avail`, zombies `count`), in the same builder-style convention.
-func requireThreshold(entry map[string]any, field string) (op string, value float64, errs string) {
-	m, ok := entry[field].(map[string]any)
-	if !ok {
-		return "", 0, fmt.Sprintf("requires %s {op, value}", field)
-	}
-	op = cfgval.AsString(m["op"])
-	if !cfgval.IsCompareOp(op) {
-		return "", 0, fmt.Sprintf("%s has invalid op %q", field, op)
-	}
-	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-	if err != nil {
-		return "", 0, fmt.Sprintf("%s value %q is not numeric", field, cfgval.String(m["value"]))
 	}
 	return op, value, ""
 }
