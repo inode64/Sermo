@@ -48,28 +48,6 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 	return active
 }
 
-// validateEntropyFields validates an entropy check's required avail {op, value}
-// threshold at prefix.
-func validateEntropyFields(prefix string, fields map[string]any, add addFunc) {
-	validateThresholdMap(prefix, "avail", fields["avail"], "for an entropy check", add)
-}
-
-// validateZombieFields validates a zombies check's required count {op, value}
-// threshold at prefix.
-func validateZombieFields(prefix string, fields map[string]any, add addFunc) {
-	validateThresholdMap(prefix, "count", fields["count"], "for a zombies check", add)
-}
-
-// validateThresholdMap validates a single required {op, value} threshold field.
-func validateThresholdMap(prefix, field string, raw any, suffix string, add addFunc) {
-	m, ok := raw.(map[string]any)
-	if !ok {
-		add("%s.%s {op, value} is required %s", prefix, field, suffix)
-		return
-	}
-	validateOpNumeric(prefix+"."+field, m, add)
-}
-
 // validateOpNumeric validates an already-extracted {op, value} threshold map (a
 // disk-style comparison op and a numeric value) at the dotted label. It is the
 // shared core of every delta/threshold/predicate check.
@@ -717,9 +695,9 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "conntrack":
 		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
 	case "entropy":
-		validateEntropyFields(path, entry, add)
+		validateThresholdPreds(path, entry, checks.EntropyPredFields, add)
 	case "zombies":
-		validateZombieFields(path, entry, add)
+		validateThresholdPreds(path, entry, checks.ZombiePredFields, add)
 	case "oom":
 		validateOomFields(path, entry, add)
 	case "cert":
