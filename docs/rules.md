@@ -34,6 +34,7 @@ which reuse the same schema). MVP types:
 | `pids`        | the kernel PID table vs `kernel.pid_max` (used_pct/free/count)      |
 | `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms) |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
+| `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
@@ -1330,7 +1331,7 @@ The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`binary`, `libraries`, `config`, `autofs`, `sqlite`/`sqlite3`,
+`binary`, `libraries`, `config`, `autofs`, `route`, `sqlite`/`sqlite3`,
 `websocket`/`ws`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
@@ -1345,6 +1346,30 @@ event/hook per changed path or matching pid) stay watch-only.
 `service`/`metric`/`process` checks need per-service context (backend status, a
 metric sampler, process discovery) and so are not available as standalone
 watches.
+
+### Default route (`route`)
+
+The `route` check verifies the kernel has an **up default route** — read
+natively from `/proc/net/route` (IPv4, the default) or `/proc/net/ipv6_route`
+(`family: ipv6`). With `interface`, a default route must egress through that
+interface. It is a health check (OK means the route is there); as a watch it
+fires when the route disappears.
+
+It closes the uplink gap the link and ping layers leave: after a failed PPP
+renegotiation the interface can stay `up` with the default route gone, and a
+ping bound to the interface cannot tell "no route" from "provider down". The
+`pppd` catalog daemon layers all three (`net` state, `route`, `icmp`).
+
+```yaml
+checks:
+  route:
+    type: route          # IPv4 by default; family: ipv6 for the v6 table
+    interface: ppp0      # optional: the default route must leave through ppp0
+```
+
+The result reports the matched egress interface and gateway (when the route
+has one — point-to-point links have none) in its data, and `value` carries the
+number of matching default routes.
 
 ### Disk throughput (`hdparm`)
 

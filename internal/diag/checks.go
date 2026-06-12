@@ -97,6 +97,10 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists(dev) {
 			b.add(LevelWarning, scope, "device %q does not exist", dev)
 		}
+	case "route":
+		if iface := cfgval.AsString(entry["interface"]); iface != "" && !host.InterfaceExists(iface) {
+			b.add(LevelWarning, scope, "network interface %q does not exist", iface)
+		}
 	case "pressure":
 		if res := cfgval.AsString(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
 			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)

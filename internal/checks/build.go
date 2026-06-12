@@ -50,6 +50,9 @@ type Deps struct {
 	PingSampler PingSamplerFunc
 	// SwapSampler reads system swap for `swap` checks. Nil reads /proc.
 	SwapSampler SwapSamplerFunc
+	// RouteSampler lists the up default routes for `route` checks. Nil reads
+	// /proc/net/route and /proc/net/ipv6_route.
+	RouteSampler RouteSamplerFunc
 	// LoadSampler reads load averages for `load` checks. Nil reads /proc.
 	LoadSampler LoadSamplerFunc
 	// OomSampler reads the cumulative OOM-kill counter for `oom` checks. Nil reads
@@ -148,6 +151,7 @@ var SingleShotCheckTypes = []string{
 	"fds", "memory", "pressure", "pids", "diskio", "conntrack", "entropy",
 	"zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query",
 	"influxdb-query", "size", "websocket", "ws", "net", "icmp", "swap",
+	"route",
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
@@ -222,6 +226,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildSwapCheck(b, entry, deps)
 	case "icmp":
 		return buildICMPCheck(b, entry, deps)
+	case "route":
+		return buildRouteCheck(b, entry, deps)
 	case "sql":
 		return buildSQLCheck(b, entry)
 	case "mongodb-query":
@@ -922,6 +928,19 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, "icmp check metric must be state or latency"
 	}
 	return c, ""
+}
+
+// buildRouteCheck builds a default-route presence check.
+func buildRouteCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	family := cfgval.AsString(entry["family"])
+	switch family {
+	case "":
+		family = "ipv4"
+	case "ipv4", "ipv6":
+	default:
+		return nil, "route family must be ipv4 or ipv6"
+	}
+	return routeCheck{base: b, family: family, iface: cfgval.AsString(entry["interface"]), sampler: deps.RouteSampler}, ""
 }
 
 // buildSizeCheck builds a path-growth check over a time window.
