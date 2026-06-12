@@ -1109,7 +1109,7 @@ func (b *WebBackend) ConfigDiff(ctx context.Context, base, service string) (web.
 	if !ok || err != nil {
 		return web.ConfigDiff{}, ok, err
 	}
-	removed, added := lineDiff(baseRender.Content, serviceRender.Content)
+	removed, added := config.LineDiff(baseRender.Content, serviceRender.Content)
 	return web.ConfigDiff{
 		Base:      base,
 		Service:   service,
@@ -1724,29 +1724,5 @@ func (b *WebBackend) configSources(name string) []string {
 		add(doc.Path)
 	}
 	addService(name)
-	return out
-}
-
-func lineDiff(base, other string) (removed, added []string) {
-	baseSet := lineCount(base)
-	otherSet := lineCount(other)
-	for _, l := range strings.Split(strings.TrimRight(base, "\n"), "\n") {
-		if otherSet[l] == 0 && !slices.Contains(removed, l) {
-			removed = append(removed, l)
-		}
-	}
-	for _, l := range strings.Split(strings.TrimRight(other, "\n"), "\n") {
-		if baseSet[l] == 0 && !slices.Contains(added, l) {
-			added = append(added, l)
-		}
-	}
-	return removed, added
-}
-
-func lineCount(s string) map[string]int {
-	out := map[string]int{}
-	for _, l := range strings.Split(s, "\n") {
-		out[l]++
-	}
 	return out
 }
