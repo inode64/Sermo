@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"sermo/internal/cfgval"
 	"slices"
 	"sort"
 )
@@ -35,11 +36,11 @@ type Notifier interface {
 	Send(ctx context.Context, msg Message) error
 }
 
-// Enabled reports whether a notifier config entry should be active. Omitted
-// `enabled` defaults to true; schema validation reports non-boolean values.
+// Enabled reports whether a notifier config entry should be active — the
+// inverse of the shared cfgval.Disabled opt-out reading (omitted `enabled`
+// defaults to true; schema validation reports non-boolean values).
 func Enabled(entry map[string]any) bool {
-	enabled, ok := entry["enabled"].(bool)
-	return !ok || enabled
+	return !cfgval.Disabled(entry)
 }
 
 // builders maps a notifier `type` to its constructor. Register new transports
