@@ -2,9 +2,9 @@ package app
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"slices"
-	"sort"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -34,7 +34,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 		return watches, warnings
 	}
 
-	for _, name := range sortedWatchNames(raw) {
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "watch "+name+" is not a mapping")
@@ -172,7 +172,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 	}
 	var out []*Watch
 	var warns []string
-	for _, key := range sortedWatchNames(metrics) {
+	for _, key := range slices.Sorted(maps.Keys(metrics)) {
 		mEntry, ok := metrics[key].(map[string]any)
 		if !ok {
 			warns = append(warns, "watch "+name+".metrics."+key+": not a mapping")
@@ -632,13 +632,4 @@ func effectiveNotify(site, global []string) []string {
 		return site
 	}
 	return global
-}
-
-func sortedWatchNames(m map[string]any) []string {
-	names := make([]string, 0, len(m))
-	for k := range m {
-		names = append(names, k)
-	}
-	sort.Strings(names)
-	return names
 }
