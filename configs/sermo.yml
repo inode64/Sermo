@@ -35,7 +35,7 @@ paths:
     # - network
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
-  # Persistent state database (monitoring state, future history/metrics). Lives
+  # Persistent state database (monitoring state, SLA history, measurements). Lives
   # under /var/lib so it survives reboots — required for `monitor: previous`.
   state: /var/lib/sermo
 
