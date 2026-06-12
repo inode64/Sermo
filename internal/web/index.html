@@ -1600,18 +1600,12 @@ function watchHasExpand(w) {
   return !!(w && w.expand && Number(w.expand.by_bytes) > 0);
 }
 
+// watchStateText reads the server-computed state (app.WatchState: disabled,
+// unmonitorized, failed or ok). The UI ships embedded in the same binary, so
+// the field is always present; re-deriving it here would duplicate the Go
+// logic (see watchViewFailed) and could only drift.
 function watchStateText(w) {
-  if (w && w.state) {
-    const st = String(w.state).toLowerCase();
-    if (st === "running" || st === "stopped") return w.monitored ? "ok" : "unmonitorized";
-    if (st === "monitorized") return "ok";
-    return st;
-  }
-  if (!w || !w.enabled) return "disabled";
-  if (!w.monitored) return "unmonitorized";
-  const failedActivity = (w.last_activity_kind || "").endsWith("-failed");
-  const diskFailed = w.disk && (w.disk.sample_error || w.disk.mount_sample_error);
-  return failedActivity || diskFailed ? "failed" : "ok";
+  return (w && w.state) || "unknown";
 }
 
 function watchStateRank(w) {
