@@ -59,6 +59,7 @@ var registry = []Assistant{
 	serviceAssistant{},
 	volumeAssistant{},
 	netAssistant{},
+	uplinkAssistant{},
 }
 
 // Assistants returns the registered assistants in menu order.
