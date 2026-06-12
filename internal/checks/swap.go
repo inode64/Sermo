@@ -87,10 +87,7 @@ func (c *swapCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
-		var delta uint64
-		if total > c.lastIO {
-			delta = total - c.lastIO
-		}
+		delta := deltaOrZero(total, c.lastIO)
 		c.lastIO = total
 		data["value"], data["pages"] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)

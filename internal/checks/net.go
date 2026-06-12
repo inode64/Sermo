@@ -108,10 +108,7 @@ func (c *netCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
-		var delta uint64
-		if total > c.lastErrTotal {
-			delta = total - c.lastErrTotal
-		}
+		delta := deltaOrZero(total, c.lastErrTotal)
 		c.lastErrTotal = total
 		data["value"], data["total"] = delta, total
 		met := compareFloat(float64(delta), c.op, c.value)
