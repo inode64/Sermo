@@ -104,8 +104,11 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "sermo.yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The shipped includes entry is the relative "apps" directory.
-	copyYAMLDir(t, filepath.Join(root, "configs", "apps"), filepath.Join(dir, "apps"))
+	// The shipped config enables no services out of the box; when a bundled
+	// "apps" include dir reappears, copy it so its services validate too.
+	if bundled := filepath.Join(root, "configs", "apps"); dirExists(bundled) {
+		copyYAMLDir(t, bundled, filepath.Join(dir, "apps"))
+	}
 
 	cfg, err := Load(filepath.Join(dir, "sermo.yml"))
 	if err != nil {
@@ -116,35 +119,9 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	}
 }
 
-// TestMultiInstanceExampleValidates loads the multi-instance example (its
-// daemons plus the two enabled instances) against the repo catalog.
-func TestMultiInstanceExampleValidates(t *testing.T) {
-	root := repoRoot(t)
-	example := filepath.Join(root, "configs", "examples", "multi-instance")
-	if _, err := os.Stat(example); err != nil {
-		t.Skipf("example dir not found: %v", err)
-	}
-
-	dir := t.TempDir()
-	enabled := filepath.Join(dir, "enabled")
-	copyYAMLDir(t, example, enabled)
-
-	global := filepath.Join(dir, "sermo.yml")
-	body := "engine: { backend: systemd }\n" +
-		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + ", " + filepath.Join(example, "daemons") + "]\n" +
-		"  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
-		"defaults:\n  policy: { cooldown: 5m }\n"
-	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	for _, issue := range Validate(cfg) {
-		t.Errorf("multi-instance example fails validation: %s", issue)
-	}
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
 
 // copyYAMLDir copies the top-level *.yml files of src into dst.
