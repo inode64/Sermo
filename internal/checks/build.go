@@ -850,7 +850,7 @@ func buildSizeCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	}
 	growBy, err := parseSize(cfgval.String(entry["grow_by"]))
 	if err != nil || growBy <= 0 {
-		return nil, "size check requires a positive grow_by (e.g. 1GB)"
+		return nil, "size check requires a positive grow_by with a K/M/G/T suffix (e.g. 1G)"
 	}
 	window := cfgval.DurationOr(entry["within"], 0)
 	if window <= 0 {

@@ -1201,8 +1201,10 @@ Each cycle it samples the path's size (a file's bytes, or the recursive sum of
 regular-file sizes under a directory), keeps the samples seen in the last
 `within`, and compares the current size against the oldest one still in the
 window. It fails when `current − baseline ≥ grow_by`. The first cycle only
-baselines (no alert). Sizes accept human units (`1GB`, `500MB`, `2GiB`, or a
-plain byte count). Result data carries `current_bytes`, `baseline_bytes`,
+baselines (no alert). `grow_by` uses the same size grammar as every other size
+field (`free_bytes`, `expand.by`): an explicit `K`/`M`/`G`/`T` suffix (optional
+`B`/`iB`), binary units (`1G` = 2³⁰), with plain byte counts rejected. Result
+data carries `current_bytes`, `baseline_bytes`,
 `growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
 directory walk reads the whole subtree each cycle, so point it at a bounded path.
 

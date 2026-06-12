@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dustin/go-humanize"
-
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/conn"
@@ -779,9 +777,9 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	gb := cfgval.String(fields["grow_by"])
 	if gb == "" {
-		add("%s.grow_by is required for a size check (e.g. 1GB)", prefix)
-	} else if n, err := humanize.ParseBytes(gb); err != nil || n == 0 {
-		add("%s.grow_by %q must be a positive size (e.g. 1GB, 500MB)", prefix, gb)
+		add("%s.grow_by is required for a size check (e.g. 1G)", prefix)
+	} else if n, ok := cfgval.ByteSize(gb); !ok || n == 0 {
+		add("%s.grow_by %q must be a positive size with a K/M/G/T suffix (e.g. 1G, 500M)", prefix, gb)
 	}
 	w := cfgval.String(fields["within"])
 	if w == "" {

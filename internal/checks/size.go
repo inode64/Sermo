@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"sermo/internal/cfgval"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -124,11 +126,14 @@ func dirOrFileSize(path string) (int64, error) {
 	return total, err
 }
 
-// parseSize parses a human byte size ("1GB", "500MB", "2GiB", "1048576").
+// parseSize parses a human byte size with an explicit suffix ("1G", "500M",
+// "2GiB") through the shared config grammar (cfgval.ByteSize): binary units,
+// unitless values rejected — the same rules as every other size field
+// (free_bytes, expand.by).
 func parseSize(s string) (int64, error) {
-	n, err := humanize.ParseBytes(s)
-	if err != nil {
-		return 0, err
+	n, ok := cfgval.ByteSize(s)
+	if !ok || n == 0 || n > math.MaxInt64 {
+		return 0, fmt.Errorf("size %q must be positive with a K/M/G/T suffix (e.g. 1G, 500M)", s)
 	}
-	return int64(n), nil //nolint:gosec // sizes are far below int64 max
+	return int64(n), nil
 }
