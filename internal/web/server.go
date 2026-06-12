@@ -479,7 +479,7 @@ type Backend interface {
 }
 
 // operateActions, monitorActions and watchOperateActions are the action verbs the API accepts.
-var operateActions = map[string]bool{"start": true, "stop": true, "restart": true}
+var operateActions = map[string]bool{"start": true, "stop": true, "restart": true, "reload": true}
 var monitorActions = map[string]bool{"monitor": true, "unmonitor": true}
 var watchOperateActions = map[string]bool{"expand": true}
 

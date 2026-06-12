@@ -73,7 +73,7 @@ remediation rules, directly or via a check reference.
 service do). It manages services owned by different users and touches privileged
 areas, so several features need it:
 
-- **Service control** — start/stop/restart via systemd/OpenRC.
+- **Service control** — start/stop/restart/reload via systemd/OpenRC.
 - **Signalling other users' processes** — the stop policy reaps residual
   processes that match the `kill_only_if` selector, across UIDs.
 - **Cross-user `/proc` inspection** — resolving a process's `/proc/<pid>/exe`,
@@ -95,7 +95,7 @@ Because the daemon runs as root:
   run their `argv` **as root** (never via a shell). Keep `/etc/sermo` writable
   only by root; anyone who can edit it can run code as root. Secrets belong in the
   environment (`${env:NAME}`), not in the file.
-- **The web UI** (when enabled) can stop/restart services as root, so it is
+- **The web UI** (when enabled) can stop/restart/reload services as root, so it is
   hardened by default: it **binds to loopback** (`127.0.0.1`), supports
   **authentication** with a read-only guest role, requires the **`X-Sermo-CSRF`
   header** on every state-changing request (blocking cross-site forgery from a
