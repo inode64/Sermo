@@ -43,7 +43,7 @@ func Enabled(entry map[string]any) bool {
 }
 
 // builders maps a notifier `type` to its constructor. Register new transports
-// here (e.g. "slack", "teams").
+// here (e.g. a future "discord").
 var builders = map[string]func(name string, entry map[string]any) (Notifier, error){
 	"email": buildEmail,
 	"slack": buildSlack,
