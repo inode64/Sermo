@@ -872,3 +872,29 @@ checks:
 `)
 	mustHave(t, issues, `used_pct value "150%" must be a percentage in 0..100`)
 }
+
+func TestValidateRuleWindowMinMatchesOptional(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+rule_window: { cycles: 5, mode: within }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`)
+	if hasIssue(issues, "rule_window") {
+		t.Fatalf("rule_window within without min_matches should default to 1, got %v", issues)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+rule_window: { cycles: 5, mode: within, min_matches: 0 }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`)
+	mustHave(t, bad, "rule_window.min_matches must be > 0")
+}

@@ -164,10 +164,22 @@ func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
 	return HasNotifyAction(names) || (len(names) == 0 && len(defaultNotify) > 0)
 }
 
+// validateMetricWatchEntry flags entry-level then/for/within on a multi-metric
+// watch (net, icmp, swap): the runtime reads them only inside each metric's own
+// block, so an entry-level copy would be silently ignored.
+func validateMetricWatchEntry(name string, entry map[string]any, add func(string, ...any)) {
+	for _, key := range []string{"then", "for", "within"} {
+		if _, present := entry[key]; present {
+			add("watches.%s.%s is ignored on a multi-metric watch; move it into the metric's own block (metrics.<name>.%s)", name, key, key)
+		}
+	}
+}
+
 // validateNetCheck validates a net interface watch: an interface and a non-empty
 // metrics map, each metric with a valid condition and its own hook
 // (spec 2026-06-06-net-interface-watch §4).
 func validateNetCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	validateMetricWatchEntry(name, entry, add)
 	if cfgval.String(check["interface"]) == "" {
 		add("watches.%s.check.interface is required for a net check", name)
 	}
@@ -227,6 +239,7 @@ var serviceScopedWatchExclusions = set("service", "metric", "process")
 // (used_pct/free_pct/free_bytes thresholds) and/or io (per-cycle delta), each
 // with its own hook (mirrors validateNetCheck).
 func validateSwapCheck(name string, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	validateMetricWatchEntry(name, entry, add)
 	metrics, ok := entry["metrics"].(map[string]any)
 	if !ok || len(metrics) == 0 {
 		add("watches.%s.metrics is required and must be non-empty for a swap check", name)
@@ -273,6 +286,7 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 // count) and a non-empty metrics map, each metric with a valid condition and its
 // own hook (spec 2026-06-06-icmp-host-watch §3).
 func validateICMPCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	validateMetricWatchEntry(name, entry, add)
 	if cfgval.String(check["host"]) == "" {
 		add("watches.%s.check.host is required for an icmp check", name)
 	}

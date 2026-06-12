@@ -1134,7 +1134,7 @@ defaults:
   rule_window:
     cycles: 1            # how many cycles the window spans
     mode: consecutive    # consecutive (a `for` window) | within (a sliding window)
-    # min_matches: 1     # only for mode: within — true at least this many times
+    # min_matches: 1     # mode: within only — optional, defaults to 1 (true at least once)
 ```
 
 `cycles: 1` + `mode: consecutive` is also the built-in default (fire the moment a

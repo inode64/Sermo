@@ -1134,3 +1134,76 @@ func TestValidateSwapUsageSharedGrammar(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateMetricWatchEntryLevelBlocks(t *testing.T) {
+	// then/for/within on a multi-metric watch entry are ignored by the runtime
+	// (each metric carries its own), so validation must flag them.
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"swap": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+				"for":   map[string]any{"cycles": 3},
+				"metrics": map[string]any{
+					"io": map[string]any{
+						"delta": map[string]any{"op": ">", "value": 1000},
+						"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+				},
+			},
+			"net": map[string]any{
+				"check": map[string]any{"type": "net", "interface": "eth0"},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+				"metrics": map[string]any{
+					"state": map[string]any{
+						"on":   "change",
+						"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+				},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.swap.then is ignored on a multi-metric watch",
+		"watches.swap.for is ignored on a multi-metric watch",
+		"watches.net.then is ignored on a multi-metric watch",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"swap": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"io": map[string]any{
+						"delta": map[string]any{"op": ">", "value": 1000},
+						"for":   map[string]any{"cycles": 3},
+						"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+				},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("per-metric then/for should be valid, got %v", w)
+	}
+}
+
+func TestValidateWithinMinMatchesOptional(t *testing.T) {
+	// min_matches defaults to 1; only an explicit invalid value is an error.
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"root": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"within": map[string]any{"cycles": 5},
+				"then":   map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("within without min_matches should be valid, got %v", w)
+	}
+}
