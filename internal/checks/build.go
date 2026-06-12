@@ -623,8 +623,19 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 			return nil, errs
 		}
 		c.op, c.value = op, v
+	case "address":
+		if exp := cfgval.AsString(entry["expect"]); exp != "" {
+			if exp != "present" && exp != "absent" {
+				return nil, "net address expect must be present or absent"
+			}
+			c.expect = exp
+		} else if cfgval.AsString(entry["on"]) == "change" {
+			c.onChange = true
+		} else {
+			return nil, "net address requires expect: present|absent or on: change"
+		}
 	default:
-		return nil, "net check metric must be state, speed or errors"
+		return nil, "net check metric must be state, speed, errors or address"
 	}
 	return c, ""
 }

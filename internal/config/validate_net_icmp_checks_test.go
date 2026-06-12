@@ -16,10 +16,11 @@ checks:
   ping: { type: icmp, host: 1.1.1.1, interface: ppp0, metric: state, expect: up }
   lat: { type: icmp, host: 1.1.1.1, metric: latency, threshold: { op: ">", value: 100 } }
   swp: { type: swap, metric: usage, used_pct: { op: ">=", value: 80 } }
+  ip: { type: net, interface: ppp0, metric: address, expect: present }
   rt: { type: route, interface: ppp0 }
   rt6: { type: route, family: ipv6 }
 `)
-	for _, name := range []string{"checks.link", "checks.errs", "checks.ping", "checks.lat", "checks.swp", "checks.rt", "checks.rt6"} {
+	for _, name := range []string{"checks.link", "checks.errs", "checks.ping", "checks.lat", "checks.swp", "checks.ip", "checks.rt", "checks.rt6"} {
 		if hasIssue(issues, name) {
 			t.Fatalf("valid %s must produce no issue: %v", name, issues)
 		}
@@ -43,6 +44,8 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 		"icmp bad metric":              {`c: { type: icmp, host: 1.1.1.1, metric: nope }`, "not a supported icmp metric"},
 		"icmp latency needs condition": {`c: { type: icmp, host: 1.1.1.1, metric: latency }`, "requires threshold {op, value} or change {delta}"},
 		"swap bad metric":              {`c: { type: swap, metric: nope }`, "not a supported swap metric"},
+		"address missing condition":    {`c: { type: net, interface: ppp0, metric: address }`, "requires expect: present|absent or on: change"},
+		"address bad expect":           {`c: { type: net, interface: ppp0, metric: address, expect: up }`, "expect must be present or absent"},
 		"route bad family":             {`c: { type: route, family: ipx }`, "family must be ipv4 or ipv6"},
 		"route list interface":         {`c: { type: route, interface: [ppp0, eth0] }`, "single interface name"},
 	}

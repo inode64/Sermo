@@ -33,6 +33,14 @@ checks:
     metric: state
     expect: up
 
+  # Layer 1.5 — the session negotiated an IP address. A PPP interface can be
+  # up while IPCP failed and left it address-less: a dead session.
+  ip:
+    type: net
+    interface: "${ppp_iface}"
+    metric: address
+    expect: present
+
   # Layer 2 — the kernel still has a default route out through the PPP
   # interface. After a failed renegotiation the interface can stay up with the
   # route gone; ping alone cannot tell "no route" from "provider down".

@@ -226,8 +226,16 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 				add("%s.counters must be a non-empty list", prefix)
 			}
 		}
+	case "address":
+		exp := cfgval.String(m["expect"])
+		onChange := cfgval.String(m["on"]) == "change"
+		if exp == "" && !onChange {
+			add("%s requires expect: present|absent or on: change", prefix)
+		} else if exp != "" && exp != "present" && exp != "absent" {
+			add("%s.expect must be present or absent", prefix)
+		}
 	default:
-		add("%s is not a supported net metric (state, speed, errors)", prefix)
+		add("%s is not a supported net metric (state, speed, errors, address)", prefix)
 	}
 }
 
