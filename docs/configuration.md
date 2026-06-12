@@ -825,9 +825,14 @@ watches:
         then:
           hook:
             command: [/usr/local/bin/sermo-net-errors.sh, eth0]
+      address:                     # assigned IP addresses (non-link-local)
+        on: change                 # fire on renumbering; or `expect: present|absent`
+        then:
+          hook:
+            command: [/usr/local/bin/sermo-ddns-update.sh, eth0]
 ```
 
-The three metrics and their conditions:
+The four metrics and their conditions:
 
 - **`state`** — interface up/down. Use `on: change` to fire on any transition, or
   `expect: up` / `expect: down` to fire whenever the state **is** the expected
@@ -836,9 +841,15 @@ The three metrics and their conditions:
   speed differs from the baseline).
 - **`errors`** — sums the named `counters` (default `rx_errors`, `tx_errors`) and
   fires when the per-cycle **delta** satisfies `delta: {op, value}`.
+- **`address`** — the interface's assigned addresses (IPv4 + global IPv6;
+  link-local is excluded). Use `on: change` to fire when the set changes — a
+  provider-forced renumbering or reconnect, the natural trigger for a dynamic-DNS
+  hook — or `expect: present` / `expect: absent` to fire whenever addresses
+  **are** in the expected state (a PPP session can be up with IPCP failed and no
+  address assigned; the `pppd` catalog daemon uses `expect: present`).
 
 Hook extras: `SERMO_INTERFACE`, `SERMO_METRIC`, and — for the change metrics
-(`state`/`speed`) — `SERMO_OLD`/`SERMO_NEW`.
+(`state`/`speed`/`address`) — `SERMO_OLD`/`SERMO_NEW`.
 
 ### `icmp` — external host (ping)
 

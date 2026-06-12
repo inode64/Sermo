@@ -35,6 +35,9 @@ which reuse the same schema). MVP types:
 | `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms) |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
+| `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
+| `icmp`        | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
+| `swap`        | one swap metric (`metric: usage\|io`) holds — single-metric form of the swap watch |
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|

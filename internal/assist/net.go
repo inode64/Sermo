@@ -64,16 +64,17 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 }
 
 type netSettings struct {
-	metrics   []string // any of: state, errors, speed
-	stateDown bool     // expect:down instead of on:change
-	errorsAt  int
-	notifiers []string
+	metrics    []string // any of: state, errors, speed, address
+	stateDown  bool     // expect:down instead of on:change
+	addrAbsent bool     // expect:absent instead of on:change
+	errorsAt   int
+	notifiers  []string
 }
 
 func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 	var s netSettings
-	options := []string{"link up/down", "link errors", "link speed changes"}
-	keys := []string{"state", "errors", "speed"}
+	options := []string{"link up/down", "link errors", "link speed changes", "IP address (lost or changed)"}
+	keys := []string{"state", "errors", "speed", "address"}
 	for _, idx := range p.MultiChoose("What do you want to monitor on "+label+"?", options) {
 		s.metrics = append(s.metrics, keys[idx])
 	}
@@ -83,6 +84,8 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 			s.stateDown = p.Choose("For link state, alert when…", []string{"it changes (up or down)", "it goes down"}) == 1
 		case "errors":
 			s.errorsAt = p.AskInt("Alert when interface errors per cycle exceed", 100)
+		case "address":
+			s.addrAbsent = p.Choose("For the IP address, alert when…", []string{"it changes (reconnect/renumbering)", "the interface has no address"}) == 1
 		}
 	}
 	// A net watch has no non-notify action, so the answer must deliver
@@ -117,6 +120,14 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 			}
 		case "speed":
 			metrics["speed"] = map[string]any{"on": "change", "then": newThen()}
+		case "address":
+			cond := map[string]any{"then": newThen()}
+			if s.addrAbsent {
+				cond["expect"] = "absent"
+			} else {
+				cond["on"] = "change"
+			}
+			metrics["address"] = cond
 		}
 	}
 	return map[string]any{
