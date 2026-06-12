@@ -62,8 +62,13 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 			t.Errorf("%s: resolved tree has no reload block", d)
 			continue
 		}
-		if cfgvalString(r["signal"]) != "HUP" || cfgvalString(r["when"]) != "auto" {
-			t.Errorf("%s: reload = %v, want signal HUP / when auto", d, r)
+		// The catalog leaves `when` unset — absent means the default auto mode,
+		// so any explicit value here would be a redundancy regression.
+		if cfgvalString(r["signal"]) != "HUP" {
+			t.Errorf("%s: reload = %v, want signal HUP", d, r)
+		}
+		if _, ok := r["when"]; ok {
+			t.Errorf("%s: reload restates when (%v); absent means auto", d, r["when"])
 		}
 	}
 }
