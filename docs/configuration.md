@@ -473,7 +473,7 @@ notifiers:
     to: [ops@example.com, oncall@example.com]       # one or more recipients
 ```
 
-Notifier types (both use only the Go standard library — no external dependency):
+Notifier types (all use only the Go standard library — no external dependency):
 
 - **`email`** — sends over SMTP.
   - **`dsn`** — `smtp://[user:pass@]host[:port]` (STARTTLS when offered; default
@@ -493,7 +493,20 @@ notifiers:
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
 ```
 
-The set of notifier **types is pluggable** — new transports (`teams`, …) are
+- **`teams`** — posts to a Microsoft Teams **incoming webhook** (a Teams
+  Workflows / Power Automate "when a webhook request is received" URL).
+  - **`webhook`** — the workflow's HTTP POST URL. The notification is sent as
+    an Adaptive Card: the subject as the bold lead line, the detail (the
+    `SERMO_*` fields) in a monospace block.
+
+```yaml
+notifiers:
+  ops-teams:
+    type: teams
+    webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/…"
+```
+
+The set of notifier **types is pluggable** — new transports (`discord`, …) are
 added without touching watches or rules (each registers a builder in
 `internal/notify`). A new transport looks the same: a `type` plus its own
 fields, addressed by name.
