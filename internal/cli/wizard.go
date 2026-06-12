@@ -22,6 +22,20 @@ import (
 // runWizard drives the interactive assistant that generates `watches:` config.
 // `sermoctl wizard [name]` runs the named assistant, or lists them to choose.
 func (a App) runWizard(ctx context.Context, opts options) int {
+	code, err := a.runWizardSession(ctx, opts)
+	if err != nil {
+		// Piped/truncated stdin: a prompt was still waiting when input ended.
+		a.reportError(opts, "wizard aborted: "+err.Error())
+		return exitUsage
+	}
+	return code
+}
+
+// runWizardSession is runWizard's prompt-driving body. assist.Recover turns an
+// input EOF mid-prompt into ErrInputClosed so a truncated pipe aborts cleanly
+// instead of re-prompting forever.
+func (a App) runWizardSession(ctx context.Context, opts options) (code int, err error) {
+	defer assist.Recover(&err)
 	globalPath := opts.config
 	if globalPath == "" {
 		globalPath = config.DefaultGlobalPath
@@ -29,68 +43,68 @@ func (a App) runWizard(ctx context.Context, opts options) int {
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+		return exitRuntimeError, nil
 	}
 
 	p := assist.NewPrompt(a.wizardStdin(), a.Stdout)
 
 	as, code := a.selectAssistant(p, opts)
 	if as == nil {
-		return code
+		return code, nil
 	}
 
 	res, err := as.Run(p, a.wizardEnv(ctx, opts, cfg))
 	if err != nil {
 		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return exitRuntimeError, nil
 	}
 	if len(res.Services) > 0 {
-		return a.writeWizardServices(p, opts, globalPath, cfg, res)
+		return a.writeWizardServices(p, opts, globalPath, cfg, res), nil
 	}
 	if len(res.Watches) == 0 {
 		fmt.Fprintln(a.Stdout, "Nothing selected; no configuration generated.")
-		return exitSuccess
+		return exitSuccess, nil
 	}
 
 	data, err := yaml.Marshal(map[string]any{"watches": res.Watches})
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("render config: %v", err))
-		return exitRuntimeError
+		return exitRuntimeError, nil
 	}
 	fmt.Fprintf(a.Stdout, "\nGenerated configuration (%s):\n\n%s\n", res.Summary, data)
 
 	if !p.Confirm("Merge this into "+globalPath+"?", false) {
 		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.includes.")
-		return exitSuccess
+		return exitSuccess, nil
 	}
 	var deletes []string
 	for _, dir := range wizardCleanupDirs(globalPath, as.Name(), res.Watches) {
 		more, err := planWizardWatchDeletes(p, dir)
 		if err != nil {
 			a.reportError(opts, err.Error())
-			return exitRuntimeError
+			return exitRuntimeError, nil
 		}
 		deletes = append(deletes, more...)
 	}
 	if err := deleteWizardWatchFiles(deletes); err != nil {
 		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return exitRuntimeError, nil
 	}
 	if len(deletes) > 0 {
 		cfg, err = a.LoadConfig(globalPath)
 		if err != nil {
 			a.reportError(opts, fmt.Sprintf("reload config after deleting old watches failed: %v", err))
-			return exitRuntimeError
+			return exitRuntimeError, nil
 		}
 	}
 	if err := ensureNoWatchCollisions(cfg, res.Watches); err != nil {
 		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return exitRuntimeError, nil
 	}
 	merged, err := mergeWizardWatches(globalPath, as.Name(), res.Watches)
 	if err != nil {
 		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return exitRuntimeError, nil
 	}
 	if merged.Backup != "" {
 		fmt.Fprintf(a.Stdout, "Updated %s paths.includes (backup: %s).\n", globalPath, merged.Backup)
@@ -99,7 +113,7 @@ func (a App) runWizard(ctx context.Context, opts options) int {
 		fmt.Fprintf(a.Stdout, "Deleted %d existing watch file(s).\n", len(deletes))
 	}
 	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl reload` to apply.\n", len(merged.Files), merged.Dir)
-	return exitSuccess
+	return exitSuccess, nil
 }
 
 // selectAssistant resolves the assistant from the first positional argument, or

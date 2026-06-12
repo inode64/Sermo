@@ -97,3 +97,68 @@ func TestPromptAskInt(t *testing.T) {
 		t.Fatalf("got %d, want 42 (after re-prompt)", got)
 	}
 }
+
+// driveWithRecover runs fn under the Recover contract and returns the error.
+func driveWithRecover(fn func()) (err error) {
+	defer Recover(&err)
+	fn()
+	return nil
+}
+
+func TestPromptAbortsOnExhaustedInput(t *testing.T) {
+	cases := map[string]struct {
+		input string // one unusable answer, then EOF
+		drive func(p *Prompt)
+	}{
+		"Choose invalid then EOF":      {"zzz\n", func(p *Prompt) { p.Choose("pick", []string{"a", "b"}) }},
+		"MultiChoose invalid then EOF": {"zzz\n", func(p *Prompt) { p.MultiChoose("pick", []string{"a", "b"}) }},
+		"AskNonEmpty empty then EOF":   {"\n", func(p *Prompt) { p.AskNonEmpty("value") }},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			p, _ := newTestPrompt(tc.input)
+			if err := driveWithRecover(func() { tc.drive(p) }); err != ErrInputClosed {
+				t.Fatalf("err = %v, want ErrInputClosed", err)
+			}
+		})
+	}
+}
+
+func TestPromptDefaultsSurviveEOF(t *testing.T) {
+	// The empty-accepting helpers keep their "empty -> default" contract on a
+	// fully exhausted reader instead of aborting.
+	p, _ := newTestPrompt("")
+	err := driveWithRecover(func() {
+		if got := p.Ask("q", "def"); got != "def" {
+			t.Errorf("Ask = %q", got)
+		}
+		if !p.Confirm("ok?", true) {
+			t.Error("Confirm must return its default on EOF")
+		}
+		if got := p.AskInt("n", 7); got != 7 {
+			t.Errorf("AskInt = %d", got)
+		}
+	})
+	if err != nil {
+		t.Fatalf("defaults must not abort: %v", err)
+	}
+}
+
+func TestPromptAnswerWithoutTrailingNewline(t *testing.T) {
+	// A last line without \n is a valid answer even though it sets EOF.
+	p, _ := newTestPrompt("2")
+	if idx := p.Choose("pick", []string{"a", "b"}); idx != 1 {
+		t.Fatalf("Choose = %d, want 1", idx)
+	}
+}
+
+func TestRecoverRepanicsOtherPanics(t *testing.T) {
+	defer func() {
+		if r := recover(); r != "boom" {
+			t.Fatalf("recovered %v, want boom", r)
+		}
+	}()
+	var err error
+	defer Recover(&err)
+	panic("boom")
+}
