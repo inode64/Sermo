@@ -726,21 +726,36 @@ service:
 	mustHave(t, mixed, "service must not mix name with systemd/openrc")
 }
 
-func TestValidateProcessSelectorsRequireExeAndUser(t *testing.T) {
+func TestValidateProcessSelectorsRequireExeOrCmd(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
 service: { name: x }
 processes:
   main: { type: command_match, user: mysql }
-  worker: { type: command_match, exe: /usr/sbin/mysqld }
+  badcmd: { type: command_match, cmd: "(" }
   pid: { type: pidfile }
   bad: { type: by_name, name: mysqld }
 `)
-	mustHave(t, issues, "processes.main command_match requires both exe and user")
-	mustHave(t, issues, "processes.worker command_match requires both exe and user")
+	mustHave(t, issues, "processes.main command_match requires exe or cmd")
+	mustHave(t, issues, "processes.badcmd command_match cmd is not a valid regex")
 	mustHave(t, issues, "processes.pid.path is required for a pidfile selector")
 	mustHave(t, issues, `processes.bad.type "by_name" is not one of pidfile, command_match`)
+
+	// exe-only and cmd-only selectors are now valid (user/group optional).
+	ok := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+processes:
+  worker: { type: command_match, exe: /usr/sbin/mysqld }
+  unifi: { type: command_match, cmd: "java .*unifi", group: unifi }
+`)
+	for _, is := range ok {
+		if hasIssue([]Issue{is}, "processes.worker") || hasIssue([]Issue{is}, "processes.unifi") {
+			t.Fatalf("exe-only / cmd-only selectors must be valid: %v", ok)
+		}
+	}
 }
 
 func TestValidateCleanServicePasses(t *testing.T) {

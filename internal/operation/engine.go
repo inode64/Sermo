@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,6 +40,8 @@ type Engine struct {
 	// aborts before the primary starts) and stopped after it (best-effort). Empty
 	// for most services.
 	AlsoUnits []string
+	// StopArtifacts are stopped-state invariants verified after a clean stop.
+	StopArtifacts StopArtifacts
 
 	ConfigError error
 	Manager     Manager
@@ -57,6 +61,16 @@ type Engine struct {
 	Sleep            func(time.Duration)
 	OperationTimeout time.Duration
 	Emit             func(Result)
+}
+
+// StopArtifacts are the stopped-state invariants verified after a clean stop: the
+// pidfile path(s) and the files/globs that must no longer exist. Remove deletes a
+// lingering file (opt-in) before re-checking. A still-present artifact is a
+// warning folded into the result message, not a failure.
+type StopArtifacts struct {
+	PidfilePaths []string
+	Files        []string
+	Remove       bool
 }
 
 type plan struct {
@@ -98,6 +112,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	// Best-effort failures stopping also_service units; folded into the final
 	// success message (a successful stop is not failed by an auxiliary unit).
 	var alsoStopErrs []string
+	// Stale stopped-state artifacts (pidfile/files still present after a clean
+	// stop); folded into the success message as a warning, like alsoStopErrs.
+	var staleWarn []string
 
 	ctx, cancel := boundContext(ctx, e.OperationTimeout)
 	defer cancel()
@@ -218,6 +235,8 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		// init keeps reporting a state that no longer matches the processes. Best
 		// effort: a stop that already succeeded must not fail on reconciliation.
 		_ = e.Manager.ResetState(ctx, e.Unit)
+		// Clean stop reached: verify stopped-state invariants (pidfile/files gone).
+		staleWarn = append(staleWarn, e.verifyStopped()...)
 	}
 
 	// Steps 12-13: start and verify status.
@@ -290,7 +309,48 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	if len(alsoStopErrs) > 0 {
 		result.Message += " (also_service: " + strings.Join(alsoStopErrs, "; ") + ")"
 	}
+	if len(staleWarn) > 0 {
+		result.Message += " (stale: " + strings.Join(staleWarn, "; ") + ")"
+	}
 	return result
+}
+
+// verifyStopped checks the stopped-state invariants after a clean stop: every
+// declared pidfile path and every files_absent glob must no longer exist. With
+// StopArtifacts.Remove set, a lingering file is deleted and only re-flagged if
+// the delete fails. Returns one warning per still-present (or unremovable)
+// artifact, for folding into the result message.
+func (e Engine) verifyStopped() []string {
+	var warns []string
+	flag := func(path string, isGlob bool) {
+		var matches []string
+		if isGlob {
+			m, err := filepath.Glob(path)
+			if err != nil {
+				warns = append(warns, fmt.Sprintf("bad files_absent pattern %q: %v", path, err))
+				return
+			}
+			matches = m
+		} else if _, err := os.Stat(path); err == nil {
+			matches = []string{path}
+		}
+		for _, m := range matches {
+			if e.StopArtifacts.Remove {
+				if err := os.Remove(m); err != nil { //nolint:gosec // operator-listed stop artifact
+					warns = append(warns, fmt.Sprintf("could not remove stale %s: %v", m, err))
+				}
+				continue
+			}
+			warns = append(warns, "stale "+m)
+		}
+	}
+	for _, p := range e.StopArtifacts.PidfilePaths {
+		flag(p, false)
+	}
+	for _, g := range e.StopArtifacts.Files {
+		flag(g, true)
+	}
+	return warns
 }
 
 // clearResiduals discovers residual processes after a stop and applies signal
