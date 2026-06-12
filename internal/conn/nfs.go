@@ -38,7 +38,7 @@ func (nfsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		port = 2049
 	}
 
-	xid := rpcXID()
+	xid := randXID32()
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
