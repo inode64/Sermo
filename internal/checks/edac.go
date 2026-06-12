@@ -48,12 +48,7 @@ func (c edacCheck) Run(_ context.Context) Result {
 	values := map[string]float64{"ce": float64(st.CE), "ue": float64(st.UE)}
 	ok := st.UE > 0 // default alert condition
 	if len(c.preds) > 0 {
-		ok = true
-		for _, p := range c.preds {
-			if !compareFloat(values[p.field], p.op, p.value) {
-				ok = false
-			}
-		}
+		ok = levelPredsHold(c.preds, values)
 	}
 
 	r := c.result(ok, fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE), start)
