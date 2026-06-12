@@ -167,6 +167,55 @@ func (p *Prompt) MultiChoose(question string, options []string) []int {
 	}
 }
 
+// MultiChooseKeyword is MultiChoose for menus with reserved answers: the
+// numbered list shows only the real options, and each keyword is accepted as a
+// typed answer instead of occupying a row (the notifier menu's 'none' and
+// 'default'). It returns (nil, keyword) when a keyword is typed; otherwise
+// (indices, ""). 'all' selects every option and needs at least one to exist;
+// the keywords work even with an empty option list.
+func (p *Prompt) MultiChooseKeyword(question string, options []string, keywords ...string) ([]int, string) {
+	quoted := make([]string, 0, len(keywords)+1)
+	if len(options) > 0 {
+		quoted = append(quoted, "'all'")
+	}
+	for _, kw := range keywords {
+		quoted = append(quoted, "'"+kw+"'")
+	}
+	hint := "choices (" + strings.Join(quoted, ", ") + "): "
+	if len(options) > 0 {
+		hint = "choices (numbers like 1,3, a name, " + strings.Join(quoted, ", ") + "): "
+	}
+	for {
+		p.printList(question, options)
+		p.printf("%s", hint)
+		ans := strings.TrimSpace(p.readLine())
+		for _, kw := range keywords {
+			if strings.EqualFold(ans, kw) {
+				return nil, kw
+			}
+		}
+		if strings.EqualFold(ans, "all") && len(options) > 0 {
+			idx := make([]int, len(options))
+			for i := range options {
+				idx[i] = i
+			}
+			return idx, ""
+		}
+		if i, ok := matchOptionWord(ans, options); ok {
+			return []int{i}, ""
+		}
+		if idx, ok := parseIndices(ans, len(options)); ok && len(idx) > 0 {
+			return idx, ""
+		}
+		if len(options) > 0 {
+			p.printf("  enter numbers between 1 and %d (e.g. 1,3), a name, or %s\n", len(options), strings.Join(quoted, ", "))
+		} else {
+			p.printf("  enter %s\n", strings.Join(quoted, " or "))
+		}
+		p.abortIfClosed()
+	}
+}
+
 // AskInt reads an integer, returning def on an empty line and re-prompting on a
 // non-numeric answer.
 func (p *Prompt) AskInt(question string, def int) int {

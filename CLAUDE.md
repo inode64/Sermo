@@ -77,14 +77,17 @@ script-src remains nonce-strict (see `securityHeaders` in
 
 The interactive wizard (`sermoctl wizard`, `internal/assist`) drives every
 selection through the shared `Prompt` helpers — never hand-roll a bespoke
-question. Multi-selects use `Prompt.MultiChoose`, which accepts item numbers,
-the keyword `all`, or an option's name. Reuse one consistent **all / none /
-default** vocabulary across menus: `all` selects everything; `none` opts out;
-`default` inherits the global setting. In the notifier menu the `none` and
-`default` entries are **always offered, even when the config defines no
-notifiers**, so an expand-only or opt-out watch still has a valid pick — keep
-that invariant when adding new assistants or selection steps, and update
-`docs/configuration.md` and the wizard spec in the same change.
+question. Multi-selects use `Prompt.MultiChoose` (item numbers, the keyword
+`all`, or an option's name); menus with reserved picks use
+`Prompt.MultiChooseKeyword`, where the numbered list shows **only the real
+options** and the reserved answers ride in the question hint instead of
+occupying rows. Reuse one consistent **all / none / default** vocabulary:
+`all` selects everything; `none` opts out; `default` inherits the global
+setting. In the notifier menu the list shows only the notifiers defined in the
+config, and the `none`/`default` keywords are **accepted even when the config
+defines no notifiers**, so an expand-only or opt-out watch still has a valid
+answer — keep that invariant when adding new assistants or selection steps,
+and update `docs/configuration.md` and the wizard spec in the same change.
 
 ## Catalog: instanced systemd daemons
 
