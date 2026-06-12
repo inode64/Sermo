@@ -311,7 +311,7 @@ func parseArgs(args []string) (cliArgs, error) {
 			if i >= len(args) {
 				return cliArgs{}, fmt.Errorf("--config requires a value")
 			}
-			parsed.globalPath = args[i]
+			parsed.globalPath = args[i] //nolint:gosec // G602 false positive: i is bounds-checked just above
 		case strings.HasPrefix(arg, "--catalog="):
 			parsed.catalog = append(parsed.catalog, strings.TrimPrefix(arg, "--catalog="))
 		case arg == "--catalog":
@@ -319,7 +319,7 @@ func parseArgs(args []string) (cliArgs, error) {
 			if i >= len(args) {
 				return cliArgs{}, fmt.Errorf("--catalog requires a value")
 			}
-			parsed.catalog = append(parsed.catalog, args[i])
+			parsed.catalog = append(parsed.catalog, args[i]) //nolint:gosec // G602 false positive: i is bounds-checked just above
 		case arg == "--verbose" || arg == "-v":
 			parsed.verbose = true
 		case strings.HasPrefix(arg, "-"):
