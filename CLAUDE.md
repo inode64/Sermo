@@ -41,6 +41,37 @@ hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
 introduce a genuinely new pattern, document it here and in `AGENTS.md` so the
 next change can follow it.
 
+The visual layer is a token-driven design system (June 2026 redesign):
+
+- **Design tokens.** All colors/radii/shadows come from CSS custom properties on
+  `:root` (`--bg`, `--panel`, `--text`, `--line`, `--ok`, `--warn`, `--crit`,
+  `--info`, …) with a `prefers-color-scheme: dark` override block. Never
+  hardcode a color in new CSS — use the tokens, deriving tints with
+  `color-mix(in srgb, var(--x) N%, transparent)`. (JS-emitted inline SVG fills
+  keep the GitHub-ish literal palette, which reads on both schemes.)
+- **Panel cards.** Every `<details>` section (plus `#locks-section` and
+  `#detail`) is styled as a card automatically — rounded border, shadow, the
+  `<summary>` as header. A new section needs no extra classes.
+- **Overview tiles.** The `#overview` band under the topbar is the at-a-glance
+  layer: `renderOverview` (called from `renderStatus`, no extra requests)
+  emits `<button class="tile" data-panel-target=…>` per vital sign, with
+  `t-ok`/`t-warn`/`t-crit` accents and optional `usageBar` gauges.
+- **Status pills.** `.target-state` renders states as tinted pills with a
+  colored dot (`::before`, `currentColor`); `state-failed` pulses. New states
+  only need a `state-<name>` color class.
+- **Heartbeat strip.** `beatStrip(points)` renders the 24h availability strip
+  (48 half-hour segments, `beat-ok`/`beat-warn`/`beat-bad`, hollow when
+  unobserved) used in the service expansion; reuse it anywhere a compact
+  availability history is needed.
+
+**CSP and inline styles:** `style-src` deliberately carries `'unsafe-inline'`
+**without** a nonce — per CSP2, a nonce in the list makes browsers ignore
+`'unsafe-inline'` and silently strip every generated `style="…"` attribute
+(section hiding, gauge widths). Do not "harden" style-src back to a nonce;
+script-src remains nonce-strict (see `securityHeaders` in
+`internal/web/server.go`).
+
+
 ## Wizard option selection
 
 The interactive wizard (`sermoctl wizard`, `internal/assist`) drives every
