@@ -114,3 +114,40 @@ func TestSlotPoolReclaimsDeadOwner(t *testing.T) {
 	}
 	_ = h.Release()
 }
+
+// TestSlotHandleReleaseLeavesForeignSlot locks the owner-checked release on
+// the slot side: a slot file rewritten by another owner (reclaim) must be
+// left untouched, and a nil handle must release as a no-op.
+func TestSlotHandleReleaseLeavesForeignSlot(t *testing.T) {
+	dir := t.TempDir()
+	pool := NewSlotPool(dir, 1)
+	h, err := pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+
+	// Simulate a reclaim: another owner now holds the same slot file.
+	foreign := lockFile{Service: "slot-0", OwnerPID: h.ownerPID + 1, OwnerStartTicks: h.ownerStartTicks + 1}
+	if err := os.Remove(h.path); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeLockFileExclusive(h.path, foreign); err != nil {
+		t.Fatalf("rewrite as foreign owner: %v", err)
+	}
+
+	if err := h.Release(); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	current, err := readLockFile(h.path)
+	if err != nil {
+		t.Fatalf("the foreign slot must survive this owner's release: %v", err)
+	}
+	if current.OwnerPID != foreign.OwnerPID {
+		t.Fatalf("slot owner = %d, want the foreign owner %d", current.OwnerPID, foreign.OwnerPID)
+	}
+
+	var nilHandle *SlotHandle
+	if err := nilHandle.Release(); err != nil {
+		t.Fatalf("nil handle release must be a no-op, got %v", err)
+	}
+}

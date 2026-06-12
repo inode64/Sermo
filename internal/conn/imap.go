@@ -34,7 +34,7 @@ func (imapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // pre-authenticated), and logs out. The greeting banner is returned in Extra.
 func imapHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 	br := bufio.NewReader(rw)
-	greeting, err := readIMAPLine(br)
+	greeting, err := readCRLFLine(br)
 	if err != nil {
 		return Result{}, err
 	}
@@ -74,7 +74,7 @@ func imapQuote(s string) string {
 // skipped.
 func readIMAPTagged(br *bufio.Reader, tag string) (ok bool, status string, err error) {
 	for {
-		line, err := readIMAPLine(br)
+		line, err := readCRLFLine(br)
 		if err != nil {
 			return false, "", err
 		}
@@ -88,9 +88,4 @@ func readIMAPTagged(br *bufio.Reader, tag string) (ok bool, status string, err e
 		}
 		// otherwise an untagged "*" line — keep reading.
 	}
-}
-
-func readIMAPLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString('\n')
-	return strings.TrimRight(s, "\r\n"), err
 }

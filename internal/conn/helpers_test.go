@@ -107,7 +107,7 @@ func TestDNSAndDHCPIDs(t *testing.T) {
 	seenDHCP := map[uint32]bool{}
 	for i := 0; i < 8; i++ {
 		seenDNS[dnsID()] = true
-		seenDHCP[dhcpXID()] = true
+		seenDHCP[randXID32()] = true
 	}
 	if len(seenDNS) < 2 || len(seenDHCP) < 2 {
 		t.Fatalf("ids look constant: dns %v dhcp %v", seenDNS, seenDHCP)

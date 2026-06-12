@@ -66,7 +66,7 @@ func (dhcpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	xid := dhcpXID()
+	xid := randXID32()
 	packet := buildDHCPDiscover(xid, mac)
 
 	// No interface -> unicast to a known server/relay; resolve its address now.
@@ -134,16 +134,6 @@ func dhcpClientMAC(s string) (net.HardwareAddr, error) {
 	}
 	mac[0] = (mac[0] | 0x02) &^ 0x01 // locally administered, unicast
 	return mac, nil
-}
-
-// dhcpXID returns a random transaction id used to match the OFFER to our
-// DISCOVER (port 68 may also receive offers meant for other clients).
-func dhcpXID() uint32 {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return 0x53524d4f // "SRMO"
-	}
-	return binary.BigEndian.Uint32(b[:])
 }
 
 // buildDHCPDiscover builds a DHCPDISCOVER: the 236-byte BOOTP header, the magic

@@ -108,7 +108,7 @@ func writeRESP(w io.Writer, args ...string) error {
 // readRESP reads one reply: simple string (+), integer (:) and bulk string ($)
 // return their payload; an error reply (-) returns it as a Go error.
 func readRESP(br *bufio.Reader) (string, error) {
-	line, err := readRESPLine(br)
+	line, err := readCRLFLine(br)
 	if err != nil {
 		return "", err
 	}
@@ -136,11 +136,6 @@ func readRESP(br *bufio.Reader) (string, error) {
 	default:
 		return line[1:], nil
 	}
-}
-
-func readRESPLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString('\n')
-	return strings.TrimRight(s, "\r\n"), err
 }
 
 // parseRedisInfo parses an INFO reply — "key:value" lines, "# Section" headers

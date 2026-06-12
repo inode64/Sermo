@@ -6,8 +6,12 @@
 package conn
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -94,3 +98,20 @@ func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) 
 
 // Names returns the registered canonical protocol names, sorted.
 func Names() []string { return defaultRegistry.names() }
+
+// readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
+// every text protocol probe (redis RESP, imap, nut, …) reads.
+func readCRLFLine(br *bufio.Reader) (string, error) {
+	s, err := br.ReadString('\n')
+	return strings.TrimRight(s, "\r\n"), err
+}
+
+// randXID32 returns a random 32-bit transaction id with a fixed fallback when
+// the system RNG fails, shared by the rpcbind/nfs and dhcp probes.
+func randXID32() uint32 {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return 0x53524d4f // "SRMO"
+	}
+	return binary.BigEndian.Uint32(b[:])
+}
