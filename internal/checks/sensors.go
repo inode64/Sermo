@@ -79,13 +79,7 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 		return c.result(false, "sensors: no matching inputs", start)
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		v, present := values[p.field]
-		if !present || !compareFloat(v, p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	parts := make([]string, 0, 3)
 	for _, f := range []string{"temp", "fan", "voltage"} {

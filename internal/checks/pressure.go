@@ -56,12 +56,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 		"full_avg10": s.Full.Avg10, "full_avg60": s.Full.Avg60, "full_avg300": s.Full.Avg300,
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		if !compareFloat(values[p.field], p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	res := c.result(ok, fmt.Sprintf("pressure %s some %.2f/%.2f/%.2f full %.2f/%.2f/%.2f",
 		c.resource, s.Some.Avg10, s.Some.Avg60, s.Some.Avg300, s.Full.Avg10, s.Full.Avg60, s.Full.Avg300), start)
@@ -74,11 +69,7 @@ func (c pressureCheck) Run(_ context.Context) Result {
 		"full_avg60":  s.Full.Avg60,
 		"full_avg300": s.Full.Avg300,
 	}
-	// value is the first predicate's reading, so a hook sees the breaching number.
-	res.Data["value"] = s.Some.Avg10
-	if len(c.preds) > 0 {
-		res.Data["value"] = values[c.preds[0].field]
-	}
+	res.Data["value"] = firstPredValue(c.preds, values, s.Some.Avg10)
 	return res
 }
 

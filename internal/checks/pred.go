@@ -120,6 +120,32 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	return op, value, ""
 }
 
+// levelPredsHold reports whether every predicate holds against values — the
+// level-check AND. A field absent from values can never hold (how disk treats
+// inode predicates on an inode-less filesystem, and fds/pids treat an unknown
+// kernel limit).
+func levelPredsHold(preds []levelPred, values map[string]float64) bool {
+	for _, p := range preds {
+		v, known := values[p.field]
+		if !known || !compareFloat(v, p.op, p.value) {
+			return false
+		}
+	}
+	return true
+}
+
+// firstPredValue returns the first predicate's reading — the breaching number a
+// hook sees as SERMO_VALUE — or fallback when no predicate (or no reading)
+// applies.
+func firstPredValue(preds []levelPred, values map[string]float64, fallback float64) float64 {
+	if len(preds) > 0 {
+		if v, ok := values[preds[0].field]; ok {
+			return v
+		}
+	}
+	return fallback
+}
+
 // deltaOrZero is the shared counter-delta clamp every stateful check uses: a
 // cumulative counter that went backwards (reset, device re-plug, module
 // reload) yields a zero delta instead of a giant unsigned wraparound.
