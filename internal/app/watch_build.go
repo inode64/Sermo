@@ -5,8 +5,6 @@ import (
 	"math"
 	"slices"
 	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -251,7 +249,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	fw := &fileWatcher{
 		name:      name,
 		path:      cfgval.AsString(checkEntry["path"]),
-		recursive: boolField(checkEntry["recursive"]),
+		recursive: cfgval.Bool(checkEntry["recursive"]),
 		cond:      cond,
 		hook:      hook,
 		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
@@ -340,7 +338,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 		if !validThresholdOp(op) {
 			return c, fmt.Errorf("process %s requires a valid op (>=, >, <=, <, ==, !=)", t.key)
 		}
-		v, ok := floatField(m["value"])
+		v, ok := cfgval.Float(m["value"])
 		if !ok {
 			return c, fmt.Errorf("process %s value must be numeric", t.key)
 		}
@@ -371,7 +369,7 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 			if !validThresholdOp(op) {
 				return c, fmt.Errorf("file size requires on: change or {op, value}")
 			}
-			v, ok := floatField(sz["value"])
+			v, ok := cfgval.Float(sz["value"])
 			if !ok {
 				return c, fmt.Errorf("file size value must be numeric")
 			}
@@ -643,29 +641,4 @@ func sortedWatchNames(m map[string]any) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-func boolField(v any) bool {
-	b, _ := v.(bool)
-	return b
-}
-
-// floatField reads a numeric field that may decode as a YAML int, float or
-// string, reporting whether it parsed.
-func floatField(v any) (float64, bool) {
-	switch t := v.(type) {
-	case int:
-		return float64(t), true
-	case int64:
-		return float64(t), true
-	case uint64:
-		return float64(t), true
-	case float64:
-		return t, true
-	case string:
-		f, err := strconv.ParseFloat(strings.TrimSpace(t), 64)
-		return f, err == nil
-	default:
-		return 0, false
-	}
 }
