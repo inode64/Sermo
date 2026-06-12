@@ -1,0 +1,57 @@
+kind: daemon
+name: kafka-broker
+display_name: "Apache Kafka Broker"
+description: "Kafka broker: serves the client data plane (produce/fetch) on the broker listener."
+type: queue
+
+# Broker role running as its own systemd unit. On a combined KRaft node the
+# broker and controller share one process; this catalog splits the roles so a
+# deployment that runs them as separate units monitors each independently.
+service:
+  systemd: [kafka-broker, kafka]
+  openrc: [kafka-broker, kafka]
+
+# Kafka runs on the JVM: the runtime is owned by the `java` app and the launcher
+# scripts + version by the `kafka` app. Both are linked here so a missing Java
+# or Kafka install blocks start, and their preflight runs before this service.
+apps: [java, kafka]
+
+variables:
+  host: 127.0.0.1
+  # Broker (client data plane) listener.
+  port: 9092
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native Kafka wire-protocol probe: an unauthenticated ApiVersions request the
+  # broker answers before login, proving it speaks Kafka (not just that the port
+  # is open). The broker (data plane) listener advertises the Produce API, so
+  # expect role=broker confirms this listener is actually the broker.
+  protocol:
+    type: kafka
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+    expect:
+      role: broker
+
+rules:
+  restart-if-protocol-failed:
+    type: remediation
+    if:
+      failed:
+        check: protocol
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart

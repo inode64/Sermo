@@ -1,0 +1,18 @@
+kind: app
+name: kafka
+display_name: "Apache Kafka"
+description: "Apache Kafka distribution (broker/controller, KRaft mode)"
+
+# Kafka ships as JVM shell launchers under <install>/bin. The runtime itself is
+# owned by the `java` app and linked from each kafka service; here we only prove
+# the distribution is installed and report its version.
+variables:
+  bindir: /opt/kafka/bin
+  binary: "${bindir}/kafka-server-start.sh"
+  topics: "${bindir}/kafka-topics.sh"
+
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  # kafka-topics.sh --version prints e.g. "3.9.0 (Commit:...)" — the canonical
+  # way to read the installed Kafka version without a running broker.
+  version: { type: command, command: ["${topics}", "--version"], timeout: 10s }
