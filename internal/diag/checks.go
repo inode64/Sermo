@@ -120,11 +120,11 @@ func diagDiskResources(b *builder, scope string, fields map[string]any, host Hos
 	}
 }
 
+// hasMountCondition mirrors the storage-check schema: `mounted` is the only
+// mount condition (config validation rejects fstype/device/options).
 func hasMountCondition(fields map[string]any) bool {
-	if _, ok := fields["mounted"]; ok {
-		return true
-	}
-	return str(fields["fstype"]) != "" || str(fields["device"]) != "" || fields["options"] != nil
+	_, ok := fields["mounted"]
+	return ok
 }
 
 // checkAlignment warns when a per-check interval is below the resolution or not an
