@@ -76,9 +76,7 @@ checks:
     timeout: 3s
 
 stop_policy:
-  graceful_timeout: 30s
   term_timeout: 10s
-  kill_timeout: 5s
   force_kill: true
   kill_only_if:
     users: ["${user}", root]
