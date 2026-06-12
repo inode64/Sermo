@@ -1,0 +1,8 @@
+kind: app
+name: smartctl_exporter
+display_name: "Prometheus smartctl Exporter"
+variables:
+  binary: /usr/bin/smartctl_exporter
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

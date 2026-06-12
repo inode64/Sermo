@@ -1,0 +1,8 @@
+kind: app
+name: influxdb
+display_name: "InfluxDB"
+variables:
+  binary: /usr/bin/influxd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "version"], timeout: 10s }

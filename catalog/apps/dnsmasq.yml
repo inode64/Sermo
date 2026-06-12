@@ -1,0 +1,8 @@
+kind: app
+name: dnsmasq
+display_name: "dnsmasq"
+variables:
+  binary: /usr/bin/dnsmasq
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

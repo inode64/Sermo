@@ -1,0 +1,35 @@
+kind: daemon
+name: homeassistant
+display_name: "Home Assistant"
+description: "Home Assistant home-automation platform."
+
+service:
+  systemd: [homeassistant, "home-assistant@homeassistant"]
+  openrc: [homeassistant]
+
+# Home Assistant runs on Python (here a venv interpreter); the runtime is owned
+# by the `python` app and linked for its preflight.
+apps: [python]
+
+variables:
+  host: 127.0.0.1
+  port: 8123
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # The frontend answers on the root path; the REST API needs a long-lived token,
+  # so accept any non-5xx as "the server responds".
+  http:
+    type: http
+    url: "http://${host}:${port}/"
+    expect_status: { op: "<", value: 500 }
+    timeout: 5s

@@ -1,0 +1,26 @@
+kind: daemon
+name: rest-server
+display_name: "Restic REST Server"
+description: "restic rest-server: HTTP backend for restic backups."
+
+service:
+  systemd: [rest-server]
+  openrc: [rest-server]
+
+apps: [rest-server]
+variables:
+  host: 127.0.0.1
+  port: 8000
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  # rest-server requires authentication for repository paths and has no public
+  # health endpoint, so a tcp probe is the reliable liveness signal.
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s

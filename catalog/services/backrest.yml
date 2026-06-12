@@ -1,0 +1,32 @@
+kind: daemon
+name: backrest
+display_name: "Backrest"
+description: "Backrest web UI/orchestrator for restic backups."
+
+service:
+  systemd: [backrest]
+  openrc: [backrest]
+
+apps: [backrest, restic]
+variables:
+  host: 127.0.0.1
+  port: 9898
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # The web UI/API answers on the root path; accept any non-5xx (it may redirect
+  # or require auth) so the check tracks "the server responds", not the page.
+  http:
+    type: http
+    url: "http://${host}:${port}/"
+    expect_status: { op: "<", value: 500 }
+    timeout: 5s

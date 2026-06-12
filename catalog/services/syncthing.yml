@@ -1,0 +1,36 @@
+kind: daemon
+name: syncthing
+display_name: "Syncthing"
+description: "Syncthing continuous file-synchronization daemon."
+
+# Syncthing runs as a per-user systemd instance (syncthing@<user>, often the
+# short hostname) or a plain OpenRC service. ${hostname} fills the common case;
+# override `service` for a different instance.
+service:
+  systemd: ["syncthing@${hostname}", syncthing]
+  openrc: [syncthing]
+
+apps: [syncthing]
+variables:
+  host: 127.0.0.1
+  port: 8384
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native Syncthing probe: GETs the unauthenticated /rest/noauth/health endpoint
+  # and verifies {"status":"OK"}. Supply an API key (as password, sent as
+  # X-API-Key) to additionally read and report the Syncthing version.
+  health:
+    type: syncthing
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

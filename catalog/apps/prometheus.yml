@@ -1,0 +1,8 @@
+kind: app
+name: prometheus
+display_name: "Prometheus"
+variables:
+  binary: /usr/bin/prometheus
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
