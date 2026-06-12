@@ -61,13 +61,3 @@ func engineInt(cfg *config.Config, key string, fallback int) int {
 		return fallback
 	}
 }
-
-// NotifiersRaw returns the global `notifiers` section (nil when absent), the
-// input notify.Build expects.
-func NotifiersRaw(cfg *config.Config) map[string]any {
-	if cfg == nil {
-		return nil
-	}
-	m, _ := cfg.Global.Raw["notifiers"].(map[string]any)
-	return m
-}

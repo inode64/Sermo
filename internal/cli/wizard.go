@@ -171,7 +171,7 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 
 // notifierNames returns the configured notifier names, sorted.
 func notifierNames(cfg *config.Config) []string {
-	raw, _ := cfg.Global.Raw["notifiers"].(map[string]any)
+	raw := cfg.Notifiers()
 	names := make([]string, 0, len(raw))
 	for n := range raw {
 		names = append(names, n)
