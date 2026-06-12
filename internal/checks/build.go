@@ -534,7 +534,7 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 		threshold = m
 	}
 	op := cfgval.AsString(threshold["op"])
-	if !validDiskOp(op) {
+	if !cfgval.IsCompareOp(op) {
 		return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
 	}
 	val, err := strconv.ParseFloat(cfgval.String(threshold["value"]), 64)
@@ -567,7 +567,7 @@ func buildAutofsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	op, value := "", 0.0
 	if m, ok := entry["count"].(map[string]any); ok {
 		op = cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
+		if !cfgval.IsCompareOp(op) {
 			return nil, "autofs check count has an invalid op (>=, >, <=, <, ==, !=)"
 		}
 		v, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
@@ -901,7 +901,7 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	case "latency":
 		if th, ok := entry["threshold"].(map[string]any); ok {
 			op := cfgval.AsString(th["op"])
-			if !validDiskOp(op) {
+			if !cfgval.IsCompareOp(op) {
 				return nil, "icmp latency threshold has an invalid op"
 			}
 			v, err := strconv.ParseFloat(cfgval.String(th["value"]), 64)
