@@ -336,6 +336,7 @@ type commandCheck struct {
 	expectExit int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
+	analyzer   *outputAnalyzer
 	onChange   bool
 	state      *cmdState
 }
@@ -358,6 +359,14 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if ok, detail := c.stderr.Match(res.Stderr); !ok {
 		return c.result(false, fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail), start)
+	}
+	if c.analyzer.Active() {
+		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {
+			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, firstLine(line)), start)
+			r.Optional = sev == SevWarning
+			r.Data = map[string]any{"pattern_id": id, "pattern_severity": sev.String(), "pattern_line": line}
+			return r
+		}
 	}
 	if c.onChange && c.state != nil {
 		cur := strings.TrimSpace(res.Stdout)

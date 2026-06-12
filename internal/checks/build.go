@@ -378,7 +378,11 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check expect_stderr " + warn
 	}
-	c := commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr}
+	analyzer, warn := parseAnalyzer(entry["analyze"])
+	if warn != "" {
+		return nil, "command check " + warn
+	}
+	c := commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr, analyzer: analyzer}
 	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
 		c.state = &cmdState{}
 	}
