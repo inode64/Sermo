@@ -213,7 +213,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	// important when services=0 but watches=N (the main dashboard would otherwise
 	// be empty). We read the raw global watches section (same source BuildWatches
 	// uses) so listing is independent of whether the watch runner is active.
-	if raw, ok := cfg.Global.Raw["watches"].(map[string]any); ok && len(raw) > 0 {
+	if raw, _ := cfg.ResolveWatches(); len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
 			disabled := isDisabled(entry)

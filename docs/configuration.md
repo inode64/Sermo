@@ -1177,6 +1177,33 @@ checks:
 - Numeric fields (`port`, `expect_status`) accept an int, a quoted string, or a
   `${var}`, and are parsed after expansion.
 
+### Global custom variables (`defaults.variables`)
+
+Declare variables once under `defaults.variables` and use them as `${name}`
+**anywhere** values are expanded — every service, daemon and host `watches:`
+entry:
+
+```yaml
+defaults:
+  policy: { cooldown: 5m }
+  variables:
+    custom_var1: /opt/myapp
+    custom_var2: 8443
+    libdir: [/usr/lib64, /usr/lib]   # list = first existing path
+```
+
+- **Precedence:** a service's own `variables.X` wins over `defaults.variables.X`,
+  which wins over the builtins (`${host}`, `${port}`, `${hostname}`, …). So a
+  custom `host`/`port` overrides the builtin for every service that does not set
+  its own.
+- **Names:** must be unique (a duplicated YAML key is a load error) and must not
+  be a **reserved name** — the selection keywords `all`/`none`/`default` and the
+  runtime tokens `date`/`event`/`action` are rejected. Builtin names (`host`,
+  `port`, …) are allowed and override the builtin (see precedence).
+- Values support `${env:...}` and list-first-existing exactly like per-service
+  variables. They cannot contain another `${var}` (no nesting), like any variable.
+- An undefined `${custom_x}` is a validation error in services **and** watches.
+
 ### Secrets from the environment
 
 `${env:NAME}` resolves to the environment variable `NAME` **anywhere** in the

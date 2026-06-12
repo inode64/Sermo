@@ -132,6 +132,18 @@ func validateGlobal(cfg *Config) []Issue {
 		add("defaults.policy.cooldown %q must be a valid positive duration", cooldown)
 	}
 
+	validateDefaultsVariables(cfg.Global.Defaults, add)
+	// Nested-${} in a custom variable value, and any undefined ${var} used in a
+	// watch, surface here (services get this via validateServices->Resolve).
+	for _, e := range validateVariableValues(cfg.globalVars()) {
+		add("defaults.variables: %s", e)
+	}
+	if _, errs := cfg.ResolveWatches(); len(errs) > 0 {
+		for _, e := range errs {
+			add("watches: %s", e)
+		}
+	}
+
 	return issues
 }
 

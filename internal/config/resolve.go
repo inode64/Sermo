@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"sermo/internal/cfgval"
 	"sort"
 	"strings"
@@ -23,7 +24,8 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 
-	vars := collectVariables(merged)
+	vars := c.globalVars()
+	maps.Copy(vars, collectVariables(merged)) // service variables override global custom ones
 	errs := validateVariableValues(vars)
 	injectBuiltinVariables(vars, name, merged)
 	expanded, expErrs := expandTree(merged, vars)
@@ -263,18 +265,7 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 	if _, ok := vars["service"]; !ok {
 		vars["service"] = ServiceUnit(merged, name)
 	}
-	if _, ok := vars["host"]; !ok {
-		vars["host"] = detectedHost
-	}
-	if _, ok := vars["hostname"]; !ok {
-		vars["hostname"] = detectedHostname
-	}
-	if _, ok := vars["init"]; !ok {
-		vars["init"] = detectedInit
-	}
-	if _, ok := vars["user"]; !ok {
-		vars["user"] = detectedUser
-	}
+	injectHostBuiltins(vars)
 	// ${pidfile} falls back to the conventional /run/<unit>.pid; an explicit
 	// `pidfile` variable always wins.
 	if _, ok := vars["pidfile"]; !ok {
@@ -288,6 +279,45 @@ func injectBuiltinVariables(vars map[string]string, name string, merged map[stri
 			vars["port"] = p
 		}
 	}
+}
+
+// injectHostBuiltins fills the service-independent (host-level) builtins —
+// host/hostname/init/user — when absent. Shared by injectBuiltinVariables and
+// the watch expansion (watches have no service-specific builtins).
+func injectHostBuiltins(vars map[string]string) {
+	if _, ok := vars["host"]; !ok {
+		vars["host"] = detectedHost
+	}
+	if _, ok := vars["hostname"]; !ok {
+		vars["hostname"] = detectedHostname
+	}
+	if _, ok := vars["init"]; !ok {
+		vars["init"] = detectedInit
+	}
+	if _, ok := vars["user"]; !ok {
+		vars["user"] = detectedUser
+	}
+}
+
+// globalVars returns the custom variables declared under `defaults.variables`,
+// processed through collectVariables so they get the same env (${env:...}) and
+// list-first-existing handling as per-service variables. They form the lowest
+// explicit layer (a service's own variables override them; builtins fill gaps).
+func (c *Config) globalVars() map[string]string {
+	return collectVariables(map[string]any{"variables": c.Global.Defaults["variables"]})
+}
+
+// ResolveWatches returns the global `watches` section with ${var} expanded
+// against the custom global variables and the host-level builtins. Watches have
+// no per-watch builtins (name/port/pidfile). nil when no watches are configured.
+func (c *Config) ResolveWatches() (map[string]any, []string) {
+	raw, ok := c.Global.Raw["watches"].(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil, nil
+	}
+	vars := c.globalVars()
+	injectHostBuiltins(vars)
+	return expandTree(raw, vars)
 }
 
 // expandRestartOnChange desugars a `restart_on_change: {libraries: [...]}` block
@@ -419,7 +449,8 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 // shared by ResolveDaemon and the `apps` linkage (which resolves app documents).
 func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
-	vars := collectVariables(body)
+	vars := c.globalVars()
+	maps.Copy(vars, collectVariables(body)) // doc variables override global custom ones
 	errs := validateVariableValues(vars)
 	injectBuiltinVariables(vars, name, body)
 	expanded, expErrs := expandTree(body, vars)
