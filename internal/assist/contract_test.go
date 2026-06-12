@@ -23,8 +23,12 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 		notifiers: []string{"ops"},
 	})
 	netAll := buildNetWatch(Iface{Name: "eth0"}, netSettings{
-		metrics:  []string{"state", "errors", "speed"},
+		metrics:  []string{"state", "errors", "speed", "address"},
 		errorsAt: 100, stateDown: true,
+		notifiers: []string{"ops"},
+	})
+	uplink := buildUplinkWatches("ppp0", uplinkSettings{
+		probeHost: "1.1.1.1", probeName: "example.com", forCycles: 3,
 		notifiers: []string{"ops"},
 	})
 
@@ -35,6 +39,9 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 		"data":     volPct,
 		"srv":      volBytes,
 		"net-eth0": netAll,
+	}
+	for name, entry := range uplink {
+		generated[name] = entry
 	}
 	text, err := yaml.Marshal(generated)
 	if err != nil {
