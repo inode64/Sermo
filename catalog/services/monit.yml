@@ -13,6 +13,11 @@ variables:
   # Monit's HTTP interface (set httpd in monitrc). Default 2812.
   port: 2812
 
+restart_on_change:
+  # Restart when a linked critical library changes on disk (e.g. an
+  # OpenSSL CVE update), so the service picks up the new code.
+  libraries: [glibc, openssl, zlib]
+
 checks:
   service:
     type: service

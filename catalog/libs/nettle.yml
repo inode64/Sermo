@@ -1,0 +1,8 @@
+kind: lib
+name: nettle
+display_name: "Nettle"
+description: "Nettle low-level cryptography library; a change triggers a restart of dependent services"
+variables:
+  binary: "/usr/lib64/libnettle.so.8"
+preflight:
+  binary: { type: binary, path: "${binary}" }

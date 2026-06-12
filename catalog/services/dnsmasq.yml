@@ -14,6 +14,11 @@ variables:
   # Name resolved to prove the resolver answers; override per deployment.
   query: localhost
 
+restart_on_change:
+  # Restart when a linked critical library changes on disk (e.g. an
+  # OpenSSL CVE update), so the service picks up the new code.
+  libraries: [glibc, systemd-libs, nettle, libidn2]
+
 checks:
   service:
     type: service
