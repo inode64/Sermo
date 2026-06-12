@@ -13,6 +13,10 @@ variables:
 preflight:
   config: { type: command, command: ["${binary}","-t"], timeout: 30s }
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/fail2ban/fail2ban.pid
+
 checks:
   service: { type: service, expect: active }
   fail2ban: { type: fail2ban, timeout: 3s }

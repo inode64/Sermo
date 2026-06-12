@@ -7,6 +7,10 @@ apps: [snmpd]
 variables:
   port: 161
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/snmpd.pid
+
 checks:
   service: { type: service, expect: active }
   port: { type: snmp, port: "${port}" }

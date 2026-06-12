@@ -1973,3 +1973,44 @@ func hasSub(errs []string, sub string) bool {
 	}
 	return false
 }
+
+func TestExpandPidfileDesugars(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/svc.yml": `
+kind: daemon
+name: svc
+pidfile: /run/svc.pid
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["pidfile"]; present {
+		t.Errorf("top-level pidfile key must be consumed")
+	}
+	// (a) process selector for tree discovery.
+	procs := resolved.Tree["processes"].(map[string]any)
+	sel := procs["pidfile"].(map[string]any)
+	if sel["type"] != "pidfile" || sel["path"] != "/run/svc.pid" {
+		t.Fatalf("process selector = %v", sel)
+	}
+	// (b) gated health check.
+	checks := resolved.Tree["checks"].(map[string]any)
+	chk := checks["pidfile"].(map[string]any)
+	if chk["type"] != "pidfile" || chk["path"] != "/run/svc.pid" {
+		t.Fatalf("pidfile check = %v", chk)
+	}
+	req, _ := chk["requires"].([]any)
+	if len(req) != 1 || req[0] != "service" {
+		t.Fatalf("pidfile check requires = %v, want [service]", chk["requires"])
+	}
+}

@@ -70,7 +70,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		var lastWarn string
 		matched := false
 		for _, path := range sel.Paths {
-			pid, err := readPidfile(path)
+			pid, err := ReadPidfile(path)
 			if err != nil {
 				lastWarn = fmt.Sprintf("pidfile %q (%s): %v", path, sel.Name, err)
 				continue
@@ -242,8 +242,10 @@ func sortedPIDs(snapshot map[int]Identity) []int {
 	return pids
 }
 
-// readPidfile reads a PID from a pidfile, accepting a trailing newline.
-func readPidfile(path string) (int, error) {
+// ReadPidfile reads a PID from a pidfile, accepting a trailing newline. It is
+// exported so the pidfile check can reuse the same parsing (and its accepted
+// gosec exception for reading an operator-configured path).
+func ReadPidfile(path string) (int, error) {
 	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return 0, err

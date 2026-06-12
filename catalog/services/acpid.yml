@@ -7,6 +7,10 @@ service: acpid
 # here, so they run in this service's preflight.
 apps: [acpid]
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/acpid.pid
+
 checks:
   service: { type: service, expect: active }
   acpid: { type: acpid, timeout: 3s }

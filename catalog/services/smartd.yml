@@ -5,5 +5,9 @@ description: "Estado de los discos SMART"
 service: smartd
 apps: [smartd]
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/smartd.pid
+
 checks:
   service: { type: service, expect: active }

@@ -12,6 +12,10 @@ variables:
   host: 127.0.0.1
   port: 9898
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/backrest.pid
+
 checks:
   service:
     type: service

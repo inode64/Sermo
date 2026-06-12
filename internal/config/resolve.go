@@ -32,8 +32,71 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
+	errs = append(errs, expandPidfile(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
+}
+
+// expandPidfile desugars a top-level `pidfile: <path>` into two things that share
+// the one declaration: (a) a `processes` pidfile selector, so the parent process
+// and its descendants are discovered and monitored, and (b) a `pidfile` health
+// check gated by `requires: [service]`, so a missing or stale pidfile is an error
+// only while the service is active (which means the daemon died or lost its
+// pidfile without the service manager noticing). The key is removed. An existing
+// pidfile selector or a check already named `pidfile` is respected, not
+// overwritten.
+func expandPidfile(tree map[string]any) []string {
+	raw, present := tree["pidfile"]
+	if !present {
+		return nil
+	}
+	delete(tree, "pidfile")
+	path := cfgval.AsString(raw)
+	if path == "" {
+		return []string{"pidfile must be a non-empty path string"}
+	}
+
+	// (a) process-tree selector, unless the service already declares one.
+	procs, _ := tree["processes"].(map[string]any)
+	if procs == nil {
+		procs = map[string]any{}
+	}
+	if !hasPidfileSelector(procs) {
+		if _, exists := procs["pidfile"]; !exists {
+			procs["pidfile"] = map[string]any{"type": "pidfile", "path": path}
+		}
+	}
+	if len(procs) > 0 {
+		tree["processes"] = procs
+	}
+
+	// (b) gated health check, unless the service already defines one.
+	checksMap, _ := tree["checks"].(map[string]any)
+	if checksMap == nil {
+		checksMap = map[string]any{}
+	}
+	if _, exists := checksMap["pidfile"]; !exists {
+		checksMap["pidfile"] = map[string]any{
+			"type":     "pidfile",
+			"path":     path,
+			"requires": []any{"service"},
+		}
+	}
+	tree["checks"] = checksMap
+	return nil
+}
+
+// hasPidfileSelector reports whether a processes map already declares a pidfile
+// selector (so the desugar does not add a second one).
+func hasPidfileSelector(procs map[string]any) bool {
+	for _, v := range procs {
+		if m, ok := v.(map[string]any); ok {
+			if cfgval.AsString(m["type"]) == "pidfile" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // expandAnalyze resolves each check's `analyze` block into the flat rule list the
@@ -363,6 +426,7 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandApps(expanded)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
+	errs = append(errs, expandPidfile(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 
