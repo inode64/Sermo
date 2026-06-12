@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -24,8 +26,19 @@ func (dnsProtocol) Name() string       { return "dns" }
 func (dnsProtocol) DefaultPort() int   { return 53 }
 func (dnsProtocol) RequiresUser() bool { return false }
 
+// resolvConfPath is the resolver configuration consulted by `resolvconf:
+// true`; a variable so tests can point it at a fixture.
+var resolvConfPath = "/etc/resolv.conf"
+
 func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
+	if cfg.Params["resolvconf"] == "true" {
+		ns, err := firstNameserver(resolvConfPath)
+		if err != nil {
+			return Result{}, err
+		}
+		host = ns
+	}
 	if host == "" {
 		host = "127.0.0.1"
 	}
@@ -70,10 +83,92 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("DNS query for %q returned %s", name, rcodeName(rcode))
 	}
 	return Result{Extra: map[string]string{
-		"query":   name,
-		"rcode":   rcodeName(rcode),
-		"answers": strconv.Itoa(answers),
+		"query":     name,
+		"rcode":     rcodeName(rcode),
+		"answers":   strconv.Itoa(answers),
+		"addresses": strings.Join(parseDNSAnswerAddrs(buf[:n]), ","),
 	}}, nil
+}
+
+// firstNameserver returns the first `nameserver` entry of a resolv.conf-style
+// file — the server the system resolver would ask first (with pppd's
+// usepeerdns, the provider's resolver).
+func firstNameserver(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "nameserver" {
+			return fields[1], nil
+		}
+	}
+	return "", fmt.Errorf("no nameserver entries in %s", path)
+}
+
+// parseDNSAnswerAddrs walks a DNS response's answer section and returns the
+// A/AAAA record addresses, sorted — so an `expect` assertion can verify what a
+// name actually resolved to. Other record types (CNAME, …) are skipped; a
+// malformed section yields what was parsed up to it.
+func parseDNSAnswerAddrs(b []byte) []string {
+	if len(b) < 12 {
+		return nil
+	}
+	qd := int(binary.BigEndian.Uint16(b[4:]))
+	an := int(binary.BigEndian.Uint16(b[6:]))
+	off := 12
+	for range qd { // skip questions: name + QTYPE + QCLASS
+		off = skipDNSName(b, off)
+		if off < 0 || off+4 > len(b) {
+			return nil
+		}
+		off += 4
+	}
+	var addrs []string
+	for range an {
+		off = skipDNSName(b, off)
+		if off < 0 || off+10 > len(b) {
+			break
+		}
+		typ := binary.BigEndian.Uint16(b[off:])
+		class := binary.BigEndian.Uint16(b[off+2:])
+		rdlen := int(binary.BigEndian.Uint16(b[off+8:]))
+		off += 10
+		if off+rdlen > len(b) {
+			break
+		}
+		if class == 1 {
+			switch {
+			case typ == 1 && rdlen == net.IPv4len:
+				addrs = append(addrs, net.IP(b[off:off+rdlen]).String())
+			case typ == 28 && rdlen == net.IPv6len:
+				addrs = append(addrs, net.IP(b[off:off+rdlen]).String())
+			}
+		}
+		off += rdlen
+	}
+	slices.Sort(addrs)
+	return addrs
+}
+
+// skipDNSName advances past a (possibly compressed) DNS name, returning the new
+// offset or -1 on a malformed name.
+func skipDNSName(b []byte, off int) int {
+	for {
+		if off >= len(b) {
+			return -1
+		}
+		l := int(b[off])
+		switch {
+		case l == 0:
+			return off + 1
+		case l&0xC0 == 0xC0: // compression pointer: two bytes, ends the name
+			return off + 2
+		default:
+			off += 1 + l
+		}
+	}
 }
 
 // dnsResponseOK reports whether an rcode means the server answered healthily: a

@@ -615,8 +615,16 @@ Protocols, in the order of the table above:
 - `dns` — default port 53 (UDP). No auth. Sends an `A` query for `query` (default
   `localhost`) and verifies the answer: `NOERROR`/`NXDOMAIN` pass (the server is up
   and speaking DNS); `SERVFAIL`, `REFUSED`, a timeout or a transport error fail.
-  Result data: the `rcode` and answer count. Set `query` to a name the server
-  should answer (e.g. a zone it is authoritative for). RFC 1035.
+  Result data: the `rcode`, answer count and the resolved `addresses` (the
+  answer's A/AAAA records, sorted and comma-joined) — so `expect` can require an
+  actual resolution (`rcode: NOERROR`, `answers: {op: ">", value: 0}`) or a
+  specific address (`addresses: {op: "=~", value: "93\\.184\\..*"}`). Set
+  `query` to a name the server should answer (e.g. a zone it is authoritative
+  for). With `resolvconf: true` (instead of `host`, mutually exclusive) the
+  probe asks the first `nameserver` of `/etc/resolv.conf` — the server the
+  system would ask first; with pppd's `usepeerdns`, the provider's
+  resolver, which is how the `pppd` catalog daemon verifies resolution through
+  the uplink. RFC 1035.
 - `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies the
   server answers in **server mode** with a synchronized **stratum (1–15)**; a
   kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
