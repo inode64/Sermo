@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
@@ -96,7 +97,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 	if p.Confirm("Auto-expand this volume when low? (requires an LVM volume)", false) {
 		s.expand = true
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
-		s.cooldown = p.Ask("Minimum time between expansions (cooldown)", "30m")
+		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", "30m")
 	}
 	if !config.HasEffectiveNotifyAction(s.notifiers, env.DefaultNotify) && !s.expand {
 		return s, fmt.Errorf("a watch needs at least one notifier or auto-expand; none chosen for %s", label)
@@ -176,7 +177,8 @@ func chooseNotifiers(p *Prompt, env Env) []string {
 	return out
 }
 
-// askPercent reads a percentage, accepting either "10" or "10%".
+// askPercent reads a percentage in 0..100 (the bound config validation
+// enforces on *_pct predicates), accepting either "10" or "10%".
 func askPercent(p *Prompt, question string, def int) any {
 	for {
 		v := strings.TrimSpace(p.Ask(question+" (%)", strconv.Itoa(def)))
@@ -185,13 +187,25 @@ func askPercent(p *Prompt, question string, def int) any {
 		}
 		if strings.HasSuffix(v, "%") {
 			n := strings.TrimSpace(strings.TrimSuffix(v, "%"))
-			if _, err := strconv.ParseFloat(n, 64); err == nil {
+			if f, err := strconv.ParseFloat(n, 64); err == nil && f >= 0 && f <= 100 {
 				return v
 			}
-		} else if n, err := strconv.Atoi(v); err == nil {
+		} else if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 100 {
 			return n
 		}
-		p.printf("  use a percentage like 10 or 10%%\n")
+		p.printf("  use a percentage in 0..100, like 10 or 10%%\n")
+	}
+}
+
+// askDuration reads a positive duration (e.g. 30m), re-prompting on a value
+// config validation would reject.
+func askDuration(p *Prompt, question, def string) string {
+	for {
+		v := strings.TrimSpace(p.Ask(question, def))
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return v
+		}
+		p.printf("  use a positive duration like 30m or 1h\n")
 	}
 }
 
