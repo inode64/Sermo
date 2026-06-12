@@ -215,6 +215,7 @@ func (c *Collector) SampleSystem() Snapshot {
 		if total > 0 {
 			r.Percent = float64(used) / float64(total) * 100
 			r.HasPercent = true
+			r.Total, r.HasTotal = float64(total), true
 		}
 		snap["total_memory"] = r
 	}
@@ -248,6 +249,8 @@ func (c *Collector) SampleSystem() Snapshot {
 			HasAbsolute: true,
 			Percent:     float64(used) / float64(total) * 100,
 			HasPercent:  true,
+			Total:       float64(total),
+			HasTotal:    true,
 			Ready:       true,
 		}
 	}

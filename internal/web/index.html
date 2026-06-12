@@ -1566,6 +1566,12 @@ function notifierCell(w) {
 
 function watchSummaryCell(w) {
   if (!w) return "—";
+  const sw = w.swap;
+  if (sw) {
+    // Volume-style rendering for a swap watch: bar + used/free, like storage.
+    return `<div>swap<span class="muted"> · ${fmtBytes(sw.total_bytes)} total</span></div>
+      <div>${usageBar(pctClamp(sw.used_pct || 0))} <span class="muted">· ${fmtBytes(sw.used_bytes)} used · ${fmtBytes(sw.free_bytes)} free</span></div>`;
+  }
   const d = w.disk;
   if (d) {
     if (d.sample_error) {
@@ -1625,6 +1631,11 @@ function watchStateHint(w) {
 
 function watchSummaryText(w) {
   if (!w) return "";
+  const sw = w.swap;
+  if (sw) {
+    return ["swap", fmtBytes(sw.used_bytes) + " used", fmtBytes(sw.free_bytes) + " free",
+      fmtPct(sw.used_pct) + " used"].join(" ");
+  }
   const d = w.disk;
   if (d) {
     return [
@@ -2265,14 +2276,24 @@ function renderOverview(ctx) {
   }
   const cpu = (hostMetrics || []).find((m) => m.name === "total_cpu");
   const mem = (hostMetrics || []).find((m) => m.name === "total_memory");
+  const swap = (hostMetrics || []).find((m) => m.name === "total_swap");
   const load = (hostMetrics || []).find((m) => m.name === "load1");
+  // usedFreeSub renders the volume-style "X used · Y free" line for a usage
+  // metric carrying its capacity (total bytes).
+  const usedFreeSub = (m) => m.total
+    ? `${fmtBytes(m.absolute || 0)} used · ${fmtBytes(Math.max(m.total - (m.absolute || 0), 0))} free`
+    : "";
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
     tiles.push(tile({ label: "Host CPU", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p), target: "daemon-section" }));
   }
   if (mem) {
     const p = pctClamp(mem.percent || 0);
-    tiles.push(tile({ label: "Host memory", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host memory", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(mem), extra: usageBar(p), target: "daemon-section" }));
+  }
+  if (swap && swap.total) {
+    const p = pctClamp(swap.percent || 0);
+    tiles.push(tile({ label: "Host swap", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p), target: "daemon-section" }));
   }
   if (load && load.absolute != null) {
     tiles.push(tile({ label: "Load 1m", value: esc(load.absolute.toFixed(2)), sub: live && live.uptime ? `up ${esc(live.uptime)}` : "", target: "daemon-section" }));
