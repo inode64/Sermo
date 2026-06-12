@@ -39,8 +39,8 @@ distinction:
 
 Pick the variant that matches the panel's nature and reuse it verbatim; never
 hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
-introduce a genuinely new pattern, document it here and in `AGENTS.md` so the
-next change can follow it.
+introduce a genuinely new pattern, document it here so the next change can
+follow it.
 
 The visual layer is a token-driven design system (June 2026 redesign):
 
@@ -93,8 +93,7 @@ events, no delivery); it is also rejected as a notifier name. Only an inert
 makes the wizard explain why and **re-ask via the shared `ensureNotifyAction`**
 — never abort the run with a hard error, and never hand-roll that validation
 per assistant. Keep these invariants when adding new assistants or selection
-steps, and update `docs/configuration.md` and the wizard spec in the same
-change.
+steps, and update `docs/configuration.md` and this section in the same change.
 
 ## Catalog: instanced systemd daemons
 
@@ -117,67 +116,41 @@ derive the instance from code, reusing existing machinery:
 
 Keep `docs/daemons.md` (built-in variable table) in step when adding a built-in.
 
-## Code formatting (Go)
+## Go quality gates
 
-**Every Go file must be `gofmt`-clean after any modification.** Run `gofmt` on a
-file whenever you change it, so the tree always conforms to the standard Go
-formatting. This keeps diffs minimal and consistent with the rest of the codebase.
+Two rules, one battery:
 
-```sh
-gofmt -w <file.go>        # format one file
-gofmt -l ./internal ./cmd # list any non-conforming files (should be empty)
-```
-
-This is enforced automatically in Claude Code: a `PostToolUse` hook in
-`.claude/settings.json` runs `gofmt -w` on every `.go` file written or edited, so
-formatting never drifts. If you edit Go outside Claude Code (another editor, a
-script), run `gofmt -w` yourself before committing — configure your editor to
-"format on save" with gofmt to make this automatic.
-
-## Static analysis & linting (Go)
-
-**Every modification must pass the project's static-analysis tools before it is
-committed**, to comply with the programming standards. These complement `gofmt`
-and catch bugs, vulnerabilities, security issues, and style drift. The binaries
-live in `~/go/bin` (add it to `PATH`).
-
-Run all of them against the whole module after any change:
+- **Every Go file must be `gofmt`-clean after any modification.** A Claude Code
+  `PostToolUse` hook (`.claude/settings.json`) runs `gofmt -w` on every edited
+  `.go` file; editing outside Claude Code, run it yourself (editor
+  format-on-save).
+- **Every change must pass the whole battery before committing** (the tools
+  analyze the full module and are too slow per-edit; binaries in `~/go/bin`):
 
 ```sh
 export PATH="$HOME/go/bin:$PATH"
-
-govulncheck ./...                 # known vulnerabilities (deps + std lib)
-staticcheck ./...                 # correctness / bug static analysis
-revive -config revive.toml ./...  # style/lint (config tuned for this repo)
-golangci-lint run                 # runs gosec (security); uses .golangci.yml
+gofmt -l ./internal ./cmd         # must print nothing
+go build ./... && go test ./...   # must pass
+govulncheck ./...                 # no known vulnerabilities
+staticcheck ./...                 # no findings
+revive -config revive.toml ./...  # no findings
+golangci-lint run                 # gosec via .golangci.yml: no findings
 ```
 
-All four must report **no findings** before committing. Notes:
+Tool notes:
 
-- **`revive`** is driven by `revive.toml` at the repo root. It mirrors revive's
-  default rule set but disables `unused-parameter`, because many methods
-  implement interfaces (e.g. `web.Backend`) whose signature includes a `ctx`
-  the implementation legitimately ignores; renaming those to `_` hurts
-  readability. Document new exported symbols (the `exported` rule is on).
-- **`gosec`** is not installed standalone in `~/go/bin`, so it is run through
-  golangci-lint (which bundles it) via `.golangci.yml` at the repo root — that
-  config enables only gosec and is in the **v2 format** (`version: "2"`), so the
-  `golangci-lint` binary must be v2. Accepted exceptions are documented there:
-  `G115` (noisy integer-overflow rule on already-bounded values) and, in test
-  fixtures only, `G306` (0644 temp files), `G101` (fake DSNs) and `G703`
-  (t.TempDir paths). By-design cases — `G204` (executing operator-configured
-  commands), intentional `0644` writes (pidfile, generated YAML), the bounded
-  `args[i]` reads gosec's G602 cannot follow, and the shutdown-context G118 —
-  are suppressed at the call site with `//nolint:gosec` plus a justifying
-  comment. Keep that pattern: prefer a justified inline `//nolint:gosec` over
-  widening the config.
-- Unlike `gofmt` (auto-applied per file by the Claude Code hook), these tools
-  analyze the whole module and are too slow to run on every edit — run them once
-  before committing, or wire them into CI / a pre-commit hook.
+- **`revive`** (`revive.toml`): default rule set minus `unused-parameter` (many
+  methods implement interfaces whose `ctx` they legitimately ignore). Document
+  new exported symbols — the `exported` rule is on.
+- **`gosec`** runs through golangci-lint (`.golangci.yml`, **v2 format** — the
+  binary must be v2). Accepted exceptions live in that config: `G115`, and in
+  test fixtures `G306`/`G101`/`G703`. By-design cases (`G204`
+  operator-configured commands, intentional `0644` writes, bounded `args[i]`
+  reads, shutdown-context `G118`) are suppressed at the call site with
+  `//nolint:gosec` plus a justifying comment — prefer that over widening the
+  config.
 
 ## Security and safety invariants
-
-These rules are mandatory.
 
 1. Never kill processes by name only.
 2. Never use `SIGKILL` unless the daemon definition explicitly allows it.
@@ -190,9 +163,8 @@ These rules are mandatory.
    per-service `policy` block; `policy.cooldown` is mandatory and positive after
    config resolution, with optional max_actions/backoff; see `docs/rules.md`
    (remediation policy). Cooldown is decided by the daemon's rule evaluation
-   before the shared engine runs. Manual
-   operator commands are exempt from cooldown but still subject to locks, guards
-   and preflight.
+   before the shared engine runs. Manual operator commands are exempt from
+   cooldown but still subject to locks, guards and preflight.
 9. Always log whether an action was executed or blocked, and why.
 10. Database daemons must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
@@ -221,15 +193,3 @@ These rules are mandatory.
     are bounded by a global operation semaphore, and concurrent check execution
     across all services is bounded by `engine.max_parallel_checks` (a separate
     global pool). See `docs/safety.md` (scheduler and concurrency).
-
-## Before committing — checklist
-
-```sh
-export PATH="$HOME/go/bin:$PATH"
-gofmt -l ./internal ./cmd         # must print nothing
-go build ./... && go test ./...   # must pass
-govulncheck ./...                 # no vulnerabilities
-staticcheck ./...                 # no findings
-revive -config revive.toml ./...  # no findings
-golangci-lint run                 # gosec: no findings (.golangci.yml)
-```

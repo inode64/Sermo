@@ -10,25 +10,15 @@ It ships two binaries:
 - **`sermoctl`** — the operator CLI (status, safe start/stop/restart, config
   validate/render, locks, processes, preflight, per-service availability/SLA,
   `diagnose` for config/host/database consistency).
-- **`sermod`** — the daemon: one independent worker per service that runs
-  checks, evaluates rules, and drives remediation through the same safe
-  operation engine `sermoctl` uses. It also runs **host watches** (storage space,
-  inodes and mount, load average, swap — usage and paging IO — kernel OOM kills,
-  file descriptors, the netfilter conntrack table, kernel entropy, zombie
-  processes, TLS certificates — expiry, validity and algorithm/issuer changes —
-  network interfaces — state, speed and rx/tx
-  errors — external hosts via ICMP — reachability and latency — files/directories
-  — size, permissions, owner and deletion — and processes by name — age,
-  CPU/memory/IO and disappearance) that fire a hook command and/or send
-  **notifications** (email and Slack, pluggable for Teams/…) when a threshold is
-  crossed or an attribute changes. It can also serve a small **web dashboard**
-  (enable by setting `web.port`, recommended `9797`) to view services and
-  monitor/start/stop/restart them, with a per-service detail showing its checks,
-  SLA history and a latency graph (tcp/ports/http/service checks, avg/min/max
-  over hour..year), and a global and per-service event feed. Optional Basic auth
-  with an admin role and a
-  read-only guest mode. It serves plain HTTP on loopback — put it behind a
-  **TLS-terminating reverse proxy** (nginx/Apache) to expose it
+- **`sermod`** — the daemon: one independent worker per service runs checks,
+  evaluates rules and drives remediation through the same safe operation engine
+  `sermoctl` uses. It also runs **host watches** (storage, load, memory, swap,
+  network, ICMP, DNS, routes, files, processes, certificates and more — see
+  [host watches](docs/configuration.md#host-watches)) that fire hook commands
+  and/or **notifications** (email, Slack, Teams), and can serve a **web
+  dashboard** (set `web.port`, recommended `9797`) with per-service checks, SLA
+  history, latency graphs and an event feed — loopback HTTP with optional auth;
+  expose it only behind a TLS reverse proxy
   ([how](docs/configuration.md#behind-a-reverse-proxy-required-to-expose-it)).
 
 ## Build
@@ -106,44 +96,20 @@ sermoctl sla --series apache-main --since 168h  # per-minute series (graph data)
 sermod run --config /etc/sermo/sermo.yml
 ```
 
-## Layout
-
-```
-/etc/sermo/sermo.yml              global config
-/usr/share/sermo/catalog/{services,apps,libs}/*.yml   packaged catalog (apache, mysql, redis, ...)
-/etc/sermo/catalog-available/*.yml   user catalog definitions
-/etc/sermo/apps-enabled/*.yml     included service documents
-/run/sermo/locks/*.lock           named runtime locks (tmpfs, wiped on reboot)
-/run/sermo/ops/*.lock             internal operation locks
-/var/lib/sermo/sermo.db           persistent state DB (monitoring state, SLA samples; survives reboot)
-```
-
-Example daemons and configs are under [`daemons/`](daemons/) and
-[`configs/`](configs/). Packaging units are under [`packaging/`](packaging/).
-
-## Exit codes (`sermoctl`)
-
-| code | meaning                                            |
-|------|----------------------------------------------------|
-| 0    | success / active / allowed                         |
-| 1    | service inactive, check failed, or rule false      |
-| 2    | runtime error / backend not detected               |
-| 64   | usage error                                        |
-| 75   | temporarily blocked by a lock or guard             |
-| 78   | configuration invalid                              |
+Packaged definitions live under [`catalog/`](catalog/), sample configs under
+[`configs/`](configs/), packaging units under [`packaging/`](packaging/). The
+on-host file layout is in
+[configuration → layout](docs/configuration.md#layout).
 
 ## Documentation
 
 - [Configuration](docs/configuration.md) — global config, daemons, services,
-  merge and variables.
+  merge and variables; [`docs/sermo-all.yml`](docs/sermo-all.yml) is the
+  complete annotated example.
 - [Rules](docs/rules.md) — checks, conditions, windows, guards, remediation
   policy.
 - [Daemons](docs/daemons.md) — writing and overriding daemons.
-- [Safety](docs/safety.md) — the safety invariants that cannot be disabled.
-
-## Safety in one paragraph
-
-Sermo never restarts or starts a service if a required preflight fails or a
-guard blocks it, never SIGKILLs by default, and never kills a process by name —
-a kill requires an exact match on the resolved `/proc/<pid>/exe` path **and** the
-real UID against an explicit `kill_only_if` selector. See [safety](docs/safety.md).
+- [CLI](docs/cli.md) — commands, flags and exit codes.
+- [Safety](docs/safety.md) — the invariants that cannot be disabled: no
+  unguarded actions, no SIGKILL by default, never kill by name (exact
+  resolved-exe + UID match only).
