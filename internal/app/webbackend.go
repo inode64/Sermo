@@ -332,14 +332,8 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 		}
 	}
 	svc.Status = status
-	if b.store != nil {
-		if rec, found, err := b.store.MonitorState(name); err == nil && found {
-			svc.Monitored = rec.Active
-			svc.MonitorSource = rec.Source
-			if !rec.UpdatedAt.IsZero() {
-				svc.MonitorChangedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
-			}
-		}
+	if active, source, changed, ok := b.monitorView(name); ok {
+		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
 	failing, health := checkHealthSummary(b.snapshots.Get(name), e.checkNames, svc.Monitored)
 	svc.CheckHealth = health
@@ -506,13 +500,9 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w.expand != nil {
 			ww.Expand = &web.WatchExpand{ByBytes: w.expand.By}
 		}
-		if !w.disabled && b.store != nil {
-			if rec, found, err := b.store.MonitorState(watchMonitorKey(name)); err == nil && found {
-				ww.Monitored = rec.Active
-				ww.MonitorSource = rec.Source
-				if !rec.UpdatedAt.IsZero() {
-					ww.MonitorChangedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
-				}
+		if !w.disabled {
+			if active, source, changed, ok := b.monitorView(watchMonitorKey(name)); ok {
+				ww.Monitored, ww.MonitorSource, ww.MonitorChangedAt = active, source, changed
 			}
 		}
 		// Compute last activity for this watch from the event log (best effort)
@@ -618,6 +608,24 @@ func swapWatchInfo(b *WebBackend) *web.SwapWatchInfo {
 		FreeBytes:  total - min(used, total),
 		UsedPct:    r.Percent,
 	}
+}
+
+// monitorView reads one monitor record and renders the view fields services
+// and watches share: active flag, source, and the RFC3339 change time ("" when
+// unknown). ok is false when there is no store or no record.
+func (b *WebBackend) monitorView(key string) (active bool, source, changedAt string, ok bool) {
+	if b.store == nil {
+		return false, "", "", false
+	}
+	rec, found, err := b.store.MonitorState(key)
+	if err != nil || !found {
+		return false, "", "", false
+	}
+	changed := ""
+	if !rec.UpdatedAt.IsZero() {
+		changed = rec.UpdatedAt.UTC().Format(time.RFC3339)
+	}
+	return rec.Active, rec.Source, changed, true
 }
 
 func diskWatchInfo(w *webWatch, b *WebBackend) *web.DiskWatchInfo {
