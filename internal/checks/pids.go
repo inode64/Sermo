@@ -81,8 +81,8 @@ func defaultPidsSampler() (PidsSample, error) {
 	if s.Threads, err = strconv.ParseUint(total, 10, 64); err != nil {
 		return PidsSample{}, fmt.Errorf("malformed thread count %q", total)
 	}
-	if raw, err := os.ReadFile("/proc/sys/kernel/pid_max"); err == nil {
-		s.Max, _ = strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64)
+	if v, err := readProcUint("/proc/sys/kernel/pid_max"); err == nil {
+		s.Max = v
 	}
 	return s, nil
 }

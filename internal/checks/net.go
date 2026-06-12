@@ -190,10 +190,8 @@ func defaultNetSampler(iface string) (NetSample, error) {
 	statDir := "/sys/class/net/" + iface + "/statistics"
 	if entries, err := os.ReadDir(statDir); err == nil {
 		for _, e := range entries {
-			if raw, err := os.ReadFile(statDir + "/" + e.Name()); err == nil {
-				if v, err := strconv.ParseUint(strings.TrimSpace(string(raw)), 10, 64); err == nil {
-					sample.Counters[e.Name()] = v
-				}
+			if v, err := readProcUint(statDir + "/" + e.Name()); err == nil {
+				sample.Counters[e.Name()] = v
 			}
 		}
 	}
