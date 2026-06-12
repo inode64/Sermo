@@ -108,7 +108,7 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 	if hasExpand && !allowExpand {
 		add("%s.then.expand is only valid on a storage watch", prefix)
 	}
-	if !hasHook && !hasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand {
+	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand {
 		add("%s.then requires a hook, notify and/or expand", prefix)
 		return
 	}
@@ -130,15 +130,23 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 	}
 }
 
-func hasNotifyAction(names []string) bool {
-	return len(names) > 0 && !slices.Contains(names, notifyNone)
+// HasNotifyAction reports whether names selects at least one real notifier — a
+// non-empty selection that is not the `none` sentinel. Shared by config
+// validation, the daemon's watch builder and the wizard so the notify-selection
+// rule lives in one place.
+func HasNotifyAction(names []string) bool {
+	return len(names) > 0 && !slices.Contains(names, NotifyNone)
 }
 
-func hasEffectiveNotifyAction(names, defaultNotify []string) bool {
-	if slices.Contains(names, notifyNone) {
+// HasEffectiveNotifyAction reports whether a watch ends up delivering to a
+// notifier: an explicit selection (HasNotifyAction), or an omitted selection that
+// inherits a non-empty defaultNotify. The `none` sentinel always suppresses
+// delivery.
+func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
+	if slices.Contains(names, NotifyNone) {
 		return false
 	}
-	return hasNotifyAction(names) || (len(names) == 0 && len(defaultNotify) > 0)
+	return HasNotifyAction(names) || (len(names) == 0 && len(defaultNotify) > 0)
 }
 
 // validateNetCheck validates a net interface watch: an interface and a non-empty

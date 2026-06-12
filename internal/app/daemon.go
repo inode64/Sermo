@@ -253,18 +253,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Gates:        parseCheckGates(tree),
 		Sample:       sampleMetrics,
 		Operate: func(ctx context.Context, action string) operation.Result {
-			switch action {
-			case "start":
-				return engine.Start(ctx)
-			case "stop":
-				return engine.Stop(ctx)
-			case "restart":
-				return engine.Restart(ctx)
-			case "reload":
-				return engine.Reload(ctx)
-			default:
-				return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
-			}
+			return engine.Do(ctx, action)
 		},
 		IsPaused:     monitorPaused(deps.Monitor, name),
 		RecordHealth: healthRecorder(deps, name),

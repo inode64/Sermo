@@ -17,8 +17,6 @@ import (
 	"sermo/internal/volume"
 )
 
-const notifyNone = "none"
-
 // BuildWatches resolves the global `watches` section into runnable Watches, plus
 // the per-service version/config monitors synthesized from each service's
 // `version:`/`config:` blocks. Disabled or malformed entries are skipped with a
@@ -120,7 +118,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) && expand == nil {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil {
 		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
 	}
 	w := &Watch{
@@ -216,7 +214,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-		if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) {
+		if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) {
 			warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
 			continue
 		}
@@ -253,7 +251,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) {
 		return nil, "watch " + name + ": then requires a hook and/or notify"
 	}
 	fw := &fileWatcher{
@@ -294,7 +292,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if len(hook.Command) == 0 && !hasNotifyAction(effectiveNames) {
+	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) {
 		return nil, "watch " + name + ": then requires a hook and/or notify"
 	}
 	pw := &procWatcher{
@@ -504,10 +502,6 @@ func resolveNotifiers(names []string, reg map[string]notify.Notifier) []notify.N
 	return out
 }
 
-func hasNotifyAction(names []string) bool {
-	return len(names) > 0 && !slices.Contains(names, notifyNone)
-}
-
 // serviceMonitorWatches synthesizes the per-service version/config monitors from
 // each resolved service's `version:`/`config:` blocks, reusing the daemon's
 // `commands.version` and `preflight.config`. They are built once (like host
@@ -648,7 +642,7 @@ func monitorWatch(name, checkType string, check checks.Check, notify []string, d
 // site selection wins, the `none` sentinel suppresses all delivery, and an
 // omitted selection inherits the global default.
 func effectiveNotify(site, global []string) []string {
-	if slices.Contains(site, notifyNone) {
+	if slices.Contains(site, config.NotifyNone) {
 		return nil
 	}
 	if len(site) > 0 {

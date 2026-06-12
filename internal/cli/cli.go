@@ -512,18 +512,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 
 	gate := app.NewOpGate(app.OpSlotsFromConfig(cfg), cfg.Global.RuntimeDir())
 	result := gate.Run(opCtx, service, action, func(ctx context.Context) operation.Result {
-		switch action {
-		case "start":
-			return engine.Start(ctx)
-		case "stop":
-			return engine.Stop(ctx)
-		case "restart":
-			return engine.Restart(ctx)
-		case "reload":
-			return engine.Reload(ctx)
-		default:
-			return operation.Result{Service: service, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
-		}
+		return engine.Do(ctx, action)
 	})
 	if result.Message == "unknown action" && result.Status == operation.ResultFailed {
 		return operation.Result{}, fmt.Errorf("unknown action %q", action)
@@ -759,7 +748,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, preflightDeadline(deps.DefaultTimeout))
+	ctx, cancel := context.WithTimeout(ctx, app.PreflightDeadline(deps.DefaultTimeout))
 	defer cancel()
 	results := checks.Run(ctx, built, 0)
 	outcome := checks.Evaluate(results)
@@ -833,15 +822,6 @@ func engineDefaultTimeout(cfg *config.Config) time.Duration {
 		}
 	}
 	return 10 * time.Second
-}
-
-// preflightDeadline bounds the whole run generously above a single check's
-// timeout so concurrent checks each get their full per-check budget.
-func preflightDeadline(perCheck time.Duration) time.Duration {
-	if perCheck <= 0 {
-		perCheck = 10 * time.Second
-	}
-	return perCheck + 5*time.Second
 }
 
 // runLocks reports the named runtime locks for a service (active, expired and

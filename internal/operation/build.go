@@ -133,11 +133,7 @@ func New(c Config) Engine {
 // stopped-state invariants, shared by every engine build (daemon, web, CLI).
 func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
-	out := StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled}
-	for _, c := range clean {
-		out.Clean = append(out.Clean, CleanPath{Path: c.Path, Recursive: c.Recursive})
-	}
-	return out
+	return StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled, Clean: clean}
 }
 
 // reloadClosure builds the engine's reload step. With no native reload declared

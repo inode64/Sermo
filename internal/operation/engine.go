@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -84,11 +85,9 @@ type StopArtifacts struct {
 }
 
 // CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)
-// deleted after a clean stop. Recursive deletes a directory tree.
-type CleanPath struct {
-	Path      string
-	Recursive bool
-}
+// deleted after a clean stop. It is an alias for config.CleanPath so the resolved
+// form flows straight into the engine without a parallel struct or a copy step.
+type CleanPath = config.CleanPath
 
 type plan struct {
 	action     string
@@ -121,6 +120,25 @@ func (e Engine) Stop(ctx context.Context) Result {
 // the non-disruptive remediation for daemons that reload rather than restart.
 func (e Engine) Reload(ctx context.Context) Result {
 	return e.run(ctx, plan{action: "reload", preflight: true, reload: true, postflight: true})
+}
+
+// Do dispatches one action name to the matching operation, returning its Result.
+// It is the single action-dispatch point shared by the CLI, the daemon worker and
+// the web UI; an unrecognized action yields a failed Result without running
+// anything.
+func (e Engine) Do(ctx context.Context, action string) Result {
+	switch action {
+	case "start":
+		return e.Start(ctx)
+	case "stop":
+		return e.Stop(ctx)
+	case "restart":
+		return e.Restart(ctx)
+	case "reload":
+		return e.Reload(ctx)
+	default:
+		return Result{Service: e.Service, Action: action, Status: ResultFailed, Message: "unknown action " + action}
+	}
 }
 
 func (e Engine) run(ctx context.Context, p plan) (result Result) {
@@ -222,7 +240,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 				alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", e.AlsoUnits[i], err))
 			}
 		}
-		if err := wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
+		if err := process.Wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
 			result.Status = ResultFailed
 			result.Message = "operation timed out during graceful stop wait"
 			return result
