@@ -10,6 +10,10 @@ variables:
 preflight:
   config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/dhcp/dhcpd.pid
+
 checks:
   service: { type: service, expect: active }
   port: { type: dhcp, port: "${port}" }

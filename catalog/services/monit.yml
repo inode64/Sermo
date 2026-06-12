@@ -18,6 +18,10 @@ restart_on_change:
   # OpenSSL CVE update), so the service picks up the new code.
   libraries: [glibc, openssl, zlib]
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/monit.pid
+
 checks:
   service:
     type: service

@@ -4,6 +4,10 @@ display_name: "ClamAV Daemon"
 service: clamd
 apps: [clamd]
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/clamav/clamd.pid
+
 checks:
   service: { type: service, expect: active }
   clamd: { type: clamd, socket: /run/clamav/clamd.sock, timeout: 3s }

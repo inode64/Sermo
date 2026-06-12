@@ -5,6 +5,10 @@ description: "DBus Daemon"
 service: dbus-daemon
 apps: [dbus-daemon]
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/dbus.pid
+
 checks:
   service: { type: service, expect: active }
   dbus: { type: dbus, timeout: 3s }

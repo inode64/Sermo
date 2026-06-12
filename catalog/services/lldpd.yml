@@ -5,5 +5,9 @@ description: "Link Layer Discovery Protocol"
 service: lldpd
 apps: [lldpd]
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/lldpd.pid
+
 checks:
   service: { type: service, expect: active }

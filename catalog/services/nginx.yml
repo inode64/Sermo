@@ -11,6 +11,10 @@ variables:
 preflight:
   config: { type: command, command: ["/etc/init.d/nginx","configtest"], timeout: 30s, analyze: { use: [common] } }
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/nginx/nginx.pid
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
