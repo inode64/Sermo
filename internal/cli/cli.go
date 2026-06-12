@@ -217,6 +217,11 @@ func (a App) Run(ctx context.Context, args []string) int {
 	case "diagnose":
 		return a.runDiagnose(opts)
 	case "reload":
+		// `reload SERVICE` reloads that service's config in place (engine reload);
+		// `reload` with no service reloads the sermod daemon's own config.
+		if opts.service() != "" {
+			return a.runAction(ctx, opts, "reload")
+		}
 		return a.runReload(ctx, opts)
 	case "wizard":
 		return a.runWizard(ctx, opts)
@@ -425,7 +430,8 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 // result is returned and drives the exit code.
 func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
-	if opts.noCascade || len(targets) == 0 {
+	// also_apply cascades only start/stop/restart, not reload.
+	if opts.noCascade || action == "reload" || len(targets) == 0 {
 		return a.Operate(ctx, opts, cfg, resolved, service, action)
 	}
 	lookup := func(svc string) []string {
@@ -526,6 +532,8 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 			return engine.Stop(ctx)
 		case "restart":
 			return engine.Restart(ctx)
+		case "reload":
+			return engine.Reload(ctx)
 		default:
 			return operation.Result{Service: service, Action: action, Status: operation.ResultFailed, Message: "unknown action"}
 		}
@@ -1040,7 +1048,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case "start", "stop", "restart":
+	case "start", "stop", "restart", "reload":
 		return 90 * time.Second
 	default:
 		return 2 * time.Second
@@ -1264,7 +1272,7 @@ func parseArgs(args []string) (options, error) {
 
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE [--no-cascade] | reload")
+	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE [--no-cascade] | reload [SERVICE]")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
