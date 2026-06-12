@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
-
-	"sermo/internal/cfgval"
 )
 
 // edacCounts is the aggregated EDAC memory-error count across controllers.
@@ -21,12 +19,6 @@ type edacCounts struct {
 // reads /sys/devices/system/edac.
 type EdacSamplerFunc func() (edacCounts, error)
 
-type edacPred struct {
-	field string // ce | ue
-	op    string
-	value float64
-}
-
 // edacCheck reports ECC memory errors from the kernel EDAC subsystem. `ce` is the
 // cumulative correctable-error count and `ue` the uncorrectable count (a single
 // uncorrectable error is serious). With no predicate it alerts when ue > 0;
@@ -36,7 +28,7 @@ type edacPred struct {
 type edacCheck struct {
 	base
 	sampler EdacSamplerFunc
-	preds   []edacPred
+	preds   []levelPred
 }
 
 func (c edacCheck) Run(_ context.Context) Result {
@@ -97,26 +89,3 @@ func readInt(path string) int64 {
 }
 
 // parseEdacPreds reads the optional ce/ue predicates.
-func parseEdacPreds(entry map[string]any) ([]edacPred, error) {
-	var preds []edacPred
-	for _, field := range []string{"ce", "ue"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, edacPred{field: field, op: op, value: val})
-	}
-	return preds, nil
-}

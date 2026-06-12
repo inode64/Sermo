@@ -40,7 +40,7 @@ func TestReadHwmon(t *testing.T) {
 	}
 }
 
-func sensorsWith(readings []SensorReading, chip, label string, preds ...sensorPred) sensorsCheck {
+func sensorsWith(readings []SensorReading, chip, label string, preds ...levelPred) sensorsCheck {
 	return sensorsCheck{
 		base:    base{name: "s", timeout: time.Second},
 		sampler: func() ([]SensorReading, error) { return readings, nil },
@@ -57,7 +57,7 @@ func TestSensorsAggregatesAndThresholds(t *testing.T) {
 		{Chip: "nct6775", Kind: "in", Label: "Vcore", Value: 1.1},
 	}
 	// temp aggregate is the max -> alert when > 80.
-	c := sensorsWith(readings, "", "", sensorPred{"temp", ">", 80})
+	c := sensorsWith(readings, "", "", levelPred{"temp", ">", 80})
 	res := c.Run(context.Background())
 	if !res.OK {
 		t.Errorf("temp max 85 > 80 should meet the alert condition: %s", res.Message)
@@ -67,19 +67,19 @@ func TestSensorsAggregatesAndThresholds(t *testing.T) {
 	}
 
 	// fan aggregate is the min -> alert when a fan drops below 500.
-	c = sensorsWith(readings, "", "", sensorPred{"fan", "<", 500})
+	c = sensorsWith(readings, "", "", levelPred{"fan", "<", 500})
 	if res := c.Run(context.Background()); !res.OK {
 		t.Errorf("slowest fan 300 < 500 should alert: %s", res.Message)
 	}
 
 	// chip filter: only coretemp -> no fans matched.
-	c = sensorsWith(readings, "coretemp", "", sensorPred{"temp", ">", 80})
+	c = sensorsWith(readings, "coretemp", "", levelPred{"temp", ">", 80})
 	if res := c.Run(context.Background()); res.Data["fan"] != nil {
 		t.Errorf("chip filter should exclude fans: %v", res.Data)
 	}
 
 	// no matching inputs -> failure.
-	c = sensorsWith(readings, "doesnotexist", "", sensorPred{"temp", ">", 80})
+	c = sensorsWith(readings, "doesnotexist", "", levelPred{"temp", ">", 80})
 	if res := c.Run(context.Background()); res.OK {
 		t.Error("no matching inputs must fail")
 	}

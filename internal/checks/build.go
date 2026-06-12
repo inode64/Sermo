@@ -491,11 +491,17 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	if !validCountKind(kind) {
 		return nil, "count check `of` must be file, dir, symlink or any"
 	}
-	op := cfgval.AsString(entry["op"])
+	// The threshold may sit at the top level (op/value) or be nested under
+	// `count: {op, value}` like every other named predicate.
+	threshold := entry
+	if m, ok := entry["count"].(map[string]any); ok {
+		threshold = m
+	}
+	op := cfgval.AsString(threshold["op"])
 	if !validDiskOp(op) {
 		return nil, "count check requires a valid op (>=, >, <=, <, ==, !=)"
 	}
-	val, err := strconv.ParseFloat(cfgval.String(entry["value"]), 64)
+	val, err := strconv.ParseFloat(cfgval.String(threshold["value"]), 64)
 	if err != nil {
 		return nil, "count check value must be numeric"
 	}
@@ -508,7 +514,7 @@ func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	if path == "" {
 		return nil, "storage check requires a path"
 	}
-	preds, err := parseDiskPreds(entry)
+	preds, err := parseLevelPreds(entry, DiskPredFields)
 	if err != nil {
 		return nil, "storage check: " + err.Error()
 	}
@@ -591,9 +597,9 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 
 // buildLoadCheck builds a system load-average check.
 func buildLoadCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, err := parseLoadPreds(entry)
-	if err != nil {
-		return nil, "load check: " + err.Error()
+	preds, errs := requireLevelPreds(entry, LoadPredFields, "load check")
+	if errs != "" {
+		return nil, errs
 	}
 	return loadCheck{base: b, preds: preds, perCPU: cfgval.Bool(entry["per_cpu"]), sampler: deps.LoadSampler}, ""
 }
@@ -604,18 +610,18 @@ func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner) (Check,
 	if device == "" {
 		return nil, "hdparm check requires a device"
 	}
-	preds, err := parseHdparmPreds(entry)
-	if err != nil {
-		return nil, "hdparm check: " + err.Error()
+	preds, errs := requireLevelPreds(entry, HdparmPredFields, "hdparm check")
+	if errs != "" {
+		return nil, errs
 	}
 	return hdparmCheck{base: b, runner: runner, device: device, preds: preds}, ""
 }
 
 // buildSensorsCheck builds a hardware-sensor check (hwmon temp/fan/voltage).
 func buildSensorsCheck(b base, entry map[string]any) (Check, string) {
-	preds, err := parseSensorPreds(entry)
-	if err != nil {
-		return nil, "sensors check: " + err.Error()
+	preds, errs := requireLevelPreds(entry, SensorPredFields, "sensors check")
+	if errs != "" {
+		return nil, errs
 	}
 	return sensorsCheck{base: b, chip: cfgval.AsString(entry["chip"]), label: cfgval.AsString(entry["label"]), preds: preds}, ""
 }
@@ -626,7 +632,7 @@ func buildSmartCheck(b base, entry map[string]any, runner execx.Runner) (Check, 
 	if device == "" {
 		return nil, "smart check requires a device"
 	}
-	preds, err := parseSmartPreds(entry)
+	preds, err := parseLevelPreds(entry, SmartPredFields)
 	if err != nil {
 		return nil, "smart check: " + err.Error()
 	}
@@ -635,7 +641,7 @@ func buildSmartCheck(b base, entry map[string]any, runner execx.Runner) (Check, 
 
 // buildRaidCheck builds a Linux md software-RAID health check.
 func buildRaidCheck(b base, entry map[string]any) (Check, string) {
-	preds, err := parseRaidPreds(entry)
+	preds, err := parseLevelPreds(entry, RaidPredFields)
 	if err != nil {
 		return nil, "raid check: " + err.Error()
 	}
@@ -644,7 +650,7 @@ func buildRaidCheck(b base, entry map[string]any) (Check, string) {
 
 // buildEdacCheck builds an ECC memory-error (EDAC) check.
 func buildEdacCheck(b base, entry map[string]any) (Check, string) {
-	preds, err := parseEdacPreds(entry)
+	preds, err := parseLevelPreds(entry, EdacPredFields)
 	if err != nil {
 		return nil, "edac check: " + err.Error()
 	}
@@ -667,18 +673,18 @@ func buildConfigCheck(b base, entry map[string]any, runner execx.Runner) (Check,
 
 // buildFdsCheck builds an open file-descriptors check.
 func buildFdsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, err := parseFdsPreds(entry)
-	if err != nil {
-		return nil, "fds check: " + err.Error()
+	preds, errs := requireLevelPreds(entry, FdsPredFields, "fds check")
+	if errs != "" {
+		return nil, errs
 	}
 	return fdsCheck{base: b, preds: preds, sampler: deps.FdsSampler}, ""
 }
 
 // buildConntrackCheck builds a netfilter conntrack-table check.
 func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	preds, err := parseConntrackPreds(entry)
-	if err != nil {
-		return nil, "conntrack check: " + err.Error()
+	preds, errs := requireLevelPreds(entry, ConntrackPredFields, "conntrack check")
+	if errs != "" {
+		return nil, errs
 	}
 	return conntrackCheck{base: b, preds: preds, sampler: deps.ConntrackSampler}, ""
 }
@@ -775,9 +781,9 @@ func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	c := &swapCheck{base: b, metric: metric, sampler: deps.SwapSampler}
 	switch metric {
 	case "usage":
-		preds, err := parseSwapPreds(entry)
-		if err != nil {
-			return nil, "swap usage: " + err.Error()
+		preds, errs := requireLevelPreds(entry, SwapUsageFields, "swap usage")
+		if errs != "" {
+			return nil, errs
 		}
 		c.preds = preds
 	case "io":

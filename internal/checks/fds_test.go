@@ -12,18 +12,18 @@ func fakeFds(s FdsSample) FdsSamplerFunc {
 func TestFdsUsedPct(t *testing.T) {
 	// 9000/10000 = 90%.
 	sample := FdsSample{Allocated: 9000, Max: 10000}
-	breach := fdsCheck{base: base{name: "f"}, preds: []fdsPred{{"used_pct", ">=", 90}}, sampler: fakeFds(sample)}
+	breach := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"used_pct", ">=", 90}}, sampler: fakeFds(sample)}
 	if res := breach.Run(context.Background()); !res.OK {
 		t.Fatalf("90%% used should breach >= 90, got %q", res.Message)
 	}
-	ok := fdsCheck{base: base{name: "f"}, preds: []fdsPred{{"used_pct", ">=", 95}}, sampler: fakeFds(sample)}
+	ok := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"used_pct", ">=", 95}}, sampler: fakeFds(sample)}
 	if ok.Run(context.Background()).OK {
 		t.Fatal("90%% used should not breach >= 95")
 	}
 }
 
 func TestFdsFreeAbsolute(t *testing.T) {
-	c := fdsCheck{base: base{name: "f"}, preds: []fdsPred{{"free", "<", 2000}}, sampler: fakeFds(FdsSample{Allocated: 9000, Max: 10000})}
+	c := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"free", "<", 2000}}, sampler: fakeFds(FdsSample{Allocated: 9000, Max: 10000})}
 	res := c.Run(context.Background())
 	if !res.OK {
 		t.Fatalf("1000 free < 2000 should fire, got %q", res.Message)
@@ -35,7 +35,7 @@ func TestFdsFreeAbsolute(t *testing.T) {
 
 func TestFdsUnknownMaxNeverFires(t *testing.T) {
 	// Max == 0 leaves used_pct/free unknown, so the predicate cannot hold.
-	c := fdsCheck{base: base{name: "f"}, preds: []fdsPred{{"free", "<", 2000}}, sampler: fakeFds(FdsSample{Allocated: 9000, Max: 0})}
+	c := fdsCheck{base: base{name: "f"}, preds: []levelPred{{"free", "<", 2000}}, sampler: fakeFds(FdsSample{Allocated: 9000, Max: 0})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("a used_pct/free predicate must not fire when the limit is unknown")
 	}

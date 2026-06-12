@@ -46,13 +46,13 @@ func (r *recordingRunner) Run(_ context.Context, name string, args ...string) (e
 func TestHdparmRunsOnlyNeededTimings(t *testing.T) {
 	cases := []struct {
 		name      string
-		preds     []hdparmPred
+		preds     []levelPred
 		wantFlags []string
 		noFlags   []string
 	}{
-		{"read only runs -t", []hdparmPred{{"read", ">", 0}}, []string{"-t"}, []string{"-T"}},
-		{"cached only runs -T", []hdparmPred{{"cached", ">", 0}}, []string{"-T"}, []string{"-t"}},
-		{"both run -t and -T", []hdparmPred{{"read", ">", 0}, {"cached", ">", 0}}, []string{"-t", "-T"}, nil},
+		{"read only runs -t", []levelPred{{"read", ">", 0}}, []string{"-t"}, []string{"-T"}},
+		{"cached only runs -T", []levelPred{{"cached", ">", 0}}, []string{"-T"}, []string{"-t"}},
+		{"both run -t and -T", []levelPred{{"read", ">", 0}, {"cached", ">", 0}}, []string{"-t", "-T"}, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestHdparmRunsOnlyNeededTimings(t *testing.T) {
 func TestHdparmThresholds(t *testing.T) {
 	degraded := " Timing buffered disk reads: 100 MB in 3.00 seconds = 50.00 MB/sec\n"
 	healthy := " Timing buffered disk reads: 500 MB in 3.00 seconds = 200.00 MB/sec\n"
-	pred := []hdparmPred{{"read", "<", 100}} // alert condition: read below 100 MB/s
+	pred := []levelPred{{"read", "<", 100}} // alert condition: read below 100 MB/s
 
 	// Degraded: read=50 < 100 -> the alert condition holds -> OK (fires as a watch).
 	c := hdparmCheck{base: base{name: "d", timeout: time.Second}, runner: fakeRunner{execx.Result{Stdout: degraded}}, device: "/dev/sda", preds: pred}
@@ -101,7 +101,7 @@ func TestHdparmCheckError(t *testing.T) {
 		base:   base{name: "d", timeout: time.Second},
 		runner: fakeRunner{execx.Result{Stderr: "/dev/sda: Permission denied\n", ExitCode: 1}},
 		device: "/dev/sda",
-		preds:  []hdparmPred{{"read", "<", 100}},
+		preds:  []levelPred{{"read", "<", 100}},
 	}
 	res := c.Run(context.Background())
 	if res.OK {
@@ -113,14 +113,14 @@ func TestHdparmCheckError(t *testing.T) {
 }
 
 func TestParseHdparmPreds(t *testing.T) {
-	if _, err := parseHdparmPreds(map[string]any{}); err == nil {
+	if _, errs := requireLevelPreds(map[string]any{}, HdparmPredFields, "hdparm check"); errs == "" {
 		t.Error("no predicate must error")
 	}
-	preds, err := parseHdparmPreds(map[string]any{"read": map[string]any{"op": "<", "value": 100}})
-	if err != nil || len(preds) != 1 || preds[0].field != "read" || preds[0].value != 100 {
-		t.Fatalf("preds = %v, err = %v", preds, err)
+	preds, errs := requireLevelPreds(map[string]any{"read": map[string]any{"op": "<", "value": 100}}, HdparmPredFields, "hdparm check")
+	if errs != "" || len(preds) != 1 || preds[0].field != "read" || preds[0].value != 100 {
+		t.Fatalf("preds = %v, errs = %q", preds, errs)
 	}
-	if _, err := parseHdparmPreds(map[string]any{"cached": map[string]any{"op": "=>", "value": 1}}); err == nil {
+	if _, errs := requireLevelPreds(map[string]any{"cached": map[string]any{"op": "=>", "value": 1}}, HdparmPredFields, "hdparm check"); errs == "" {
 		t.Error("an invalid op must error")
 	}
 }

@@ -4,19 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 )
-
-type smartPred struct {
-	field string // temperature | reallocated | wear | power_on_hours
-	op    string
-	value float64
-}
 
 // smartCheck reads a drive's SMART health and attributes via `smartctl -j`. With
 // no predicate it alerts when the overall SMART health verdict is FAILED;
@@ -28,7 +20,7 @@ type smartCheck struct {
 	base
 	runner execx.Runner
 	device string
-	preds  []smartPred
+	preds  []levelPred
 }
 
 func (c smartCheck) Run(ctx context.Context) Result {
@@ -134,26 +126,3 @@ func parseSmart(out string) (smartData, error) {
 
 // parseSmartPreds reads the optional temperature/reallocated/wear/power_on_hours
 // predicates.
-func parseSmartPreds(entry map[string]any) ([]smartPred, error) {
-	var preds []smartPred
-	for _, field := range []string{"temperature", "reallocated", "wear", "power_on_hours"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, smartPred{field: field, op: op, value: val})
-	}
-	return preds, nil
-}

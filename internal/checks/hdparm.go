@@ -7,16 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/execx"
 )
-
-// hdparmPred is one threshold predicate on an hdparm timing field.
-type hdparmPred struct {
-	field string // read | cached
-	op    string
-	value float64
-}
 
 // hdparmCheck times disk read throughput with hdparm and compares it to
 // thresholds (a level check, like disk/load: OK==true means every predicate
@@ -31,7 +23,7 @@ type hdparmCheck struct {
 	base
 	runner execx.Runner
 	device string
-	preds  []hdparmPred
+	preds  []levelPred
 }
 
 func (c hdparmCheck) Run(ctx context.Context) Result {
@@ -117,33 +109,4 @@ func hdparmMessage(device string, values map[string]float64) string {
 		}
 	}
 	return fmt.Sprintf("hdparm %s %s MB/s", device, strings.Join(parts, " "))
-}
-
-// parseHdparmPreds reads the read/cached threshold predicates ({op, value}). At
-// least one is required.
-func parseHdparmPreds(entry map[string]any) ([]hdparmPred, error) {
-	var preds []hdparmPred
-	for _, field := range []string{"read", "cached"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, hdparmPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("requires at least one of read/cached")
-	}
-	return preds, nil
 }

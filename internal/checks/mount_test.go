@@ -13,7 +13,7 @@ var dataMount = Mount{Device: "/dev/sdb1", MountPoint: "/data", FSType: "ext4", 
 
 // diskMount builds a disk check with a mount condition (and optional space preds)
 // for the integrated mount tests.
-func diskMount(m mountCond, sampler MountSamplerFunc, preds ...diskPred) diskCheck {
+func diskMount(m mountCond, sampler MountSamplerFunc, preds ...levelPred) diskCheck {
 	return diskCheck{base: base{name: "fs"}, path: "/data", preds: preds, mount: m, mountSampler: sampler}
 }
 
@@ -57,7 +57,7 @@ func TestDiskMountTakesPrecedenceOverSpace(t *testing.T) {
 	c := diskCheck{
 		base:         base{name: "fs"},
 		path:         "/data",
-		preds:        []diskPred{{"used_pct", ">=", 90}},
+		preds:        []levelPred{{"used_pct", ">=", 90}},
 		mount:        mountCond{active: true, expectMount: true},
 		mountSampler: fakeMounts(), // not mounted
 		usage:        func(string) (DiskStats, error) { usageCalled = true; return DiskStats{}, nil },

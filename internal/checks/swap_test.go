@@ -13,12 +13,12 @@ func TestSwapUsageThreshold(t *testing.T) {
 	// 800/1000 used = 80%.
 	sample := SwapSample{TotalBytes: 1000, FreeBytes: 200}
 	breached := &swapCheck{base: base{name: "s"}, metric: "usage",
-		preds: []swapPred{{field: "used_pct", op: ">=", value: 80}}, sampler: fakeSwap(sample)}
+		preds: []levelPred{{field: "used_pct", op: ">=", value: 80}}, sampler: fakeSwap(sample)}
 	if res := breached.Run(context.Background()); !res.OK {
 		t.Fatalf("80%% used should breach >= 80, got %q", res.Message)
 	}
 	ok := &swapCheck{base: base{name: "s"}, metric: "usage",
-		preds: []swapPred{{field: "used_pct", op: ">=", value: 90}}, sampler: fakeSwap(sample)}
+		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}}, sampler: fakeSwap(sample)}
 	if ok.Run(context.Background()).OK {
 		t.Fatal("80%% used should not breach >= 90")
 	}
@@ -26,7 +26,7 @@ func TestSwapUsageThreshold(t *testing.T) {
 
 func TestSwapUsageFreeBytes(t *testing.T) {
 	c := &swapCheck{base: base{name: "s"}, metric: "usage",
-		preds: []swapPred{{field: "free_bytes", op: "<", value: 500}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 200})}
+		preds: []levelPred{{field: "free_bytes", op: "<", value: 500}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 200})}
 	res := c.Run(context.Background())
 	if !res.OK {
 		t.Fatalf("200 free < 500 should fire, got %q", res.Message)
@@ -38,7 +38,7 @@ func TestSwapUsageFreeBytes(t *testing.T) {
 
 func TestSwapUsageNoSwapNeverFires(t *testing.T) {
 	c := &swapCheck{base: base{name: "s"}, metric: "usage",
-		preds: []swapPred{{field: "free_bytes", op: "<", value: 500}}, sampler: fakeSwap(SwapSample{TotalBytes: 0, FreeBytes: 0})}
+		preds: []levelPred{{field: "free_bytes", op: "<", value: 500}}, sampler: fakeSwap(SwapSample{TotalBytes: 0, FreeBytes: 0})}
 	if c.Run(context.Background()).OK {
 		t.Fatal("a swapless host must never fire the usage check")
 	}

@@ -627,7 +627,11 @@ These conventions keep the per-type sections below short:
 - **Evaluation model.** A **level check** (`storage`, `load`, `fds`, `conntrack`,
   `entropy`, `zombies`, swap `usage`) fires when **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
-  at least one, and add `for: { cycles: N }` to require N consecutive cycles. A
+  at least one, and add `for: { cycles: N }` to require N consecutive cycles.
+  Predicate values share one grammar across every level check: a `*_pct` field
+  accepts a number or an explicit `%` suffix in 0–100 (`90` or `"90%"`), a
+  `*_bytes` field **requires** a size suffix (`K`/`M`/`G`/`T`, e.g. `10G`), and
+  any other field is a plain number. A
   **stateful check** (counter deltas — net `errors`, swap `io`, `oom`; and change
   detection — net/icmp `state`/`speed`/`latency`, `file`, `process`) compares
   against a baseline carried across cycles: the **first cycle primes the baseline
@@ -708,7 +712,7 @@ The `storage` check reads filesystem usage for `path` and is true when every pre
 predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `used_pct`, `free_pct`, `used_bytes`, `free_bytes` — and **inodes** —
 `inodes_used_pct`, `inodes_free_pct`, `inodes_free` (absolute count).
-`*_pct.value` accepts a number or an explicit `%` suffix, e.g. `90` or `90%`.
+`*_pct.value` accepts a number or an explicit `%` suffix in 0–100, e.g. `90` or `90%`.
 `*_bytes.value` must include a size suffix (`K`/`M`/`G`/`T`, with optional
 `B`/`iB`), e.g. `10G`; unitless byte values such as `10` are rejected.
 Inode predicates catch the "disk full" that `df` hides: a filesystem out of
@@ -880,9 +884,10 @@ watches:
         then: { hook: { command: [/usr/local/bin/sermo-swap-io.sh] } }
 ```
 
-- **`usage`** predicates: `used_pct`, `free_pct` (of total swap) and `free_bytes`.
-  A host with **no swap configured** never fires (so a `free_bytes` predicate does
-  not misfire on a swapless box).
+- **`usage`** predicates: `used_pct`, `free_pct` (of total swap) and `free_bytes`
+  (a size with a `K`/`M`/`G`/`T` suffix, e.g. `1G` — same grammar as the storage
+  check). A host with **no swap configured** never fires (so a `free_bytes`
+  predicate does not misfire on a swapless box).
 - **`io`** sums the pages swapped **in and out** (`pswpin`+`pswpout` from
   `/proc/vmstat`); the `delta` threshold is pages per interval, so it scales with
   `interval`.

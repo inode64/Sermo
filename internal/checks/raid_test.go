@@ -41,7 +41,7 @@ func TestParseMdstat(t *testing.T) {
 	}
 }
 
-func raidWith(st raidStatus, preds ...raidPred) raidCheck {
+func raidWith(st raidStatus, preds ...levelPred) raidCheck {
 	return raidCheck{base: base{name: "r", timeout: time.Second}, sampler: func() (raidStatus, error) { return st, nil }, preds: preds}
 }
 
@@ -58,7 +58,7 @@ func TestRaidCheck(t *testing.T) {
 		t.Error("no arrays must not alert")
 	}
 	// Predicate override: alert while recovering.
-	res := raidWith(raidStatus{Arrays: 1, Recovering: 1}, raidPred{"recovering", ">", 0}).Run(context.Background())
+	res := raidWith(raidStatus{Arrays: 1, Recovering: 1}, levelPred{"recovering", ">", 0}).Run(context.Background())
 	if !res.OK {
 		t.Error("recovering>0 predicate should alert")
 	}

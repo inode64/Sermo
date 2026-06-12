@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"sermo/internal/cfgval"
 )
 
 // raidStatus summarizes the Linux software-RAID (md) state.
@@ -24,12 +22,6 @@ type raidStatus struct {
 // default parses /proc/mdstat.
 type RaidSamplerFunc func() (raidStatus, error)
 
-type raidPred struct {
-	field string // degraded | recovering | arrays
-	op    string
-	value float64
-}
-
 // raidCheck reports the health of Linux md software-RAID arrays. With no predicate
 // it is a condition check that alerts when any array is degraded; predicates on
 // `degraded`/`recovering`/`arrays` override that. (A host with no md arrays never
@@ -37,7 +29,7 @@ type raidPred struct {
 type raidCheck struct {
 	base
 	sampler RaidSamplerFunc
-	preds   []raidPred
+	preds   []levelPred
 }
 
 func (c raidCheck) Run(_ context.Context) Result {
@@ -152,26 +144,3 @@ func parseMdstat(s string) raidStatus {
 }
 
 // parseRaidPreds reads the optional degraded/recovering/arrays predicates.
-func parseRaidPreds(entry map[string]any) ([]raidPred, error) {
-	var preds []raidPred
-	for _, field := range []string{"degraded", "recovering", "arrays"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, raidPred{field: field, op: op, value: val})
-	}
-	return preds, nil
-}

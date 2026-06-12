@@ -3,8 +3,6 @@ package checks
 import (
 	"context"
 	"fmt"
-	"sermo/internal/cfgval"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -32,13 +30,6 @@ type DiskStats struct {
 // tests; the default uses statfs.
 type DiskUsageFunc func(path string) (DiskStats, error)
 
-// diskPred is one threshold predicate on a computed disk field.
-type diskPred struct {
-	field string // used_pct | free_pct | used_bytes | free_bytes | inodes_used_pct | inodes_free_pct | inodes_free
-	op    string // >= > <= < == !=
-	value float64
-}
-
 // diskCheck verifies a filesystem at path: optionally that it is mounted as
 // expected, and that its space/inode predicates hold. OK=true
 // means an alert condition: a mount problem OR a crossed threshold. Folding mount
@@ -47,7 +38,7 @@ type diskPred struct {
 type diskCheck struct {
 	base
 	path         string
-	preds        []diskPred
+	preds        []levelPred
 	usage        DiskUsageFunc
 	mount        mountCond
 	mountSampler MountSamplerFunc
@@ -147,25 +138,6 @@ func diskUsedBytes(st DiskStats) uint64 {
 	return 0
 }
 
-func compareFloat(a float64, op string, b float64) bool {
-	switch op {
-	case ">=":
-		return a >= b
-	case ">":
-		return a > b
-	case "<=":
-		return a <= b
-	case "<":
-		return a < b
-	case "==":
-		return a == b
-	case "!=":
-		return a != b
-	default:
-		return false
-	}
-}
-
 // statfsUsage is the default DiskUsageFunc backed by statfs(2).
 func statfsUsage(path string) (DiskStats, error) {
 	var s syscall.Statfs_t
@@ -203,76 +175,4 @@ func statfsUsage(path string) (DiskStats, error) {
 // DefaultDiskUsage reports disk usage using the host statfs implementation.
 func DefaultDiskUsage(path string) (DiskStats, error) {
 	return statfsUsage(path)
-}
-
-// parseDiskPreds reads the space/inode predicates from a disk entry (each
-// {op, value}). The set may be empty — a disk check is valid with only mount
-// conditions — so the "at least one of predicate/mount" requirement is enforced
-// by the builder and config validation, not here.
-func parseDiskPreds(entry map[string]any) ([]diskPred, error) {
-	var preds []diskPred
-	for _, field := range diskPredFields {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := parseDiskPredValue(field, m["value"])
-		if err != nil {
-			return nil, err
-		}
-		preds = append(preds, diskPred{field: field, op: op, value: val})
-	}
-	return preds, nil
-}
-
-func parseDiskPredValue(field string, raw any) (float64, error) {
-	value := cfgval.String(raw)
-	if field == "used_bytes" || field == "free_bytes" {
-		n, ok := cfgval.ByteSize(raw)
-		if !ok {
-			return 0, fmt.Errorf("%s value %q must include a size suffix (K, M, G or T; e.g. 10G)", field, value)
-		}
-		return float64(n), nil
-	}
-	if strings.HasSuffix(field, "_pct") {
-		return parseDiskPercentValue(field, value)
-	}
-	val, err := strconv.ParseFloat(value, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
-	}
-	return val, nil
-}
-
-func parseDiskPercentValue(field, value string) (float64, error) {
-	s := strings.TrimSpace(value)
-	if strings.HasSuffix(s, "%") {
-		s = strings.TrimSpace(strings.TrimSuffix(s, "%"))
-	}
-	val, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s value %q is not numeric or a percentage (e.g. 90%%)", field, value)
-	}
-	return val, nil
-}
-
-// diskPredFields are the predicate fields a disk check accepts: block space and
-// inode accounting. Shared with config validation so both stay in step.
-var diskPredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
-
-func validDiskOp(op string) bool {
-	switch op {
-	case ">=", ">", "<=", "<", "==", "!=":
-		return true
-	default:
-		return false
-	}
 }
