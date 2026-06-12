@@ -75,7 +75,10 @@ func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 				defer func() { <-sem }()
 			}
 			res := b.Check.Run(ctx)
-			res.Optional = b.Optional
+			// A check may mark its own result optional (a warning, e.g. an output
+			// pattern match graded `warning`); keep that, and the static flag also
+			// makes a check optional.
+			res.Optional = res.Optional || b.Optional
 			results[i] = res
 		}(i, b)
 	}

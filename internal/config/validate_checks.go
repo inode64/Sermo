@@ -574,6 +574,57 @@ func validateCheckSection(tree map[string]any, section, locksDir string, add add
 	}
 }
 
+// validateAnalyze statically validates a command check's resolved `analyze`
+// block. It runs after expandAnalyze, so `use`/`silence` are gone and only the
+// flat `rules` list remains (unknown-set/silence errors are raised during
+// resolution). It checks each rule's id (present, unique), severity
+// (error|warning|ok), stream (stdout|stderr|both or empty), and that `match`
+// compiles as a regular expression.
+func validateAnalyze(path string, entry map[string]any, add addFunc) {
+	analyze, ok := entry["analyze"].(map[string]any)
+	if !ok {
+		if _, present := entry["analyze"]; present {
+			add("%s.analyze must be a mapping", path)
+		}
+		return
+	}
+	rules, ok := analyze["rules"].([]any)
+	if !ok {
+		if _, present := analyze["rules"]; present {
+			add("%s.analyze.rules must be a list", path)
+		}
+		return
+	}
+	seen := map[string]bool{}
+	for i, item := range rules {
+		rm, ok := item.(map[string]any)
+		if !ok {
+			add("%s.analyze rule %d must be a mapping", path, i)
+			continue
+		}
+		id := cfgval.AsString(rm["id"])
+		if id == "" {
+			add("%s.analyze rule %d is missing an id", path, i)
+		} else if seen[id] {
+			add("%s.analyze has a duplicate rule id %q", path, id)
+		}
+		seen[id] = true
+		switch cfgval.AsString(rm["severity"]) {
+		case "error", "warning", "ok":
+		default:
+			add("%s.analyze rule %q severity must be error, warning or ok", path, id)
+		}
+		switch cfgval.AsString(rm["stream"]) {
+		case "", "both", "stdout", "stderr":
+		default:
+			add("%s.analyze rule %q stream must be stdout, stderr or both", path, id)
+		}
+		if _, err := regexp.Compile(cfgval.AsString(rm["match"])); err != nil {
+			add("%s.analyze rule %q has an invalid regex: %v", path, id, err)
+		}
+	}
+}
+
 func validateSingleShotCheckFields(path, typ string, entry map[string]any, locksDir string, add addFunc) bool {
 	if _, known := knownCheckTypes[typ]; !known {
 		// A connection-protocol check (mysql, …): the type names a protocol in
@@ -606,6 +657,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 		validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
 		validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
+		validateAnalyze(path, entry, add)
 	case "service":
 		if st := cfgval.String(entry["expect"]); st != "" {
 			if _, ok := serviceStates[st]; !ok {

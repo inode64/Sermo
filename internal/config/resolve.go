@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"sermo/internal/cfgval"
+	"sort"
 	"strings"
 )
 
@@ -30,8 +31,112 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, c.expandAnalyze(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
+}
+
+// expandAnalyze resolves each check's `analyze` block into the flat rule list the
+// checks package consumes: it concatenates the `rules` of every `use:` pattern
+// set (in order), drops any rule whose id is in `silence:`, then appends the
+// check's local `rules:`, and replaces the block with `{rules: [...]}`. An
+// unknown set name, a `silence` id absent from the inherited sets, or a duplicate
+// id in the resolved list is an error. Checks without `analyze` are untouched.
+func (c *Config) expandAnalyze(tree map[string]any) []string {
+	checks, ok := tree["checks"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	names := make([]string, 0, len(checks))
+	for name := range checks {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var errs []string
+	for _, name := range names {
+		entry, ok := checks[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		analyze, ok := entry["analyze"].(map[string]any)
+		if !ok {
+			if _, present := entry["analyze"]; present {
+				errs = append(errs, "checks."+name+".analyze must be a mapping")
+			}
+			continue
+		}
+		rules, rerrs := c.resolveAnalyze(name, analyze)
+		errs = append(errs, rerrs...)
+		entry["analyze"] = map[string]any{"rules": rules}
+	}
+	return errs
+}
+
+// resolveAnalyze builds the flat, ordered rule list for one check's analyze block.
+func (c *Config) resolveAnalyze(checkName string, analyze map[string]any) ([]any, []string) {
+	var errs []string
+	scope := "checks." + checkName + ".analyze"
+
+	silence := map[string]bool{}
+	for _, id := range cfgval.StringList(analyze["silence"]) {
+		silence[id] = true
+	}
+	seenSilence := map[string]bool{}
+
+	var rules []any
+	ids := map[string]bool{}
+	addRule := func(r any) {
+		rm, ok := r.(map[string]any)
+		if !ok {
+			errs = append(errs, scope+": each rule must be a mapping")
+			return
+		}
+		id := cfgval.AsString(rm["id"])
+		if id != "" && ids[id] {
+			errs = append(errs, fmt.Sprintf("%s: duplicate rule id %q", scope, id))
+			return
+		}
+		ids[id] = true
+		rules = append(rules, r)
+	}
+
+	// Local rules come FIRST so the service takes precedence: a local rule (e.g.
+	// an `ok` whitelist for a known-benign line) wins over an inherited rule that
+	// would otherwise match the same line, since evaluation is first-match-wins.
+	if local, ok := analyze["rules"].([]any); ok {
+		for _, r := range local {
+			addRule(r)
+		}
+	}
+
+	// Inherited rules from each `use` set, in order, minus silenced ids.
+	for _, setName := range cfgval.StringList(analyze["use"]) {
+		doc, ok := c.Patterns[setName]
+		if !ok {
+			errs = append(errs, fmt.Sprintf("%s.use references %q, which is not a patterns set", scope, setName))
+			continue
+		}
+		setRules, _ := doc.Body["rules"].([]any)
+		for _, r := range setRules {
+			if rm, ok := r.(map[string]any); ok {
+				if id := cfgval.AsString(rm["id"]); id != "" && silence[id] {
+					seenSilence[id] = true
+					continue
+				}
+			}
+			addRule(r)
+		}
+	}
+
+	// A silence id that matched no inherited rule is a typo worth catching.
+	for _, id := range cfgval.StringList(analyze["silence"]) {
+		if !seenSilence[id] {
+			errs = append(errs, fmt.Sprintf("%s.silence references id %q not present in the inherited sets", scope, id))
+		}
+	}
+
+	return rules, errs
 }
 
 // expandReloadOnChange desugars a `reload_on_change: {paths: [...]}` block into
@@ -228,6 +333,8 @@ func (c *Config) catalogRegistry(category string) map[string]*Document {
 		return c.Apps
 	case CategoryLibrary:
 		return c.Libraries
+	case CategoryPatterns:
+		return c.Patterns
 	default:
 		return c.Daemons
 	}
@@ -255,6 +362,7 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, c.expandAnalyze(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 

@@ -1887,3 +1887,89 @@ defaults:
 		}
 	}
 }
+
+func TestExpandAnalyzeResolvesUseSilenceRules(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/patterns/common.yml": `
+kind: patterns
+name: common
+rules:
+  - { id: dep,  match: "(?i)deprecated", severity: warning }
+  - { id: note, match: "(?i)note",       severity: warning }
+`,
+		"catalog/svc.yml": `
+kind: daemon
+name: svc
+variables: { binary: /bin/true }
+checks:
+  config:
+    type: command
+    command: ["${binary}"]
+    analyze:
+      use: [common]
+      silence: [dep]
+      rules:
+        - { id: local, match: "(?i)ok", severity: ok }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	checks := resolved.Tree["checks"].(map[string]any)
+	analyze := checks["config"].(map[string]any)["analyze"].(map[string]any)
+	rules := analyze["rules"].([]any)
+	if len(rules) != 2 {
+		t.Fatalf("want 2 resolved rules (note + local), got %d: %v", len(rules), rules)
+	}
+	ids := []string{idOf(rules[0]), idOf(rules[1])}
+	if ids[0] != "local" || ids[1] != "note" {
+		t.Fatalf("resolved rule order = %v, want [local note] (local first for precedence, dep silenced)", ids)
+	}
+	if _, present := analyze["use"]; present {
+		t.Errorf("use must be consumed during resolution")
+	}
+	if _, present := analyze["silence"]; present {
+		t.Errorf("silence must be consumed during resolution")
+	}
+}
+
+func idOf(r any) string { return r.(map[string]any)["id"].(string) }
+
+func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
+	mk := func(analyze string) []string {
+		global := writeConfig(t, map[string]string{
+			"sermo.yml":                   baseGlobal,
+			"catalog/patterns/common.yml": "kind: patterns\nname: common\nrules:\n  - { id: dep, match: x, severity: warning }\n",
+			"catalog/svc.yml":             "kind: daemon\nname: svc\nvariables: { binary: /bin/true }\nchecks:\n  config:\n    type: command\n    command: [\"${binary}\"]\n    analyze:\n" + analyze,
+			"enabled/svc-main.yml":        "kind: service\nname: svc-main\nuses: svc\n",
+		})
+		cfg, err := Load(global)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		_, errs := cfg.Resolve("svc-main")
+		return errs
+	}
+	if errs := mk("      use: [nope]\n"); !hasSub(errs, "not a patterns set") {
+		t.Errorf("unknown set should error, got %v", errs)
+	}
+	if errs := mk("      use: [common]\n      silence: [ghost]\n"); !hasSub(errs, "not present in the inherited sets") {
+		t.Errorf("bad silence id should error, got %v", errs)
+	}
+}
+
+func hasSub(errs []string, sub string) bool {
+	for _, e := range errs {
+		if strings.Contains(e, sub) {
+			return true
+		}
+	}
+	return false
+}

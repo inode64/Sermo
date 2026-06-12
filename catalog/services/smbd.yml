@@ -8,7 +8,17 @@ apps: [smbd]
 variables:
   port: 445
 preflight:
-  config: { type: command, command: ["/usr/bin/testparm","-s"], timeout: 30s }
+  # `testparm -s` warns that the lock/pid dirs "do not exist" when run standalone
+  # (the running smbd creates them) — whitelist that artifact so only genuine
+  # warnings (e.g. deprecated options) grade orange. Local rules win (first-match).
+  config:
+    type: command
+    command: ["/usr/bin/testparm", "-s"]
+    timeout: 30s
+    analyze:
+      use: [common]
+      rules:
+        - { id: dir-artifact, match: '(?i)(lock|pid) directory .* does not exist', severity: ok }
 
 checks:
   service: { type: service, expect: active }

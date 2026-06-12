@@ -53,6 +53,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Daemons:   map[string]*Document{},
 		Apps:      map[string]*Document{},
 		Libraries: map[string]*Document{},
+		Patterns:  map[string]*Document{},
 		Services:  map[string]*Document{},
 	}
 
@@ -315,6 +316,8 @@ func (c *Config) add(doc *Document) {
 		index(c.Apps, &c.AppNames)
 	case kindLibrary:
 		index(c.Libraries, &c.LibraryNames)
+	case kindPatterns:
+		index(c.Patterns, &c.PatternNames)
 	case kindService:
 		index(c.Services, &c.ServiceNames)
 	}
@@ -331,6 +334,8 @@ func (c *Config) DaemonsInCategory(category string) []string {
 		names = append(names, c.AppNames...)
 	case CategoryLibrary:
 		names = append(names, c.LibraryNames...)
+	case CategoryPatterns:
+		names = append(names, c.PatternNames...)
 	default:
 		names = append(names, c.DaemonNames...)
 	}

@@ -199,6 +199,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runApps(ctx, opts)
 	case "libs":
 		return a.runLibs(ctx, opts)
+	case "patterns":
+		return a.runPatterns(opts)
 	case "services":
 		return a.runServices(ctx, opts)
 	case "service":
@@ -1201,7 +1203,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
 	fmt.Fprintln(w, "          diagnose | wizard [volume|net]")
-	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
+	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }

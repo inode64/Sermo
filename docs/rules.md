@@ -116,6 +116,53 @@ checks:
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available on
 a watch hook (`then.hook`) to validate the hook command's result.
 
+#### Grading output with `analyze:` (pattern sets)
+
+`expect_*` is a single pass/fail assertion. To grade an *otherwise-passing*
+command's output into **warning** (orange) or **error** (red) — the way the
+legacy `verifica_sistema.py` scanned config-test/version output — add an
+`analyze:` block. It references reusable rule sets from `catalog/patterns/`
+(category `patterns`, `sermoctl patterns`) and can add or silence rules per
+check:
+
+```yaml
+checks:
+  config:
+    type: command
+    command: ["/usr/bin/named-checkconf"]
+    analyze:
+      use: [common, named]     # inherit catalog/patterns sets, in order
+      silence: [deprecated]     # drop inherited rules by id
+      rules:                    # service-local rules, evaluated FIRST (precedence)
+        - { id: zone-ok, match: "(?i)loaded serial", severity: ok }
+```
+
+A pattern set is `kind: patterns` with an ordered, id'd rule list:
+
+```yaml
+kind: patterns
+name: common
+rules:
+  - { id: backup-now, match: "BACK UP DATA NOW",   severity: error }
+  - { id: deprecated, match: "(?i)deprecated",      severity: warning }
+```
+
+- `match` is a Go RE2 regex (`(?i)` for case-insensitive); `severity` is
+  `error` | `warning` | `ok`; optional `stream` is `stdout` | `stderr` | `both`
+  (default `both`).
+- **Evaluation:** the resolved rule list is the check's local `rules` first (so a
+  service `ok` whitelist or stricter rule overrides an inherited one), then the
+  `use` sets in order (minus `silence`d ids). Per output line the first matching
+  rule wins (an `ok` match whitelists that line); the check's severity is the
+  maximum over all lines.
+- **Result:** `error` → the check fails (red, required); `warning` → the check
+  fails as *optional* (orange — a warning that does not block start or drive
+  remediation by itself); no match → the check passes. The matched `pattern_id`
+  and line are in the result data.
+- **Precedence:** exit-code → `expect_*` → `analyze`. The analyzer only grades a
+  command that already passed its exit-code and `expect_*` checks.
+- v1 covers the `command` check only; hooks are a documented follow-up.
+
 ### Service health conditions (version / state / config)
 
 A `kind: service` can enable three standard health monitors with two short
