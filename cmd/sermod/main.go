@@ -92,7 +92,7 @@ func run(args []string) int {
 	defer stop()
 
 	detector := servicemgr.NewDetector()
-	backend, err := servicemgr.ParseBackend(engineString(cfg, "backend"))
+	backend, err := servicemgr.ParseBackend(app.EngineString(cfg, "backend"))
 	if err != nil {
 		logger.Error("backend", "error", err)
 		return 2
@@ -125,7 +125,7 @@ func run(args []string) int {
 	}
 	defer store.Close()
 
-	notifiers, notifyWarnings := notify.Build(notifiersRaw(cfg))
+	notifiers, notifyWarnings := notify.Build(app.NotifiersRaw(cfg))
 	for _, w := range notifyWarnings {
 		logger.Warn("build notifiers", "warning", w)
 	}
@@ -336,11 +336,6 @@ func parseArgs(args []string) (cliArgs, error) {
 	return parsed, nil
 }
 
-func notifiersRaw(cfg *config.Config) map[string]any {
-	m, _ := cfg.Global.Raw["notifiers"].(map[string]any)
-	return m
-}
-
 // webListenAddr returns the host:port the web UI should bind to, or "" when the
 // web UI is disabled. The second return value explains the decision (a non-empty
 // reason when disabled) so `--verbose` can surface why no port was opened.
@@ -388,14 +383,4 @@ func webAuth(cfg *config.Config) web.Auth {
 	auth.GuestPassword, _ = m["guest_password"].(string)
 	auth.AnonymousGuest, _ = m["guest"].(bool)
 	return auth
-}
-
-func engineMap(cfg *config.Config) map[string]any {
-	m, _ := cfg.Global.Raw["engine"].(map[string]any)
-	return m
-}
-
-func engineString(cfg *config.Config, key string) string {
-	s, _ := engineMap(cfg)[key].(string)
-	return s
 }
