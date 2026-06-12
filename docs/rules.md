@@ -33,7 +33,7 @@ which reuse the same schema). MVP types:
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |
 | `oom`         | the kernel OOM-kill count rose by `delta {op, value}` since last cycle|
 | `cert`        | a TLS certificate is expiring/invalid, or its algorithm/issuer changed (see Cert)|
-| `mysql` / `mariadb` | a connection to a MySQL/MariaDB server authenticates and responds (see Database) |
+| `mysql` / `mariadb` | a MySQL/MariaDB server answers: with no credentials it reads the handshake greeting (liveness + version); with a user/password it authenticates and pings (see Database) |
 | `mongodb` / `mongo` | a connection to a MongoDB server authenticates, pings and reports its version and replica-set `role` for `expect`/`on_change` (see Database) |
 | `postgres` / `postgresql` | a connection to a PostgreSQL server authenticates and responds (see Database) |
 | `redis` / `valkey` | a connection to a Redis/Valkey server authenticates and answers PING; exposes role, replication, persistence and memory from INFO for `expect` (see Database) |
@@ -491,8 +491,12 @@ keep the per-protocol entries short:
 
 Protocols, in the order of the table above:
 
-- `mysql` (alias `mariadb`) — default port 3306; `tls` supported. Uses
-  `github.com/go-sql-driver/mysql`.
+- `mysql` (alias `mariadb`) — default port 3306; `tls` supported. `user` is
+  **optional**: with no user/password it reads the server's initial handshake
+  packet (sent before auth) to prove liveness and report the version — no
+  credentials, like the smtp/amqp greeting probes. With a user/password it
+  authenticates and pings via `github.com/go-sql-driver/mysql` (the deeper
+  check). An ERR handshake (host blocked, too many connections) fails the probe.
 - `mongodb` (alias `mongo`) — default port 27017; `tls` supported. `user` is
   **optional** (MongoDB may run without auth); with credentials it authenticates
   against `auth_source` (defaults to `database`, then `admin`). Connects, verifies

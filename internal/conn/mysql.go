@@ -1,8 +1,11 @@
 package conn
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -15,17 +18,38 @@ func init() {
 	Register(mysqlProtocol{}, "mariadb")
 }
 
-// mysqlProtocol probes a MySQL or MariaDB server.
+// mysqlProtocol probes a MySQL or MariaDB server. With no credentials it reads
+// the server's unauthenticated handshake greeting for a liveness + version
+// check; with a user/password it performs a full authenticated ping.
 type mysqlProtocol struct{}
 
-func (mysqlProtocol) Name() string       { return "mysql" }
-func (mysqlProtocol) DefaultPort() int   { return 3306 }
-func (mysqlProtocol) RequiresUser() bool { return true }
+func (mysqlProtocol) Name() string     { return "mysql" }
+func (mysqlProtocol) DefaultPort() int { return 3306 }
 
-// Probe connects (authenticating with the configured user/password), verifies
-// the server responds with a ping, and reads its version. The caller's context
-// bounds the whole probe.
+// RequiresUser is false: a credential-free probe reads the server's initial
+// handshake (proving liveness, like smtp/amqp). A user only enables the deeper
+// authenticated ping.
+func (mysqlProtocol) RequiresUser() bool { return false }
+
+// Probe checks a MySQL/MariaDB server. Without a user or password it reads the
+// server's initial handshake packet — sent unprompted on connect — proving the
+// peer is a live MySQL/MariaDB server and reporting its version, with no
+// credentials (the smtp/amqp greeting model). With credentials it authenticates
+// and pings via the driver. The caller's context bounds the whole probe.
 func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
+	if cfg.User == "" && cfg.Password == "" {
+		// The MySQL handshake is always sent in plaintext (TLS is negotiated
+		// afterwards), so dial without TLS regardless of cfg.TLS.
+		plain := cfg
+		plain.TLS = ""
+		c, err := dialDeadline(ctx, plain, 3306)
+		if err != nil {
+			return Result{}, err
+		}
+		defer func() { _ = c.Close() }()
+		return mysqlGreeting(c)
+	}
+
 	db, err := sql.Open("mysql", buildDSN(cfg))
 	if err != nil {
 		return Result{}, err
@@ -39,6 +63,51 @@ func (mysqlProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// Best effort: a successful ping already proves connect + auth.
 	_ = db.QueryRowContext(ctx, "SELECT VERSION()").Scan(&version)
 	return Result{Version: version}, nil
+}
+
+// maxMySQLHandshake bounds the initial handshake packet we are willing to read,
+// so a non-MySQL or hostile peer cannot make the probe allocate without limit.
+// The real packet is well under a kilobyte.
+const maxMySQLHandshake = 1 << 16
+
+// mysqlGreeting reads the server's Initial Handshake Packet — sent unprompted on
+// connect, before authentication — and extracts the server version. A
+// well-formed protocol-10 handshake proves the peer is a live MySQL/MariaDB
+// server without any credentials. An ERR packet (0xff) means the server answered
+// but refused the connection (host blocked, too many connections, …); it is
+// returned as an error carrying the server's message.
+func mysqlGreeting(r io.Reader) (Result, error) {
+	var hdr [4]byte
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
+		return Result{}, err
+	}
+	// Packet header: 3-byte little-endian payload length, then a sequence id.
+	n := int(hdr[0]) | int(hdr[1])<<8 | int(hdr[2])<<16
+	if n < 1 || n > maxMySQLHandshake {
+		return Result{}, fmt.Errorf("mysql: implausible handshake length %d", n)
+	}
+	payload := make([]byte, n)
+	if _, err := io.ReadFull(r, payload); err != nil {
+		return Result{}, err
+	}
+
+	switch payload[0] {
+	case 0x0a: // protocol version 10
+		// server_version: a null-terminated string right after the version byte.
+		ver := payload[1:]
+		if i := bytes.IndexByte(ver, 0); i >= 0 {
+			ver = ver[:i]
+		}
+		return Result{Version: string(ver)}, nil
+	case 0xff: // ERR packet before handshake: code(2, LE) + message
+		msg := ""
+		if len(payload) > 3 {
+			msg = strings.TrimSpace(string(payload[3:]))
+		}
+		return Result{}, fmt.Errorf("mysql: server refused connection: %s", msg)
+	default:
+		return Result{}, fmt.Errorf("mysql: unexpected handshake protocol byte 0x%02x (not MySQL)", payload[0])
+	}
 }
 
 // MySQLDSN renders a go-sql-driver DSN from cfg (escaping the password). Exported
