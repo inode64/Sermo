@@ -151,8 +151,8 @@ func ParseWindowRule(entry map[string]any) Rule {
 // ParseRuleWindow parses the global/per-service `rule_window` fallback block
 // ({cycles, mode, min_matches}) into the equivalent for/within window, applied by
 // ParseRules to any rule that declares neither `for` nor `within` (section 13).
-// `mode: consecutive` (the default) yields a for window; `mode: within` (alias
-// `sliding`) yields a within window whose min_matches defaults to 1. The built-in
+// `mode: consecutive` (the default) yields a for window; `mode: within` yields
+// a within window whose min_matches defaults to 1. The built-in
 // default — fire on the first true cycle — is "1 consecutive", so a fallback that
 // resolves to it (consecutive with cycles <= 1) returns nil/nil: it leaves rules
 // at the immediate default rather than wrapping them in a redundant window.
@@ -166,7 +166,7 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 		return nil, nil
 	}
 	switch cfgval.AsString(m["mode"]) {
-	case "within", "sliding":
+	case "within":
 		matches, _ := cfgval.Int(m["min_matches"])
 		if matches <= 0 {
 			matches = 1

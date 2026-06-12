@@ -132,7 +132,7 @@ func TestParseRuleWindow(t *testing.T) {
 		{"zero cycles", map[string]any{"cycles": 0}, 0, [2]int{}},
 		{"consecutive N", map[string]any{"cycles": 3, "mode": "consecutive"}, 3, [2]int{}},
 		{"within with min_matches", map[string]any{"cycles": 15, "mode": "within", "min_matches": 5}, 0, [2]int{15, 5}},
-		{"within defaults min_matches to 1", map[string]any{"cycles": 10, "mode": "sliding"}, 0, [2]int{10, 1}},
+		{"within defaults min_matches to 1", map[string]any{"cycles": 10, "mode": "within"}, 0, [2]int{10, 1}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

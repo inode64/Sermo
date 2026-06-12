@@ -1184,11 +1184,18 @@ watch** where the same instance ticks each cycle and remembers recent sizes.
 ```yaml
 watches:
   log-runaway:
-    type: size
-    path: /var/log/app.log     # a file, or a directory (recursive sum of file sizes)
-    grow_by: 1GB               # alert if it grows at least this much…
-    within: 1h                 # …within this sliding window
+    check:
+      type: size
+      path: /var/log/app.log   # a file, or a directory (recursive sum of file sizes)
+      grow_by: 1GB             # alert if it grows at least this much…
+      within: 1h               # …within this sliding window
+    then:
+      notify: [ops-email]      # and/or a hook
 ```
+
+(Note `within` here is the size check's **own field** — the duration of its
+growth window — not the watch-level `within: {cycles, min_matches}` firing
+window, which a size watch normally does not need.)
 
 Each cycle it samples the path's size (a file's bytes, or the recursive sum of
 regular-file sizes under a directory), keeps the samples seen in the last
