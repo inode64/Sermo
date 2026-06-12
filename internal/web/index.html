@@ -955,7 +955,7 @@ function renderAttention() {
       </button>
     `).join("")}</div>`;
 }
-function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart"; }
+function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload"; }
 function serviceBusy(name) {
   const op = liveOps.get(name);
   return !!op && !op.finished;
@@ -1173,6 +1173,7 @@ function renderServices() {
           <button ${busy || st === "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
           <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
           <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
+          <button ${busy || st !== "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="reload">reload</button>
           ${s.monitored
             ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
             : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
