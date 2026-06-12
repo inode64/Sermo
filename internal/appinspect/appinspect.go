@@ -170,32 +170,21 @@ type versionCommand struct {
 }
 
 // versionCommandFor returns a daemon's version command and outcome expectations
-// for the named entry (`version` or `version_short`), looked up in
-// `preflight.<key>` then `commands.<key>`. argv is nil when no such command is
+// for the named entry (`version` or `version_short`), resolved through the
+// shared preflight-then-commands lookup. argv is nil when no such command is
 // configured.
 func versionCommandFor(tree map[string]any, key string) versionCommand {
-	for _, src := range []string{"preflight", "commands"} {
-		section, ok := tree[src].(map[string]any)
-		if !ok {
-			continue
-		}
-		entry, ok := section[key].(map[string]any)
-		if !ok {
-			continue
-		}
-		argv := cfgval.StringList(entry["command"])
-		if len(argv) == 0 {
-			continue
-		}
-		vc := versionCommand{argv: argv}
-		if v, ok := cfgval.Int(entry["expect_exit"]); ok {
-			vc.expectExit = v
-		}
-		vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
-		vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
-		return vc
+	entry := checks.VersionCommandEntry(tree, key)
+	if entry == nil {
+		return versionCommand{}
 	}
-	return versionCommand{}
+	vc := versionCommand{argv: cfgval.StringList(entry["command"])}
+	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
+		vc.expectExit = v
+	}
+	vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
+	vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
+	return vc
 }
 
 // shortVersionRE matches the first dotted numeric version in a raw version line:
