@@ -73,14 +73,15 @@ type App struct {
 }
 
 type options struct {
-	backend servicemgr.Backend
-	json    bool
-	quiet   bool
-	help    bool
-	timeout time.Duration
-	config  string
-	command string
-	args    []string
+	backend   servicemgr.Backend
+	json      bool
+	quiet     bool
+	noCascade bool // --no-cascade: act on exactly this service, skip also_apply
+	help      bool
+	timeout   time.Duration
+	config    string
+	command   string
+	args      []string
 	// lock command flags
 	name        string
 	reason      string
@@ -403,7 +404,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		return exitConfigInvalid
 	}
 
-	result, err := a.Operate(ctx, opts, cfg, resolved, service, action)
+	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action)
 	if err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError
@@ -415,6 +416,50 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 		a.printOperation(result)
 	}
 	return operationExit(result.Status)
+}
+
+// operateWithCascade runs the action on the primary service, and — unless
+// --no-cascade — on the services it lists in also_apply, in dependency order
+// (start/restart: primary first; stop: additionals first). Targets run through
+// their own guarded operation; each target's result is printed. The primary's
+// result is returned and drives the exit code.
+func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
+	targets := config.CascadeTargets(resolved.Tree)
+	if opts.noCascade || len(targets) == 0 {
+		return a.Operate(ctx, opts, cfg, resolved, service, action)
+	}
+	lookup := func(svc string) []string {
+		r, errs := cfg.Resolve(svc)
+		if len(errs) > 0 {
+			return nil
+		}
+		return config.CascadeTargets(r.Tree)
+	}
+	seq := app.OrderedGroup(service, action, lookup, map[string]bool{}, 0)
+	var primary operation.Result
+	var primaryErr error
+	for _, svc := range seq {
+		res := resolved
+		if svc != service {
+			r, errs := cfg.Resolve(svc)
+			if len(errs) > 0 {
+				fmt.Fprintf(a.Stderr, "cascade %s: skipped (%s)\n", svc, errs[0])
+				continue
+			}
+			res = r
+		}
+		out, err := a.Operate(ctx, opts, cfg, res, svc, action)
+		if svc == service {
+			primary, primaryErr = out, err
+			continue
+		}
+		if err != nil {
+			fmt.Fprintf(a.Stderr, "cascade %s: %v\n", svc, err)
+		} else if !opts.quiet {
+			fmt.Fprintf(a.Stdout, "cascade %s: %s %s\n", svc, action, out.Status)
+		}
+	}
+	return primary, primaryErr
 }
 
 // defaultOperate wires the real operation engine from a resolved service and
@@ -446,6 +491,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Service:          service,
 		Unit:             unit,
 		Backend:          string(detection.Backend),
+		AlsoUnits:        config.AdditionalUnits(resolved.Tree, string(detection.Backend)),
 		Tree:             resolved.Tree,
 		Manager:          manager,
 		Locker:           &locker,
@@ -1089,6 +1135,8 @@ func parseArgs(args []string) (options, error) {
 			opts.json = true
 		case arg == "--quiet" || arg == "-q":
 			opts.quiet = true
+		case arg == "--no-cascade":
+			opts.noCascade = true
 		case arg == "--series":
 			opts.series = true
 		case arg == "--long":
@@ -1198,7 +1246,7 @@ func parseArgs(args []string) (options, error) {
 
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE | reload")
+	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE [--no-cascade] | reload")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")

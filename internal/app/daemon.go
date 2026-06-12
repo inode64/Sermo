@@ -141,6 +141,7 @@ type Deps struct {
 func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []string) {
 	var workers []*Worker
 	var warnings []string
+	cascadeMap := map[string][]string{}
 	if collector == nil {
 		collector = metrics.New(metrics.OSReader{})
 		if deps.SystemFreshness > 0 {
@@ -175,9 +176,44 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 		for _, x := range warns {
 			warnings = append(warnings, "service "+name+": "+x)
 		}
+		if t := config.CascadeTargets(resolved.Tree); len(t) > 0 {
+			cascadeMap[name] = t
+		}
 		workers = append(workers, w)
 	}
+	wireCascade(workers, cascadeMap, deps)
 	return workers, warnings
+}
+
+// wireCascade gives every worker whose service declares also_apply a Cascade
+// closure that operates the service plus its additional services (resolved from
+// this generation's worker set) in dependency order. The byName index is built
+// once per generation and read-only thereafter, so concurrent cascades are safe.
+func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
+	if len(cascadeMap) == 0 {
+		return
+	}
+	byName := make(map[string]*Worker, len(workers))
+	for _, w := range workers {
+		byName[w.Service] = w
+	}
+	op := func(ctx context.Context, svc, action string) operation.Result {
+		if tw := byName[svc]; tw != nil {
+			return tw.Operate(ctx, action)
+		}
+		return operation.Result{Service: svc, Action: action, Status: operation.ResultFailed, Message: "cascade target not configured"}
+	}
+	lookup := func(svc string) []string { return cascadeMap[svc] }
+	for _, w := range workers {
+		if len(cascadeMap[w.Service]) == 0 {
+			continue
+		}
+		c := cascader{op: op, lookup: lookup, emit: deps.Emit, sleep: time.Sleep}
+		service := w.Service
+		w.Cascade = func(ctx context.Context, action string) operation.Result {
+			return c.run(ctx, service, action)
+		}
+	}
 }
 
 func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {

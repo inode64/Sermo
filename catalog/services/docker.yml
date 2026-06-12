@@ -7,6 +7,9 @@ service:
   systemd: [docker]
   openrc: [docker]
 
+also_service:
+  systemd: [docker.socket]
+
 apps: [docker]
 variables:
   # The engine API on its local Unix socket; set `host` (and tls for 2376) for a

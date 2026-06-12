@@ -49,6 +49,10 @@ type Worker struct {
 	Sample func(ctx context.Context) checks.MetricReader
 	// Operate runs an action through the operation engine.
 	Operate func(ctx context.Context, action string) operation.Result
+	// Cascade, when set (the service declares also_apply), runs the action across
+	// this service plus its additional services in dependency order, and returns
+	// this service's own (primary) Result. nil → Operate is used directly.
+	Cascade func(ctx context.Context, action string) operation.Result
 	// IsPaused reports whether monitoring is paused for this service (operator ran
 	// `unmonitor`). A paused cycle still advances cycle but runs no checks, rules
 	// or remediation.
@@ -269,7 +273,14 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 
 		// All actions of this rule run together: alerts notify, then the operation.
 		w.emitAlerts(ctx, r)
-		result := w.Operate(ctx, action)
+		// Cascade owns the primary's placement when also_apply is set (so stop can
+		// take additionals down first); it returns this service's own Result, which
+		// drives the bookkeeping below exactly as a bare Operate would.
+		operate := w.Operate
+		if w.Cascade != nil {
+			operate = w.Cascade
+		}
+		result := operate(ctx, action)
 		if result.RecordsRemediation() {
 			w.State.Record(now(), w.Policy)
 		}
