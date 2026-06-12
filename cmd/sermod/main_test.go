@@ -208,13 +208,17 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	if got := app.EngineString(cfg, "missing"); got != "" {
 		t.Fatalf("engineString(missing) = %q, want empty", got)
 	}
-	if raw := app.NotifiersRaw(cfg); len(raw) != 1 {
-		t.Fatalf("notifiersRaw = %v, want the ops entry", raw)
+	if raw := cfg.Notifiers(); len(raw) != 1 {
+		t.Fatalf("Notifiers() = %v, want the ops entry", raw)
 	}
 
 	bare := &config.Config{Global: config.Global{Raw: map[string]any{}}}
-	if app.EngineString(bare, "backend") != "" || app.NotifiersRaw(bare) != nil {
+	if app.EngineString(bare, "backend") != "" || bare.Notifiers() != nil {
 		t.Fatal("accessors on an empty config must return zero values")
+	}
+	var nilCfg *config.Config
+	if nilCfg.Notifiers() != nil {
+		t.Fatal("Notifiers() on a nil config must return nil")
 	}
 }
 

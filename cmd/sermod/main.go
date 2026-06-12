@@ -126,7 +126,7 @@ func run(args []string) int {
 	}
 	defer store.Close()
 
-	notifiers, notifyWarnings := notify.Build(app.NotifiersRaw(cfg))
+	notifiers, notifyWarnings := notify.Build(cfg.Notifiers())
 	for _, w := range notifyWarnings {
 		logger.Warn("build notifiers", "warning", w)
 	}

@@ -269,6 +269,17 @@ func CascadeTargets(tree map[string]any) []string {
 	return cfgval.StringList(tree["also_apply"])
 }
 
+// Notifiers returns the global `notifiers` section (nil when absent) — the
+// single way to reach it; validation, the web backend, the wizard and
+// notify.Build all consume this shape.
+func (c *Config) Notifiers() map[string]any {
+	if c == nil {
+		return nil
+	}
+	m, _ := c.Global.Raw["notifiers"].(map[string]any)
+	return m
+}
+
 // Config is the full loaded configuration set.
 type Config struct {
 	Global    Global
