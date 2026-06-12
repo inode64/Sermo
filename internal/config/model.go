@@ -9,7 +9,11 @@
 // every section instead of per-field.
 package config
 
-import "sermo/internal/cfgval"
+import (
+	"maps"
+	"sermo/internal/cfgval"
+	"slices"
+)
 
 // docKind identifies the document kinds. Catalog definitions carry a kind per
 // subdirectory — `daemon` (services), `app` (tools/runtimes), `lib` (shared
@@ -278,6 +282,16 @@ func (c *Config) Notifiers() map[string]any {
 	}
 	m, _ := c.Global.Raw["notifiers"].(map[string]any)
 	return m
+}
+
+// SortedServiceNames returns the configured service names alphabetically —
+// the stable iteration order the daemon, web backend and diagnostics share
+// (ServiceNames keeps load order for reporting).
+func (c *Config) SortedServiceNames() []string {
+	if c == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(c.Services))
 }
 
 // Config is the full loaded configuration set.

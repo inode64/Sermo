@@ -162,7 +162,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	var warnings []string
 	resolver := servicemgr.NewUnitResolver()
 
-	for _, name := range serviceNames(cfg) {
+	for _, name := range cfg.SortedServiceNames() {
 		doc := cfg.Services[name]
 		if doc == nil {
 			continue

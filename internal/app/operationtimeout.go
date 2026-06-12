@@ -13,7 +13,7 @@ import (
 // stop_policy (operation.ResolveTimeout).
 func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Duration {
 	maxTO := operation.ResolveTimeout(configured, nil)
-	for _, name := range serviceNames(cfg) {
+	for _, name := range cfg.SortedServiceNames() {
 		doc := cfg.Services[name]
 		if doc == nil || cfgval.Disabled(doc.Body) {
 			continue
