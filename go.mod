@@ -3,8 +3,8 @@ module sermo
 go 1.26
 
 require (
-	github.com/cloudsoda/go-smb2 v0.0.0-20260512215926-828fc89b00fb
-	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
+	github.com/cloudsoda/go-smb2 v0.0.0-20260609183447-7b96c35f5f4b
+	github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8
 	github.com/dustin/go-humanize v1.0.1
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/go-sql-driver/mysql v1.10.0
@@ -15,7 +15,7 @@ require (
 	github.com/quic-go/quic-go v0.60.0
 	go.mongodb.org/mongo-driver/v2 v2.6.0
 	golang.org/x/crypto v0.53.0
-	golang.org/x/net v0.55.0
+	golang.org/x/net v0.56.0
 	golang.org/x/sys v0.46.0
 	modernc.org/sqlite v1.52.0
 )
