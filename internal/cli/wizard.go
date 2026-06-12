@@ -473,8 +473,8 @@ func ensureIncludesPath(root map[string]any, base, relDir, targetDir string) (bo
 	if len(list) == 0 {
 		// Seeding the conventional services dir is itself a change: the loader
 		// has no implicit default, so an unwritten seed would leave the files
-		// the wizard writes under apps-enabled never loaded.
-		list = append(list, "apps-enabled")
+		// the wizard writes under apps never loaded.
+		list = append(list, "apps")
 		changed = true
 	}
 	for _, item := range list {

@@ -101,7 +101,7 @@ install-catalog:
 # Install the global config (kept if one already exists) and create the
 # available/included service directories.
 install-config:
-	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/apps-enabled
+	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/apps
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \

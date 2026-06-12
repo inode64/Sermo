@@ -283,7 +283,7 @@ Include:
 ```yaml
 resolved_from:
   - /usr/share/sermo/profiles/apache.yml
-  - /etc/sermo/apps-enabled/apache-main.yml
+  - /etc/sermo/apps/apache-main.yml
 ```
 
 ## Output format
