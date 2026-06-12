@@ -564,8 +564,9 @@ a service.
 > `paths.includes` in `sermo.yml` (writing a `.bak` first); then `sermoctl reload`.
 > New assistant types can be added over time. At any multi-select prompt you can
 > type item numbers (`1,3`), the keyword `all`, or an option's name. When asked
-> for notification targets the menu always offers the same `all` / `none` /
-> `default` vocabulary — even when the config defines no notifiers: type `all` to
+> for notification targets the numbered list shows only the notifiers defined in
+> the config; the reserved answers `all` / `none` / `default` are offered in the
+> question itself — even when the config defines no notifiers: type `all` to
 > notify every configured notifier, `default` to omit `then.notify` and inherit
 > the global default, or `none` to generate `notify: [none]` and suppress that
 > default for the watch.
