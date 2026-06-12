@@ -3,9 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -145,13 +147,8 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 }
 
 func docsPreview(docs map[string]map[string]any) []any {
-	names := make([]string, 0, len(docs))
-	for n := range docs {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	out := make([]any, 0, len(names))
-	for _, n := range names {
+	out := make([]any, 0, len(docs))
+	for _, n := range slices.Sorted(maps.Keys(docs)) {
 		out = append(out, docs[n])
 	}
 	return out
