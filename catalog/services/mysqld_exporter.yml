@@ -1,0 +1,32 @@
+kind: daemon
+name: mysqld_exporter
+display_name: "Prometheus MySQL Exporter"
+description: "Prometheus mysqld_exporter: MySQL/MariaDB metrics over HTTP /metrics."
+
+service:
+  systemd: [mysqld_exporter]
+  openrc: [mysqld_exporter]
+
+apps: [mysqld_exporter]
+variables:
+  host: 127.0.0.1
+  port: 9104
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # The scrape endpoint answers 200 only while the exporter can reach the
+  # database, so it doubles as a "DB connection up" signal for Prometheus.
+  metrics:
+    type: http
+    url: "http://${host}:${port}/metrics"
+    expect_status: 200
+    timeout: 5s

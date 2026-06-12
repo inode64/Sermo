@@ -1,0 +1,8 @@
+kind: app
+name: backrest
+display_name: "Backrest"
+variables:
+  binary: /usr/bin/backrest
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

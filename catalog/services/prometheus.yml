@@ -1,0 +1,33 @@
+kind: daemon
+name: prometheus
+display_name: "Prometheus"
+description: "Prometheus monitoring server and time-series database."
+
+service:
+  systemd: [prometheus]
+  openrc: [prometheus]
+
+apps: [prometheus]
+variables:
+  host: 127.0.0.1
+  port: 9090
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native Prometheus probe: GETs /api/v1/status/buildinfo and verifies a success
+  # status, reporting the server version; falls back to /-/healthy (liveness) on
+  # older servers. Set user/password for a reverse proxy in front of the API.
+  health:
+    type: prometheus
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

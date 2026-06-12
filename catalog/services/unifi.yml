@@ -1,0 +1,37 @@
+kind: daemon
+name: unifi
+display_name: "UniFi Network Controller"
+description: "Ubiquiti UniFi Network controller (management API over HTTPS)."
+
+service:
+  systemd: [unifi]
+  openrc: [unifi]
+
+# The controller runs on the JVM: the runtime is owned by the `java` app and
+# linked here so a missing Java blocks start and its preflight runs first.
+apps: [java]
+
+variables:
+  host: 127.0.0.1
+  port: 8443
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native UniFi probe: GETs the unauthenticated /status endpoint over HTTPS and
+  # verifies meta.rc == "ok", reporting server_version. The controller ships a
+  # self-signed certificate, so verification is skipped by default (set tls: true
+  # to require a valid one).
+  api:
+    type: unifi
+    host: "${host}"
+    port: "${port}"
+    timeout: 5s

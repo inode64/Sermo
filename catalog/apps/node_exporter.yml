@@ -1,0 +1,8 @@
+kind: app
+name: node_exporter
+display_name: "Prometheus Node Exporter"
+variables:
+  binary: /usr/bin/node_exporter
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

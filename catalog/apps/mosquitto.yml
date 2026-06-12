@@ -1,0 +1,7 @@
+kind: app
+name: mosquitto
+display_name: "Eclipse Mosquitto"
+variables:
+  binary: /usr/bin/mosquitto
+preflight:
+  binary: { type: binary, path: "${binary}" }

@@ -1,0 +1,8 @@
+kind: app
+name: docker
+display_name: "Docker Engine"
+variables:
+  binary: /usr/bin/docker
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

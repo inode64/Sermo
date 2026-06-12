@@ -1,0 +1,26 @@
+kind: daemon
+name: pmcd
+display_name: "PCP Collector (pmcd)"
+description: "Performance Co-Pilot metric collector daemon (pmcd)."
+
+service:
+  systemd: [pmcd]
+  openrc: [pmcd]
+
+apps: [pmcd]
+variables:
+  host: 127.0.0.1
+  port: 44321
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  # pmcd serves the PCP protocol on 44321; a tcp probe confirms collectors and
+  # pmlogger/pmie clients can reach it.
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s

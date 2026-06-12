@@ -1,0 +1,32 @@
+kind: daemon
+name: nebula
+display_name: "Nebula"
+description: "Nebula mesh-VPN node (Slack/Defined Networking)."
+type: tunnel
+
+# Nebula commonly runs as a systemd instance per config (nebula@config) or as a
+# plain OpenRC service. Override `service` if your instance is named differently.
+service:
+  systemd: [nebula@config, nebula]
+  openrc: [nebula]
+
+apps: [nebula]
+variables:
+  # Probe the node's own lighthouse/listen port; the default is 4242/udp.
+  host: 127.0.0.1
+  port: 4242
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  # Native Nebula probe over the UDP control protocol: sends a Message packet for
+  # an unknown tunnel index and verifies the node answers a plaintext recv_error
+  # echoing it — proof the node is up and speaking Nebula, no credentials needed.
+  # Requires listen.send_recv_error "always" (the default).
+  handshake:
+    type: nebula
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

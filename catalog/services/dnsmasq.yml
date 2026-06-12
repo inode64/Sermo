@@ -1,0 +1,30 @@
+kind: daemon
+name: dnsmasq
+display_name: "dnsmasq"
+description: "dnsmasq lightweight DNS forwarder and DHCP/TFTP server."
+
+service:
+  systemd: [dnsmasq]
+  openrc: [dnsmasq]
+
+apps: [dnsmasq]
+variables:
+  host: 127.0.0.1
+  port: 53
+  # Name resolved to prove the resolver answers; override per deployment.
+  query: localhost
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  # Native DNS probe: sends an A query for ${query} and verifies the server
+  # answers (NOERROR or NXDOMAIN). SERVFAIL/REFUSED, a transport error or a
+  # timeout fail the check.
+  dns:
+    type: dns
+    host: "${host}"
+    port: "${port}"
+    query: "${query}"
+    timeout: 3s
