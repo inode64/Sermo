@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -32,6 +33,11 @@ type Engine struct {
 	Service string // config service name
 	Unit    string // backend unit, passed to Manager
 	Backend string
+	// AlsoUnits are auxiliary init units (from `also_service`) acted on alongside
+	// the primary in wrap order: started before the primary (strict — a failure
+	// aborts before the primary starts) and stopped after it (best-effort). Empty
+	// for most services.
+	AlsoUnits []string
 
 	ConfigError error
 	Manager     Manager
@@ -88,6 +94,10 @@ func (e Engine) Reload(ctx context.Context) Result {
 
 func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	result = Result{Service: e.Service, Action: p.action, Backend: e.Backend, Status: ResultOK}
+
+	// Best-effort failures stopping also_service units; folded into the final
+	// success message (a successful stop is not failed by an auxiliary unit).
+	var alsoStopErrs []string
 
 	ctx, cancel := boundContext(ctx, e.OperationTimeout)
 	defer cancel()
@@ -168,6 +178,16 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 			}
 			return result
 		}
+		// Auxiliary units (also_service) go down AFTER the primary, in reverse
+		// declaration order (LIFO nesting). Placed here — right after the primary
+		// stop, before residual handling — so the orphan-process early-return below
+		// cannot skip them. Best-effort: a failure is recorded and folded into the
+		// final message, it does not fail an already-successful stop.
+		for i := len(e.AlsoUnits) - 1; i >= 0; i-- {
+			if err := e.Manager.Stop(ctx, e.AlsoUnits[i]); err != nil {
+				alsoStopErrs = append(alsoStopErrs, fmt.Sprintf("stop %s: %v", e.AlsoUnits[i], err))
+			}
+		}
 		if err := wait(ctx, e.Sleep, e.KillPolicy.GracefulTimeout); err != nil {
 			result.Status = ResultFailed
 			result.Message = "operation timed out during graceful stop wait"
@@ -202,6 +222,20 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 
 	// Steps 12-13: start and verify status.
 	if p.start {
+		// Auxiliary units (also_service) come up BEFORE the primary, in declaration
+		// order (socket activation). Strict: a failure aborts the operation before
+		// the primary is started, leaving a clean "not started" state.
+		for _, unit := range e.AlsoUnits {
+			if err := e.Manager.Start(ctx, unit); err != nil {
+				result.Status = ResultFailed
+				if timedOut(ctx) {
+					result.Message = "operation timed out starting also_service " + unit
+				} else {
+					result.Message = "start " + unit + ": " + err.Error()
+				}
+				return result
+			}
+		}
 		if err := e.Manager.Start(ctx, e.Unit); err != nil {
 			result.Status = ResultFailed
 			if timedOut(ctx) {
@@ -253,6 +287,9 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 	}
 
 	result.Message = p.action + " ok"
+	if len(alsoStopErrs) > 0 {
+		result.Message += " (also_service: " + strings.Join(alsoStopErrs, "; ") + ")"
+	}
 	return result
 }
 

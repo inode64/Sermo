@@ -196,6 +196,27 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 	return []string{fallback}, true
 }
 
+// AdditionalUnits returns the auxiliary init units declared in `also_service`
+// for the active backend (e.g. `also_service: { systemd: [docker.socket] }`).
+// These are plain init units the operation acts on alongside the primary unit
+// (wrap order: up before the primary, down after) — distinct from `also_apply`,
+// which cascades to other Sermo services. Empty when absent or when the backend
+// has no list.
+func AdditionalUnits(tree map[string]any, backend string) []string {
+	m, ok := tree["also_service"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return cfgval.StringList(m[backend])
+}
+
+// CascadeTargets returns the additional Sermo services declared in `also_apply`,
+// which receive the same action (start/stop/restart) as this service via their
+// own guarded operation. Empty when absent.
+func CascadeTargets(tree map[string]any) []string {
+	return cfgval.StringList(tree["also_apply"])
+}
+
 // Config is the full loaded configuration set.
 type Config struct {
 	Global    Global

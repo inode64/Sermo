@@ -306,6 +306,56 @@ A **pidfile** selector's `path` accepts a single path or a **list of candidates*
 discovery tries them in order and uses the first that points at a running process
 (so per-OS or versioned pidfile locations all resolve without personal config).
 
+### `also_service` — auxiliary init units
+
+A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
+companion unit) that are started/stopped/restarted **together with the primary**,
+in the same operation. It mirrors the `service:` shape (per-init lists, resolved
+for the active backend):
+
+```yaml
+service:
+  systemd: [docker]
+  openrc:  [docker]
+also_service:
+  systemd: [docker.socket]
+```
+
+These are plain init units driven directly by the service manager (not separate
+monitored services — that is `also_apply`). They are acted on in **wrap /
+socket-activation order**: started **before** the primary (strict — a failure
+aborts the operation before the primary starts), and stopped **after** it
+(best-effort — a stop failure is reported in the result message but does not fail
+an already-successful stop). `reload` touches the primary only. The primary's
+guards, locks and preflight wrap the whole operation. Listing the primary unit in
+`also_service` is rejected.
+
+### `also_apply` — cascade to other services
+
+Where `also_service` acts on *init units of this service*, `also_apply` acts on
+**other Sermo services**: when this service is started/stopped/restarted (by a
+remediation rule or a manual `sermoctl`), the same action runs on each listed
+service through **its own** guarded operation.
+
+```yaml
+also_apply: [nginx, varnish]
+```
+
+- **Dependency-aware order**: on `start`/`restart` the primary acts first, then
+  the additionals (a dependent comes up after what it depends on); on `stop` the
+  additionals act first, then the primary.
+- **Each target keeps its own guards/locks/preflight** (it runs its real
+  operation). A target's remediation cooldown and paused/`unmonitor` state are
+  *not* consulted — `also_apply` is an explicit relationship.
+- **Best-effort & loop-safe**: a failing/blocked target is reported (a `cascade`
+  event; a blocked target is retried once) but does not fail the primary; cycles
+  are cut by a visited set.
+- Entries must be configured services and must not include the service itself.
+- `sermoctl restart <svc> --no-cascade` acts on exactly one service.
+
+`also_apply` (other services) and `also_service` (this service's init units) are
+complementary; a service may use both.
+
 ### `pidfile:` shorthand (selector + health check)
 
 A daemon can declare a top-level `pidfile: <path>` to wire **both** uses of a

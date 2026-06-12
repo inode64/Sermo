@@ -24,15 +24,26 @@ type fakeManager struct {
 	status    servicemgr.Status
 	statusErr error
 	calls     []string
+	errOn     map[string]error // per-call ("start <unit>"/"stop <unit>") error override
 }
 
 func (m *fakeManager) Start(_ context.Context, s string) error {
 	m.calls = append(m.calls, "start "+s)
+	if m.errOn != nil {
+		if err, ok := m.errOn["start "+s]; ok {
+			return err
+		}
+	}
 	return m.startErr
 }
 
 func (m *fakeManager) Stop(_ context.Context, s string) error {
 	m.calls = append(m.calls, "stop "+s)
+	if m.errOn != nil {
+		if err, ok := m.errOn["stop "+s]; ok {
+			return err
+		}
+	}
 	return m.stopErr
 }
 
@@ -551,3 +562,60 @@ func TestStartRunsNoStop(t *testing.T) {
 type noopSignaler struct{}
 
 func (noopSignaler) Signal(int, syscall.Signal) error { return nil }
+
+func TestAlsoServiceRestartWrapOrder(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	e.AlsoUnits = []string{"docker.socket"}
+	res := e.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("status = %q (%s)", res.Status, res.Message)
+	}
+	// Wrap order: primary down first then also; also up first then primary.
+	var seq []string
+	for _, c := range h.mgr.calls {
+		if c == "stop mysqld" || c == "stop docker.socket" || c == "start docker.socket" || c == "start mysqld" {
+			seq = append(seq, c)
+		}
+	}
+	want := []string{"stop mysqld", "stop docker.socket", "start docker.socket", "start mysqld"}
+	if len(seq) != len(want) {
+		t.Fatalf("call seq = %v, want %v", seq, want)
+	}
+	for i := range want {
+		if seq[i] != want[i] {
+			t.Fatalf("call seq = %v, want %v", seq, want)
+		}
+	}
+}
+
+func TestAlsoServiceStartStrictAborts(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.errOn = map[string]error{"start docker.socket": errors.New("socket down")}
+	e := h.engine()
+	e.AlsoUnits = []string{"docker.socket"}
+	res := e.Restart(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("a failing also_service start must fail the op, got %q", res.Status)
+	}
+	if h.mgr.did("start mysqld") {
+		t.Fatal("primary must NOT start when an also_service unit fails to start")
+	}
+}
+
+func TestAlsoServiceStopBestEffort(t *testing.T) {
+	h := defaultHarness()
+	h.mgr.errOn = map[string]error{"stop docker.socket": errors.New("socket stuck")}
+	e := h.engine()
+	e.AlsoUnits = []string{"docker.socket"}
+	res := e.Restart(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("a failing also_service stop must not fail the op, got %q (%s)", res.Status, res.Message)
+	}
+	if !strings.Contains(res.Message, "docker.socket") {
+		t.Fatalf("best-effort stop failure should be noted in the message, got %q", res.Message)
+	}
+	if !h.mgr.did("start mysqld") {
+		t.Fatal("primary must still start after a best-effort also_service stop failure")
+	}
+}
