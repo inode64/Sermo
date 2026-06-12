@@ -151,3 +151,60 @@ watches:
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+func TestDiagnoseNewCheckResources(t *testing.T) {
+	global := baseGlobal + `
+watches:
+  sda-busy:
+    check: { type: diskio, device: sdz, util_pct: { op: ">=", value: 90 } }
+    then: { hook: { command: [/bin/true] } }
+  mem-stall:
+    check: { type: pressure, resource: memory, some_avg60: { op: ">", value: 10 } }
+    then: { hook: { command: [/bin/true] } }
+  slow-disk:
+    check: { type: hdparm, device: /dev/sdz, read: { op: "<", value: 100 } }
+    then: { hook: { command: [/bin/true] } }
+  dying-disk:
+    check: { type: smart, device: /dev/sdz }
+    then: { hook: { command: [/bin/true] } }
+`
+	cfg := loadCfg(t, global, "")
+
+	// Nothing exists on this fake host.
+	r := Diagnose(cfg, nil, fakeHost{})
+	for _, want := range []string{
+		`block device "sdz" does not exist`,
+		"no /proc/pressure/memory",
+		`device "/dev/sdz" does not exist`,
+	} {
+		if !has(r, LevelWarning, want) {
+			t.Fatalf("missing warning %q in %+v", want, r.Findings)
+		}
+	}
+
+	// With every resource present there are no warnings.
+	clean := Diagnose(cfg, nil, fakeHost{paths: map[string]bool{
+		"/sys/class/block/sdz":  true,
+		"/proc/pressure/memory": true,
+		"/dev/sdz":              true,
+	}})
+	if clean.Warnings() != 0 {
+		t.Fatalf("expected no warnings when resources exist: %+v", clean.Findings)
+	}
+}
+
+func TestDiagnoseServiceCheckDeviceResources(t *testing.T) {
+	// The same probes apply to a service's checks: section (unified types).
+	svc := `
+kind: service
+name: db
+service: { name: db }
+checks:
+  io: { type: diskio, device: sdz, util_pct: { op: ">=", value: 90 } }
+`
+	cfg := loadCfg(t, baseGlobal, svc)
+	r := Diagnose(cfg, nil, fakeHost{})
+	if !has(r, LevelWarning, `block device "sdz" does not exist`) {
+		t.Fatalf("expected service-check diskio warning: %+v", r.Findings)
+	}
+}
