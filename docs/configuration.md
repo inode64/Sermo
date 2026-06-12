@@ -1402,8 +1402,11 @@ It reports, as `error` / `warning` / `info` findings:
   (see [per-check interval](#per-check-interval)).
 - **Host resources** — referenced things that **do not exist on this host**:
   network interfaces (`net` watches), files/directories (`storage`/`count` checks,
-  `file` watches) and **mount points** (a `storage` check with mount conditions whose
-  path is not currently mounted).
+  `file` watches), **mount points** (a `storage` check with mount conditions whose
+  path is not currently mounted), **block devices** (`diskio` names without a
+  `/sys/class/block` entry; `hdparm`/`smart` device paths) and **kernel PSI**
+  (a `pressure` check on a kernel without `/proc/pressure` — `CONFIG_PSI=n` —
+  which would otherwise silently never fire).
 
 `diagnose` exits `78` when any **error** finding is present; warnings alone exit
 `0`. The same report is available in the web UI's **Diagnostics** panel and at

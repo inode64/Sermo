@@ -71,13 +71,16 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 			if p := str(check["path"]); p != "" && !host.PathExists(p) {
 				b.add(LevelWarning, scope, "path %q does not exist", p)
 			}
-		case "storage", "disk":
-			diagDiskResources(b, scope, check, host)
+		default:
+			// Every single-shot check type shares the same resource probes as a
+			// service's checks: section (unified check types).
+			diagCheckResources(b, scope, check, host)
 		}
 	}
 }
 
-// diagCheckResources flags missing paths referenced by a service check.
+// diagCheckResources flags host resources referenced by a single-shot check
+// that do not exist on this host. Shared by service checks and host watches.
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
 	switch str(entry["type"]) {
 	case "storage", "disk":
@@ -85,6 +88,18 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 	case "count":
 		if p := str(entry["path"]); p != "" && !host.PathExists(p) {
 			b.add(LevelWarning, scope, "directory %q does not exist", p)
+		}
+	case "diskio":
+		if dev := str(entry["device"]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
+			b.add(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
+		}
+	case "hdparm", "smart":
+		if dev := str(entry["device"]); dev != "" && !host.PathExists(dev) {
+			b.add(LevelWarning, scope, "device %q does not exist", dev)
+		}
+	case "pressure":
+		if res := str(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
+			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
 	}
 }
