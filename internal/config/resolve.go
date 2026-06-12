@@ -3,9 +3,11 @@ package config
 import (
 	"fmt"
 	"maps"
-	"sermo/internal/cfgval"
+	"slices"
 	"sort"
 	"strings"
+
+	"sermo/internal/cfgval"
 )
 
 // Resolved is a fully flattened, variable-expanded service definition.
@@ -31,6 +33,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
+	errs = append(errs, c.resolveChangedLibraries(expanded)...)
 	errs = append(errs, expandReloadOnChange(expanded)...)
 	errs = append(errs, c.expandApps(expanded)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
@@ -338,13 +341,12 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 		libraries = map[string]any{}
 	}
 	for _, lib := range cfgval.StringList(roc["libraries"]) {
-		doc, ok := c.Libraries[lib]
-		if !ok {
+		path, known := c.libraryPath(lib)
+		switch {
+		case !known:
 			errs = append(errs, fmt.Sprintf("restart_on_change references %q, which is not a library", lib))
 			continue
-		}
-		path := daemonBinary(doc.Body)
-		if path == "" {
+		case path == "":
 			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
 			continue
 		}
@@ -356,6 +358,79 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 	}
 	if len(libraries) > 0 {
 		tree["rules"] = libraries
+	}
+	return errs
+}
+
+// libraryPath resolves a library name to the file its library daemon watches
+// (the `binary` variable). known is false when no library has that name; an
+// empty path with known=true means the library declares no binary. Shared by
+// expandRestartOnChange and the `changed: {library: X}` condition rewrite.
+func (c *Config) libraryPath(lib string) (path string, known bool) {
+	doc, ok := c.Libraries[lib]
+	if !ok {
+		return "", false
+	}
+	return daemonBinary(doc.Body), true
+}
+
+// resolveChangedLibraries fills the `path` of a hand-written
+// `changed: {library: X}` condition in every rule's if-tree, resolving the
+// library exactly like restart_on_change does — so the documented shorthand
+// works anywhere a condition does. Conditions already carrying a path are left
+// untouched (the restart_on_change desugar emits both keys).
+func (c *Config) resolveChangedLibraries(tree map[string]any) []string {
+	rules, ok := tree["rules"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var errs []string
+	for _, name := range slices.Sorted(maps.Keys(rules)) {
+		rule, ok := rules[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		if ifNode, ok := rule["if"].(map[string]any); ok {
+			errs = append(errs, c.fillChangedLibraryPaths(ifNode, "rules."+name)...)
+		}
+	}
+	return errs
+}
+
+// fillChangedLibraryPaths walks one condition node (recursing through and/or/
+// not) and rewrites its changed-library leaf, collecting resolution errors.
+func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []string {
+	var errs []string
+	for _, key := range []string{"and", "or"} {
+		items, ok := node[key].([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range items {
+			if child, ok := item.(map[string]any); ok {
+				errs = append(errs, c.fillChangedLibraryPaths(child, scope)...)
+			}
+		}
+	}
+	if child, ok := node["not"].(map[string]any); ok {
+		errs = append(errs, c.fillChangedLibraryPaths(child, scope)...)
+	}
+	ch, ok := node["changed"].(map[string]any)
+	if !ok {
+		return errs
+	}
+	lib := cfgval.String(ch["library"])
+	if lib == "" || cfgval.String(ch["path"]) != "" {
+		return errs
+	}
+	path, known := c.libraryPath(lib)
+	switch {
+	case !known:
+		errs = append(errs, fmt.Sprintf("%s: changed references %q, which is not a library", scope, lib))
+	case path == "":
+		errs = append(errs, fmt.Sprintf("%s: library %q has no binary to watch", scope, lib))
+	default:
+		ch["path"] = path
 	}
 	return errs
 }

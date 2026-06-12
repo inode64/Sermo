@@ -288,7 +288,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
 					if op := cfgval.String(cond["op"]); op != "" && !validJSONOp(op) {
-						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, =~, contains", prefix, path, op)
+						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, path, op)
 					}
 				}
 			}
@@ -325,7 +325,7 @@ func validateOutputExpectation(prefix, field string, v any, add addFunc) {
 func validateOpValue(prefix, label string, m map[string]any, add addFunc) {
 	op := cfgval.String(m["op"])
 	if _, ok := compareOps[op]; !ok {
-		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, label, op)
+		add("%s.%s op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, label, op)
 		return
 	}
 	value := cfgval.String(m["value"])
@@ -512,8 +512,10 @@ var httpMethods = set("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
 var sqlEngines = set("mysql", "mariadb", "postgres", "postgresql", "sqlite", "sqlite3")
 
 // compareOps is the operator set shared by the sql check and the http response
-// comparisons (expect_body / expect_status / expect_latency).
-var compareOps = set("==", "!=", ">", ">=", "<", "<=", "=~")
+// comparisons (expect_body / expect_status / expect_latency). It matches the
+// runtime compareValue and the expect_json operator set, so every {op, value}
+// comparison shares one vocabulary.
+var compareOps = set("==", "!=", ">", ">=", "<", "<=", "contains", "=~")
 
 // validateCheckSection validates a checks/preflight/postflight section: known
 // types, optional booleans, command array form, valid service/process states,
@@ -796,7 +798,7 @@ func validateSizeFields(prefix string, fields map[string]any, add addFunc) {
 func validateMongoFields(prefix string, fields map[string]any, add addFunc) {
 	op := cfgval.String(fields["op"])
 	if _, ok := compareOps[op]; !ok {
-		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	if cfgval.String(fields["value"]) == "" {
 		add("%s.value is required for a mongodb-query check", prefix)
@@ -869,7 +871,7 @@ func validateInfluxFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	op := cfgval.String(fields["op"])
 	if _, ok := compareOps[op]; !ok {
-		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	if cfgval.String(fields["value"]) == "" {
 		add("%s.value is required for an influxdb-query check", prefix)
@@ -920,7 +922,7 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	}
 	op := cfgval.String(fields["op"])
 	if _, ok := compareOps[op]; !ok {
-		add("%s.op %q is not one of ==, !=, >, >=, <, <=, =~", prefix, op)
+		add("%s.op %q is not one of ==, !=, >, >=, <, <=, contains, =~", prefix, op)
 	}
 	value := cfgval.String(fields["value"])
 	switch op {

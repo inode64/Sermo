@@ -2150,3 +2150,72 @@ watches:
 		t.Fatalf("watch custom var not expanded: %v", got)
 	}
 }
+
+func TestChangedLibraryConditionResolvesPath(t *testing.T) {
+	// The documented shorthand `changed: {library: X}` resolves the library to
+	// its watched file anywhere in a rule's condition tree, exactly like the
+	// restart_on_change desugar.
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/libs/glibc.yml": `
+kind: daemon
+name: glibc
+variables:
+  binary: "/lib64/libc.so.6"
+`,
+		"enabled/web.yml": `
+kind: service
+name: web
+service: { name: web }
+rules:
+  glibc-changed:
+    type: alert
+    if:
+      or:
+        - changed: { library: glibc }
+        - changed: { path: /etc/web.conf }
+    then: { action: alert, message: "glibc changed" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("web")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	or, ok := nested(t, resolved.Tree, "rules", "glibc-changed", "if")["or"].([]any)
+	if !ok || len(or) != 2 {
+		t.Fatalf("if.or = %v", or)
+	}
+	changed := nested(t, or[0].(map[string]any), "changed")
+	if cfgval.String(changed["path"]) != "/lib64/libc.so.6" {
+		t.Errorf("changed.path = %v, want /lib64/libc.so.6", changed["path"])
+	}
+}
+
+func TestChangedUnknownLibraryErrors(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/web.yml": `
+kind: service
+name: web
+service: { name: web }
+rules:
+  ghost-changed:
+    type: alert
+    if: { changed: { library: ghost } }
+    then: { action: alert, message: "x" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs := cfg.Resolve("web")
+	joined := strings.Join(errs, "\n")
+	if !strings.Contains(joined, `"ghost"`) || !strings.Contains(joined, "not a library") {
+		t.Fatalf("expected unknown-library error, got %v", errs)
+	}
+}
