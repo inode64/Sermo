@@ -36,7 +36,7 @@ rules:
 ```
 
 `RuleType`/`ActionType` constants and the `Action` struct are defined in
-`implementation-spec.md` section 16. `block` and `alert` actions require a
+`AGENTS.md` spec section 16. `block` and `alert` actions require a
 `message`; only guard rules use `action: block`, and a guard must list `blocks`.
 
 ## Condition tree
@@ -76,7 +76,7 @@ Conditions are read-only predicates. The evaluator runs every distinct probe (a
 declared check or an inline condition) at most once per cycle and caches the
 result, so a probe shared by several rules never executes twice in a cycle, and a
 condition must never change system state. Inline `command` conditions must be
-side-effect-free, array form, with a timeout. See `implementation-spec.md`
+side-effect-free, array form, with a timeout. See `AGENTS.md`
 section 14.
 
 ## Windows
@@ -172,7 +172,7 @@ Cooldown and rate limiting are a per-service `policy` block (mandatory positive
 cooldown, optional max_actions/max_actions_window/backoff), NOT per-rule. The
 daemon checks this resolved policy before invoking the operation engine
 (evaluation order step 5). A rule may keep firing every cycle while the cooldown
-suppresses repeated execution. See `implementation-spec.md` section 16.
+suppresses repeated execution. See `AGENTS.md` spec section 16.
 
 ## Testing
 
