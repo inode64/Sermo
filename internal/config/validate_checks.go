@@ -498,13 +498,12 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 }
 
 // knownCheckTypes are the single-shot check types valid in a service's
-// checks:/preflight:/postflight: sections (and referenceable from rules). The
-// host-resource checks (storage/disk…oom) are shared with host watches; the multi-target
-// watch types (net, icmp, swap, file, process) stay watch-only because they fire
-// per-metric/per-target rather than producing one Result. Keep this in step with
-// internal/checks buildCheck and the watch validation (section: unified checks).
-var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "process", "metric", "libraries", "count",
-	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "memory", "pressure", "pids", "diskio", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+// checks:/preflight:/postflight: sections (and referenceable from rules), taken
+// from the checks package so validation and the builder share one list
+// (section: unified checks). The multi-target watch types (net, icmp, swap,
+// file) stay watch-only because they fire per-metric/per-target rather than
+// producing one Result.
+var knownCheckTypes = set(checks.SingleShotCheckTypes...)
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
