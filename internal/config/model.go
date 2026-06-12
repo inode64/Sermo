@@ -220,15 +220,19 @@ type CleanPath struct {
 // StopInvariants reads the stopped-state invariants from `stop_policy`: the
 // pidfile path(s) that must be absent after stop (when `pidfile_absent: true`,
 // found by scanning the processes section for pidfile selectors), the files/globs
-// that must be absent (`files_absent`), whether stale files are removed
-// (`remove_stale`), and the files/directories to delete on stop (`clean_on_stop`,
-// each a path string or a `{path, recursive}` mapping). All zero when absent.
-func StopInvariants(tree map[string]any) (pidfilePaths, files []string, remove bool, clean []CleanPath) {
+// that must be absent (`files_absent`), the master cleanup switch
+// (`clean_after_stop`), and the files/directories to delete on stop
+// (`clean_on_stop`, each a path string or a `{path, recursive}` mapping). The
+// `clean` bool is the single opt-in that enables all active deletion after a
+// clean stop — both removing stale `pidfile_absent`/`files_absent` leftovers and
+// deleting the `clean_on_stop` list; with it off the invariants are verified and
+// warned about but nothing is deleted. All zero when absent.
+func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bool, cleanPaths []CleanPath) {
 	sp, ok := tree["stop_policy"].(map[string]any)
 	if !ok {
 		return nil, nil, false, nil
 	}
-	remove, _ = sp["remove_stale"].(bool)
+	clean, _ = sp["clean_after_stop"].(bool)
 	files = cfgval.StringList(sp["files_absent"])
 	if pa, _ := sp["pidfile_absent"].(bool); pa {
 		if procs, ok := tree["processes"].(map[string]any); ok {
@@ -244,18 +248,18 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, remove b
 			switch e := item.(type) {
 			case string:
 				if e != "" {
-					clean = append(clean, CleanPath{Path: e})
+					cleanPaths = append(cleanPaths, CleanPath{Path: e})
 				}
 			case map[string]any:
 				p := cfgval.AsString(e["path"])
 				rec, _ := e["recursive"].(bool)
 				if p != "" {
-					clean = append(clean, CleanPath{Path: p, Recursive: rec})
+					cleanPaths = append(cleanPaths, CleanPath{Path: p, Recursive: rec})
 				}
 			}
 		}
 	}
-	return pidfilePaths, files, remove, clean
+	return pidfilePaths, files, clean, cleanPaths
 }
 
 // CascadeTargets returns the additional Sermo services declared in `also_apply`,

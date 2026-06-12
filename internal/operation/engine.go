@@ -69,14 +69,17 @@ type Engine struct {
 }
 
 // StopArtifacts are the stopped-state invariants verified after a clean stop: the
-// pidfile path(s) and the files/globs that must no longer exist. Remove deletes a
-// lingering file (opt-in) before re-checking. A still-present artifact is a
-// warning folded into the result message, not a failure. Clean lists files and
-// directories actively deleted on a clean stop (recursive for directory trees).
+// pidfile path(s) and the files/globs that must no longer exist. A still-present
+// artifact is always a warning folded into the result message, not a failure.
+// CleanEnabled is the master opt-in (`clean_after_stop`) for all active deletion:
+// when set, lingering pidfile/files artifacts are deleted and the Clean list is
+// removed; when unset nothing is deleted (verify-and-warn only). Clean lists the
+// `clean_on_stop` files and directories deleted when CleanEnabled is set
+// (recursive for directory trees).
 type StopArtifacts struct {
 	PidfilePaths []string
 	Files        []string
-	Remove       bool
+	CleanEnabled bool
 	Clean        []CleanPath
 }
 
@@ -331,9 +334,11 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 
 // verifyStopped checks the stopped-state invariants after a clean stop: every
 // declared pidfile path and every files_absent glob must no longer exist. With
-// StopArtifacts.Remove set, a lingering file is deleted and only re-flagged if
-// the delete fails. Returns one warning per still-present (or unremovable)
-// artifact, for folding into the result message.
+// StopArtifacts.CleanEnabled set (`clean_after_stop`), a lingering file is deleted
+// and only re-flagged if the delete fails, and the clean_on_stop list is deleted
+// too; otherwise nothing is deleted and a still-present artifact is warned about.
+// Returns one warning per still-present (or unremovable) artifact, for folding
+// into the result message.
 func (e Engine) verifyStopped() []string {
 	var warns []string
 	flag := func(path string, isGlob bool) {
@@ -349,7 +354,7 @@ func (e Engine) verifyStopped() []string {
 			matches = []string{path}
 		}
 		for _, m := range matches {
-			if e.StopArtifacts.Remove {
+			if e.StopArtifacts.CleanEnabled {
 				if err := os.Remove(m); err != nil { //nolint:gosec // operator-listed stop artifact
 					warns = append(warns, fmt.Sprintf("could not remove stale %s: %v", m, err))
 				}
@@ -365,7 +370,11 @@ func (e Engine) verifyStopped() []string {
 		flag(g, true)
 	}
 	// clean_on_stop: actively delete the listed files/dirs (recursive trees with
-	// RemoveAll, plain paths/globs with Remove). A failure is a warning.
+	// RemoveAll, plain paths/globs with Remove), but only when the master
+	// clean_after_stop opt-in is set. A failure is a warning.
+	if !e.StopArtifacts.CleanEnabled {
+		return warns
+	}
 	for _, c := range e.StopArtifacts.Clean {
 		if c.Recursive {
 			if err := os.RemoveAll(c.Path); err != nil { //nolint:gosec // operator-listed clean_on_stop path

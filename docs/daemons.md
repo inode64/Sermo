@@ -444,21 +444,29 @@ stop_policy:
   graceful_timeout: 30s
   pidfile_absent: true                      # the declared pidfile must be gone
   files_absent: [/run/postgresql/.s.PGSQL*] # stale sockets/locks (globs)
-  remove_stale: false                       # opt-in: delete the stale files
+  clean_after_stop: false                   # master opt-in: delete on stop
 ```
 
 - A lingering pidfile or `files_absent` match is a **warning** (the stop still
   succeeds, `ResultOK`) folded into the result message and surfaced in CLI/web —
   it means the daemon crashed or left junk. Residual *processes* keep their
   stronger `orphan-processes` (red) handling via the reaper.
-- `remove_stale: true` deletes a lingering file (the legacy `rm` behavior), only
-  re-warning if the delete fails. Default is report-only.
+- **`clean_after_stop`** is the single master switch for *all* active deletion
+  after a clean stop. It is **opt-in (default `false`)**: with it off the engine
+  only **verifies and warns** — it never deletes. Set it to `true` to enable
+  cleanup, which then does two things:
+  1. **deletes** any lingering `pidfile_absent`/`files_absent` artifact (the old
+     `rm`-on-stop behavior), re-warning only if the delete fails; and
+  2. **deletes** the `clean_on_stop` list below.
 
-`clean_on_stop` actively **deletes** files and directories on a clean stop (a
-maintenance cleanup, distinct from the `files_absent` invariant):
+`clean_on_stop` lists files and directories to **delete** on a clean stop (a
+maintenance cleanup, distinct from the `files_absent` invariant). It only deletes
+when `clean_after_stop: true`; listed without the master flag it is inert (so you
+can stage the list and enable it later):
 
 ```yaml
 stop_policy:
+  clean_after_stop: true                        # required to actually delete
   clean_on_stop:
     - /run/svc/foo.tmp                          # a file
     - /tmp/svc-*.lock                           # a glob (files)
