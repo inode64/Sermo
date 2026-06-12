@@ -306,6 +306,25 @@ A **pidfile** selector's `path` accepts a single path or a **list of candidates*
 discovery tries them in order and uses the first that points at a running process
 (so per-OS or versioned pidfile locations all resolve without personal config).
 
+### `pidfile:` shorthand (selector + health check)
+
+A daemon can declare a top-level `pidfile: <path>` to wire **both** uses of a
+pidfile from one line:
+
+```yaml
+pidfile: /run/named/named.pid
+```
+
+On resolution this desugars into (a) a `processes` pidfile selector — so the
+parent process **and its descendants** are discovered and monitored — and (b) a
+`pidfile` health check gated by `requires: [service]`. Because of the gate, a
+missing or stale pidfile is reported as an **error only while the service is
+active** (it means the daemon died or lost its pidfile without the service
+manager noticing); a legitimately stopped service is skipped, not alarmed. An
+existing pidfile selector or a check already named `pidfile` is respected, so a
+daemon that needs a candidate list or custom check can still spell it out. The
+shorthand path can reference variables (e.g. `pidfile: "${pidfile}"`).
+
 ## Versioned daemons
 
 Some applications ship one binary per version and several can be installed at
