@@ -653,3 +653,36 @@ func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
 		t.Fatal("remove:true must delete the stale socket")
 	}
 }
+
+func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "foo.tmp")
+	subdir := filepath.Join(dir, "work")
+	nested := filepath.Join(subdir, "a", "b.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(nested), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nested, []byte("y"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	h := defaultHarness()
+	e := h.engine()
+	e.StopArtifacts = StopArtifacts{Clean: []CleanPath{
+		{Path: file},                    // plain file
+		{Path: subdir, Recursive: true}, // non-empty dir tree
+	}}
+	res := e.Stop(context.Background())
+	if res.Status != ResultOK {
+		t.Fatalf("clean_on_stop status = %q (%s)", res.Status, res.Message)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Fatal("clean_on_stop must delete the file")
+	}
+	if _, err := os.Stat(subdir); !os.IsNotExist(err) {
+		t.Fatal("recursive clean_on_stop must delete the directory tree")
+	}
+}

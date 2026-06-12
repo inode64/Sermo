@@ -2055,7 +2055,7 @@ func TestStopInvariants(t *testing.T) {
 			"remove_stale":   true,
 		},
 	}
-	pp, ff, rm := StopInvariants(tree)
+	pp, ff, rm, _ := StopInvariants(tree)
 	if len(pp) != 1 || pp[0] != "/run/svc.pid" {
 		t.Fatalf("pidfile paths = %v, want [/run/svc.pid]", pp)
 	}
@@ -2063,7 +2063,7 @@ func TestStopInvariants(t *testing.T) {
 		t.Fatalf("files=%v remove=%v", ff, rm)
 	}
 	// pidfile_absent omitted -> no pidfile paths even if a selector exists.
-	pp2, _, _ := StopInvariants(map[string]any{
+	pp2, _, _, _ := StopInvariants(map[string]any{
 		"processes":   tree["processes"],
 		"stop_policy": map[string]any{"files_absent": []any{"/x"}},
 	})
