@@ -39,10 +39,7 @@ func (a App) runWizard(ctx context.Context, opts options) int {
 // instead of re-prompting forever.
 func (a App) runWizardSession(ctx context.Context, opts options) (code int, err error) {
 	defer assist.Recover(&err)
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))

@@ -94,6 +94,14 @@ type options struct {
 	long bool // show the full raw version string instead of the short one
 }
 
+// globalPath returns the --config path, or the packaged default.
+func (o options) globalPath() string {
+	if o.config != "" {
+		return o.config
+	}
+	return config.DefaultGlobalPath
+}
+
 // service returns the first positional argument after the command.
 func (o options) service() string {
 	if len(o.args) == 0 {
@@ -301,10 +309,7 @@ func (m monitorView) Monitored() bool {
 // an empty view (not paused).
 func (a App) serviceMonitorState(opts options) monitorView {
 	view := monitorView{Enabled: true}
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		return view
@@ -390,10 +395,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	}
 	service := opts.service()
 
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
@@ -579,10 +581,7 @@ func (a App) runConfig(opts options) int {
 
 	sub := opts.args[0]
 	rest := opts.args[1:]
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 
 	switch sub {
 	case "render":
@@ -716,10 +715,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	}
 	service := opts.service()
 
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
@@ -833,10 +829,7 @@ func (a App) runLocks(opts options) int {
 		return exitUsage
 	}
 
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
@@ -902,10 +895,7 @@ func (a App) runProcesses(opts options) int {
 	}
 	service := opts.service()
 
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
@@ -1043,10 +1033,7 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 // runtime dir (or the legacy OpenRC location). If no pidfile is found it falls
 // back to pidof/pgrep discovery. This works whether or not the web UI is enabled.
 func (a App) runReload(ctx context.Context, opts options) int {
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
