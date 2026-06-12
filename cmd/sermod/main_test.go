@@ -133,7 +133,8 @@ func TestWebListenAddr(t *testing.T) {
 		{"no web section", nil, "", true},
 		{"port missing", map[string]any{}, "", true},
 		{"port zero", map[string]any{"port": 0}, "", true},
-		{"port not a number", map[string]any{"port": "8080"}, "", true},
+		{"port not a number", map[string]any{"port": "abc"}, "", true},
+		{"quoted port accepted", map[string]any{"port": "8080"}, "127.0.0.1:8080", false},
 		{"default address", map[string]any{"port": 8080}, "127.0.0.1:8080", false},
 		{"explicit address", map[string]any{"port": 9000, "address": "0.0.0.0"}, "0.0.0.0:9000", false},
 	}

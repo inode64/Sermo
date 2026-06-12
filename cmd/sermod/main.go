@@ -16,6 +16,7 @@ import (
 
 	"sermo/internal/app"
 	"sermo/internal/buildinfo"
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -348,21 +349,14 @@ func webListenAddr(cfg *config.Config) (addr, reason string) {
 	if _, present := m["port"]; !present {
 		return "", "web.port is not set"
 	}
-	port := 0
-	switch v := m["port"].(type) {
-	case int:
-		port = v
-	case int64:
-		port = int(v)
-	case uint64:
-		port = int(v)
-	case float64:
-		port = int(v)
-	default:
+	// cfgval.Int accepts the same shapes config validation does (including a
+	// quoted "9797"), so a config that validates never silently disables the UI.
+	port, ok := cfgval.Int(m["port"])
+	if !ok {
 		return "", fmt.Sprintf("web.port is not a number (%T)", m["port"])
 	}
-	if port <= 0 {
-		return "", fmt.Sprintf("web.port must be positive (got %d)", port)
+	if port < 1 || port > 65535 {
+		return "", fmt.Sprintf("web.port must be in 1..65535 (got %d)", port)
 	}
 	address, _ := m["address"].(string)
 	if address == "" {
