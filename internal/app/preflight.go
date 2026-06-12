@@ -8,9 +8,10 @@ import (
 	"sermo/internal/web"
 )
 
-// preflightDeadline bounds a preflight run generously above a single check's
-// timeout so concurrent checks each get their full per-check budget.
-func preflightDeadline(perCheck time.Duration) time.Duration {
+// PreflightDeadline bounds a preflight run generously above a single check's
+// timeout so concurrent checks each get their full per-check budget. Shared by
+// the daemon's web preflight and the sermoctl preflight command.
+func PreflightDeadline(perCheck time.Duration) time.Duration {
 	if perCheck <= 0 {
 		perCheck = 10 * time.Second
 	}
@@ -44,7 +45,7 @@ func (b *WebBackend) Preflight(ctx context.Context, name string) (web.PreflightR
 	if e.engine.Preflight == nil {
 		return web.PreflightResult{OK: true}, true
 	}
-	deadline := preflightDeadline(b.defaultTimeout)
+	deadline := PreflightDeadline(b.defaultTimeout)
 	ctx, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
 	return preflightToWeb(e.engine.Preflight(ctx)), true

@@ -40,16 +40,16 @@ func validateWeb(webCfg map[string]any, add func(string, ...any)) {
 	}
 }
 
+// NotifyNone is the reserved notify sentinel: a notify selection of `none`
+// suppresses delivery, and no notifier may take it as a name.
+const NotifyNone = "none"
+
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
-// notifyNone is the reserved notify sentinel: a notify selection of `none`
-// suppresses delivery, and no notifier may take it as a name.
-const notifyNone = "none"
-
 func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
-		if name == notifyNone {
-			add("notifiers.%s: %q is a reserved keyword and cannot name a notifier", name, notifyNone)
+		if name == NotifyNone {
+			add("notifiers.%s: %q is a reserved keyword and cannot name a notifier", name, NotifyNone)
 			continue
 		}
 		entry, ok := notifiers[name].(map[string]any)
@@ -109,7 +109,7 @@ func notifierNames(notifiers map[string]any) map[string]struct{} {
 // selection of its own.
 func NotifyDefault(raw map[string]any) []string {
 	names := cfgval.StringList(raw["notify"])
-	if slices.Contains(names, notifyNone) {
+	if slices.Contains(names, NotifyNone) {
 		return nil
 	}
 	return names
@@ -119,11 +119,11 @@ func NotifyDefault(raw map[string]any) []string {
 // watch `then.notify`, or a rule `notify`): every name must be a defined notifier
 // or the `none` sentinel, and `none` cannot be combined with real names.
 func validateNotifySelection(prefix string, names []string, defined map[string]struct{}, add func(string, ...any)) {
-	if slices.Contains(names, notifyNone) && len(names) > 1 {
-		add("%s: %q cannot be combined with notifier names", prefix, notifyNone)
+	if slices.Contains(names, NotifyNone) && len(names) > 1 {
+		add("%s: %q cannot be combined with notifier names", prefix, NotifyNone)
 	}
 	for _, ref := range names {
-		if ref == notifyNone {
+		if ref == NotifyNone {
 			continue
 		}
 		if _, ok := defined[ref]; !ok {

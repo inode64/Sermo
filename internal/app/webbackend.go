@@ -1436,18 +1436,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 		return web.ActionResult{OK: false, Message: msg}
 	}
 	run := func(ctx context.Context) operation.Result {
-		switch action {
-		case "start":
-			return e.engine.Start(ctx)
-		case "stop":
-			return e.engine.Stop(ctx)
-		case "restart":
-			return e.engine.Restart(ctx)
-		case "reload":
-			return e.engine.Reload(ctx)
-		default:
-			return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown action " + action}
-		}
+		return e.engine.Do(ctx, action)
 	}
 	var r operation.Result
 	if b.opGate != nil {

@@ -95,7 +95,7 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	}
 
 	round(residuals, syscall.SIGTERM)
-	if err := wait(ctx, sleep, policy.TermTimeout); err != nil {
+	if err := Wait(ctx, sleep, policy.TermTimeout); err != nil {
 		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled)}
 	}
 	residuals = r.Rediscover()
@@ -104,7 +104,7 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	}
 
 	round(residuals, syscall.SIGKILL)
-	if err := wait(ctx, sleep, policy.KillTimeout); err != nil {
+	if err := Wait(ctx, sleep, policy.KillTimeout); err != nil {
 		return ReapResult{Remaining: r.Rediscover(), Signalled: sortedInts(signalled)}
 	}
 	residuals = r.Rediscover()
@@ -112,7 +112,10 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	return ReapResult{Remaining: residuals, Signalled: sortedInts(signalled)}
 }
 
-func wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
+// Wait blocks for d, returning early if ctx is cancelled. A non-positive d is an
+// immediate ctx-check. sleep is injectable for tests (defaults to time.Sleep). It
+// is the shared cancellable-sleep used by the reaper and the operation engine.
+func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
 	}

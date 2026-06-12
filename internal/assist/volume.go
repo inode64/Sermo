@@ -7,9 +7,8 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/config"
 )
-
-const notifyNone = "none"
 
 // volumeAssistant creates `storage` watches: a free/used-space threshold with
 // notifications and an optional native auto-expand action.
@@ -99,7 +98,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
 		s.cooldown = p.Ask("Minimum time between expansions (cooldown)", "30m")
 	}
-	if !hasEffectiveNotifyAction(s.notifiers, env) && !s.expand {
+	if !config.HasEffectiveNotifyAction(s.notifiers, env.DefaultNotify) && !s.expand {
 		return s, fmt.Errorf("a watch needs at least one notifier or auto-expand; none chosen for %s", label)
 	}
 	return s, nil
@@ -156,7 +155,7 @@ func chooseNotifiers(p *Prompt, env Env) []string {
 		if len(idx) == len(options) {
 			idx = idx[1:]
 		} else {
-			return []string{notifyNone}
+			return []string{config.NotifyNone}
 		}
 	}
 	out := make([]string, 0, len(idx))
@@ -172,20 +171,9 @@ func chooseNotifiers(p *Prompt, env Env) []string {
 		return nil
 	}
 	if len(out) == 0 {
-		return []string{notifyNone}
+		return []string{config.NotifyNone}
 	}
 	return out
-}
-
-func hasNotifyAction(names []string) bool {
-	return len(names) > 0 && !slices.Contains(names, notifyNone)
-}
-
-func hasEffectiveNotifyAction(names []string, env Env) bool {
-	if slices.Contains(names, notifyNone) {
-		return false
-	}
-	return hasNotifyAction(names) || (len(names) == 0 && len(env.DefaultNotify) > 0)
 }
 
 // askPercent reads a percentage, accepting either "10" or "10%".

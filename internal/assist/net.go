@@ -1,6 +1,10 @@
 package assist
 
-import "fmt"
+import (
+	"fmt"
+
+	"sermo/internal/config"
+)
 
 // netAssistant creates `net` (network interface) watches: per-interface metrics
 // (link state, errors, speed) each notifying the chosen targets.
@@ -81,7 +85,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 		}
 	}
 	s.notifiers = chooseNotifiers(p, env)
-	if !hasEffectiveNotifyAction(s.notifiers, env) {
+	if !config.HasEffectiveNotifyAction(s.notifiers, env.DefaultNotify) {
 		return s, fmt.Errorf("a net watch needs at least one notifier; none chosen for %s", label)
 	}
 	return s, nil
