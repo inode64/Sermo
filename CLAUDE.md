@@ -30,11 +30,12 @@ and a `<table class="{name}-table">` with a sticky header. The one deliberate
 distinction:
 
 - **Scrollable panel** — wrap the table in `<div class="table-wrap">`, which
-  adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services and
-  Host watches (long, unbounded lists).
+  adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services (a
+  long, unbounded list).
 - **Non-scrollable panel** — place the bare `<table>` directly inside the
-  `<details>`, no wrapper. Used by Events, Notifiers and Applications (the page
-  scrolls as a whole instead of trapping a panel in its own scrollbar).
+  `<details>`, no wrapper. Used by Host watches, Events, Notifiers and
+  Applications (the page scrolls as a whole instead of trapping a panel in its
+  own scrollbar).
 
 Pick the variant that matches the panel's nature and reuse it verbatim; never
 hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
