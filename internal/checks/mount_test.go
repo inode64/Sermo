@@ -92,6 +92,9 @@ func TestUnescapeMount(t *testing.T) {
 	if got := unescapeMount(`/mnt/my\040disk`); got != "/mnt/my disk" {
 		t.Fatalf("unescapeMount = %q", got)
 	}
+	if got := unescapeMount(`/mnt/tab\011nl\012bs\134x`); got != "/mnt/tab\tnl\nbs\\x" {
+		t.Fatalf("unescapeMount escapes = %q", got)
+	}
 }
 
 func TestMountForPathReturnsDeepestContainingMount(t *testing.T) {

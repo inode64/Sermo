@@ -12,11 +12,11 @@ package volume
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/execx"
 )
 
@@ -228,30 +228,18 @@ func List(mounts MountSource) ([]Mount, error) {
 	return out, nil
 }
 
-// procMounts reads the mount table from /proc/mounts.
+// procMounts reads the mount table via the shared /proc/mounts parser
+// (internal/checks owns the escaping rules), mapped to this package's shape.
 func procMounts() ([]Mount, error) {
-	data, err := os.ReadFile("/proc/mounts")
+	entries, err := checks.DefaultMounts()
 	if err != nil {
 		return nil, err
 	}
-	var out []Mount
-	for _, line := range strings.Split(string(data), "\n") {
-		f := strings.Fields(line)
-		if len(f) < 3 {
-			continue
-		}
-		out = append(out, Mount{Device: unescape(f[0]), Mountpoint: unescape(f[1]), FSType: f[2]})
+	out := make([]Mount, 0, len(entries))
+	for _, m := range entries {
+		out = append(out, Mount{Device: m.Device, Mountpoint: m.MountPoint, FSType: m.FSType})
 	}
 	return out, nil
-}
-
-// unescape decodes the octal escapes /proc/mounts uses for space, tab, newline
-// and backslash.
-func unescape(s string) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
-	return strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`).Replace(s)
 }
 
 // parseInt trims and parses a decimal integer from command output.
