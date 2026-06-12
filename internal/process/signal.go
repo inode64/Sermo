@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -140,5 +141,42 @@ func sortedInts(set map[int]bool) []int {
 		out = append(out, pid)
 	}
 	sort.Ints(out)
+	return out
+}
+
+// signalNames maps the signal names accepted in configuration to their numbers.
+// These are the signals daemons actually use to reload/rotate/cycle in place; the
+// fatal/stop signals (TERM/KILL) are handled by the stop policy, not reload.
+var signalNames = map[string]syscall.Signal{
+	"HUP":   syscall.SIGHUP,
+	"INT":   syscall.SIGINT,
+	"QUIT":  syscall.SIGQUIT,
+	"USR1":  syscall.SIGUSR1,
+	"USR2":  syscall.SIGUSR2,
+	"TERM":  syscall.SIGTERM,
+	"WINCH": syscall.SIGWINCH,
+	"CONT":  syscall.SIGCONT,
+}
+
+// ParseSignal resolves a configured signal name to its syscall.Signal. The name
+// is case-insensitive and an optional `SIG` prefix is accepted (`HUP`, `sighup`,
+// `SIGHUP` all resolve to SIGHUP). An unknown name is an error so a typo in a
+// `reload.signal` fails validation instead of silently sending nothing.
+func ParseSignal(name string) (syscall.Signal, error) {
+	key := strings.ToUpper(strings.TrimSpace(name))
+	key = strings.TrimPrefix(key, "SIG")
+	if sig, ok := signalNames[key]; ok {
+		return sig, nil
+	}
+	return 0, fmt.Errorf("unknown signal %q", name)
+}
+
+// SignalNames returns the accepted signal names, sorted, for diagnostics and docs.
+func SignalNames() []string {
+	out := make([]string, 0, len(signalNames))
+	for name := range signalNames {
+		out = append(out, name)
+	}
+	sort.Strings(out)
 	return out
 }

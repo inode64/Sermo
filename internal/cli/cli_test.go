@@ -251,6 +251,10 @@ func (m fakeManager) Reload(_ context.Context, service string) error {
 	return m.record("reload", service)
 }
 
+func (m fakeManager) SupportsReload(_ context.Context, _ string) (bool, error) {
+	return true, nil
+}
+
 func (m fakeManager) ResetState(_ context.Context, service string) error {
 	return m.record("reset", service)
 }

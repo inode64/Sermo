@@ -9,6 +9,29 @@ import (
 	"time"
 )
 
+func TestParseSignal(t *testing.T) {
+	cases := map[string]syscall.Signal{
+		"HUP":    syscall.SIGHUP,
+		"sighup": syscall.SIGHUP,
+		"SIGHUP": syscall.SIGHUP,
+		" usr1 ": syscall.SIGUSR1,
+		"USR2":   syscall.SIGUSR2,
+	}
+	for in, want := range cases {
+		got, err := ParseSignal(in)
+		if err != nil {
+			t.Errorf("ParseSignal(%q): %v", in, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("ParseSignal(%q) = %v, want %v", in, got, want)
+		}
+	}
+	if _, err := ParseSignal("BOGUS"); err == nil {
+		t.Error("ParseSignal(BOGUS) must error on an unknown name")
+	}
+}
+
 type sigCall struct {
 	pid int
 	sig syscall.Signal

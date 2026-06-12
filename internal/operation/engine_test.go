@@ -26,6 +26,7 @@ type fakeManager struct {
 	statusErr error
 	calls     []string
 	errOn     map[string]error // per-call ("start <unit>"/"stop <unit>") error override
+	canReload bool             // SupportsReload result
 }
 
 func (m *fakeManager) Start(_ context.Context, s string) error {
@@ -51,6 +52,11 @@ func (m *fakeManager) Stop(_ context.Context, s string) error {
 func (m *fakeManager) Reload(_ context.Context, s string) error {
 	m.calls = append(m.calls, "reload "+s)
 	return m.reloadErr
+}
+
+func (m *fakeManager) SupportsReload(_ context.Context, s string) (bool, error) {
+	m.calls = append(m.calls, "supports-reload "+s)
+	return m.canReload, nil
 }
 
 func (m *fakeManager) Status(_ context.Context, s string) (servicemgr.ServiceStatus, error) {

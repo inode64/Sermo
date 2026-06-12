@@ -12,6 +12,14 @@ variables:
   host: 127.0.0.1
   port: 9090
 
+# Prometheus reloads its config and rule files on SIGHUP. Its systemd unit
+# commonly defines no ExecReload, so Sermo signals MainPID; OpenRC's init script
+# reloads where present. (`--web.enable-lifecycle` also exposes POST /-/reload,
+# but SIGHUP needs no flag.)
+reload:
+  signal: HUP
+  when: auto
+
 checks:
   service:
     type: service
