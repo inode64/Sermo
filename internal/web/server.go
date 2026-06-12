@@ -808,7 +808,7 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 	detail, ok := s.Backend.Detail(r.Context(), r.PathValue("name"))
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
@@ -820,16 +820,16 @@ func (s *Server) handleConfigRender(w http.ResponseWriter, r *http.Request) {
 		format = "yaml"
 	}
 	if format != "yaml" && format != "json" {
-		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "format must be yaml or json"})
+		writeError(w, http.StatusBadRequest, "format must be yaml or json")
 		return
 	}
 	res, ok, err := s.Backend.ConfigRender(r.Context(), r.PathValue("name"), format)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -838,16 +838,16 @@ func (s *Server) handleConfigRender(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConfigDiff(w http.ResponseWriter, r *http.Request) {
 	base := r.URL.Query().Get("base")
 	if base == "" {
-		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "base query parameter is required"})
+		writeError(w, http.StatusBadRequest, "base query parameter is required")
 		return
 	}
 	res, ok, err := s.Backend.ConfigDiff(r.Context(), base, r.PathValue("name"))
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -871,7 +871,7 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 	since := seriesSince(r)
 	points, ok := s.Backend.Series(r.Context(), r.PathValue("name"), since)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"since": since.String(), "points": points})
@@ -880,12 +880,12 @@ func (s *Server) handleSeries(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	check := r.URL.Query().Get("check")
 	if check == "" {
-		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "check query parameter is required"})
+		writeError(w, http.StatusBadRequest, "check query parameter is required")
 		return
 	}
 	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, r.URL.Query().Get("metric"), seriesSince(r))
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service or check"})
+		writeError(w, http.StatusNotFound, "unknown service or check")
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -964,7 +964,7 @@ func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleServiceEvents(w http.ResponseWriter, r *http.Request) {
 	events, ok := s.Backend.ServiceEvents(r.Context(), r.PathValue("name"), eventLimit(r))
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	writeJSON(w, http.StatusOK, events)
@@ -974,7 +974,7 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	res, ok := s.Backend.Preflight(r.Context(), name)
 	if !ok {
-		writeJSON(w, http.StatusNotFound, ActionResult{OK: false, Message: "unknown service"})
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	writeJSON(w, http.StatusOK, res)
@@ -994,12 +994,12 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	case monitorActions[action]:
 		err := s.Backend.SetMonitored(r.Context(), name, action == "monitor")
 		if err != nil {
-			writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, ActionResult{OK: true})
 	default:
-		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "unknown action " + action})
+		writeError(w, http.StatusBadRequest, "unknown action "+action)
 	}
 }
 
@@ -1016,11 +1016,11 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !monitorActions[action] {
-		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "unknown action " + action})
+		writeError(w, http.StatusBadRequest, "unknown action "+action)
 		return
 	}
 	if err := s.Backend.SetWatchMonitored(r.Context(), name, action == "monitor"); err != nil {
-		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, ActionResult{OK: true})
@@ -1028,11 +1028,11 @@ func (s *Server) handleWatchAction(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
 	if s.Reload == nil {
-		writeJSON(w, http.StatusServiceUnavailable, ActionResult{OK: false, Message: "reload is not available for this daemon"})
+		writeError(w, http.StatusServiceUnavailable, "reload is not available for this daemon")
 		return
 	}
 	if err := s.Reload(); err != nil {
-		writeJSON(w, http.StatusConflict, ActionResult{OK: false, Message: err.Error()})
+		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, ActionResult{OK: true, Message: "reload requested"})
@@ -1044,4 +1044,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
 	_ = enc.Encode(v)
+}
+
+// writeError replies with an ActionResult failure — the uniform error body
+// every JSON handler returns.
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, ActionResult{OK: false, Message: msg})
 }
