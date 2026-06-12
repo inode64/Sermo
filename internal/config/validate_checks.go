@@ -965,6 +965,19 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.port must be an integer in 1..65535", prefix)
 		}
 	}
+	if v, present := fields["server_name"]; present {
+		if _, ok := v.(string); !ok {
+			add("%s.server_name must be a string (SNI + hostname to verify)", prefix)
+		}
+	}
+	// A PEM file has no endpoint: port and server_name only make sense with host.
+	if host == "" && path != "" {
+		for _, key := range []string{"port", "server_name"} {
+			if _, present := fields[key]; present {
+				add("%s.%s does not apply to a PEM file path", prefix, key)
+			}
+		}
+	}
 	if v, present := fields["expires_in_days"]; present {
 		if n, ok := cfgval.Int(v); !ok || n < 1 {
 			add("%s.expires_in_days must be a positive integer", prefix)

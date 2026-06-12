@@ -576,17 +576,9 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		if len(c.counters) == 0 {
 			c.counters = []string{"rx_errors", "tx_errors"}
 		}
-		delta, ok := entry["delta"].(map[string]any)
-		if !ok {
-			return nil, "net errors requires a delta {op, value}"
-		}
-		op := cfgval.AsString(delta["op"])
-		if !validDiskOp(op) {
-			return nil, "net errors delta has an invalid op"
-		}
-		v, err := strconv.ParseFloat(cfgval.String(delta["value"]), 64)
-		if err != nil {
-			return nil, "net errors delta value must be numeric"
+		op, v, errs := parseDeltaThreshold(entry["delta"], "net errors")
+		if errs != "" {
+			return nil, errs
 		}
 		c.op, c.value = op, v
 	default:
@@ -691,18 +683,18 @@ func buildConntrackCheck(b base, entry map[string]any, deps Deps) (Check, string
 
 // buildEntropyCheck builds an available-entropy check.
 func buildEntropyCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	op, value, err := parseEntropyThreshold(entry)
-	if err != nil {
-		return nil, "entropy check: " + err.Error()
+	op, value, errs := requireThreshold(entry, "avail")
+	if errs != "" {
+		return nil, "entropy check: " + errs
 	}
 	return entropyCheck{base: b, op: op, value: value, sampler: deps.EntropySampler}, ""
 }
 
 // buildZombieCheck builds a zombie-process count check.
 func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	op, value, err := parseZombieThreshold(entry)
-	if err != nil {
-		return nil, "zombies check: " + err.Error()
+	op, value, errs := requireThreshold(entry, "count")
+	if errs != "" {
+		return nil, "zombies check: " + errs
 	}
 	return zombieCheck{base: b, op: op, value: value, sampler: deps.ZombieSampler}, ""
 }
@@ -711,16 +703,11 @@ func buildZombieCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 func buildOomCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	// delta is optional; the default fires on any OOM kill (> 0).
 	op, value := ">", 0.0
-	if d, ok := entry["delta"].(map[string]any); ok {
-		op = cfgval.AsString(d["op"])
-		if !validDiskOp(op) {
-			return nil, "oom delta has an invalid op"
+	if raw, present := entry["delta"]; present {
+		var errs string
+		if op, value, errs = parseDeltaThreshold(raw, "oom"); errs != "" {
+			return nil, errs
 		}
-		v, err := strconv.ParseFloat(cfgval.String(d["value"]), 64)
-		if err != nil {
-			return nil, "oom delta value must be numeric"
-		}
-		value = v
 	}
 	return &oomCheck{base: b, op: op, value: value, sampler: deps.OomSampler}, ""
 }
@@ -787,17 +774,9 @@ func buildSwapCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		c.preds = preds
 	case "io":
-		delta, ok := entry["delta"].(map[string]any)
-		if !ok {
-			return nil, "swap io requires a delta {op, value}"
-		}
-		op := cfgval.AsString(delta["op"])
-		if !validDiskOp(op) {
-			return nil, "swap io delta has an invalid op"
-		}
-		v, err := strconv.ParseFloat(cfgval.String(delta["value"]), 64)
-		if err != nil {
-			return nil, "swap io delta value must be numeric"
+		op, v, errs := parseDeltaThreshold(entry["delta"], "swap io")
+		if errs != "" {
+			return nil, errs
 		}
 		c.op, c.value = op, v
 	default:

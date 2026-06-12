@@ -1207,3 +1207,29 @@ func TestValidateWithinMinMatchesOptional(t *testing.T) {
 		t.Fatalf("within without min_matches should be valid, got %v", w)
 	}
 }
+
+func TestValidateWatchWithoutCheckStillValidatesEntry(t *testing.T) {
+	// A missing check must not mask the entry-level problems: everything is
+	// reported in one validation pass.
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"broken": map[string]any{
+				"interval": "soon",
+				"within":   map[string]any{"cycles": 0},
+				"policy":   map[string]any{"cooldown": "-1m"},
+				"then":     map[string]any{"notify": []any{"ghost"}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.broken.check is required",
+		`watches.broken.interval "soon" must be a valid positive duration`,
+		"watches.broken.within.cycles must be > 0",
+		`watches.broken.policy.cooldown "-1m" must be a valid positive duration`,
+		`watches.broken.then.notify references unknown notifier "ghost"`,
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}

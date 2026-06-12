@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -78,21 +77,4 @@ func procRunState(pid int) string {
 		return ""
 	}
 	return fields[0]
-}
-
-// parseZombieThreshold reads the required count {op, value} of a zombies check.
-func parseZombieThreshold(entry map[string]any) (op string, value float64, err error) {
-	m, ok := entry["count"].(map[string]any)
-	if !ok {
-		return "", 0, fmt.Errorf("requires count {op, value}")
-	}
-	op = cfgval.AsString(m["op"])
-	if !validDiskOp(op) {
-		return "", 0, fmt.Errorf("count has invalid op %q", op)
-	}
-	value, perr := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-	if perr != nil {
-		return "", 0, fmt.Errorf("count value %q is not numeric", cfgval.String(m["value"]))
-	}
-	return op, value, nil
 }

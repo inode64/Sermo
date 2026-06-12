@@ -898,3 +898,31 @@ checks:
 `)
 	mustHave(t, bad, "rule_window.min_matches must be > 0")
 }
+
+func TestValidateCertServerNameAndFileScope(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  bad-sni:  { type: cert, host: api.example.com, server_name: 443 }
+  pem-file: { type: cert, path: /etc/ssl/api.pem, port: 443, server_name: api.example.com }
+`)
+	mustHave(t, issues, "server_name must be a string")
+	mustHave(t, issues, "port does not apply to a PEM file path")
+	mustHave(t, issues, "server_name does not apply to a PEM file path")
+
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  api: { type: cert, host: 10.0.0.5, port: 8443, server_name: api.example.com, expires_in_days: 14 }
+  pem: { type: cert, path: /etc/ssl/api.pem, expires_in_days: 14 }
+`)
+	if hasIssue(good, "cert") || hasIssue(good, "server_name") {
+		t.Fatalf("valid cert checks flagged: %v", good)
+	}
+}

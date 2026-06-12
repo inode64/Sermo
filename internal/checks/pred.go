@@ -86,6 +86,43 @@ func requireLevelPreds(entry map[string]any, fields []string, label string) ([]l
 	return preds, ""
 }
 
+// parseDeltaThreshold parses a `delta` {op, value} mapping — the per-cycle
+// counter threshold shared by net errors, swap io and oom. It returns a
+// builder-style error string when the shape, op or value is invalid.
+func parseDeltaThreshold(raw any, label string) (op string, value float64, errs string) {
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return "", 0, label + " requires a delta {op, value}"
+	}
+	op = cfgval.AsString(m["op"])
+	if !validDiskOp(op) {
+		return "", 0, label + " delta has an invalid op"
+	}
+	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
+	if err != nil {
+		return "", 0, label + " delta value must be numeric"
+	}
+	return op, value, ""
+}
+
+// requireThreshold parses the single required {op, value} predicate at field
+// (entropy `avail`, zombies `count`), in the same builder-style convention.
+func requireThreshold(entry map[string]any, field string) (op string, value float64, errs string) {
+	m, ok := entry[field].(map[string]any)
+	if !ok {
+		return "", 0, fmt.Sprintf("requires %s {op, value}", field)
+	}
+	op = cfgval.AsString(m["op"])
+	if !validDiskOp(op) {
+		return "", 0, fmt.Sprintf("%s has invalid op %q", field, op)
+	}
+	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
+	if err != nil {
+		return "", 0, fmt.Sprintf("%s value %q is not numeric", field, cfgval.String(m["value"]))
+	}
+	return op, value, ""
+}
+
 // parseLevelPredValue parses one predicate value by its field's form.
 func parseLevelPredValue(field string, raw any) (float64, error) {
 	value := cfgval.String(raw)

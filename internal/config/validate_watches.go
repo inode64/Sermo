@@ -23,6 +23,15 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			continue
 		}
 
+		// Entry-level fields are validated before the check so a watch with a
+		// missing/invalid check still reports every other problem in one pass.
+		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("watches.%s.interval %q must be a valid positive duration", name, cfgval.String(v))
+		}
+		validateNotifyRefs(name, entry, notifiers, add)
+		validateWindow("watches."+name, entry, add)
+		validateWatchPolicy("watches."+name, entry, add)
+
 		check, ok := entry["check"].(map[string]any)
 		if !ok {
 			add("watches.%s.check is required", name)
@@ -57,14 +66,6 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 				add("watches.%s.check.type %q is not supported", name, cfgval.String(check["type"]))
 			}
 		}
-
-		if v, present := entry["interval"]; present && !isPositiveDuration(cfgval.String(v)) {
-			add("watches.%s.interval %q must be a valid positive duration", name, cfgval.String(v))
-		}
-
-		validateNotifyRefs(name, entry, notifiers, add)
-		validateWindow("watches."+name, entry, add)
-		validateWatchPolicy("watches."+name, entry, add)
 	}
 }
 
