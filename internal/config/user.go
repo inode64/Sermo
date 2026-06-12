@@ -1,9 +1,7 @@
 package config
 
 import (
-	"os"
 	"os/user"
-	"strings"
 )
 
 // detectedUser holds the username used as the ${user} fallback (the user running
@@ -13,7 +11,7 @@ import (
 var detectedUser = detectUser()
 
 func detectUser() string {
-	if v := strings.TrimSpace(os.Getenv("SERMO_USER")); v != "" {
+	if v := envOverride("SERMO_USER"); v != "" {
 		return v
 	}
 	if u, err := user.Current(); err == nil && u.Username != "" {

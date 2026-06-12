@@ -14,7 +14,7 @@ const osMarker = "${os}"
 var detectedOS = detectOS()
 
 func detectOS() string {
-	if v := strings.TrimSpace(os.Getenv("SERMO_OS")); v != "" {
+	if v := envOverride("SERMO_OS"); v != "" {
 		return strings.ToLower(v)
 	}
 	if id := osReleaseID(); id != "" {
