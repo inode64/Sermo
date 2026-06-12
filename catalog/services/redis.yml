@@ -72,10 +72,6 @@ checks:
     expect:
       rdb_last_bgsave_status: ok
 
-stop_policy:
-  graceful_timeout: 30s
-  term_timeout: 15s
-  force_kill: false
 
 rules:
   restart-if-tcp-failed:
