@@ -29,6 +29,12 @@ func EngineInt(cfg *config.Config, key string, fallback int) int {
 	return engineInt(cfg, key, fallback)
 }
 
+// EngineString reads a string field from the engine block ("" when unset).
+func EngineString(cfg *config.Config, key string) string {
+	s, _ := engineMap(cfg)[key].(string)
+	return s
+}
+
 func engineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
 	s, _ := engineMap(cfg)[key].(string)
 	if s == "" {
@@ -56,7 +62,9 @@ func engineInt(cfg *config.Config, key string, fallback int) int {
 	}
 }
 
-func notifiersRaw(cfg *config.Config) map[string]any {
+// NotifiersRaw returns the global `notifiers` section (nil when absent), the
+// input notify.Build expects.
+func NotifiersRaw(cfg *config.Config) map[string]any {
 	if cfg == nil {
 		return nil
 	}
