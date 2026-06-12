@@ -1,5 +1,7 @@
 package config
 
+import "sermo/internal/cfgval"
+
 // namedSections are maps keyed by entry name where `enabled:false`/`delete:true`
 // apply (section 9).
 var namedSections = []string{"checks", "preflight", "postflight", "processes", "rules"}
@@ -35,16 +37,11 @@ func applyDeletes(tree map[string]any) {
 			if !ok {
 				continue
 			}
-			if truthy(entry["delete"]) {
+			if cfgval.Bool(entry["delete"]) {
 				delete(entries, name)
 			}
 		}
 	}
-}
-
-func truthy(v any) bool {
-	b, ok := v.(bool)
-	return ok && b
 }
 
 func cloneMap(in map[string]any) map[string]any {
