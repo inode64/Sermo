@@ -152,7 +152,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 
 	for _, name := range serviceNames(cfg) {
 		doc := cfg.Services[name]
-		if doc == nil || isDisabled(doc.Body) {
+		if doc == nil || cfgval.Disabled(doc.Body) {
 			continue
 		}
 		resolved, errs := cfg.Resolve(name)
@@ -658,13 +658,4 @@ func HasConfiguredTargets(cfg *config.Config) bool {
 	}
 	raw, ok := cfg.Global.Raw["watches"].(map[string]any)
 	return ok && len(raw) > 0
-}
-
-func isDisabled(body map[string]any) bool {
-	v, ok := body["enabled"]
-	if !ok {
-		return false
-	}
-	b, ok := v.(bool)
-	return ok && !b
 }

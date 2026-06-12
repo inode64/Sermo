@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 	"sermo/internal/operation"
 )
@@ -14,7 +15,7 @@ func MaxOperationTimeout(cfg *config.Config, configured time.Duration) time.Dura
 	maxTO := operation.ResolveTimeout(configured, nil)
 	for _, name := range serviceNames(cfg) {
 		doc := cfg.Services[name]
-		if doc == nil || isDisabled(doc.Body) {
+		if doc == nil || cfgval.Disabled(doc.Body) {
 			continue
 		}
 		resolved, errs := cfg.Resolve(name)

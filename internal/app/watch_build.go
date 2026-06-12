@@ -42,7 +42,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 			warnings = append(warnings, "watch "+name+" is not a mapping")
 			continue
 		}
-		if isDisabled(entry) {
+		if cfgval.Disabled(entry) {
 			continue
 		}
 
