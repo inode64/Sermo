@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/process"
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -212,6 +213,43 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		if errMax != nil || dm < di {
 			add("policy.backoff.max must be >= initial")
 		}
+	}
+}
+
+// validateReload checks the optional `reload:` block: a native reload Sermo runs
+// when the init backend cannot (`when: auto`) or instead of it (`when: always`).
+// Exactly one of `signal` (a known signal name) or `command` (an array) is
+// required; `when`, when present, must be `auto` or `always`.
+func validateReload(tree map[string]any, add addFunc) {
+	raw, present := tree["reload"]
+	if !present {
+		return
+	}
+	r, ok := raw.(map[string]any)
+	if !ok {
+		add("reload must be a mapping with a signal or command")
+		return
+	}
+	if when := cfgval.AsString(r["when"]); when != "" && when != "auto" && when != "always" {
+		add("reload.when %q must be \"auto\" or \"always\"", when)
+	}
+	sig := cfgval.AsString(r["signal"])
+	_, hasCmd := r["command"]
+	switch {
+	case sig != "" && hasCmd:
+		add("reload sets both signal and command; use exactly one")
+	case sig != "":
+		if _, err := process.ParseSignal(sig); err != nil {
+			add("reload.signal %q is not a known signal name (%s)", sig, strings.Join(process.SignalNames(), ", "))
+		}
+	case hasCmd:
+		if !isStringArray(r["command"]) {
+			add("reload.command must be an array, not a shell string")
+		} else if len(cfgval.StringArray(r["command"])) == 0 {
+			add("reload.command must not be empty")
+		}
+	default:
+		add("reload must set either signal or command")
 	}
 }
 

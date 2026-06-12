@@ -118,6 +118,58 @@ commands:
   reload: { command: ["systemctl", "daemon-reload"] }
 ```
 
+### Native reload (`reload:`) — when the init can't, Sermo can
+
+Some daemons reload in place (e.g. `sshd`, `snmpd`, `proftpd`, `prometheus`,
+`loki` re-read their config on **`SIGHUP`**) but their **systemd** unit defines
+**no `ExecReload`**, so `systemctl reload <unit>` fails — even though the daemon
+itself supports it (the same service under OpenRC usually does reload, via an
+init-script `reload()` that sends the signal). The `reload:` block closes that
+gap: it declares a **native reload** Sermo performs itself, by signalling the
+service's main process or running a command.
+
+```yaml
+reload:
+  signal: HUP        # send this signal to the main process (HUP, USR1, USR2, …)
+  when: auto         # auto (default): use the init's reload if the unit/script
+                     #   has one, otherwise do this; always: never use the init,
+                     #   always do this
+# or, instead of a signal, a command:
+reload:
+  command: ["nginx", "-s", "reload"]
+  when: auto
+```
+
+- **`when: auto`** (default) asks the backend whether it can reload — systemd's
+  `CanReload` (the unit has an `ExecReload`), or an OpenRC init script that
+  defines `reload`. If it can, the init reload runs; if it can't, Sermo runs the
+  native reload. So the *same* daemon definition reloads correctly on a host
+  whose unit exposes reload **and** on one whose unit doesn't.
+- **`when: always`** always runs the native reload and never the init's — the
+  signal/command equivalent of `commands.reload` (which is still accepted and
+  behaves as `when: always`). **Migrating `commands.reload` → `reload.command`:**
+  a bare `reload: { command: [...] }` defaults to `when: auto` (it prefers the
+  init reload where one exists), so set `when: always` to keep the old
+  always-run-the-command behavior.
+- **Signal target.** The signal goes to systemd's `MainPID`, or — on OpenRC, or
+  any unit with no MainPID — to the PID in the service's `pidfile:`. A signal
+  reload with neither available fails with a clear error; give the daemon a
+  `pidfile:` so the target can be resolved.
+
+The reload that `reload:` produces is what the **`reload` action**,
+`reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload
+button all run. It is a service-control concept: it applies to service daemons
+(`kind: service`/`daemon`), not to host `watches:`, which observe host metrics
+and fire hooks rather than reload a unit.
+
+A signal reload needs a process to signal: systemd's `MainPID` (available while
+the unit is active) or, on OpenRC and any backend without a MainPID, the PID in
+the service's `pidfile:`. If neither exists the reload fails with a clear error
+rather than silently doing nothing — declare a `pidfile:` for a daemon that must
+reload by signal on OpenRC. Daemons that write no pidfile (e.g. Prometheus, Loki)
+therefore reload by signal only on systemd; on OpenRC they rely on the init
+script's own `reload` (`when: auto`).
+
 ## App dependencies (`apps`)
 
 A service often runs on top of one or more **apps** — the runtimes/tools in

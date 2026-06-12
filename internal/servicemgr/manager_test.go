@@ -171,6 +171,67 @@ func TestNewManagerUnsupportedBackend(t *testing.T) {
 	}
 }
 
+func TestSystemdManagerSupportsReload(t *testing.T) {
+	cases := []struct {
+		stdout string
+		want   bool
+	}{
+		{"yes\n", true},
+		{"no\n", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		m := systemdManager{runner: stubRunner{result: execx.Result{Stdout: tc.stdout}}}
+		got, err := m.SupportsReload(context.Background(), "nginx")
+		if err != nil {
+			t.Fatalf("SupportsReload(%q): %v", tc.stdout, err)
+		}
+		if got != tc.want {
+			t.Errorf("CanReload=%q -> SupportsReload=%v, want %v", tc.stdout, got, tc.want)
+		}
+	}
+}
+
+func TestOpenrcManagerSupportsReload(t *testing.T) {
+	cases := []struct {
+		name   string
+		script string
+		want   bool
+	}{
+		{"reload func", "#!/sbin/openrc-run\nreload() {\n\tstart-stop-daemon --signal HUP\n}\n", true},
+		{"reload func with space", "#!/sbin/openrc-run\nreload () {\n\t:\n}\n", true},
+		{"extra_started_commands", "extra_started_commands=\"reload\"\n", true},
+		{"extra_commands with others", "extra_commands=\"checkconfig reload\"\n", true},
+		{"description_reload", "description_reload=\"reload config\"\n", true},
+		{"no reload", "#!/sbin/openrc-run\nstart() { :; }\n", false},
+		{"commented out", "#!/sbin/openrc-run\n# extra_commands=\"reload\"\n", false},
+		{"forcereload substring", "extra_commands=\"forcereload\"\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := openrcManager{readFile: func(string) ([]byte, error) { return []byte(tc.script), nil }}
+			got, err := m.SupportsReload(context.Background(), "svc")
+			if err != nil {
+				t.Fatalf("SupportsReload: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("script %q -> %v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOpenrcManagerSupportsReloadUnreadableScript(t *testing.T) {
+	m := openrcManager{readFile: func(string) ([]byte, error) { return nil, errors.New("no such file") }}
+	got, err := m.SupportsReload(context.Background(), "svc")
+	if err != nil {
+		t.Fatalf("unreadable script must not error: %v", err)
+	}
+	if got {
+		t.Error("an unreadable init script must report reload unsupported (false)")
+	}
+}
+
 type stubRunner struct {
 	result execx.Result
 	err    error
