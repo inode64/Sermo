@@ -280,6 +280,20 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-conntrack-alert.sh]
+  # Watch a block device's I/O rates from /proc/diskstats deltas: busy share,
+  # throughput and average request latency (the saturated-disk signal).
+  #sda-busy:
+  #  monitor: disabled
+  #  interval: 30s
+  #  check:
+  #    type: diskio
+  #    device: sda
+  #    util_pct: { op: ">=", value: 90 }
+  #    await_ms: { op: ">", value: 50 }
+  #  for: { cycles: 3 }
+  #  then:
+  #    hook:
+  #      command: [/usr/local/bin/sermo-diskio-alert.sh, sda]
   # Watch a Cloudflare Tunnel metrics endpoint with the native cloudflared
   # protocol check instead of a plain TCP port-open test.
   cloudflared:

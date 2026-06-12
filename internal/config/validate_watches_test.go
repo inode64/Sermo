@@ -1301,3 +1301,23 @@ func TestValidatePidsWatch(t *testing.T) {
 		t.Fatalf("valid pids watch flagged: %v", w)
 	}
 }
+
+func TestValidateDiskIOWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"sda-busy": map[string]any{
+				"check": map[string]any{
+					"type":     "diskio",
+					"device":   "sda",
+					"util_pct": map[string]any{"op": ">=", "value": 90},
+					"await_ms": map[string]any{"op": ">", "value": 50},
+				},
+				"for":  map[string]any{"cycles": 3},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("valid diskio watch flagged: %v", w)
+	}
+}

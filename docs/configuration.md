@@ -647,7 +647,8 @@ These conventions keep the per-type sections below short:
   `*_bytes` field **requires** a size suffix (`K`/`M`/`G`/`T`, e.g. `10G`), and
   any other field is a plain number. A
   **stateful check** (counter deltas — net `errors`, swap `io`, `oom`; and change
-  detection — net/icmp `state`/`speed`/`latency`, `file`, `process`) compares
+  detection — net/icmp `state`/`speed`/`latency`, `file`, `process`; and rate
+  computation — `diskio`) compares
   against a baseline carried across cycles: the **first cycle primes the baseline
   and never fires**, and a counter reset clamps the per-cycle delta to zero.
 
@@ -1014,6 +1015,38 @@ check:                                   # in a watches: entry like `load` above
 Predicates: `used_pct` (percent of the limit), `free` (`file-max − allocated`) and
 `allocated` (absolute). Hook extras: `SERMO_ALLOCATED`, `SERMO_MAX`,
 `SERMO_USED_PCT`, `SERMO_FREE`.
+
+### `diskio` — block-device I/O rates
+
+A `diskio` watch monitors one block device's I/O, computed from per-cycle
+`/proc/diskstats` deltas: **utilization** (share of wall time the device was
+busy), **throughput** and **average request latency**. Catches the saturated or
+degraded disk that storage-space checks cannot see. Like the other counter
+checks it is **stateful**: the first cycle only baselines (never fires), and a
+counter reset clamps the delta to zero.
+
+```yaml
+watches:
+  sda-busy:
+    interval: 30s
+    check:
+      type: diskio
+      device: sda                          # required: a /proc/diskstats name
+      util_pct: { op: ">=", value: 90 }    # % of the cycle the device was busy
+      await_ms: { op: ">", value: 50 }     # avg ms per completed request
+      # read_bytes:  { op: ">", value: 100M }  # bytes/second, size suffix
+      # write_bytes: { op: ">", value: 50M }
+    for: { cycles: 3 }
+    then: { hook: { command: [/usr/local/bin/sermo-diskio-alert.sh, sda] } }
+```
+
+Predicates: `util_pct` (0–100), `await_ms` (plain ms), and `read_bytes`/
+`write_bytes` — **bytes per second**, written with the shared size grammar
+(`50M` = 50 MiB/s). All present predicates must hold (AND), so `util_pct` +
+`await_ms` together distinguish "busy and slow" from merely busy. A device
+missing from `/proc/diskstats` never fires (the check reports the error). Hook
+extras: `SERMO_DEVICE`, `SERMO_UTIL_PCT`, `SERMO_READ_BYTES`,
+`SERMO_WRITE_BYTES`, `SERMO_AWAIT_MS`.
 
 ### `pids` — kernel PID table
 
