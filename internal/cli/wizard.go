@@ -251,7 +251,7 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 	relDir, targetDir := wizardTargetDir(path, wizard, fragment)
 
 	var files []string
-	for _, name := range sortedMapKeys(fragment) {
+	for _, name := range slices.Sorted(maps.Keys(fragment)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
 		if _, err := os.Stat(file); err == nil {
 			return wizardMergeResult{}, fmt.Errorf("watch file %s already exists; not overwriting", file)
@@ -284,7 +284,7 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return wizardMergeResult{}, fmt.Errorf("create %s: %w", targetDir, err)
 	}
-	for _, name := range sortedMapKeys(fragment) {
+	for _, name := range slices.Sorted(maps.Keys(fragment)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
 		data, err := yaml.Marshal(map[string]any{"watches": map[string]any{name: fragment[name]}})
 		if err != nil {
@@ -319,7 +319,7 @@ func wizardCleanupDirs(path, wizard string, fragment map[string]any) []string {
 
 func wizardConfigDirName(wizard string, fragment map[string]any) string {
 	dirName := ""
-	for _, name := range sortedMapKeys(fragment) {
+	for _, name := range slices.Sorted(maps.Keys(fragment)) {
 		checkType := watchFragmentCheckType(fragment[name])
 		if checkType == "" {
 			continue
@@ -433,7 +433,7 @@ func watchNamesInFile(path string) []string {
 	if len(watches) == 0 {
 		return nil
 	}
-	return sortedMapKeys(watches)
+	return slices.Sorted(maps.Keys(watches))
 }
 
 func deleteWizardWatchFiles(files []string) error {
@@ -545,15 +545,6 @@ func sameConfigPath(base, item, target string) bool {
 		p = filepath.Join(base, p)
 	}
 	return filepath.Clean(p) == filepath.Clean(target)
-}
-
-func sortedMapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func safeConfigPathName(name string) string {
