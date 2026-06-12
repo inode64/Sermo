@@ -2,8 +2,6 @@ package assist
 
 import (
 	"fmt"
-
-	"sermo/internal/config"
 )
 
 // netAssistant creates `net` (network interface) watches: per-interface metrics
@@ -13,7 +11,10 @@ type netAssistant struct{}
 func (netAssistant) Name() string  { return "net" }
 func (netAssistant) Title() string { return "Network interface checks (link state, errors, speed)" }
 
-func (netAssistant) Run(p *Prompt, env Env) (Result, error) {
+func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
+	// Translate an input-closed re-prompt abort into ErrInputClosed even when
+	// Run is driven directly (the CLI also recovers at its own boundary).
+	defer Recover(&err)
 	ifaces, err := env.Ifaces()
 	if err != nil {
 		return Result{}, fmt.Errorf("list interfaces: %w", err)
@@ -84,10 +85,9 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 			s.errorsAt = p.AskInt("Alert when interface errors per cycle exceed", 100)
 		}
 	}
-	s.notifiers = chooseNotifiers(p, env)
-	if !config.HasEffectiveNotifyAction(s.notifiers, env.DefaultNotify) {
-		return s, fmt.Errorf("a net watch needs at least one notifier; none chosen for %s", label)
-	}
+	// A net watch has no non-notify action, so the answer must deliver
+	// somewhere; ensureNotifyAction re-asks until it does.
+	s.notifiers = ensureNotifyAction(p, env, chooseNotifiers(p, env), false)
 	return s, nil
 }
 

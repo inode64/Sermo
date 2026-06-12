@@ -189,11 +189,32 @@ func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
 func TestVolumeAssistantNoActionErrors(t *testing.T) {
 	env := testEnv()
 	env.Notifiers = nil // no notifiers configured
-	// Select volume 1; free 10; for 3; default notify (not configured); decline expand.
+	// Select volume 1; free 10; for 3; default notify (not configured); decline
+	// expand: the wizard re-asks and the script's EOF aborts with ErrInputClosed.
 	script := strings.Join([]string{"1", "1", "10", "3", "default", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (volumeAssistant{}).Run(p, env); err == nil {
 		t.Fatal("a watch with neither notify nor expand must error")
+	}
+}
+
+func TestVolumeAssistantNoneWithoutExpandReasks(t *testing.T) {
+	// 'none' with expand declined leaves no action: the wizard explains,
+	// re-asks, and a notifier picked on the second round succeeds.
+	script := strings.Join([]string{"1", "1", "10", "3", "none", "n", "1"}, "\n") + "\n"
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := volumeAssistant{}.Run(p, testEnv())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	then := res.Watches["storage-mnt-backup"].(map[string]any)["then"].(map[string]any)
+	notify := then["notify"].([]string)
+	if len(notify) != 1 || notify[0] != "ops-email" {
+		t.Fatalf("notify = %v, want [ops-email]", notify)
+	}
+	if !strings.Contains(out.String(), "'none' would leave this watch with no action") {
+		t.Fatalf("expected the re-ask explanation, got %q", out.String())
 	}
 }
 
@@ -273,7 +294,8 @@ func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
 }
 
 func TestVolumeAssistantNotifyNoneWithoutExpandErrors(t *testing.T) {
-	// Select volume 1; free 10; for 3; explicit none; decline expand.
+	// Select volume 1; free 10; for 3; explicit none; decline expand: the
+	// wizard re-asks and the script's EOF aborts with ErrInputClosed.
 	script := strings.Join([]string{"1", "1", "10", "3", "none", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	if _, err := (volumeAssistant{}).Run(p, testEnv()); err == nil {
