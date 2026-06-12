@@ -32,7 +32,7 @@ paths:
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
   includes:                    # kind:service files and watch fragments
-    - apps-enabled             # relative to this file's directory
+    - apps             # relative to this file's directory
   runtime: /run/sermo          # volatile: locks, op slots (tmpfs)
   state: /var/lib/sermo        # persistent: monitor state, SLA, measurements
 

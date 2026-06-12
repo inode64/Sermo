@@ -104,10 +104,10 @@ func pathExists(p string) bool {
 
 // servicesIncludeDir is the includes subdirectory the service wizard writes
 // kind:service files into (the conventional enabled-services location).
-const servicesIncludeDir = "apps-enabled"
+const servicesIncludeDir = "apps"
 
 // writeWizardServices renders the generated services, confirms, then writes one
-// `kind: service` file per service into the apps-enabled includes directory and
+// `kind: service` file per service into the apps includes directory and
 // ensures that directory is listed in paths.includes.
 func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath string, cfg *config.Config, res assist.Result) int {
 	existing := serviceNameSet(cfg)
@@ -155,7 +155,7 @@ func docsPreview(docs map[string]map[string]any) []any {
 }
 
 // writeServiceFiles writes each service doc to its own file under the
-// apps-enabled includes dir, ensuring that dir is in paths.includes.
+// apps includes dir, ensuring that dir is in paths.includes.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	orig, err := os.ReadFile(globalPath)
 	if err != nil {

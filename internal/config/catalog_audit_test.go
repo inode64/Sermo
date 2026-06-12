@@ -86,7 +86,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 }
 
 // TestShippedGlobalConfigValidates points the shipped configs/sermo.yml at the
-// repo catalog and validates it with its bundled apps-enabled services.
+// repo catalog and validates it with its bundled apps services.
 func TestShippedGlobalConfigValidates(t *testing.T) {
 	root := repoRoot(t)
 
@@ -104,8 +104,8 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "sermo.yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The shipped includes entry is the relative "apps-enabled" directory.
-	copyYAMLDir(t, filepath.Join(root, "configs", "apps-enabled"), filepath.Join(dir, "apps-enabled"))
+	// The shipped includes entry is the relative "apps" directory.
+	copyYAMLDir(t, filepath.Join(root, "configs", "apps"), filepath.Join(dir, "apps"))
 
 	cfg, err := Load(filepath.Join(dir, "sermo.yml"))
 	if err != nil {

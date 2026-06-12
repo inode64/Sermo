@@ -19,7 +19,7 @@ import (
 // subdirectory — `daemon` (services), `app` (tools/runtimes), `lib` (shared
 // libraries) — so they live in separate registries and a service may share a
 // name with the app that owns its binary (e.g. `apache` daemon + `apache` app).
-// `service` is an enabled instance (apps-enabled) that `uses` a daemon.
+// `service` is an enabled instance (apps) that `uses` a daemon.
 const (
 	kindDaemon   = "daemon"
 	kindApp      = "app"
