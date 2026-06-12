@@ -1,33 +1,52 @@
-# golangci-lint configuration for Sermo.
+# golangci-lint v2 configuration for Sermo.
 #
 # Its purpose is to run gosec, the security analyzer that is not installed as a
 # standalone binary in ~/go/bin. The other standards are covered by dedicated
 # tools (gofmt, staticcheck, revive via revive.toml, govulncheck), so only gosec
 # is enabled here.
 #
-# Run with:  golangci-lint run
+# Run with:  golangci-lint run        (requires golangci-lint v2)
+version: "2"
 
 run:
   tests: true
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - gosec
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
+      - linters: [gosec]
+        path: _test\.go
+        text: G306
+      # Test fixtures use fake DSNs ("smtp://user:pass@…") to exercise URL
+      # parsing; there are no real credentials in the tree.
+      - linters: [gosec]
+        path: _test\.go
+        text: G101
+      # Tests build paths from t.TempDir() and repo-controlled names; the
+      # taint-analysis traversal warning cannot apply.
+      - linters: [gosec]
+        path: _test\.go
+        text: G703
+      # G115 (integer-overflow conversions) is noisy and false-positive-prone in
+      # this codebase: every flagged site converts an already-bounded value (a
+      # port 0-65535, a /proc-reported count, a range-validated config field).
+      # Accepted project-wide. By-design exec (G204) and intentional 0644 writes
+      # (pidfile, generated YAML) are suppressed inline with //nolint:gosec +
+      # justification.
+      - linters: [gosec]
+        text: G115
 
 issues:
   # Report every finding (golangci-lint otherwise caps repeated issues at 3).
-  max-same-issues: 0
   max-issues-per-linter: 0
-  exclude-rules:
-    # Test fixtures are written to throwaway temp dirs with 0644; not a concern.
-    - path: _test\.go
-      linters: [gosec]
-      text: "G306"
-    # G115 (integer-overflow conversions) is noisy and false-positive-prone in
-    # this codebase: every flagged site converts an already-bounded value (a port
-    # 0-65535, a /proc-reported count, a range-validated config field). Accepted
-    # project-wide. By-design exec (G204) and intentional 0644 writes (pidfile,
-    # generated YAML) are suppressed inline with //nolint:gosec + justification.
-    - linters: [gosec]
-      text: "G115"
+  max-same-issues: 0
