@@ -31,8 +31,9 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 	watches = append(watches, sw...)
 	warnings = append(warnings, swarn...)
 
-	raw, ok := cfg.Global.Raw["watches"].(map[string]any)
-	if !ok || len(raw) == 0 {
+	raw, resErrs := cfg.ResolveWatches() // ${var}-expanded (custom globals + host builtins)
+	warnings = append(warnings, resErrs...)
+	if len(raw) == 0 {
 		return watches, warnings
 	}
 

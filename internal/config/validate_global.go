@@ -154,6 +154,36 @@ func validateNotifyRefs(name string, entry map[string]any, notifiers map[string]
 	}
 }
 
+// reservedVarNames cannot be used as custom variable names in defaults.variables:
+// the selection keywords (all/none/default) and the runtime-only tokens
+// (date/event/action). Builtins (host/port/…) are intentionally NOT reserved —
+// a custom variable may override them. Duplicate names are already rejected by
+// the YAML parser (a mapping key defined twice is a load error).
+var reservedVarNames = set("all", "none", "default", "date", "event", "action")
+
+// validateDefaultsVariables checks the optional defaults.variables map: it must be
+// a mapping; each value must be a scalar or a list (not a nested mapping); and no
+// name may be reserved.
+func validateDefaultsVariables(defaults map[string]any, add addFunc) {
+	v, present := defaults["variables"]
+	if !present {
+		return
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		add("defaults.variables must be a mapping of name -> value")
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(m)) {
+		if _, reserved := reservedVarNames[name]; reserved {
+			add("defaults.variables: %q is a reserved name and cannot be a custom variable", name)
+		}
+		if _, isMap := m[name].(map[string]any); isMap {
+			add("defaults.variables.%s must be a scalar or a list, not a mapping", name)
+		}
+	}
+}
+
 func defaultsCooldown(defaults map[string]any) (string, bool) {
 	policy, ok := defaults["policy"].(map[string]any)
 	if !ok {
