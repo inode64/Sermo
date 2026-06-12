@@ -5,7 +5,7 @@ type: cache
 
 service:
   systemd: [redis, redis-server]
-  openrc: [redis]
+  openrc: [redis, redis-server]
 
 # Binary + version are owned by the `redis` app (same name) and linked here.
 apps: [redis]
