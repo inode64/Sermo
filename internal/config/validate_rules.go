@@ -16,17 +16,27 @@ import (
 // within.min_matches — optional, defaulting to 1 (true at least once within the
 // window) — must be positive and no larger than within.cycles when declared.
 func validateWindow(prefix string, entry map[string]any, add addFunc) {
-	_, hasFor := entry["for"]
-	_, hasWithin := entry["within"]
+	rawFor, hasFor := entry["for"]
+	rawWithin, hasWithin := entry["within"]
 	if hasFor && hasWithin {
 		add("%s cannot define both for and within", prefix)
 	}
-	if f, ok := entry["for"].(map[string]any); ok {
-		if c, _ := cfgval.Int(f["cycles"]); c <= 0 {
+	if hasFor {
+		f, ok := rawFor.(map[string]any)
+		if !ok {
+			// A scalar (`for: 3`) would otherwise be silently ignored by the
+			// runtime parser, leaving the rule without a window.
+			add("%s.for must be a mapping, e.g. for: {cycles: 3}", prefix)
+		} else if c, _ := cfgval.Int(f["cycles"]); c <= 0 {
 			add("%s.for.cycles must be > 0", prefix)
 		}
 	}
-	if wn, ok := entry["within"].(map[string]any); ok {
+	if hasWithin {
+		wn, ok := rawWithin.(map[string]any)
+		if !ok {
+			add("%s.within must be a mapping, e.g. within: {cycles: 5, min_matches: 2}", prefix)
+			return
+		}
 		cycles, _ := cfgval.Int(wn["cycles"])
 		if cycles <= 0 {
 			add("%s.within.cycles must be > 0", prefix)

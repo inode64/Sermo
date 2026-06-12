@@ -90,7 +90,7 @@ which reuse the same schema). MVP types:
 | `glusterfs` / `glusterd` / `gluster` | a GlusterFS node's glusterd answers an RPC NULL on 24007 (see Database) |
 | `openvswitch` / `ovs` / `ovsdb` / `ovsdb-server` | ovsdb-server answers an OVSDB `list_dbs` JSON-RPC request (see Database) |
 | `sqlite` / `sqlite3` | a SQLite database file passes `PRAGMA integrity_check` (see SQLite) |
-| `sql`         | a SQL query's scalar result compares (`== != > >= < <= =~`) against a value (see SQL query) |
+| `sql`         | a SQL query's scalar result compares (`== != > >= < <= contains =~`) against a value (see SQL query) |
 | `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
 | `influxdb-query` | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
@@ -1586,8 +1586,9 @@ primitive behind `restart_on_change` (see Daemons → Library daemons).
 
 ### Windows
 
-Without `for`/`within`, a rule fires the cycle its condition is true. `for: N`
-requires N consecutive true cycles; `within: {cycles, min_matches}` requires
+Without `for`/`within`, a rule fires the cycle its condition is true.
+`for: {cycles: N}` requires N consecutive true cycles; `within: {cycles,
+min_matches}` requires
 `min_matches` true cycles out of the last `cycles` — `min_matches` is optional
 and defaults to `1` (true at least once within the window). A rule cannot use
 both.

@@ -8,12 +8,17 @@ import (
 	"strings"
 )
 
-// compareValue evaluates "result op value" and is shared by the sql and http
-// checks. Ordering ops (> >= < <=) parse both sides as floats; == and != compare
-// numerically when both parse as numbers, otherwise as strings (equal/different);
-// =~ matches result against value as a Go (RE2) regular expression.
+// compareValue evaluates "result op value" and is shared by the sql, http and
+// connection checks. Ordering ops (> >= < <=) parse both sides as floats; == and
+// != compare numerically when both parse as numbers, otherwise as strings
+// (equal/different); contains requires value to be a substring of result; =~
+// matches result against value as a Go (RE2) regular expression. The set
+// matches expect_json (jsonAssert) so every {op, value} comparison shares one
+// vocabulary.
 func compareValue(result, op, value string) (bool, error) {
 	switch op {
+	case "contains":
+		return strings.Contains(result, value), nil
 	case ">", ">=", "<", "<=":
 		rf, err := strconv.ParseFloat(strings.TrimSpace(result), 64)
 		if err != nil {
@@ -48,7 +53,7 @@ func compareValue(result, op, value string) (bool, error) {
 // validCompareOp reports whether op is a supported comparison operator.
 func validCompareOp(op string) bool {
 	switch op {
-	case "==", "!=", ">", ">=", "<", "<=", "=~":
+	case "==", "!=", ">", ">=", "<", "<=", "contains", "=~":
 		return true
 	default:
 		return false
@@ -57,9 +62,9 @@ func validCompareOp(op string) bool {
 
 // OutputMatcher matches captured command/hook output (stdout or stderr) against
 // an expectation declared in YAML: a plain string is a substring requirement; an
-// {op, value} mapping is an operator comparison (==, !=, >, >=, <, <=, =~) on the
-// trimmed output, the same grammar as an http check's expect_body. The zero value
-// is inactive and matches anything.
+// {op, value} mapping is an operator comparison (==, !=, >, >=, <, <=, contains,
+// =~) on the trimmed output, the same grammar as an http check's expect_body.
+// The zero value is inactive and matches anything.
 type OutputMatcher struct {
 	Substring string // non-empty: output must contain this
 	Op        string // non-empty: compareValue(trimmed output, Op, Value)
@@ -79,7 +84,7 @@ func ParseOutputMatcher(v any) (OutputMatcher, string) {
 	case map[string]any:
 		op := cfgval.AsString(t["op"])
 		if !validCompareOp(op) {
-			return OutputMatcher{}, "op must be one of ==, !=, >, >=, <, <=, =~"
+			return OutputMatcher{}, "op must be one of ==, !=, >, >=, <, <=, contains, =~"
 		}
 		return OutputMatcher{Op: op, Value: cfgval.String(t["value"])}, ""
 	default:
@@ -118,7 +123,7 @@ func parseExpectLatency(entry map[string]any) (op, value, warn string) {
 	}
 	op = cfgval.AsString(lat["op"])
 	if !validCompareOp(op) {
-		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, =~"
+		return "", "", "expect_latency op must be one of ==, !=, >, >=, <, <=, contains, =~"
 	}
 	return op, cfgval.String(lat["value"]), ""
 }
