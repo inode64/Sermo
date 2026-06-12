@@ -1286,3 +1286,18 @@ func TestValidatePressureWatch(t *testing.T) {
 		t.Fatalf("valid pressure watch flagged: %v", w)
 	}
 }
+
+func TestValidatePidsWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"pid-table": map[string]any{
+				"check": map[string]any{"type": "pids", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"for":   map[string]any{"cycles": 3},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("valid pids watch flagged: %v", w)
+	}
+}

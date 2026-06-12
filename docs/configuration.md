@@ -638,8 +638,8 @@ These conventions keep the per-type sections below short:
   The same `expect_exit` / `expect_stdout` / `expect_stderr` fields work on a
   `command` check (see [Checks](rules.md#checks)).
 - **Evaluation model.** A **level check** (`storage`, `memory`, `pressure`,
-  `load`, `fds`, `conntrack`, `entropy`, `zombies`, swap `usage`) fires when
-  **every present predicate holds**
+  `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, swap `usage`) fires
+  when **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
   at least one, and add `for: { cycles: N }` to require N consecutive cycles.
   Predicate values share one grammar across every level check: a `*_pct` field
@@ -695,7 +695,8 @@ receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`conntrack`, `entropy`, `zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
+`pids`, `conntrack`, `entropy`, `zombies`, `oom`, `cert`) *and* the service
+checks (`tcp`, `ports`, `http`,
 `command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`,
 `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
 such as `mysql`/`smtp`) — can be used as a watch here, and
@@ -1013,6 +1014,27 @@ check:                                   # in a watches: entry like `load` above
 Predicates: `used_pct` (percent of the limit), `free` (`file-max − allocated`) and
 `allocated` (absolute). Hook extras: `SERMO_ALLOCATED`, `SERMO_MAX`,
 `SERMO_USED_PCT`, `SERMO_FREE`.
+
+### `pids` — kernel PID table
+
+A `pids` watch checks the kernel PID table — the total scheduling entities
+alive (threads; each consumes a PID, from the fourth `/proc/loadavg` field)
+against `kernel.pid_max`. A full table makes every `fork()`/`clone()` fail with
+`EAGAIN` host-wide: the end state a runaway fork loop or a leaking thread pool
+reaches, and where the [`zombies`](#zombies--defunct-processes) growth warning
+ultimately lands.
+
+```yaml
+check:                                   # in a watches: entry like `load` above
+  type: pids
+  used_pct: { op: ">=", value: 90 }      # threads / kernel.pid_max
+  # free: { op: "<", value: 5000 }       # absolute headroom, alternatively
+```
+
+Predicates: `used_pct` (percent of the limit), `free` (`pid_max − threads`) and
+`count` (absolute threads). An unreadable `pid_max` leaves `used_pct`/`free`
+unknown (they never fire); `count` still works. Hook extras: `SERMO_COUNT`,
+`SERMO_MAX`, `SERMO_USED_PCT`, `SERMO_FREE`.
 
 ### `conntrack` — netfilter connection table
 

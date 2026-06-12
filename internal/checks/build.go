@@ -63,6 +63,9 @@ type Deps struct {
 	// PressureSampler reads kernel PSI for `pressure` checks. Nil reads
 	// /proc/pressure/<resource>.
 	PressureSampler PressureSamplerFunc
+	// PidsSampler reads the kernel PID table for `pids` checks. Nil reads
+	// /proc/loadavg and kernel.pid_max.
+	PidsSampler PidsSamplerFunc
 	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
 	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
@@ -179,6 +182,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildMemoryCheck(b, entry, deps)
 	case "pressure":
 		return buildPressureCheck(b, entry, deps)
+	case "pids":
+		return buildPidsCheck(b, entry, deps)
 	case "conntrack":
 		return buildConntrackCheck(b, entry, deps)
 	case "entropy":
@@ -688,6 +693,15 @@ func buildMemoryCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, errs
 	}
 	return memoryCheck{base: b, preds: preds, sampler: deps.MemorySampler}, ""
+}
+
+// buildPidsCheck builds a kernel PID-table check.
+func buildPidsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, errs := requireLevelPreds(entry, PidsPredFields, "pids check")
+	if errs != "" {
+		return nil, errs
+	}
+	return pidsCheck{base: b, preds: preds, sampler: deps.PidsSampler}, ""
 }
 
 // buildPressureCheck builds a kernel PSI stall check.
