@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strings"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -97,7 +96,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		r.Status = "error: " + err.Error()
 	case res.ExitCode != vc.expectExit:
 		r.Status = fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, vc.expectExit)
-		if line := firstNonEmptyLine(res.Stderr); line != "" {
+		if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
 			r.Status += ": " + line
 		}
 	default:
@@ -108,9 +107,9 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		} else {
 			r.OK = true
 			r.Status = "ok"
-			r.Version = firstNonEmptyLine(res.Stdout)
+			r.Version = checks.FirstNonEmptyLine(res.Stdout)
 			if r.Version == "" {
-				r.Version = firstNonEmptyLine(res.Stderr)
+				r.Version = checks.FirstNonEmptyLine(res.Stderr)
 			}
 			r.VersionShort = shortVersionFor(ctx, runner, resolved.Tree, r.Version)
 		}
@@ -133,10 +132,10 @@ func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]a
 	if vc := versionCommandFor(tree, "version_short"); len(vc.argv) > 0 {
 		res, err := execx.Run(ctx, runner, probeTimeout, vc.argv[0], vc.argv[1:]...)
 		if err == nil || res.ExitCode != 0 {
-			if line := firstNonEmptyLine(res.Stdout); line != "" {
+			if line := checks.FirstNonEmptyLine(res.Stdout); line != "" {
 				return line
 			}
-			if line := firstNonEmptyLine(res.Stderr); line != "" {
+			if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
 				return line
 			}
 		}
@@ -201,13 +200,4 @@ var shortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
 // when the line carries no recognizable version.
 func ShortVersion(s string) string {
 	return shortVersionRE.FindString(s)
-}
-
-func firstNonEmptyLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

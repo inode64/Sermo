@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"sermo/internal/checks"
@@ -61,7 +60,7 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 	}
 	if res.ExitCode != want {
 		detail := fmt.Sprintf("exit %d (want %d)", res.ExitCode, want)
-		if s := firstLine(res.Stderr); s != "" {
+		if s := checks.FirstNonEmptyLine(res.Stderr); s != "" {
 			detail += ": " + s
 		}
 		return errors.New(detail)
@@ -123,15 +122,4 @@ func defaultHookRunner(r HookRunner) HookRunner {
 		return r
 	}
 	return OSHookRunner{}
-}
-
-// firstLine returns the first non-empty line of s, trimmed, for compact hook
-// failure messages.
-func firstLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
-		if t := strings.TrimSpace(line); t != "" {
-			return t
-		}
-	}
-	return ""
 }
