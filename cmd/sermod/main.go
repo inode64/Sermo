@@ -162,20 +162,19 @@ func run(args []string) int {
 
 	// Bound the SLA and measurement tables to roughly a year of per-minute data.
 	cutoff := time.Now().Add(-366 * 24 * time.Hour)
-	if n, err := store.PruneSLA(cutoff); err != nil {
-		logger.Warn("prune sla samples", "error", err)
-	} else if n > 0 {
-		logger.Info("pruned old sla samples", "rows", n)
-	}
-	if n, err := store.PruneMeasurements(cutoff); err != nil {
-		logger.Warn("prune measurements", "error", err)
-	} else if n > 0 {
-		logger.Info("pruned old measurements", "rows", n)
-	}
-	if n, err := store.PruneMetrics(cutoff); err != nil {
-		logger.Warn("prune metrics", "error", err)
-	} else if n > 0 {
-		logger.Info("pruned old metrics", "rows", n)
+	for _, p := range []struct {
+		what  string
+		prune func(time.Time) (int64, error)
+	}{
+		{"sla samples", store.PruneSLA},
+		{"measurements", store.PruneMeasurements},
+		{"metrics", store.PruneMetrics},
+	} {
+		if n, err := p.prune(cutoff); err != nil {
+			logger.Warn("prune "+p.what, "error", err)
+		} else if n > 0 {
+			logger.Info("pruned old "+p.what, "rows", n)
+		}
 	}
 
 	collector := metrics.New(metrics.OSReader{})

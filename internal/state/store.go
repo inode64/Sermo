@@ -435,7 +435,14 @@ func (s *Store) MeasurementSeries(service, check string, from, to time.Time) ([]
 
 // PruneMeasurements deletes measurement buckets older than before. Returns rows removed.
 func (s *Store) PruneMeasurements(before time.Time) (int64, error) {
-	res, err := s.db.Exec(`DELETE FROM measurement WHERE bucket < ?;`, minuteBucket(before))
+	return s.pruneBuckets("measurement", before)
+}
+
+// pruneBuckets deletes rows with a bucket older than before from one of the
+// per-minute bucket tables. table is always a compile-time literal, never
+// operator input.
+func (s *Store) pruneBuckets(table string, before time.Time) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM `+table+` WHERE bucket < ?;`, minuteBucket(before)) //nolint:gosec // table is a package-internal literal
 	if err != nil {
 		return 0, err
 	}
@@ -514,11 +521,7 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 
 // PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
 func (s *Store) PruneMetrics(before time.Time) (int64, error) {
-	res, err := s.db.Exec(`DELETE FROM measurement_metric WHERE bucket < ?;`, minuteBucket(before))
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
+	return s.pruneBuckets("measurement_metric", before)
 }
 
 // IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when
@@ -560,9 +563,5 @@ func (s *Store) TrackedServices() ([]string, error) {
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
 // one year of per-minute samples per service. Returns the rows removed.
 func (s *Store) PruneSLA(before time.Time) (int64, error) {
-	res, err := s.db.Exec(`DELETE FROM sla_sample WHERE bucket < ?;`, minuteBucket(before))
-	if err != nil {
-		return 0, err
-	}
-	return res.RowsAffected()
+	return s.pruneBuckets("sla_sample", before)
 }
