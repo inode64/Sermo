@@ -428,11 +428,10 @@ func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
 }
 
 // isValidDiskOp reports whether op is one of the comparison operators shared by
-// every {op, value} threshold — the same set as rule metric thresholds
-// (metricOps), so the two grammars cannot drift apart.
+// every {op, value} threshold — the single set in cfgval, shared with the
+// runtime builders so the two grammars cannot drift apart.
 func isValidDiskOp(op string) bool {
-	_, ok := metricOps[op]
-	return ok
+	return cfgval.IsCompareOp(op)
 }
 
 func isNumeric(s string) bool {
@@ -770,7 +769,7 @@ func validateAutofsFields(prefix string, fields map[string]any, add addFunc) {
 		add("%s: path and count are mutually exclusive", prefix)
 	}
 	op := cfgval.String(count["op"])
-	if _, ok := metricOps[op]; !ok {
+	if !cfgval.IsCompareOp(op) {
 		add("%s.count.op %q is not one of >, >=, <, <=, ==, !=", prefix, op)
 	}
 	if !isNumeric(cfgval.String(count["value"])) {

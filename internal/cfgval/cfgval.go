@@ -157,6 +157,20 @@ func ByteSize(v any) (uint64, bool) {
 	return uint64(bytes), true
 }
 
+// IsCompareOp reports whether op is one of the comparison operators every
+// {op, value} threshold accepts (>= > <= < == !=). Shared by config validation
+// and the runtime check builders so the threshold grammar cannot drift between
+// the two layers. The =~/contains extensions used by response assertions are a
+// separate, wider set (see internal/checks compareValue).
+func IsCompareOp(op string) bool {
+	switch op {
+	case ">=", ">", "<=", "<", "==", "!=":
+		return true
+	default:
+		return false
+	}
+}
+
 // Bool returns v when it is a bool, or false otherwise.
 func Bool(v any) bool {
 	b, _ := v.(bool)

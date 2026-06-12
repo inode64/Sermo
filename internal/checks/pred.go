@@ -71,7 +71,7 @@ func parseLevelPreds(entry map[string]any, fields []string) ([]levelPred, error)
 			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
 		}
 		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
+		if !cfgval.IsCompareOp(op) {
 			return nil, fmt.Errorf("%s has invalid op %q", field, op)
 		}
 		val, err := parseLevelPredValue(field, m["value"])
@@ -106,7 +106,7 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 		return "", 0, label + " requires a delta {op, value}"
 	}
 	op = cfgval.AsString(m["op"])
-	if !validDiskOp(op) {
+	if !cfgval.IsCompareOp(op) {
 		return "", 0, label + " delta has an invalid op"
 	}
 	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
@@ -124,7 +124,7 @@ func requireThreshold(entry map[string]any, field string) (op string, value floa
 		return "", 0, fmt.Sprintf("requires %s {op, value}", field)
 	}
 	op = cfgval.AsString(m["op"])
-	if !validDiskOp(op) {
+	if !cfgval.IsCompareOp(op) {
 		return "", 0, fmt.Sprintf("%s has invalid op %q", field, op)
 	}
 	value, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
@@ -157,17 +157,6 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
 	}
 	return val, nil
-}
-
-// validDiskOp reports whether op is one of the comparison operators shared by
-// every {op, value} threshold.
-func validDiskOp(op string) bool {
-	switch op {
-	case ">=", ">", "<=", "<", "==", "!=":
-		return true
-	default:
-		return false
-	}
 }
 
 // compareFloat evaluates one comparison; an unknown op never holds.
