@@ -55,8 +55,6 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		Service:          name,
 		Unit:             unit,
 		Backend:          string(deps.Backend),
-		AlsoUnits:        config.AdditionalUnits(tree, string(deps.Backend)),
-		StopArtifacts:    BuildStopArtifacts(tree),
 		Tree:             tree,
 		Manager:          deps.Manager,
 		Locker:           &locker,

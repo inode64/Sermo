@@ -497,8 +497,6 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Service:          service,
 		Unit:             unit,
 		Backend:          string(detection.Backend),
-		AlsoUnits:        config.AdditionalUnits(resolved.Tree, string(detection.Backend)),
-		StopArtifacts:    app.BuildStopArtifacts(resolved.Tree),
 		Tree:             resolved.Tree,
 		Manager:          manager,
 		Locker:           &locker,
