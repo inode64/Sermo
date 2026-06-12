@@ -15,6 +15,7 @@ which reuse the same schema). MVP types:
 | `service`     | the backend status equals `expect` (active/inactive/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `binary`      | a path exists and is executable                                    |
+| `pidfile`     | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `libraries`   | `ldd <binary>` resolves all shared libraries                       |
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
