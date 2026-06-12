@@ -7,8 +7,9 @@ service: pppd
 apps: [pppd]
 
 variables:
-  ppp_iface: ppp0       # PPP unit interface (pppd option `unit 0` -> ppp0)
-  probe_host: 1.1.1.1   # well-known anycast host pinged through the uplink
+  ppp_iface: ppp0          # PPP unit interface (pppd option `unit 0` -> ppp0)
+  probe_host: 1.1.1.1      # well-known anycast host pinged through the uplink
+  probe_name: example.com  # stable public name resolved through the uplink
 
 # pppd writes /var/run/<iface>.pid for the session. Defining pidfile auto-wires
 # process-tree monitoring and a requires:[service] pidfile health check (error
@@ -58,4 +59,17 @@ checks:
     interface: "${ppp_iface}"
     metric: state
     expect: up
+    timeout: 5s
+
+  # Layer 4 — name resolution works through the uplink: ask the first
+  # resolv.conf nameserver (with usepeerdns, the provider's resolver) bound to
+  # the PPP interface, and require an actual answer for a stable public name.
+  dns:
+    type: dns
+    resolvconf: true
+    query: "${probe_name}"
+    interface: "${ppp_iface}"
+    expect:
+      rcode: NOERROR
+      answers: { op: ">", value: 0 }
     timeout: 5s

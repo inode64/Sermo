@@ -1,8 +1,14 @@
 package conn
 
 import (
+	"context"
 	"encoding/binary"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 )
 
 func TestDNSRegistered(t *testing.T) {
@@ -87,5 +93,106 @@ func TestDNSOK(t *testing.T) {
 	}
 	if dnsResponseOK(2) || dnsResponseOK(5) { // SERVFAIL, REFUSED
 		t.Fatal("SERVFAIL/REFUSED must not count as healthy")
+	}
+}
+
+// dnsAnswerRR appends one answer RR using a compression pointer to offset 12
+// (the question name), as real servers do.
+func dnsAnswerRR(typ uint16, rdata []byte) []byte {
+	rr := []byte{0xC0, 0x0C} // name: pointer to the question
+	tail := make([]byte, 10)
+	binary.BigEndian.PutUint16(tail[0:], typ)
+	binary.BigEndian.PutUint16(tail[2:], 1) // class IN
+	binary.BigEndian.PutUint16(tail[8:], uint16(len(rdata)))
+	return append(append(rr, tail...), rdata...)
+}
+
+func TestParseDNSAnswerAddrs(t *testing.T) {
+	// Header (1 question, 3 answers) + question + A + CNAME (skipped) + AAAA.
+	msg := dnsResponse(0x1, 0, 3)
+	binary.BigEndian.PutUint16(msg[4:], 1) // QDCOUNT
+	q, err := encodeDNSName("example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	msg = append(msg, q...)
+	msg = append(msg, 0, 1, 0, 1) // QTYPE A, QCLASS IN
+	msg = append(msg, dnsAnswerRR(1, []byte{93, 184, 216, 34})...)
+	msg = append(msg, dnsAnswerRR(5, []byte{0xC0, 0x0C})...) // CNAME
+	v6 := append([]byte{0x26, 0x06, 0x28, 0x00}, make([]byte, 12)...)
+	msg = append(msg, dnsAnswerRR(28, v6)...)
+
+	addrs := parseDNSAnswerAddrs(msg)
+	if len(addrs) != 2 || addrs[0] != "2606:2800::" || addrs[1] != "93.184.216.34" {
+		t.Fatalf("addrs = %v, want the sorted A + AAAA records", addrs)
+	}
+
+	// A truncated answer section yields what was parsed, never panics.
+	if got := parseDNSAnswerAddrs(msg[:len(msg)-10]); len(got) != 1 {
+		t.Fatalf("truncated = %v, want just the A record", got)
+	}
+}
+
+func TestFirstNameserver(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "resolv.conf")
+	body := "# comment\nsearch lan\nnameserver 10.64.0.1\nnameserver 10.64.0.2\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ns, err := firstNameserver(path)
+	if err != nil || ns != "10.64.0.1" {
+		t.Fatalf("firstNameserver = %q, %v; want 10.64.0.1", ns, err)
+	}
+	if err := os.WriteFile(path, []byte("search lan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := firstNameserver(path); err == nil {
+		t.Fatal("a resolv.conf without nameserver entries must error")
+	}
+}
+
+func TestDNSProbeResolvconf(t *testing.T) {
+	// A fake DNS server answering one A record, reached via resolvconf: true.
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = pc.Close() }()
+	go func() {
+		buf := make([]byte, 1500)
+		n, addr, err := pc.ReadFrom(buf)
+		if err != nil {
+			return
+		}
+		resp := dnsResponse(binary.BigEndian.Uint16(buf[:n]), 0, 1)
+		binary.BigEndian.PutUint16(resp[4:], 1)
+		resp = append(resp, buf[12:n]...) // echo the question
+		resp = append(resp, dnsAnswerRR(1, []byte{203, 0, 113, 7})...)
+		_, _ = pc.WriteTo(resp, addr)
+	}()
+
+	host, port, err := net.SplitHostPort(pc.LocalAddr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	rc := filepath.Join(dir, "resolv.conf")
+	if err := os.WriteFile(rc, []byte("nameserver "+host+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := resolvConfPath
+	resolvConfPath = rc
+	defer func() { resolvConfPath = old }()
+
+	n, _ := strconv.Atoi(port)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	res, err := dnsProtocol{}.Probe(ctx, Config{Port: n, Query: "example.com", Params: map[string]string{"resolvconf": "true"}})
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if res.Extra["addresses"] != "203.0.113.7" || res.Extra["rcode"] != "NOERROR" {
+		t.Fatalf("extra = %v, want the resolved address", res.Extra)
 	}
 }
