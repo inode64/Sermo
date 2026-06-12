@@ -58,7 +58,7 @@ defaults:
   # with `min_matches` for a sliding window.
   # rule_window:
   #   cycles: 1
-  #   mode: consecutive    # consecutive | within (within also needs min_matches)
+  #   mode: consecutive    # consecutive | within (min_matches optional, default 1)
 
 logging:
   level: info

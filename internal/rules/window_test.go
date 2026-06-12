@@ -243,3 +243,10 @@ func TestParseWindows(t *testing.T) {
 		t.Errorf("rule b Within = %+v", byName["b"].Within)
 	}
 }
+
+func TestParseWithinWindowDefaultsMinMatches(t *testing.T) {
+	w := ParseWithinWindow(map[string]any{"cycles": 5})
+	if w == nil || w.Cycles != 5 || w.MinMatches != 1 {
+		t.Fatalf("ParseWithinWindow({cycles:5}) = %+v, want {5 1}", w)
+	}
+}

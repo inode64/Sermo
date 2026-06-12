@@ -123,7 +123,9 @@ func ParseForWindow(v any) *ForWindow {
 }
 
 // ParseWithinWindow parses a `within` window ({cycles, min_matches}) from a config
-// node, or nil when absent. Shared by the rules parser and the host-watch builder.
+// node, or nil when absent. min_matches defaults to 1 (true at least once within
+// the window) — the same default ParseRuleWindow applies, so every `within` form
+// reads identically. Shared by the rules parser and the host-watch builder.
 func ParseWithinWindow(v any) *WithinWindow {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -131,6 +133,9 @@ func ParseWithinWindow(v any) *WithinWindow {
 	}
 	cycles, _ := cfgval.Int(m["cycles"])
 	matches, _ := cfgval.Int(m["min_matches"])
+	if matches <= 0 {
+		matches = 1
+	}
 	return &WithinWindow{Cycles: cycles, MinMatches: matches}
 }
 
