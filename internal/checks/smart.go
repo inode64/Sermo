@@ -31,7 +31,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	res, _ := c.runner.Run(ctx, "smartctl", "-H", "-A", "-j", c.device)
 	data, err := parseSmart(res.Stdout)
 	if err != nil {
-		if s := firstLine(res.Stderr); s != "" {
+		if s := FirstNonEmptyLine(res.Stderr); s != "" {
 			return c.result(false, "smart "+c.device+": "+s, start)
 		}
 		return c.result(false, "smart "+c.device+": "+err.Error(), start)
