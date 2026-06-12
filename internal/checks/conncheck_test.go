@@ -120,24 +120,26 @@ func TestBuildMySQLCheck(t *testing.T) {
 	}
 }
 
-func TestBuildMySQLCheckDefaultsAndUserRequired(t *testing.T) {
-	// mariadb alias resolves; missing user warns.
-	_, warns := Build(map[string]any{
+func TestBuildMySQLCheckDefaultsAndOptionalUser(t *testing.T) {
+	// mariadb alias resolves; no user is fine now — a credential-free greeting
+	// liveness probe (mysql no longer requires a user).
+	built, warns := Build(map[string]any{
 		"db": map[string]any{"type": "mariadb"},
 	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) == 0 || !strings.Contains(warns[0], "user") {
-		t.Fatalf("missing user should warn, got %v", warns)
-	}
-
-	built, warns := Build(map[string]any{
-		"db": map[string]any{"type": "mariadb", "user": "u"},
-	}, Deps{DefaultTimeout: time.Second})
 	if len(warns) != 0 || len(built) != 1 {
-		t.Fatalf("mariadb with user should build: warns=%v", warns)
+		t.Fatalf("mariadb without a user should build (greeting mode): warns=%v", warns)
 	}
 	cc := built[0].Check.(connCheck)
 	if cc.cfg.Host != "127.0.0.1" || cc.cfg.Port != 3306 {
 		t.Fatalf("defaults = %+v, want 127.0.0.1:3306", cc.cfg)
+	}
+
+	// With a user it still builds (the deeper authenticated mode).
+	built, warns = Build(map[string]any{
+		"db": map[string]any{"type": "mariadb", "user": "u"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("mariadb with user should build: warns=%v", warns)
 	}
 }
 

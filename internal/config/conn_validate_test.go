@@ -17,13 +17,29 @@ checks:
 	}
 }
 
-func TestValidateMySQLCheckRequiresUser(t *testing.T) {
+func TestValidateMySQLCheckNoUserOK(t *testing.T) {
+	// mysql no longer requires a user: a credential-free greeting probe is valid.
+	issues := validateService(t, `
+kind: service
+name: db
+service: { name: x }
+checks:
+  conn: { type: mysql, port: 3306 }
+`)
+	for _, is := range issues {
+		if hasIssue([]Issue{is}, "checks.conn") {
+			t.Fatalf("mysql without a user must be valid (greeting mode): %v", issues)
+		}
+	}
+}
+
+func TestValidatePostgresCheckRequiresUser(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: db
 service: { name: x }
 checks:
-  conn: { type: mysql }
+  conn: { type: postgres }
 `), "user is required")
 }
 
