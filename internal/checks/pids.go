@@ -51,25 +51,14 @@ func (c pidsCheck) Run(_ context.Context) Result {
 		values["free"] = float64(s.Max - min(s.Threads, s.Max))
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		v, known := values[p.field]
-		if !known || !compareFloat(v, p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	res := c.result(ok, fmt.Sprintf("pids %d/%d in use (%.1f%%)", s.Threads, s.Max, usedPct), start)
 	res.Data = map[string]any{"count": s.Threads, "max": s.Max, "used_pct": usedPct}
 	if s.Max > 0 {
 		res.Data["free"] = s.Max - min(s.Threads, s.Max)
 	}
-	res.Data["value"] = usedPct
-	if len(c.preds) > 0 {
-		if v, known := values[c.preds[0].field]; known {
-			res.Data["value"] = v
-		}
-	}
+	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
 	return res
 }
 

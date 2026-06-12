@@ -53,12 +53,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 		"available_bytes": float64(avail),
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		if !compareFloat(values[p.field], p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	res := c.result(ok, fmt.Sprintf("memory used %.1f%% available %.1f%% (%d bytes)", usedPct, availPct, avail), start)
 	res.Data = map[string]any{
@@ -67,11 +62,7 @@ func (c memoryCheck) Run(_ context.Context) Result {
 		"used_pct":        usedPct,
 		"available_pct":   availPct,
 	}
-	// value is the first predicate's reading, so a hook sees the breaching number.
-	res.Data["value"] = usedPct
-	if len(c.preds) > 0 {
-		res.Data["value"] = values[c.preds[0].field]
-	}
+	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
 	return res
 }
 

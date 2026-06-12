@@ -55,13 +55,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 		return c.result(false, "hdparm "+c.device+": "+err.Error(), start)
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		v, present := values[p.field]
-		if !present || !compareFloat(v, p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	r := c.result(ok, hdparmMessage(c.device, values), start)
 	r.Data = map[string]any{"device": c.device}
