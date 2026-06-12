@@ -1705,10 +1705,10 @@ func (b *WebBackend) configSources(name string) []string {
 		if doc == nil {
 			return
 		}
-		if clone := webScalarString(doc.Body["clone"]); clone != "" {
+		if clone := cfgval.AsString(doc.Body["clone"]); clone != "" {
 			addService(clone)
 		}
-		if uses := webScalarString(doc.Body["uses"]); uses != "" {
+		if uses := cfgval.AsString(doc.Body["uses"]); uses != "" {
 			if daemon := b.cfg.Daemons[uses]; daemon != nil {
 				add(daemon.Path)
 			}
@@ -1741,19 +1741,4 @@ func lineCount(s string) map[string]int {
 		out[l]++
 	}
 	return out
-}
-
-func webScalarString(v any) string {
-	switch x := v.(type) {
-	case string:
-		return x
-	case int:
-		return fmt.Sprint(x)
-	case int64:
-		return fmt.Sprint(x)
-	case float64:
-		return fmt.Sprint(x)
-	default:
-		return ""
-	}
 }
