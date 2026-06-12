@@ -1,0 +1,31 @@
+kind: daemon
+name: node_exporter
+display_name: "Prometheus Node Exporter"
+description: "Prometheus node_exporter: host metrics over HTTP /metrics."
+
+service:
+  systemd: [node_exporter]
+  openrc: [node_exporter]
+
+apps: [node_exporter]
+variables:
+  host: 127.0.0.1
+  port: 9100
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # The scrape endpoint must answer 200 for Prometheus to collect metrics.
+  metrics:
+    type: http
+    url: "http://${host}:${port}/metrics"
+    expect_status: 200
+    timeout: 5s

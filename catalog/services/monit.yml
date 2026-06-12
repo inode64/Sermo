@@ -1,0 +1,27 @@
+kind: daemon
+name: monit
+display_name: "Monit"
+description: "Monit process supervision and monitoring daemon."
+
+service:
+  systemd: [monit]
+  openrc: [monit]
+
+apps: [monit]
+variables:
+  host: 127.0.0.1
+  # Monit's HTTP interface (set httpd in monitrc). Default 2812.
+  port: 2812
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  # The HTTP interface is usually behind basic auth (so an http check would 401);
+  # a tcp probe verifies the interface is listening without needing credentials.
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s

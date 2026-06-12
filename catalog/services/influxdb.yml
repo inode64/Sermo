@@ -1,0 +1,34 @@
+kind: daemon
+name: influxdb
+display_name: "InfluxDB"
+description: "InfluxDB time-series database."
+type: database
+
+service:
+  systemd: [influxdb]
+  openrc: [influxdb]
+
+apps: [influxdb]
+variables:
+  host: 127.0.0.1
+  port: 8086
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native InfluxDB probe: GETs /health (2.x and 1.8+) and verifies status "pass",
+  # reporting the server version; falls back to /ping (all versions) when /health
+  # is unavailable. Set tls: true if the API is served over https.
+  health:
+    type: influxdb
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

@@ -1,0 +1,28 @@
+kind: daemon
+name: docker
+display_name: "Docker Engine"
+description: "Docker Engine container runtime."
+
+service:
+  systemd: [docker]
+  openrc: [docker]
+
+apps: [docker]
+variables:
+  # The engine API on its local Unix socket; set `host` (and tls for 2376) for a
+  # TCP daemon instead.
+  socket: /var/run/docker.sock
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  # Native Docker probe: GETs /info over the engine socket, proving the daemon is
+  # up, and exposes container counts (total/running/paused/stopped), image count
+  # and the engine version for expect:/on_version_change. Select a `query:`
+  # container to additionally assert its state/health.
+  engine:
+    type: docker
+    socket: "${socket}"
+    timeout: 3s

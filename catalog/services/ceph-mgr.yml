@@ -1,0 +1,31 @@
+kind: daemon
+name: ceph-mgr
+display_name: "Ceph Manager"
+description: "Ceph manager daemon: hosts the cluster's management modules (dashboard, prometheus, balancer, …)."
+
+# Managers run as a systemd instance keyed by the mgr id, which is the short
+# hostname (e.g. ceph-mgr@radon). The built-in ${hostname} fills it in
+# automatically — no per-service configuration needed. Override with a
+# `hostname` variable (or SERMO_HOSTNAME) if your mgr id is not the hostname.
+service: "ceph-mgr@${hostname}"
+
+# Binary + version are owned by the ceph-mgr app (same name) and linked here.
+apps: [ceph-mgr]
+
+variables:
+  user: ceph
+  binary: /usr/bin/ceph-mgr
+
+processes:
+  # Exactly one ceph-mgr runs per host, so an exe+user match selects it
+  # unambiguously. The mgr binds a dynamic messenger port (no fixed listener),
+  # so process liveness — not a tcp probe — is the reliable signal here.
+  ceph-mgr:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+checks:
+  service:
+    type: service
+    expect: active

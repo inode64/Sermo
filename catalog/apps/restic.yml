@@ -1,0 +1,8 @@
+kind: app
+name: restic
+display_name: "restic"
+variables:
+  binary: /usr/bin/restic
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "version"], timeout: 10s }

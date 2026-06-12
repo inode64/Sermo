@@ -1,0 +1,35 @@
+kind: daemon
+name: mosquitto
+display_name: "Eclipse Mosquitto"
+description: "Mosquitto MQTT message broker."
+type: queue
+
+service:
+  systemd: [mosquitto]
+  openrc: [mosquitto]
+
+apps: [mosquitto]
+variables:
+  host: 127.0.0.1
+  port: 1883
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # Native MQTT probe: performs a CONNECT handshake and verifies the broker
+  # answers CONNACK with return code 0 — proof it speaks MQTT, not just that the
+  # port is open. Anonymous by default; set user/password (and tls for MQTTS 8883)
+  # if the broker requires auth.
+  mqtt:
+    type: mqtt
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s

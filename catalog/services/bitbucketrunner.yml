@@ -1,0 +1,15 @@
+kind: daemon
+name: bitbucketrunner
+display_name: "Bitbucket Pipelines Runner"
+description: "Atlassian Bitbucket self-hosted Pipelines runner."
+
+service:
+  systemd: [bitbucketrunner]
+  openrc: [bitbucketrunner]
+
+# The runner is an outbound CI agent: it polls Bitbucket and runs jobs (often via
+# Docker), exposing no listening port, so its liveness is the unit state alone.
+checks:
+  service:
+    type: service
+    expect: active

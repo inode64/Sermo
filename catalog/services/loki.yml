@@ -1,0 +1,32 @@
+kind: daemon
+name: loki
+display_name: "Grafana Loki"
+description: "Grafana Loki log-aggregation server."
+
+service:
+  systemd: [loki]
+  openrc: [loki]
+
+apps: [loki]
+variables:
+  host: 127.0.0.1
+  port: 3100
+
+checks:
+  service:
+    type: service
+    expect: active
+
+  port:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 2s
+
+  # /ready returns 200 once Loki has finished starting and can serve queries;
+  # before then it answers 503, so it doubles as a startup-complete signal.
+  ready:
+    type: http
+    url: "http://${host}:${port}/ready"
+    expect_status: 200
+    timeout: 5s
