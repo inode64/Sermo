@@ -183,10 +183,7 @@ func (a App) renderForDiff(opts options, cfg *config.Config, name string) (strin
 }
 
 func (a App) loadConfig(opts options) (*config.Config, int) {
-	globalPath := opts.config
-	if globalPath == "" {
-		globalPath = config.DefaultGlobalPath
-	}
+	globalPath := opts.globalPath()
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
