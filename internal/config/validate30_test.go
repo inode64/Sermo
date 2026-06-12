@@ -959,3 +959,33 @@ rules:
 `)
 	mustHave(t, issues, "for must be a mapping")
 }
+
+func TestValidateFileConditionExistsBoolean(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+rules:
+  marker:
+    type: alert
+    if: { file: { path: /run/x.flag, exists: "false" } }
+    then: { action: alert, message: "flag" }
+`)
+	mustHave(t, issues, "file.exists must be a boolean")
+
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+rules:
+  marker:
+    type: alert
+    if: { file: { path: /run/x.flag, exists: false } }
+    then: { action: alert, message: "flag" }
+`)
+	if hasIssue(good, "file.exists") {
+		t.Fatalf("boolean exists flagged: %v", good)
+	}
+}
