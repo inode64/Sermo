@@ -1094,3 +1094,17 @@ checks:
 	mustHave(t, bad, "checks.no-pred requires at least one of util_pct/read_bytes/write_bytes/await_ms")
 	mustHave(t, bad, `read_bytes value "1048576" must include a size suffix`)
 }
+
+func TestValidateCleanOnStopDotDotEscape(t *testing.T) {
+	// ".." segments must not sidestep the protected-dir check.
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+stop_policy:
+  clean_on_stop:
+    - { path: /var/cache/myapp/../.., recursive: true }
+`)
+	mustHave(t, issues, "refuses to recursively delete")
+}
