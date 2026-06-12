@@ -1586,7 +1586,9 @@ primitive behind `restart_on_change` (see Daemons → Library daemons).
 
 Without `for`/`within`, a rule fires the cycle its condition is true. `for: N`
 requires N consecutive true cycles; `within: {cycles, min_matches}` requires
-`min_matches` true cycles out of the last `cycles`. A rule cannot use both.
+`min_matches` true cycles out of the last `cycles` — `min_matches` is optional
+and defaults to `1` (true at least once within the window). A rule cannot use
+both.
 
 ### Guards
 

@@ -13,7 +13,8 @@ import (
 // validateWindow checks an optional for/within firing window at the dotted prefix,
 // shared by rules, host watches and per-metric sub-watches. A window may declare
 // at most one of for/within; for.cycles and within.cycles must be positive; and
-// within.min_matches must be positive and no larger than within.cycles.
+// within.min_matches — optional, defaulting to 1 (true at least once within the
+// window) — must be positive and no larger than within.cycles when declared.
 func validateWindow(prefix string, entry map[string]any, add addFunc) {
 	_, hasFor := entry["for"]
 	_, hasWithin := entry["within"]
@@ -27,15 +28,17 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 	}
 	if wn, ok := entry["within"].(map[string]any); ok {
 		cycles, _ := cfgval.Int(wn["cycles"])
-		matches, _ := cfgval.Int(wn["min_matches"])
 		if cycles <= 0 {
 			add("%s.within.cycles must be > 0", prefix)
 		}
-		if matches <= 0 {
-			add("%s.within.min_matches must be > 0", prefix)
-		}
-		if cycles > 0 && matches > cycles {
-			add("%s.within.min_matches must be <= within.cycles", prefix)
+		if v, present := wn["min_matches"]; present {
+			matches, _ := cfgval.Int(v)
+			switch {
+			case matches <= 0:
+				add("%s.within.min_matches must be > 0", prefix)
+			case cycles > 0 && matches > cycles:
+				add("%s.within.min_matches must be <= within.cycles", prefix)
+			}
 		}
 	}
 }
@@ -72,8 +75,9 @@ var metricForms = map[string]metricForm{
 }
 
 // validateRuleWindow checks the merged `rule_window` fallback block (section 13):
-// a positive cycles count, a known mode, and — for the within mode — a
-// min_matches that is positive and no larger than cycles.
+// a positive cycles count, a known mode, and — for the within mode — an optional
+// min_matches (default 1) that is positive and no larger than cycles when
+// declared.
 func validateRuleWindow(tree map[string]any, add addFunc) {
 	rw, present := tree["rule_window"]
 	if !present {
@@ -91,12 +95,14 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 	switch mode := cfgval.String(m["mode"]); mode {
 	case "", "consecutive":
 	case "within":
-		matches, _ := cfgval.Int(m["min_matches"])
-		switch {
-		case matches <= 0:
-			add("rule_window.min_matches must be > 0 for mode %q", mode)
-		case cycles > 0 && matches > cycles:
-			add("rule_window.min_matches must be <= rule_window.cycles")
+		if v, present := m["min_matches"]; present {
+			matches, _ := cfgval.Int(v)
+			switch {
+			case matches <= 0:
+				add("rule_window.min_matches must be > 0 for mode %q", mode)
+			case cycles > 0 && matches > cycles:
+				add("rule_window.min_matches must be <= rule_window.cycles")
+			}
 		}
 	default:
 		add("rule_window.mode %q is not one of consecutive, within", mode)
