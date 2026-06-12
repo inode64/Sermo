@@ -12,6 +12,14 @@ variables:
   host: 127.0.0.1
   port: 3100
 
+# Loki reloads its config on SIGHUP (and POST /reload when
+# -config.expand-env/--config.file reloading is enabled). Its systemd unit
+# usually has no ExecReload, so Sermo signals MainPID; `when: auto` uses the
+# init reload where one exists.
+reload:
+  signal: HUP
+  when: auto
+
 checks:
   service:
     type: service

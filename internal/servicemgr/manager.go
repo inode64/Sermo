@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -38,6 +39,13 @@ type Manager interface {
 	// control --reload` or `nginx -s reload`; OpenRC runs the init script's
 	// `reload`). A unit/script with no reload support surfaces as an action error.
 	Reload(ctx context.Context, service string) error
+	// SupportsReload reports whether the init backend can reload the unit in place:
+	// systemd's `CanReload` (the unit defines `ExecReload`), or an OpenRC init
+	// script that defines a `reload` command. It lets the operation engine decide
+	// whether to use the backend reload or fall back to a native signal/command
+	// (a `reload:` block with `when: auto`). Best-effort: a query error reports
+	// false so the caller falls back to the native reload it was given.
+	SupportsReload(ctx context.Context, service string) (bool, error)
 	// ResetState reconciles the init system's recorded state with reality,
 	// clearing a lingering failed/stuck marker so it no longer disagrees with the
 	// actual processes (systemd `reset-failed`, OpenRC `zap`). It is idempotent
@@ -55,7 +63,7 @@ func newManager(backend Backend, runner execx.Runner) (Manager, error) {
 	case BackendSystemd:
 		return systemdManager{runner: runner}, nil
 	case BackendOpenRC:
-		return openrcManager{runner: runner}, nil
+		return openrcManager{runner: runner, readFile: os.ReadFile}, nil
 	default:
 		return nil, fmt.Errorf("no service manager for backend %q", backend)
 	}
@@ -185,6 +193,17 @@ func (m systemdManager) ResetState(ctx context.Context, service string) error {
 	return m.action(ctx, "reset-failed", service)
 }
 
+// SupportsReload queries systemd's CanReload property, which is true exactly when
+// the unit defines an ExecReload (so `systemctl reload` is applicable).
+func (m systemdManager) SupportsReload(ctx context.Context, service string) (bool, error) {
+	unit := systemdUnit(service)
+	result, err := m.runner.Run(ctx, "systemctl", "show", "-p", "CanReload", "--value", "--", unit)
+	if err != nil && strings.TrimSpace(result.Stdout) == "" {
+		return false, fmt.Errorf("query CanReload for %s: %w", unit, err)
+	}
+	return strings.EqualFold(strings.TrimSpace(result.Stdout), "yes"), nil
+}
+
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
 	result, err := m.runner.Run(ctx, "systemctl", verb, unit)
@@ -196,7 +215,8 @@ func (m systemdManager) action(ctx context.Context, verb, service string) error 
 
 // openrcManager queries services through rc-service.
 type openrcManager struct {
-	runner execx.Runner
+	runner   execx.Runner
+	readFile func(string) ([]byte, error)
 }
 
 func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatus, error) {
@@ -232,6 +252,34 @@ func (m openrcManager) Reload(ctx context.Context, service string) error {
 
 func (m openrcManager) ResetState(ctx context.Context, service string) error {
 	return m.action(ctx, "zap", service)
+}
+
+// openrcReloadDef matches an OpenRC init script that defines a reload command:
+// a `reload()` function, `reload` listed in extra_(started_)commands, or a
+// `description_reload=` line (the documented ways an init script exposes reload).
+// Every alternative is anchored at the start of a line (after leading blanks) so
+// it cannot match a comment (`# ...`), and the `reload` token in the command list
+// is bounded by a quote/space so `forcereload` is not a false positive — a false
+// positive is worse than a false negative here, because the `when: auto` path
+// then runs the init reload (which fails) instead of the native one.
+var openrcReloadDef = regexp.MustCompile(`(?m)` +
+	`^[[:space:]]*reload[[:space:]]*\(\)` + // reload() / reload ()
+	`|^[[:space:]]*extra_(started_)?commands=.*["[:space:]]reload(["[:space:]]|$)` + // reload as a listed command
+	`|^[[:space:]]*description_reload=`) // documented reload description
+
+// SupportsReload reports whether the OpenRC init script for the service defines a
+// reload command. The script lives at /etc/init.d/<service>; an unreadable script
+// reports false (best-effort) so the caller falls back to its native reload.
+func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, error) {
+	read := m.readFile
+	if read == nil {
+		read = os.ReadFile
+	}
+	data, err := read(filepath.Join("/etc/init.d", service))
+	if err != nil {
+		return false, nil
+	}
+	return openrcReloadDef.Match(data), nil
 }
 
 func (m openrcManager) action(ctx context.Context, verb, service string) error {

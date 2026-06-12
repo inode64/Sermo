@@ -118,6 +118,13 @@ at startup to make `sermoctl reload` reliable (it also checks the legacy
 `sermoctl reload` falls back to locating the running `sermod` process by name —
 a native scan of `/proc`, no external `pidof`/`pgrep` needed.
 
+`sermoctl reload` with **no** argument reloads `sermod`'s own configuration (as
+above). `sermoctl reload <service>` is a different operation — it reloads *that
+service* in place through the engine (preflight → reload → health). How a service
+reloads, including the `reload:` block that lets Sermo signal a daemon when its
+init unit has no reload, is documented in
+[daemons.md](daemons.md#reload-on-config-change-reload_on_change).
+
 ### Per-service interval
 
 `engine.interval` sets the default for every service. A service may override it

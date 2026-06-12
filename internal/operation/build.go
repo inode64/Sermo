@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"syscall"
 	"time"
 
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
+	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/process"
 	"sermo/internal/rules"
@@ -114,7 +116,7 @@ func New(c Config) Engine {
 		Guard:            guardClosure(tree, deps),
 		Preflight:        sectionRunner(tree, "preflight", deps),
 		Postflight:       sectionRunner(tree, "postflight", deps),
-		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Unit),
+		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit),
 		Discover:         discover,
 		Reaper:           reaper,
 		KillPolicy:       killPolicy,
@@ -124,32 +126,137 @@ func New(c Config) Engine {
 	}
 }
 
-// reloadClosure builds the engine's reload step: a daemon-declared
-// `commands.reload` (e.g. `systemctl daemon-reload`, `nginx -s reload`) runs
-// through the command runner; otherwise it falls back to the backend's per-unit
-// reload (systemctl reload <unit> / rc-service <svc> reload).
-func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, unit string) func(context.Context) error {
+// reloadClosure builds the engine's reload step. With no native reload declared
+// it asks the backend to reload in place (systemctl reload <unit> /
+// rc-service <svc> reload). A `reload:` block (or legacy commands.reload) adds a
+// native reload — a signal to the main process or a command — that either
+// overrides the backend reload (`when: always`) or stands in for it only when the
+// init backend cannot reload the unit itself (`when: auto`, the default).
+func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string) func(context.Context) error {
+	initReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
+
+	spec := parseReloadSpec(tree)
+	if spec == nil {
+		return initReload
+	}
+	native := nativeReloadFunc(spec, deps, backend, unit, tree)
+	if spec.always {
+		return native
+	}
+	// `when: auto` — prefer the backend reload, fall back to the native reload only
+	// when the unit/script exposes no reload of its own.
+	return func(ctx context.Context) error {
+		if ok, _ := mgr.SupportsReload(ctx, unit); ok {
+			return initReload(ctx)
+		}
+		return native(ctx)
+	}
+}
+
+// reloadSpec is the parsed native-reload declaration: exactly one of command or
+// signal, plus whether it always replaces the backend reload (legacy
+// commands.reload and `when: always`) or only fills in when the init cannot.
+type reloadSpec struct {
+	command []string
+	signal  syscall.Signal
+	hasSig  bool
+	always  bool
+}
+
+// parseReloadSpec reads the native reload from the `reload:` block, falling back
+// to a legacy `commands.reload` command (treated as `when: always`). A present
+// `reload:` block fully shadows any legacy `commands.reload`: even an
+// empty/invalid block (which validation rejects, so it cannot reach runtime)
+// returns nil here rather than consulting the legacy command. It returns nil when
+// neither is present or the block is empty/invalid; the engine then uses the
+// plain backend reload. Note a bare `reload: { command: [...] }` defaults to
+// `when: auto` (prefer the init reload), unlike legacy `commands.reload` which is
+// always `when: always`.
+func parseReloadSpec(tree map[string]any) *reloadSpec {
+	if r, ok := tree["reload"].(map[string]any); ok {
+		spec := &reloadSpec{always: cfgval.AsString(r["when"]) == "always"}
+		if name := cfgval.AsString(r["signal"]); name != "" {
+			sig, err := process.ParseSignal(name)
+			if err != nil {
+				return nil
+			}
+			spec.signal, spec.hasSig = sig, true
+			return spec
+		}
+		if argv := cfgval.StringArray(r["command"]); len(argv) > 0 {
+			spec.command = argv
+			return spec
+		}
+		return nil
+	}
 	if argv := reloadCommand(tree); len(argv) > 0 {
-		runner := deps.Runner
+		return &reloadSpec{command: argv, always: true}
+	}
+	return nil
+}
+
+// nativeReloadFunc turns a reloadSpec into the closure that performs the reload:
+// running its command, or sending its signal to the service's main process.
+func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, tree map[string]any) func(context.Context) error {
+	if spec.hasSig {
+		pidfile := reloadPidfile(tree)
 		return func(ctx context.Context) error {
-			res, err := runner.Run(ctx, argv[0], argv[1:]...)
+			pid, err := reloadPID(deps.Runner, backend, unit, pidfile)
 			if err != nil {
 				return err
 			}
-			if res.ExitCode != 0 {
-				msg := strings.TrimSpace(res.Stderr)
-				if msg == "" {
-					msg = strings.TrimSpace(res.Stdout)
-				}
-				return fmt.Errorf("reload command exited %d: %s", res.ExitCode, msg)
-			}
-			return nil
+			return process.OSSignaler{}.Signal(pid, spec.signal)
 		}
 	}
-	return func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
+	argv := spec.command
+	runner := deps.Runner
+	return func(ctx context.Context) error {
+		res, err := runner.Run(ctx, argv[0], argv[1:]...)
+		if err != nil {
+			return err
+		}
+		if res.ExitCode != 0 {
+			msg := strings.TrimSpace(res.Stderr)
+			if msg == "" {
+				msg = strings.TrimSpace(res.Stdout)
+			}
+			return fmt.Errorf("reload command exited %d: %s", res.ExitCode, msg)
+		}
+		return nil
+	}
 }
 
-// reloadCommand extracts the optional `commands.reload` command array.
+// reloadPID resolves the process to signal for a native reload: systemd's MainPID
+// when available, otherwise the service's pidfile (the only source on OpenRC).
+func reloadPID(runner execx.Runner, backend, unit, pidfile string) (int, error) {
+	if pid, ok := servicemgr.MainPID(runner, servicemgr.Backend(backend), unit); ok {
+		return pid, nil
+	}
+	if pidfile != "" {
+		return process.ReadPidfile(pidfile)
+	}
+	return 0, fmt.Errorf("reload: cannot resolve a pid to signal — the backend exposes no MainPID (OpenRC) and the service declares no pidfile:; add a pidfile: so the signal target can be found")
+}
+
+// reloadPidfile returns the service's pidfile path from its processes section (a
+// pidfile selector, as produced by the `pidfile:` shorthand), used as the signal
+// target when the backend has no MainPID (OpenRC).
+func reloadPidfile(tree map[string]any) string {
+	procs, ok := tree["processes"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	for _, v := range procs {
+		if m, ok := v.(map[string]any); ok && cfgval.AsString(m["type"]) == "pidfile" {
+			if paths := cfgval.StringList(m["path"]); len(paths) > 0 {
+				return paths[0]
+			}
+		}
+	}
+	return ""
+}
+
+// reloadCommand extracts the optional legacy `commands.reload` command array.
 func reloadCommand(tree map[string]any) []string {
 	cmds, _ := tree["commands"].(map[string]any)
 	if cmds == nil {

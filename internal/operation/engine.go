@@ -22,6 +22,9 @@ type Manager interface {
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
 	Reload(ctx context.Context, service string) error
+	// SupportsReload reports whether the init backend can reload the unit in place,
+	// so the reload step can fall back to a native signal/command when it cannot.
+	SupportsReload(ctx context.Context, service string) (bool, error)
 	Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error)
 	// ResetState reconciles the init's recorded state with reality after a clean
 	// stop (systemd reset-failed, OpenRC zap).
@@ -52,8 +55,10 @@ type Engine struct {
 	Preflight   func(ctx context.Context) checks.Outcome
 	Postflight  func(ctx context.Context) checks.Outcome
 	// ReloadFunc reloads the service's config in place. When nil the engine falls
-	// back to Manager.Reload (the backend per-unit reload); a daemon's
-	// commands.reload overrides it (e.g. `systemctl daemon-reload`).
+	// back to Manager.Reload (the backend per-unit reload). A `reload:` block (or
+	// legacy commands.reload) builds a richer closure: a native signal/command that
+	// either overrides the backend reload (`when: always`) or stands in for it when
+	// the init has no reload of its own (`when: auto`).
 	ReloadFunc       func(ctx context.Context) error
 	Discover         func() ([]process.Process, error)
 	Reaper           process.Reaper
