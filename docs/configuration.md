@@ -637,9 +637,9 @@ These conventions keep the per-type sections below short:
 
   The same `expect_exit` / `expect_stdout` / `expect_stderr` fields work on a
   `command` check (see [Checks](rules.md#checks)).
-- **Evaluation model.** A **level check** (`storage`, `memory`, `load`, `fds`,
-  `conntrack`, `entropy`, `zombies`, swap `usage`) fires when **every present
-  predicate holds**
+- **Evaluation model.** A **level check** (`storage`, `memory`, `pressure`,
+  `load`, `fds`, `conntrack`, `entropy`, `zombies`, swap `usage`) fires when
+  **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
   at least one, and add `for: { cycles: N }` to require N consecutive cycles.
   Predicate values share one grammar across every level check: a `*_pct` field
@@ -694,8 +694,8 @@ subject/body carry the watch's message and the same `SERMO_*` fields a hook
 receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
-host-resource ones below (`storage`, `memory`, `load`, `fds`, `conntrack`,
-`entropy`, `zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
+host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
+`conntrack`, `entropy`, `zombies`, `oom`, `cert`) *and* the service checks (`tcp`, `ports`, `http`,
 `command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`,
 `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
 such as `mysql`/`smtp`) — can be used as a watch here, and
@@ -953,6 +953,31 @@ Predicates: `used_pct`, `available_pct` (of total RAM) and `available_bytes`
 `/proc/meminfo` reports no total never fires. Pair with `for: { cycles: 3 }` so
 a momentary spike does not alert. Hook extras: `SERMO_TOTAL_BYTES`,
 `SERMO_AVAILABLE_BYTES`, `SERMO_USED_PCT`, `SERMO_AVAILABLE_PCT`.
+
+### `pressure` — kernel PSI stall time
+
+A `pressure` watch checks a kernel **PSI** resource (`/proc/pressure/cpu`,
+`memory` or `io`) against stall-percentage thresholds. PSI reports the share of
+wall time tasks spent **stalled** waiting on the resource — the kernel's own
+"this host is struggling" signal. It complements `load` (queue depth) and
+`memory` (headroom) with actual experienced stall: a host can look fine on both
+and still be thrashing.
+
+```yaml
+check:                                   # in a watches: entry like `load` above
+  type: pressure
+  resource: memory                       # required: cpu | memory | io
+  some_avg10: { op: ">", value: 10 }     # % of time SOME tasks stalled (10s avg)
+  # full_avg60: { op: ">", value: 5 }    # % of time ALL tasks stalled (60s avg)
+```
+
+Predicates (each a stall percentage, 10s/60s/300s rolling windows):
+`some_avg10`/`some_avg60`/`some_avg300` and `full_avg10`/`full_avg60`/
+`full_avg300`. `some` means at least one task stalled; `full` means every
+non-idle task stalled (the severe form; for `cpu` it is 0 or absent on older
+kernels). Prefer `some_avg60`/`full_avg60` with a `for` window for sustained
+pressure. A kernel built without PSI (`CONFIG_PSI=n`) never fires. Hook extras:
+`SERMO_RESOURCE` and all six `SERMO_SOME_*`/`SERMO_FULL_*` averages.
 
 ### `oom` — kernel OOM kills
 

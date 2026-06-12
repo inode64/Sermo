@@ -1267,3 +1267,22 @@ func TestValidateMemoryWatch(t *testing.T) {
 		t.Fatalf("valid memory watch flagged: %v", w)
 	}
 }
+
+func TestValidatePressureWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"mem-stall": map[string]any{
+				"check": map[string]any{
+					"type":       "pressure",
+					"resource":   "memory",
+					"some_avg10": map[string]any{"op": ">", "value": 10},
+				},
+				"for":  map[string]any{"cycles": 3},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("valid pressure watch flagged: %v", w)
+	}
+}

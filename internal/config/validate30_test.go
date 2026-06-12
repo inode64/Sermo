@@ -1016,3 +1016,29 @@ checks:
 	mustHave(t, bad, "checks.no-pred requires at least one of used_pct/available_pct/available_bytes")
 	mustHave(t, bad, `available_bytes value "1024" must include a size suffix`)
 }
+
+func TestValidatePressureCheck(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  mem-stall: { type: pressure, resource: memory, some_avg10: { op: ">", value: 10 } }
+`)
+	if hasIssue(good, "pressure") || hasIssue(good, "mem-stall") {
+		t.Fatalf("valid pressure check flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  bad-res: { type: pressure, resource: disk, some_avg10: { op: ">", value: 10 } }
+  no-pred: { type: pressure, resource: cpu }
+`)
+	mustHave(t, bad, "checks.bad-res.resource must be cpu, memory or io")
+	mustHave(t, bad, "checks.no-pred requires at least one of some_avg10/some_avg60/some_avg300/full_avg10/full_avg60/full_avg300")
+}

@@ -186,6 +186,19 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-memory-alert.sh]
+  # Watch kernel PSI: % of wall time tasks stalled waiting on memory. The
+  # kernel's own pressure signal — catches thrashing load/memory can miss.
+  mem-pressure:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: pressure
+      resource: memory
+      some_avg60: { op: ">", value: 10 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-pressure-alert.sh]
   # Watch system file descriptors against the kernel fs.file-max limit.
   fds:
     monitor: disabled
