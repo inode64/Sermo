@@ -96,9 +96,6 @@ notifiers:
     # enabled: false  # keep configured but skip delivery attempts
     type: slack
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
-  # ops-teams:
-  #   type: teams     # Microsoft Teams Workflows incoming-webhook URL
-  #   webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/..."
 
 # Default notification targets for watches/rules that omit notify. Uncomment to
 # avoid repeating then.notify everywhere. Use per-watch notify: [none] to suppress.
