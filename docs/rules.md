@@ -31,6 +31,7 @@ which reuse the same schema). MVP types:
 | `memory`      | system RAM vs the kernel's MemAvailable (used_pct/available_pct/available_bytes) |
 | `pressure`    | kernel PSI stall time for cpu/memory/io (`some_*`/`full_*` avg10/60/300) |
 | `fds`         | system file descriptors vs `fs.file-max` (used_pct/free/allocated)  |
+| `pids`        | the kernel PID table vs `kernel.pid_max` (used_pct/free/count)      |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
 | `entropy`     | available kernel entropy satisfies `avail {op, value}`              |
 | `zombies`     | the count of zombie processes satisfies `count {op, value}`         |

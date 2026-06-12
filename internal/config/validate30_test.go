@@ -1042,3 +1042,27 @@ checks:
 	mustHave(t, bad, "checks.bad-res.resource must be cpu, memory or io")
 	mustHave(t, bad, "checks.no-pred requires at least one of some_avg10/some_avg60/some_avg300/full_avg10/full_avg60/full_avg300")
 }
+
+func TestValidatePidsCheck(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  pid-table: { type: pids, used_pct: { op: ">=", value: "90%" } }
+`)
+	if hasIssue(good, "pid-table") {
+		t.Fatalf("valid pids check flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-pred: { type: pids }
+`)
+	mustHave(t, bad, "checks.no-pred requires at least one of used_pct/free/count")
+}

@@ -31,6 +31,8 @@ var (
 	PressurePredFields = []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"}
 	// FdsPredFields are the predicates of an fds check.
 	FdsPredFields = []string{"used_pct", "free", "allocated"}
+	// PidsPredFields are the predicates of a pids check.
+	PidsPredFields = []string{"used_pct", "free", "count"}
 	// ConntrackPredFields are the predicates of a conntrack check.
 	ConntrackPredFields = []string{"used_pct", "free", "count"}
 	// LoadPredFields are the predicates of a load check.
