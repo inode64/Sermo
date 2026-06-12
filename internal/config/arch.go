@@ -46,13 +46,14 @@ func goarchToUname(goarch string) string {
 	}
 }
 
-// bakeArch substitutes ${arch} with the detected architecture across every loaded
-// document. Doing it once at load — before version-template discovery and before
-// the variable pipeline — keeps ${arch} out of variable values (so it never trips
-// the no-nested-variables rule) and lets the version glob and library paths see a
-// concrete architecture.
-func (c *Config) bakeArch() {
+// bakeBuiltins substitutes ${arch} and ${os} with their detected values across
+// every loaded document in a single tree walk. Doing it once at load — before
+// version-template discovery and before the variable pipeline — keeps the
+// tokens out of variable values (so they never trip the no-nested-variables
+// rule) and lets the version glob and library paths see concrete values.
+func (c *Config) bakeBuiltins() {
+	repl := strings.NewReplacer(archMarker, detectedArch, osMarker, detectedOS)
 	for _, doc := range c.docs {
-		doc.Body = bindToken(doc.Body, archMarker, detectedArch).(map[string]any)
+		doc.Body = bindTokens(doc.Body, repl).(map[string]any)
 	}
 }

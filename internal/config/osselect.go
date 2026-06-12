@@ -39,14 +39,6 @@ func osReleaseID() string {
 	return ""
 }
 
-// bakeOS substitutes ${os} with the detected OS id across every loaded document,
-// alongside bakeArch.
-func (c *Config) bakeOS() {
-	for _, doc := range c.docs {
-		doc.Body = bindToken(doc.Body, osMarker, detectedOS).(map[string]any)
-	}
-}
-
 // applyOSSelectors collapses every `os:` selector block in every loaded document.
 // An `os:` key holding a map of os-id -> block selects the branch for the detected
 // OS (or a `default` branch), merges it into the surrounding map, and discards the
