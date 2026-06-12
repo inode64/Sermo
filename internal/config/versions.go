@@ -164,19 +164,26 @@ func instantiateVersion(body map[string]any, templateName, value string, tok tmp
 // bindToken replaces every occurrence of marker in every string of the tree with
 // value. Unlike full expansion it touches only that one marker.
 func bindToken(v any, marker, value string) any {
+	return bindTokens(v, strings.NewReplacer(marker, value))
+}
+
+// bindTokens applies a Replacer to every string of the tree in one pass,
+// cloning maps/lists as it goes — so multiple built-in tokens (arch, os) cost
+// one tree walk instead of one per token.
+func bindTokens(v any, repl *strings.Replacer) any {
 	switch t := v.(type) {
 	case string:
-		return strings.ReplaceAll(t, marker, value)
+		return repl.Replace(t)
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, e := range t {
-			out[k] = bindToken(e, marker, value)
+			out[k] = bindTokens(e, repl)
 		}
 		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, e := range t {
-			out[i] = bindToken(e, marker, value)
+			out[i] = bindTokens(e, repl)
 		}
 		return out
 	default:
