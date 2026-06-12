@@ -129,13 +129,16 @@ apps: [java]
 ```
 
 On resolution each linked app's preflight checks are injected into the service's
-preflight under namespaced keys (`app-<name>-<check>`), carrying the app's own
-binary path and version command:
+preflight under keys namespaced by the app name (`<app>-<check>`), carrying the
+app's own binary path and version command. When a service links several apps,
+each one's checks stay distinct — e.g. `backrest`'s `apps: [backrest, restic]`
+yields `backrest-binary`, `backrest-version`, `restic-binary`, `restic-version`,
+so a missing `restic` raises its own alert separate from `backrest`:
 
 ```yaml
 preflight:
-  app-java-binary:  { type: binary, path: /usr/bin/java }
-  app-java-version: { type: command, command: ["/usr/bin/java", "-version"] }
+  java-binary:  { type: binary, path: /usr/bin/java }
+  java-version: { type: command, command: ["/usr/bin/java", "-version"] }
 ```
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
