@@ -13,6 +13,11 @@ variables:
   host: 127.0.0.1
   port: 1883
 
+restart_on_change:
+  # Restart when a linked critical library changes on disk (e.g. an
+  # OpenSSL CVE update), so the service picks up the new code.
+  libraries: [glibc, openssl, systemd-libs]
+
 checks:
   service:
     type: service

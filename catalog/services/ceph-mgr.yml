@@ -25,6 +25,11 @@ processes:
     exe: "${binary}"
     user: "${user}"
 
+restart_on_change:
+  # Restart when a linked critical library changes on disk (e.g. an
+  # OpenSSL CVE update), so the service picks up the new code.
+  #libraries: [glibc, openssl, zlib, sqlite3, lzma, zstd, bzip2, util-linux, udev]
+
 checks:
   service:
     type: service

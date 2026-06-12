@@ -15,6 +15,11 @@ variables:
   host: 127.0.0.1
   port: 8384
 
+restart_on_change:
+  # Restart when a linked critical library changes on disk (e.g. an
+  # OpenSSL CVE update), so the service picks up the new code.
+  libraries: [glibc, zlib, sqlite3]
+
 checks:
   service:
     type: service
