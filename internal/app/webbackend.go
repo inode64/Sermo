@@ -172,7 +172,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			warnings = append(warnings, "skip service "+name+": "+errs[0])
 			continue
 		}
-		disabled := isDisabled(doc.Body)
+		disabled := cfgval.Disabled(doc.Body)
 		base := config.ServiceUnit(resolved.Tree, name)
 		candidates, trust := config.ServiceCandidates(resolved.Tree, string(deps.Backend), name)
 		unit, err := resolver.Resolve(context.Background(), deps.Backend, candidates, trust)
@@ -214,7 +214,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	if raw, _ := cfg.ResolveWatches(); len(raw) > 0 {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
-			disabled := isDisabled(entry)
+			disabled := cfgval.Disabled(entry)
 			ctype := ""
 			fireOnFail := false
 			if ce, ok := entry["check"].(map[string]any); ok {

@@ -112,7 +112,7 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 			warnings = append(warnings, fmt.Sprintf("check %q is not a mapping", name))
 			continue
 		}
-		if disabled(entry) {
+		if cfgval.Disabled(entry) {
 			continue
 		}
 
@@ -1061,15 +1061,6 @@ func Evaluate(results []Result) Outcome {
 		}
 	}
 	return Outcome{OK: ok, Results: results}
-}
-
-func disabled(entry map[string]any) bool {
-	v, ok := entry["enabled"]
-	if !ok {
-		return false
-	}
-	b, ok := v.(bool)
-	return ok && !b
 }
 
 // parseJSONAssertions reads the expect_json mapping into ordered assertions: a

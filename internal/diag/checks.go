@@ -16,7 +16,7 @@ import (
 // config diagnostics) are skipped.
 func diagService(b *builder, cfg *config.Config, name string, global time.Duration, host Host) {
 	doc := cfg.Services[name]
-	if doc == nil || disabled(doc.Body) {
+	if doc == nil || cfgval.Disabled(doc.Body) {
 		return
 	}
 	resolved, errs := cfg.Resolve(name)
@@ -51,7 +51,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 		if !ok {
 			continue
 		}
-		if v, ok := entry["enabled"].(bool); ok && !v {
+		if cfgval.Disabled(entry) {
 			continue
 		}
 		scope := "watch " + name
@@ -140,11 +140,6 @@ func checkAlignment(b *builder, scope string, d, resolution time.Duration) {
 	case time.Duration(n)*resolution != d:
 		b.add(LevelWarning, scope, "interval %s is not a multiple of the %s resolution; it will run every %s", d, resolution, time.Duration(n)*resolution)
 	}
-}
-
-func disabled(body map[string]any) bool {
-	v, ok := body["enabled"].(bool)
-	return ok && !v
 }
 
 func str(v any) string {
