@@ -939,16 +939,11 @@ function stateRank(state) {
   }
 }
 
-function deriveServiceState(s) {
-  if (!s || !s.enabled) return "disabled";
-  const backend = (s.status || "").toLowerCase();
-  if (!s.monitored) return backend === "active" ? "running" : "stopped";
-  if (backend !== "active" || s.check_health === "failing") return "failed";
-  return "monitorized";
-}
-
+// serviceState reads the server-computed state (app.ServiceState). The UI is
+// embedded in the same binary, so the field is always present — deriving it
+// again here would just be a second copy of that logic that could drift.
 function serviceState(s) {
-  return (s && s.state) || deriveServiceState(s);
+  return (s && s.state) || "unknown";
 }
 
 function serviceUnmonitorized(s) {
