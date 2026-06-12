@@ -926,3 +926,36 @@ checks:
 		t.Fatalf("valid cert checks flagged: %v", good)
 	}
 }
+
+func TestValidateContainsOp(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  q: { type: sql, engine: sqlite, path: /var/db/x.db, query: "select status from t", op: contains, value: ok }
+  redis: { type: redis, expect: { role: { op: contains, value: master } } }
+`)
+	if hasIssue(issues, "op") {
+		t.Fatalf("contains should be a valid op, got %v", issues)
+	}
+}
+
+func TestValidateScalarWindowRejected(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  bad:
+    type: remediation
+    if: { failed: { check: http } }
+    for: 3
+    then: { action: restart }
+`)
+	mustHave(t, issues, "for must be a mapping")
+}

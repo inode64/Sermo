@@ -1233,3 +1233,18 @@ func TestValidateWatchWithoutCheckStillValidatesEntry(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateScalarWithinRejectedOnWatch(t *testing.T) {
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"root": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"within": "1h",
+				"then":   map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if !hasIssue(bad, "watches.root.within must be a mapping") {
+		t.Fatalf("scalar within should be rejected, got %v", bad)
+	}
+}

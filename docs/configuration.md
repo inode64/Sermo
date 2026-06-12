@@ -609,7 +609,7 @@ These conventions keep the per-type sections below short:
   treat another code as success. `expect_stdout` / `expect_stderr` additionally
   check the captured output — a plain string requires that substring, or an
   `{op, value}` mapping compares the trimmed output with the same operators as an
-  http check's `expect_body` (`== != > >= < <= =~`). A failed assertion is a
+  http check's `expect_body` (`== != > >= < <= contains =~`). A failed assertion is a
   `hook-failed` event with the mismatch detail.
 
   ```yaml

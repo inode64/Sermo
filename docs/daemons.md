@@ -777,7 +777,7 @@ it as part of monitoring or remediation; the `sermoctl apps`/`libs`/`services`
 listings run the `version` command to report a daemon's version and confirm it
 runs. That run can assert its outcome, the same way a watch hook or `command`
 check does: `expect_exit` (default 0) and optional `expect_stdout`/`expect_stderr`
-matchers — a substring or an `{op, value}` comparison (`== != > >= < <= =~`).
+matchers — a substring or an `{op, value}` comparison (`== != > >= < <= contains =~`).
 
 ```yaml
 commands:
