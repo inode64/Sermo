@@ -77,8 +77,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		}
 	}
 	cfg.applyOSSelectors()
-	cfg.bakeArch()
-	cfg.bakeOS()
+	cfg.bakeBuiltins()
 	cfg.materializeVersionTemplates()
 	return cfg, nil
 }
