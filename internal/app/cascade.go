@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"sermo/internal/config"
 	"sermo/internal/operation"
 )
 
@@ -82,19 +81,6 @@ func OrderedGroup(root, action string, lookup func(string) []string, visited map
 	}
 	if stop {
 		out = append(out, root)
-	}
-	return out
-}
-
-// BuildStopArtifacts maps a service's resolved stop_policy invariants into the
-// engine form. It is the single mapping shared by every engine build — the daemon
-// worker, the web backend and the sermoctl CLI — so the config→engine translation
-// is not duplicated across those surfaces.
-func BuildStopArtifacts(tree map[string]any) operation.StopArtifacts {
-	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
-	out := operation.StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled}
-	for _, c := range clean {
-		out.Clean = append(out.Clean, operation.CleanPath{Path: c.Path, Recursive: c.Recursive})
 	}
 	return out
 }
