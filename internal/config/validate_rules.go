@@ -90,7 +90,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 	}
 	switch mode := cfgval.String(m["mode"]); mode {
 	case "", "consecutive":
-	case "within", "sliding":
+	case "within":
 		matches, _ := cfgval.Int(m["min_matches"])
 		switch {
 		case matches <= 0:
@@ -145,7 +145,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		for _, act := range actions {
 			if act.typ != "" {
 				if _, ok := validActions[act.typ]; !ok {
-					add("%s then.action %q is not one of restart, start, stop, alert, block", path, act.typ)
+					add("%s then.action %q is not one of restart, start, stop, reload, alert, block", path, act.typ)
 				}
 			}
 			if act.typ == "block" {
