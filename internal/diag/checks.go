@@ -45,7 +45,7 @@ func diagService(b *builder, cfg *config.Config, name string, global time.Durati
 // diagWatches diagnoses host watches: interval alignment and referenced
 // interfaces, files/directories and mount points.
 func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host) {
-	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	watches, _ := cfg.ResolveWatches()
 	for _, name := range slices.Sorted(maps.Keys(watches)) {
 		entry, ok := watches[name].(map[string]any)
 		if !ok {

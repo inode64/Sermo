@@ -2071,3 +2071,82 @@ func TestStopInvariants(t *testing.T) {
 		t.Fatalf("pidfile_absent off must yield no pidfile paths, got %v", pp2)
 	}
 }
+
+func TestGlobalCustomVariables(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+engine: { backend: auto }
+paths:
+  catalog: [ @ROOT@/catalog ]
+  includes: [ @ROOT@/enabled ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+  variables:
+    cvar: /opt/data
+    host: 10.0.0.9
+`,
+		"catalog/svc.yml": `
+kind: daemon
+name: svc
+checks:
+  f: { type: file_exists, path: "${cvar}/file" }
+  h: { type: command, command: ["echo", "${host}"] }
+`,
+		"enabled/a.yml": "kind: service\nname: a\nuses: svc\n",
+		// b overrides the custom host with its own variable.
+		"enabled/b.yml": "kind: service\nname: b\nuses: svc\nvariables: { host: 127.0.0.1 }\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// custom var used in a service-level variable, then in a check.
+	ra, errs := cfg.Resolve("a")
+	if len(errs) != 0 {
+		t.Fatalf("resolve a: %v", errs)
+	}
+	checks := ra.Tree["checks"].(map[string]any)
+	if got := checks["f"].(map[string]any)["path"]; got != "/opt/data/file" {
+		t.Fatalf("custom var not expanded: %v", got)
+	}
+	// custom host overrides the builtin host (custom > builtins).
+	if got := checks["h"].(map[string]any)["command"].([]any)[1]; got != "10.0.0.9" {
+		t.Fatalf("custom host should override builtin, got %v", got)
+	}
+	// a service's own variable overrides the custom one (service > custom).
+	rb, _ := cfg.Resolve("b")
+	cmd := rb.Tree["checks"].(map[string]any)["h"].(map[string]any)["command"].([]any)
+	if cmd[1] != "127.0.0.1" {
+		t.Fatalf("service variable should override custom, got %v", cmd[1])
+	}
+}
+
+func TestResolveWatchesExpandsCustomVars(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+engine: { backend: auto }
+paths:
+  catalog: [ @ROOT@/catalog ]
+  includes: [ @ROOT@/enabled ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+  variables: { cdir: /var/spool }
+watches:
+  w: { check: { type: file_exists, path: "${cdir}/flag" } }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	watches, errs := cfg.ResolveWatches()
+	if len(errs) != 0 {
+		t.Fatalf("ResolveWatches: %v", errs)
+	}
+	got := watches["w"].(map[string]any)["check"].(map[string]any)["path"]
+	if got != "/var/spool/flag" {
+		t.Fatalf("watch custom var not expanded: %v", got)
+	}
+}
