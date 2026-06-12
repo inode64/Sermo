@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -43,7 +42,7 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		port = 111
 	}
 
-	xid := rpcXID()
+	xid := randXID32()
 	c, err := BindDialer(cfg.Interface).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
@@ -64,14 +63,6 @@ func (rpcbindProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 	return Result{Extra: map[string]string{"program": "100000", "rpc_status": status}}, nil
-}
-
-func rpcXID() uint32 {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return 0x53524d4f // "SRMO"
-	}
-	return binary.BigEndian.Uint32(b[:])
 }
 
 // buildRPCNull builds an ONC RPC CALL for the NULL procedure of program prog

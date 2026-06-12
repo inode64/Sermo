@@ -152,7 +152,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 		}
 		err := writeLockFileExclusive(path, lf)
 		if err == nil {
-			return &Handle{path: path, ownerPID: ownerPID, ownerStartTicks: ownerTicks}, nil
+			return &Handle{ownedLock{path: path, ownerPID: ownerPID, ownerStartTicks: ownerTicks}}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, fmt.Errorf("acquire %s: %w", path, err)

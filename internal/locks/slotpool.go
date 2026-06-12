@@ -13,32 +13,16 @@ var errSlotBusy = errors.New("operation slot busy")
 
 // SlotHandle is one acquired global operation slot.
 type SlotHandle struct {
-	path            string
-	ownerPID        int
-	ownerStartTicks uint64
-	released        bool
+	ownedLock
 }
 
-// Release frees the slot for another operation.
+// Release frees the slot for another operation, only while the slot file still
+// carries this owner's identity. Safe on a nil handle.
 func (h *SlotHandle) Release() error {
-	if h == nil || h.released {
+	if h == nil {
 		return nil
 	}
-	current, err := readLockFile(h.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			h.released = true
-			return nil
-		}
-		return err
-	}
-	if current.OwnerPID == h.ownerPID && current.OwnerStartTicks == h.ownerStartTicks {
-		if err := os.Remove(h.path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	h.released = true
-	return nil
+	return h.release()
 }
 
 // SlotPool bounds how many service operations may run at once across processes
@@ -156,7 +140,7 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 		CreatedAt:       now(),
 	}
 	if err := writeLockFileExclusive(path, payload); err == nil {
-		return &SlotHandle{path: path, ownerPID: pid, ownerStartTicks: ticks}, nil
+		return &SlotHandle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
 	} else if !errors.Is(err, os.ErrExist) {
 		return nil, fmt.Errorf("acquire %s: %w", path, err)
 	}

@@ -22,21 +22,18 @@ type HeldError struct {
 
 func (e *HeldError) Error() string { return "operation in progress" }
 
-// Handle is an acquired operation lock owned by this process. Release removes it.
-type Handle struct {
+// ownedLock is the owner-checked release shared by the operation lock and the
+// slot pool: the file is removed only while it still carries this owner's
+// identity; a lock reclaimed by someone else is left untouched (section 20).
+type ownedLock struct {
 	path            string
 	ownerPID        int
 	ownerStartTicks uint64
 	released        bool
 }
 
-// Path returns the lock file path.
-func (h *Handle) Path() string { return h.path }
-
-// Release removes the lock, but only if it is still this owner's lock. A lock
-// reclaimed by someone else is left untouched (section 20).
-func (h *Handle) Release() error {
-	if h == nil || h.released {
+func (h *ownedLock) release() error {
+	if h.released {
 		return nil
 	}
 	current, err := readLockFile(h.path)
@@ -54,6 +51,23 @@ func (h *Handle) Release() error {
 	}
 	h.released = true
 	return nil
+}
+
+// Handle is an acquired operation lock owned by this process. Release removes it.
+type Handle struct {
+	ownedLock
+}
+
+// Path returns the lock file path.
+func (h *Handle) Path() string { return h.path }
+
+// Release removes the lock, but only if it is still this owner's lock. Safe on
+// a nil handle, so callers can defer it unconditionally.
+func (h *Handle) Release() error {
+	if h == nil {
+		return nil
+	}
+	return h.release()
 }
 
 // OperationLocker acquires the internal operation lock that serializes
@@ -115,7 +129,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 		}
 		err := writeLockFileExclusive(path, payload)
 		if err == nil {
-			return &Handle{path: path, ownerPID: pid, ownerStartTicks: ticks}, nil
+			return &Handle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, fmt.Errorf("acquire %s: %w", path, err)
