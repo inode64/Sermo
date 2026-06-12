@@ -2071,13 +2071,18 @@ function pctVal(metrics, name) {
   return m.ready === false ? v + " (stale)" : v;
 }
 
+// shortDur renders a second count on the shared s/m/h/d ladder ("37s", "5m",
+// "3h", "2d"); every age/remaining formatter builds on it.
+function shortDur(sec) {
+  sec = Math.max(0, Math.floor(Number(sec) || 0));
+  if (sec < 60) return sec + "s";
+  if (sec < 3600) return Math.floor(sec / 60) + "m";
+  if (sec < 86400) return Math.floor(sec / 3600) + "h";
+  return Math.floor(sec / 86400) + "d";
+}
+
 function fmtSeconds(n) {
-  n = Math.max(0, Math.floor(Number(n) || 0));
-  if (n <= 0) return "0s";
-  if (n < 60) return n + "s";
-  if (n < 3600) return Math.floor(n / 60) + "m";
-  if (n < 86400) return Math.floor(n / 3600) + "h";
-  return Math.floor(n / 86400) + "d";
+  return shortDur(n);
 }
 
 function lockName(l) {
@@ -2959,8 +2964,7 @@ function fmtRemain(until) {
   if (isNaN(d)) return "";
   const sec = Math.floor((d - Date.now()) / 1000);
   if (sec <= 0) return "elapsed";
-  if (sec < 60) return sec + "s remaining";
-  if (sec < 3600) return Math.floor(sec / 60) + "m remaining";
+  if (sec < 3600) return shortDur(sec) + " remaining";
   return Math.floor(sec / 3600) + "h remaining · until " + fmtTime(until);
 }
 
@@ -2969,9 +2973,7 @@ function fmtUntilShort(until) {
   if (isNaN(d)) return "";
   const sec = Math.floor((d - Date.now()) / 1000);
   if (sec <= 0) return "now";
-  if (sec < 60) return "in " + sec + "s";
-  if (sec < 3600) return "in " + Math.floor(sec / 60) + "m";
-  if (sec < 86400) return "in " + Math.floor(sec / 3600) + "h";
+  if (sec < 86400) return "in " + shortDur(sec);
   return d.toLocaleDateString();
 }
 
@@ -3027,9 +3029,7 @@ function fmtAge(t) {
   if (isNaN(d)) return "";
   const sec = Math.floor((Date.now() - d) / 1000);
   if (sec < 0) return "just now";
-  if (sec < 60) return sec + "s ago";
-  if (sec < 3600) return Math.floor(sec / 60) + "m ago";
-  if (sec < 86400) return Math.floor(sec / 3600) + "h ago";
+  if (sec < 86400) return shortDur(sec) + " ago";
   return fmtTime(t);
 }
 
