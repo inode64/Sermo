@@ -86,9 +86,11 @@ func OrderedGroup(root, action string, lookup func(string) []string, visited map
 	return out
 }
 
-// stopArtifacts maps a service's resolved stop_policy invariants into the engine
-// form, shared by the daemon worker and web backend engine builds.
-func stopArtifacts(tree map[string]any) operation.StopArtifacts {
+// BuildStopArtifacts maps a service's resolved stop_policy invariants into the
+// engine form. It is the single mapping shared by every engine build — the daemon
+// worker, the web backend and the sermoctl CLI — so the config→engine translation
+// is not duplicated across those surfaces.
+func BuildStopArtifacts(tree map[string]any) operation.StopArtifacts {
 	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
 	out := operation.StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled}
 	for _, c := range clean {
