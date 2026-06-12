@@ -5,3 +5,6 @@ variables:
   binary: /usr/bin/mosquitto
 preflight:
   binary: { type: binary, path: "${binary}" }
+  # mosquitto has no --version flag; -h prints the usage with
+  # "mosquitto version 2.0.22" as its first line and exits 1.
+  version: { type: command, command: ["${binary}", "-h"], expect_exit: 1, timeout: 10s }
