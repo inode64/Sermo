@@ -836,7 +836,8 @@ function policyStateClass(state) {
 }
 
 function policyCell(s) {
-  const state = s.remediation_state || (s.enabled ? "pending" : "disabled");
+  // remediation_state is always sent (decorateRemediation covers every path).
+  const state = s.remediation_state || "unknown";
   // A paused service shows its state in the State column; don't repeat it here.
   if (state === "paused") return '<span class="muted">—</span>';
   const cd = s.policy_cooldown ? `<div class="muted mono">${esc(s.policy_cooldown)}</div>` : "";

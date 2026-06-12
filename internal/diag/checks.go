@@ -62,13 +62,13 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 		if check == nil {
 			continue
 		}
-		switch str(check["type"]) {
+		switch cfgval.AsString(check["type"]) {
 		case "net":
-			if iface := str(check["interface"]); iface != "" && !host.InterfaceExists(iface) {
+			if iface := cfgval.AsString(check["interface"]); iface != "" && !host.InterfaceExists(iface) {
 				b.add(LevelWarning, scope, "network interface %q does not exist", iface)
 			}
 		case "file":
-			if p := str(check["path"]); p != "" && !host.PathExists(p) {
+			if p := cfgval.AsString(check["path"]); p != "" && !host.PathExists(p) {
 				b.add(LevelWarning, scope, "path %q does not exist", p)
 			}
 		default:
@@ -82,23 +82,23 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 // diagCheckResources flags host resources referenced by a single-shot check
 // that do not exist on this host. Shared by service checks and host watches.
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
-	switch str(entry["type"]) {
+	switch cfgval.AsString(entry["type"]) {
 	case "storage", "disk":
 		diagDiskResources(b, scope, entry, host)
 	case "count":
-		if p := str(entry["path"]); p != "" && !host.PathExists(p) {
+		if p := cfgval.AsString(entry["path"]); p != "" && !host.PathExists(p) {
 			b.add(LevelWarning, scope, "directory %q does not exist", p)
 		}
 	case "diskio":
-		if dev := str(entry["device"]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
+		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists("/sys/class/block/"+dev) {
 			b.add(LevelWarning, scope, "block device %q does not exist (no /sys/class/block entry)", dev)
 		}
 	case "hdparm", "smart":
-		if dev := str(entry["device"]); dev != "" && !host.PathExists(dev) {
+		if dev := cfgval.AsString(entry["device"]); dev != "" && !host.PathExists(dev) {
 			b.add(LevelWarning, scope, "device %q does not exist", dev)
 		}
 	case "pressure":
-		if res := str(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
+		if res := cfgval.AsString(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
 			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
 	}
@@ -107,7 +107,7 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 // diagDiskResources flags a storage check's path when it is missing, and a configured
 // mount that is not currently mounted.
 func diagDiskResources(b *builder, scope string, fields map[string]any, host Host) {
-	p := str(fields["path"])
+	p := cfgval.AsString(fields["path"])
 	if p == "" {
 		return
 	}
@@ -140,9 +140,4 @@ func checkAlignment(b *builder, scope string, d, resolution time.Duration) {
 	case time.Duration(n)*resolution != d:
 		b.add(LevelWarning, scope, "interval %s is not a multiple of the %s resolution; it will run every %s", d, resolution, time.Duration(n)*resolution)
 	}
-}
-
-func str(v any) string {
-	s, _ := v.(string)
-	return s
 }
