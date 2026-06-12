@@ -824,3 +824,51 @@ policy: { cooldown: 5m }
 		t.Fatalf("valid service interval flagged: %v", good)
 	}
 }
+
+func TestValidateCountCheckNestedThreshold(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  backlog: { type: count, path: /var/spool, count: { op: ">", value: 1000 } }
+`)
+	if hasIssue(good, "count") {
+		t.Fatalf("nested count threshold flagged: %v", good)
+	}
+
+	mixed := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  backlog: { type: count, path: /var/spool, op: ">", value: 5, count: { op: ">", value: 1000 } }
+`)
+	mustHave(t, mixed, "count check must not mix a nested count {op, value} with top-level op/value")
+}
+
+func TestValidatePidfileCheckRequiresPath(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  pid: { type: pidfile }
+`)
+	mustHave(t, issues, "path is required for a pidfile check")
+}
+
+func TestValidatePercentBound(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  rootfs: { type: storage, path: /, used_pct: { op: ">=", value: "150%" } }
+`)
+	mustHave(t, issues, `used_pct value "150%" must be a percentage in 0..100`)
+}

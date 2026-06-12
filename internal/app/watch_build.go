@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -471,18 +472,13 @@ func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 	if !isStorageCheckType(checkType) {
 		return nil, fmt.Errorf("then.expand is only valid on a storage watch, not %q", checkType)
 	}
-	by := cfgval.AsString(raw["by"])
-	if by == "" {
-		return nil, fmt.Errorf("then.expand requires a `by` size (e.g. 5G)")
+	// The same grammar as every *_bytes threshold: an explicit size suffix is
+	// required so a raw byte count is never confused with another unit.
+	n, ok := cfgval.ByteSize(raw["by"])
+	if !ok || n == 0 || n > math.MaxInt64 {
+		return nil, fmt.Errorf("then.expand requires a positive `by` size with a K/M/G/T suffix (e.g. 5G)")
 	}
-	n, err := parseSize(by)
-	if err != nil {
-		return nil, fmt.Errorf("then.expand by: %w", err)
-	}
-	if n <= 0 {
-		return nil, fmt.Errorf("then.expand by must be positive")
-	}
-	return &ExpandSpec{By: n}, nil
+	return &ExpandSpec{By: int64(n)}, nil
 }
 
 func isStorageCheckType(typ string) bool {

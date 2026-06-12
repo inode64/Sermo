@@ -1,0 +1,37 @@
+package checks
+
+import "testing"
+
+// The one predicate grammar every level check shares: *_pct accepts a number
+// or a % suffix in 0..100, *_bytes requires a size suffix, the rest is numeric.
+func TestParseLevelPredGrammar(t *testing.T) {
+	preds, err := parseLevelPreds(map[string]any{
+		"used_pct":   map[string]any{"op": ">=", "value": "85%"},
+		"free_bytes": map[string]any{"op": "<", "value": "1G"},
+	}, SwapUsageFields)
+	if err != nil || len(preds) != 2 {
+		t.Fatalf("preds = %v, err = %v", preds, err)
+	}
+	if preds[0].field != "used_pct" || preds[0].value != 85 {
+		t.Errorf("used_pct = %+v, want value 85", preds[0])
+	}
+	if preds[1].field != "free_bytes" || preds[1].value != 1<<30 {
+		t.Errorf("free_bytes = %+v, want value 1Gi", preds[1])
+	}
+
+	if _, err := parseLevelPreds(map[string]any{
+		"used_pct": map[string]any{"op": ">=", "value": "150%"},
+	}, SwapUsageFields); err == nil {
+		t.Error("a percentage above 100 must error")
+	}
+	if _, err := parseLevelPreds(map[string]any{
+		"free_bytes": map[string]any{"op": "<", "value": 1024},
+	}, SwapUsageFields); err == nil {
+		t.Error("a unitless byte size must error")
+	}
+	if _, err := parseLevelPreds(map[string]any{
+		"load5": map[string]any{"op": ">", "value": "high"},
+	}, LoadPredFields); err == nil {
+		t.Error("a non-numeric plain value must error")
+	}
+}
