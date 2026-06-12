@@ -1,4 +1,4 @@
-# Sermo Codex Instructions
+# Sermo Agent Instructions
 
 ## Project summary
 
@@ -39,168 +39,21 @@ process discovery
 
 Do not create two separate implementations of service actions.
 
-## Non-goals for the MVP
-
-Do not implement these unless explicitly requested:
+## TODO
 
 ```text
-web UI
-distributed cluster mode
-remote API authentication
-plugin ABI
-database persistence
-complex notification integrations
-multi-tenant RBAC
-systemd D-Bus integration beyond optional scaffolding
+Distributed cluster mode
+Remote agents
+Remote API authentication
+Multi-tenant RBAC
+Plugin ABI
+Database persistence
+Complex notification integrations
+Metrics export (Prometheus, OpenMetrics)
+Server MCP or gRPC API
+PolicyKit integration
+Native systemd D-Bus backend (the command-based backend works today)
 ```
-
-Prefer a reliable local CLI/daemon first.
-
-## Repository layout
-
-This section is the canonical repository layout — the single source of truth.
-(Spec section 5 below is the original MVP tree, kept for history; this one
-reflects how the tree actually evolved.) Use this structure unless there is a
-strong reason to change it, and update this section in the same change:
-
-```text
-sermo/
-├── cmd/
-│   ├── sermod/
-│   │   └── main.go
-│   └── sermoctl/
-│       └── main.go
-├── internal/
-│   ├── app/
-│   │   ├── daemon.go
-│   │   ├── scheduler.go
-│   │   └── state.go
-│   ├── cli/
-│   │   ├── root.go
-│   │   ├── backend.go
-│   │   ├── service.go
-│   │   ├── config.go
-│   │   ├── locks.go
-│   │   ├── preflight.go
-│   │   └── processes.go
-│   ├── config/
-│   │   ├── model.go
-│   │   ├── loader.go
-│   │   ├── merge.go
-│   │   ├── render.go
-│   │   ├── variables.go
-│   │   └── validate.go
-│   ├── daemons/
-│   │   ├── registry.go
-│   │   ├── resolver.go
-│   │   └── source.go
-│   ├── servicemgr/
-│   │   ├── manager.go
-│   │   ├── detector.go
-│   │   ├── systemd_exec.go
-│   │   ├── openrc.go
-│   │   └── errors.go
-│   ├── checks/
-│   │   ├── check.go
-│   │   ├── runner.go
-│   │   ├── tcp.go
-│   │   ├── http.go
-│   │   ├── command.go
-│   │   ├── service.go
-│   │   ├── file.go
-│   │   ├── process.go
-│   │   └── metric.go
-│   ├── rules/
-│   │   ├── condition.go
-│   │   ├── evaluator.go
-│   │   ├── window.go
-│   │   └── state.go
-│   ├── operation/
-│   │   ├── engine.go
-│   │   ├── start.go
-│   │   ├── stop.go
-│   │   ├── restart.go
-│   │   └── result.go
-│   ├── preflight/
-│   │   ├── runner.go
-│   │   └── result.go
-│   ├── locks/
-│   │   ├── manager.go
-│   │   ├── runtime.go
-│   │   ├── file.go
-│   │   └── external.go
-│   ├── process/
-│   │   ├── model.go
-│   │   ├── discover.go
-│   │   ├── procfs.go
-│   │   ├── tree.go
-│   │   ├── signal.go
-│   │   └── residual.go
-│   ├── metrics/
-│   │   ├── collector.go
-│   │   ├── cpu.go
-│   │   └── memory.go
-│   ├── events/
-│   │   ├── event.go
-│   │   └── logger.go
-│   └── execx/
-│       └── runner.go
-├── catalog/
-│   ├── services/   # long-running daemons (apache.yml, mysql.yml, redis.yml, ...)
-│   ├── apps/       # tools/runtimes (java.yml, git.yml, ...)
-│   └── libs/       # shared libraries (glibc.yml, pam.yml)
-├── configs/
-│   ├── sermo.yml
-│   └── apps-enabled/
-│       ├── apache-main.yml
-│       ├── mysql-main.yml
-│       └── redis-main.yml
-├── packaging/
-│   ├── systemd/
-│   │   └── sermod.service
-│   └── openrc/
-│       └── sermod
-├── docs/
-│   ├── configuration.md
-│   ├── rules.md
-│   ├── daemons.md
-│   └── safety.md
-├── go.mod
-├── go.sum
-├── Makefile
-└── README.md
-```
-
-Notes on package responsibilities:
-
-- Safe operation logic (the old `safety/` idea) lives inside `operation/` and
-  `process/` (residual detection, `kill_only_if` validation, signal escalation),
-  not in a separate package.
-- Cooldown/backoff and other action-gating policy (the old `policy/` idea) is
-  tracked in `rules/` rule state and enforced by `operation/`.
-- The daemon lifecycle (the old `supervisor/` idea) is `app/` (`daemon.go`,
-  `scheduler.go`, `state.go`).
-
-## Dependencies
-
-Keep the MVP dependency set small.
-
-Allowed initial dependencies:
-
-```text
-github.com/spf13/cobra
-github.com/goccy/go-yaml
-github.com/prometheus/procfs
-```
-
-Allowed later dependencies:
-
-```text
-github.com/coreos/go-systemd/v22
-github.com/fsnotify/fsnotify
-```
-
-Use the Go standard library where it is sufficient.
 
 ## Go conventions
 
@@ -349,29 +202,28 @@ The visual layer is a token-driven design system (June 2026 redesign):
 script-src remains nonce-strict (see `securityHeaders` in
 `internal/web/server.go`).
 
-
 ## Wizard option selection
 
-The interactive wizard (`sermoctl wizard`, `internal/assist`) drives every
-selection through the shared `Prompt` helpers — never hand-roll a bespoke
-question. Multi-selects use `Prompt.MultiChoose` (item numbers, the keyword
-`all`, or an option's name); menus with reserved picks use
-`Prompt.MultiChooseKeyword`, where the numbered list shows **only the real
-options** and the reserved answers ride in the question hint instead of
-occupying rows. Reuse one consistent **all / none / default** vocabulary:
-`all` selects everything; `none` opts out; `default` inherits the global
-setting. In the notifier menu the list shows only the notifiers defined in the
-config, and the `none`/`default` keywords are **accepted even when the config
-defines no notifiers**, so an expand-only or opt-out watch still has a valid
-answer. The reserved `none` is **always accepted** — with or without a global
-notify default — and produces a monitor-only watch (`notify: [none]`: state and
-events, no delivery); it is also rejected as a notifier name. Only an inert
-`default` (no global notify configured, and no other action like auto-expand)
-makes the wizard explain why and **re-ask via the shared `ensureNotifyAction`**
-— never abort the run with a hard error, and never hand-roll that validation
-per assistant. Keep these invariants when adding new assistants or selection
-steps, and update `docs/configuration.md` and the wizard spec in the same
-change.
+The wizard (`sermoctl wizard`, `internal/assist`) drives every selection through
+the shared `Prompt` helpers — never hand-roll a bespoke question.
+
+- Multi-selects use `Prompt.MultiChoose`: item numbers, the keyword `all`, or an
+  option's name.
+- Menus with reserved picks use `Prompt.MultiChooseKeyword`: the numbered list
+  shows **only the real options**; reserved answers ride in the question hint.
+- One vocabulary everywhere: `all` selects everything, `none` opts out,
+  `default` inherits the global setting.
+- The notifier menu lists only the notifiers defined in the config. `none` and
+  `default` are accepted even when none are defined.
+- `none` is **always valid** — with or without a global notify default — and
+  produces a monitor-only watch (`notify: [none]`: state and events, no
+  delivery). It is also rejected as a notifier name.
+- Only an inert `default` (no global notify configured, no other action like
+  auto-expand) makes the wizard explain why and re-ask, via the shared
+  `ensureNotifyAction`. Never abort with a hard error; never hand-roll that
+  validation per assistant.
+- Update `docs/configuration.md` and this section when adding assistants or
+  selection steps.
 
 ## Catalog: instanced systemd daemons
 
@@ -438,8 +290,8 @@ These rules are mandatory.
 8. Never enter a restart loop. Automatic remediation must honor the resolved
    per-service `policy` block; `policy.cooldown` is mandatory and positive after
    config resolution, with optional max_actions/backoff; see
-   spec section 16, "Remediation policy". Cooldown is
-   decided by the daemon's rule evaluation before the shared engine runs. Manual
+   spec section 16, "Remediation policy". Cooldown is decided by the daemon's
+   rule evaluation before the shared engine runs. Manual
    operator commands are exempt from cooldown but still subject to locks, guards
    and preflight.
 9. Always log whether an action was executed or blocked, and why.
@@ -469,194 +321,29 @@ These rules are mandatory.
     another. Never serialize all services through a single loop. Mass restarts
     are bounded by a global operation semaphore, and concurrent check execution
     across all services is bounded by `engine.max_parallel_checks` (a separate
-    global pool). See sections 12 and 24.
-
-## Service manager abstraction
-
-Implement service management behind this conceptual interface:
-
-```go
-type Manager interface {
-    Backend() Backend
-    IsAvailable(ctx context.Context) bool
-    Status(ctx context.Context, service string) (Status, error)
-    IsActive(ctx context.Context, service string) (bool, error)
-    Start(ctx context.Context, service string) error
-    Stop(ctx context.Context, service string) error
-    Restart(ctx context.Context, service string) error
-}
-```
-
-`Manager.Restart` may exist as a backend primitive, but Sermo's safe operation
-engine must not use it for `sermoctl restart` or automatic remediation. A safe
-restart is always `Stop` -> residual process handling -> `Start`, so any
-`orphan_processes` result aborts before the service is started again.
-
-Backends:
-
-```text
-auto
-systemd
-openrc
-```
-
-Autodetection order:
-
-1. Explicit CLI flag.
-2. Environment variable.
-3. Config value.
-4. Automatic detection.
-
-For automatic detection:
-
-```text
-systemd:
-  - `systemctl` exists
-  - `/run/systemd/system` exists
-  - tolerate `degraded` from `systemctl is-system-running`
-
-openrc:
-  - `rc-service` exists
-  - `/run/openrc` exists, or `rc-status` works
-```
-
-If both appear available, prefer the active init system rather than the mere presence of a command.
-
-## Config model
-
-Use YAML.
-
-Sermo supports:
-
-```text
-global config
-daemons
-services
-clones
-overrides
-variables
-aliases          # per-backend candidate unit names (see spec section 11)
-commands         # optional informational commands, never auto-run
-checks
-preflight        # entries may set optional: true (best-effort, non-blocking)
-postflight       # checks after start/restart; required failures return postflight_failed
-processes
-rules
-guards
-locks
-stop_policy
-policy
-```
-
-Prefer maps keyed by name over lists for mergeable sections:
-
-```yaml
-checks:
-  http:
-    type: http
-    url: http://127.0.0.1/health
-```
-
-Avoid this for mergeable sections:
-
-```yaml
-checks:
-  - name: http
-    type: http
-```
-
-A service can use a daemon:
-
-```yaml
-kind: service
-name: apache-main
-uses: apache
-```
-
-A service can clone another service:
-
-```yaml
-kind: service
-name: redis-cache
-clone: redis-main
-```
-
-Merge rules:
-
-```text
-scalars: override
-maps: recursive merge
-checks/preflight/postflight/processes/rules: keyed by name
-enabled: false disables inherited item
-delete: true removes inherited item
-```
-
-Resolution precedence, low to high:
-
-```text
-global defaults  <  daemon (uses) or clone source  <  service overrides
-```
-
-The global `defaults` block (stop_policy, policy, rule_window) is merged in as the
-base layer of every service, so a field omitted everywhere falls back to it.
-Engine-wide settings (interval, max_parallel_checks, default_timeout, backend) are
-daemon config and are NOT merged into services. Variable expansion runs once,
-after all merging. See spec section 8.
-The effective `defaults.policy.cooldown` is required and must be positive, and a
-service/daemon override may only replace it with another positive duration.
-`paths.runtime` is the single runtime root (default `/run/sermo`). Named runtime
-locks live under `<paths.runtime>/locks` and operation locks under
-`<paths.runtime>/ops`. Do not use `paths.locks` or `/etc/sermo/locks.d` in the
-MVP; active locks are runtime state, not configuration files.
-
-Numeric fields that may also be written as a string or carry a `${var}` (for
-example `port` and `expect_status`) use a tolerant scalar type that accepts an
-int or a string and is parsed to its target type after variable expansion. The
-metric `value` is a string with an optional trailing `%`. See
-spec section 10, "Typed fields and variable interaction".
-
-The daemon should consume a fully resolved, flat configuration. Do not make the daemon reason about inheritance at runtime.
-
-## Required config commands
-
-Implement these early:
-
-```text
-sermoctl config validate
-sermoctl config render SERVICE
-sermoctl config diff BASE SERVICE
-```
-
-`config render` must show the final resolved service and the source files used.
-
-`config diff` compares two resolved services line-by-line for pre-deploy review.
+    global pool). See spec sections 12 and 24.
 
 ## Check types are unified across checks and watches
 
 There is **one set of check types**, shared by a service's
 `checks:`/`preflight:`/`postflight:` (referenced from rules) and by host
-`watches:` (which fire a hook). The build path is already shared
+`watches:` (which fire a hook). The build path is shared
 (`internal/checks.buildCheck`, used by both `Build` and `BuildInline`).
 
-**Standing rule — whenever you add a new check type, integrate it with the
-existing checks and keep the docs in step:**
+**Standing rule — a new check type must land on both surfaces in one change:**
 
-- If it is a single-shot check (`Check.Run → Result`), make it work in **both**
-  places: add it to `knownCheckTypes` (service checks/rules) *and* ensure the
-  watch path accepts it (`internal/app/watch_build.go`; service checks usable as
-  watches go through `buildSingleWatch`). Validate its fields in **one** shared
-  validator (`internal/config/validate.go`) called from both
-  `validateCheckSection` and `validateWatches`.
-- Decide its firing polarity: condition-style (`OK == true` means the alert
-  condition, e.g. disk/load/metric/count) vs health-style (`OK == true` means
-  healthy, e.g. tcp/http). `isHealthCheckType` drives whether a watch fires its
-  hook on failure. Keep that list current.
-- Multi-target / multi-hook checks (`net`, `icmp`, `swap` metric expansion;
-  `file`, `process`) are watch-only by design — they are not single-shot. Note
-  the exclusion rather than forcing them into `checks:`.
-- Always update `docs/rules.md` (the check-type table + the "shared types"
-  note) and `docs/configuration.md` (host watches), plus a `configs/sermo.yml`
-  example, in the same change.
+- Add it to `checks.SingleShotCheckTypes` (config validation trusts that list)
+  and validate its fields in shared validators (`internal/config/`) used by both
+  the service-check and watch paths, so the grammars cannot drift.
+- Decide its firing polarity: condition-style (`OK == true` is the alert, e.g.
+  disk/load/count) vs health-style (`OK == true` is healthy, e.g. tcp/http).
+  `checks.IsHealthType` drives whether a watch fires on failure — keep it
+  current.
+- The multi-metric `metrics:` map shape of `net`/`icmp`/`swap` and the
+  multi-target `file`/`process` watches are watch-only; the single-metric form
+  of `net`/`icmp`/`swap` (an explicit `metric:` field) works in `checks:` too.
+- Update `docs/rules.md` (check-type table), `docs/configuration.md` (host
+  watches) and a `configs/sermo.yml` example in the same change.
 
 ## Notifications are pluggable
 
@@ -672,163 +359,12 @@ not require changes outside `internal/notify` and the docs:**
 - Register the new type's constructor in `internal/notify` (the `builders` map)
   and implement the `Notifier` interface (`Name`/`Type`/`Send`). Use only the Go
   standard library where feasible (the project avoids new dependencies).
-- Add its config validation to `validateNotifiers` (internal/config/validate.go)
+- Add its config validation to `validateNotifiers` (`internal/config/validate_global.go`)
   and keep `notify.SupportedTypes()` in step.
 - The watch/dispatch side is transport-agnostic (it addresses every notifier
   through the interface) — do not special-case a transport there.
 - Update `docs/configuration.md` (Notifications) and a `configs/sermo.yml`
   example in the same change.
-
-## Rule engine
-
-Rules use a structured YAML condition tree.
-
-Support:
-
-```text
-and
-or
-not
-failed
-active
-metric
-service
-process
-file
-command
-```
-
-Support windows:
-
-```text
-for cycles: consecutive matches
-within cycles: rolling window with min_matches
-```
-
-Example:
-
-`rules` is a map keyed by rule name (like `checks`/`preflight`/`processes`), not
-a list; the key is the rule name and there is no inner `name` field. This lets a
-service override or disable a single inherited rule.
-
-```yaml
-rules:
-  restart-if-port-failed:
-    type: remediation
-    if:
-      failed:
-        check: tcp-783
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
-```
-
-Conditions are read-only predicates. The evaluator runs all declared checks and
-any inline condition probes once per cycle and caches the results, so a probe
-shared by several rules executes at most once per cycle. Inline `command`
-conditions must be side-effect-free, array form, with a timeout; prefer declaring
-anything expensive as a named check and referencing it with `failed`/`active`.
-
-Metric conditions carry a `scope` (`service`, the default, or `system`). Service
-metrics measure only the monitored service (its discovered process set or
-cgroup); system metrics measure the whole machine. Remediation rules must use
-service-scoped metrics only — a system-wide metric may drive an `alert` but must
-never restart, start or stop an individual service. See the spec
-sections 12 and 14.
-
-Rate metrics (cpu, total_cpu) are a delta between two samples, so the
-`internal/metrics` collector is stateful and sampled once per cycle; on the first
-cycle a rate is not-ready and its condition evaluates to false (no remediation on
-a warm-up value). Instantaneous metrics (memory, process_count, load) need no
-history. A metric `Check` stays single-shot — it reads the collector, which holds
-the state. See section 12.
-
-Guards must be evaluated before remediation rules.
-
-A rule's `then:` is a single `Action { action, message, ... }` in the MVP (the
-`RuleType` and `Action` Go types are defined in spec section
-16). `block` and `alert` actions require a `message` — it is the reason shown to
-the operator and recorded in the event. Only guard rules use `action: block`, and
-a guard must list the actions it blocks under `blocks:`.
-
-## Operation flow
-
-Safe restart flow:
-
-```text
-1. Load resolved service definition.
-2. Detect backend.
-3. defer: emit exactly one event from the final result (registered first).
-4. Acquire internal operation lock at `<paths.runtime>/ops/<service>.lock`
-   (default `/run/sermo/ops/<service>.lock`; atomic; fail fast if held by a live
-   owner).
-5. defer: release the lock (registered only after a successful acquire).
-6. Evaluate blocking locks.        # any of 6-13 may return early
-7. Run required preflight checks.
-8. Evaluate guard rules.
-9. For restart, execute Stop through servicemgr.
-10. Wait for graceful stop where applicable.
-11. Discover residual processes and apply stop_policy.
-12. If any residual remains, return `orphan_processes` and do not start.
-13. After a clean stop, reconcile init state (`ResetState`: systemd
-    `reset-failed`, OpenRC `zap`) so a stuck/failed marker can't disagree with
-    the processes. Best effort — never fails an already-successful stop.
-14. Execute Start through servicemgr only after the stop phase is clean.
-15. Run postflight checks and return the result.
-```
-
-The two deferred steps mean the event always fires and the lock is always
-released when held, so a blocked, failed or panicking operation never leaks the
-lock and always emits exactly one event. Use Go `defer` in that order; never
-repeat release/record at each early return. See the spec
-section 18.
-
-Step 6 ("evaluate blocking locks") and step 8 ("evaluate guard rules") are two
-distinct, complementary mechanisms — not two ways to do the same thing. Step 6
-blocks automatically on Sermo's own named runtime lock files; step 8 blocks on
-guard rules over checks of foreign signals Sermo does not own (a backup process,
-a foreign flag file). A `file_exists`/`process` check must point at a foreign
-signal, never at a file under `<paths.runtime>/locks/` (default
-`/run/sermo/locks/`; that would duplicate step 6).
-The `sermoctl lock` creation/release commands are post-MVP; MVP CLI scope only
-requires `sermoctl locks SERVICE` for reporting. See the spec
-section 20.
-
-## CLI expectations
-
-Minimum CLI commands:
-
-```text
-sermoctl backend
-sermoctl status SERVICE
-sermoctl is-active SERVICE
-sermoctl start SERVICE
-sermoctl stop SERVICE
-sermoctl restart SERVICE
-sermoctl preflight SERVICE
-sermoctl processes SERVICE
-sermoctl locks SERVICE
-sermoctl config validate
-sermoctl config render SERVICE
-```
-
-For the MVP, `sermoctl locks SERVICE` is a reporting command. Commands that
-create or release named runtime locks (`sermoctl lock ...`, `sermoctl lock
-acquire`, `sermoctl lock release`) are post-MVP.
-
-Exit codes (canonical list and the `2` vs `78` distinction are defined in
-spec section 23; keep this in sync):
-
-```text
-0   success / active / allowed
-1   expected false condition, such as inactive or a failed check
-2   internal or runtime error / backend not detected
-64  usage error (bad flags or arguments)
-75  temporarily blocked action, such as an active backup lock or guard
-78  configuration invalid (syntax, schema or `config validate` failure)
-```
 
 ## Testing requirements
 
@@ -878,23 +414,8 @@ revive -config revive.toml ./...  # no findings
 golangci-lint run                 # gosec: no findings (.golangci.yml)
 ```
 
-## Verification before finishing a task
-
-Run:
-
-```bash
-go test ./...
-go vet ./...
-```
-
-If available, also run:
-
-```bash
-gofmt -w .
-go test -race ./...
-```
-
-If a command cannot be run, state why.
+When useful, also run `go vet ./...` and `go test -race ./...`. If a command
+cannot be run, state why.
 
 ## Definition of done
 
@@ -911,154 +432,19 @@ A task is not done unless:
 
 ---
 
+---
+
 # Implementation specification
 
-This part is the original `implementation-spec.md`, merged here so the project
-keeps a single instructions file. Cross-references of the form "spec section N"
-(here and in `.agents/skills/`) point into this part.
-
-It is the **MVP-era specification**: it remains the reference for the core
-semantics (config model and merge rules, variables, rule engine, operation
-flow, locks, process discovery, stop policy, exit codes, safety rules). Where
-it talks about *scope* it is historical — the project has long since shipped
-features it lists as non-goals (web UI, notifiers, host watches, the wizard,
-SQLite-backed state). When this part contradicts the instructions above or the
-current code, the instructions and the code win.
-
-## 1. Project identity
-
-Project name: **Sermo**
-
-Binaries:
-
-- `sermod`: daemon responsible for monitoring, evaluating rules and applying safe remediation actions.
-- `sermoctl`: command-line tool used by operators and scripts.
-
-Default paths:
-
-```text
-/etc/sermo/                 # configuration
-/usr/share/sermo/daemons/  # packaged base daemons
-/run/sermo/                 # runtime state, locks, sockets
-/var/lib/sermo/             # persistent state, optional later
-```
-
-Short description:
-
-```text
-Sermo is a safe service monitoring and control system for Linux.
-It provides a portable service wrapper over systemd and OpenRC, validates services before actions, detects blocking operational states, discovers service processes and applies guarded remediation rules.
-```
-
-Primary design rule:
-
-```text
-sermod and sermoctl must use the same operation engine.
-If sermoctl restart mysql is protected by preflight checks and locks, the automatic restart performed by sermod must be protected in exactly the same way.
-```
-
----
-
-## 2. Goals
-
-Sermo should provide:
-
-1. Automatic service manager detection: systemd or OpenRC.
-2. A portable CLI wrapper for service control:
-   - `sermoctl status SERVICE`
-   - `sermoctl start SERVICE`
-   - `sermoctl stop SERVICE`
-   - `sermoctl restart SERVICE`
-3. Safe restart workflow:
-   - check locks
-   - run preflight validation
-   - stop via detected backend
-   - verify residual processes before any start
-   - optionally escalate to SIGTERM/SIGKILL only when explicitly allowed
-   - start via detected backend only if the stop phase is clean
-   - run postflight checks
-4. Declarative YAML configuration.
-5. Packaged base daemons for applications such as Apache, Redis, MySQL/MariaDB and PHP-FPM.
-6. User configuration by layering, overrides and clones.
-7. Monitoring rules with logical conditions: `and`, `or`, `not`.
-8. Rule windows:
-   - `for: cycles: N` for consecutive failures
-   - `within: cycles: N, min_matches: M` for sliding windows
-9. Guard rules that block unsafe actions.
-10. Process discovery using pidfiles, cgroups where available and `/proc`.
-11. Simple event logging.
-12. Good output for scripts, including stable exit codes and optional JSON output.
-
----
-
-## 3. Non-goals for the first implementation
-
-Do not implement these in the MVP:
-
-- Web UI.
-- Distributed/cluster mode.
-- Database-backed event storage.
-- Plugin system.
-- Full Monit-compatible language parser.
-- Remote agents.
-- PolicyKit integration.
-- Full systemd D-Bus implementation unless the command-based backend is already working.
-
-The MVP should work with `systemctl` and `rc-service` first.
-
----
-
-## 4. External dependencies
-
-Use a small dependency set.
-
-Required for MVP:
-
-```bash
-go get github.com/spf13/cobra
-go get github.com/goccy/go-yaml
-go get github.com/prometheus/procfs
-```
-
-Recommended later:
-
-```bash
-go get github.com/coreos/go-systemd/v22
-go get github.com/fsnotify/fsnotify
-```
-
-Dependency rationale:
-
-- `github.com/spf13/cobra`: CLI framework for `sermoctl` and `sermod` subcommands.
-- `github.com/goccy/go-yaml`: YAML parsing and rendering.
-- `github.com/prometheus/procfs`: process and system metrics from `/proc` and `/sys`.
-- `github.com/coreos/go-systemd/v22/dbus`: optional future native systemd backend.
-- `github.com/fsnotify/fsnotify`: optional future config reload watcher.
-
-Use Go standard library where possible:
-
-- `context`
-- `os/exec`
-- `net/http`
-- `net`
-- `time`
-- `log/slog`
-- `encoding/json`
-- `os/signal`
-- `syscall`
-
----
-
-## 5. Repository layout
-
-The canonical, current repository layout lives in the **Repository layout**
-section of the instructions above — the tree has evolved past this spec's MVP
-draft (packaged `daemons/` became `catalog/{services,apps,libs}/`, and
-`internal/` gained packages the MVP excluded: `web/`, `notify/`, `assist/`,
-`state/`, `diag/`, `conn/`, `volume/`, …). Do not re-derive the layout from
-this section.
-
----
+The original implementation spec, merged here so the project keeps a single
+instructions file; "spec section N" references (here and in `.agents/skills/`)
+point into this part. Section numbering is preserved, so there are gaps where
+obsolete sections were removed. It is the reference for the core semantics:
+config model and merge rules, variables, checks, rules, operations, locks,
+process discovery, stop policy, CLI exit codes. Its scope statements are
+historical — the web UI, notifiers, host watches and the wizard shipped long
+ago. On conflict, the instructions above and the code win. The example daemons
+it once carried live for real in `catalog/`.
 
 ## 6. Configuration layout
 
@@ -1272,7 +658,7 @@ taken in UNEXPANDED form:
 ```
 
 This is why a clone can override a single variable and have it take effect: in
-`redis-cache` (section 29) setting `port: 6380` works only because the clone
+a clone like `redis-cache` setting `port: 6380` works only because the clone
 copies `redis-main` before expansion, so the override changes the value that
 `${port}` resolves to. If clone copied an already-expanded source, the override
 would not reach the already-substituted checks. Clone chains resolve
@@ -2522,10 +1908,13 @@ Restart flow:
     - if force_kill=true, apply the signal escalation policy.
 11. Rediscover residual processes after any signal escalation. If any remain,
     return orphan_processes and do NOT start the service.
-12. Execute backend Start.
-13. Verify final service status.
-14. Run postflight checks.
-15. Return the result (ok or the relevant failure status).
+12. After a clean stop, reconcile init state (`ResetState`: systemd
+    `reset-failed`, OpenRC `zap`) so a stuck/failed marker cannot disagree with
+    the processes. Best effort — never fails an already-successful stop.
+13. Execute backend Start.
+14. Verify final service status.
+15. Run postflight checks.
+16. Return the result (ok or the relevant failure status).
 ```
 
 Every numbered step from 5 onward is a possible early return. The two deferred
@@ -3298,402 +2687,6 @@ Optional foreground mode only for MVP. Packaging can run it as a normal daemon u
 
 ---
 
-## 25. Example daemon: Apache
-
-```yaml
-kind: daemon
-name: apache
-type: webserver
-
-service:
-  name: apache2
-  backend: auto
-
-aliases:
-  systemd:
-    - apache2.service
-    - httpd.service
-  openrc:
-    - apache2
-    - apache
-
-variables:
-  binary: /usr/sbin/apache2
-  user: www-data
-  host: 127.0.0.1
-  port: 80
-  health_path: /
-
-commands:
-  version:
-    command: ["apachectl", "-v"]
-
-preflight:
-  config:
-    type: command
-    command: ["apachectl", "configtest"]
-    timeout: 10s
-
-  libraries:
-    type: libraries
-    binary: "${binary}"
-    optional: true
-
-processes:
-  main:
-    type: command_match
-    exe: "${binary}"
-    user: root
-
-  workers:
-    type: command_match
-    exe: "${binary}"
-    user: "${user}"
-
-checks:
-  service:
-    type: service
-    expect: active
-
-  http:
-    type: http
-    url: "http://${host}:${port}${health_path}"
-    expect_status: 200
-    timeout: 5s
-
-stop_policy:
-  graceful_timeout: 30s
-  term_timeout: 10s
-  kill_timeout: 5s
-  force_kill: true
-  kill_only_if:
-    users: ["${user}", root]
-    exe_any:
-      - "${binary}"
-
-rules:
-  block-restart-if-config-invalid:
-    type: guard
-    blocks: [restart, start]
-    if:
-      failed:
-        check: config
-    then:
-      action: block
-      message: "Apache configuration is invalid"
-
-  restart-if-http-failed:
-    type: remediation
-    if:
-      failed:
-        check: http
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
-```
-
----
-
-## 26. Example service: Apache main
-
-```yaml
-kind: service
-name: apache-main
-uses: apache
-
-variables:
-  health_path: /health
-
-checks:
-  http:
-    url: http://127.0.0.1/health
-    expect_status: 200
-
-rules:
-  restart-if-http-failed:
-    type: remediation
-    if:
-      failed:
-        check: http
-    for:
-      cycles: 5
-      mode: consecutive
-    then:
-      action: restart
-```
-
----
-
-## 27. Example daemon: MySQL
-
-```yaml
-kind: daemon
-name: mysql
-type: database
-
-service:
-  name: mysql
-  backend: auto
-
-variables:
-  binary: /usr/sbin/mysqld
-  clientadmin: /usr/bin/mysqladmin
-  user: mysql
-  host: 127.0.0.1
-  port: 3306
-  pidfile: /run/mysqld/mysqld.pid
-
-commands:
-  version:
-    command: ["${binary}", "--version"]
-
-preflight:
-  binary:
-    type: binary
-    path: "${binary}"
-
-  config:
-    type: command
-    command: ["${binary}", "--validate-config"]
-    timeout: 15s
-
-  libraries:
-    type: libraries
-    binary: "${binary}"
-
-processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
-
-  mysqld:
-    type: command_match
-    exe: "${binary}"
-    user: "${user}"
-
-checks:
-  service:
-    type: service
-    expect: active
-
-  tcp:
-    type: tcp
-    host: "${host}"
-    port: "${port}"
-    timeout: 3s
-
-  ping:
-    type: command
-    command: ["${clientadmin}", "ping"]
-    timeout: 5s
-
-  # Category-2 external lock check: a mariabackup run represented by a foreign
-  # process signal is detected by its process. Post-MVP, a backup wrapped in
-  # `sermoctl lock mysql --name backup` is blocked by the engine automatically
-  # and needs no check or guard here (see section 20).
-  mariabackup:
-    type: process
-    exe: /usr/bin/mariabackup
-    user: "${user}"
-    state: running
-
-stop_policy:
-  graceful_timeout: 120s
-  term_timeout: 60s
-  force_kill: false
-  kill_only_if:
-    users: ["${user}"]
-    exe_any:
-      - "${binary}"
-
-policy:
-  cooldown: 15m
-  max_actions: 2
-  max_actions_window: 1h
-
-rules:
-  block-restart-if-config-invalid:
-    type: guard
-    blocks: [restart, start]
-    if:
-      failed:
-        check: config
-    then:
-      action: block
-      message: "MySQL configuration is invalid"
-
-  block-restart-during-backup:
-    type: guard
-    blocks: [restart, stop]
-    if:
-      active:
-        check: mariabackup
-    then:
-      action: block
-      message: "MySQL backup is running"
-
-  restart-if-tcp-failed:
-    type: remediation
-    if:
-      failed:
-        check: tcp
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
-
-  restart-if-ping-failed:
-    type: remediation
-    if:
-      failed:
-        check: ping
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
-
-  restart-if-memory-high:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: memory
-        op: ">"
-        value: 40%
-    within:
-      cycles: 15
-      min_matches: 5
-    then:
-      action: restart
-```
-
----
-
-## 28. Example daemon: Redis
-
-```yaml
-kind: daemon
-name: redis
-type: cache
-
-service:
-  name: redis
-  backend: auto
-
-variables:
-  binary: /usr/bin/redis-server
-  cli: /usr/bin/redis-cli
-  user: redis
-  host: 127.0.0.1
-  port: 6379
-  pidfile: /run/redis/redis.pid
-
-commands:
-  version:
-    command: ["${binary}", "--version"]
-
-preflight:
-  binary:
-    type: binary
-    path: "${binary}"
-
-  libraries:
-    type: libraries
-    binary: "${binary}"
-
-processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
-
-  redis:
-    type: command_match
-    exe: "${binary}"
-    user: "${user}"
-
-checks:
-  service:
-    type: service
-    expect: active
-
-  tcp:
-    type: tcp
-    host: "${host}"
-    port: "${port}"
-    timeout: 2s
-
-  ping:
-    type: command
-    command: ["${cli}", "-h", "${host}", "-p", "${port}", "ping"]
-    timeout: 3s
-
-stop_policy:
-  graceful_timeout: 30s
-  term_timeout: 15s
-  force_kill: false
-
-rules:
-  restart-if-tcp-failed:
-    type: remediation
-    if:
-      failed:
-        check: tcp
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
-
-  restart-if-ping-failed:
-    type: remediation
-    if:
-      failed:
-        check: ping
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart
-```
-
----
-
-## 29. Example clone
-
-```yaml
-kind: service
-name: redis-cache
-clone: redis-main
-
-service:
-  name: redis-cache
-
-variables:
-  port: 6380
-  pidfile: /run/redis-cache/redis.pid
-
-checks:
-  tcp:
-    host: 127.0.0.1
-    port: 6380
-
-  ping:
-    command: ["/usr/bin/redis-cli", "-p", "6380", "ping"]
-```
-
-Here `redis-main` is a service that `uses: redis` with the default `port: 6379`.
-Because clone copies it unexpanded (section 8), overriding the `port` variable to
-`6380` is enough: every check that references `${port}` resolves to the new value
-after expansion. The explicit `checks.tcp.port` and `ping` overrides above are
-redundant when the base uses `${port}`, and are shown only to illustrate that
-either form works.
-
----
-
 ## 30. Config validation requirements
 
 `sermoctl config validate` must check:
@@ -3786,423 +2779,6 @@ ERROR redis-cache:
 
 ---
 
-## 31. Output examples
-
-### Backend
-
-```bash
-sermoctl backend
-```
-
-```text
-systemd
-```
-
-JSON:
-
-```json
-{
-  "backend": "systemd"
-}
-```
-
-### Status
-
-```bash
-sermoctl status mysql
-```
-
-```text
-mysql active backend=systemd service=mysql.service
-```
-
-JSON:
-
-```json
-{
-  "service": "mysql",
-  "backend": "systemd",
-  "status": "active",
-  "unit": "mysql.service"
-}
-```
-
-### Blocked restart
-
-```bash
-sermoctl restart mysql
-```
-
-```text
-BLOCKED mysql restart
-reason: MySQL backup lock is active
-```
-
-JSON:
-
-```json
-{
-  "service": "mysql",
-  "action": "restart",
-  "status": "blocked",
-  "reason": "MySQL backup lock is active"
-}
-```
-
----
-
-## 32. Testing strategy
-
-Unit tests:
-
-```text
-internal/config:
-  - merge maps recursively
-  - scalar override
-  - enabled:false handling
-  - variable expansion
-  - missing variable detection
-  - a variable value containing ${...} is rejected (no nested variables)
-  - any ${...} left after one expansion pass is an error
-  - clone cycle detection
-  - clone copies the source unexpanded: a cloned variable override changes ${var}
-  - flexible scalar parsing (port/expect_status as int, quoted string or ${var})
-  - metric value parsing (percentage vs absolute, invalid value rejected)
-  - global defaults merge as base layer (defaults < daemon < service overrides)
-  - engine settings (interval, max_parallel_checks) are not merged into services
-  - reject scope: system metric used in a remediation rule
-  - unknown metric name for the declared scope is rejected
-  - block/alert action requires a message; guard requires a blocks list
-  - invalid service expect/state or process state value is rejected
-  - paths.runtime defaults to /run/sermo and derives distinct locks/ops dirs
-  - paths.locks is rejected; /etc/sermo/locks.d is not scanned for active locks
-  - defaults.policy.cooldown is required and positive
-  - resolved service policy.cooldown is required and positive; `0s` and missing
-    resolved cooldown are invalid
-  - postflight merges by name and uses the same check schema as preflight/checks
-  - file_exists checks under <paths.runtime>/locks are rejected; Sermo named
-    runtime locks are handled by the operation engine, not by guards
-
-internal/rules:
-  - and/or/not evaluation
-  - failed check evaluation
-  - metric comparison
-  - for consecutive windows
-  - within sliding windows
-  - cooldown suppression of repeated remediation
-  - max_actions rate limiting within window
-  - a probe shared by several rules runs at most once per cycle (memoization)
-
-internal/servicemgr:
-  - systemd unit normalization
-  - backend detection with fake paths/commands
-  - systemd detection treats `degraded` as usable
-  - when systemd and OpenRC both appear available, active init wins over command
-    presence
-  - ambiguous both-present detection fails clearly unless backend is explicit
-  - openrc status parsing
-  - alias resolution picks the first existing unit; clear error when none resolve
-
-internal/process:
-  - pidfile parsing
-  - process selector matching
-  - kill safety selector validation
-  - exe matched by exact resolved /proc/<pid>/exe; substring/basename never matches
-  - unresolvable or "(deleted)" exe never matches an exe selector
-  - cmdline/argv[0] is never used for matching
-  - residual not matching kill_only_if is never signalled and yields orphan_processes
-  - killable residuals are SIGTERM/SIGKILLed; a survivor still yields orphan_processes
-  - orphan_processes from a stop does not lead to a start
-
-internal/metrics:
-  - cpu rate computed from two injected samples; first cycle is not-ready
-  - a metric condition over a not-ready rate evaluates to false (no remediation)
-  - memory/process_count are instantaneous (single sample)
-  - percentage vs absolute normalization for service and system scope
-
-internal/operation:
-  - restart blocked by guard
-  - restart blocked by preflight failure
-  - start blocked by guard
-  - start blocked by required preflight failure
-  - restart blocked by active lock
-  - restart uses backend Stop then Start, never backend Restart, so residual
-    checks happen before any start
-  - restart returns orphan_processes and does not call Start when residuals remain
-  - residual process handling with force_kill=false
-  - internal operation lock released on every early-return path (no leak)
-  - internal operation lock path is <paths.runtime>/ops/<service>.lock and
-    cannot collide with a user lock named `op`
-  - exactly one event emitted per operation, including blocked/failed paths
-  - concurrent operation fails fast with exit 75 while the op lock is held
-  - optional preflight failure warns but does not block; required failure blocks
-  - postflight runs after start/restart; required failure returns postflight_failed,
-    optional failure warns, and no automatic rollback is attempted
-
-internal/locks:
-  - atomic acquisition fails when an active lock already exists
-  - expired (TTL) lock is treated as inactive and reclaimable
-  - lock with a dead owner_pid is treated as stale and reclaimed
-  - PID reuse detected via owner_start_ticks (alive PID, wrong start time)
-  - lock file naming: <service>[.<name>].lock
-  - named runtime locks live under <paths.runtime>/locks and operation locks live
-    under <paths.runtime>/ops
-  - a named runtime lock such as <service>.op.lock is separate from the internal
-    operation lock under <paths.runtime>/ops
-
-internal/app (scheduler):
-  - a long operation on one service does not block another service's cycles
-  - a tick is skipped (not queued) while the previous cycle is still running
-  - an overrun of N intervals causes N skips, not a backlog of catch-up cycles
-  - the global operation semaphore serializes mass restarts
-  - concurrent check execution never exceeds max_parallel_checks across services
-  - context cancellation on shutdown stops in-flight waits and releases locks
-```
-
-Integration tests:
-
-```text
-- Fake service manager commands using temporary PATH.
-- Fake systemctl and rc-service scripts.
-- Temporary config tree.
-- sermoctl config validate.
-- sermoctl config render.
-- sermoctl config diff.
-- sermoctl locks SERVICE with active, expired and stale lock fixtures.
-- sermoctl restart with guard blocking.
-```
-
-Do not require real root or real systemd/OpenRC in unit tests.
-
----
-
-## 33. Implementation phases for Codex
-
-### Phase 1: Skeleton and CLI
-
-Implement:
-
-```text
-- go.mod
-- cmd/sermoctl
-- cmd/sermod
-- cobra root command
-- version command
-- backend command
-- basic logging
-```
-
-Acceptance:
-
-```bash
-go test ./...
-go run ./cmd/sermoctl backend --backend auto
-```
-
-### Phase 2: Service manager wrapper
-
-Implement:
-
-```text
-- servicemgr.Manager
-- systemd exec backend
-- OpenRC backend
-- autodetection
-- status/start/stop/restart commands
-```
-
-Acceptance:
-
-```bash
-sermoctl --backend systemd status nginx
-sermoctl --backend openrc status nginx
-```
-
-Tests must use fake commands instead of real init systems.
-
-### Phase 3: Config loader and renderer
-
-Implement:
-
-```text
-- YAML models
-- load global config
-- load daemons
-- load included services and watch fragments
-- merge rules
-- variable expansion
-- config validate
-- config render
-- config diff
-```
-
-Acceptance:
-
-```bash
-sermoctl config validate --config ./configs/sermo.yml
-sermoctl config render apache-main --config ./configs/sermo.yml
-sermoctl config diff redis-main redis-cache --config ./configs/sermo.yml
-```
-
-### Phase 4: Check runner
-
-Implement:
-
-```text
-- tcp check
-- http check
-- command check
-- service check
-- file_exists check
-- binary check
-- libraries check
-```
-
-Acceptance:
-
-```bash
-sermoctl preflight apache-main --config ./configs/sermo.yml
-```
-
-### Phase 5: Rule evaluator
-
-Implement:
-
-```text
-- Condition AST
-- and/or/not
-- failed/active check references
-- inline tcp condition
-- metric condition with scope (service default) and the system-in-remediation
-  validation rule; full service metric collection can land with phase 7
-- for consecutive window
-- within sliding window
-```
-
-Acceptance:
-
-```text
-Unit tests prove the three example Monit-like rules work.
-Config validation rejects a scope: system metric used in a remediation rule.
-```
-
-Note: service-scoped metric collection builds on process discovery (phase 7) and
-the `internal/metrics` collectors. In phase 5 the evaluator can read metric
-values from an injected collector interface so rules and validation are testable
-before the real collector exists.
-
-### Phase 6: Operation engine
-
-Implement:
-
-```text
-- restart flow
-- preflight before restart
-- guard blocking
-- internal operation lock
-- sermoctl locks SERVICE active named lock reporting
-- result output
-```
-
-Acceptance:
-
-```bash
-sermoctl restart mysql-main --config ./configs/sermo.yml
-sermoctl locks mysql-main --config ./configs/sermo.yml
-```
-
-must block if the config preflight fails or backup lock exists.
-
-### Phase 7: Process discovery and safe kill policy
-
-Implement:
-
-```text
-- pidfile discovery
-- procfs command_match discovery
-- residual process detection
-- force_kill=false behavior
-- kill_only_if validation
-```
-
-Acceptance:
-
-```bash
-sermoctl processes mysql-main --config ./configs/sermo.yml
-```
-
-### Phase 8: Daemon scheduler
-
-Implement:
-
-```text
-- sermod run
-- one independent worker per service (no single serial loop)
-- per-service ticker with start jitter; skip a tick if the cycle still runs
-- periodic check execution
-- rule evaluation
-- remediation using the operation engine, behind a global operation semaphore
-- graceful shutdown via context cancellation
-```
-
-Acceptance:
-
-```bash
-sermod run --config ./configs/sermo.yml
-```
-
-### Phase 9: Packaging examples
-
-Implement:
-
-```text
-- packaging/systemd/sermod.service
-- packaging/openrc/sermod
-- README install section
-```
-
----
-
-## 34. Security rules
-
-Hard rules:
-
-```text
-1. Never restart or start if a required preflight fails.
-2. Never restart, start or stop if a guard blocks the action.
-3. Never SIGKILL by default.
-4. Never kill by process name only. A kill requires an exact match on the
-   resolved /proc/<pid>/exe path and the real UID against kill_only_if; argv[0]
-   and cmdline are never trusted. An unresolvable exe never matches (section 21).
-5. force_kill=true requires kill_only_if with both an exact executable selector
-   (`exe_any`) and a real-user selector (`users`).
-6. Commands must be array form, not shell string.
-7. Avoid invoking shell unless explicitly configured later.
-8. Every action must produce a structured event.
-9. sermod and sermoctl must share the same operation code path.
-10. Automatic remediation must respect the resolved service cooldown/rate-limit
-    policy. `policy.cooldown` is mandatory and positive after config resolution,
-    and automatic remediation must never enter a restart loop. Manual operator
-    actions are exempt from cooldown but still subject to locks, guards and
-    preflight.
-11. Remediation rules must trigger on service-scoped metrics only. A system-wide
-    metric must never restart, start or stop an individual service; it may only
-    drive an alert.
-12. Rule conditions are read-only predicates evaluated at most once per cycle.
-    A condition must never change system state; mutation belongs to actions, not
-    to conditions.
-13. Locks are acquired atomically (O_CREAT|O_EXCL) and bounded by a TTL so they
-    cannot wedge remediation forever. A lock is honored only while active; an
-    expired lock, or one whose owner PID is dead, is stale and must be reclaimed
-    through the logged reclaim path, never silently overwritten.
-14. Only processes that exactly match kill_only_if are ever signalled; a residual
-    that does not match (or whose exe is unresolvable) is reported, never killed.
-    If any residual remains, the result is orphan_processes, and the service must
-    not be started after a failed stop unless policy explicitly allows it.
-```
-
----
-
 ## 35. Event model
 
 Package: `internal/events`
@@ -4239,13 +2815,3 @@ webhook
 ```
 
 ---
-
-## 36. References
-
-- Cobra: https://github.com/spf13/cobra
-- goccy/go-yaml: https://github.com/goccy/go-yaml
-- go-systemd: https://github.com/coreos/go-systemd
-- prometheus/procfs: https://github.com/prometheus/procfs
-- fsnotify: https://github.com/fsnotify/fsnotify
-- systemctl manual: https://www.freedesktop.org/software/systemd/man/systemctl.html
-- OpenRC quickstart examples: [https://wiki.alpinelinux.org/wiki/OpenRC](https://github.com/OpenRC/openrc/blob/master/user-guide.md)
