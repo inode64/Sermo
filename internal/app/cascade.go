@@ -89,8 +89,8 @@ func OrderedGroup(root, action string, lookup func(string) []string, visited map
 // stopArtifacts maps a service's resolved stop_policy invariants into the engine
 // form, shared by the daemon worker and web backend engine builds.
 func stopArtifacts(tree map[string]any) operation.StopArtifacts {
-	pp, ff, rm, clean := config.StopInvariants(tree)
-	out := operation.StopArtifacts{PidfilePaths: pp, Files: ff, Remove: rm}
+	pp, ff, cleanEnabled, clean := config.StopInvariants(tree)
+	out := operation.StopArtifacts{PidfilePaths: pp, Files: ff, CleanEnabled: cleanEnabled}
 	for _, c := range clean {
 		out.Clean = append(out.Clean, operation.CleanPath{Path: c.Path, Recursive: c.Recursive})
 	}
