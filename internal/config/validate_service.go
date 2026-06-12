@@ -75,6 +75,80 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 	if v, present := sp["files_absent"]; present && len(cfgval.StringList(v)) == 0 {
 		add("stop_policy.files_absent must be a non-empty list of paths/globs")
 	}
+	validateCleanOnStop(sp["clean_on_stop"], add)
+}
+
+// protectedDirs are absolute paths that clean_on_stop must never delete
+// recursively (the filesystem root and shallow system directories).
+var protectedDirs = set("/", "/etc", "/usr", "/var", "/home", "/root", "/boot",
+	"/bin", "/sbin", "/lib", "/lib32", "/lib64", "/proc", "/sys", "/dev", "/run",
+	"/tmp", "/opt", "/srv", "/mnt", "/media", "/usr/bin", "/usr/sbin", "/usr/lib",
+	"/usr/local", "/var/lib", "/var/log", "/var/run")
+
+// validateCleanOnStop validates the clean_on_stop list: each entry is a path
+// string or a {path, recursive} mapping; paths must be absolute, and a recursive
+// entry must be a concrete (non-glob) path at least two levels deep and not a
+// protected system directory.
+func validateCleanOnStop(raw any, add addFunc) {
+	if raw == nil {
+		return
+	}
+	list, ok := raw.([]any)
+	if !ok {
+		add("stop_policy.clean_on_stop must be a list")
+		return
+	}
+	for i, item := range list {
+		var path string
+		var recursive bool
+		switch e := item.(type) {
+		case string:
+			path = e
+		case map[string]any:
+			path = cfgval.AsString(e["path"])
+			recursive, _ = e["recursive"].(bool)
+		default:
+			add("stop_policy.clean_on_stop[%d] must be a path or a {path, recursive} mapping", i)
+			continue
+		}
+		if path == "" {
+			add("stop_policy.clean_on_stop[%d] has an empty path", i)
+			continue
+		}
+		if !strings.HasPrefix(path, "/") {
+			add("stop_policy.clean_on_stop[%d] path %q must be absolute", i, path)
+			continue
+		}
+		if recursive {
+			clean := pathClean(path)
+			_, isProtected := protectedDirs[clean]
+			if strings.ContainsAny(path, "*?[") {
+				add("stop_policy.clean_on_stop[%d] recursive path %q must not be a glob", i, path)
+			} else if isProtected || pathDepth(clean) < 2 {
+				add("stop_policy.clean_on_stop[%d] refuses to recursively delete %q (root/shallow/system path)", i, path)
+			}
+		}
+	}
+}
+
+// pathClean normalizes an absolute path for the protected-dir check (trailing
+// slash removed, "." segments collapsed) without importing path/filepath here.
+func pathClean(p string) string {
+	for len(p) > 1 && strings.HasSuffix(p, "/") {
+		p = p[:len(p)-1]
+	}
+	return p
+}
+
+// pathDepth counts the non-empty path components below root ("/var/cache" -> 2).
+func pathDepth(p string) int {
+	n := 0
+	for _, seg := range strings.Split(strings.Trim(p, "/"), "/") {
+		if seg != "" {
+			n++
+		}
+	}
+	return n
 }
 
 func validateProcesses(tree map[string]any, add addFunc) {

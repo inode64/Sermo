@@ -397,6 +397,24 @@ stop_policy:
 - `remove_stale: true` deletes a lingering file (the legacy `rm` behavior), only
   re-warning if the delete fails. Default is report-only.
 
+`clean_on_stop` actively **deletes** files and directories on a clean stop (a
+maintenance cleanup, distinct from the `files_absent` invariant):
+
+```yaml
+stop_policy:
+  clean_on_stop:
+    - /run/svc/foo.tmp                          # a file
+    - /tmp/svc-*.lock                           # a glob (files)
+    - { path: /var/cache/svc, recursive: true } # a directory tree
+```
+
+- A plain entry (string or glob) is deleted with `Remove` (file or empty dir);
+  `{ path, recursive: true }` deletes a directory tree (`RemoveAll`).
+- **Safety (strict):** every path must be absolute; a `recursive` entry must be a
+  concrete (non-glob) path at least two levels deep and not the filesystem root or
+  a shallow system directory (`/`, `/etc`, `/usr`, `/var`, `/var/lib`, …) — those
+  are refused at validation time. A delete failure is a warning, not a failure.
+
 ### `pidfile:` shorthand (selector + health check)
 
 A daemon can declare a top-level `pidfile: <path>` to wire **both** uses of a

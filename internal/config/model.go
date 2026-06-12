@@ -210,15 +210,23 @@ func AdditionalUnits(tree map[string]any, backend string) []string {
 	return cfgval.StringList(m[backend])
 }
 
+// CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)
+// deleted after a clean stop; Recursive deletes a directory tree.
+type CleanPath struct {
+	Path      string
+	Recursive bool
+}
+
 // StopInvariants reads the stopped-state invariants from `stop_policy`: the
 // pidfile path(s) that must be absent after stop (when `pidfile_absent: true`,
-// found by scanning the processes section for pidfile selectors), the
-// files/globs that must be absent (`files_absent`), and whether stale files are
-// removed (`remove_stale`). All zero when not configured.
-func StopInvariants(tree map[string]any) (pidfilePaths, files []string, remove bool) {
+// found by scanning the processes section for pidfile selectors), the files/globs
+// that must be absent (`files_absent`), whether stale files are removed
+// (`remove_stale`), and the files/directories to delete on stop (`clean_on_stop`,
+// each a path string or a `{path, recursive}` mapping). All zero when absent.
+func StopInvariants(tree map[string]any) (pidfilePaths, files []string, remove bool, clean []CleanPath) {
 	sp, ok := tree["stop_policy"].(map[string]any)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, false, nil
 	}
 	remove, _ = sp["remove_stale"].(bool)
 	files = cfgval.StringList(sp["files_absent"])
@@ -231,7 +239,23 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, remove b
 			}
 		}
 	}
-	return pidfilePaths, files, remove
+	if raw, ok := sp["clean_on_stop"].([]any); ok {
+		for _, item := range raw {
+			switch e := item.(type) {
+			case string:
+				if e != "" {
+					clean = append(clean, CleanPath{Path: e})
+				}
+			case map[string]any:
+				p := cfgval.AsString(e["path"])
+				rec, _ := e["recursive"].(bool)
+				if p != "" {
+					clean = append(clean, CleanPath{Path: p, Recursive: rec})
+				}
+			}
+		}
+	}
+	return pidfilePaths, files, remove, clean
 }
 
 // CascadeTargets returns the additional Sermo services declared in `also_apply`,
