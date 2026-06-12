@@ -6,6 +6,7 @@ package assist
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -14,9 +15,12 @@ import (
 
 // Prompt asks interactive questions over a reader/writer pair. All helpers
 // re-prompt until the answer is valid, so callers never deal with parse errors.
+// When the input ends (EOF) while an answer is still required, the re-prompting
+// helpers abort the wizard (see ErrInputClosed) instead of spinning forever.
 type Prompt struct {
-	r *bufio.Reader
-	w io.Writer
+	r   *bufio.Reader
+	w   io.Writer
+	eof bool
 }
 
 // NewPrompt returns a Prompt reading from in and writing prompts to out.
@@ -24,11 +28,52 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 	return &Prompt{r: bufio.NewReader(in), w: out}
 }
 
+// ErrInputClosed reports that the prompt's input ended (EOF) while an answer
+// was still required — e.g. piped stdin with too few lines. The helpers that
+// accept an empty answer (Ask, Confirm, AskInt) still return their default on
+// EOF; only the ones that would re-prompt forever abort with this error.
+var ErrInputClosed = errors.New("input ended before the prompt was answered")
+
+// promptAbort is the panic sentinel Recover translates into ErrInputClosed.
+type promptAbort struct{}
+
+// Recover converts an input-closed abort into ErrInputClosed on *errp; any
+// other panic is re-raised. Defer it around code that drives a Prompt:
+//
+//	func run() (err error) {
+//		defer assist.Recover(&err)
+//		idx := p.Choose(...)
+//		...
+//	}
+func Recover(errp *error) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	if _, ok := r.(promptAbort); ok {
+		*errp = ErrInputClosed
+		return
+	}
+	panic(r)
+}
+
+// abortIfClosed stops a re-prompt loop once the input is exhausted — without
+// it, EOF would make the loop spin forever at full CPU.
+func (p *Prompt) abortIfClosed() {
+	if p.eof {
+		panic(promptAbort{})
+	}
+}
+
 func (p *Prompt) printf(format string, a ...any) { fmt.Fprintf(p.w, format, a...) }
 
-// readLine reads one trimmed line; io.EOF yields an empty string.
+// readLine reads one trimmed line; io.EOF yields an empty string and marks the
+// input as exhausted for abortIfClosed.
 func (p *Prompt) readLine() string {
-	line, _ := p.r.ReadString('\n')
+	line, err := p.r.ReadString('\n')
+	if err != nil {
+		p.eof = true
+	}
 	return strings.TrimSpace(line)
 }
 
@@ -53,6 +98,7 @@ func (p *Prompt) AskNonEmpty(question string) string {
 			return line
 		}
 		p.printf("  a value is required\n")
+		p.abortIfClosed()
 	}
 }
 
@@ -88,6 +134,7 @@ func (p *Prompt) Choose(question string, options []string) int {
 			return n - 1
 		}
 		p.printf("  enter a number between 1 and %d\n", len(options))
+		p.abortIfClosed()
 	}
 }
 
@@ -116,6 +163,7 @@ func (p *Prompt) MultiChoose(question string, options []string) []int {
 			return idx
 		}
 		p.printf("  enter numbers between 1 and %d (e.g. 1,3), 'all', or an option name\n", len(options))
+		p.abortIfClosed()
 	}
 }
 

@@ -279,3 +279,31 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 		t.Fatalf("delete summary not shown: %s", out.String())
 	}
 }
+
+func TestRunWizardAbortsOnTruncatedInput(t *testing.T) {
+	// A truncated pipe used to spin the re-prompt loop forever at 100% CPU;
+	// now the wizard must abort cleanly with a usage error. The test itself is
+	// the regression guard: a hang here fails on the test timeout.
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	app := App{
+		// One unusable answer for the volume menu, then EOF.
+		Stdin:         strings.NewReader("zzz\n"),
+		Stdout:        &out,
+		Stderr:        &errOut,
+		LoadConfig:    config.Load,
+		wizardEnvFunc: fakeWizardEnv,
+	}
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "volume"})
+	if code != exitUsage {
+		t.Fatalf("exit = %d, want %d (usage); out=%s err=%s", code, exitUsage, out.String(), errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "wizard aborted") {
+		t.Fatalf("stderr = %q, want a wizard-aborted message", errOut.String())
+	}
+}
