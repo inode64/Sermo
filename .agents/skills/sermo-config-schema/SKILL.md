@@ -55,7 +55,7 @@ description: "..."        # optional free-text note
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
 what `${var}` resolves to after expansion. Same for `uses` with a profile. See
-`AGENTS.md` spec section 8.
+`docs/configuration.md`.
 
 ## Version templates
 
@@ -122,7 +122,7 @@ Precedence, low to high: `global defaults < profile (uses)/clone source < servic
 overrides`. The global `defaults` (stop_policy, policy, rule_window) is the base
 layer of every service; engine settings (interval, max_parallel_checks,
 default_timeout, backend) are NOT merged into services. Variables expand once,
-after all merging. See `AGENTS.md` spec section 8.
+after all merging. See `docs/configuration.md`.
 The effective `defaults.policy.cooldown` is required and must be positive. A
 profile or service may omit `policy.cooldown` only when it inherits that value;
 any explicit override must also be positive.
@@ -198,7 +198,7 @@ Validation must fail on unresolved variables.
 Variables are always strings, but some fields are logically numeric or have a
 small grammar. Use a tolerant scalar (`FlexInt`) for these so YAML never fails
 just because a value was quoted or carried a `${var}`; parse after expansion. See
-`AGENTS.md` spec section 10.
+`docs/configuration.md`.
 
 ```text
 port           int, quoted string or ${var}; resolves to an int in 1..65535.
@@ -231,7 +231,7 @@ value           "%" suffix = percentage 0..100; otherwise an absolute number.
 
 Safety: a remediation rule may only trigger on a `scope: service` metric. A
 `scope: system` metric may drive `alert` only — never restart/start/stop a
-single service. See `AGENTS.md` spec sections 12 and 14.
+single service. See `docs/rules.md`.
 
 ## Required validation
 

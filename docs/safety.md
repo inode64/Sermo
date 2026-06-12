@@ -43,6 +43,18 @@ through the same engine (section 18):
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
 
+Implementation contract: the engine registers exactly two deferred steps —
+emit one event from the final result (registered first, so it fires on every
+exit path), and release the operation lock (registered only after a successful
+acquire). Every later step may return early; cleanup never repeats per return,
+and a blocked, failed or panicking operation cannot leak the lock or skip its
+event. Result statuses: `ok`, `blocked`, `preflight_failed`,
+`postflight_failed`, `failed`, `orphan_processes`. The engine does not
+implement cooldown itself — that gates the *decision* to act and runs in the
+daemon's rule evaluation before the engine is called, which is how manual and
+automatic actions share one engine while only automatic remediation is rate
+limited.
+
 ## Rate limiting
 
 Only *automatic* remediation is rate limited (`cooldown`, `max_actions`,
@@ -107,3 +119,122 @@ Because the daemon runs as root:
   a warning if the UI runs without authentication.
 - **No shell, no name-based kills, no SIGKILL by default** — see the hard
   invariants above; these bound what even a misconfiguration can do.
+
+## Locks
+
+Two complementary blocking mechanisms guard operations:
+
+1. **Named runtime locks** — files under `<paths.runtime>/locks` (default
+   `/run/sermo/locks`), named `<service>[.<name>].lock`. The operation engine
+   blocks automatically on any active one; no rule is needed. Created by
+   `sermoctl lock` (wrap a command), `lock acquire` / `lock release`
+   (see [cli.md](cli.md)).
+2. **External lock checks gated by a guard** — a check (`file_exists`,
+   `process`, …) over a signal Sermo does *not* own: a backup process, a
+   foreign flag file. Never point such a check under `<paths.runtime>/locks` —
+   that duplicates mechanism 1.
+
+The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
+serializes start/stop/restart for one service. It is deliberately outside the
+named-lock namespace so it cannot collide with a user lock named `op`, is never
+listed as a named lock, and cannot be released by `sermoctl lock release`. A
+live holder makes a second operation fail fast with exit `75` ("operation in
+progress") — the engine never waits or queues.
+
+Lock files are JSON:
+
+```json
+{
+  "service": "mysql",
+  "name": "backup",
+  "reason": "backup mysql",
+  "owner_pid": 12345,
+  "owner_start_ticks": 884512,
+  "created_at": "2026-06-05T12:00:00Z",
+  "expires_at": "2026-06-05T16:00:00Z"
+}
+```
+
+`owner_start_ticks` is the owner's start time (field 22 of
+`/proc/<pid>/stat`), recorded so a stale lock can be told apart from a live one
+even after PID reuse.
+
+Lifecycle:
+
+- **Acquire atomically** with `O_CREAT|O_EXCL`; write the JSON and fsync file
+  and directory, so an existing lock is always complete and readable.
+- A lock is **stale** (ignored, reclaimable) when its TTL elapsed, its owner
+  PID is dead, or the PID is alive with a different start time (reuse). A live
+  lock is **never silently overwritten**.
+- **Reclaim is logged**: read, confirm still stale, unlink, acquire fresh;
+  abort if it turned active in between.
+- The wrap form unlinks the lock when the wrapped command exits (any path);
+  the TTL still bounds the lock's lifetime if the owner crashes. Pick a TTL
+  safely above the protected work's real duration — one that expires
+  mid-backup would wrongly unblock restarts.
+
+## Process identity and matching
+
+Kill decisions depend on how process facts are read, so this is fixed:
+
+- **Exe** is the resolved target of `/proc/<pid>/exe` — the absolute real path
+  of the running binary. Never `argv[0]`/cmdline, which a process can set to
+  anything. Selectors match it by **exact equality** after canonicalizing both
+  sides; no basename, prefix or substring matching.
+- **UID** is the real UID from `/proc/<pid>/status`; user selectors match it
+  exactly.
+- **Cmdline** is read for display and logging only — never for matching.
+- A selector with several fields (`exe` and `user`) requires **all** of them
+  to match.
+- **Unresolvable exe fails safe**: if `/proc/<pid>/exe` cannot be read or
+  resolves to a `(deleted)` path (binary replaced by an upgrade), the process
+  matches no exe selector — it is reported as a residual with exe unknown and
+  is never signaled.
+
+Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
+→ configured pidfiles → `command_match` selectors → child process tree from
+`/proc`, deduplicated by PID.
+
+## Stop and signal escalation
+
+`stop_policy` fields omitted by a daemon or service inherit from
+`defaults.stop_policy`. The stop phase of a stop/restart:
+
+1. Backend `Stop`, wait `graceful_timeout`, discover residuals.
+2. No residuals → clean stop.
+3. Residuals with `force_kill: false` → `orphan_processes` (and a restart does
+   **not** start).
+4. Residuals with `force_kill: true` → classify each one: KILLABLE only when
+   every `kill_only_if` field matches (exact resolved exe **and** real UID;
+   unresolvable exe is never killable). SIGTERM the killable set, wait
+   `term_timeout`, rediscover; SIGKILL what remains of the killable set, wait
+   `kill_timeout`, rediscover. A residual that never matched is never signaled.
+5. The result is `ok` only when no residuals remain at all — whether the
+   survivor was deliberately spared or outlived SIGKILL, the result is
+   `orphan_processes` and lists every remaining process.
+
+## Scheduler and concurrency
+
+Each enabled service is monitored by its own worker with an independent ticker
+at `engine.interval` (per-service `interval` overrides). Workers never share a
+cycle: a multi-minute restart on one service cannot block monitoring of
+another. Within a service the cycle is synchronous — checks, rule evaluation,
+then at most one operation.
+
+- **Tick overlap**: if a worker's cycle is still running when its next tick
+  fires, that tick is **skipped, not queued** — an overrunning operation causes
+  skips, never a backlog of catch-up cycles. Skips are per service and logged.
+- **Jitter**: workers start with a small per-service offset so ticks spread
+  across the interval.
+- **Bounded concurrency**: operations across all services share the global
+  semaphore (`engine.max_parallel_operations`); check execution shares a
+  separate global pool (`engine.max_parallel_checks`). A check that cannot get
+  a slot waits — it is not skipped.
+- **Shutdown** (SIGTERM/SIGINT): stop starting cycles, cancel worker contexts;
+  an in-flight operation observes cancellation, its deferred cleanup releases
+  the lock and emits the event, and a partially stopped service is left as-is —
+  never force-killed because of shutdown.
+- **SIGHUP** reloads the config: validate first, swap workers/watches while
+  preserving per-service runtime state; an invalid config is rejected and the
+  running generation stays.
+

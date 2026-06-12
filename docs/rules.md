@@ -1589,6 +1589,13 @@ requires privilege, so those sum only the processes the daemon can read.
 
 ## Rules
 
+Rule evaluation is deterministic and order-independent: guards always run
+before remediation, at most **one remediation action runs per service per
+cycle**, and when several remediation rules fire at once they are considered
+in sorted name order — the first non-blocked action wins. Every declared check
+and inline condition probe runs **at most once per cycle**; rules read the
+cached results.
+
 ```yaml
 rules:
   RULE_NAME:
