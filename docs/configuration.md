@@ -1330,6 +1330,9 @@ variable and have every `${var}` reference resolve to the new value.
 - Disable an inherited entry with `enabled: false`; delete it with
   `delete: true`.
 
+Worked examples (cloning, disabling, multiple instances) live in
+[daemons](daemons.md#cloning).
+
 ## Variables
 
 ```yaml
