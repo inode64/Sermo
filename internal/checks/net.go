@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,13 +17,17 @@ type NetSample struct {
 	SpeedMbps  int64
 	SpeedKnown bool
 	Counters   map[string]uint64 // statistics counters by name
+	// Addrs are the interface's non-link-local addresses (IPv4 + global IPv6),
+	// sorted. Link-local IPv6 is excluded: it exists on any up interface, so it
+	// would mask both "no address assigned" and a provider-forced renumbering.
+	Addrs []string
 }
 
 // NetSamplerFunc observes an interface. Injected for tests; the default reads
 // net.Interfaces() flags and /sys/class/net/<iface>.
 type NetSamplerFunc func(iface string) (NetSample, error)
 
-// netCheck watches one metric (state|speed|errors) of one interface. It is
+// netCheck watches one metric (state|speed|errors|address) of one interface. It is
 // stateful across cycles (remembers the previous sample) and therefore a pointer
 // type; this is safe because a watch ticks sequentially on its own goroutine.
 // OK==true means "fire".
@@ -30,8 +35,8 @@ type netCheck struct {
 	base
 	iface    string
 	metric   string
-	expect   string // state: "up"|"down"; "" means on-change
-	onChange bool   // state/speed change detection
+	expect   string // state: "up"|"down"; address: "present"|"absent"; "" means on-change
+	onChange bool   // state/speed/address change detection
 	counters []string
 	op       string
 	value    float64
@@ -41,6 +46,7 @@ type netCheck struct {
 	lastState    string
 	lastSpeed    int64
 	lastErrTotal uint64
+	lastAddrs    string
 }
 
 func (c *netCheck) Run(_ context.Context) Result {
@@ -116,6 +122,35 @@ func (c *netCheck) Run(_ context.Context) Result {
 		res.Data = data
 		return res
 
+	case "address":
+		joined := strings.Join(s.Addrs, ",")
+		display := joined
+		if display == "" {
+			display = "none"
+		}
+		data["addresses"] = s.Addrs
+		if c.expect != "" {
+			present := len(s.Addrs) > 0
+			data["value"] = len(s.Addrs)
+			ok := (c.expect == "present") == present
+			res := c.result(ok, fmt.Sprintf("%s address %s (want %s)", c.iface, display, c.expect), start)
+			res.Data = data
+			return res
+		}
+		if !c.primed {
+			c.primed, c.lastAddrs = true, joined
+			res := c.result(false, fmt.Sprintf("%s address baseline %s", c.iface, display), start)
+			res.Data = data
+			return res
+		}
+		changed := joined != c.lastAddrs
+		data["old"], data["new"], data["value"] = c.lastAddrs, joined, joined
+		msg := fmt.Sprintf("%s address %s->%s", c.iface, c.lastAddrs, joined)
+		c.lastAddrs = joined
+		res := c.result(changed, msg, start)
+		res.Data = data
+		return res
+
 	default:
 		res := c.result(false, "unknown net metric "+c.metric, start)
 		res.Data = data
@@ -139,6 +174,17 @@ func defaultNetSampler(iface string) (NetSample, error) {
 		if v, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64); err == nil && v >= 0 {
 			sample.SpeedMbps, sample.SpeedKnown = v, true
 		}
+	}
+
+	if addrs, err := ifi.Addrs(); err == nil {
+		for _, a := range addrs {
+			ipn, ok := a.(*net.IPNet)
+			if !ok || ipn.IP.IsLinkLocalUnicast() {
+				continue
+			}
+			sample.Addrs = append(sample.Addrs, ipn.IP.String())
+		}
+		slices.Sort(sample.Addrs)
 	}
 
 	statDir := "/sys/class/net/" + iface + "/statistics"
