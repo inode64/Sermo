@@ -24,6 +24,8 @@ var (
 	DiskPredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 	// SwapUsageFields are the predicates of a swap usage metric.
 	SwapUsageFields = []string{"used_pct", "free_pct", "free_bytes"}
+	// MemoryPredFields are the predicates of a memory check.
+	MemoryPredFields = []string{"used_pct", "available_pct", "available_bytes"}
 	// FdsPredFields are the predicates of an fds check.
 	FdsPredFields = []string{"used_pct", "free", "allocated"}
 	// ConntrackPredFields are the predicates of a conntrack check.

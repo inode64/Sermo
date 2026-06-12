@@ -174,6 +174,18 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-load-alert.sh]
+  # Watch system RAM via the kernel's MemAvailable estimate (page cache and
+  # reclaimable buffers never read as "used").
+  memory:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: memory
+      used_pct: { op: ">=", value: "90%" }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-memory-alert.sh]
   # Watch system file descriptors against the kernel fs.file-max limit.
   fds:
     monitor: disabled

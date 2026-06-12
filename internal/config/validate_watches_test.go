@@ -1248,3 +1248,22 @@ func TestValidateScalarWithinRejectedOnWatch(t *testing.T) {
 		t.Fatalf("scalar within should be rejected, got %v", bad)
 	}
 }
+
+func TestValidateMemoryWatch(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"ram": map[string]any{
+				"check": map[string]any{
+					"type":            "memory",
+					"used_pct":        map[string]any{"op": ">=", "value": "90%"},
+					"available_bytes": map[string]any{"op": "<", "value": "1G"},
+				},
+				"for":  map[string]any{"cycles": 3},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("valid memory watch flagged: %v", w)
+	}
+}

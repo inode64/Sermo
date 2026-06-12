@@ -989,3 +989,30 @@ rules:
 		t.Fatalf("boolean exists flagged: %v", good)
 	}
 }
+
+func TestValidateMemoryCheckBothSurfaces(t *testing.T) {
+	// In a service's checks: (unified check types — same validator as watches).
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  ram: { type: memory, used_pct: { op: ">=", value: "90%" } }
+`)
+	if hasIssue(good, "memory") || hasIssue(good, "ram") {
+		t.Fatalf("valid memory check flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-pred:  { type: memory }
+  bad-size: { type: memory, available_bytes: { op: "<", value: 1024 } }
+`)
+	mustHave(t, bad, "checks.no-pred requires at least one of used_pct/available_pct/available_bytes")
+	mustHave(t, bad, `available_bytes value "1024" must include a size suffix`)
+}
