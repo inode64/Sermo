@@ -70,21 +70,14 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		return c.result(false, fmt.Sprintf("diskio %s baseline", c.device), start)
 	}
 
-	// Counter deltas, clamped to zero on reset (e.g. device re-plug).
-	sub := func(cur, prev uint64) uint64 {
-		if cur < prev {
-			return 0
-		}
-		return cur - prev
-	}
-	ioTicks := sub(s.IOTicksMs, st.last.IOTicksMs)
+	ioTicks := deltaOrZero(s.IOTicksMs, st.last.IOTicksMs)
 	utilPct := min(100, float64(ioTicks)/float64(elapsed.Milliseconds())*100)
-	readBytes := float64(sub(s.SectorsRead, st.last.SectorsRead)*512) / elapsed.Seconds()
-	writeBytes := float64(sub(s.SectorsWritten, st.last.SectorsWritten)*512) / elapsed.Seconds()
-	ops := sub(s.ReadsCompleted, st.last.ReadsCompleted) + sub(s.WritesCompleted, st.last.WritesCompleted)
+	readBytes := float64(deltaOrZero(s.SectorsRead, st.last.SectorsRead)*512) / elapsed.Seconds()
+	writeBytes := float64(deltaOrZero(s.SectorsWritten, st.last.SectorsWritten)*512) / elapsed.Seconds()
+	ops := deltaOrZero(s.ReadsCompleted, st.last.ReadsCompleted) + deltaOrZero(s.WritesCompleted, st.last.WritesCompleted)
 	awaitMs := 0.0
 	if ops > 0 {
-		awaitMs = float64(sub(s.ReadTicksMs, st.last.ReadTicksMs)+sub(s.WriteTicksMs, st.last.WriteTicksMs)) / float64(ops)
+		awaitMs = float64(deltaOrZero(s.ReadTicksMs, st.last.ReadTicksMs)+deltaOrZero(s.WriteTicksMs, st.last.WriteTicksMs)) / float64(ops)
 	}
 	st.t, st.last = now, s
 

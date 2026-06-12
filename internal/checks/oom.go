@@ -44,10 +44,7 @@ func (c *oomCheck) Run(_ context.Context) Result {
 		res.Data = map[string]any{"value": uint64(0), "total": count}
 		return res
 	}
-	var delta uint64
-	if count > c.lastCount {
-		delta = count - c.lastCount
-	}
+	delta := deltaOrZero(count, c.lastCount)
 	c.lastCount = count
 	met := compareFloat(float64(delta), c.op, c.value)
 	res := c.result(met, fmt.Sprintf("oom kills +%d (total %d)", delta, count), start)

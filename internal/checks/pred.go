@@ -120,6 +120,16 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	return op, value, ""
 }
 
+// deltaOrZero is the shared counter-delta clamp every stateful check uses: a
+// cumulative counter that went backwards (reset, device re-plug, module
+// reload) yields a zero delta instead of a giant unsigned wraparound.
+func deltaOrZero(cur, prev uint64) uint64 {
+	if cur < prev {
+		return 0
+	}
+	return cur - prev
+}
+
 // parseLevelPredValue parses one predicate value by its field's form.
 func parseLevelPredValue(field string, raw any) (float64, error) {
 	value := cfgval.String(raw)
