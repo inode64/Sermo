@@ -650,7 +650,7 @@ func TestVerifyStoppedWarnsAndRemoves(t *testing.T) {
 	// remove: the same stop deletes the stale files.
 	h2 := defaultHarness()
 	e2 := h2.engine()
-	e2.StopArtifacts = StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}, Remove: true}
+	e2.StopArtifacts = StopArtifacts{PidfilePaths: []string{pidf}, Files: []string{filepath.Join(dir, "*.sock")}, CleanEnabled: true}
 	res2 := e2.Stop(context.Background())
 	if res2.Status != ResultOK {
 		t.Fatalf("remove stop status = %q (%s)", res2.Status, res2.Message)
@@ -675,12 +675,29 @@ func TestCleanOnStopDeletesFilesAndDirs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := defaultHarness()
-	e := h.engine()
-	e.StopArtifacts = StopArtifacts{Clean: []CleanPath{
+	clean := []CleanPath{
 		{Path: file},                    // plain file
 		{Path: subdir, Recursive: true}, // non-empty dir tree
-	}}
+	}
+
+	// clean_after_stop off (default): the list is inert — nothing is deleted.
+	h0 := defaultHarness()
+	e0 := h0.engine()
+	e0.StopArtifacts = StopArtifacts{Clean: clean}
+	if res := e0.Stop(context.Background()); res.Status != ResultOK {
+		t.Fatalf("clean_on_stop (disabled) status = %q (%s)", res.Status, res.Message)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatal("clean_on_stop must NOT delete when clean_after_stop is off")
+	}
+	if _, err := os.Stat(subdir); err != nil {
+		t.Fatal("clean_on_stop must NOT delete the dir when clean_after_stop is off")
+	}
+
+	// clean_after_stop on: the list is deleted (file and recursive dir tree).
+	h := defaultHarness()
+	e := h.engine()
+	e.StopArtifacts = StopArtifacts{CleanEnabled: true, Clean: clean}
 	res := e.Stop(context.Background())
 	if res.Status != ResultOK {
 		t.Fatalf("clean_on_stop status = %q (%s)", res.Status, res.Message)

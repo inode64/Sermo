@@ -2050,17 +2050,17 @@ func TestStopInvariants(t *testing.T) {
 			"pidfile": map[string]any{"type": "pidfile", "path": "/run/svc.pid"},
 		},
 		"stop_policy": map[string]any{
-			"pidfile_absent": true,
-			"files_absent":   []any{"/run/svc/*.sock"},
-			"remove_stale":   true,
+			"pidfile_absent":   true,
+			"files_absent":     []any{"/run/svc/*.sock"},
+			"clean_after_stop": true,
 		},
 	}
-	pp, ff, rm, _ := StopInvariants(tree)
+	pp, ff, cleanEnabled, _ := StopInvariants(tree)
 	if len(pp) != 1 || pp[0] != "/run/svc.pid" {
 		t.Fatalf("pidfile paths = %v, want [/run/svc.pid]", pp)
 	}
-	if len(ff) != 1 || ff[0] != "/run/svc/*.sock" || !rm {
-		t.Fatalf("files=%v remove=%v", ff, rm)
+	if len(ff) != 1 || ff[0] != "/run/svc/*.sock" || !cleanEnabled {
+		t.Fatalf("files=%v cleanEnabled=%v", ff, cleanEnabled)
 	}
 	// pidfile_absent omitted -> no pidfile paths even if a selector exists.
 	pp2, _, _, _ := StopInvariants(map[string]any{

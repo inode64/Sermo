@@ -65,8 +65,10 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 			add("stop_policy.kill_only_if must define both users and exe_any, each non-empty")
 		}
 	}
-	// Stopped-state invariants (verified after a clean stop).
-	for _, b := range []string{"pidfile_absent", "remove_stale"} {
+	// Stopped-state invariants (verified after a clean stop). clean_after_stop is
+	// the master opt-in that enables deleting stale leftovers and the clean_on_stop
+	// list; with it off the invariants are only verified and warned about.
+	for _, b := range []string{"pidfile_absent", "clean_after_stop"} {
 		if v, present := sp[b]; present {
 			if _, ok := v.(bool); !ok {
 				add("stop_policy.%s must be true or false", b)
