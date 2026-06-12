@@ -66,6 +66,9 @@ type Deps struct {
 	// PidsSampler reads the kernel PID table for `pids` checks. Nil reads
 	// /proc/loadavg and kernel.pid_max.
 	PidsSampler PidsSamplerFunc
+	// DiskIOSampler reads a block device's counters for `diskio` checks. Nil
+	// reads /proc/diskstats.
+	DiskIOSampler DiskIOSamplerFunc
 	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
 	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
@@ -184,6 +187,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildPressureCheck(b, entry, deps)
 	case "pids":
 		return buildPidsCheck(b, entry, deps)
+	case "diskio":
+		return buildDiskIOCheck(b, entry, deps)
 	case "conntrack":
 		return buildConntrackCheck(b, entry, deps)
 	case "entropy":
@@ -702,6 +707,19 @@ func buildPidsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, errs
 	}
 	return pidsCheck{base: b, preds: preds, sampler: deps.PidsSampler}, ""
+}
+
+// buildDiskIOCheck builds a block-device I/O rate check.
+func buildDiskIOCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	device := cfgval.AsString(entry["device"])
+	if device == "" {
+		return nil, "diskio check requires a device (e.g. sda, nvme0n1)"
+	}
+	preds, errs := requireLevelPreds(entry, DiskIOPredFields, "diskio check")
+	if errs != "" {
+		return nil, errs
+	}
+	return &diskIOCheck{base: b, device: device, preds: preds, sampler: deps.DiskIOSampler, state: &diskIOState{}}, ""
 }
 
 // buildPressureCheck builds a kernel PSI stall check.

@@ -29,6 +29,10 @@ var (
 	// PressurePredFields are the predicates of a pressure (PSI) check: the
 	// rolling stall percentages of the some/full lines.
 	PressurePredFields = []string{"some_avg10", "some_avg60", "some_avg300", "full_avg10", "full_avg60", "full_avg300"}
+	// DiskIOPredFields are the predicates of a diskio check: per-cycle rates
+	// (read_bytes/write_bytes are bytes per second, so the size-suffix grammar
+	// reads naturally, e.g. "50M").
+	DiskIOPredFields = []string{"util_pct", "read_bytes", "write_bytes", "await_ms"}
 	// FdsPredFields are the predicates of an fds check.
 	FdsPredFields = []string{"used_pct", "free", "allocated"}
 	// PidsPredFields are the predicates of a pids check.
