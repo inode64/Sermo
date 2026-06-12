@@ -1400,10 +1400,10 @@ notifiers:
 ## Validating
 
 ```sh
-sermoctl --config /etc/sermo/sermo.yml config validate          # all services
-sermoctl --config /etc/sermo/sermo.yml config validate mysql    # one service
-sermoctl --config /etc/sermo/sermo.yml config render mysql-main # resolved form
-sermoctl --config /etc/sermo/sermo.yml config diff redis-main redis-cache
+sermoctl config validate          # all services
+sermoctl config validate mysql    # one service
+sermoctl config render mysql-main # resolved form
+sermoctl config diff redis-main redis-cache
 ```
 
 `config validate` exits `78` on a configuration error. See
@@ -1422,8 +1422,8 @@ machine-readable output with `base`, `service`, `identical`, `removed`, and
 further and checks it against the **live host and state database**:
 
 ```sh
-sermoctl --config /etc/sermo/sermo.yml diagnose          # text report
-sermoctl --config /etc/sermo/sermo.yml diagnose --json   # machine-readable
+sermoctl diagnose          # text report
+sermoctl diagnose --json   # machine-readable
 ```
 
 It reports, as `error` / `warning` / `info` findings:
