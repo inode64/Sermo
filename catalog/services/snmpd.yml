@@ -12,10 +12,10 @@ variables:
 pidfile: /run/snmpd.pid
 
 # Net-SNMP reloads its config on SIGHUP; the systemd unit usually has no
-# ExecReload while OpenRC's init script reloads. `when: auto` bridges both.
+# ExecReload while OpenRC's init script reloads; the default `when: auto`
+# bridges both.
 reload:
   signal: HUP
-  when: auto
 
 checks:
   service: { type: service, expect: active }

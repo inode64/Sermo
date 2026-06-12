@@ -18,11 +18,10 @@ pidfile: /run/sshd.pid
 
 # sshd re-reads its config on SIGHUP, but its systemd unit usually defines no
 # ExecReload (so `systemctl reload` fails); OpenRC's init script does reload.
-# `when: auto` uses the init reload where it exists and signals sshd ourselves
-# where it doesn't.
+# The default `when: auto` uses the init reload where it exists and signals
+# sshd ourselves where it doesn't.
 reload:
   signal: HUP
-  when: auto
 
 checks:
   service: { type: service, expect: active }
