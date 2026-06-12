@@ -261,16 +261,16 @@ uses: tomcat
 	if _, ok := pf["binary"]; !ok {
 		t.Errorf("service's own preflight binary missing")
 	}
-	jbin, ok := pf["app-java-binary"].(map[string]any)
+	jbin, ok := pf["java-binary"].(map[string]any)
 	if !ok {
-		t.Fatalf("app-java-binary not injected: %v", pf)
+		t.Fatalf("java-binary not injected: %v", pf)
 	}
 	// It carries java's binary path (expanded with java's vars), not tomcat's.
 	if got := cfgval.String(jbin["path"]); got != "/usr/bin/java" {
-		t.Errorf("app-java-binary path = %q, want /usr/bin/java", got)
+		t.Errorf("java-binary path = %q, want /usr/bin/java", got)
 	}
-	if _, ok := pf["app-java-version"]; !ok {
-		t.Errorf("app-java-version not injected: %v", pf)
+	if _, ok := pf["java-version"]; !ok {
+		t.Errorf("java-version not injected: %v", pf)
 	}
 	// `apps` is consumed, not left in the resolved tree.
 	if _, ok := resolved.Tree["apps"]; ok {
