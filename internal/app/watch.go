@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/notify"
 	"sermo/internal/rules"
@@ -116,7 +116,7 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
 		w.emit(Event{Watch: w.Name, Kind: "expand-skipped", Message: reason})
 		return
 	}
-	path := stringifyValue(res.Data["path"])
+	path := cfgval.String(res.Data["path"])
 	r, err := w.Expander.ExpandPath(ctx, path, w.Expand.By)
 	w.policyState.Record(at, w.Policy)
 	if err != nil {
@@ -180,7 +180,7 @@ func hookEnv(name, checkType string, res checks.Result) map[string]string {
 		"SERMO_MESSAGE":    res.Message,
 	}
 	for k, v := range res.Data {
-		env["SERMO_"+envKey(k)] = stringifyValue(v)
+		env["SERMO_"+envKey(k)] = cfgval.String(v)
 	}
 	return env
 }
@@ -199,12 +199,4 @@ func envKey(k string) string {
 		}
 	}
 	return b.String()
-}
-
-// stringifyValue renders a Data value; whole floats print without a trailing .0.
-func stringifyValue(v any) string {
-	if f, ok := v.(float64); ok {
-		return strconv.FormatFloat(f, 'f', -1, 64)
-	}
-	return fmt.Sprintf("%v", v)
 }
