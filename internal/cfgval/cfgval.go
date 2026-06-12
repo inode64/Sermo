@@ -171,6 +171,19 @@ func IsCompareOp(op string) bool {
 	}
 }
 
+// IsAssertOp reports whether op is one of the response-assertion operators:
+// the IsCompareOp set plus `contains` (substring) and `=~` (RE2 regexp).
+// Shared by the expect/expect_json/sql-style validations and the runtime
+// matchers so the assertion vocabulary cannot drift.
+func IsAssertOp(op string) bool {
+	switch op {
+	case "contains", "=~":
+		return true
+	default:
+		return IsCompareOp(op)
+	}
+}
+
 // Bool returns v when it is a bool, or false otherwise.
 func Bool(v any) bool {
 	b, _ := v.(bool)

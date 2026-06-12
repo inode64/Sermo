@@ -50,14 +50,10 @@ func compareValue(result, op, value string) (bool, error) {
 	}
 }
 
-// validCompareOp reports whether op is a supported comparison operator.
+// validCompareOp reports whether op is a supported comparison operator (the
+// shared assertion set in cfgval).
 func validCompareOp(op string) bool {
-	switch op {
-	case "==", "!=", ">", ">=", "<", "<=", "contains", "=~":
-		return true
-	default:
-		return false
-	}
+	return cfgval.IsAssertOp(op)
 }
 
 // OutputMatcher matches captured command/hook output (stdout or stderr) against
