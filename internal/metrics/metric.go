@@ -19,6 +19,10 @@ type Reading struct {
 	HasAbsolute bool
 	HasPercent  bool
 	Ready       bool
+	// Total is the capacity behind a usage metric (memory/swap bytes), so a
+	// consumer can derive free space; HasTotal reports whether it applies.
+	Total    float64
+	HasTotal bool
 }
 
 // Snapshot holds one scope's metrics for a cycle, keyed by metric name.

@@ -13,6 +13,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/volume"
@@ -166,6 +167,56 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	}
 	if watches[0].Monitor != config.MonitorDisabled || watches[0].Monitored {
 		t.Fatalf("watch monitor view = %+v", watches[0])
+	}
+}
+
+// fakeSwapReader is the minimal metrics.Reader (plus optional TotalSwap) the
+// swap watch view needs.
+type fakeSwapReader struct {
+	total, used uint64
+}
+
+func (fakeSwapReader) ProcessCPU(int) (uint64, bool)        { return 0, false }
+func (fakeSwapReader) ProcessRSS(int) (uint64, bool)        { return 0, false }
+func (fakeSwapReader) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
+func (fakeSwapReader) ProcessFDs(int) (uint64, bool)        { return 0, false }
+func (fakeSwapReader) ProcessThreads(int) (uint64, bool)    { return 0, false }
+func (fakeSwapReader) TotalMemory() (uint64, uint64, bool)  { return 1 << 30, 1 << 29, true }
+func (fakeSwapReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
+func (fakeSwapReader) LoadAverages() (float64, float64, float64, bool) {
+	return 0, 0, 0, false
+}
+func (fakeSwapReader) NumCPU() int         { return 1 }
+func (fakeSwapReader) ClockTicks() float64 { return 100 }
+func (r fakeSwapReader) TotalSwap() (uint64, uint64, bool) {
+	return r.total, r.used, true
+}
+
+func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"swap": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"usage": map[string]any{
+						"used_pct": map[string]any{"op": ">=", "value": 80},
+						"then":     map[string]any{"notify": []any{"none"}},
+					},
+				},
+			},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{Collector: metrics.New(fakeSwapReader{total: 2048, used: 512})})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 || watches[0].Swap == nil {
+		t.Fatalf("watches = %+v, want one with swap usage", watches)
+	}
+	sw := watches[0].Swap
+	if sw.TotalBytes != 2048 || sw.UsedBytes != 512 || sw.FreeBytes != 1536 || sw.UsedPct != 25 {
+		t.Fatalf("swap view = %+v, want 512/2048 used (25%%, 1536 free)", sw)
 	}
 }
 

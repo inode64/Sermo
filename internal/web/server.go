@@ -87,6 +87,7 @@ type Watch struct {
 	NotifierCount    int              `json:"notifier_count"`
 	Conditions       []WatchCondition `json:"conditions,omitempty"`
 	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
+	Swap             *SwapWatchInfo   `json:"swap,omitempty"`
 	Expand           *WatchExpand     `json:"expand,omitempty"`
 	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
 	LastActivityKind string           `json:"last_activity_kind,omitempty"`
@@ -102,6 +103,15 @@ type WatchCondition struct {
 // WatchExpand is the configured manual/automatic storage growth action.
 type WatchExpand struct {
 	ByBytes int64 `json:"by_bytes"`
+}
+
+// SwapWatchInfo is live swap usage for a swap host watch, mirroring the
+// volume-style used/free rendering of DiskWatchInfo.
+type SwapWatchInfo struct {
+	TotalBytes uint64  `json:"total_bytes"`
+	UsedBytes  uint64  `json:"used_bytes"`
+	FreeBytes  uint64  `json:"free_bytes"`
+	UsedPct    float64 `json:"used_pct"`
 }
 
 // DiskWatchInfo is live filesystem data for a storage host watch.
@@ -178,6 +188,7 @@ type HostMetric struct {
 	Name     string  `json:"name"`
 	Percent  float64 `json:"percent,omitempty"`
 	Absolute float64 `json:"absolute,omitempty"`
+	Total    float64 `json:"total,omitempty"` // capacity behind a usage metric (memory/swap bytes)
 	Unit     string  `json:"unit,omitempty"`
 	Ready    bool    `json:"ready"`
 }
