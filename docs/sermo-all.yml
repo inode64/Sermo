@@ -1,0 +1,387 @@
+# Sermo — complete annotated configuration example
+# =================================================
+#
+# Every configuration surface in one place, as YAML documents separated by
+# `---`. In a real deployment each document lives in its own file:
+#
+#   document 1 (global)          -> /etc/sermo/sermo.yml
+#   kind: daemon / app / lib /
+#   kind: patterns               -> a catalog dir (paths.catalog)
+#   kind: service                -> an include dir (paths.includes)
+#
+# This file is validated by the test suite (internal/config), so it cannot
+# drift from the real schema. The shipped operational config is
+# configs/sermo.yml; the field-by-field reference is docs/configuration.md and
+# docs/rules.md.
+
+# ---------------------------------------------------------------------------
+# 1. Global configuration (sermo.yml)
+# ---------------------------------------------------------------------------
+
+engine:
+  backend: auto                # auto | systemd | openrc
+  interval: 30s                # default check cycle for services and watches
+  max_parallel_checks: 8       # global probe pool, all workers together
+  max_parallel_operations: 2   # global start/stop/restart slots
+  default_timeout: 10s         # per-check timeout when a check sets none
+  operation_timeout: 90s       # outer deadline for safe start/stop/restart
+  startup_delay: 0             # grace before the first cycle after boot
+
+paths:
+  catalog:                     # packaged + admin daemon/app/lib definitions
+    - /usr/share/sermo/catalog
+    - /etc/sermo/catalog-available
+  includes:                    # kind:service files and watch fragments
+    - apps-enabled             # relative to this file's directory
+  runtime: /run/sermo          # volatile: locks, op slots (tmpfs)
+  state: /var/lib/sermo        # persistent: monitor state, SLA, measurements
+
+defaults:                      # merged into every service as the base layer
+  stop_policy:
+    graceful_timeout: 30s
+    term_timeout: 15s
+    kill_timeout: 5s
+    force_kill: false          # SIGKILL never allowed by default
+  policy:
+    cooldown: 5m               # required and positive: loop prevention
+  # rule_window:               # fallback for rules without for/within
+  #   cycles: 1
+  #   mode: consecutive        # consecutive | within (min_matches optional)
+
+logging:
+  level: info
+  format: text
+
+# Web dashboard. NOT activated unless `port` is defined.
+web:
+  address: 127.0.0.1
+  port: 9797
+  # password: "change-me"        # admin: read + actions
+  # guest_password: "read-only"  # optional read-only login
+  # guest: false                 # true allows anonymous read-only access
+
+# Named notification targets (email, slack and teams are built in).
+notifiers:
+  ops-email:
+    type: email
+    dsn: "smtp://user:pass@smtp.example.com:587"  # smtp:// or smtps://
+    from: "Sermo <sermo@example.com>"
+    to: [ops@example.com]
+  team-slack:
+    type: slack
+    webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
+  ops-teams:
+    enabled: false             # keep configured but skip delivery
+    type: teams
+    webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/x"
+
+# Default targets for watches/rules that omit notify; notify: [none] suppresses
+# delivery per site (a watch whose only action is [none] is monitor-only).
+notify: [ops-email]
+
+# Host watches: one entry per concern; `monitor: disabled` builds them paused.
+watches:
+  # -- storage with auto-expand (LVM) ---------------------------------------
+  data-space:
+    monitor: disabled
+    interval: 1m
+    check:
+      type: storage
+      path: /var/lib/data
+      free_pct: { op: "<", value: "10%" }    # *_bytes need a K/M/G/T suffix
+    for: { cycles: 3 }                       # debounce: N consecutive cycles
+    then:
+      notify: [team-slack]
+      expand: { by: 5G }                     # storage-only action
+    policy: { cooldown: 30m }                # pace the expand action
+
+  # -- multi-metric icmp: per-metric conditions, each with its own then -----
+  ping-gw:
+    monitor: disabled
+    check: { type: icmp, host: 8.8.8.8, count: 3 }
+    metrics:
+      state:
+        on: change                            # or expect: up|down
+        then: { notify: [ops-email] }
+      latency:
+        threshold: { op: ">", value: 100 }    # ms; or change: { delta: N }
+        then:
+          hook: { command: [/usr/local/bin/latency-alert.sh, "8.8.8.8"] }
+
+  # -- multi-metric net: link state, errors, speed, addresses ---------------
+  uplink:
+    monitor: disabled
+    check: { type: net, interface: ppp0 }
+    metrics:
+      state:   { expect: down, then: { notify: [ops-email] } }
+      errors:  { delta: { op: ">", value: 100 }, then: { notify: [ops-email] } }
+      speed:   { on: change, then: { notify: [none] } }   # monitor-only metric
+      address:                                # renumbering -> dynamic-DNS hook
+        on: change                            # or expect: present|absent
+        then:
+          hook: { command: [/usr/local/bin/ddns-update.sh] }
+
+  # -- default route pinned to an egress interface --------------------------
+  uplink-route:
+    monitor: disabled
+    check: { type: route, interface: ppp0 }   # family: ipv6 for the v6 table
+    then: { notify: [ops-email] }
+
+  # -- DNS resolution through the system resolver ---------------------------
+  uplink-dns:
+    monitor: disabled
+    check:
+      type: dns
+      resolvconf: true                        # first /etc/resolv.conf server
+      query: example.com
+      expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
+      timeout: 5s
+    for: { cycles: 3 }
+    then: { notify: [ops-email] }
+
+  # -- host levels: one compact example per family --------------------------
+  load:
+    monitor: disabled
+    check: { type: load, per_cpu: true, load5: { op: ">", value: 1.5 } }
+    for: { cycles: 3 }
+    then: { notify: [ops-email] }
+  memory:
+    monitor: disabled
+    check: { type: memory, used_pct: { op: ">=", value: "90%" } }
+    for: { cycles: 3 }
+    then: { notify: [ops-email] }
+  # Same level-check grammar: pressure (PSI), fds, pids, conntrack, entropy,
+  # zombies, diskio, hdparm, sensors, smart, raid, edac — see configs/sermo.yml
+  # for one tuned entry of each and docs/rules.md for their fields.
+  oom:
+    monitor: disabled
+    check: { type: oom }                      # fires on any OOM kill
+    then: { notify: [ops-email] }
+
+  # -- multi-metric swap: usage level + paging rate -------------------------
+  swap:
+    monitor: disabled
+    check: { type: swap }
+    metrics:
+      usage: { used_pct: { op: ">=", value: 80 }, then: { notify: [ops-email] } }
+      io:    { delta: { op: ">", value: 1000 }, then: { notify: [ops-email] } }
+
+  # -- file watch: one event per changed path -------------------------------
+  app-data:
+    monitor: disabled
+    check:
+      type: file
+      path: /var/lib/myapp
+      recursive: true
+      size: { op: ">", value: 1048576 }       # or size: { on: change }
+      permissions: { on: change }
+      owner: { on: change }
+      existence: { on: delete }
+    then:
+      hook: { command: [/usr/local/bin/file-change.sh], timeout: 10s }
+
+  # -- process watch: per-PID thresholds, edge-triggered ---------------------
+  hot-workers:
+    monitor: disabled
+    check:
+      type: process
+      name: myworker
+      user: www-data
+      for: 5m                                 # PID alive at least this long
+      cpu: { op: ">", value: 80 }
+      memory: { op: ">", value: 524288000 }
+      gone: true                              # also fire when a PID disappears
+    then:
+      hook: { command: [/usr/local/bin/proc-alert.sh] }
+
+  # -- any single-shot service check as a host watch (fires on failure) -----
+  webapp-health:
+    monitor: disabled
+    check: { type: http, url: "http://127.0.0.1:8080/health", expect_status: 2xx }
+    for: { cycles: 3 }
+    then: { notify: [ops-email] }
+
+---
+# ---------------------------------------------------------------------------
+# 2. kind: daemon — a reusable base definition (catalog)
+# ---------------------------------------------------------------------------
+kind: daemon
+name: demo
+display_name: "Demo HTTP Server"
+description: "Reference daemon showing every section."
+type: webserver
+
+service:                       # per-backend unit candidates, first match wins
+  systemd: [demo, demo-server]
+  openrc: [demo]
+
+apps: [demo-app]               # binary + version owned by the linked app
+
+variables:                     # flat strings; ${var} expands after all merging
+  binary: /usr/bin/demo
+  user: demo
+  host: 127.0.0.1
+  port: 8080
+  health_path: /health
+
+commands:                      # informational; never run automatically
+  version:
+    command: ["${binary}", "--version"]
+    timeout: 5s
+
+# pidfile auto-wires process-tree monitoring and a requires:[service] health check.
+pidfile: /run/demo.pid
+
+config_files: [/etc/demo/demo.conf]
+
+preflight:                     # gate start/restart
+  config:
+    type: command
+    command: ["${binary}", "--test-config"]
+    timeout: 10s
+  libraries:
+    type: libraries
+    binary: "${binary}"
+    optional: true             # best-effort: warns, never blocks
+
+postflight:                    # assert health after start/restart
+  http:
+    type: http
+    url: "http://${host}:${port}${health_path}"
+    expect_status: 200
+    timeout: 5s
+
+processes:                     # discovery selectors (exact exe + real UID)
+  main:
+    type: command_match
+    exe: "${binary}"
+    user: root
+  workers:
+    type: command_match
+    exe: "${binary}"
+    user: "${user}"
+
+reload:                        # native reload (signal or command)
+  signal: HUP                  # when: defaults to auto (init reload if defined)
+
+restart_on_change:             # restart when a linked library changes on disk
+  libraries: [demo-lib]
+
+checks:
+  service: { type: service, expect: active }
+  port:    { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
+  http:
+    type: http
+    url: "http://${host}:${port}${health_path}"
+    expect_status: 2xx         # code, class, list, or {op, value}
+    timeout: 5s
+  cert:
+    type: cert
+    host: "${host}"
+    port: 443
+    verify: false
+    expires_in_days: 21
+  mem:
+    type: metric
+    scope: service             # service metrics may drive remediation
+    name: memory
+    op: ">"
+    value: 40%
+
+stop_policy:
+  graceful_timeout: 30s
+  term_timeout: 10s
+  kill_timeout: 5s
+  force_kill: true             # requires the restrictive selector below
+  kill_only_if:
+    users: ["${user}", root]
+    exe_any: ["${binary}"]
+
+policy:                        # overrides defaults.policy for this daemon
+  cooldown: 10m
+  max_actions: 5
+  max_actions_window: 1h
+  backoff: { initial: 1m, factor: 2, max: 30m }
+
+rules:
+  block-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if: { failed: { check: config } }
+    then: { action: block, message: "demo config is invalid" }
+  restart-if-http-failed:
+    type: remediation
+    if: { failed: { check: http } }
+    for: { cycles: 3, mode: consecutive }     # or within: {cycles, min_matches}
+    then: { action: restart }
+  alert-host-pressure:
+    type: alert                # system metrics may only alert, never remediate
+    if: { metric: { scope: system, name: total_memory, op: ">", value: 90% } }
+    then: { action: alert, message: "host memory high" }
+
+---
+# ---------------------------------------------------------------------------
+# 3. kind: app — a tool/runtime with a binary and a version (catalog)
+# ---------------------------------------------------------------------------
+kind: app
+name: demo-app
+display_name: "Demo Server"
+variables:
+  binary: /usr/bin/demo
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+
+---
+# ---------------------------------------------------------------------------
+# 4. kind: lib — a shared library tracked for restart_on_change (catalog)
+# ---------------------------------------------------------------------------
+kind: lib
+name: demo-lib
+display_name: "Demo Library"
+variables:
+  binary: /usr/lib/libdemo.so.1
+preflight:
+  binary: { type: binary, path: "${binary}" }
+
+---
+# ---------------------------------------------------------------------------
+# 5. kind: patterns — output-analysis rule set for command checks (catalog)
+# ---------------------------------------------------------------------------
+kind: patterns
+name: demo-patterns
+display_name: "Demo output signals"
+rules:
+  - { id: corrupt,  match: '(?i)corruption detected', severity: error }
+  - { id: degraded, match: '(?i)\bdegraded\b',        severity: warning }
+
+---
+# ---------------------------------------------------------------------------
+# 6. kind: service — a concrete monitored instance (include dir)
+# ---------------------------------------------------------------------------
+kind: service
+name: demo-main
+uses: demo                     # inherit the daemon, then override below
+interval: 15s                  # check more often than engine.interval
+# enabled: false               # keep configured but fully off
+# monitor: disabled            # build paused; or `previous` to restore state
+
+variables:
+  health_path: /status         # changes every ${health_path} use at once
+
+checks:
+  cert: { enabled: false }     # disable one inherited check (delete: true removes)
+
+rules:
+  restart-if-http-failed:      # override one inherited rule field
+    for: { cycles: 5 }
+
+---
+# ---------------------------------------------------------------------------
+# 7. kind: service clone — copy another service pre-expansion and tweak it
+# ---------------------------------------------------------------------------
+kind: service
+name: demo-second
+clone: demo-main               # copies demo-main BEFORE variable expansion...
+variables:
+  port: 8081                   # ...so this override reaches every ${port}
