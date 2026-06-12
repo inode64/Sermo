@@ -504,7 +504,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
 var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "process", "metric", "libraries", "count",
-	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "memory", "pressure", "pids", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
+	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "memory", "pressure", "pids", "diskio", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -710,6 +710,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validatePressureFields(path, entry, add)
 	case "pids":
 		validateThresholdPreds(path, entry, checks.PidsPredFields, add)
+	case "diskio":
+		validateDiskIOFields(path, entry, add)
 	case "conntrack":
 		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
 	case "entropy":
@@ -996,6 +998,15 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 			}
 		}
 	}
+}
+
+// validateDiskIOFields validates a diskio check: a required block device name
+// and at least one rate predicate.
+func validateDiskIOFields(prefix string, fields map[string]any, add addFunc) {
+	if cfgval.String(fields["device"]) == "" {
+		add("%s.device is required for a diskio check (e.g. sda, nvme0n1)", prefix)
+	}
+	validateThresholdPreds(prefix, fields, checks.DiskIOPredFields, add)
 }
 
 // validatePressureFields validates a pressure (PSI) check: a required resource

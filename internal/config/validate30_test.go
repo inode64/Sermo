@@ -1066,3 +1066,31 @@ checks:
 `)
 	mustHave(t, bad, "checks.no-pred requires at least one of used_pct/free/count")
 }
+
+func TestValidateDiskIOCheck(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  db-disk: { type: diskio, device: nvme0n1, util_pct: { op: ">=", value: "90%" }, write_bytes: { op: ">", value: 50M } }
+`)
+	if hasIssue(good, "db-disk") {
+		t.Fatalf("valid diskio check flagged: %v", good)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  no-dev:  { type: diskio, util_pct: { op: ">=", value: 90 } }
+  no-pred: { type: diskio, device: sda }
+  raw-bps: { type: diskio, device: sda, read_bytes: { op: ">", value: 1048576 } }
+`)
+	mustHave(t, bad, "checks.no-dev.device is required for a diskio check")
+	mustHave(t, bad, "checks.no-pred requires at least one of util_pct/read_bytes/write_bytes/await_ms")
+	mustHave(t, bad, `read_bytes value "1048576" must include a size suffix`)
+}
