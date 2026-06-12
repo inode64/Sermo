@@ -88,12 +88,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		"await_ms":    awaitMs,
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		if !compareFloat(values[p.field], p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
 		c.device, utilPct, readBytes, writeBytes, awaitMs), start)
@@ -104,11 +99,7 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		"write_bytes": writeBytes,
 		"await_ms":    awaitMs,
 	}
-	// value is the first predicate's reading, so a hook sees the breaching number.
-	res.Data["value"] = utilPct
-	if len(c.preds) > 0 {
-		res.Data["value"] = values[c.preds[0].field]
-	}
+	res.Data["value"] = firstPredValue(c.preds, values, utilPct)
 	return res
 }
 

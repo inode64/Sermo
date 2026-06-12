@@ -51,12 +51,7 @@ func (c loadCheck) Run(_ context.Context) Result {
 		}
 	}
 
-	ok := true
-	for _, p := range c.preds {
-		if !compareFloat(values[p.field], p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 
 	suffix := ""
 	if c.perCPU {
@@ -67,10 +62,7 @@ func (c loadCheck) Run(_ context.Context) Result {
 		"load1": s.Load1, "load5": s.Load5, "load15": s.Load15,
 		"num_cpu": s.NumCPU, "per_cpu": c.perCPU,
 	}
-	res.Data["value"] = values["load1"]
-	if len(c.preds) > 0 {
-		res.Data["value"] = values[c.preds[0].field]
-	}
+	res.Data["value"] = firstPredValue(c.preds, values, values["load1"])
 	return res
 }
 

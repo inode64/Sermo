@@ -100,13 +100,7 @@ func (c diskCheck) Run(_ context.Context) Result {
 		values["inodes_free_pct"] = st.InodesFreePct
 		values["inodes_free"] = float64(st.InodesFree)
 	}
-	ok := true
-	for _, p := range c.preds {
-		v, known := values[p.field]
-		if !known || !compareFloat(v, p.op, p.value) {
-			ok = false
-		}
-	}
+	ok := levelPredsHold(c.preds, values)
 	res := c.result(ok, fmt.Sprintf("%s used %.1f%% free %.1f%% inodes %.1f%% used", c.path, st.UsedPct, st.FreePct, st.InodesUsedPct), start)
 	data["used_pct"] = st.UsedPct
 	data["free_pct"] = st.FreePct
@@ -117,13 +111,7 @@ func (c diskCheck) Run(_ context.Context) Result {
 	data["inodes_free_pct"] = st.InodesFreePct
 	data["inodes_free"] = st.InodesFree
 	data["inodes_total"] = st.InodesTotal
-	// value is the first predicate's reading, so a hook sees the breaching number.
-	data["value"] = st.UsedPct
-	if len(c.preds) > 0 {
-		if v, ok := values[c.preds[0].field]; ok {
-			data["value"] = v
-		}
-	}
+	data["value"] = firstPredValue(c.preds, values, st.UsedPct)
 	res.Data = data
 	return res
 }
