@@ -66,11 +66,20 @@ type Engine struct {
 // StopArtifacts are the stopped-state invariants verified after a clean stop: the
 // pidfile path(s) and the files/globs that must no longer exist. Remove deletes a
 // lingering file (opt-in) before re-checking. A still-present artifact is a
-// warning folded into the result message, not a failure.
+// warning folded into the result message, not a failure. Clean lists files and
+// directories actively deleted on a clean stop (recursive for directory trees).
 type StopArtifacts struct {
 	PidfilePaths []string
 	Files        []string
 	Remove       bool
+	Clean        []CleanPath
+}
+
+// CleanPath is one `clean_on_stop` entry: a path (or glob, when not recursive)
+// deleted after a clean stop. Recursive deletes a directory tree.
+type CleanPath struct {
+	Path      string
+	Recursive bool
 }
 
 type plan struct {
@@ -349,6 +358,31 @@ func (e Engine) verifyStopped() []string {
 	}
 	for _, g := range e.StopArtifacts.Files {
 		flag(g, true)
+	}
+	// clean_on_stop: actively delete the listed files/dirs (recursive trees with
+	// RemoveAll, plain paths/globs with Remove). A failure is a warning.
+	for _, c := range e.StopArtifacts.Clean {
+		if c.Recursive {
+			if err := os.RemoveAll(c.Path); err != nil { //nolint:gosec // operator-listed clean_on_stop path
+				warns = append(warns, fmt.Sprintf("could not clean %s: %v", c.Path, err))
+			}
+			continue
+		}
+		matches, err := filepath.Glob(c.Path)
+		if err != nil {
+			warns = append(warns, fmt.Sprintf("bad clean_on_stop pattern %q: %v", c.Path, err))
+			continue
+		}
+		if matches == nil {
+			if _, statErr := os.Stat(c.Path); statErr == nil {
+				matches = []string{c.Path}
+			}
+		}
+		for _, m := range matches {
+			if err := os.Remove(m); err != nil { //nolint:gosec // operator-listed clean_on_stop path
+				warns = append(warns, fmt.Sprintf("could not clean %s: %v", m, err))
+			}
+		}
 	}
 	return warns
 }

@@ -208,3 +208,35 @@ service: { name: x }
 also_apply: [web]
 `), "the service itself")
 }
+
+func TestValidateCleanOnStop(t *testing.T) {
+	bad := validateService(t, `
+kind: service
+name: s
+service: { name: x }
+stop_policy:
+  clean_on_stop:
+    - relative/path
+    - { path: /var, recursive: true }
+    - { path: "/var/cache/*", recursive: true }
+`)
+	mustHave(t, bad, "must be absolute")
+	mustHave(t, bad, "refuses to recursively delete")
+	mustHave(t, bad, "must not be a glob")
+
+	ok := validateService(t, `
+kind: service
+name: s
+service: { name: x }
+stop_policy:
+  clean_on_stop:
+    - /run/svc/foo.tmp
+    - /tmp/svc-*.lock
+    - { path: /var/cache/svc, recursive: true }
+`)
+	for _, is := range ok {
+		if hasIssue([]Issue{is}, "clean_on_stop") {
+			t.Fatalf("valid clean_on_stop must produce no issue: %v", ok)
+		}
+	}
+}
