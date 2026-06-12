@@ -39,13 +39,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 
 	ok := data.healthKnown && !data.passed // default alert condition: health FAILED
 	if len(c.preds) > 0 {
-		ok = true
-		for _, p := range c.preds {
-			v, present := data.values[p.field]
-			if !present || !compareFloat(v, p.op, p.value) {
-				ok = false
-			}
-		}
+		ok = levelPredsHold(c.preds, data.values)
 	}
 
 	health := "unknown"
