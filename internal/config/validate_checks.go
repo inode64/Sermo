@@ -290,7 +290,7 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 			for _, path := range slices.Sorted(maps.Keys(m)) {
 				if cond, ok := m[path].(map[string]any); ok {
 					if op := cfgval.String(cond["op"]); op != "" && !validJSONOp(op) {
-						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, contains", prefix, path, op)
+						add("%s.expect_json.%s op %q is not one of ==, !=, >, >=, <, <=, =~, contains", prefix, path, op)
 					}
 				}
 			}
@@ -947,9 +947,10 @@ func validateSQLFields(prefix string, fields map[string]any, add addFunc) {
 	}
 }
 
-// validateCertFields validates a cert check at prefix: a required host, optional
-// port (1..65535), optional positive expires_in_days, and boolean toggles. New
-// certificate conditions add here.
+// validateCertFields validates a cert check at prefix: exactly one of host (a
+// live TLS endpoint) or path (a PEM file), optional port (1..65535), optional
+// positive expires_in_days, and boolean toggles. New certificate conditions add
+// here.
 func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 	host := cfgval.String(fields["host"])
 	path := cfgval.String(fields["path"])

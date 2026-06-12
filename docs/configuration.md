@@ -1138,7 +1138,8 @@ defaults:
 ```
 
 `cycles: 1` + `mode: consecutive` is also the built-in default (fire the moment a
-rule's condition is true), so the shipped block is a no-op kept for documentation.
+rule's condition is true), so the shipped `sermo.yml` carries this block only as
+a commented reference.
 Raise `cycles` (e.g. `3`) to require N consecutive true cycles before every
 window-less rule fires, or use `mode: within` with `min_matches` for a sliding
 window. A rule's own `for`/`within` always overrides the fallback, and like the

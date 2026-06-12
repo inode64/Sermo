@@ -51,6 +51,15 @@ defaults:
   policy:
     cooldown: 5m
 
+  # Fallback firing window for rules that declare neither `for` nor `within`.
+  # The values below equal the built-in default (fire on the first true cycle),
+  # so the block is documentation; raise `cycles` (e.g. 3) to require N
+  # consecutive true cycles for every window-less rule, or use `mode: within`
+  # with `min_matches` for a sliding window.
+  # rule_window:
+  #   cycles: 1
+  #   mode: consecutive    # consecutive | within (within also needs min_matches)
+
 logging:
   level: info
   format: text
@@ -65,7 +74,8 @@ logging:
 # then sermod will not start the HTTP server and will log a warning
 # ("web ui disabled; no port will be opened").
 #
-# Uncomment `port` (9797 recommended) to activate the web UI.
+# This shipped config enables it on loopback (9797, the recommended port);
+# comment out or remove `port` to disable the dashboard.
 # Set `password` for admin access; `guest`/`guest_password` give read-only access.
 web:
   address: 127.0.0.1
@@ -97,18 +107,18 @@ notifiers:
 # Paused by default: each watch is built and visible in the web UI, but it does
 # not run until an admin monitors it or the YAML changes to `monitor: enabled`.
 watches:
-  #  storage-root:
+  #storage-root:
   #  monitor: disabled
-  #    interval: 1m
-  # check:
-  #   type: storage
-  #   path: /
-  #   used_pct: { op: ">=", value: "90%" }
-  #   free_bytes: { op: "<", value: 10G }       # absolute threshold, requires K/M/G/T
-  #   inodes_used_pct: { op: ">=", value: "90%" } # also catch inode exhaustion
-  # for: { cycles: 3 }
-  # then:
-  #    notify: [ops-email, team-slack]            # email the on-call list and post to Slack
+  #  interval: 1m
+  #  check:
+  #    type: storage
+  #    path: /
+  #    used_pct: { op: ">=", value: "90%" }
+  #    free_bytes: { op: "<", value: 10G }         # absolute threshold, requires K/M/G/T
+  #    inodes_used_pct: { op: ">=", value: "90%" } # also catch inode exhaustion
+  #  for: { cycles: 3 }
+  #  then:
+  #    notify: [ops-email, team-slack]             # email the on-call list and post to Slack
   #    hook:
   #      command: [/usr/local/bin/sermo-alert-storage.sh, "/"]
   #      timeout: 10s
