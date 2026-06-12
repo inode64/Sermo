@@ -53,7 +53,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 		}
 
 		interval := defaultInterval
-		if d := durationField(entry["interval"]); d > 0 {
+		if d := cfgval.Duration(entry["interval"]); d > 0 {
 			interval = d
 		}
 
@@ -316,7 +316,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 func parseProcCond(check map[string]any) (procCond, error) {
 	var c procCond
 	if _, present := check["for"]; present {
-		d := durationField(check["for"])
+		d := cfgval.Duration(check["for"])
 		if d <= 0 {
 			return c, fmt.Errorf("process for must be a positive duration")
 		}
@@ -438,7 +438,7 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 		if len(cmd) == 0 {
 			return HookSpec{}, nil, fmt.Errorf("hook requires a non-empty command")
 		}
-		hook = HookSpec{Command: cmd, Timeout: durationField(h["timeout"])}
+		hook = HookSpec{Command: cmd, Timeout: cfgval.Duration(h["timeout"])}
 		if v, ok := cfgval.Int(h["expect_exit"]); ok {
 			hook.ExpectExit = &v
 		}
@@ -505,7 +505,7 @@ func serviceMonitorWatches(cfg *config.Config, deps Deps, defaultInterval time.D
 		}
 		tree := resolved.Tree
 		interval := defaultInterval
-		if d := durationField(tree["interval"]); d > 0 {
+		if d := cfgval.Duration(tree["interval"]); d > 0 {
 			interval = d
 		}
 		for _, m := range []struct {
@@ -643,18 +643,6 @@ func sortedWatchNames(m map[string]any) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-func durationField(v any) time.Duration {
-	s, ok := v.(string)
-	if !ok {
-		return 0
-	}
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return 0
-	}
-	return d
 }
 
 func boolField(v any) bool {

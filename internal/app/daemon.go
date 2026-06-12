@@ -227,7 +227,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	// interval/resolution); skipped cycles reuse its last result so the cache and
 	// rule windows stay complete. resolution is the service's own interval, or the
 	// global one.
-	resolution := durationField(tree["interval"])
+	resolution := cfgval.Duration(tree["interval"])
 	if resolution <= 0 {
 		resolution = deps.Interval
 	}
@@ -249,7 +249,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Remediation:  deps.Remediation,
 		RuleWindows:  deps.RuleWindows,
 		CheckDeps:    checkDeps,
-		Interval:     durationField(tree["interval"]),
+		Interval:     cfgval.Duration(tree["interval"]),
 		Gates:        parseCheckGates(tree),
 		Sample:       sampleMetrics,
 		Operate: func(ctx context.Context, action string) operation.Result {
@@ -319,7 +319,7 @@ func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]i
 		if !ok {
 			continue
 		}
-		d := durationField(entry["interval"])
+		d := cfgval.Duration(entry["interval"])
 		if d <= 0 {
 			continue // no per-check interval: runs every cycle
 		}

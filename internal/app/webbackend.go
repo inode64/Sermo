@@ -179,7 +179,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		if err != nil {
 			unit = base
 		}
-		iv := durationField(resolved.Tree["interval"])
+		iv := cfgval.Duration(resolved.Tree["interval"])
 		if iv <= 0 {
 			iv = EngineInterval(cfg, 30*time.Second)
 		}
@@ -221,7 +221,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				ctype = canonicalWatchCheckType(cfgval.AsString(ce["type"]))
 			}
 			fireOnFail = checks.IsHealthType(ctype)
-			iv := durationField(entry["interval"])
+			iv := cfgval.Duration(entry["interval"])
 			if iv <= 0 {
 				iv = 30 * time.Second
 			}
