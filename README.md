@@ -79,28 +79,28 @@ sermoctl status nginx
 sermoctl is-active nginx
 
 # List installed services, applications and libraries, their version and health
-sermoctl --config /etc/sermo/sermo.yml services      # service software (nginx, mariadb, ...)
-sermoctl --config /etc/sermo/sermo.yml apps          # tools/runtimes (only installed)
-sermoctl --config /etc/sermo/sermo.yml apps all      # include not-installed
-sermoctl --config /etc/sermo/sermo.yml libs          # shared libraries (restart triggers)
+sermoctl services      # service software (nginx, mariadb, ...)
+sermoctl apps          # tools/runtimes (only installed)
+sermoctl apps all      # include not-installed
+sermoctl libs          # shared libraries (restart triggers)
 
 # Validate and render the resolved configuration
-sermoctl --config /etc/sermo/sermo.yml config validate
-sermoctl --config /etc/sermo/sermo.yml config render apache-main
-sermoctl --config /etc/sermo/sermo.yml config diff redis-main redis-cache
+sermoctl config validate
+sermoctl config render apache-main
+sermoctl config diff redis-main redis-cache
 
 # Operate a configured service through the safe engine
-sermoctl --config /etc/sermo/sermo.yml restart apache-main
+sermoctl restart apache-main
 
 # Pause / resume monitoring of a service (e.g. for maintenance)
-sermoctl --config /etc/sermo/sermo.yml unmonitor apache-main   # daemon stops checking it
-sermoctl --config /etc/sermo/sermo.yml monitor apache-main     # resume
-sermoctl --config /etc/sermo/sermo.yml reload                  # ask daemon to re-read its config (SIGHUP)
+sermoctl unmonitor apache-main   # daemon stops checking it
+sermoctl monitor apache-main     # resume
+sermoctl reload                  # ask daemon to re-read its config (SIGHUP)
 
 # Availability (SLA) per service over rolling windows (hour..year)
-sermoctl --config /etc/sermo/sermo.yml sla                     # all services
-sermoctl --config /etc/sermo/sermo.yml sla apache-main         # one service
-sermoctl --config /etc/sermo/sermo.yml sla --series apache-main --since 168h  # per-minute series (graph data)
+sermoctl sla                     # all services
+sermoctl sla apache-main         # one service
+sermoctl sla --series apache-main --since 168h  # per-minute series (graph data)
 
 # Run the daemon
 sermod run --config /etc/sermo/sermo.yml
