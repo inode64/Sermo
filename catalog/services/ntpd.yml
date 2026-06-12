@@ -8,6 +8,10 @@ apps: [ntpd]
 variables:
   port: 123
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/ntpd.pid
+
 checks:
   service: { type: service, expect: active }
   port: { type: ntp, port: "${port}" }

@@ -40,7 +40,7 @@ type Check interface {
 // invert these checks and fire on failure; condition-style checks fire on OK.
 func IsHealthType(typ string) bool {
 	switch typ {
-	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws":
+	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws":
 		return true
 	default:
 		_, ok := conn.Lookup(typ)

@@ -523,7 +523,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 // watch types (net, icmp, swap, file, process) stay watch-only because they fire
 // per-metric/per-target rather than producing one Result. Keep this in step with
 // internal/checks buildCheck and the watch validation (section: unified checks).
-var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "process", "metric", "libraries", "count",
+var knownCheckTypes = set("tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "process", "metric", "libraries", "count",
 	"storage", "disk", "autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config", "fds", "conntrack", "entropy", "zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query", "influxdb-query", "size", "websocket", "ws")
 var countKinds = set("any", "file", "dir", "symlink")
 

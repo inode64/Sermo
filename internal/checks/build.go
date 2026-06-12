@@ -138,6 +138,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildFileExistsCheck(b, entry)
 	case "binary":
 		return buildBinaryCheck(b, entry)
+	case "pidfile":
+		return buildPidfileCheck(b, entry)
 	case "libraries":
 		return buildLibrariesCheck(b, entry, runner)
 	case "metric":
@@ -408,6 +410,17 @@ func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
 		return nil, "file_exists check requires a path"
 	}
 	return fileExistsCheck{base: b, path: path}, ""
+}
+
+// buildPidfileCheck builds a check that a pidfile exists and references a running
+// process. Gate it with `requires: [service]` so it only errors while the service
+// is active.
+func buildPidfileCheck(b base, entry map[string]any) (Check, string) {
+	path := cfgval.AsString(entry["path"])
+	if path == "" {
+		return nil, "pidfile check requires a path"
+	}
+	return pidfileCheck{base: b, path: path}, ""
 }
 
 // buildBinaryCheck builds a check on a binary's fingerprint.

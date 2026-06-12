@@ -6,6 +6,10 @@ apps: [rsync]
 variables:
   port: 873
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/rsyncd.pid
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

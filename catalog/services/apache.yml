@@ -44,6 +44,10 @@ processes:
     exe: "${binary}"
     user: "${user}"
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/apache2.pid
+
 checks:
   service:
     type: service

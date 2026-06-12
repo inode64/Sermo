@@ -15,6 +15,10 @@ variables:
   host: 127.0.0.1
   port: 8443
 
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: /run/unifi.pid
+
 checks:
   service:
     type: service
