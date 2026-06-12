@@ -98,7 +98,7 @@ aliases:
     - apache
 ```
 
-Resolution (see `AGENTS.md` spec section 11): build the candidate list as
+Resolution (see `docs/configuration.md`): build the candidate list as
 `service.name` followed by the aliases for the active backend, normalize for the
 backend (systemd appends `.service`), pick the first candidate the backend
 actually knows, and cache it. If none resolve, fail with a clear error listing
