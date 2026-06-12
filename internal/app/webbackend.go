@@ -472,7 +472,10 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		}
 		iv := formatInterval(w.interval)
 		var disk *web.DiskWatchInfo
-		if isStorageCheckType(w.checkType) {
+		// A disabled watch is config, not a live concern: skip the statfs/mount
+		// sampling so the UI never surfaces sample errors (or pays the probe)
+		// for something the operator has switched off.
+		if isStorageCheckType(w.checkType) && !w.disabled {
 			disk = diskWatchInfo(w, b)
 		}
 		monitorMode := w.monitorMode
