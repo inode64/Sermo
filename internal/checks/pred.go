@@ -181,22 +181,7 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 	return val, nil
 }
 
-// compareFloat evaluates one comparison; an unknown op never holds.
+// compareFloat evaluates one comparison via the shared cfgval vocabulary.
 func compareFloat(a float64, op string, b float64) bool {
-	switch op {
-	case ">=":
-		return a >= b
-	case ">":
-		return a > b
-	case "<=":
-		return a <= b
-	case "<":
-		return a < b
-	case "==":
-		return a == b
-	case "!=":
-		return a != b
-	default:
-		return false
-	}
+	return cfgval.CompareFloat(a, op, b)
 }

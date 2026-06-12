@@ -335,7 +335,7 @@ func parseProcCond(check map[string]any) (procCond, error) {
 			continue
 		}
 		op := cfgval.AsString(m["op"])
-		if !validThresholdOp(op) {
+		if !cfgval.IsCompareOp(op) {
 			return c, fmt.Errorf("process %s requires a valid op (>=, >, <=, <, ==, !=)", t.key)
 		}
 		v, ok := cfgval.Float(m["value"])
@@ -366,7 +366,7 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 			c.sizeChange = true
 		} else {
 			op := cfgval.AsString(sz["op"])
-			if !validThresholdOp(op) {
+			if !cfgval.IsCompareOp(op) {
 				return c, fmt.Errorf("file size requires on: change or {op, value}")
 			}
 			v, ok := cfgval.Float(sz["value"])
