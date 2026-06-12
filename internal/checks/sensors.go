@@ -8,8 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"sermo/internal/cfgval"
 )
 
 // SensorReading is one hwmon input: the chip name, the kind (temp/fan/in), a
@@ -25,13 +23,6 @@ type SensorReading struct {
 // the default reads /sys/class/hwmon.
 type SensorSamplerFunc func() ([]SensorReading, error)
 
-// sensorPred is one threshold predicate on a sensor aggregate field.
-type sensorPred struct {
-	field string // temp | fan | voltage
-	op    string
-	value float64
-}
-
 // sensorsCheck reads lm-sensors-style hwmon inputs and compares aggregates to
 // thresholds (a level check: OK==true means a predicate holds, i.e. the alerting
 // condition). `temp` is the hottest matching temperature (°C), `fan` the slowest
@@ -43,7 +34,7 @@ type sensorsCheck struct {
 	sampler SensorSamplerFunc
 	chip    string
 	label   string
-	preds   []sensorPred
+	preds   []levelPred
 }
 
 func (c sensorsCheck) Run(_ context.Context) Result {
@@ -177,33 +168,4 @@ func minFloat(vs []float64) float64 {
 		}
 	}
 	return m
-}
-
-// parseSensorPreds reads the temp/fan/voltage threshold predicates ({op, value}).
-// At least one is required.
-func parseSensorPreds(entry map[string]any) ([]sensorPred, error) {
-	var preds []sensorPred
-	for _, field := range []string{"temp", "fan", "voltage"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, sensorPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("requires at least one of temp/fan/voltage")
-	}
-	return preds, nil
 }

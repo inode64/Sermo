@@ -717,7 +717,7 @@ func TestValidateFdsWatch(t *testing.T) {
 	for _, w := range []string{
 		"watches.no-pred.check requires at least one of used_pct/free/allocated",
 		"watches.bad-op.check.used_pct has an invalid op",
-		"watches.bad-op.check.used_pct value \"lots\" must be numeric",
+		"watches.bad-op.check.used_pct value \"lots\" must be a percentage in 0..100",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
@@ -1014,5 +1014,123 @@ func TestValidateWatchesICMPBad(t *testing.T) {
 				t.Fatalf("%s: expected a watch issue", name)
 			}
 		})
+	}
+}
+
+func TestValidateWatchPolicy(t *testing.T) {
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"grow": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}},
+				"policy": map[string]any{"cooldown": "30m"},
+				"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("valid watch policy flagged: %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"bad-cooldown": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}},
+				"policy": map[string]any{"cooldown": "-5m"},
+				"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
+			},
+			"bad-shape": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}},
+				"policy": "30m",
+				"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
+			},
+			"bad-actions": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}},
+				"policy": map[string]any{"cooldown": "30m", "max_actions": 3},
+				"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
+			},
+		},
+	})
+	for _, w := range []string{
+		`watches.bad-cooldown.policy.cooldown "-5m" must be a valid positive duration`,
+		"watches.bad-shape.policy must be a mapping",
+		"watches.bad-actions.policy.max_actions requires policy.max_actions_window",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
+func TestValidateExpandBy(t *testing.T) {
+	diskCheck := map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}}
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"no-by": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"expand": map[string]any{}},
+			},
+			"unitless": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"expand": map[string]any{"by": 1024}},
+			},
+			"bad-shape": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"expand": "5G"},
+			},
+		},
+	})
+	for _, w := range []string{
+		`watches.no-by.then.expand.by "" must be a positive size with a K/M/G/T suffix`,
+		`watches.unitless.then.expand.by "1024" must be a positive size with a K/M/G/T suffix`,
+		"watches.bad-shape.then.expand must be a mapping with a `by` size",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
+
+func TestValidateSwapUsageSharedGrammar(t *testing.T) {
+	// Percent and byte-size forms work in swap usage exactly like in storage
+	// (section: unified checks — one predicate grammar for every level check).
+	good := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"swap": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"usage": map[string]any{
+						"used_pct":   map[string]any{"op": ">=", "value": "85%"},
+						"free_bytes": map[string]any{"op": "<", "value": "1G"},
+						"then":       map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+				},
+			},
+		},
+	})
+	if w := watchIssues(good); len(w) != 0 {
+		t.Fatalf("percent/size forms should be valid in swap usage, got %v", w)
+	}
+
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"swap": map[string]any{
+				"check": map[string]any{"type": "swap"},
+				"metrics": map[string]any{
+					"usage": map[string]any{
+						"used_pct":   map[string]any{"op": ">=", "value": "150%"},
+						"free_bytes": map[string]any{"op": "<", "value": 1024},
+						"then":       map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+					},
+				},
+			},
+		},
+	})
+	for _, w := range []string{
+		`used_pct value "150%" must be a percentage in 0..100`,
+		`free_bytes value "1024" must include a size suffix`,
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
 	}
 }

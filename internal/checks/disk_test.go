@@ -20,7 +20,7 @@ func TestDiskCheckUsedPctBreached(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk", service: ""},
 		path:  "/",
-		preds: []diskPred{{field: "used_pct", op: ">=", value: 90}},
+		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}},
 		usage: fakeDisk(92, 8, 100, 1000),
 	}
 	res := c.Run(context.Background())
@@ -36,7 +36,7 @@ func TestDiskCheckUsedPctNotBreached(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk"},
 		path:  "/",
-		preds: []diskPred{{field: "used_pct", op: ">=", value: 90}},
+		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}},
 		usage: fakeDisk(50, 50, 500, 1000),
 	}
 	if c.Run(context.Background()).OK {
@@ -49,7 +49,7 @@ func TestDiskCheckMultiPredAnd(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk"},
 		path:  "/",
-		preds: []diskPred{{"used_pct", ">=", 90}, {"free_pct", "<", 5}},
+		preds: []levelPred{{"used_pct", ">=", 90}, {"free_pct", "<", 5}},
 		usage: fakeDisk(92, 8, 80, 1000), // used crossed, free not (8 !< 5)
 	}
 	if c.Run(context.Background()).OK {
@@ -61,7 +61,7 @@ func TestDiskCheckFreeBytesBreached(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk"},
 		path:  "/",
-		preds: []diskPred{{field: "free_bytes", op: "<", value: float64(10 << 30)}},
+		preds: []levelPred{{field: "free_bytes", op: "<", value: float64(10 << 30)}},
 		usage: fakeDisk(92, 8, 9<<30, 100<<30),
 	}
 	res := c.Run(context.Background())
@@ -77,7 +77,7 @@ func TestDiskCheckUsedBytesBreached(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk"},
 		path:  "/",
-		preds: []diskPred{{field: "used_bytes", op: ">=", value: float64(90 << 30)}},
+		preds: []levelPred{{field: "used_bytes", op: ">=", value: float64(90 << 30)}},
 		usage: fakeDisk(92, 8, 8<<30, 100<<30),
 	}
 	res := c.Run(context.Background())
@@ -93,7 +93,7 @@ func TestDiskCheckStatError(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "disk"},
 		path:  "/nope",
-		preds: []diskPred{{"used_pct", ">=", 90}},
+		preds: []levelPred{{"used_pct", ">=", 90}},
 		usage: func(string) (DiskStats, error) { return DiskStats{}, context.DeadlineExceeded },
 	}
 	if c.Run(context.Background()).OK {
@@ -206,7 +206,7 @@ func fakeDiskStats(s DiskStats) func(string) (DiskStats, error) {
 func TestDiskCheckInodesUsedPct(t *testing.T) {
 	// 9500/10000 inodes used = 95%.
 	stats := DiskStats{TotalBytes: 1000, FreeBytes: 900, InodesTotal: 10000, InodesFree: 500, InodesUsedPct: 95, InodesFreePct: 5}
-	breach := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"inodes_used_pct", ">=", 90}}, usage: fakeDiskStats(stats)}
+	breach := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"inodes_used_pct", ">=", 90}}, usage: fakeDiskStats(stats)}
 	if res := breach.Run(context.Background()); !res.OK {
 		t.Fatalf("95%% inodes used should breach >= 90, got %q", res.Message)
 	}
@@ -214,7 +214,7 @@ func TestDiskCheckInodesUsedPct(t *testing.T) {
 		t.Fatal("value should be the inodes_used_pct reading")
 	}
 	// Plenty of block space free, but inodes exhausted -> the inode predicate fires.
-	ok := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"inodes_free", "<", 1000}}, usage: fakeDiskStats(stats)}
+	ok := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"inodes_free", "<", 1000}}, usage: fakeDiskStats(stats)}
 	if !ok.Run(context.Background()).OK {
 		t.Fatal("500 inodes free < 1000 should fire")
 	}
@@ -224,7 +224,7 @@ func TestDiskCheckInodesUnavailableNeverFires(t *testing.T) {
 	// A filesystem that reports no inodes (InodesTotal == 0) must not misfire an
 	// inode predicate (e.g. inodes_free < N would otherwise see 0 < N and fire).
 	stats := DiskStats{TotalBytes: 1000, FreeBytes: 900, InodesTotal: 0}
-	c := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"inodes_free", "<", 1000}}, usage: fakeDiskStats(stats)}
+	c := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"inodes_free", "<", 1000}}, usage: fakeDiskStats(stats)}
 	if c.Run(context.Background()).OK {
 		t.Fatal("inode predicate must not fire on a 0-inode filesystem")
 	}
@@ -249,12 +249,12 @@ func TestBuildDiskInodeCheck(t *testing.T) {
 
 func TestDiskCheckDataHasValueKey(t *testing.T) {
 	// used_pct predicate -> value is used_pct.
-	c := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"used_pct", ">=", 90}}, usage: fakeDisk(92, 8, 80, 1000)}
+	c := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"used_pct", ">=", 90}}, usage: fakeDisk(92, 8, 80, 1000)}
 	if v := c.Run(context.Background()).Data["value"]; v != 92.0 {
 		t.Fatalf("value = %v, want 92.0 (used_pct)", v)
 	}
 	// only free_pct predicate -> value is free_pct.
-	c2 := diskCheck{base: base{name: "d"}, path: "/", preds: []diskPred{{"free_pct", "<", 5}}, usage: fakeDisk(96, 4, 40, 1000)}
+	c2 := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"free_pct", "<", 5}}, usage: fakeDisk(96, 4, 40, 1000)}
 	if v := c2.Run(context.Background()).Data["value"]; v != 4.0 {
 		t.Fatalf("value = %v, want 4.0 (free_pct)", v)
 	}

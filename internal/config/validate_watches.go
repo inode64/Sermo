@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 )
 
 func validateWatches(watches map[string]any, locksDir string, notifiers map[string]struct{}, defaultNotify []string, add func(string, ...any)) {
@@ -30,6 +31,8 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		cp := "watches." + name + ".check"
 		switch cfgval.String(check["type"]) {
 		case "storage", "disk":
+			// The one single-shot type with its own case: a storage watch may carry
+			// a then.expand action, so its hook block allows expand.
 			validateDiskFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, true, defaultNotify, add)
 		case "net":
@@ -38,27 +41,6 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 			validateICMPCheck(name, check, entry, defaultNotify, add)
 		case "swap":
 			validateSwapCheck(name, entry, defaultNotify, add)
-		case "load":
-			validateLoadFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
-		case "oom":
-			validateOomFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
-		case "fds":
-			validateThresholdPreds(cp, check, []string{"used_pct", "free", "allocated"}, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
-		case "conntrack":
-			validateThresholdPreds(cp, check, []string{"used_pct", "free", "count"}, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
-		case "entropy":
-			validateEntropyFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
-		case "cert":
-			validateCertFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
-		case "zombies":
-			validateZombieFields(cp, check, add)
-			validateHookBlock("watches."+name, entry, false, defaultNotify, add)
 		case "file":
 			validateFileCheck(name, check, entry, defaultNotify, add)
 		case "process":
@@ -66,8 +48,9 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		case "":
 			add("watches.%s.check.type is required", name)
 		default:
-			// Any single-shot service check (tcp, http, command, …) can be a host
-			// watch: validate its fields and require a hook (section: unified checks).
+			// Any single-shot service check (tcp, http, load, oom, cert, …) can be
+			// a host watch: validate its fields with the same per-type validators a
+			// checks: section uses and require a hook (section: unified checks).
 			if validateWatchableCheck(cp, cfgval.String(check["type"]), check, locksDir, add) {
 				validateHookBlock("watches."+name, entry, false, defaultNotify, add)
 			} else {
@@ -81,6 +64,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 
 		validateNotifyRefs(name, entry, notifiers, add)
 		validateWindow("watches."+name, entry, add)
+		validateWatchPolicy("watches."+name, entry, add)
 	}
 }
 
@@ -104,9 +88,19 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 	}
 	hook, hasHook := then["hook"].(map[string]any)
 	notify := cfgval.StringList(then["notify"])
-	_, hasExpand := then["expand"].(map[string]any)
-	if hasExpand && !allowExpand {
+	rawExpand, expandPresent := then["expand"]
+	expand, hasExpand := rawExpand.(map[string]any)
+	switch {
+	case expandPresent && !hasExpand:
+		add("%s.then.expand must be a mapping with a `by` size", prefix)
+	case hasExpand && !allowExpand:
 		add("%s.then.expand is only valid on a storage watch", prefix)
+	case hasExpand:
+		// The same grammar the daemon's parseExpand applies, so a bad size fails
+		// `config validate` instead of the next start/reload.
+		if by, ok := cfgval.ByteSize(expand["by"]); !ok || by == 0 {
+			add("%s.then.expand.by %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", prefix, cfgval.String(expand["by"]))
+		}
 	}
 	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand {
 		add("%s.then requires a hook, notify and/or expand", prefix)
@@ -128,6 +122,27 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 		validateOutputExpectation(prefix+".then.hook", "expect_stdout", hook["expect_stdout"], add)
 		validateOutputExpectation(prefix+".then.hook", "expect_stderr", hook["expect_stderr"], add)
 	}
+}
+
+// validateWatchPolicy checks a watch-level `policy` block — the pacing for a
+// firing watch's actions (notably then.expand): an optional positive cooldown
+// plus the same max_actions/backoff extras a service policy allows. Unlike a
+// service, a watch does not require a cooldown; absent means "fire every cycle".
+func validateWatchPolicy(prefix string, entry map[string]any, add addFunc) {
+	raw, present := entry["policy"]
+	if !present {
+		return
+	}
+	policy, ok := raw.(map[string]any)
+	if !ok {
+		add("%s.policy must be a mapping", prefix)
+		return
+	}
+	padd := func(format string, args ...any) { add(prefix+"."+format, args...) }
+	if v, has := policy["cooldown"]; has && !isPositiveDuration(cfgval.String(v)) {
+		padd("policy.cooldown %q must be a valid positive duration", cfgval.String(v))
+	}
+	validatePolicyExtras(entry, padd)
 }
 
 // HasNotifyAction reports whether names selects at least one real notifier — a
@@ -226,23 +241,7 @@ func validateSwapCheck(name string, entry map[string]any, defaultNotify []string
 		}
 		switch key {
 		case "usage":
-			preds := 0
-			for _, field := range []string{"used_pct", "free_pct", "free_bytes"} {
-				raw, present := m[field]
-				if !present {
-					continue
-				}
-				preds++
-				mm, ok := raw.(map[string]any)
-				if !ok {
-					add("%s.%s must be a mapping {op, value}", prefix, field)
-					continue
-				}
-				validateOpNumeric(prefix+"."+field, mm, add)
-			}
-			if preds == 0 {
-				add("%s requires at least one of used_pct/free_pct/free_bytes", prefix)
-			}
+			validateThresholdPreds(prefix, m, checks.SwapUsageFields, add)
 		case "io":
 			delta, ok := m["delta"].(map[string]any)
 			if !ok {

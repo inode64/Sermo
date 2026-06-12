@@ -1481,6 +1481,9 @@ checks:
   immediate entries.
 - A missing or unreadable `path` makes the check fail. The observed total is
   exposed in the check's result data as `count`.
+- The threshold may also be written as a nested predicate —
+  `count: { op: ">", value: 1000 }` — matching the `{op, value}` form the other
+  checks use. Use one form or the other, not both.
 
 ## Metrics
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -21,20 +20,13 @@ type FdsSample struct {
 // reads /proc/sys/fs/file-nr.
 type FdsSamplerFunc func() (FdsSample, error)
 
-// fdsPred is one threshold predicate on a computed fd field.
-type fdsPred struct {
-	field string // used_pct | free | allocated
-	op    string
-	value float64
-}
-
 // fdsCheck watches the system-wide open file descriptors against the kernel
 // maximum (fs.file-max). Like disk it is a level check: OK==true means every
 // predicate holds. Catches fd exhaustion, which makes every open()/socket()/
 // accept() across the host fail with EMFILE/ENFILE.
 type fdsCheck struct {
 	base
-	preds   []fdsPred
+	preds   []levelPred
 	sampler FdsSamplerFunc
 }
 
@@ -99,33 +91,4 @@ func defaultFdsSampler() (FdsSample, error) {
 		return FdsSample{}, fmt.Errorf("malformed /proc/sys/fs/file-nr")
 	}
 	return FdsSample{Allocated: alloc, Max: maxFds}, nil
-}
-
-// parseFdsPreds reads the used_pct/free/allocated predicates of an fds check. At
-// least one is required; each is {op, value}.
-func parseFdsPreds(entry map[string]any) ([]fdsPred, error) {
-	var preds []fdsPred
-	for _, field := range []string{"used_pct", "free", "allocated"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, fdsPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("requires at least one of used_pct/free/allocated")
-	}
-	return preds, nil
 }

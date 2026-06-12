@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -22,20 +21,13 @@ type LoadSample struct {
 // reads /proc/loadavg and runtime.NumCPU().
 type LoadSamplerFunc func() (LoadSample, error)
 
-// loadPred is one threshold predicate on a load field.
-type loadPred struct {
-	field string // load1 | load5 | load15
-	op    string
-	value float64
-}
-
 // loadCheck watches the system load averages against thresholds (like disk, a
 // level check: OK==true means every predicate holds). With perCPU the loads are
 // divided by the CPU count first, so a threshold expresses load per core (1.0 ==
 // fully utilized) regardless of machine size.
 type loadCheck struct {
 	base
-	preds   []loadPred
+	preds   []levelPred
 	perCPU  bool
 	sampler LoadSamplerFunc
 }
@@ -101,33 +93,4 @@ func defaultLoadSampler() (LoadSample, error) {
 		return LoadSample{}, fmt.Errorf("malformed /proc/loadavg")
 	}
 	return LoadSample{Load1: l1, Load5: l5, Load15: l15, NumCPU: runtime.NumCPU()}, nil
-}
-
-// parseLoadPreds reads the load1/load5/load15 predicates of a load check. At
-// least one is required; each is {op, value}.
-func parseLoadPreds(entry map[string]any) ([]loadPred, error) {
-	var preds []loadPred
-	for _, field := range []string{"load1", "load5", "load15"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, loadPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("requires at least one of load1/load5/load15")
-	}
-	return preds, nil
 }

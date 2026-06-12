@@ -13,6 +13,7 @@ import (
 	"github.com/dustin/go-humanize"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/conn"
 )
 
@@ -24,37 +25,11 @@ func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["path"]) == "" {
 		add("%s.path is required for a storage check", prefix)
 	}
-	preds := validateDiskPredicates(prefix, fields, add)
+	preds := validatePresentThresholds(prefix, fields, checks.DiskPredFields, add)
 	hasMount := validateMountConditions(prefix, fields, add)
 	if preds == 0 && !hasMount {
 		add("%s requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted)", prefix)
 	}
-}
-
-func validateDiskPredicates(prefix string, fieldsMap map[string]any, add addFunc) int {
-	preds := 0
-	for _, field := range []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"} {
-		raw, present := fieldsMap[field]
-		if !present {
-			continue
-		}
-		preds++
-		m, ok := raw.(map[string]any)
-		if !ok {
-			add("%s.%s must be a mapping {op, value}", prefix, field)
-			continue
-		}
-		if field == "used_bytes" || field == "free_bytes" {
-			validateOpByteSize(prefix+"."+field, m, add)
-			continue
-		}
-		if strings.HasSuffix(field, "_pct") {
-			validateOpPercent(prefix+"."+field, m, add)
-			continue
-		}
-		validateOpNumeric(prefix+"."+field, m, add)
-	}
-	return preds
 }
 
 // validateMountConditions validates the optional mount predicate of a storage
@@ -123,20 +98,21 @@ func validateOpPercent(label string, m map[string]any, add addFunc) {
 		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
 	}
 	if !isPercentValue(cfgval.String(m["value"])) {
-		add("%s value %q must be numeric or a percentage (e.g. 90%%)", label, cfgval.String(m["value"]))
+		add("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", label, cfgval.String(m["value"]))
 	}
 }
 
 func isPercentValue(s string) bool {
-	s = strings.TrimSpace(s)
-	if strings.HasSuffix(s, "%") {
-		s = strings.TrimSpace(strings.TrimSuffix(s, "%"))
-	}
-	return isNumeric(s)
+	s = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(s), "%"))
+	n, err := strconv.ParseFloat(s, 64)
+	return err == nil && n >= 0 && n <= 100
 }
 
 // validatePresentThresholds validates the present {op, value} predicates among
-// fields and returns how many were present (it does not require any).
+// fields and returns how many were present (it does not require any). Each
+// value is validated by its field's form — `*_bytes` requires a size suffix,
+// `*_pct` accepts a number or a trailing % in 0..100, anything else is plain
+// numeric — the same grammar the runtime parser (checks.parseLevelPreds) uses.
 func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields []string, add addFunc) int {
 	preds := 0
 	for _, field := range fields {
@@ -150,7 +126,14 @@ func validatePresentThresholds(prefix string, fieldsMap map[string]any, fields [
 			add("%s.%s must be a mapping {op, value}", prefix, field)
 			continue
 		}
-		validateOpNumeric(prefix+"."+field, m, add)
+		switch {
+		case strings.HasSuffix(field, "_bytes"):
+			validateOpByteSize(prefix+"."+field, m, add)
+		case strings.HasSuffix(field, "_pct"):
+			validateOpPercent(prefix+"."+field, m, add)
+		default:
+			validateOpNumeric(prefix+"."+field, m, add)
+		}
 	}
 	return preds
 }
@@ -422,7 +405,7 @@ func validateLoadFields(prefix string, fields map[string]any, add addFunc) {
 			add("%s.per_cpu must be a boolean", prefix)
 		}
 	}
-	validateThresholdPreds(prefix, fields, []string{"load1", "load5", "load15"}, add)
+	validateThresholdPreds(prefix, fields, checks.LoadPredFields, add)
 }
 
 // validateHdparmFields validates an hdparm check: a required device and at least
@@ -431,7 +414,7 @@ func validateHdparmFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["device"]) == "" {
 		add("%s.device is required for an hdparm check", prefix)
 	}
-	if validatePresentThresholds(prefix, fields, []string{"read", "cached"}, add) == 0 {
+	if validatePresentThresholds(prefix, fields, checks.HdparmPredFields, add) == 0 {
 		add("%s requires at least one of read/cached {op, value}", prefix)
 	}
 }
@@ -443,16 +426,15 @@ func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["device"]) == "" {
 		add("%s.device is required for a smart check", prefix)
 	}
-	validatePresentThresholds(prefix, fields, []string{"temperature", "reallocated", "wear", "power_on_hours"}, add)
+	validatePresentThresholds(prefix, fields, checks.SmartPredFields, add)
 }
 
+// isValidDiskOp reports whether op is one of the comparison operators shared by
+// every {op, value} threshold — the same set as rule metric thresholds
+// (metricOps), so the two grammars cannot drift apart.
 func isValidDiskOp(op string) bool {
-	switch op {
-	case ">=", ">", "<=", "<", "==", "!=":
-		return true
-	default:
-		return false
-	}
+	_, ok := metricOps[op]
+	return ok
 }
 
 func isNumeric(s string) bool {
@@ -681,6 +663,10 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a binary check", path)
 		}
+	case "pidfile":
+		if cfgval.String(entry["path"]) == "" {
+			add("%s.path is required for a pidfile check", path)
+		}
 	case "libraries":
 		if cfgval.String(entry["binary"]) == "" {
 			add("%s.binary is required for a libraries check", path)
@@ -698,15 +684,15 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "hdparm":
 		validateHdparmFields(path, entry, add)
 	case "sensors":
-		if validatePresentThresholds(path, entry, []string{"temp", "fan", "voltage"}, add) == 0 {
+		if validatePresentThresholds(path, entry, checks.SensorPredFields, add) == 0 {
 			add("%s requires at least one of temp/fan/voltage {op, value}", path)
 		}
 	case "smart":
 		validateSmartFields(path, entry, add)
 	case "raid":
-		validatePresentThresholds(path, entry, []string{"degraded", "recovering", "arrays"}, add)
+		validatePresentThresholds(path, entry, checks.RaidPredFields, add)
 	case "edac":
-		validatePresentThresholds(path, entry, []string{"ce", "ue"}, add)
+		validatePresentThresholds(path, entry, checks.EdacPredFields, add)
 	case "config":
 		_, hasCmd := entry["command"]
 		_, hasPath := entry["path"]
@@ -717,9 +703,9 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s command must be an array, not a shell string", path)
 		}
 	case "fds":
-		validateThresholdPreds(path, entry, []string{"used_pct", "free", "allocated"}, add)
+		validateThresholdPreds(path, entry, checks.FdsPredFields, add)
 	case "conntrack":
-		validateThresholdPreds(path, entry, []string{"used_pct", "free", "count"}, add)
+		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
 	case "entropy":
 		validateEntropyFields(path, entry, add)
 	case "zombies":
@@ -993,7 +979,9 @@ func validateCertFields(prefix string, fields map[string]any, add addFunc) {
 }
 
 // validateCount checks a count entry: a path, an optional `of` kind, an optional
-// boolean `recursive`, and a required numeric threshold (op + value).
+// boolean `recursive`, and a required numeric threshold — flat op/value at the
+// top level, or nested under `count: {op, value}` like the other named
+// predicates (use one form, not both).
 func validateCount(entry map[string]any, path string, add addFunc) {
 	if cfgval.String(entry["path"]) == "" {
 		add("%s count check requires a path", path)
@@ -1008,10 +996,19 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 			add("%s count recursive must be a boolean", path)
 		}
 	}
-	if op := cfgval.String(entry["op"]); !isValidDiskOp(op) {
+	threshold := entry
+	if m, ok := entry["count"].(map[string]any); ok {
+		_, hasOp := entry["op"]
+		_, hasValue := entry["value"]
+		if hasOp || hasValue {
+			add("%s count check must not mix a nested count {op, value} with top-level op/value", path)
+		}
+		threshold = m
+	}
+	if op := cfgval.String(threshold["op"]); !isValidDiskOp(op) {
 		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
 	}
-	if !isNumeric(cfgval.String(entry["value"])) {
-		add("%s count check value %q must be numeric", path, cfgval.String(entry["value"]))
+	if !isNumeric(cfgval.String(threshold["value"])) {
+		add("%s count check value %q must be numeric", path, cfgval.String(threshold["value"]))
 	}
 }

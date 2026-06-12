@@ -49,7 +49,7 @@ func TestParseSmart(t *testing.T) {
 	}
 }
 
-func smartWith(out string, preds ...smartPred) smartCheck {
+func smartWith(out string, preds ...levelPred) smartCheck {
 	return smartCheck{
 		base:   base{name: "sm", timeout: time.Second},
 		runner: fakeRunner{execx.Result{Stdout: out}},
@@ -66,10 +66,10 @@ func TestSmartCheck(t *testing.T) {
 		t.Error("a PASSED verdict must not alert by default")
 	}
 	// Predicate: alert on reallocated sectors.
-	if res := smartWith(smartATA, smartPred{"reallocated", ">", 0}).Run(context.Background()); !res.OK {
+	if res := smartWith(smartATA, levelPred{"reallocated", ">", 0}).Run(context.Background()); !res.OK {
 		t.Error("reallocated>0 predicate should alert")
 	}
-	if res := smartWith(smartATA, smartPred{"temperature", ">", 50}).Run(context.Background()); res.OK {
+	if res := smartWith(smartATA, levelPred{"temperature", ">", 50}).Run(context.Background()); res.OK {
 		t.Error("temperature 38 is not > 50")
 	}
 }

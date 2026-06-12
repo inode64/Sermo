@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -21,20 +20,13 @@ type ConntrackSample struct {
 // the default reads /proc/sys/net/netfilter/nf_conntrack_{count,max}.
 type ConntrackSamplerFunc func() (ConntrackSample, error)
 
-// conntrackPred is one threshold predicate on a computed conntrack field.
-type conntrackPred struct {
-	field string // used_pct | free | count
-	op    string
-	value float64
-}
-
 // conntrackCheck watches the netfilter conntrack table against its maximum. Like
 // disk it is a level check: OK==true means every predicate holds. A full table
 // drops new connections (and logs "nf_conntrack: table full"), so catching it
 // approaching the limit is valuable on busy gateways/proxies.
 type conntrackCheck struct {
 	base
-	preds   []conntrackPred
+	preds   []levelPred
 	sampler ConntrackSamplerFunc
 }
 
@@ -104,33 +96,4 @@ func readProcUint(path string) (uint64, error) {
 		return 0, fmt.Errorf("malformed %s", path)
 	}
 	return n, nil
-}
-
-// parseConntrackPreds reads the used_pct/free/count predicates of a conntrack
-// check. At least one is required; each is {op, value}.
-func parseConntrackPreds(entry map[string]any) ([]conntrackPred, error) {
-	var preds []conntrackPred
-	for _, field := range []string{"used_pct", "free", "count"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, conntrackPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("requires at least one of used_pct/free/count")
-	}
-	return preds, nil
 }

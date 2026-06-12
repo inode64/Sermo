@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
@@ -23,13 +22,6 @@ type SwapSample struct {
 // reads /proc/meminfo and /proc/vmstat.
 type SwapSamplerFunc func() (SwapSample, error)
 
-// swapPred is one threshold predicate on a computed swap field.
-type swapPred struct {
-	field string // used_pct | free_pct | free_bytes
-	op    string
-	value float64
-}
-
 // swapCheck watches one swap metric. `usage` is a level check over
 // used_pct/free_pct/free_bytes (like disk); `io` is the per-cycle delta of pages
 // swapped in+out (like net errors), so it is stateful and a pointer type. A watch
@@ -38,7 +30,7 @@ type swapPred struct {
 type swapCheck struct {
 	base
 	metric  string
-	preds   []swapPred
+	preds   []levelPred
 	op      string
 	value   float64
 	sampler SwapSamplerFunc
@@ -151,33 +143,4 @@ func parseMeminfoKB(s string) uint64 {
 		return 0
 	}
 	return kb * 1024
-}
-
-// parseSwapPreds reads the used_pct/free_pct/free_bytes predicates of a swap
-// usage metric. At least one is required; each is {op, value}.
-func parseSwapPreds(entry map[string]any) ([]swapPred, error) {
-	var preds []swapPred
-	for _, field := range []string{"used_pct", "free_pct", "free_bytes"} {
-		raw, ok := entry[field]
-		if !ok {
-			continue
-		}
-		m, ok := raw.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%s must be a mapping {op, value}", field)
-		}
-		op := cfgval.AsString(m["op"])
-		if !validDiskOp(op) {
-			return nil, fmt.Errorf("%s has invalid op %q", field, op)
-		}
-		val, err := strconv.ParseFloat(cfgval.String(m["value"]), 64)
-		if err != nil {
-			return nil, fmt.Errorf("%s value %q is not numeric", field, cfgval.String(m["value"]))
-		}
-		preds = append(preds, swapPred{field: field, op: op, value: val})
-	}
-	if len(preds) == 0 {
-		return nil, fmt.Errorf("usage requires at least one of used_pct/free_pct/free_bytes")
-	}
-	return preds, nil
 }
