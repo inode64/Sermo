@@ -606,18 +606,29 @@ func swapWatchInfo(b *WebBackend) *web.SwapWatchInfo {
 	if b.collector == nil {
 		return nil
 	}
-	r, ok := b.collector.SampleSystem()["total_swap"]
-	if !ok || !r.HasTotal || r.Total <= 0 {
+	r := b.collector.SampleSystem()["total_swap"]
+	used, total, free, ok := byteUsage(r)
+	if !ok {
 		return nil
 	}
-	used := uint64(r.Absolute)
-	total := uint64(r.Total)
 	return &web.SwapWatchInfo{
 		TotalBytes: total,
 		UsedBytes:  used,
-		FreeBytes:  total - min(used, total),
+		FreeBytes:  free,
 		UsedPct:    r.Percent,
 	}
+}
+
+// byteUsage reads a capacity-carrying usage Reading (memory/swap) as used/total/
+// free bytes, clamping free so a "used" momentarily above total cannot underflow
+// the unsigned subtraction. ok is false when the reading carries no capacity
+// (no total), including the zero Reading a missing metric yields.
+func byteUsage(r metrics.Reading) (used, total, free uint64, ok bool) {
+	if !r.HasTotal || r.Total <= 0 {
+		return 0, 0, 0, false
+	}
+	used, total = uint64(r.Absolute), uint64(r.Total)
+	return used, total, total - min(used, total), true
 }
 
 // watchMeter builds the generic usage gauge (progress bar) for the host watch
@@ -631,17 +642,17 @@ func watchMeter(checkType string, b *WebBackend) *web.WatchMeter {
 		if b.collector == nil {
 			return nil
 		}
-		r, ok := b.collector.SampleSystem()["total_memory"]
-		if !ok || !r.HasTotal || r.Total <= 0 {
+		r := b.collector.SampleSystem()["total_memory"]
+		used, total, free, ok := byteUsage(r)
+		if !ok {
 			return nil
 		}
-		used, total := uint64(r.Absolute), uint64(r.Total)
 		return &web.WatchMeter{
 			Kind:       "memory",
 			UsedPct:    r.Percent,
 			TotalBytes: total,
 			UsedBytes:  used,
-			FreeBytes:  total - min(used, total),
+			FreeBytes:  free,
 		}
 	case "load":
 		if b.collector == nil {
