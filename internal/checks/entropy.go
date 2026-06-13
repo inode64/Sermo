@@ -38,6 +38,10 @@ func (c entropyCheck) Run(_ context.Context) Result {
 	return res
 }
 
+// SampleEntropy returns one live kernel entropy observation using the default
+// /proc/sys/kernel/random/entropy_avail reader. ok is false when unavailable.
+func SampleEntropy() (avail uint64, ok bool) { return defaultEntropySampler() }
+
 // defaultEntropySampler reads /proc/sys/kernel/random/entropy_avail.
 func defaultEntropySampler() (uint64, bool) {
 	n, err := readProcUint("/proc/sys/kernel/random/entropy_avail")

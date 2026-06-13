@@ -445,6 +445,25 @@ func TestValidateNotifyReferences(t *testing.T) {
 	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify and/or expand") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
 	}
+
+	// Bare watch (no "then" key at all) with check+for is valid as alert-only:
+	// produces firing events / web state but no actions (even if globals exist).
+	bare := validateRawGlobal(t, map[string]any{
+		"notify": []any{"ops-email"}, // globals should be ignored for bare
+		"watches": map[string]any{
+			"mem-high": map[string]any{
+				"check": map[string]any{
+					"type":     "memory",
+					"used_pct": map[string]any{"op": ">=", "value": "90%"},
+				},
+				"for": map[string]any{"cycles": 3},
+				// deliberately no "then"
+			},
+		},
+	})
+	if w := watchIssues(bare); len(w) != 0 {
+		t.Fatalf("bare watch (no then) should be valid alert-only, got issues: %v", w)
+	}
 }
 
 func TestValidateServiceCheckAsWatch(t *testing.T) {

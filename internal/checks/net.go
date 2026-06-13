@@ -158,6 +158,11 @@ func (c *netCheck) Run(_ context.Context) Result {
 	}
 }
 
+// SampleNet returns one live network-interface observation using the default
+// net.Interfaces + /sys/class/net reader. Exposed so callers like the web
+// backend can render interface state without running a stateful net check.
+func SampleNet(iface string) (NetSample, error) { return defaultNetSampler(iface) }
+
 // defaultNetSampler reads interface flags and /sys/class/net/<iface>.
 func defaultNetSampler(iface string) (NetSample, error) {
 	ifi, err := net.InterfaceByName(iface)

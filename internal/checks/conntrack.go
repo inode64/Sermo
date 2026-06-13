@@ -43,6 +43,11 @@ func (c conntrackCheck) Run(_ context.Context) Result {
 	return levelCountResult(c.base, c.preds, "conntrack", "entries", "count", s.Count, s.Max, start)
 }
 
+// SampleConntrack returns one live netfilter conntrack observation using the
+// default /proc/sys/net/netfilter reader. Exposed so callers like the web
+// backend can render a conntrack gauge without running a full conntrack check.
+func SampleConntrack() (ConntrackSample, error) { return defaultConntrackSampler() }
+
 // defaultConntrackSampler reads the conntrack count and max from
 // /proc/sys/net/netfilter (present when the nf_conntrack module is loaded).
 func defaultConntrackSampler() (ConntrackSample, error) {

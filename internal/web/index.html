@@ -1611,8 +1611,8 @@ function notifierCell(w) {
 }
 
 // meterParts returns the [title, detail] strings for a generic usage meter
-// (memory/load/fds/pids), shared by the summary cell, the search index, and the
-// detail panel so the wording can't drift.
+// (memory/load/fds/pids/conntrack), shared by the summary cell, the search
+// index, and the detail panel so the wording can't drift.
 function meterParts(m) {
   if (!m) return null;
   switch (m.kind) {
@@ -1628,6 +1628,9 @@ function meterParts(m) {
     case "pids":
       return [`PID table · ${(m.max || 0).toLocaleString()} max`,
         `${(m.count || 0).toLocaleString()} in use · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
+    case "conntrack":
+      return [`conntrack · ${(m.max || 0).toLocaleString()} max`,
+        `${(m.count || 0).toLocaleString()} entries · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
     default:
       return null;
   }
@@ -1640,6 +1643,28 @@ function meterSummaryCell(m) {
     <div>${usageBar(pctClamp(m.used_pct || 0))} <span class="muted">· ${esc(parts[1])}</span></div>`;
 }
 
+function watchReadings(w) {
+  return (w && Array.isArray(w.readings)) ? w.readings.filter(Boolean) : [];
+}
+
+function readingText(r) {
+  if (!r) return "";
+  const label = r.label || r.field || "sample";
+  return r.error ? `${label}: ${r.error}` : `${label} ${r.value || ""}`.trim();
+}
+
+function readingsSummaryCell(w) {
+  const list = watchReadings(w);
+  if (!list.length) return "";
+  const errors = list.filter((r) => r.error);
+  if (errors.length) {
+    return errors.map((r) => `<span class="bad">${esc(readingText(r))}</span>`).join("<br>");
+  }
+  const detail = w.summary ? "" : list.slice(0, 3).map(readingText).filter(Boolean).join(" · ");
+  return `<div>${esc(w.summary || w.check_type || "watch")}</div>${
+    detail ? `<div class="muted">· ${esc(detail)}</div>` : ""}`;
+}
+
 function watchSummaryCell(w) {
   if (!w) return "—";
   const sw = w.swap;
@@ -1650,6 +1675,8 @@ function watchSummaryCell(w) {
   }
   const meterCell = meterSummaryCell(w.meter);
   if (meterCell) return meterCell;
+  const readingCell = readingsSummaryCell(w);
+  if (readingCell) return readingCell;
   const d = w.disk;
   if (d) {
     if (d.sample_error) {
@@ -1730,6 +1757,8 @@ function watchSummaryText(w) {
   }
   const parts = meterParts(w.meter);
   if (parts) return parts.join(" ") + " " + fmtPct(w.meter.used_pct) + " used";
+  const readings = watchReadings(w);
+  if (readings.length) return [w.summary, ...readings.map(readingText)].filter(Boolean).join(" ");
   return w.summary || "";
 }
 
@@ -1876,8 +1905,8 @@ function renderDiskWatch(d) {
   </div>${errors}`;
 }
 
-// renderMeterWatch shows a memory/load/fds/pids watch's live gauge in the
-// expansion detail, reusing the watch-grid layout that renderDiskWatch uses.
+// renderMeterWatch shows a memory/load/fds/pids/conntrack watch's live gauge in
+// the expansion detail, reusing the watch-grid layout that renderDiskWatch uses.
 function renderMeterWatch(m) {
   if (!m) return "";
   const usedPct = pctClamp(m.used_pct || 0);
@@ -1892,8 +1921,8 @@ function renderMeterWatch(m) {
       `<div><span class="muted">Load 1m</span><br><b>${(m.load || 0).toFixed(2)}</b></div>`,
       `<div><span class="muted">CPUs</span><br><b>${m.num_cpu || 0}</b></div>`,
       `<div><span class="muted">Capacity</span><br>${usageBar(usedPct)} <b>${fmtPct(m.used_pct)}</b></div>`);
-  } else { // fds | pids
-    const label = m.kind === "fds" ? "Allocated" : "In use";
+  } else { // fds | pids | conntrack
+    const label = m.kind === "fds" ? "Allocated" : (m.kind === "conntrack" ? "Entries" : "In use");
     cells.push(
       `<div><span class="muted">${label}</span><br><b>${(m.count || 0).toLocaleString()}</b></div>`,
       `<div><span class="muted">Max</span><br><b>${(m.max || 0).toLocaleString()}</b></div>`,
@@ -1901,6 +1930,19 @@ function renderMeterWatch(m) {
       `<div><span class="muted">Free</span><br><b>${((m.max || 0) - (m.count || 0)).toLocaleString()}</b></div>`);
   }
   return `<div class="watch-grid">${cells.join("")}</div>`;
+}
+
+function renderWatchReadings(readings) {
+  const list = (readings || []).filter(Boolean);
+  if (!list.length) return "";
+  const cells = list.map((r) => {
+    const label = r.label || r.field || "Sample";
+    const value = r.error
+      ? `<span class="bad">${esc(r.error)}</span>`
+      : `<b>${esc(r.value || "—")}</b>`;
+    return `<div><span class="muted">${esc(label)}</span><br>${value}</div>`;
+  }).join("");
+  return `<div class="watch-grid">${cells}</div>`;
 }
 
 function renderWatches(watches) {
@@ -2079,9 +2121,9 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
   </div>`;
-  const disk = renderDiskWatch(w.disk) + renderMeterWatch(w.meter);
+  const live = renderDiskWatch(w.disk) + renderMeterWatch(w.meter) + renderWatchReadings(w.readings);
   const conditions = renderConditionRows(w.conditions || []);
-  if (!events || !events.length) return cfg + disk + conditions + '<div class="muted">No recent activity.</div>';
+  if (!events || !events.length) return cfg + live + conditions + '<div class="muted">No recent activity.</div>';
   const rows = events.slice(0, 50).map((e) => {
     const detail = [e.action, e.status].filter(Boolean).map(esc).join(" ");
     return `<tr>
@@ -2090,7 +2132,7 @@ function renderWatchExpansion(w, events) {
       <td>${detail ? `<span class="muted">${detail}</span> ` : ""}${esc(e.message || "")}</td>
     </tr>`;
   }).join("");
-  return cfg + disk + conditions + `<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
+  return cfg + live + conditions + `<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
 }
 
 function renderNotifiers(notifiers) {
