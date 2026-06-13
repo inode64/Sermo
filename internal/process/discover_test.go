@@ -308,6 +308,31 @@ func TestParseSelectors(t *testing.T) {
 	}
 }
 
+func TestParseSelectorsCanonicalizesExe(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "mysqld")
+	link := filepath.Join(dir, "mysqld-link")
+	if err := os.WriteFile(target, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	tree := map[string]any{
+		"processes": map[string]any{
+			"main": map[string]any{"type": "command_match", "exe": link},
+		},
+	}
+
+	selectors, warnings := ParseSelectors(tree)
+	if len(warnings) != 0 || len(selectors) != 1 {
+		t.Fatalf("selectors=%+v warnings=%v, want one selector", selectors, warnings)
+	}
+	if selectors[0].exePath != target {
+		t.Fatalf("exePath = %q, want %q", selectors[0].exePath, target)
+	}
+}
+
 func TestMatchesCmdAndGroup(t *testing.T) {
 	d := Discoverer{
 		ResolveUser:  func(string) (uint32, bool) { return 1000, true },
