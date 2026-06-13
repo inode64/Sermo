@@ -27,7 +27,7 @@ func LineDiff(base, other string) (removed, added []string) {
 
 func lineCount(s string) map[string]int {
 	out := map[string]int{}
-	for _, l := range strings.Split(s, "\n") {
+	for _, l := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
 		out[l]++
 	}
 	return out
