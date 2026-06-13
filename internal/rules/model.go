@@ -121,6 +121,61 @@ func parseActions(then map[string]any) []Action {
 	return []Action{{Type: ActionType(cfgval.AsString(then["action"])), Message: cfgval.AsString(then["message"])}}
 }
 
+// ConditionUsesSystemMetric walks a condition tree and reports whether any
+// leaf reads a `scope: system` metric — directly, or (when checks is non-nil)
+// through a failed/active reference to a `type: metric, scope: system` check.
+// Runtime defense-in-depth for safety invariant 13: a system-wide metric may
+// only drive alert rules, never remediation, even if a rule slips past static
+// validation (catalog bug, partial reload, hand-built Rule).
+func ConditionUsesSystemMetric(node map[string]any, checks map[string]any) bool {
+	for key, v := range node {
+		switch key {
+		case "and", "or":
+			list, ok := v.([]any)
+			if !ok {
+				continue
+			}
+			for _, c := range list {
+				if m, ok := c.(map[string]any); ok && ConditionUsesSystemMetric(m, checks) {
+					return true
+				}
+			}
+		case "not":
+			if m, ok := v.(map[string]any); ok && ConditionUsesSystemMetric(m, checks) {
+				return true
+			}
+		case "metric":
+			if m, ok := v.(map[string]any); ok && cfgval.AsString(m["scope"]) == "system" {
+				return true
+			}
+		case "failed", "active":
+			m, ok := v.(map[string]any)
+			if !ok || checks == nil {
+				continue
+			}
+			if c, ok := checks[cfgval.AsString(m["check"])].(map[string]any); ok &&
+				cfgval.AsString(c["type"]) == "metric" && cfgval.AsString(c["scope"]) == "system" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// referencedChecks merges the sections a rule's failed/active references may
+// point at (checks and preflight), for system-metric detection.
+func referencedChecks(tree map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, section := range []string{"checks", "preflight"} {
+		if m, ok := tree[section].(map[string]any); ok {
+			for name, entry := range m {
+				out[name] = entry
+			}
+		}
+	}
+	return out
+}
+
 // ParseRules extracts the resolved `rules` section into Rules, skipping
 // `enabled: false` entries and reporting malformed ones as warnings. Rules are
 // returned in name order (guards are evaluated in this order, section 13).
@@ -136,6 +191,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 	// default.
 	fbFor, fbWithin := ParseRuleWindow(tree["rule_window"])
 
+	refChecks := referencedChecks(tree)
 	var rules []Rule
 	var warnings []string
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
@@ -155,6 +211,10 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 		thenNode, ok := entry["then"].(map[string]any)
 		if !ok {
 			warnings = append(warnings, "rule "+name+" has no then action")
+			continue
+		}
+		if RuleType(cfgval.AsString(entry["type"])) != RuleAlert && ConditionUsesSystemMetric(ifNode, refChecks) {
+			warnings = append(warnings, "rule "+name+": a scope: system metric may only drive alert rules; rule dropped (safety invariant)")
 			continue
 		}
 		actions := parseActions(thenNode)
