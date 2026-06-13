@@ -206,6 +206,25 @@ func TestEvalProcessCondition(t *testing.T) {
 	}
 }
 
+func TestEvalChangedCondition(t *testing.T) {
+	ev := &Evaluator{Changed: func(path string) (bool, error) { return path == "/etc/app.conf", nil }}
+	if !evalNode(t, ev, map[string]any{"changed": map[string]any{"path": "/etc/app.conf"}}) {
+		t.Error("a file that differs from its baseline should be true")
+	}
+	if evalNode(t, ev, map[string]any{"changed": map[string]any{"path": "/etc/other"}}) {
+		t.Error("an unchanged file should be false")
+	}
+	// No Changed source: never fire a remediation on an unavailable signal.
+	if (&Evaluator{}).mustFalse(t, map[string]any{"changed": map[string]any{"path": "/x"}}) {
+		t.Error("absent changed source must be false")
+	}
+	// A changed condition without a path is a configuration error.
+	if _, err := (&Evaluator{Changed: func(string) (bool, error) { return false, nil }}).
+		Eval(context.Background(), map[string]any{"changed": map[string]any{}}); err == nil {
+		t.Error("changed without a path must error")
+	}
+}
+
 func (e *Evaluator) mustFalse(t *testing.T, node map[string]any) bool {
 	t.Helper()
 	got, err := e.Eval(context.Background(), node)
