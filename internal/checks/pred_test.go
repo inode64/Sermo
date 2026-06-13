@@ -35,3 +35,18 @@ func TestParseLevelPredGrammar(t *testing.T) {
 		t.Error("a non-numeric plain value must error")
 	}
 }
+
+// deltaOrZero is the clamp every stateful counter check relies on: a counter
+// that went backwards (reset / reload / device re-plug) must yield 0, not a
+// giant unsigned wraparound.
+func TestDeltaOrZero(t *testing.T) {
+	if got := deltaOrZero(150, 100); got != 50 {
+		t.Fatalf("deltaOrZero(150,100) = %d, want 50", got)
+	}
+	if got := deltaOrZero(100, 100); got != 0 {
+		t.Fatalf("deltaOrZero(100,100) = %d, want 0", got)
+	}
+	if got := deltaOrZero(40, 100); got != 0 {
+		t.Fatalf("deltaOrZero(40,100) = %d, want 0 (clamped, not wraparound)", got)
+	}
+}
