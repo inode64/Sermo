@@ -211,8 +211,9 @@ At startup `sermod` logs a warning: "web ui disabled; no port will be opened".
 
 ```yaml
 web:
-  address: 127.0.0.1     # optional, default 127.0.0.1 (loopback only)
-  port: 9797             # REQUIRED to activate the web UI (9797 recommended)
+  address: 127.0.0.1        # optional, default 127.0.0.1 (loopback only)
+  port: 9797                # REQUIRED to activate the web UI (9797 recommended)
+  disable_diagnostics: true # optional, default false — hide the Diagnostics panel
 ```
 
 - **Activation rule:** the web UI ("servicio web") is **not started** unless
@@ -223,6 +224,9 @@ web:
   `3000` Grafana, `8080`).
 - **Authentication** is optional but recommended before exposing it. Without it,
   the UI binds to **loopback (`127.0.0.1`) by default** and is fully open.
+- **`disable_diagnostics`** (optional, default `false`) — when `true`, the
+  dashboard hides the **Diagnostics** panel and `GET /api/diagnostics` returns an
+  empty result. The underlying `sermoctl diagnose` command is unaffected.
 
 ### Authentication
 

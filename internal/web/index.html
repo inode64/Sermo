@@ -530,7 +530,7 @@
 <script nonce="{{CSP_NONCE}}">
 const $ = (s) => document.querySelector(s);
 
-let me = { can_act: true, role: "admin", auth: false };
+let me = { can_act: true, role: "admin", auth: false, diagnostics: true };
 
 async function loadMe() {
   try {
@@ -544,6 +544,11 @@ async function loadMe() {
   const reloadBtn = $("#reload-btn");
   if (reloadBtn) {
     reloadBtn.style.display = (me.can_act ? "inline-block" : "none");
+  }
+  // Hide the Diagnostics panel entirely when disabled via web.disable_diagnostics.
+  const diagSection = $("#diag-section");
+  if (diagSection) {
+    diagSection.style.display = (me.diagnostics === false) ? "none" : "";
   }
 }
 
@@ -703,6 +708,7 @@ function clearEventFilters() {
 }
 
 async function loadDiag() {
+  if (me.diagnostics === false) { latestDiagnostics = []; renderAttention(); return; }
   $("#diag").innerHTML = `<tr><td class="muted">checking…</td></tr>`;
   try {
     const res = await fetch("api/diagnostics");
@@ -3657,8 +3663,7 @@ function initDelegatedHandlers() {
 
 initStaticHandlers();
 initDelegatedHandlers();
-loadMe().then(load);
-loadDiag();
+loadMe().then(() => { load(); loadDiag(); });
 
 // Manual refresh + a once-per-second "updated Xs ago" readout. The readout is
 // independent of the auto-refresh interval, so it keeps counting up even when

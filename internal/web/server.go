@@ -574,6 +574,11 @@ type Server struct {
 	// web UI is reachable.
 	Reload func() error
 
+	// DiagnosticsDisabled hides the Diagnostics panel in the dashboard and makes
+	// GET /api/diagnostics return an empty result. Set from web.disable_diagnostics
+	// in the global config.
+	DiagnosticsDisabled bool
+
 	started  time.Time       // when the server began serving; for /livez uptime
 	shutdown context.Context // daemon lifetime; set in Run
 }
@@ -968,6 +973,10 @@ func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
+	if s.DiagnosticsDisabled {
+		writeJSON(w, http.StatusOK, []Finding{})
+		return
+	}
 	writeJSON(w, http.StatusOK, s.Backend.Diagnostics(r.Context()))
 }
 
