@@ -60,6 +60,11 @@ func (c *swapCheck) Run(_ context.Context) Result {
 			res.Data = data
 			return res
 		}
+		if s.FreeBytes > s.TotalBytes {
+			res := c.result(false, "swap: free bytes exceed total bytes", start)
+			res.Data = data
+			return res
+		}
 		used := s.TotalBytes - s.FreeBytes
 		usedPct := float64(used) / float64(s.TotalBytes) * 100
 		freePct := float64(s.FreeBytes) / float64(s.TotalBytes) * 100

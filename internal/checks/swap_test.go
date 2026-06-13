@@ -44,6 +44,14 @@ func TestSwapUsageNoSwapNeverFires(t *testing.T) {
 	}
 }
 
+func TestSwapUsageRejectsFreeAboveTotal(t *testing.T) {
+	c := &swapCheck{base: base{name: "s"}, metric: "usage",
+		preds: []levelPred{{field: "used_pct", op: ">", value: 90}}, sampler: fakeSwap(SwapSample{TotalBytes: 1000, FreeBytes: 1200})}
+	if res := c.Run(context.Background()); res.OK {
+		t.Fatalf("invalid free > total sample must not underflow and fire: %+v", res)
+	}
+}
+
 func TestSwapIODeltaPrimes(t *testing.T) {
 	samples := []SwapSample{
 		{PagesIn: 100, PagesOut: 100}, // baseline total 200
