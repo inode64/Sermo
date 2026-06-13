@@ -1,9 +1,8 @@
 # golangci-lint v2 configuration for Sermo.
 #
-# Its purpose is to run gosec, the security analyzer that is not installed as a
-# standalone binary in ~/go/bin. The other standards are covered by dedicated
-# tools (gofmt, staticcheck, revive via revive.toml, govulncheck), so only gosec
-# is enabled here.
+# Its purpose is to run gosec plus a small set of focused bug analyzers that are
+# not covered by the standalone tools. The other standards are covered by
+# dedicated tools (gofmt, staticcheck, revive via revive.toml, govulncheck).
 #
 # Run with:  golangci-lint run        (requires golangci-lint v2)
 version: "2"
@@ -14,7 +13,12 @@ run:
 linters:
   default: none
   enable:
+    - bodyclose
+    - copyloopvar
     - gosec
+    - ineffassign
+    - nilerr
+    - wastedassign
   exclusions:
     generated: lax
     presets:

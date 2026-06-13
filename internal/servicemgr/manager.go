@@ -277,7 +277,7 @@ func (m openrcManager) SupportsReload(_ context.Context, service string) (bool, 
 	}
 	data, err := read(filepath.Join("/etc/init.d", service))
 	if err != nil {
-		return false, nil
+		return false, nil //nolint:nilerr // unreadable scripts mean reload support is unknown; callers fall back safely
 	}
 	return openrcReloadDef.Match(data), nil
 }

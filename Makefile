@@ -56,9 +56,9 @@ fmt-check:
 	@out="$$(gofmt -l internal cmd)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
-# Static analysis. Requires the tools on PATH (see CLAUDE.md for install
-# commands): staticcheck, revive, golangci-lint (runs gosec via .golangci.yml),
-# and govulncheck.
+# Static analysis. Requires the tools on PATH: staticcheck, revive,
+# golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and
+# govulncheck.
 lint:
 	staticcheck ./...
 	revive -config revive.toml ./...
