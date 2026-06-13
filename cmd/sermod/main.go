@@ -312,19 +312,19 @@ func parseArgs(args []string) (cliArgs, error) {
 		case strings.HasPrefix(arg, "--config="):
 			parsed.globalPath = strings.TrimPrefix(arg, "--config=")
 		case arg == "--config":
-			i++
-			if i >= len(args) {
-				return cliArgs{}, fmt.Errorf("--config requires a value")
+			v, err := nextValue(args, &i, "--config")
+			if err != nil {
+				return cliArgs{}, err
 			}
-			parsed.globalPath = args[i] //nolint:gosec // G602 false positive: i is bounds-checked just above
+			parsed.globalPath = v
 		case strings.HasPrefix(arg, "--catalog="):
 			parsed.catalog = append(parsed.catalog, strings.TrimPrefix(arg, "--catalog="))
 		case arg == "--catalog":
-			i++
-			if i >= len(args) {
-				return cliArgs{}, fmt.Errorf("--catalog requires a value")
+			v, err := nextValue(args, &i, "--catalog")
+			if err != nil {
+				return cliArgs{}, err
 			}
-			parsed.catalog = append(parsed.catalog, args[i]) //nolint:gosec // G602 false positive: i is bounds-checked just above
+			parsed.catalog = append(parsed.catalog, v)
 		case arg == "--verbose" || arg == "-v":
 			parsed.verbose = true
 		case strings.HasPrefix(arg, "-"):
@@ -339,6 +339,17 @@ func parseArgs(args []string) (cliArgs, error) {
 		return cliArgs{}, fmt.Errorf("missing command")
 	}
 	return parsed, nil
+}
+
+// nextValue advances the index and returns the following arg as a flag value,
+// or an error if no value remains. Factored to deduplicate the --config/--catalog
+// "value required" handling and the associated G602 suppression.
+func nextValue(args []string, i *int, flag string) (string, error) {
+	*i++
+	if *i >= len(args) {
+		return "", fmt.Errorf("%s requires a value", flag)
+	}
+	return args[*i], nil //nolint:gosec // G602: bounds-checked by the if just above
 }
 
 // webListenAddr returns the host:port the web UI should bind to, or "" when the
