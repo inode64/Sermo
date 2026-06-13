@@ -117,7 +117,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && expand == nil && !config.NotifyOptedOut(names) {
+	if !hasWatchAction(hook, names, effectiveNames, expand) {
 		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
 	}
 	w := &Watch{
@@ -158,6 +158,10 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 		runner = execx.CommandRunner{}
 	}
 	return volume.Expander{Runner: runner}
+}
+
+func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *ExpandSpec) bool {
+	return len(hook.Command) > 0 || config.HasNotifyAction(effectiveNames) || expand != nil || config.NotifyOptedOut(names)
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
@@ -206,7 +210,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-		if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) {
+		if !hasWatchAction(hook, names, effectiveNames, nil) {
 			warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
 			continue
 		}
@@ -243,7 +247,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) {
+	if !hasWatchAction(hook, names, effectiveNames, nil) {
 		return nil, "watch " + name + ": then requires a hook and/or notify"
 	}
 	fw := &fileWatcher{
@@ -284,7 +288,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if len(hook.Command) == 0 && !config.HasNotifyAction(effectiveNames) && !config.NotifyOptedOut(names) {
+	if !hasWatchAction(hook, names, effectiveNames, nil) {
 		return nil, "watch " + name + ": then requires a hook and/or notify"
 	}
 	pw := &procWatcher{
