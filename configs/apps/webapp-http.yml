@@ -1,0 +1,27 @@
+kind: service
+name: webapp
+# A self-contained service (no daemon): monitor any HTTP endpoint and restart
+# its unit when it stays unhealthy. `service` names the init unit to control.
+service: my-webapp
+
+variables:
+  health_url: "http://127.0.0.1:8080/health"
+
+checks:
+  http:
+    type: http
+    url: "${health_url}"
+    expect_status: 200
+    timeout: 5s
+
+rules:
+  restart-if-http-failed:
+    type: remediation
+    if:
+      failed:
+        check: http
+    for:
+      cycles: 3
+      mode: consecutive
+    then:
+      action: restart

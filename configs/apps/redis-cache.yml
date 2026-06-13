@@ -1,0 +1,13 @@
+kind: service
+name: redis-cache
+clone: redis-main
+
+# A distinct cache instance runs as its own unit (overrides the redis daemon).
+service: redis-cache
+
+# Cloning copies redis-main BEFORE variable expansion, so overriding the `port`
+# variable alone is enough — every check that references ${port} resolves to the
+# new value after expansion (section 8/29).
+variables:
+  port: 6380
+  pidfile: /run/redis-cache/redis.pid
