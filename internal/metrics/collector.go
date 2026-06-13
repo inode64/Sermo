@@ -218,31 +218,24 @@ func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
 	c.prevServiceProcs[service] = cur
 
 	out := ServiceCPU{NumCPU: ncpu, CPU: Reading{HasPercent: true}, CPUThread: Reading{HasPercent: true}}
-	if prev.ticks == nil || prev.at.IsZero() {
-		return out // first observation: no delta yet
+	rates, ready := perProcCPURates(prev, cur, hz)
+	if !ready {
+		return out // first observation (or no time elapsed): no delta yet
 	}
-	wall := now.Sub(prev.at).Seconds()
-	if wall <= 0 || hz <= 0 {
-		return out
-	}
-	out.PerProc = make(map[int]float64, len(curTicks))
-	var sumDelta, maxPct float64
-	for pid, curT := range curTicks {
-		prevT, ok := prev.ticks[pid]
-		if !ok || curT < prevT {
-			continue // new process this cycle, or a counter reset: no rate
-		}
-		d := float64(curT - prevT)
-		sumDelta += d
-		pct := d / hz / wall * 100 // against one CPU thread (cpu_thread units)
-		out.PerProc[pid] = pct
-		if pct > maxPct {
-			maxPct = pct
+	out.PerProc = rates
+	// cpu_thread is the busiest single process; the whole-machine rate is the sum
+	// of the per-process rates spread over the cores (each rate is already a
+	// percentage of one thread, so Σ/ncpu is the percentage of all of them).
+	var sum, max float64
+	for _, pct := range rates {
+		sum += pct
+		if pct > max {
+			max = pct
 		}
 	}
-	out.CPUThread = Reading{Percent: maxPct, HasPercent: true, Ready: true}
+	out.CPUThread = Reading{Percent: max, HasPercent: true, Ready: true}
 	if ncpu > 0 {
-		out.CPU = Reading{Percent: sumDelta / hz / (wall * float64(ncpu)) * 100, HasPercent: true, Ready: true}
+		out.CPU = Reading{Percent: sum / float64(ncpu), HasPercent: true, Ready: true}
 	}
 	return out
 }
@@ -346,31 +339,46 @@ func (c *Collector) Reset(service string) {
 	c.mu.Unlock()
 }
 
-// maxProcCPURate computes the highest single-process CPU rate between two
-// per-process samples, as a percentage of ONE CPU thread (100% = a process using
-// a full core; a multi-threaded process may exceed 100%). Only PIDs present in
-// both samples contribute (a process needs a baseline), and a lower current tick
-// count (PID reuse / restart) is skipped. Not ready until there is a previous
-// sample.
-func maxProcCPURate(prev, cur procCPUSample, hz float64) Reading {
+// perProcCPURates returns each PID's CPU rate as a percentage of ONE CPU thread
+// (Δticks / hz / Δwall * 100; 100% = a process pegging a full core, and a
+// multi-threaded process may exceed it) between two per-process samples. Only
+// PIDs present in both contribute (a process needs a baseline), and a lower
+// current tick count (PID reuse / restart) is skipped. ready is false until a
+// usable previous sample exists, so callers can mark their Reading not-ready.
+func perProcCPURates(prev, cur procCPUSample, hz float64) (rates map[int]float64, ready bool) {
 	if prev.ticks == nil || prev.at.IsZero() {
-		return Reading{HasPercent: true}
+		return nil, false
 	}
 	wall := cur.at.Sub(prev.at).Seconds()
 	if wall <= 0 || hz <= 0 {
-		return Reading{HasPercent: true, Ready: false}
+		return nil, false
 	}
-	maxPct := 0.0
+	rates = make(map[int]float64, len(cur.ticks))
 	for pid, curT := range cur.ticks {
 		prevT, ok := prev.ticks[pid]
 		if !ok || curT < prevT {
 			continue
 		}
-		if pct := float64(curT-prevT) / hz / wall * 100; pct > maxPct {
-			maxPct = pct
+		rates[pid] = float64(curT-prevT) / hz / wall * 100
+	}
+	return rates, true
+}
+
+// maxProcCPURate is the highest single-process CPU rate between two per-process
+// samples (the service cpu_thread metric). Not ready until there is a previous
+// sample.
+func maxProcCPURate(prev, cur procCPUSample, hz float64) Reading {
+	rates, ready := perProcCPURates(prev, cur, hz)
+	if !ready {
+		return Reading{HasPercent: true}
+	}
+	max := 0.0
+	for _, pct := range rates {
+		if pct > max {
+			max = pct
 		}
 	}
-	return Reading{Percent: maxPct, HasPercent: true, Ready: true}
+	return Reading{Percent: max, HasPercent: true, Ready: true}
 }
 
 // cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100 (section 12).
