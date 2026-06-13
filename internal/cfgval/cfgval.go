@@ -51,13 +51,7 @@ func String(v any) string {
 func StringList(v any) []string {
 	switch t := v.(type) {
 	case []any:
-		out := make([]string, 0, len(t))
-		for _, e := range t {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
+		return nonEmptyStrings(t)
 	case string:
 		if t != "" {
 			return []string{t}
@@ -74,6 +68,12 @@ func StringArray(v any) []string {
 	if !ok {
 		return nil
 	}
+	return nonEmptyStrings(list)
+}
+
+// nonEmptyStrings returns the non-empty string elements of a decoded YAML list,
+// dropping non-strings and blanks — the shared body of StringList/StringArray.
+func nonEmptyStrings(list []any) []string {
 	out := make([]string, 0, len(list))
 	for _, e := range list {
 		if s, ok := e.(string); ok && s != "" {
