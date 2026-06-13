@@ -107,6 +107,16 @@ func (OSLookup) LookPath(name string) (string, error) {
 	return path, nil
 }
 
+// deadline returns a derived context with timeout applied when > 0.
+// It always returns a cancel func safe to defer-call (no-op when no new
+// deadline is added). Centralizes the WithTimeout pattern used by Run/RunEnv.
+func deadline(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout > 0 {
+		return context.WithTimeout(ctx, timeout)
+	}
+	return ctx, func() {}
+}
+
 // Run is a fortified wrapper that ensures the command runs under a deadline
 // and then delegates to r.Run.
 //
@@ -118,11 +128,8 @@ func (OSLookup) LookPath(name string) (string, error) {
 // still encouraged to pass a positive per-command timeout for fast-failing
 // probes and queries.
 func Run(ctx context.Context, r Runner, timeout time.Duration, name string, args ...string) (Result, error) {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
+	ctx, cancel := deadline(ctx, timeout)
+	defer cancel()
 	return r.Run(ctx, name, args...)
 }
 
@@ -142,11 +149,8 @@ type EnvRunner interface {
 // it returns an error (in normal Sermo usage we always pass CommandRunner
 // for hooks).
 func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, name string, args ...string) (Result, error) {
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
+	ctx, cancel := deadline(ctx, timeout)
+	defer cancel()
 
 	if er, ok := r.(EnvRunner); ok {
 		return er.RunEnv(ctx, env, name, args...)
