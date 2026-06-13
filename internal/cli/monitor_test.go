@@ -204,3 +204,17 @@ func monitorTestApp(root string, stdout *bytes.Buffer) App {
 		Stderr: &bytes.Buffer{},
 	}
 }
+
+func TestMetaSuffix(t *testing.T) {
+	cases := []struct{ source, changed, want string }{
+		{"", "", ""},
+		{"cli", "", " source=cli"},
+		{"", "2026-01-02T03:04:05Z", " changed=2026-01-02T03:04:05Z"},
+		{"web", "2026-01-02T03:04:05Z", " source=web changed=2026-01-02T03:04:05Z"},
+	}
+	for _, tc := range cases {
+		if got := metaSuffix(tc.source, tc.changed); got != tc.want {
+			t.Errorf("metaSuffix(%q, %q) = %q, want %q", tc.source, tc.changed, got, tc.want)
+		}
+	}
+}

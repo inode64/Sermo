@@ -381,12 +381,19 @@ func (a App) serviceMonitorState(opts options) monitorView {
 }
 
 func formatStateMetadata(mon monitorView) string {
+	return metaSuffix(mon.Source, mon.ChangedAt)
+}
+
+// metaSuffix renders the optional " source=… changed=…" trailer shared by the
+// status line and the monitor pause/resume messages. Empty fields are omitted;
+// an all-empty result is the empty string (no leading space).
+func metaSuffix(source, changedAt string) string {
 	var parts []string
-	if mon.Source != "" {
-		parts = append(parts, "source="+mon.Source)
+	if source != "" {
+		parts = append(parts, "source="+source)
 	}
-	if mon.ChangedAt != "" {
-		parts = append(parts, "changed="+mon.ChangedAt)
+	if changedAt != "" {
+		parts = append(parts, "changed="+changedAt)
 	}
 	if len(parts) == 0 {
 		return ""
