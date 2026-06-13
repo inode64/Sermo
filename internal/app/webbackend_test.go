@@ -114,6 +114,41 @@ func TestWebBackendViewInterval(t *testing.T) {
 	}
 }
 
+func TestWebBackendMonitoringStatusAvoidsServiceViewWork(t *testing.T) {
+	store := newFakeStore()
+	if err := store.SetActive("paused", false, state.SourceCLI); err != nil {
+		t.Fatalf("SetActive: %v", err)
+	}
+	statusCalls := 0
+	b := &WebBackend{
+		order: []string{"active", "paused", "disabled"},
+		entries: map[string]*webEntry{
+			"active": {
+				status: func(context.Context) (servicemgr.Status, error) {
+					statusCalls++
+					return servicemgr.StatusActive, nil
+				},
+			},
+			"paused": {
+				status: func(context.Context) (servicemgr.Status, error) {
+					statusCalls++
+					return servicemgr.StatusActive, nil
+				},
+			},
+			"disabled": {disabled: true},
+		},
+		store: store,
+	}
+
+	got := b.MonitoringStatus(context.Background())
+	if got.Total != 3 || got.Monitored != 1 || got.Paused != 2 {
+		t.Fatalf("MonitoringStatus = %+v, want total=3 monitored=1 paused=2", got)
+	}
+	if statusCalls != 0 {
+		t.Fatalf("MonitoringStatus called service status %d times, want 0", statusCalls)
+	}
+}
+
 func TestWebBackendLastEventIndexes(t *testing.T) {
 	events := NewEventLog(10)
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
