@@ -476,6 +476,13 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		if w.checkType == "swap" && !w.disabled {
 			swap = swapWatchInfo(b)
 		}
+		// memory/load/fds/pids carry a natural capacity, so render them with the
+		// same progress bar as swap. Skip disabled watches (config, not a live
+		// concern) so the UI never probes /proc for something switched off.
+		var meter *web.WatchMeter
+		if !w.disabled {
+			meter = watchMeter(w.checkType, b)
+		}
 		monitorMode := w.monitorMode
 		if monitorMode == "" {
 			monitorMode = config.MonitorEnabled
@@ -496,6 +503,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			Conditions:    watchConditions(w.check),
 			Disk:          disk,
 			Swap:          swap,
+			Meter:         meter,
 		}
 		if w.expand != nil {
 			ww.Expand = &web.WatchExpand{ByBytes: w.expand.By}
@@ -608,6 +616,69 @@ func swapWatchInfo(b *WebBackend) *web.SwapWatchInfo {
 		FreeBytes:  total - min(used, total),
 		UsedPct:    r.Percent,
 	}
+}
+
+// watchMeter builds the generic usage gauge (progress bar) for the host watch
+// types that have a natural 0-100% capacity: memory and load come from the
+// collector's cached system snapshot (shared with the overview tiles, no extra
+// probe); fds and pids read their tiny /proc files live. nil for any other
+// type, or when the needed data is unavailable.
+func watchMeter(checkType string, b *WebBackend) *web.WatchMeter {
+	switch checkType {
+	case "memory":
+		if b.collector == nil {
+			return nil
+		}
+		r, ok := b.collector.SampleSystem()["total_memory"]
+		if !ok || !r.HasTotal || r.Total <= 0 {
+			return nil
+		}
+		used, total := uint64(r.Absolute), uint64(r.Total)
+		return &web.WatchMeter{
+			Kind:       "memory",
+			UsedPct:    r.Percent,
+			TotalBytes: total,
+			UsedBytes:  used,
+			FreeBytes:  total - min(used, total),
+		}
+	case "load":
+		if b.collector == nil {
+			return nil
+		}
+		r, ok := b.collector.SampleSystem()["load1"]
+		if !ok || !r.HasAbsolute {
+			return nil
+		}
+		ncpu := runtime.NumCPU()
+		pct := 0.0
+		if ncpu > 0 {
+			pct = r.Absolute / float64(ncpu) * 100
+		}
+		return &web.WatchMeter{Kind: "load", UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
+	case "fds":
+		s, err := checks.SampleFds()
+		if err != nil || s.Max == 0 {
+			return nil
+		}
+		return &web.WatchMeter{
+			Kind:    "fds",
+			UsedPct: float64(s.Allocated) / float64(s.Max) * 100,
+			Count:   s.Allocated,
+			Max:     s.Max,
+		}
+	case "pids":
+		s, err := checks.SamplePids()
+		if err != nil || s.Max == 0 {
+			return nil
+		}
+		return &web.WatchMeter{
+			Kind:    "pids",
+			UsedPct: float64(s.Threads) / float64(s.Max) * 100,
+			Count:   s.Threads,
+			Max:     s.Max,
+		}
+	}
+	return nil
 }
 
 // monitorView reads one monitor record and renders the view fields services
@@ -847,6 +918,15 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 			}
 			if k == "total_memory" || k == "total_swap" {
 				m.Unit = "bytes"
+			}
+			// Give load1 a 0-100% reading (load vs logical CPUs) and a capacity
+			// (CPU count) so the overview tile can draw a saturation bar, matching
+			// the cpu/mem/swap tiles. The raw load stays in Absolute.
+			if k == "load1" {
+				if ncpu := runtime.NumCPU(); ncpu > 0 {
+					m.Total = float64(ncpu)
+					m.Percent = r.Absolute / float64(ncpu) * 100
+				}
 			}
 			out = append(out, m)
 			seen[k] = true
