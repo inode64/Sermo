@@ -550,11 +550,11 @@ for versions. Even so, a placeholder bounded on both sides (e.g.
 `/usr/lib64/php${version}/bin/php-fpm`, via `versions.from`) discovers most
 precisely.
 
-### Integer placeholder (%n)
+### Integer and instance placeholders
 
-`%v`/`${version}` accepts a free-form version (`8.3`, `12.0.2`); use `%n`/`${n}`
-when the value is a **plain integer** — it matches only whole numbers, otherwise
-working exactly like `%v`:
+`%v`/`${version}` accepts a digit-leading version (`8.3`, `12.0.2`); use
+`%n`/`${n}` when the value is a **plain integer** — it matches only whole
+numbers, otherwise working exactly like `%v`:
 
 ```yaml
 kind: daemon
@@ -566,6 +566,9 @@ variables: { binary: "/usr/bin/python${n}" }
 
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
 `python-config`.
+
+Use `%i`/`${instance}` for named init instances discovered from a bounded path,
+for example `versions: { from: "/etc/init.d/openvpn.${instance}" }`.
 
 ### Listing installed applications
 

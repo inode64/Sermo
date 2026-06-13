@@ -1353,6 +1353,8 @@ variable and have every `${var}` reference resolve to the new value.
 
 Worked examples (cloning, disabling, multiple instances) live in
 [daemons](daemons.md#cloning).
+Catalog templates for installed versions/instances use `%v`, `%n` and `%i`; see
+[versioned daemons](daemons.md#versioned-daemons).
 
 ## Variables
 

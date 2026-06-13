@@ -28,6 +28,7 @@ func (t tmplToken) marker() string { return "${" + t.variable + "}" }
 var tmplTokens = []tmplToken{
 	{placeholder: "%v", variable: "version", capture: "[0-9][^/]*"},
 	{placeholder: "%n", variable: "n", capture: "[0-9]+"},
+	{placeholder: "%i", variable: "instance", capture: "[A-Za-z0-9][A-Za-z0-9_.-]*"},
 }
 
 // tokenFor returns the template token a name carries, or nil if it is not a

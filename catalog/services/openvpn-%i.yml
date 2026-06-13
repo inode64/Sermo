@@ -1,0 +1,9 @@
+kind: daemon
+name: openvpn-%i
+display_name: "OpenVPN ${instance}"
+uses: openvpn
+service: "openvpn.${instance}"
+versions:
+  from: "/etc/init.d/openvpn.${instance}"
+variables:
+  config: "/etc/openvpn/${instance}.conf"
