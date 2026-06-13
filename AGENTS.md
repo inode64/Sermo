@@ -40,6 +40,15 @@ public struct or API as the single canonical term. Avoid near-synonyms such as
 target/service/daemon, limit/max/cap or notify/notifier unless the code already
 uses them for distinct concepts.
 
+The one sanctioned exception is a Go builtin collision: a lowercase local or
+parameter must not be named `max`, `min`, `cap`, `len`, etc. (the
+`redefines-builtin-id` lint forbids it). The canonical term still names the
+exported field and JSON (`Max`, `json:"max"`), and the lowercase local takes a
+documented alias — `limit` for `max`. So the kernel-maximum concept is `Max` /
+`"max"` in structs and on the wire, and `limit` in function locals (see
+`levelCountResult` in `internal/checks/check.go` and `countMeter` in
+`internal/app/webbackend.go`). Do not "fix" those `limit` locals back to `max`.
+
 ## Service operations
 
 Application-level start, stop, restart, reload or signal actions on a service

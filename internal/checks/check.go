@@ -114,13 +114,15 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 	}
 }
 
-// levelCountResult builds the Result shared by the count-vs-kernel-limit level
-// checks (fds, pids, conntrack): the used_pct/free predicate fields — with free
-// clamped so a count momentarily above limit can't underflow the unsigned
-// subtraction — the "label cur/max unit (pct)" message, and the Data map.
-// countField names the primary metric in values/Data ("allocated", "count").
-// When limit is 0 the kernel limit is unknown, so used_pct/free are omitted and a
-// predicate on them cannot hold (the level check is an AND).
+// levelCountResult builds the Result shared by the count-vs-max level checks
+// (fds, pids, conntrack): the used_pct/free predicate fields — with free clamped
+// so a count momentarily above the max can't underflow the unsigned subtraction
+// — the "label cur/max unit (pct)" message, and the Data map. countField names
+// the primary metric in values/Data ("allocated", "count"). The kernel maximum
+// (each sample's Max, the Data `max` field) is the `limit` parameter: the
+// lowercase local is `limit`, not `max`, only to avoid shadowing the Go `max`
+// builtin — keep it that way. When it is 0 the maximum is unknown, so used_pct/
+// free are omitted and a predicate on them cannot hold (the level check is an AND).
 func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, limit uint64, start time.Time) Result {
 	values := map[string]float64{countField: float64(count)}
 	usedPct := 0.0
