@@ -24,6 +24,8 @@ type DaemonCandidate struct {
 	ConfigPaths   []string // config file locations that exist on the host
 	UnitPresent   bool     // the init unit exists on the active backend
 	PortListening bool     // something is listening on Port
+	Pidfile       string   // pidfile path derived from the init definition (best-effort)
+	Exe           string   // main executable derived from the init definition (best-effort)
 }
 
 // Env carries the host facts and config an assistant needs, injected so the

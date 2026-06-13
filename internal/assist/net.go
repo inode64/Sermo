@@ -64,6 +64,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 }
 
 type netSettings struct {
+	Monitoring          // shared monitor-state + interval (asked first, see docs/wizards.md)
 	metrics    []string // any of: state, errors, speed, address
 	stateDown  bool     // expect:down instead of on:change
 	addrAbsent bool     // expect:absent instead of on:change
@@ -73,6 +74,7 @@ type netSettings struct {
 
 func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 	var s netSettings
+	s.Monitoring = p.AskMonitoring(label)
 	options := []string{"link up/down", "link errors", "link speed changes", "IP address (lost or changed)"}
 	keys := []string{"state", "errors", "speed", "address"}
 	for _, idx := range p.MultiChoose("What do you want to monitor on "+label+"?", options) {
@@ -88,9 +90,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 			s.addrAbsent = p.Choose("For the IP address, alert when…", []string{"it changes (reconnect/renumbering)", "the interface has no address"}) == 1
 		}
 	}
-	// ensureNotifyAction re-asks only an inert 'default'; the explicit 'none'
-	// opt-out builds a monitor-only watch and is always accepted.
-	s.notifiers = ensureNotifyAction(p, env, chooseNotifiers(p, env), false)
+	s.notifiers = chooseNotifiers(p, env)
 	return s, nil
 }
 
@@ -130,8 +130,10 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 			metrics["address"] = cond
 		}
 	}
-	return map[string]any{
+	entry := map[string]any{
 		"check":   map[string]any{"type": "net", "interface": iface.Name},
 		"metrics": metrics,
 	}
+	s.Monitoring.apply(entry)
+	return entry
 }

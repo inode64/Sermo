@@ -6,9 +6,9 @@ import (
 )
 
 func TestUplinkAssistant(t *testing.T) {
-	// Select eth0 (lo filtered out); accept the probe-host/name/cycles
-	// defaults (empty lines); notifier ops-email.
-	script := strings.Join([]string{"1", "", "", "", "1"}, "\n") + "\n"
+	// Select eth0 (lo filtered out); monitor enabled, inherit interval; accept the
+	// probe-host/name/cycles defaults (empty lines); notifier ops-email.
+	script := strings.Join([]string{"1", "1", "", "", "", "", "1"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := uplinkAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -21,6 +21,9 @@ func TestUplinkAssistant(t *testing.T) {
 	}
 
 	link := res.Watches["uplink-eth0"].(map[string]any)
+	if link["monitor"] != "enabled" {
+		t.Fatalf("monitor = %v, want enabled (applied to every uplink watch)", link["monitor"])
+	}
 	metrics := link["metrics"].(map[string]any)
 	if metrics["state"].(map[string]any)["expect"] != "down" {
 		t.Fatalf("state = %v, want expect down", metrics["state"])
@@ -59,7 +62,7 @@ func TestUplinkAssistant(t *testing.T) {
 func TestUplinkAssistantInheritsDefaultNotify(t *testing.T) {
 	// Custom probe host and name; 'default' inherits the global notify, so
 	// every generated then block omits notify.
-	script := strings.Join([]string{"1", "8.8.8.8", "cloudflare.com", "2", "default"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "8.8.8.8", "cloudflare.com", "2", "default"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := uplinkAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {

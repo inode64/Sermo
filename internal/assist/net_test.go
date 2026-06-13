@@ -6,10 +6,12 @@ import (
 )
 
 func TestNetAssistantStateAndErrors(t *testing.T) {
-	// Select iface 1 (eth0; lo is filtered out); monitor state+errors;
-	// state on any change; errors threshold 100; notifier ops-email.
+	// Select iface 1 (eth0; lo is filtered out); monitor enabled, interval 10s;
+	// monitor state+errors; state on any change; errors threshold 100; ops-email.
 	script := strings.Join([]string{
 		"1",   // MultiChoose interfaces -> eth0
+		"1",   // monitor state: enabled
+		"10s", // interval
 		"1,2", // metrics: link up/down + link errors
 		"1",   // state: any change
 		"100", // errors threshold
@@ -27,6 +29,9 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 	}
 	if entry["check"].(map[string]any)["interface"] != "eth0" {
 		t.Fatalf("check = %v", entry["check"])
+	}
+	if entry["monitor"] != "enabled" || entry["interval"] != "10s" {
+		t.Fatalf("monitor/interval = %v / %v, want enabled / 10s", entry["monitor"], entry["interval"])
 	}
 	metrics := entry["metrics"].(map[string]any)
 	state := metrics["state"].(map[string]any)
@@ -47,22 +52,28 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 }
 
 func TestNetAssistantStateDownOnly(t *testing.T) {
-	// Select eth0; only state; "only when down"; notifier team-slack.
-	script := strings.Join([]string{"1", "1", "2", "2"}, "\n") + "\n"
+	// Select eth0; monitor enabled, inherit interval; only state; "only when
+	// down"; notifier team-slack.
+	script := strings.Join([]string{"1", "1", "", "1", "2", "2"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnv())
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	state := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)
+	entry := res.Watches["net-eth0"].(map[string]any)
+	if _, hasInterval := entry["interval"]; hasInterval {
+		t.Fatalf("blank interval must be omitted to inherit the global: %v", entry)
+	}
+	state := entry["metrics"].(map[string]any)["state"].(map[string]any)
 	if state["expect"] != "down" {
 		t.Fatalf("state = %v, want expect:down", state)
 	}
 }
 
 func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
-	// Select eth0; only state; any change; inherit global notify.
-	script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
+	// Select eth0; monitor enabled, inherit interval; only state; any change;
+	// inherit global notify.
+	script := strings.Join([]string{"1", "1", "", "1", "1", "default"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
@@ -75,37 +86,34 @@ func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
 	}
 }
 
-func TestNetAssistantRequiresNotifier(t *testing.T) {
-	env := testEnv()
-	env.Notifiers = nil
-	// Select default notify, but no global default is configured: the wizard
-	// re-asks (a net watch has no other action) and the script's EOF then
-	// aborts with ErrInputClosed instead of producing an inert watch.
-	script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
-	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
-	if _, err := (netAssistant{}).Run(p, env); err == nil {
-		t.Fatal("a net watch with no notifier must error (no hook/expand offered)")
-	}
-}
-
-func TestNetAssistantDefaultWithoutGlobalReasks(t *testing.T) {
-	// The regression: choosing 'default' with no global notify configured used
-	// to abort the whole wizard with a hard error. Now it explains and re-asks,
-	// and a notifier picked on the second round succeeds.
-	script := strings.Join([]string{"1", "1", "1", "default", "1"}, "\n") + "\n"
-	var out strings.Builder
-	p := NewPrompt(strings.NewReader(script), &out)
-	res, err := netAssistant{}.Run(p, testEnv())
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	then := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)["then"].(map[string]any)
-	notify := then["notify"].([]string)
-	if len(notify) != 1 || notify[0] != "ops-email" {
-		t.Fatalf("notify = %v, want [ops-email]", notify)
-	}
-	if !strings.Contains(out.String(), "no global notify default is configured") {
-		t.Fatalf("expected the re-ask explanation, got %q", out.String())
+func TestNetAssistantDefaultWithoutGlobalMonitorOnly(t *testing.T) {
+	// Choosing 'default' with no global notify configured is ALWAYS accepted: it
+	// degrades to a monitor-only watch (notify [none]) with an explanatory line,
+	// instead of re-asking or aborting (the old behavior).
+	for _, tc := range []struct {
+		name string
+		env  Env
+	}{
+		{"no notifiers at all", func() Env { e := testEnv(); e.Notifiers = nil; return e }()},
+		{"notifiers but no global default", testEnv()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := strings.Join([]string{"1", "1", "", "1", "1", "default"}, "\n") + "\n"
+			var out strings.Builder
+			p := NewPrompt(strings.NewReader(script), &out)
+			res, err := netAssistant{}.Run(p, tc.env)
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			then := res.Watches["net-eth0"].(map[string]any)["metrics"].(map[string]any)["state"].(map[string]any)["then"].(map[string]any)
+			notify := then["notify"].([]string)
+			if len(notify) != 1 || notify[0] != "none" {
+				t.Fatalf("notify = %v, want [none] (monitor-only)", notify)
+			}
+			if !strings.Contains(out.String(), "monitor-only") {
+				t.Fatalf("expected the monitor-only note, got %q", out.String())
+			}
+		})
 	}
 }
 
@@ -113,8 +121,7 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 	// The shared all/none/default vocabulary works in the net wizard too:
 	// notifiers can be picked by name, and "default" inherits the global default.
 	t.Run("notifier by name", func(t *testing.T) {
-		// Select eth0; only state; any change; type the notifier name.
-		script := strings.Join([]string{"1", "1", "1", "team-slack"}, "\n") + "\n"
+		script := strings.Join([]string{"1", "1", "", "1", "1", "team-slack"}, "\n") + "\n"
 		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 		res, err := netAssistant{}.Run(p, testEnv())
 		if err != nil {
@@ -128,8 +135,7 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 	})
 
 	t.Run("default by name", func(t *testing.T) {
-		// Select eth0; only state; any change; type "default" to inherit.
-		script := strings.Join([]string{"1", "1", "1", "default"}, "\n") + "\n"
+		script := strings.Join([]string{"1", "1", "", "1", "1", "default"}, "\n") + "\n"
 		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 		res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
 		if err != nil {
@@ -143,9 +149,9 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 }
 
 func TestNetAssistantNotifyNoneMonitorOnly(t *testing.T) {
-	// Select eth0; only state; any change; explicit none: the reserved opt-out
-	// is always accepted and generates a monitor-only watch.
-	script := strings.Join([]string{"1", "1", "1", "none"}, "\n") + "\n"
+	// Select eth0; monitor enabled, inherit interval; only state; any change;
+	// explicit none: the reserved opt-out generates a monitor-only watch.
+	script := strings.Join([]string{"1", "1", "", "1", "1", "none"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnv())
 	if err != nil {
