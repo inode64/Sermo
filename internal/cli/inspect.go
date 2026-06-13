@@ -225,11 +225,7 @@ func (a App) printNamed(opts options, names []string, docs map[string]*config.Do
 	if opts.json {
 		out := make([]map[string]string, 0, len(names))
 		for _, n := range names {
-			display := n
-			if doc, ok := docs[n]; ok {
-				display = config.DisplayName(doc.Body, n)
-			}
-			out = append(out, map[string]string{"name": n, "display_name": display})
+			out = append(out, map[string]string{"name": n, "display_name": displayNameOf(docs, n)})
 		}
 		writeJSON(a.Stdout, map[string]any{kind: out})
 		return
@@ -239,16 +235,22 @@ func (a App) printNamed(opts options, names []string, docs map[string]*config.Do
 		return
 	}
 	for _, n := range names {
-		display := n
-		if doc, ok := docs[n]; ok {
-			display = config.DisplayName(doc.Body, n)
-		}
+		display := displayNameOf(docs, n)
 		if display == n {
 			fmt.Fprintln(a.Stdout, n)
 		} else {
 			fmt.Fprintf(a.Stdout, "%s\t%s\n", n, display)
 		}
 	}
+}
+
+// displayNameOf returns the document's display_name, falling back to the id
+// when the document is absent.
+func displayNameOf(docs map[string]*config.Document, n string) string {
+	if doc, ok := docs[n]; ok {
+		return config.DisplayName(doc.Body, n)
+	}
+	return n
 }
 
 func sortedUnique[V any](m map[string]V) []string {
