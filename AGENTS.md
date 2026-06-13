@@ -16,6 +16,12 @@ where the dispatch/validation decision lives and in the user docs. Keep
 `docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml` in
 step with YAML behavior.
 
+## Naming and terminology
+
+Use consistent names for the same concept across variables, parameters, comments,
+and struct fields; when in doubt, prefer the existing struct/API field name as
+the canonical term.
+
 ## Web UI cohesion
 
 The web UI is a single embedded document, `internal/web/index.html` (HTML, CSS
