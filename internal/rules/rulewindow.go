@@ -92,8 +92,10 @@ func FormatCondition(node map[string]any) string {
 }
 
 // BuildRuleWindowReports snapshots remediation and alert rules after their
-// windows were updated for the cycle. eval may be nil (condition stays false).
-func BuildRuleWindowReports(ruleSet []Rule, windows map[string]*WindowState, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
+// windows were updated for the cycle, evaluating conditions under the caller's
+// cycle context (the probes are memoized, but a cancelled cycle must not be
+// outlived). eval may be nil (condition stays false).
+func BuildRuleWindowReports(ctx context.Context, ruleSet []Rule, windows map[string]*WindowState, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
 	var out []RuleWindowReport
 	for _, r := range ruleSet {
 		if r.Type != RuleRemediation && r.Type != RuleAlert {
@@ -103,7 +105,7 @@ func BuildRuleWindowReports(ruleSet []Rule, windows map[string]*WindowState, eva
 		cond := false
 		if eval != nil {
 			var err error
-			cond, err = eval(context.Background(), r)
+			cond, err = eval(ctx, r)
 			if err != nil {
 				cond = false
 			}
@@ -117,7 +119,7 @@ func BuildRuleWindowReports(ruleSet []Rule, windows map[string]*WindowState, eva
 			Condition:     FormatCondition(r.If),
 			ConditionTrue: cond,
 			Window:        WindowDescription(r),
-			Progress:      ws.Progress(r), // Progress/IsFiring nil-guard the receiver
+			Progress:      ws.Progress(r), // Progress/IsFiring are nil-safe
 			Firing:        ws.IsFiring(r),
 		})
 	}

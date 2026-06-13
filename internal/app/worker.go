@@ -416,7 +416,7 @@ func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator) {
 	if w.RuleWindows == nil || ev == nil {
 		return
 	}
-	reports := rules.BuildRuleWindowReports(w.Rules, w.windows, func(ctx context.Context, r rules.Rule) (bool, error) {
+	reports := rules.BuildRuleWindowReports(ctx, w.Rules, w.windows, func(ctx context.Context, r rules.Rule) (bool, error) {
 		return ev.Eval(ctx, r.If)
 	})
 	w.RuleWindows.Publish(w.Service, reports)

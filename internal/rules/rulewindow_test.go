@@ -54,7 +54,7 @@ func TestBuildRuleWindowReports(t *testing.T) {
 	eval := func(_ context.Context, r Rule) (bool, error) {
 		return r.Name == "restart-if-down", nil
 	}
-	reports := BuildRuleWindowReports(ruleSet, windows, eval)
+	reports := BuildRuleWindowReports(context.Background(), ruleSet, windows, eval)
 	if len(reports) != 2 {
 		t.Fatalf("reports = %d, want 2 (no guard)", len(reports))
 	}
