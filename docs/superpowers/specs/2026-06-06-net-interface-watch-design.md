@@ -156,9 +156,14 @@ Extend `validateWatches` with a per-`check.type` branch:
   - `speed`: `on: change`.
   - `errors`: `delta` is a `{op, value}` mapping with a valid op and numeric
     value; `counters`, if present, is a non-empty list of strings.
-  - each metric requires `then.hook.command` (non-empty array); optional
-    `then.hook.timeout` a valid positive duration.
+  - each metric that declares a `then` requires `then.hook.command` (non-empty
+    array); optional `then.hook.timeout` a valid positive duration.
   - optional per-metric `for`/`within` validated with the same window checks.
+
+(Note: design-time assumption was that every metric/watch would have a `then`.
+The implementation was later relaxed so that omitting `then` (or the per-metric
+equivalent) is valid for alert-only watches: they produce "firing" state/events
+for the web UI and logs but no delivery/actions.)
 - Top-level `interval` validated as today.
 
 **Hook-validation reuse boundary:** the existing `validateWatchHook(name, entry, add)`

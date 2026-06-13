@@ -550,15 +550,16 @@ Each site then **overrides** the default — the per-site choice always wins:
 - an explicit list (`notify: [team-slack]`) replaces the default for that site;
 - `notify: none` suppresses delivery for that site — valid **anywhere a notify
   selection is**, with or without a global default configured. A watch whose
-  only action is `notify: [none]` is a deliberate *monitor-only* watch: it
-  still runs, shows its state in the dashboard and records events, it just
-  never delivers;
-- omitting `notify` inherits the global default.
+  only action is `notify: [none]` (inside an explicit `then`) is a deliberate
+  *monitor-only* watch: it still runs, shows its state in the dashboard and
+  records events, it just never delivers;
+- omitting `notify` (inside an explicit `then`) inherits the global default.
 
-`none` cannot be combined with notifier names in the same list. With a global
-default set, a watch that only runs a hook (no `notify`) also sends to the default
-targets; a watch may also omit `then.notify` entirely and rely only on the
-default. Add `notify: none` to silence just that watch.
+`none` cannot be combined with notifier names in the same list. Omitting the
+entire `then` key on a watch (or per-metric) is another way to get pure
+alert-only behaviour (firing state + events in the UI and log, but no actions
+and no inheritance of globals). See the host watches section below for the
+bare `check` + `for` example.
 
 ## Host watches
 
@@ -600,25 +601,39 @@ a service.
 > optional check interval, and on finishing offers to delete any managed file
 > whose target it no longer detects. See [wizards](wizards.md) for the full flow.
 
-A watch's `then` block declares the actions taken when it fires — a `hook`, a
-`notify` list, an `expand` (storage only), or any combination. If the top-level
-`notify` default is set, `then.notify` is optional: omitting it inherits the
-default, and a watch with no local action can omit `then` entirely.
+A watch's `then` block (when present) declares the actions taken when it
+fires — a `hook`, a `notify` list, an `expand` (storage only), or any
+combination.
+
+**Omitting `then` entirely** is supported and means *alert-only / monitor-only*:
+the `check` + `for` (or per-metric conditions) are still evaluated; when the
+window is satisfied the watch emits a `firing` event (visible in the web UI
+Alerts/Watches tiles, "failed" state badge, failed filter, and in the event
+log under the watch expansion), but **no hook is executed and no notifications
+are delivered** (global `notify:` defaults are **not** inherited for bare
+watches). This is the form you use when you only want the condition surfaced in
+the dashboard and logs:
 
 ```yaml
 watches:
-  storage-root:
-    monitor: previous                  # enabled (default) | disabled | previous
-    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
-    then:
-      notify: [ops-email]                # send to these notifiers
-      hook: { command: [/usr/local/bin/alert-storage.sh, "/"] }   # optional
+  memory:
+    monitor: disabled
+    interval: 30s
+    check:
+      type: memory
+      used_pct: { op: ">=", value: "90%" }
+    for: { cycles: 3 }
+    # no then: alert-only (web + events only; no notify/hook even if globals exist)
 ```
 
-Use `notify: [none]` to suppress notifications: alongside another action (for
-example `expand`), or on its own as a monitor-only watch (state and events
-without delivery). It is always valid, whether or not a global `notify` default
-is configured.
+If you want actions, write an explicit `then:` block. Inside it, omitting the
+`notify` sub-key inherits the global default (or you can list names, or use
+`notify: [none]` to opt out while still declaring e.g. a hook).
+
+Use `notify: [none]` (in an explicit `then`) to suppress notifications: alongside
+another action (for example `expand`), or on its own as a monitor-only watch
+(state and events without delivery). It is always valid, whether or not a
+global `notify` default is configured.
 
 A watch supports the same top-level `monitor` flag as a service/daemon:
 `enabled` (the default) forces monitoring on at daemon start/reload, `disabled`

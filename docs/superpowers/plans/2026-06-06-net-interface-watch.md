@@ -844,6 +844,12 @@ In `internal/config/validate.go`:
 func validateHookBlock(prefix string, block map[string]any, add func(string, ...any)) {
 	then, ok := block["then"].(map[string]any)
 	if !ok {
+		// NOTE (post-plan evolution): "then is required" was later relaxed.
+		// Omitting `then` entirely (on the watch or a per-metric block) is valid
+		// for alert-only watches: they still generate "firing" (visible in web
+		// UI as failed state / Alerts counts + event logs) but perform no actions
+		// and do not inherit global notify. See current validateHookBlock in
+		// validate_watches.go + docs/configuration.md (bare check + for examples).
 		add("%s.then is required", prefix)
 		return
 	}

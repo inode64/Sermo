@@ -141,9 +141,15 @@ from `cfg.Global.Raw["watches"]` (same access pattern as `engine`/`paths`).
 For each `watches.<name>`:
 - `check.type` must be a known type; for `disk`: `path` required and at least one
   of `used_pct`/`free_pct` present, each with a valid `op` and numeric `value`.
-- `then.hook.command` must be a non-empty array.
+- `then.hook.command` must be a non-empty array (if a `then` block is present).
 - `interval` and `hook.timeout`, if present, must be valid positive durations.
 - `for`/`within`, if present, validated with the existing window checks.
+
+(Note: post-design, omitting the entire `then` key was made valid for alert-only
+watches: they still produce "firing" events for the web UI and logs when the
+`for` window is satisfied, but perform no actions and ignore global notify
+defaults. See implementation evolution in the plans and current
+`docs/configuration.md`.)
 
 ### 6. Daemon wiring — `cmd/sermod/main.go`
 
