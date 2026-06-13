@@ -903,55 +903,47 @@ func (b *WebBackend) HostMetrics(ctx context.Context) []web.HostMetric {
 	}
 
 	out := make([]web.HostMetric, 0, len(snap))
-	// Nice display order
-	order := []string{"load1", "load5", "load15", "total_cpu", "total_memory", "total_swap"}
+	order := []string{"load1", "load5", "load15", "total_cpu", "total_memory", "total_swap"} // nice display order
 	seen := map[string]bool{}
 	for _, k := range order {
 		if r, ok := snap[k]; ok {
-			m := web.HostMetric{Name: k, Ready: r.Ready}
-			if r.HasPercent {
-				m.Percent = r.Percent
-			}
-			if r.HasAbsolute {
-				m.Absolute = r.Absolute
-			}
-			if r.HasTotal {
-				m.Total = r.Total
-			}
-			if k == "total_memory" || k == "total_swap" {
-				m.Unit = "bytes"
-			}
-			// Give load1 a 0-100% reading (load vs logical CPUs) and a capacity
-			// (CPU count) so the overview tile can draw a saturation bar, matching
-			// the cpu/mem/swap tiles. The raw load stays in Absolute.
-			if k == "load1" {
-				if ncpu := runtime.NumCPU(); ncpu > 0 {
-					m.Total = float64(ncpu)
-					m.Percent = r.Absolute / float64(ncpu) * 100
-				}
-			}
-			out = append(out, m)
+			out = append(out, hostMetric(k, r))
 			seen[k] = true
 		}
 	}
-	// Add any others
-	for k, r := range snap {
-		if seen[k] {
-			continue
+	for k, r := range snap { // any others the collector reported, after the ordered ones
+		if !seen[k] {
+			out = append(out, hostMetric(k, r))
 		}
-		m := web.HostMetric{Name: k, Ready: r.Ready}
-		if r.HasPercent {
-			m.Percent = r.Percent
-		}
-		if r.HasAbsolute {
-			m.Absolute = r.Absolute
-		}
-		if r.HasTotal {
-			m.Total = r.Total
-		}
-		out = append(out, m)
 	}
 	return out
+}
+
+// hostMetric maps a collector reading to the web view, applying the metric's
+// display specifics: a bytes unit for memory/swap, and a 0-100% saturation
+// reading for load1 (load vs logical CPUs, capacity = CPU count) so the overview
+// tile can draw a bar like cpu/mem/swap. The raw load stays in Absolute.
+func hostMetric(name string, r metrics.Reading) web.HostMetric {
+	m := web.HostMetric{Name: name, Ready: r.Ready}
+	if r.HasPercent {
+		m.Percent = r.Percent
+	}
+	if r.HasAbsolute {
+		m.Absolute = r.Absolute
+	}
+	if r.HasTotal {
+		m.Total = r.Total
+	}
+	switch name {
+	case "total_memory", "total_swap":
+		m.Unit = "bytes"
+	case "load1":
+		if ncpu := runtime.NumCPU(); ncpu > 0 {
+			m.Total = float64(ncpu)
+			m.Percent = r.Absolute / float64(ncpu) * 100
+		}
+	}
+	return m
 }
 
 // Locks returns the active and stale runtime locks across services.
