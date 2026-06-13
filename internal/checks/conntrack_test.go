@@ -32,6 +32,15 @@ func TestConntrackFreeAbsolute(t *testing.T) {
 	}
 }
 
+func TestConntrackFreeClampsWhenCountExceedsMax(t *testing.T) {
+	// The kernel lets count momentarily exceed nf_conntrack_max under bursts;
+	// free must clamp to 0, not underflow the unsigned subtraction.
+	c := conntrackCheck{base: base{name: "c"}, sampler: fakeConntrack(ConntrackSample{Count: 110000, Max: 100000})}
+	if got := c.Run(context.Background()).Data["free"]; got != uint64(0) {
+		t.Fatalf("data free = %v, want 0 (clamped)", got)
+	}
+}
+
 func TestConntrackUnknownMaxNeverFires(t *testing.T) {
 	c := conntrackCheck{base: base{name: "c"}, preds: []levelPred{{"free", "<", 10000}}, sampler: fakeConntrack(ConntrackSample{Count: 95000, Max: 0})}
 	if c.Run(context.Background()).OK {

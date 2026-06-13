@@ -46,7 +46,7 @@ func (c conntrackCheck) Run(_ context.Context) Result {
 	if s.Max > 0 {
 		usedPct = float64(s.Count) / float64(s.Max) * 100
 		values["used_pct"] = usedPct
-		values["free"] = float64(s.Max - s.Count)
+		values["free"] = float64(s.Max - min(s.Count, s.Max))
 	}
 
 	ok := levelPredsHold(c.preds, values)
@@ -54,7 +54,7 @@ func (c conntrackCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("conntrack %d/%d entries (%.1f%%)", s.Count, s.Max, usedPct), start)
 	res.Data = map[string]any{"count": s.Count, "max": s.Max, "used_pct": usedPct}
 	if s.Max > 0 {
-		res.Data["free"] = s.Max - s.Count
+		res.Data["free"] = s.Max - min(s.Count, s.Max)
 	}
 	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
 	return res
