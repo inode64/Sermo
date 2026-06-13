@@ -1,0 +1,198 @@
+package checks
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"sermo/internal/execx"
+)
+
+func TestCountNftRules(t *testing.T) {
+	out := `{
+		"nftables": [
+			{"metainfo": {"version": "1.0.9"}},
+			{"table": {"family": "inet", "name": "filter"}},
+			{"chain": {"family": "inet", "table": "filter", "name": "input"}},
+			{"rule": {"family": "inet", "table": "filter", "chain": "input"}},
+			{"rule": {"family": "inet", "table": "filter", "chain": "forward"}}
+		]
+	}`
+	got, err := countNftRules(out)
+	if err != nil {
+		t.Fatalf("countNftRules() error = %v", err)
+	}
+	if got != 2 {
+		t.Fatalf("countNftRules() = %d, want 2", got)
+	}
+	if _, err := countNftRules("{"); err == nil {
+		t.Fatal("invalid nft JSON must error")
+	}
+}
+
+func TestCountIptablesRules(t *testing.T) {
+	out := strings.Join([]string{
+		"*filter",
+		":INPUT ACCEPT [0:0]",
+		"-P FORWARD DROP",
+		"-A INPUT -m conntrack --ctstate ESTABLISHED -j ACCEPT",
+		" -A INPUT -p tcp --dport 22 -j ACCEPT",
+		"COMMIT",
+	}, "\n")
+	if got := countIptablesRules(out); got != 2 {
+		t.Fatalf("countIptablesRules() = %d, want 2", got)
+	}
+}
+
+func TestFirewallRulesCheckRun(t *testing.T) {
+	tests := []struct {
+		name    string
+		sample  FirewallRulesSample
+		err     error
+		wantOK  bool
+		wantMsg string
+	}{
+		{
+			name:    "enough rules",
+			sample:  FirewallRulesSample{Backend: firewallBackendNftables, Rules: 2},
+			wantOK:  true,
+			wantMsg: "has 2 rules",
+		},
+		{
+			name:    "no rules",
+			sample:  FirewallRulesSample{Backend: firewallBackendNftables, Rules: 0},
+			wantOK:  false,
+			wantMsg: "below min 1",
+		},
+		{
+			name:    "sampler error",
+			err:     fmt.Errorf("nft failed"),
+			wantOK:  false,
+			wantMsg: "nft failed",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := firewallRulesCheck{
+				base:     base{name: "fw", timeout: time.Second},
+				backend:  firewallBackendAuto,
+				minRules: 1,
+				sampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
+					return tc.sample, tc.err
+				},
+			}
+			res := c.Run(context.Background())
+			if res.OK != tc.wantOK {
+				t.Fatalf("OK = %v, want %v (%+v)", res.OK, tc.wantOK, res)
+			}
+			if !strings.Contains(res.Message, tc.wantMsg) {
+				t.Fatalf("message = %q, want substring %q", res.Message, tc.wantMsg)
+			}
+			if tc.err == nil && res.Data["rules"] != tc.sample.Rules {
+				t.Fatalf("data rules = %v, want %d", res.Data["rules"], tc.sample.Rules)
+			}
+		})
+	}
+}
+
+func TestDefaultFirewallRulesSampler(t *testing.T) {
+	nftOneRule := `{"nftables":[{"rule":{"family":"inet","table":"filter","chain":"input"}}]}`
+	nftNoRules := `{"nftables":[{"table":{"family":"inet","name":"filter"}}]}`
+	tests := []struct {
+		name    string
+		backend string
+		runner  firewallRunner
+		want    FirewallRulesSample
+		wantErr string
+	}{
+		{
+			name:    "auto prefers nftables when rules exist",
+			backend: firewallBackendAuto,
+			runner: firewallRunner{
+				"nft -j list ruleset": {result: execx.Result{Stdout: nftOneRule}},
+			},
+			want: FirewallRulesSample{Backend: firewallBackendNftables, Rules: 1},
+		},
+		{
+			name:    "auto falls back to iptables when nftables has no rules",
+			backend: firewallBackendAuto,
+			runner: firewallRunner{
+				"nft -j list ruleset": {result: execx.Result{Stdout: nftNoRules}},
+				"iptables-save":       {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n-A OUTPUT -j ACCEPT\n"}},
+				"ip6tables-save":      {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n"}},
+			},
+			want: FirewallRulesSample{Backend: firewallBackendIptables, Rules: 3},
+		},
+		{
+			name:    "auto returns nftables zero when legacy tools are unavailable",
+			backend: firewallBackendAuto,
+			runner: firewallRunner{
+				"nft -j list ruleset": {result: execx.Result{Stdout: nftNoRules}},
+			},
+			want: FirewallRulesSample{Backend: firewallBackendNftables, Rules: 0},
+		},
+		{
+			name:    "explicit nftables parse error",
+			backend: firewallBackendNftables,
+			runner: firewallRunner{
+				"nft -j list ruleset": {result: execx.Result{Stdout: "{"}},
+			},
+			wantErr: "parse nft JSON",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := defaultFirewallRulesSampler(context.Background(), tc.backend, tc.runner)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("error = %v, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("defaultFirewallRulesSampler() error = %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("sample = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildFirewallRulesCheck(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"fw": map[string]any{"type": "firewall_rules", "backend": "nft", "min_rules": 2},
+	}, Deps{FirewallRulesSampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
+		return FirewallRulesSample{Backend: firewallBackendNftables, Rules: 2}, nil
+	}})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
+		t.Fatal("firewall_rules check should build and pass")
+	}
+
+	if _, warns := Build(map[string]any{"fw": map[string]any{"type": "firewall_rules", "backend": "pf"}}, Deps{}); len(warns) == 0 {
+		t.Fatal("invalid firewall backend should warn")
+	}
+	if _, warns := Build(map[string]any{"fw": map[string]any{"type": "firewall_rules", "min_rules": 0}}, Deps{}); len(warns) == 0 {
+		t.Fatal("invalid min_rules should warn")
+	}
+}
+
+type firewallRun struct {
+	result execx.Result
+	err    error
+}
+
+type firewallRunner map[string]firewallRun
+
+func (r firewallRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	key := strings.TrimSpace(name + " " + strings.Join(args, " "))
+	if run, ok := r[key]; ok {
+		return run.result, run.err
+	}
+	return execx.Result{ExitCode: -1}, fmt.Errorf("%s unavailable", key)
+}

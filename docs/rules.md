@@ -34,6 +34,7 @@ which reuse the same schema). MVP types:
 | `pids`        | the kernel PID table vs `kernel.pid_max` (used_pct/free/count)      |
 | `diskio`      | a block device's per-cycle I/O rates (util_pct/read_bytes/write_bytes/await_ms) |
 | `conntrack`   | the netfilter conntrack table vs its max (used_pct/free/count)      |
+| `firewall_rules` | nftables/iptables has at least `min_rules` loaded rules (see Firewall rules) |
 | `route`       | an up default route exists, optionally egressing a given `interface` (see Default route)|
 | `net`         | one interface metric (`metric: state\|speed\|errors\|address`) holds — single-metric form of the net watch |
 | `icmp`        | one ping metric (`metric: state\|latency`) against `host`, optionally bound to an `interface` |
@@ -1340,7 +1341,7 @@ The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`binary`, `libraries`, `config`, `autofs`, `route`, `sqlite`/`sqlite3`,
+`binary`, `libraries`, `config`, `autofs`, `route`, `firewall_rules`, `sqlite`/`sqlite3`,
 `websocket`/`ws`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
@@ -1379,6 +1380,26 @@ checks:
 The result reports the matched egress interface and gateway (when the route
 has one — point-to-point links have none) in its data, and `value` carries the
 number of matching default routes.
+
+### Firewall rules (`firewall_rules`)
+
+The `firewall_rules` check verifies that nftables or iptables rules are loaded.
+It is health-style: a service or watch fails when the rule count is below
+`min_rules` (default `1`). `backend: auto` tries nftables first and falls back to
+iptables/ip6tables.
+
+```yaml
+checks:
+  service: { type: service, expect: active }
+  firewall:
+    type: firewall_rules
+    backend: auto        # auto | nftables | iptables
+    min_rules: 1
+    requires: [service]  # useful for oneshot firewall loaders
+```
+
+As a watch, it fires the hook when the firewall rules disappear. Hook extras:
+`SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
 
 ### Disk throughput (`hdparm`)
 

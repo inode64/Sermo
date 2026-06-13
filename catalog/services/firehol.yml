@@ -8,7 +8,13 @@ service:
   openrc: [firehol]
 apps: [firehol]
 
-# FireHOL is a oneshot firewall loader: it applies rules and exits. Do not add a
-# pidfile/process selector; the init service state is the health signal.
+# FireHOL is a oneshot firewall loader: it applies rules and exits. The explicit
+# empty process map prevents derived process CPU/memory tracking in the WebUI.
+processes: {}
 checks:
   service: { type: service, expect: active }
+  firewall:
+    type: firewall_rules
+    backend: auto
+    min_rules: 1
+    requires: [service]

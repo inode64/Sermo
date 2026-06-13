@@ -1537,22 +1537,25 @@ function renderExpansion(d, metrics, beats) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
   const unresolvedProcs = procs.filter((p) => !p.exe_resolved);
-  const pt = d.process_totals || {
+  const noResidentProcess = !!d.no_resident_process;
+  const pt = d.process_totals || (noResidentProcess ? null : {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
     io_read: procs.reduce((a, p) => a + (p.io_read || 0), 0),
     io_write: procs.reduce((a, p) => a + (p.io_write || 0), 0),
     fds: procs.reduce((a, p) => a + (p.fds || 0), 0),
     threads: procs.reduce((a, p) => a + (p.threads || 0), 0),
     count: procs.length,
-  };
+  });
   // When the host RAM total is known, show each process's resident memory as a
   // share of host RAM (a compact bar), plus a bar on the whole-tree total.
   const hostMem = hostMemTotalBytes();
   const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * 100) : 0;
-  const totalBar = hostMem > 0
+  const totalBar = pt && hostMem > 0
     ? ` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
     : "";
-  const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`;
+  const totals = pt
+    ? `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`
+    : "";
   const lat = renderLatency(metrics);
   const sla = renderSLA(d.sla);
   const strip = beats || "";
@@ -1560,7 +1563,9 @@ function renderExpansion(d, metrics, beats) {
     ...procWarnings.map((w) => `<div class="bad" style="margin:.2rem 0">discovery warning: ${esc(w)}</div>`),
     ...unresolvedProcs.map((p) => `<div class="inactive" style="margin:.2rem 0">pid ${p.pid}: exe unresolved</div>`),
   ].join("");
-  const procTable = procs.length
+  const procTable = noResidentProcess
+    ? `<div class="muted">No resident process expected.</div>`
+    : procs.length
     ? `<table style="width:auto; font-size:.85rem;">
         <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>CPU</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
         <tbody>${procs.map((p) => `<tr>
@@ -2805,6 +2810,7 @@ function renderActionConfirm() {
   const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
   const unresolved = (d.processes || []).filter((p) => !p.exe_resolved);
   const procWarnings = d.process_warnings || [];
+  const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;
   const pre = ctx.preflight;
   const preState = ctx.action === "restart"
@@ -2816,7 +2822,9 @@ function renderActionConfirm() {
   const checksLine = failingChecks.length
     ? `<span class="bad">${failingChecks.length} required check${failingChecks.length === 1 ? "" : "s"} failing</span>`
     : '<span class="ok">no required check failures observed</span>';
-  const procLine = `${(d.processes || []).length} discovered${unresolved.length ? ` <span class="inactive">· ${unresolved.length} unresolved exe</span>` : ""}${procWarnings.length ? ` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : ""}`;
+  const procLine = noResidentProcess
+    ? '<span class="muted">No resident process expected</span>'
+    : `${(d.processes || []).length} discovered${unresolved.length ? ` <span class="inactive">· ${unresolved.length} unresolved exe</span>` : ""}${procWarnings.length ? ` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : ""}`;
   const lastEvent = ev
     ? `${esc(fmtTime(ev.time))} · <span class="kind kind-${esc(ev.kind)}">${esc(ev.kind || "")}</span> ${esc([ev.action, ev.status].filter(Boolean).join(" "))} <span class="muted">${esc(ev.message || "")}</span>`
     : '<span class="muted">none recorded</span>';
@@ -2916,13 +2924,16 @@ function renderDetail(d) {
 
   const unresolvedProcs = (d.processes || []).filter((p) => !p.exe_resolved);
   const procWarnings = d.process_warnings || [];
+  const noResidentProcess = !!d.no_resident_process;
   const procWarns = [
     ...procWarnings.map((w) => `<div class="bad" style="margin-top:.25rem">discovery warning: ${esc(w)}</div>`),
     ...unresolvedProcs.map((p) => `<div class="inactive" style="margin-top:.25rem">pid ${p.pid}: exe is unresolved, so it cannot satisfy safe process matching</div>`),
   ].join("");
-  const procSummary = `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}${unresolvedProcs.length ? ` · ${unresolvedProcs.length} unresolved exe` : ""}</p>`;
+  const procSummary = noResidentProcess
+    ? `<p class="muted" style="margin-top:-.25rem">No resident process expected.</p>`
+    : `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}${unresolvedProcs.length ? ` · ${unresolvedProcs.length} unresolved exe` : ""}</p>`;
   const pt = d.process_totals;
-  const procTotals = pt
+  const procTotals = !noResidentProcess && pt
     ? `<p class="muted" style="margin:-.1rem 0 .35rem">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : "";
   const procExe = (p) => {
@@ -2930,7 +2941,7 @@ function renderDetail(d) {
     if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
     return '<span class="muted">unknown</span>';
   };
-  const procRows = (d.processes || []).map((p) => {
+  const procRows = noResidentProcess ? "" : (d.processes || []).map((p) => {
     const cmd = (p.cmdline || []).join(" ");
     const exeCell = cmd ? `${procExe(p)} <span class="muted" title="${esc(cmd)}">…</span>` : procExe(p);
     const user = p.user ? esc(p.user) : '<span class="muted">unknown</span>';
@@ -2939,6 +2950,12 @@ function renderDetail(d) {
       <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
       <td>${procCpuCell(p)}</td><td>${p.rss ? fmtBytes(p.rss) : '—'}</td>${procIoFdThreadCells(p)}</tr>`;
   }).join("") || `<tr><td colspan="12" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
+  const processSection = noResidentProcess
+    ? `<h2>Processes</h2>${procSummary}${procWarns}`
+    : `<h2>Processes</h2>
+    ${procSummary}${procTotals}${procWarns}
+    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th>CPU</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+      <tbody>${procRows}</tbody></table>`;
 
   const wins = winButtons([["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
@@ -3000,10 +3017,7 @@ function renderDetail(d) {
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
       <tbody>${lockRows}</tbody></table>${lockWarns}
-    <h2>Processes</h2>
-    ${procSummary}${procTotals}${procWarns}
-    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th>CPU</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
-      <tbody>${procRows}</tbody></table>
+    ${processSection}
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Availability</h2>

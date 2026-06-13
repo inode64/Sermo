@@ -75,6 +75,7 @@ func TestIsHealthType(t *testing.T) {
 		{"sqlite", true},
 		{"websocket", true},
 		{"ws", true},
+		{"firewall_rules", true},
 		{"mysql", true},
 		{"mariadb", true},
 		{"storage", false},
