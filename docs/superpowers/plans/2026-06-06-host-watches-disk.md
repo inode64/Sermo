@@ -1,6 +1,6 @@
 # Host Watches (disk check + hook action) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. **All code modifications must use a git worktree** (see AGENTS.md "AI / agent workspaces"). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add host-level resource monitoring to Sermo, delivering disk-partition space end to end: a new `watch` unit, a `disk` check type, and a `hook` action that runs a local command when a threshold is crossed.
 

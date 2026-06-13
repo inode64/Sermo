@@ -1,6 +1,6 @@
 # ICMP Host Watch (`icmp` check + per-metric hooks) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. **All code modifications must use a git worktree** (see AGENTS.md "AI / agent workspaces"). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add an `icmp` watch check that monitors an external host's reachability (up/down change or fixed state) and round-trip latency (threshold or abrupt-change), with a **different hook per metric**, configured grouped-per-host.
 

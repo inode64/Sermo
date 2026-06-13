@@ -325,7 +325,7 @@ history + summary, see below), `GET /api/events?limit=N` (the **global event fee
 malformed lock files under `<paths.runtime>/locks`),
 `GET /api/watches` (configured host watches, their single `state`
 (`disabled`, `unmonitorized`, `ok`, `failed`), `monitor` mode, conditions,
-notifications and recent activity),
+notifications, live resource readings when available and recent activity),
 `POST /api/watches/{name}/{action}` where action is `monitor` or `unmonitor`,
 `GET /api/locks` (named runtime locks with TTL remaining, owner status,
 created age, blocked actions and release eligibility),

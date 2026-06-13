@@ -1,6 +1,6 @@
 # HTTPS Certificate Inspection in the `http` Check — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. **All code modifications must use a git worktree** (see AGENTS.md "AI / agent workspaces"). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the `http` check protocol-aware so that, on an `https://` URL, it can also assert the server certificate's expiry, chain/hostname validity, and changes — reusing the certificate machinery in `internal/checks/cert.go`.
 

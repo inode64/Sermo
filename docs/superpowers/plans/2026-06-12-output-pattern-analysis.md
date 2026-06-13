@@ -1,6 +1,6 @@
 # Output Pattern Analysis Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. **All code modifications must use a git worktree** (see AGENTS.md "AI / agent workspaces"). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Classify a `command` check's output into ok/warning/error by matching it against ordered, reusable, named pattern sets in `catalog/patterns/`, replacing the legacy `verifica_sistema.py` token scanning.
 
