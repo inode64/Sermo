@@ -49,7 +49,8 @@ type Selector struct {
 	User  string   // command_match: real UID owner
 	Group string   // command_match: real GID owner
 
-	cmdRe *regexp.Regexp // compiled Cmd, set by ParseSelectors (matches falls back)
+	cmdRe   *regexp.Regexp // compiled Cmd, set by ParseSelectors (matches falls back)
+	exePath string         // canonicalized Exe, set by ParseSelectors (matches falls back)
 }
 
 // Identity is the raw per-process data read from /proc. ExeOK is false when the
