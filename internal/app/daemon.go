@@ -222,6 +222,19 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	ruleSet, _ := rules.ParseRules(tree)
 	sampleMetrics := metricSampler(name, tree, collector, discoverer)
 
+	// remediation.shadow (or mode: shadow) allows full rule+window+guard+policy
+	// evaluation and event emission without ever executing operations. It merges
+	// from defaults via perServiceDefaults.
+	shadow := false
+	if r, ok := tree["remediation"].(map[string]any); ok {
+		if cfgval.Bool(r["shadow"]) {
+			shadow = true
+		}
+		if cfgval.AsString(r["mode"]) == "shadow" {
+			shadow = true
+		}
+	}
+
 	// A per-check `interval` runs that check every N cycles (N rounded from
 	// interval/resolution); skipped cycles reuse its last result so the cache and
 	// rule windows stay complete. resolution is the service's own interval, or the
@@ -255,6 +268,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 			return engine.Do(ctx, action)
 		},
 		IsPaused:     monitorPaused(deps.Monitor, name),
+		Shadow:       shadow,
 		RecordHealth: healthRecorder(deps, name),
 		Publish:      publishSnapshots(deps.Snapshots, name),
 		Now:          deps.Now,
