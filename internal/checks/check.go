@@ -5,9 +5,9 @@
 // Service checks/preflight/postflight support tcp, ports, http, command, service,
 // file_exists, binary, process, metric (via the daemon's stateful collector),
 // libraries, count, and host-resource probes (disk, autofs, load, fds, conntrack,
-// entropy, zombies, oom, cert). Multi-target watch types (net, icmp, swap, file)
-// are built for host watches, not single-shot service checks — see buildCheck and
-// config validation's knownCheckTypes.
+// firewall_rules, entropy, zombies, oom, cert). Multi-target watch types (net,
+// icmp, swap, file) are built for host watches, not single-shot service checks —
+// see buildCheck and config validation's knownCheckTypes.
 package checks
 
 import (
@@ -41,7 +41,7 @@ type Check interface {
 // invert these checks and fire on failure; condition-style checks fire on OK.
 func IsHealthType(typ string) bool {
 	switch typ {
-	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws", "route":
+	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws", "route", "firewall_rules":
 		return true
 	default:
 		_, ok := conn.Lookup(typ)

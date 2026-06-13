@@ -42,6 +42,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 	checkDeps := checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
+		Runner:         deps.ExecxRunner,
 		Status: func(ctx context.Context) (servicemgr.Status, error) {
 			st, err := deps.Manager.Status(ctx, unit)
 			if err != nil {
@@ -49,22 +50,23 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 			}
 			return st.Status, nil
 		},
-		Processes:        discoverer.ObserveState,
-		DiskUsage:        deps.DiskUsage,
-		MountSampler:     deps.MountSampler,
-		NetSampler:       deps.NetSampler,
-		PingSampler:      deps.PingSampler,
-		OomSampler:       deps.OomSampler,
-		PidsSampler:      deps.PidsSampler,
-		DiskIOSampler:    deps.DiskIOSampler,
-		SensorSampler:    deps.SensorSampler,
-		RaidSampler:      deps.RaidSampler,
-		EdacSampler:      deps.EdacSampler,
-		RouteSampler:     deps.RouteSampler,
-		PressureSampler:  deps.PressureSampler,
-		ConntrackSampler: deps.ConntrackSampler,
-		EntropySampler:   deps.EntropySampler,
-		ZombieSampler:    deps.ZombieSampler,
+		Processes:            discoverer.ObserveState,
+		DiskUsage:            deps.DiskUsage,
+		MountSampler:         deps.MountSampler,
+		NetSampler:           deps.NetSampler,
+		PingSampler:          deps.PingSampler,
+		OomSampler:           deps.OomSampler,
+		PidsSampler:          deps.PidsSampler,
+		DiskIOSampler:        deps.DiskIOSampler,
+		SensorSampler:        deps.SensorSampler,
+		RaidSampler:          deps.RaidSampler,
+		EdacSampler:          deps.EdacSampler,
+		RouteSampler:         deps.RouteSampler,
+		PressureSampler:      deps.PressureSampler,
+		ConntrackSampler:     deps.ConntrackSampler,
+		FirewallRulesSampler: deps.FirewallRulesSampler,
+		EntropySampler:       deps.EntropySampler,
+		ZombieSampler:        deps.ZombieSampler,
 	}
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{
@@ -95,22 +97,28 @@ func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps
 	return selectors, warnings
 }
 
+func noResidentProcess(tree map[string]any) bool {
+	processes, ok := tree["processes"].(map[string]any)
+	return ok && len(processes) == 0
+}
+
 // webEntry is one service's web-backend record.
 type webEntry struct {
-	displayName     string
-	category        string
-	unit            string
-	backend         string
-	interval        time.Duration // resolved per-service cycle cadence (own interval or engine default)
-	policyCooldown  time.Duration
-	engine          operation.Engine
-	status          func(context.Context) (servicemgr.Status, error)
-	checkNames      []string          // sorted
-	checkTypes      map[string]string // check name -> type
-	discoverer      process.Discoverer
-	selectors       []process.Selector
-	processWarnings []string
-	disabled        bool // true when the service had `enabled: false` (still listed for visibility)
+	displayName       string
+	category          string
+	unit              string
+	backend           string
+	interval          time.Duration // resolved per-service cycle cadence (own interval or engine default)
+	policyCooldown    time.Duration
+	engine            operation.Engine
+	status            func(context.Context) (servicemgr.Status, error)
+	checkNames        []string          // sorted
+	checkTypes        map[string]string // check name -> type
+	discoverer        process.Discoverer
+	selectors         []process.Selector
+	processWarnings   []string
+	noResidentProcess bool
+	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
 }
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
@@ -268,12 +276,13 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			iv = EngineInterval(cfg, 30*time.Second)
 		}
 		entry := &webEntry{
-			displayName:    config.DisplayName(resolved.Tree, name),
-			category:       config.CategoryLabel(resolved.Tree, config.CategoryService),
-			unit:           unit,
-			backend:        string(deps.Backend),
-			interval:       iv,
-			policyCooldown: rules.ParsePolicy(resolved.Tree).Cooldown,
+			displayName:       config.DisplayName(resolved.Tree, name),
+			category:          config.CategoryLabel(resolved.Tree, config.CategoryService),
+			unit:              unit,
+			backend:           string(deps.Backend),
+			interval:          iv,
+			policyCooldown:    rules.ParsePolicy(resolved.Tree).Cooldown,
+			noResidentProcess: noResidentProcess(resolved.Tree),
 		}
 		if disabled {
 			entry.disabled = true
@@ -867,6 +876,19 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 		if iface := cfgval.AsString(check["interface"]); iface != "" {
 			out = append(out, web.WatchCondition{Field: "interface", Op: "==", Value: iface})
 		}
+	case "firewall_rules":
+		backend := cfgval.AsString(check["backend"])
+		if backend == "" {
+			backend = "auto"
+		}
+		minRules := cfgval.String(check["min_rules"])
+		if minRules == "" {
+			minRules = "1"
+		}
+		out = append(out,
+			web.WatchCondition{Field: "backend", Op: "==", Value: backend},
+			web.WatchCondition{Field: "rules", Op: ">=", Value: minRules},
+		)
 	case "size":
 		if path := cfgval.AsString(check["path"]); path != "" {
 			out = append(out, web.WatchCondition{Field: "path", Value: path})
@@ -2104,9 +2126,9 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		return web.Detail{}, false
 	}
 	if e.disabled {
-		return web.Detail{Service: b.view(ctx, name, e)}, true
+		return web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}, true
 	}
-	d := web.Detail{Service: b.view(ctx, name, e)}
+	d := web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}
 
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
@@ -2150,13 +2172,15 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		}
 	}
 
-	procs, procWarnings := e.discoverer.Discover(e.selectors)
-	procWarnings = append(slices.Clone(e.processWarnings), procWarnings...)
-	if len(procWarnings) > 0 {
-		d.ProcessWarnings = procWarnings
+	if !e.noResidentProcess {
+		procs, procWarnings := e.discoverer.Discover(e.selectors)
+		procWarnings = append(slices.Clone(e.processWarnings), procWarnings...)
+		if len(procWarnings) > 0 {
+			d.ProcessWarnings = procWarnings
+		}
+		d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
+		attachLiveCPU(&d, b.live, name)
 	}
-	d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
-	attachLiveCPU(&d, b.live, name)
 
 	if b.remediation != nil {
 		if rep, ok := b.remediation.Get(name); ok {

@@ -362,6 +362,11 @@ A **pidfile** selector's `path` accepts a single path or a **list of candidates*
 discovery tries them in order and uses the first that points at a running process
 (so per-OS or versioned pidfile locations all resolve without personal config).
 
+For oneshot loaders that do not keep a resident process (for example firewall
+loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
+process selector from init metadata and keeps the WebUI from showing CPU/memory
+process totals for a service that cannot have them.
+
 ### `also_service` — auxiliary init units
 
 A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
