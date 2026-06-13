@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/metrics"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
@@ -593,5 +594,34 @@ func TestCycleAtMostOneRemediation(t *testing.T) {
 	w.RunCycle(context.Background())
 	if len(h.ops) != 1 {
 		t.Fatalf("at most one remediation per cycle, ops=%v", h.ops)
+	}
+}
+
+// TestWorkerFiresSuppressesSystemMetricRemediation locks the second defense
+// layer for safety invariant 13: even a hand-built remediation rule (one that
+// never went through ParseRules) reading a scope: system metric must not
+// fire — fires() suppresses it and reports the anomaly as an error event.
+func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
+	var events []Event
+	w := &Worker{Service: "svc", Emit: func(e Event) { events = append(events, e) }}
+	ev := &rules.Evaluator{Deps: checks.Deps{Metrics: func(scope, name string) (metrics.Reading, bool) {
+		return metrics.Reading{Percent: 99, HasPercent: true, Ready: true}, true
+	}}}
+	r := rules.Rule{
+		Name: "bad",
+		Type: rules.RuleRemediation,
+		If:   map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}},
+	}
+	if w.fires(context.Background(), ev, r) {
+		t.Fatal("a system-metric remediation rule must never fire")
+	}
+	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
+		t.Fatalf("events = %+v, want one error explaining the suppression", events)
+	}
+
+	// The same metric on an alert rule keeps working.
+	r.Type = rules.RuleAlert
+	if !w.fires(context.Background(), ev, r) {
+		t.Fatal("an alert rule on the same system metric must still fire")
 	}
 }

@@ -337,6 +337,13 @@ func alertMessage(service, rule, msg string) notify.Message {
 // returning whether the rule fires now (section 15). An evaluation error counts
 // as a false cycle.
 func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
+	// Defense-in-depth for safety invariant 13: a system-scoped metric must
+	// never trigger anything but an alert. ParseRules already drops such
+	// rules; this catches one that bypassed parsing entirely.
+	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, nil) {
+		w.emit(Event{Kind: "error", Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
+		return false
+	}
 	cond, err := ev.Eval(ctx, r.If)
 	if err != nil {
 		w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})

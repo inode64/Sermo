@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"sermo/internal/checks"
@@ -306,5 +307,64 @@ func TestGuardIgnoresNonGuardRules(t *testing.T) {
 	}
 	if blocked {
 		t.Fatal("a remediation rule must never block an action")
+	}
+}
+
+// TestParseRulesDropsSystemMetricRemediation locks the runtime defense for
+// safety invariant 13: a non-alert rule reading a scope: system metric —
+// inline (even nested under or/not) or via a check reference — is dropped
+// with a warning, while alert rules keep their system metrics and
+// service-scoped remediation is untouched.
+func TestParseRulesDropsSystemMetricRemediation(t *testing.T) {
+	tree := map[string]any{
+		"checks": map[string]any{
+			"sysmem": map[string]any{"type": "metric", "scope": "system", "name": "total_memory", "op": ">", "value": "90%"},
+		},
+		"rules": map[string]any{
+			"bad-inline": map[string]any{
+				"type": "remediation",
+				"if":   map[string]any{"metric": map[string]any{"scope": "system", "name": "total_cpu", "op": ">", "value": "95%"}},
+				"then": map[string]any{"action": "restart"},
+			},
+			"bad-nested": map[string]any{
+				"type": "remediation",
+				"if": map[string]any{"not": map[string]any{
+					"metric": map[string]any{"scope": "system", "name": "load1", "op": ">", "value": "8"},
+				}},
+				"then": map[string]any{"action": "restart"},
+			},
+			"bad-reference": map[string]any{
+				"type":   "guard",
+				"blocks": []any{"restart"},
+				"if":     map[string]any{"active": map[string]any{"check": "sysmem"}},
+				"then":   map[string]any{"action": "block", "message": "x"},
+			},
+			"ok-alert": map[string]any{
+				"type": "alert",
+				"if":   map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}},
+				"then": map[string]any{"action": "alert", "message": "host memory high"},
+			},
+			"ok-service": map[string]any{
+				"type": "remediation",
+				"if":   map[string]any{"metric": map[string]any{"name": "memory", "op": ">", "value": "40%"}},
+				"then": map[string]any{"action": "restart"},
+			},
+		},
+	}
+	rules, warns := ParseRules(tree)
+	var names []string
+	for _, r := range rules {
+		names = append(names, r.Name)
+	}
+	if len(rules) != 2 || names[0] != "ok-alert" || names[1] != "ok-service" {
+		t.Fatalf("rules = %v, want only ok-alert and ok-service", names)
+	}
+	if len(warns) != 3 {
+		t.Fatalf("warnings = %v, want one per dropped rule", warns)
+	}
+	for _, w := range warns {
+		if !strings.Contains(w, "system metric may only drive alert rules") {
+			t.Fatalf("warning %q must explain the invariant", w)
+		}
 	}
 }
