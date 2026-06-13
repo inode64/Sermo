@@ -129,6 +129,7 @@ type WebBackend struct {
 	host             diag.Host
 	measure          MeasurementReader
 	collector        *metrics.Collector
+	live             *LiveMetrics
 	diskUsage        checks.DiskUsageFunc
 	mountSampler     checks.MountSamplerFunc
 	expander         VolumeExpander
@@ -152,6 +153,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		events: deps.Events, remediation: deps.Remediation, ruleWindows: deps.RuleWindows,
 		cfg: cfg, host: diag.OSHost{},
 		collector: deps.Collector,
+		live:      deps.Live,
 		diskUsage: deps.DiskUsage, mountSampler: deps.MountSampler,
 		expander: configuredVolumeExpander(deps),
 		emit:     deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout, operationTimeout: deps.OperationTimeout,
@@ -1135,6 +1137,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		d.ProcessWarnings = append([]string(nil), procWarnings...)
 	}
 	d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
+	attachLiveCPU(&d, b.live, name)
 
 	if b.remediation != nil {
 		if rep, ok := b.remediation.Get(name); ok {
@@ -1297,6 +1300,38 @@ func aggregateProcesses(procs []process.Process, r procMetricReader) ([]web.Proc
 		out = append(out, wp)
 	}
 	return out, &totals
+}
+
+// attachLiveCPU folds the per-cycle live CPU sample into a service's detail: the
+// per-process single-core rate onto each Process, and the whole-machine /
+// single-core aggregates onto ProcessTotals. No-op when no sample exists yet
+// (CPU stays unset and the UI shows "measuring"). aggregateProcesses can't
+// compute these — a CPU rate needs two samples over time, which the live
+// collector tracks; a one-shot /proc read cannot.
+func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
+	if live == nil {
+		return
+	}
+	sl, ok := live.Get(service)
+	if !ok {
+		return
+	}
+	if sl.PerProcCPU != nil {
+		for i := range d.Processes {
+			if pct, ok := sl.PerProcCPU[d.Processes[i].PID]; ok {
+				d.Processes[i].CPU = pct
+				d.Processes[i].HasCPU = true
+			}
+		}
+	}
+	if d.ProcessTotals != nil {
+		d.ProcessTotals.NumCPU = sl.NumCPU
+		if sl.CPUReady {
+			d.ProcessTotals.CPU = sl.CPU
+			d.ProcessTotals.CPUThread = sl.CPUThread
+			d.ProcessTotals.HasCPU = true
+		}
+	}
 }
 
 func lockToWeb(lk locks.Lock, service string) web.Lock {

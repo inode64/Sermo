@@ -282,6 +282,8 @@ type Process struct {
 	IOWrite     int64    `json:"io_write,omitempty"` // cumulative disk write, bytes
 	FDs         int64    `json:"fds,omitempty"`      // open file descriptors
 	Threads     int64    `json:"threads,omitempty"`  // thread count
+	CPU         float64  `json:"cpu,omitempty"`      // live CPU %, single-core normalized (100% = one core)
+	HasCPU      bool     `json:"has_cpu,omitempty"`  // true when a live CPU rate is available (distinguishes 0% from unknown)
 }
 
 // ProcessTotals aggregates a service's whole discovered process tree — the
@@ -294,6 +296,14 @@ type ProcessTotals struct {
 	IOWrite int64 `json:"io_write,omitempty"`
 	FDs     int64 `json:"fds,omitempty"`
 	Threads int64 `json:"threads,omitempty"`
+	// Live CPU for the whole tree: CPU is the whole-machine rate (% of all
+	// cores); CPUThread is the busiest single process against one core (100% =
+	// one saturated core); NumCPU is the logical CPU count. HasCPU is true once a
+	// rate is available (two samples), so the UI can tell 0% from "measuring".
+	CPU       float64 `json:"cpu,omitempty"`
+	CPUThread float64 `json:"cpu_thread,omitempty"`
+	NumCPU    int     `json:"num_cpu,omitempty"`
+	HasCPU    bool    `json:"has_cpu,omitempty"`
 }
 
 // RuleWindow is one rule's window progress in a service detail.

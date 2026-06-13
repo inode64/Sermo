@@ -125,6 +125,13 @@ type Deps struct {
 	// Collector provides live system and per-service metrics (cpu, memory, load).
 	// Made available to the web UI for host overview.
 	Collector *metrics.Collector
+	// Live collects each service's per-cycle live CPU readings (per-process and
+	// aggregate) for the web detail view. Optional: nil disables live CPU.
+	Live *LiveMetrics
+	// LiveCollector is a collector dedicated to the per-cycle live web CPU
+	// sampling, kept separate from Collector so the two never corrupt each
+	// other's rate deltas. Optional: nil disables live CPU sampling.
+	LiveCollector *metrics.Collector
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
@@ -221,6 +228,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
 	sampleMetrics := metricSampler(name, tree, collector, discoverer)
+	liveSample := liveSampler(name, tree, deps.LiveCollector, discoverer, deps.Live)
 
 	// remediation.shadow (or mode: shadow) allows full rule+window+guard+policy
 	// evaluation and event emission without ever executing operations. It merges
@@ -264,6 +272,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Interval:     cfgval.Duration(tree["interval"]),
 		Gates:        parseCheckGates(tree),
 		Sample:       sampleMetrics,
+		LiveSample:   liveSample,
 		Operate: func(ctx context.Context, action string) operation.Result {
 			return engine.Do(ctx, action)
 		},
@@ -584,6 +593,34 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 			r, ok := snap[name]
 			return r, ok
 		}
+	}
+}
+
+// liveSampler returns a per-cycle closure that discovers the service's process
+// tree and samples its live CPU (per-process + aggregate) into the LiveMetrics
+// registry for the web UI. It uses a dedicated collector (deps.LiveCollector)
+// so its rate deltas never collide with the engine's metric sampling. Returns
+// nil when live metrics are not wired.
+func liveSampler(service string, tree map[string]any, lc *metrics.Collector, discoverer process.Discoverer, live *LiveMetrics) func(context.Context) {
+	if lc == nil || live == nil {
+		return nil
+	}
+	selectors, _ := process.ParseSelectors(tree)
+	return func(_ context.Context) {
+		procs, _ := discoverer.Discover(selectors)
+		pids := make([]int, 0, len(procs))
+		for _, p := range procs {
+			pids = append(pids, p.PID)
+		}
+		sc := lc.SampleServiceCPU(service, pids)
+		live.Publish(service, ServiceLive{
+			CPU:            sc.CPU.Percent,
+			CPUReady:       sc.CPU.Ready,
+			CPUThread:      sc.CPUThread.Percent,
+			CPUThreadReady: sc.CPUThread.Ready,
+			NumCPU:         sc.NumCPU,
+			PerProcCPU:     sc.PerProc,
+		})
 	}
 }
 

@@ -152,6 +152,7 @@ func run(args []string) int {
 		Notifiers:       notifiers,
 		GlobalNotify:    config.NotifyDefault(cfg.Global.Raw),
 		Snapshots:       app.NewSnapshots(),
+		Live:            app.NewLiveMetrics(),
 		Remediation:     app.NewRemediationRegistry(),
 		RuleWindows:     app.NewRuleWindowRegistry(),
 		Events:          eventLog,
@@ -182,6 +183,10 @@ func run(args []string) int {
 		collector.SystemFreshness = deps.SystemFreshness
 	}
 	deps.Collector = collector
+
+	// A second collector dedicated to the web's per-cycle live CPU sampling, kept
+	// separate from the engine's so their rate deltas never corrupt each other.
+	deps.LiveCollector = metrics.New(metrics.OSReader{})
 
 	workers, warnings := app.BuildWorkers(cfg, deps, collector)
 	for _, w := range warnings {
