@@ -12,6 +12,7 @@ package checks
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -111,4 +112,28 @@ func (b base) result(ok bool, message string, start time.Time) Result {
 		Message: message,
 		Latency: time.Since(start),
 	}
+}
+
+// levelCountResult builds the Result shared by the count-vs-kernel-limit level
+// checks (fds, pids, conntrack): the used_pct/free predicate fields — with free
+// clamped so a count momentarily above max can't underflow the unsigned
+// subtraction — the "label cur/max unit (pct)" message, and the Data map.
+// countField names the primary metric in values/Data ("allocated", "count").
+// When max is 0 the kernel limit is unknown, so used_pct/free are omitted and a
+// predicate on them cannot hold (the level check is an AND).
+func levelCountResult(b base, preds []levelPred, label, unit, countField string, count, max uint64, start time.Time) Result {
+	values := map[string]float64{countField: float64(count)}
+	usedPct := 0.0
+	if max > 0 {
+		usedPct = float64(count) / float64(max) * 100
+		values["used_pct"] = usedPct
+		values["free"] = float64(max - min(count, max))
+	}
+	res := b.result(levelPredsHold(preds, values), fmt.Sprintf("%s %d/%d %s (%.1f%%)", label, count, max, unit, usedPct), start)
+	res.Data = map[string]any{countField: count, "max": max, "used_pct": usedPct}
+	if max > 0 {
+		res.Data["free"] = max - min(count, max)
+	}
+	res.Data["value"] = firstPredValue(preds, values, usedPct)
+	return res
 }
