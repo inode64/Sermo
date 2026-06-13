@@ -1493,7 +1493,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
-	fmt.Fprintln(w, "          diagnose | wizard [service|volume|net]")
+	fmt.Fprintln(w, "          diagnose | diagnose clean | wizard [service|volume|net]")
 	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          events [SERVICE] [--limit N]   # list recent (global or per-service)")
