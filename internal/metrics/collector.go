@@ -226,14 +226,14 @@ func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
 	// cpu_thread is the busiest single process; the whole-machine rate is the sum
 	// of the per-process rates spread over the cores (each rate is already a
 	// percentage of one thread, so Σ/ncpu is the percentage of all of them).
-	var sum, max float64
+	var sum, peak float64
 	for _, pct := range rates {
 		sum += pct
-		if pct > max {
-			max = pct
+		if pct > peak {
+			peak = pct
 		}
 	}
-	out.CPUThread = Reading{Percent: max, HasPercent: true, Ready: true}
+	out.CPUThread = Reading{Percent: peak, HasPercent: true, Ready: true}
 	if ncpu > 0 {
 		out.CPU = Reading{Percent: sum / float64(ncpu), HasPercent: true, Ready: true}
 	}
@@ -372,13 +372,13 @@ func maxProcCPURate(prev, cur procCPUSample, hz float64) Reading {
 	if !ready {
 		return Reading{HasPercent: true}
 	}
-	max := 0.0
+	peak := 0.0
 	for _, pct := range rates {
-		if pct > max {
-			max = pct
+		if pct > peak {
+			peak = pct
 		}
 	}
-	return Reading{Percent: max, HasPercent: true, Ready: true}
+	return Reading{Percent: peak, HasPercent: true, Ready: true}
 }
 
 // cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100 (section 12). A drop

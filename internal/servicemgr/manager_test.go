@@ -71,6 +71,7 @@ func TestOpenRCManagerStatus(t *testing.T) {
 	}{
 		{name: "started stdout", result: execx.Result{Stdout: " * status: started\n"}, want: StatusActive},
 		{name: "stopped stdout", result: execx.Result{Stdout: " * status: stopped\n", ExitCode: 3}, want: StatusInactive},
+		{name: "not started stdout", result: execx.Result{Stdout: " * status: not started\n", ExitCode: 3}, want: StatusInactive},
 		{name: "crashed stdout", result: execx.Result{Stdout: " * status: crashed\n", ExitCode: 1}, want: StatusFailed},
 		{name: "exit code fallback active", result: execx.Result{ExitCode: 0}, want: StatusActive},
 		{name: "exit code fallback inactive", result: execx.Result{ExitCode: 3}, want: StatusInactive},
