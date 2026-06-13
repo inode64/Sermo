@@ -148,7 +148,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 			return nil, &HeldError{Service: service, Lock: toLock(existing, path, state, reason)}
 		}
 
-		if l.reclaim(path, existing, proc, now) {
+		if reclaimStale(path, existing, proc, now) {
 			if l.OnReclaim != nil {
 				l.OnReclaim(service, reason)
 			}
@@ -164,28 +164,6 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 	}
 
 	return nil, &HeldError{Service: service, Lock: Lock{Service: service, Path: path, State: StateActive}}
-}
-
-// reclaim re-reads the lock, confirms it is still the same stale lock, and
-// unlinks it. It returns false if the lock changed or turned active between the
-// classify and the unlink (section 20: abort and treat as held).
-func (l OperationLocker) reclaim(path string, expected lockFile, proc ProcessProber, now func() time.Time) bool {
-	current, err := readLockFile(path)
-	if err != nil {
-		return os.IsNotExist(err) // already gone: treat as reclaimed
-	}
-	if current.OwnerPID != expected.OwnerPID ||
-		current.OwnerStartTicks != expected.OwnerStartTicks ||
-		!current.ExpiresAt.Equal(expected.ExpiresAt) {
-		return false // a different lock now; let the caller re-evaluate
-	}
-	if state, _ := classify(current, now(), proc); state == StateActive {
-		return false // became active between check and unlink
-	}
-	if err := os.Remove(path); err != nil {
-		return os.IsNotExist(err)
-	}
-	return true
 }
 
 // reclaimStale re-reads a lock, confirms it is still the same stale lock, and
