@@ -182,6 +182,71 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	return snap
 }
 
+// ServiceCPU is the live CPU view of a service's process tree for the web UI:
+// the whole-machine rate (CPU, % of all cores), the busiest single process
+// against one core (CPUThread, 100% = one saturated core), and the per-process
+// single-core rate (PerProc, keyed by PID). NumCPU is the logical CPU count, so
+// the UI can label/normalize the bars.
+type ServiceCPU struct {
+	CPU       Reading
+	CPUThread Reading
+	PerProc   map[int]float64
+	NumCPU    int
+}
+
+// SampleServiceCPU computes the live per-process and aggregate CPU rates for a
+// service's process tree against the previous call for the same service. It is
+// the web-only counterpart to SampleService's cpu/cpu_thread, adding the
+// per-process breakdown the process table needs. It keeps its own prev state in
+// prevServiceProcs, so it must run on a collector dedicated to live web
+// sampling — never the engine's, or the two would corrupt each other's deltas.
+func (c *Collector) SampleServiceCPU(service string, pids []int) ServiceCPU {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := c.Now()
+	hz := c.Reader.ClockTicks()
+	ncpu := c.Reader.NumCPU()
+	curTicks := make(map[int]uint64, len(pids))
+	for _, pid := range pids {
+		if v, ok := c.Reader.ProcessCPU(pid); ok {
+			curTicks[pid] = v
+		}
+	}
+	cur := procCPUSample{ticks: curTicks, at: now}
+	prev := c.prevServiceProcs[service]
+	c.prevServiceProcs[service] = cur
+
+	out := ServiceCPU{NumCPU: ncpu, CPU: Reading{HasPercent: true}, CPUThread: Reading{HasPercent: true}}
+	if prev.ticks == nil || prev.at.IsZero() {
+		return out // first observation: no delta yet
+	}
+	wall := now.Sub(prev.at).Seconds()
+	if wall <= 0 || hz <= 0 {
+		return out
+	}
+	out.PerProc = make(map[int]float64, len(curTicks))
+	var sumDelta, maxPct float64
+	for pid, curT := range curTicks {
+		prevT, ok := prev.ticks[pid]
+		if !ok || curT < prevT {
+			continue // new process this cycle, or a counter reset: no rate
+		}
+		d := float64(curT - prevT)
+		sumDelta += d
+		pct := d / hz / wall * 100 // against one CPU thread (cpu_thread units)
+		out.PerProc[pid] = pct
+		if pct > maxPct {
+			maxPct = pct
+		}
+	}
+	out.CPUThread = Reading{Percent: maxPct, HasPercent: true, Ready: true}
+	if ncpu > 0 {
+		out.CPU = Reading{Percent: sumDelta / hz / (wall * float64(ncpu)) * 100, HasPercent: true, Ready: true}
+	}
+	return out
+}
+
 // ioRate computes a bytes/second rate from two cumulative samples. A drop in the
 // total (a counter reset, or a child leaving the process set between cycles)
 // clamps to 0 rather than underflowing.
