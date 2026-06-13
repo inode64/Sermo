@@ -20,6 +20,9 @@ paths:
   includes: [ `+root+`/enabled ]
   state: `+root+`/state
 defaults: { policy: { cooldown: 5m } }
+watches:
+  load:
+    check: { type: load, load5: { op: ">", value: 2 }, per_cpu: true }
 `)
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
@@ -81,6 +84,9 @@ paths:
   includes: [ `+root+`/enabled ]
   state: `+root+`/state
 defaults: { policy: { cooldown: 5m } }
+watches:
+  load:
+    check: { type: load, load5: { op: ">", value: 2 }, per_cpu: true }
 `)
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
@@ -99,6 +105,9 @@ checks:
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 	if err := store.SetActive("web", true, state.SourceCLI); err != nil {
 		t.Fatalf("SetActive(web): %v", err)
+	}
+	if err := store.SetActive("watch:load", true, state.SourceCLI); err != nil {
+		t.Fatalf("SetActive(watch:load): %v", err)
 	}
 	if err := store.SetActive("ghost", false, state.SourceCLI); err != nil {
 		t.Fatalf("SetActive(ghost): %v", err)
@@ -123,6 +132,9 @@ checks:
 	}
 	if !strings.Contains(stdout.String(), `service "ghost" which is no longer configured`) {
 		t.Fatalf("diagnose before clean missing stale warning:\n%s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), `service "watch:load" which is no longer configured`) {
+		t.Fatalf("diagnose before clean reported configured watch:\n%s", stdout.String())
 	}
 
 	stdout.Reset()

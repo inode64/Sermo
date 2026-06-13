@@ -84,12 +84,14 @@ the service's init definition, best-effort (unknown fields come back `""`):
 - **OpenRC**: the init script and its `conf.d` override — `pidfile=`, a
   `start-stop-daemon --pidfile`, `--exec`, `command=`, `command_user=`, and
   simple OpenRC variables/defaults (`${RC_SVCNAME}`, `${VAR:-default}`).
-  Unknown `$`-built paths are skipped.
+  Unknown `$`-built paths are skipped; runtime `/run/openrc/daemons/<unit>/001`
+  options may fill dynamic pidfiles/executables.
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`; the service assistant prefills the
-PID question from them. Catalog services write `uses:`; uncataloged active units
-write `service.name` plus a basic `checks.service`.
+PID question from them and only accepts absolute pidfile paths. Catalog services
+write `uses:`; uncataloged active units write `service.name` plus a basic
+`checks.service`.
 
 ## Adding a new wizard
 

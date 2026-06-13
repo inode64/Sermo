@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,23 @@ func fakeWizardEnv(*config.Config) assist.Env {
 			return []assist.Volume{{Mountpoint: "/mnt/backup", FSType: "ext4", Device: "/dev/mapper/vg0-data"}}, nil
 		},
 		Ifaces: func() ([]assist.Iface, error) { return nil, nil },
+	}
+}
+
+func TestIfaceHasUsableAddress(t *testing.T) {
+	addr := func(cidr string) net.Addr {
+		ip, n, err := net.ParseCIDR(cidr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n.IP = ip
+		return n
+	}
+	if ifaceHasUsableAddress([]net.Addr{addr("127.0.0.1/8"), addr("fe80::1/64")}) {
+		t.Fatal("loopback/link-local addresses must not count as usable")
+	}
+	if !ifaceHasUsableAddress([]net.Addr{addr("192.168.2.254/24")}) {
+		t.Fatal("private global-unicast IPv4 should count as usable")
 	}
 }
 

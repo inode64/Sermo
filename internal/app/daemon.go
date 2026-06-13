@@ -197,6 +197,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 		}
 	}
 	resolver := servicemgr.NewUnitResolver()
+	resolver.Manager = deps.Manager
 
 	for _, name := range cfg.SortedServiceNames() {
 		doc := cfg.Services[name]

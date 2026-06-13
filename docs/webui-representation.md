@@ -132,7 +132,7 @@ Row expansion:
 | Area | Content |
 | --- | --- |
 | Checks | configured checks and current result |
-| Processes | detected process tree and warnings |
+| Processes | detected process tree and warnings; hidden as CPU/memory totals when `no_resident_process` is true |
 | Metrics | process/service metrics where available |
 | SLA | heartbeat strip and availability summary |
 | Rules | remediation/alert rule state |

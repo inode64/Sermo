@@ -54,6 +54,9 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 		if cfgval.Disabled(entry) {
 			continue
 		}
+		if config.MonitorMode(entry) == config.MonitorDisabled {
+			continue
+		}
 		scope := "watch " + name
 		if d := cfgval.Duration(entry["interval"]); d > 0 {
 			checkAlignment(b, scope, d, global)

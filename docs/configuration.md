@@ -583,7 +583,8 @@ a service.
 > the notify threshold as a percent or size (sizes require a `K`/`M`/`G`/`T`
 > suffix), and optionally enable auto-expand)
 > and `sermoctl wizard net` for network interfaces (pick interfaces and which of
-> link state / errors / speed / IP address to watch). `sermoctl wizard uplink`
+> link state / errors / speed / IP address to watch; already addressless
+> interfaces do not get an immediate "address absent" watch). `sermoctl wizard uplink`
 > generates the full internet-uplink set for an interface (PPPoE, WAN port, LTE
 > modem): link state, assigned address, default route, a bound ping and DNS
 > resolution through the system resolver — the same layering the `pppd` catalog

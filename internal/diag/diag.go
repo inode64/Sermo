@@ -10,6 +10,8 @@ package diag
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"time"
 
@@ -120,11 +122,30 @@ func diagDatabase(b *builder, cfg *config.Config, store Store) {
 		b.add(LevelWarning, "database", "could not list stored services: %v", err)
 		return
 	}
+	known := map[string]struct{}{}
+	for _, name := range ConfiguredStoredNames(cfg) {
+		known[name] = struct{}{}
+	}
 	for _, name := range tracked {
-		if _, ok := cfg.Services[name]; !ok {
+		if _, ok := known[name]; !ok {
 			b.add(LevelWarning, "database", "stored data (monitoring state, SLA, or measurements) for service %q which is no longer configured", name)
 		}
 	}
+}
+
+// ConfiguredStoredNames returns the state-store target names currently backed by
+// config: services by name plus host watches under the daemon's `watch:` prefix.
+func ConfiguredStoredNames(cfg *config.Config) []string {
+	if cfg == nil {
+		return nil
+	}
+	names := cfg.SortedServiceNames()
+	if watches, _ := cfg.ResolveWatches(); len(watches) > 0 {
+		for _, name := range slices.Sorted(maps.Keys(watches)) {
+			names = append(names, "watch:"+name)
+		}
+	}
+	return names
 }
 
 // globalInterval reads engine.interval, defaulting to 30s.
