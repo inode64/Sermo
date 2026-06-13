@@ -36,7 +36,7 @@ name: redis-cache
 clone: redis-main
 ```
 
-Every document has a `kind` and a `name`. Two optional human-facing strings may
+Every document has a `kind` and a `name`. Optional human-facing metadata may
 accompany them:
 
 ```yaml
@@ -44,13 +44,17 @@ kind: profile
 name: mariadb
 display_name: "MariaDB"   # optional pretty label
 description: "..."        # optional free-text note
+category: "database"      # optional WebUI grouping/filter label
 ```
 
 - `display_name` is the label shown to humans (`profile list`, `service list`).
   When absent or blank it falls back to `name`. Omit it when it would just repeat
   `name`.
 - `description` is optional free text with NO fallback: when absent, nothing is
-  shown — never substitute `name`. Both must be strings if present.
+  shown — never substitute `name`.
+- `category` groups/filters Services and Apps in the WebUI; when absent Sermo
+  infers a broad family from name/display_name, then falls back to `service` or
+  `app`. All three must be strings if present.
 
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
@@ -257,7 +261,7 @@ kill_only_if without both exe_any and users
 SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
-display_name and description, if present, are strings (both optional; display_name falls back to name, description has no fallback)
+display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps and is inferred when absent)
 service without service.name
 service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog

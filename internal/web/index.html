@@ -79,10 +79,15 @@
   .services-table .policy-cell { max-width: 11rem; }
   .services-table .actions { min-width: 14rem; }
   #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
+  #rows tr.group-row:hover td, #app-rows tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
   #rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
   #rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
+  .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
+  tr.group-row td { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--text); font-weight: 650; cursor: pointer; }
+  tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+  tr.group-row .muted { font-weight: 500; margin-left: .35rem; }
   tr.exp-row td { background: color-mix(in srgb, var(--text) 3.5%, transparent); padding: .7rem 1rem .85rem 1.7rem; box-shadow: inset 3px 0 0 var(--line-2); }
 
   /* ---- status language ------------------------------------------------------
@@ -127,7 +132,7 @@
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
   }
   input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
-  #svc-controls input, #watch-controls input { min-width: 13rem; }
+  #svc-controls input, #watch-controls input, #app-controls input { min-width: 13rem; }
   #svc-filters button, #watch-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #watch-filters button:hover { background: var(--panel-2); color: var(--text); }
   #svc-filters button.f-active, #watch-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
@@ -180,6 +185,7 @@
   details[open], section#locks-section, #detail { padding-bottom: .95rem; }
   summary {
     cursor: pointer; font-size: .98rem; font-weight: 650; list-style: none; user-select: none;
+    display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
     padding: .7rem 1.05rem; margin: 0 -1.05rem;
   }
   summary::-webkit-details-marker { display: none; }
@@ -187,6 +193,10 @@
   details[open] > summary::before { transform: rotate(90deg); }
   details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: .65rem; }
   summary > button { font-weight: 400; margin-left: .4rem; }
+  .summary-title { display: inline-flex; align-items: baseline; gap: .35rem; }
+  .panel-tools { margin-left: auto; display: inline-flex; gap: .3rem; align-items: center; }
+  .icon-btn { width: 1.85rem; height: 1.85rem; display: inline-grid; place-items: center; padding: 0; font-size: .95rem; line-height: 1; }
+  .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   #detail { margin-top: .9rem; padding-top: .9rem; display: none; }
@@ -312,9 +322,18 @@
 <div id="attention"></div>
 <div id="op-live"></div>
 <details id="services-section" open>
-  <summary>Services <span id="services-count" class="muted"></span></summary>
+  <summary>
+    <span class="summary-title">Services <span id="services-count" class="muted"></span></span>
+    <span class="panel-tools">
+      <button id="svc-group-toggle" class="icon-btn" title="Group services by category" aria-label="Group services by category" aria-pressed="false">&#x25A6;</button>
+      <button id="svc-groups-toggle" class="icon-btn" title="Collapse service groups" aria-label="Collapse service groups">&#x25BE;</button>
+    </span>
+  </summary>
   <div id="svc-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
     <input id="svc-search" type="search" placeholder="filter services…  ( / )">
+    <select id="svc-category" title="Filter by category" aria-label="Filter services by category">
+      <option value="all">all categories</option>
+    </select>
     <span id="svc-filters">
       <button data-f="all" class="f-active">all</button>
       <button data-f="disabled">disabled</button>
@@ -330,6 +349,7 @@
     <thead>
       <tr>
         <th class="sortable" data-sort="name">Service<span class="sort-ind" data-si="name"></span></th>
+        <th class="sortable" data-sort="category">Category<span class="sort-ind" data-si="category"></span></th>
         <th>Unit</th>
         <th class="sortable" data-sort="state">State<span class="sort-ind" data-si="state"></span></th>
         <th>Interval</th><th>Policy</th><th>Locks</th>
@@ -344,14 +364,24 @@
 </details>
 
 <details id="apps-section" open style="display:none">
-  <summary>Installed applications <span id="apps-count" class="muted"></span></summary>
+  <summary>
+    <span class="summary-title">Installed applications <span id="apps-count" class="muted"></span></span>
+    <span class="panel-tools">
+      <button id="app-group-toggle" class="icon-btn" title="Group applications by category" aria-label="Group applications by category" aria-pressed="false">&#x25A6;</button>
+      <button id="app-groups-toggle" class="icon-btn" title="Collapse application groups" aria-label="Collapse application groups">&#x25BE;</button>
+    </span>
+  </summary>
   <div id="app-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
     <input id="app-search" type="search" placeholder="filter applications…">
+    <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
+      <option value="all">all categories</option>
+    </select>
     <span id="app-count" class="muted"></span>
   </div>
   <table class="apps-table">
     <thead><tr>
       <th class="sortable" data-app-sort="name">Application<span class="sort-ind" data-ai="name"></span></th>
+      <th class="sortable" data-app-sort="category">Category<span class="sort-ind" data-ai="category"></span></th>
       <th class="sortable" data-app-sort="version">Version<span class="sort-ind" data-ai="version"></span></th>
     </tr></thead>
     <tbody id="app-rows"></tbody>
@@ -870,6 +900,9 @@ function summarizeSLA(points) {
 let allServices = [];
 let svcQuery = "";
 let svcStatus = "all"; // all | disabled | running | stopped | unmonitorized | monitorized | failed
+let svcCategory = "all";
+let svcGrouped = false;
+let svcCollapsedGroups = new Set();
 let allWatches = [];
 let watchQuery = "";
 let watchStatus = "all"; // all | disabled | ok | monitorized | unmonitorized | failed
@@ -1136,8 +1169,10 @@ function renderOperationLive() {
 }
 
 function serviceMatches(s) {
+  const category = categoryOf(s, "service");
+  if (svcCategory !== "all" && category !== svcCategory) return false;
   if (svcQuery) {
-    const hay = `${s.name || ""} ${s.display_name || ""} ${s.unit || ""} ${serviceState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
+    const hay = `${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
   switch (svcStatus) {
@@ -1152,6 +1187,7 @@ function serviceMatches(s) {
 }
 
 function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); }
+function setSvcCategory(v) { svcCategory = v || "all"; renderServices(); }
 
 function compareSortValues(a, b) {
   if (a == null) a = "";
@@ -1191,6 +1227,7 @@ function renderFilterButtonCounts(selector, counts) {
 let svcSort = { key: "", dir: 1 };
 const svcSortKeys = {
   name: (s) => (s.name || "").toLowerCase(),
+  category: (s) => categoryOf(s, "service").toLowerCase(),
   state: (s) => stateRank(serviceState(s)),
   last: (s) => (s.last_event && s.last_event.time) || "",
 };
@@ -1238,6 +1275,23 @@ function setSvcStatus(v) {
   renderServices();
 }
 
+function setSvcGrouped(v) {
+  svcGrouped = !!v;
+  renderServices();
+}
+
+function toggleAllSvcGroups() {
+  const list = (allServices || []).filter(serviceMatches);
+  const categories = sortedCategories(list, "service");
+  const allCollapsed = categories.length > 0 && categories.every((category) => svcCollapsedGroups.has(category));
+  if (allCollapsed) {
+    categories.forEach((category) => svcCollapsedGroups.delete(category));
+  } else {
+    categories.forEach((category) => svcCollapsedGroups.add(category));
+  }
+  renderServices();
+}
+
 // render receives fresh data on each refresh; cache it, then render through the
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
@@ -1250,6 +1304,7 @@ function renderServices() {
   const total = (allServices || []).length;
   const headCount = $("#services-count");
   if (headCount) headCount.textContent = total ? `(${total})` : "";
+  svcCategory = syncCategorySelect("#svc-category", allServices || [], "service", svcCategory);
   renderFilterCounts();
   const list = (allServices || []).filter(serviceMatches);
   if (svcSort.key && svcSortKeys[svcSort.key]) {
@@ -1259,11 +1314,15 @@ function renderServices() {
     list.sort((a, b) => (isFailing(b) ? 1 : 0) - (isFailing(a) ? 1 : 0));
   }
   updateSortIndicators();
+  const visibleCategories = sortedCategories(list, "service");
+  svcCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) svcCollapsedGroups.delete(category); });
+  updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
   const cnt = $("#svc-count");
-  if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all") ? `showing ${list.length} of ${total}` : "";
-  const rows = list.map((s) => {
+  if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all" || svcCategory !== "all") ? `showing ${list.length} of ${total}` : "";
+  const serviceRow = (s) => {
     const st = (s.status || "unknown").toLowerCase();
     const state = serviceState(s);
+    const category = categoryOf(s, "service");
     const op = liveOps.get(s.name);
     const busy = serviceBusy(s.name);
     const busyText = op
@@ -1293,6 +1352,7 @@ function renderServices() {
     const name = `<a class="name" data-detail-service="${esc(s.name)}">${label}</a>`;
     const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
+      <td>${categoryBadge(category)}</td>
       <td>${unitCell(s)}</td>
       <td>${stateBadge(state)}${state === "running" || state === "stopped" ? monitorHint(s) : ""}</td>
       <td>${s.interval ? esc(s.interval) : '<span class="muted">—</span>'}</td>
@@ -1303,14 +1363,17 @@ function renderServices() {
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="9">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
-  });
+  };
+  const rows = svcGrouped
+    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 10, serviceRow, svcSort.key === "category" ? svcSort.dir : 1)
+    : list.map(serviceRow).join("");
   const empty = (allServices || []).length
-    ? `<tr><td colspan="9" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="9" class="muted">No services.</td></tr>`;
-  $("#rows").innerHTML = rows.join("") || empty;
+    ? `<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="10" class="muted">No services.</td></tr>`;
+  $("#rows").innerHTML = rows || empty;
   renderAttention();
   expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
 }
@@ -2026,22 +2089,62 @@ function renderWatches(watches) {
 // ---- Installed applications ----------------------------------------------
 let allApps = [];
 let appQuery = "";
+let appCategory = "all";
+let appGrouped = false;
+let appCollapsedGroups = new Set();
 let appSort = { key: "", dir: 1 };
 const appSortKeys = {
   name: (a) => (a.name || "").toLowerCase(),
+  category: (a) => categoryOf(a, "app").toLowerCase(),
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
 };
 function setAppSort(key) { toggleSort(appSort, key, renderApps); }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); }
+function setAppCategory(v) { appCategory = v || "all"; renderApps(); }
 function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
 function appMatches(a) {
+  const category = categoryOf(a, "app");
+  if (appCategory !== "all" && category !== appCategory) return false;
   if (!appQuery) return true;
   const q = appQuery.toLowerCase();
   return (a.name || "").toLowerCase().includes(q)
     || (a.display_name || "").toLowerCase().includes(q)
+    || category.toLowerCase().includes(q)
     || (a.version || "").toLowerCase().includes(q)
     || (a.user || "").toLowerCase().includes(q)
     || (a.group || "").toLowerCase().includes(q);
+}
+
+function setAppGrouped(v) {
+  appGrouped = !!v;
+  renderApps();
+}
+
+function toggleAllAppGroups() {
+  const list = (allApps || []).filter(appMatches);
+  const categories = sortedCategories(list, "app");
+  const allCollapsed = categories.length > 0 && categories.every((category) => appCollapsedGroups.has(category));
+  if (allCollapsed) {
+    categories.forEach((category) => appCollapsedGroups.delete(category));
+  } else {
+    categories.forEach((category) => appCollapsedGroups.add(category));
+  }
+  renderApps();
+}
+
+function toggleCategoryGroup(panel, category) {
+  if (!category) return;
+  if (panel === "svc") {
+    if (svcCollapsedGroups.has(category)) svcCollapsedGroups.delete(category);
+    else svcCollapsedGroups.add(category);
+    renderServices();
+    return;
+  }
+  if (panel === "app") {
+    if (appCollapsedGroups.has(category)) appCollapsedGroups.delete(category);
+    else appCollapsedGroups.add(category);
+    renderApps();
+  }
 }
 
 // renderApps lists the installed applications below the services table. The
@@ -2064,13 +2167,18 @@ function renderApps(apps) {
   }
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${total})`;
+  appCategory = syncCategorySelect("#app-category", allApps || [], "app", appCategory);
   const list = (allApps || []).filter(appMatches);
   if (appSort.key && appSortKeys[appSort.key]) {
     sortedBy(list, appSort, appSortKeys, "name");
   }
   updateAppSortIndicators();
-  if (filterCount) filterCount.textContent = appQuery ? `showing ${list.length} of ${total}` : "";
-  const rows = list.map((a) => {
+  const visibleCategories = sortedCategories(list, "app");
+  appCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) appCollapsedGroups.delete(category); });
+  updateGroupButtons("app", appGrouped, visibleCategories, appCollapsedGroups, "applications");
+  if (filterCount) filterCount.textContent = (appQuery || appCategory !== "all") ? `showing ${list.length} of ${total}` : "";
+  const appRow = (a) => {
+    const category = categoryOf(a, "app");
     const label = a.display_name && a.display_name !== a.name
       ? `${esc(a.name)} <span class="muted">${esc(a.display_name)}</span>`
       : esc(a.name);
@@ -2080,14 +2188,18 @@ function renderApps(apps) {
     const ver = a.version_short || a.version || "—";
     const row = `<tr class="clickable" data-exp-key="${esc(key)}">
       <td>${chev}${label}</td>
+      <td>${categoryBadge(category)}</td>
       <td>${esc(ver)}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="2">${renderAppExpansion(a)}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="3">${renderAppExpansion(a)}</td></tr>`
       : "";
     return row + expRow;
-  });
-  tbody.innerHTML = rows.join("") || `<tr><td colspan="2" class="muted">No applications match the filter.</td></tr>`;
+  };
+  const rows = appGrouped
+    ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 3, appRow, appSort.key === "category" ? appSort.dir : 1)
+    : list.map(appRow).join("");
+  tbody.innerHTML = rows || `<tr><td colspan="3" class="muted">No applications match the filter.</td></tr>`;
 }
 
 // renderAppExpansion shows one application's full version, binary location and
@@ -2097,8 +2209,10 @@ function renderAppExpansion(a) {
   const perm = a.permissions ? `<code>${esc(a.permissions)}</code>` : '<span class="muted">—</span>';
   const usr = a.user ? esc(a.user) : '<span class="muted">—</span>';
   const grp = a.group ? esc(a.group) : '<span class="muted">—</span>';
+  const category = categoryOf(a, "app");
   return `<div class="watch-grid">
     <div><span class="muted">Version</span><br>${esc(a.version || "—")}</div>
+    <div><span class="muted">Category</span><br>${esc(category)}</div>
     <div><span class="muted">Location</span><br>${bin}</div>
     <div><span class="muted">Permissions</span><br>${perm}</div>
     <div><span class="muted">User</span><br>${usr}</div>
@@ -3197,6 +3311,78 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function categoryOf(item, fallback) {
+  const raw = item && typeof item.category === "string" ? item.category.trim() : "";
+  return raw || fallback;
+}
+
+function categoryBadge(category) {
+  return `<span class="category-badge" title="${esc(category)}">${esc(category)}</span>`;
+}
+
+function categoryCounts(items, fallback) {
+  const counts = new Map();
+  (items || []).forEach((item) => {
+    const category = categoryOf(item, fallback);
+    counts.set(category, (counts.get(category) || 0) + 1);
+  });
+  return counts;
+}
+
+function sortedCategories(items, fallback) {
+  return Array.from(categoryCounts(items, fallback).keys())
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+}
+
+function syncCategorySelect(id, items, fallback, selected) {
+  const select = $(id);
+  if (!select) return selected || "all";
+  const categories = sortedCategories(items, fallback);
+  const next = selected !== "all" && categories.includes(selected) ? selected : "all";
+  const counts = categoryCounts(items, fallback);
+  select.innerHTML = `<option value="all">all categories</option>` + categories.map((category) =>
+    `<option value="${esc(category)}">${esc(category)} (${counts.get(category) || 0})</option>`
+  ).join("");
+  select.value = next;
+  return next;
+}
+
+function renderGroupedRows(list, collapsedGroups, panel, fallback, colspan, renderRow, groupDir) {
+  const groups = new Map();
+  list.forEach((item) => {
+    const category = categoryOf(item, fallback);
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(item);
+  });
+  const dir = groupDir === -1 ? -1 : 1;
+  return Array.from(groups.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
+  ).map(([category, items]) => {
+    const collapsed = collapsedGroups.has(category);
+    const header = `<tr class="group-row" data-group-panel="${panel}" data-group-name="${esc(category)}">
+      <td colspan="${colspan}"><span class="exp">${collapsed ? "▸" : "▾"}</span>${esc(category)} <span class="muted">${items.length}</span></td>
+    </tr>`;
+    return header + (collapsed ? "" : items.map(renderRow).join(""));
+  }).join("");
+}
+
+function updateGroupButtons(prefix, grouped, categories, collapsedGroups, label) {
+  const group = $("#" + prefix + "-group-toggle");
+  if (group) {
+    group.setAttribute("aria-pressed", grouped ? "true" : "false");
+    group.title = grouped ? `Ungroup ${label}` : `Group ${label} by category`;
+    group.setAttribute("aria-label", group.title);
+  }
+  const all = $("#" + prefix + "-groups-toggle");
+  if (!all) return;
+  const any = categories.length > 0;
+  const allCollapsed = any && categories.every((category) => collapsedGroups.has(category));
+  all.disabled = !grouped || !any;
+  all.innerHTML = allCollapsed ? "▾" : "▴";
+  all.title = allCollapsed ? `Expand all ${label} groups` : `Collapse all ${label} groups`;
+  all.setAttribute("aria-label", all.title);
+}
+
 function closestFrom(event, selector) {
   let target = event.target;
   if (target && target.nodeType !== 1) target = target.parentElement;
@@ -3226,6 +3412,26 @@ function initStaticHandlers() {
     svcFilters.addEventListener("click", (e) => {
       const btn = closestFrom(e, "button[data-f]");
       if (btn) setSvcStatus(btn.dataset.f || "all");
+    });
+  }
+
+  const svcCategorySelect = $("#svc-category");
+  if (svcCategorySelect) svcCategorySelect.addEventListener("change", () => setSvcCategory(svcCategorySelect.value));
+
+  const svcGroupToggle = $("#svc-group-toggle");
+  if (svcGroupToggle) {
+    svcGroupToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setSvcGrouped(!svcGrouped);
+    });
+  }
+  const svcGroupsToggle = $("#svc-groups-toggle");
+  if (svcGroupsToggle) {
+    svcGroupsToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAllSvcGroups();
     });
   }
 
@@ -3264,6 +3470,26 @@ function initStaticHandlers() {
         appSearch.value = "";
         setAppQuery("");
       }
+    });
+  }
+
+  const appCategorySelect = $("#app-category");
+  if (appCategorySelect) appCategorySelect.addEventListener("change", () => setAppCategory(appCategorySelect.value));
+
+  const appGroupToggle = $("#app-group-toggle");
+  if (appGroupToggle) {
+    appGroupToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setAppGrouped(!appGrouped);
+    });
+  }
+  const appGroupsToggle = $("#app-groups-toggle");
+  if (appGroupsToggle) {
+    appGroupsToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAllAppGroups();
     });
   }
 
@@ -3385,6 +3611,12 @@ function initDelegatedHandlers() {
           setMetricWin(val);
           break;
       }
+      return;
+    }
+
+    const group = closestFrom(e, "[data-group-panel][data-group-name]");
+    if (group) {
+      toggleCategoryGroup(group.dataset.groupPanel || "", group.dataset.groupName || "");
       return;
     }
 

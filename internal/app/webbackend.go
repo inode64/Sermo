@@ -87,6 +87,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 // webEntry is one service's web-backend record.
 type webEntry struct {
 	displayName     string
+	category        string
 	unit            string
 	backend         string
 	interval        time.Duration // resolved per-service cycle cadence (own interval or engine default)
@@ -257,6 +258,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		}
 		entry := &webEntry{
 			displayName:    config.DisplayName(resolved.Tree, name),
+			category:       config.CategoryLabel(resolved.Tree, config.CategoryService),
 			unit:           unit,
 			backend:        string(deps.Backend),
 			interval:       iv,
@@ -412,6 +414,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc := web.Service{
 		Name:        name,
 		DisplayName: e.displayName,
+		Category:    e.category,
 		Backend:     e.backend,
 		Unit:        e.unit,
 		Enabled:     !e.disabled,
@@ -1783,6 +1786,7 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 		out = append(out, web.Application{
 			Name:         r.Name,
 			DisplayName:  r.DisplayName,
+			Category:     r.Category,
 			Binary:       r.Binary,
 			Permissions:  r.Permissions,
 			User:         r.User,

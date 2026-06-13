@@ -73,6 +73,16 @@ func TestInspectBinaryStates(t *testing.T) {
 	}
 }
 
+func TestInspectReportsCategory(t *testing.T) {
+	bin := writeBinary(t, 0o755)
+	tr := tree(bin, nil)
+	tr["category"] = "database"
+	r := inspect(t, fakeRunner{}, tr)
+	if r.Category != "database" {
+		t.Fatalf("category = %q, want database", r.Category)
+	}
+}
+
 func TestInspectVersionCommandOutcomes(t *testing.T) {
 	bin := writeBinary(t, 0o755)
 	version := func(extra map[string]any) map[string]any {

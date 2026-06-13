@@ -1121,9 +1121,10 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"mysql", "web"},
 		entries: map[string]*webEntry{
-			"mysql": {displayName: "MySQL", unit: "mysqld", backend: "systemd", disabled: true},
+			"mysql": {displayName: "MySQL", category: "database", unit: "mysqld", backend: "systemd", disabled: true},
 			"web": {
 				displayName: "Web",
+				category:    "frontend",
 				unit:        "nginx",
 				backend:     "systemd",
 				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
@@ -1144,10 +1145,16 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	if dis.Enabled || dis.Status != "disabled" || dis.State != TargetStateDisabled || dis.Monitored {
 		t.Fatalf("disabled service = %+v, want Enabled=false, Status=disabled, State=disabled, Monitored=false", dis)
 	}
+	if dis.Category != "database" {
+		t.Fatalf("disabled service category = %q, want database", dis.Category)
+	}
 
 	en := byName["web"]
 	if !en.Enabled || en.Status == "disabled" || en.State != TargetStateMonitorized {
 		t.Fatalf("normal service = %+v, want Enabled=true", en)
+	}
+	if en.Category != "frontend" {
+		t.Fatalf("normal service category = %q, want frontend", en.Category)
 	}
 
 	// Detail for disabled should succeed (returns basic info) but have no checks etc.
