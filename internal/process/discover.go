@@ -189,7 +189,11 @@ func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) boo
 	}
 	if sel.Exe != "" {
 		// Fail-safe exe match: exact resolved /proc/<pid>/exe, never cmdline.
-		if !id.ExeOK || canonicalizePath(sel.Exe) != id.Exe {
+		exePath := sel.exePath
+		if exePath == "" {
+			exePath = canonicalizePath(sel.Exe)
+		}
+		if !id.ExeOK || exePath != id.Exe {
 			return false
 		}
 	}
@@ -347,6 +351,9 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			sel.Cmd = cfgval.AsString(entry["cmd"])
 			sel.User = cfgval.AsString(entry["user"])
 			sel.Group = cfgval.AsString(entry["group"])
+			if sel.Exe != "" {
+				sel.exePath = canonicalizePath(sel.Exe)
+			}
 			if sel.Exe == "" && sel.Cmd == "" {
 				warnings = append(warnings, fmt.Sprintf("command_match selector %q requires exe or cmd", name))
 				continue
