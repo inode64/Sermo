@@ -49,6 +49,10 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	resolve := d.resolveUser()
 
 	var warnings []string
+	backendPIDs := backendPIDSeeds(d.BackendPIDs)
+	if len(backendPIDs) == 0 && len(selectors) == 0 {
+		return nil, nil
+	}
 	snapshot := snapshotIdentities(reader)
 
 	found := map[int]Process{}
@@ -62,11 +66,9 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	}
 
 	// 0. backend-provided PIDs (systemd cgroup + MainPID, section 21 step 1).
-	if d.BackendPIDs != nil {
-		for _, pid := range d.BackendPIDs() {
-			if id, ok := snapshot[pid]; ok {
-				add(id, "main", sourceBackend)
-			}
+	for _, pid := range backendPIDs {
+		if id, ok := snapshot[pid]; ok {
+			add(id, "main", sourceBackend)
 		}
 	}
 
@@ -120,6 +122,22 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		result = append(result, found[pid])
 	}
 	return result, warnings
+}
+
+func backendPIDSeeds(fn func() []int) []int {
+	if fn == nil {
+		return nil
+	}
+	seen := map[int]bool{}
+	var seeds []int
+	for _, pid := range fn() {
+		if pid <= 0 || seen[pid] {
+			continue
+		}
+		seen[pid] = true
+		seeds = append(seeds, pid)
+	}
+	return seeds
 }
 
 // Process states reported by ObserveState (section 12).
