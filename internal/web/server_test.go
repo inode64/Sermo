@@ -262,7 +262,7 @@ func TestSecurityHeaders(t *testing.T) {
 }
 
 func TestListServices(t *testing.T) {
-	b := &fakeBackend{services: []Service{{Name: "web", Status: "active", Monitored: true}}}
+	b := &fakeBackend{services: []Service{{Name: "web", Category: "frontend", Status: "active", Monitored: true}}}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services", nil))
 	if rec.Code != http.StatusOK {
@@ -272,14 +272,14 @@ func TestListServices(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(got) != 1 || got[0].Name != "web" || !got[0].Monitored {
+	if len(got) != 1 || got[0].Name != "web" || got[0].Category != "frontend" || !got[0].Monitored {
 		t.Fatalf("unexpected services: %+v", got)
 	}
 }
 
 func TestListApplications(t *testing.T) {
 	b := &fakeBackend{applications: []Application{{
-		Name: "nginx", DisplayName: "Nginx", Binary: "/usr/bin/nginx",
+		Name: "nginx", DisplayName: "Nginx", Category: "web", Binary: "/usr/bin/nginx",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version:      "nginx version: nginx/1.30.2",
 		VersionShort: "1.30.2", Status: "ok",
@@ -295,7 +295,7 @@ func TestListApplications(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
 		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
-		got[0].User != "root" || got[0].Group != "root" {
+		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" {
 		t.Fatalf("unexpected applications: %+v", got)
 	}
 }

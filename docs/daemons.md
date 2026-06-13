@@ -206,16 +206,17 @@ an app). Referenced names must be `app` daemons.
 
 ## Metadata fields
 
-A daemon or service may carry two optional human-facing strings:
+A daemon or service may carry optional human-facing metadata:
 
 ```yaml
 kind: daemon
 name: mariadb
 display_name: "MariaDB"      # pretty label; falls back to name when absent
 description: "..."           # free-text note; shown verbatim, nothing when absent
+category: "database"         # optional WebUI grouping/filter label
 ```
 
-Both are optional and behave differently when missing:
+These fields are optional and behave differently when missing:
 
 - **`display_name`** is the label used wherever Sermo shows the application to a
   human (e.g. `daemon list`, `service list`). When it is absent or blank, Sermo
@@ -225,8 +226,13 @@ Both are optional and behave differently when missing:
 - **`description`** is an optional free-text note. It has **no fallback**: when it
   is absent, nothing is shown for it — Sermo never substitutes `name`. Use it for
   a real sentence, not a restatement of the name.
+- **`category`** groups and filters Services and Installed applications in the
+  WebUI. When absent or blank, Sermo infers a broad family from `name` /
+  `display_name` (for example `web`, `database`, `storage`) and falls back to
+  `service` or `app` when unknown.
 
-Both must be strings if present; validation rejects non-string values.
+All metadata fields must be strings if present; validation rejects non-string
+values.
 
 ### Built-in variables
 

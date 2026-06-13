@@ -667,6 +667,30 @@ service: { name: x }
 	}
 }
 
+func TestValidateCategoryMustBeString(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+category: [not, a, string]
+service: { name: x }
+`)
+	mustHave(t, issues, "category must be a string")
+}
+
+func TestValidateCategoryStringPasses(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+category: database
+service: { name: x }
+`)
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "category") {
+			t.Fatalf("valid category wrongly flagged: %v", is)
+		}
+	}
+}
+
 func TestValidateCommandExpectExit(t *testing.T) {
 	issues := validateService(t, `
 kind: service

@@ -27,6 +27,7 @@ const probeTimeout = 5 * time.Second
 type Report struct {
 	Name         string `json:"name"`
 	DisplayName  string `json:"display_name"`
+	Category     string `json:"category,omitempty"`
 	Binary       string `json:"binary"`
 	Permissions  string `json:"permissions,omitempty"`
 	User         string `json:"user,omitempty"`
@@ -63,6 +64,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	r := Report{
 		Name:        name,
 		DisplayName: config.DisplayName(resolved.Tree, name),
+		Category:    config.CategoryLabel(resolved.Tree, config.CategoryApp),
 		Binary:      binaryPath(resolved.Tree),
 	}
 
