@@ -27,18 +27,26 @@ func NewDiscoverer() Discoverer {
 	return Discoverer{Reader: OSReader{}, ResolveUser: OSUserResolver, ResolveGroup: OSGroupResolver}
 }
 
+func (d Discoverer) reader() Reader {
+	if d.Reader != nil {
+		return d.Reader
+	}
+	return OSReader{}
+}
+
+func (d Discoverer) resolveUser() UserResolver {
+	if d.ResolveUser != nil {
+		return d.ResolveUser
+	}
+	return OSUserResolver
+}
+
 // Discover applies pidfile then command_match selectors, then adds descendants
 // from the process tree, deduplicated by PID (section 21). Non-fatal problems
 // (missing pidfile, dead pid) are returned as warnings.
 func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
-	reader := d.Reader
-	if reader == nil {
-		reader = OSReader{}
-	}
-	resolve := d.ResolveUser
-	if resolve == nil {
-		resolve = OSUserResolver
-	}
+	reader := d.reader()
+	resolve := d.resolveUser()
 
 	var warnings []string
 	snapshot := snapshotIdentities(reader)
@@ -128,14 +136,8 @@ const (
 //   - zombie:  matches exist but all are defunct;
 //   - absent:  no process matches.
 func (d Discoverer) ObserveState(exe, user string) string {
-	reader := d.Reader
-	if reader == nil {
-		reader = OSReader{}
-	}
-	resolve := d.ResolveUser
-	if resolve == nil {
-		resolve = OSUserResolver
-	}
+	reader := d.reader()
+	resolve := d.resolveUser()
 	sel := Selector{Type: SelectorCommandMatch, Exe: exe, User: user}
 
 	matched, live := false, false
