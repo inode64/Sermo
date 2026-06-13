@@ -247,7 +247,9 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	for _, r := range firing {
 		op, hasOp := r.OperationAction()
 		if !hasOp {
-			// A remediation rule with no operation (alert-only) just notifies.
+			// Validation rejects operation-less remediation rules; tolerate one
+			// that bypassed it (hand-built Rule) by at least delivering its
+			// alerts instead of silently doing nothing.
 			w.emitAlerts(ctx, r)
 			continue
 		}
@@ -284,10 +286,10 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		if result.RecordsRemediation() {
 			w.State.Record(now(), w.Policy)
 		}
-		// A successful (re)launch now runs against the current files, so refresh
-		// the watched baselines — otherwise a `changed:`-driven restart would fire
-		// again every cycle.
-		if result.OK() && (action == "restart" || action == "start") {
+		// A successful (re)launch or reload now runs against the current files,
+		// so refresh the watched baselines — otherwise a `changed:`-driven
+		// restart/reload would fire again every cycle.
+		if result.OK() && (action == "restart" || action == "start" || action == "reload") {
 			w.acknowledgeChanges()
 		}
 		w.emit(Event{Kind: eventKindForResult(result), Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})
