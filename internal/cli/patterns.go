@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"text/tabwriter"
 
 	"sermo/internal/cfgval"
@@ -23,8 +23,8 @@ func (a App) runPatterns(opts options) int {
 		Description string `json:"description,omitempty"`
 	}
 
-	names := append([]string(nil), cfg.PatternNames...)
-	sort.Strings(names)
+	names := slices.Clone(cfg.PatternNames)
+	slices.Sort(names)
 	var reports []setReport
 	seen := map[string]bool{}
 	for _, name := range names {
