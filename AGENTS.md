@@ -41,6 +41,28 @@ commands (systemctl, rc-service, user checks, hooks, ldd, etc.) must go through
 the `execx` runner with a context and an explicit timeout. `execx` is the only
 sanctioned execution surface.
 
+## Documentation lockstep
+
+When you change configuration, add a check type, notifier, rule action or
+observable behavior, update the corresponding documentation, catalog examples
+(when generally useful) and `docs/configuration.md` / `docs/rules.md` in the
+same change. Keep `configs/sermo.yml` comments current. Code and docs must
+evolve together.
+
+## Central builders
+
+New check types, watch kinds, notifiers and rule actions must be introduced
+exclusively through the central builder functions (`internal/checks/build.go`,
+`internal/app/watch_build.go`, `internal/notify/`, rule builders, etc.). Do not
+duplicate construction logic or add ad-hoc cases across packages.
+
+## Timeout discipline
+
+Every blocking operation (commands, network, database, I/O, etc.) must be
+bounded by a timeout taken from engine configuration (via `app.EngineDuration`
+or `cfgval`) or a named, documented constant. Magic duration literals in
+application logic are forbidden.
+
 ## Web UI cohesion
 
 The web UI is a single embedded document, `internal/web/index.html` (HTML, CSS

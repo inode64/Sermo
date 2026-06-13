@@ -25,6 +25,15 @@ You are implementing Go code for Sermo.
 13. All service start/stop/restart/reload/signals must go through the
     `internal/operation` package. Do not bypass it. See AGENTS.md "Service
     operations".
+14. Keep documentation, catalog examples and `docs/configuration.md` / `docs/rules.md`
+    in step with any config, check, notifier or behavior change. See AGENTS.md
+    "Documentation lockstep".
+15. Introduce new check types, watches, notifiers and rule actions only through
+    the central builder functions. Do not scatter construction logic. See
+    AGENTS.md "Central builders".
+16. Bound every blocking operation with a timeout from configuration or a named
+    constant. No magic durations in application logic. See AGENTS.md "Timeout
+    discipline".
 
 ## External command pattern
 
