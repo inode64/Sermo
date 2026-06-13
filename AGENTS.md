@@ -18,9 +18,28 @@ step with YAML behavior.
 
 ## Naming and terminology
 
-Use consistent names for the same concept across variables, parameters, comments,
-and struct fields; when in doubt, prefer the existing struct/API field name as
-the canonical term.
+Names are vocabulary. Use exactly the same name for a given concept across
+variables, parameters, comments and struct fields.
+
+This is the naming counterpart of "Reuse and shared behavior". Before choosing
+a name, look at the structs that already model the concept (e.g. `config.Service`,
+`process.Selector`, `app.Event`). When in doubt, treat the field name from the
+public struct or API as the single canonical term.
+
+## Service operations
+
+Every start, stop, restart, reload or signal action on a service must go through
+the shared `internal/operation` package (and its engine). Do not call backends
+directly, do not send signals from `app/` or `cli/`, and do not bypass locks,
+guards, preflight or policy. The operation path is the single source of truth
+for safe service control.
+
+## External commands
+
+Never call `os/exec`, `exec.Command` or equivalent directly. All external
+commands (systemctl, rc-service, user checks, hooks, ldd, etc.) must go through
+the `execx` runner with a context and an explicit timeout. `execx` is the only
+sanctioned execution surface.
 
 ## Web UI cohesion
 
