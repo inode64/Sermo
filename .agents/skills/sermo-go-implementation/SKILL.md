@@ -17,9 +17,14 @@ You are implementing Go code for Sermo.
 8. Do not use package-level mutable state unless unavoidable.
 9. Keep exported APIs minimal.
 10. Keep Linux-specific behavior behind interfaces where possible.
-11. Use consistent names for the same concept across variables, parameters,
-    comments, and struct fields; when in doubt, prefer the existing struct/API
-    field name as the canonical term. (See AGENTS.md "Naming and terminology".)
+11. Use exactly the same name for a concept in variables, parameters, comments
+    and struct fields. Look at the model structs first; prefer the public field
+    name as the canonical term (see AGENTS.md "Naming and terminology").
+12. Never call `os/exec` directly. Route everything through the `execx` runner
+    (context + timeout). See AGENTS.md "External commands".
+13. All service start/stop/restart/reload/signals must go through the
+    `internal/operation` package. Do not bypass it. See AGENTS.md "Service
+    operations".
 
 ## External command pattern
 
