@@ -434,7 +434,15 @@
     <button id="event-clear">clear</button>
     <span id="event-count" class="muted"></span>
   </div>
-  <table class="events"><tbody id="events"></tbody></table>
+  <table class="events">
+    <thead><tr>
+      <th class="sortable" data-ev-sort="time">Time<span class="sort-ind" data-ei="time"></span></th>
+      <th class="sortable" data-ev-sort="subject">Service / watch<span class="sort-ind" data-ei="subject"></span></th>
+      <th class="sortable" data-ev-sort="kind">Kind<span class="sort-ind" data-ei="kind"></span></th>
+      <th class="sortable" data-ev-sort="message">Message<span class="sort-ind" data-ei="message"></span></th>
+    </tr></thead>
+    <tbody id="events"></tbody>
+  </table>
 </details>
 
 <details id="notifiers-section" style="display:none">
@@ -757,10 +765,28 @@ function groupedEvents(events) {
   return [...map.values()];
 }
 
+// Column sort for the global events feed: empty key keeps the API order (newest
+// first); clicking a header sorts by it, clicking again flips direction. Mirrors
+// the services/watches/apps panels via the shared toggleSort/sortedBy helpers.
+let evSort = { key: "", dir: 1 };
+const evSortKeys = {
+  time: (e) => e.time || "",
+  subject: (e) => eventSubject(e).toLowerCase(),
+  kind: (e) => (e.kind || "").toLowerCase(),
+  message: (e) => (e.message || "").toLowerCase(),
+};
+function setEvSort(key) { toggleSort(evSort, key, renderGlobalEvents); }
+function updateEvSortIndicators() { updateSortIndicatorsFor("ei", evSort); }
+function sortedEvents(events) {
+  if (!evSort.key || !evSortKeys[evSort.key]) return events;
+  return sortedBy(events.slice(), evSort, evSortKeys, "time");
+}
+
 function renderGlobalEvents() {
   const tbody = $("#events");
   if (!tbody) return;
-  const events = allEvents || [];
+  updateEvSortIndicators();
+  const events = sortedEvents(allEvents || []);
   const cnt = $("#event-count");
   if (cnt) cnt.textContent = events.length ? `${events.length} shown` : "";
   const grouped = $("#event-group") && $("#event-group").checked;
@@ -3437,6 +3463,10 @@ function initStaticHandlers() {
 
   document.querySelectorAll(".services-table th.sortable[data-sort]").forEach((th) => {
     th.addEventListener("click", () => setSvcSort(th.dataset.sort || ""));
+  });
+
+  document.querySelectorAll(".events th.sortable[data-ev-sort]").forEach((th) => {
+    th.addEventListener("click", () => setEvSort(th.dataset.evSort || ""));
   });
 
   const watchSearch = $("#watch-search");
