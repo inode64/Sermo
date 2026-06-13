@@ -1,0 +1,13 @@
+kind: daemon
+name: rpcbind
+display_name: "RPC Bind"
+description: "ONC RPC portmapper."
+service: rpcbind
+
+variables:
+  host: 127.0.0.1
+  port: 111
+
+checks:
+  service: { type: service, expect: active }
+  rpcbind: { type: rpcbind, host: "${host}", port: "${port}", timeout: 3s }

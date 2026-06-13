@@ -2,7 +2,9 @@ kind: daemon
 name: dbus-daemon
 display_name: "D-Bus"
 description: "DBus Daemon"
-service: dbus-daemon
+service:
+  systemd: [dbus]
+  openrc: [dbus, dbus-daemon]
 apps: [dbus-daemon]
 
 # Defining pidfile auto-wires process-tree monitoring and a

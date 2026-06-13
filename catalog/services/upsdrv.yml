@@ -1,0 +1,8 @@
+kind: daemon
+name: upsdrv
+display_name: "NUT UPS Drivers"
+description: "Network UPS Tools driver supervisor."
+service: upsdrv
+
+checks:
+  service: { type: service, expect: active }

@@ -2,9 +2,10 @@ kind: daemon
 name: rpc-statd
 display_name: "NFS Status Monitor"
 description: "RPC"
-service: rpc-statd
+service:
+  systemd: [rpc-statd]
+  openrc: [rpc.statd, rpc-statd]
 apps: [rpc-statd]
 
 checks:
   service: { type: service, expect: active }
-  statd: { type: statd, timeout: 3s }

@@ -2,13 +2,15 @@ kind: daemon
 name: cups-config
 display_name: "CUPS"
 description: "CUPSD"
-service: cups-config
+service:
+  systemd: [cups]
+  openrc: [cupsd, cups-config]
 apps: [cups-config]
 
 variables:
   port: 631
 preflight:
-  config: { type: command, command: ["/usr/bin/cupsd","-t"], timeout: 30s }
+  config: { type: command, command: ["/usr/sbin/cupsd","-t"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }
