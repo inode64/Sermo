@@ -115,6 +115,29 @@ func TestScanMatchesBareAndIgnoresOtherServices(t *testing.T) {
 	}
 }
 
+func TestScanServicesClassifiesSeveralServices(t *testing.T) {
+	dir := t.TempDir()
+	future := fixedNow.Add(time.Hour)
+	past := fixedNow.Add(-time.Hour)
+	writeLock(t, dir, "mysql.backup.lock", lockFile{Service: "mysql", Name: "backup", OwnerPID: 1, ExpiresAt: future})
+	writeLock(t, dir, "redis.lock", lockFile{Service: "redis", OwnerPID: 1, ExpiresAt: past})
+	writeLock(t, dir, "other.lock", lockFile{Service: "other", OwnerPID: 1, ExpiresAt: future})
+
+	reports, err := scannerFor(dir, fakeProc{alive: map[int]bool{1: true}}).ScanServices([]string{"mysql", "redis", "missing"})
+	if err != nil {
+		t.Fatalf("ScanServices() error = %v", err)
+	}
+	if len(reports["mysql"].Locks) != 1 || reports["mysql"].Locks[0].Name != "backup" || reports["mysql"].Locks[0].State != StateActive {
+		t.Fatalf("mysql locks = %+v, want active backup", reports["mysql"].Locks)
+	}
+	if len(reports["redis"].Locks) != 1 || reports["redis"].Locks[0].Name != "" || reports["redis"].Locks[0].State != StateExpired {
+		t.Fatalf("redis locks = %+v, want expired default", reports["redis"].Locks)
+	}
+	if len(reports["missing"].Locks) != 0 {
+		t.Fatalf("missing locks = %+v, want none", reports["missing"].Locks)
+	}
+}
+
 func TestScanMissingDirIsEmpty(t *testing.T) {
 	report, err := scannerFor(filepath.Join(t.TempDir(), "absent"), fakeProc{}).Scan("mysql")
 	if err != nil {
@@ -122,6 +145,16 @@ func TestScanMissingDirIsEmpty(t *testing.T) {
 	}
 	if len(report.Locks) != 0 {
 		t.Fatalf("got %d locks, want 0", len(report.Locks))
+	}
+}
+
+func TestScanServicesMissingDirIsEmpty(t *testing.T) {
+	reports, err := scannerFor(filepath.Join(t.TempDir(), "absent"), fakeProc{}).ScanServices([]string{"mysql", "redis"})
+	if err != nil {
+		t.Fatalf("ScanServices() error = %v", err)
+	}
+	if len(reports["mysql"].Locks) != 0 || len(reports["redis"].Locks) != 0 {
+		t.Fatalf("reports = %+v, want empty locks", reports)
 	}
 }
 
@@ -159,6 +192,26 @@ func TestScanMalformedFileWarns(t *testing.T) {
 	}
 	if len(report.Warnings) != 1 {
 		t.Errorf("expected 1 warning, got %v", report.Warnings)
+	}
+}
+
+func TestScanServicesMalformedFileWarnsMatchingService(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "mysql.lock"), []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reports, err := scannerFor(dir, fakeProc{}).ScanServices([]string{"mysql", "redis"})
+	if err != nil {
+		t.Fatalf("ScanServices() error = %v", err)
+	}
+	if len(reports["mysql"].Locks) != 0 || len(reports["mysql"].Warnings) != 1 {
+		t.Fatalf("mysql report = %+v, want one warning and no locks", reports["mysql"])
+	}
+	if len(reports["redis"].Warnings) != 0 {
+		t.Fatalf("redis warnings = %+v, want none", reports["redis"].Warnings)
 	}
 }
 

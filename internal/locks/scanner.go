@@ -37,6 +37,17 @@ func NewScanner(dir string) Scanner {
 // as active, expired or stale. A missing directory yields an empty report (a
 // host may simply have no locks); an unreadable directory is an error.
 func (s Scanner) Scan(service string) (Report, error) {
+	reports, err := s.ScanServices([]string{service})
+	if err != nil {
+		return Report{Service: service}, err
+	}
+	return reports[service], nil
+}
+
+// ScanServices returns named runtime locks for each requested service, reading
+// the locks directory once. Reports are keyed by service and always include every
+// requested service, even when it has no locks.
+func (s Scanner) ScanServices(services []string) (map[string]Report, error) {
 	proc := s.Proc
 	if proc == nil {
 		proc = OSProcessProber{}
@@ -46,14 +57,17 @@ func (s Scanner) Scan(service string) (Report, error) {
 		now = s.Now
 	}
 
-	report := Report{Service: service}
+	reports := make(map[string]Report, len(services))
+	for _, service := range services {
+		reports[service] = Report{Service: service}
+	}
 
 	entries, err := os.ReadDir(s.Dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return report, nil
+			return reports, nil
 		}
-		return report, fmt.Errorf("read locks dir %s: %w", s.Dir, err)
+		return reports, fmt.Errorf("read locks dir %s: %w", s.Dir, err)
 	}
 
 	names := make([]string, 0, len(entries))
@@ -65,32 +79,40 @@ func (s Scanner) Scan(service string) (Report, error) {
 	sort.Strings(names)
 
 	for _, fileName := range names {
-		lockName, ok := matchService(fileName, service)
-		if !ok {
+		matches := lockServiceMatches(fileName, services)
+		if len(matches) == 0 {
 			continue
 		}
 		path := filepath.Join(s.Dir, fileName)
-		lf, err := readLockFile(path)
-		if err != nil {
-			report.Warnings = append(report.Warnings, err.Error())
+		lf, readErr := readLockFile(path)
+		if readErr != nil {
+			for _, match := range matches {
+				report := reports[match.service]
+				report.Warnings = append(report.Warnings, readErr.Error())
+				reports[match.service] = report
+			}
 			continue
 		}
-
 		state, staleReason := classify(lf, now(), proc)
-		report.Locks = append(report.Locks, Lock{
-			Service:         orDefault(lf.Service, service),
-			Name:            orDefault(lf.Name, lockName),
-			Reason:          lf.Reason,
-			OwnerPID:        lf.OwnerPID,
-			OwnerStartTicks: lf.OwnerStartTicks,
-			CreatedAt:       lf.CreatedAt,
-			ExpiresAt:       lf.ExpiresAt,
-			Path:            path,
-			State:           state,
-			StaleReason:     staleReason,
-		})
+
+		for _, match := range matches {
+			report := reports[match.service]
+			report.Locks = append(report.Locks, Lock{
+				Service:         orDefault(lf.Service, match.service),
+				Name:            orDefault(lf.Name, match.lockName),
+				Reason:          lf.Reason,
+				OwnerPID:        lf.OwnerPID,
+				OwnerStartTicks: lf.OwnerStartTicks,
+				CreatedAt:       lf.CreatedAt,
+				ExpiresAt:       lf.ExpiresAt,
+				Path:            path,
+				State:           state,
+				StaleReason:     staleReason,
+			})
+			reports[match.service] = report
+		}
 	}
-	return report, nil
+	return reports, nil
 }
 
 // ScanDir returns a warning for every lock file under Dir that cannot be read or
@@ -135,6 +157,23 @@ func matchService(fileName, service string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+type lockServiceMatch struct {
+	service  string
+	lockName string
+}
+
+func lockServiceMatches(fileName string, services []string) []lockServiceMatch {
+	var matches []lockServiceMatch
+	for _, service := range services {
+		lockName, ok := matchService(fileName, service)
+		if !ok {
+			continue
+		}
+		matches = append(matches, lockServiceMatch{service: service, lockName: lockName})
+	}
+	return matches
 }
 
 func readLockFile(path string) (lockFile, error) {

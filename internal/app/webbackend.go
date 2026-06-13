@@ -311,6 +311,10 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 }
 
 func (b *WebBackend) viewWithEvent(ctx context.Context, name string, e *webEntry, lastEvent *web.Event) web.Service {
+	return b.viewWithRuntime(ctx, name, e, lastEvent, nil, false)
+}
+
+func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEntry, lastEvent *web.Event, activeLocks []string, activeLocksReady bool) web.Service {
 	svc := web.Service{
 		Name:        name,
 		DisplayName: e.displayName,
@@ -351,8 +355,11 @@ func (b *WebBackend) viewWithEvent(ctx context.Context, name string, e *webEntry
 	if failing > 0 {
 		svc.ChecksFailing = failing
 	}
-	if locks := activeLockNames(b.cfg, name); len(locks) > 0 {
-		svc.ActiveLocks = locks
+	if !activeLocksReady {
+		activeLocks = activeLockNames(b.cfg, name)
+	}
+	if len(activeLocks) > 0 {
+		svc.ActiveLocks = activeLocks
 	}
 	b.decorateRemediation(name, &svc)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth)
@@ -406,6 +413,10 @@ func activeLockNames(cfg *config.Config, service string) []string {
 	if err != nil {
 		return nil
 	}
+	return activeLockNamesFromReport(report)
+}
+
+func activeLockNamesFromReport(report locks.Report) []string {
 	var names []string
 	for _, lk := range report.Locks {
 		if lk.State != locks.StateActive {
@@ -418,6 +429,21 @@ func activeLockNames(cfg *config.Config, service string) []string {
 		names = append(names, n)
 	}
 	return names
+}
+
+func (b *WebBackend) activeLockNamesByService() map[string][]string {
+	if b.cfg == nil || len(b.order) == 0 {
+		return nil
+	}
+	reports, err := locksScanner(b.cfg).ScanServices(b.order)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string][]string, len(reports))
+	for name, report := range reports {
+		out[name] = activeLockNamesFromReport(report)
+	}
+	return out
 }
 
 // checkHealthSummary reports required-check health for the service list. It uses
@@ -459,8 +485,9 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, moni
 func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
 	lastEvents := b.lastServiceEvents()
+	activeLocks := b.activeLockNamesByService()
 	for _, name := range b.order {
-		out = append(out, b.viewWithEvent(ctx, name, b.entries[name], lastEvents[name]))
+		out = append(out, b.viewWithRuntime(ctx, name, b.entries[name], lastEvents[name], activeLocks[name], true))
 	}
 	return out
 }
