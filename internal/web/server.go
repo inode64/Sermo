@@ -88,6 +88,7 @@ type Watch struct {
 	Conditions       []WatchCondition `json:"conditions,omitempty"`
 	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
 	Swap             *SwapWatchInfo   `json:"swap,omitempty"`
+	Meter            *WatchMeter      `json:"meter,omitempty"`
 	Expand           *WatchExpand     `json:"expand,omitempty"`
 	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
 	LastActivityKind string           `json:"last_activity_kind,omitempty"`
@@ -112,6 +113,26 @@ type SwapWatchInfo struct {
 	UsedBytes  uint64  `json:"used_bytes"`
 	FreeBytes  uint64  `json:"free_bytes"`
 	UsedPct    float64 `json:"used_pct"`
+}
+
+// WatchMeter is a generic 0-100% usage gauge for a host watch that has a
+// natural capacity (memory, load, fds, pids), giving those watches the same
+// progress-bar rendering as swap/disk. UsedPct always drives the bar; the
+// kind-specific fields below carry the human-readable detail (bytes for
+// memory, counts for fds/pids, raw load vs CPU count for load).
+type WatchMeter struct {
+	Kind    string  `json:"kind"` // memory | load | fds | pids
+	UsedPct float64 `json:"used_pct"`
+	// Memory: byte capacity.
+	TotalBytes uint64 `json:"total_bytes,omitempty"`
+	UsedBytes  uint64 `json:"used_bytes,omitempty"`
+	FreeBytes  uint64 `json:"free_bytes,omitempty"`
+	// fds / pids: count vs kernel limit.
+	Count uint64 `json:"count,omitempty"`
+	Max   uint64 `json:"max,omitempty"`
+	// load: 1-minute load average vs logical CPU count.
+	Load   float64 `json:"load,omitempty"`
+	NumCPU int     `json:"num_cpu,omitempty"`
 }
 
 // DiskWatchInfo is live filesystem data for a storage host watch.

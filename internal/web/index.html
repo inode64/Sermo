@@ -244,6 +244,8 @@
   .usagebar.usage-high { --usage-color: #fb8500; }
   .usagebar.usage-crit { --usage-color: #cf222e; }
   .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: var(--text); text-shadow: 0 1px 0 var(--panel), 0 -1px 0 var(--panel), 1px 0 0 var(--panel), -1px 0 0 var(--panel); }
+  .usagebar.usagebar-sm { width: 5.5rem; height: .85rem; }
+  .usagebar.usagebar-sm .usagebar-label { font-size: .58rem; }
   .watch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .35rem 1rem; margin: .2rem 0 .65rem; font-size: .9rem; }
   .watch-grid div { min-width: 0; overflow-wrap: anywhere; }
 
@@ -884,6 +886,7 @@ let liveOpsSlots = null;
 let latestLocks = [];
 let latestActivity = null;
 let latestReady = null;
+let latestHostMetrics = [];   // last /api/host readings (for process memory bars)
 let latestDiagnostics = [];
 
 function targetStateClass(state) {
@@ -1427,7 +1430,14 @@ function renderExpansion(d, metrics, beats) {
     threads: procs.reduce((a, p) => a + (p.threads || 0), 0),
     count: procs.length,
   };
-  const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b> · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`;
+  // When the host RAM total is known, show each process's resident memory as a
+  // share of host RAM (a compact bar), plus a bar on the whole-tree total.
+  const hostMem = hostMemTotalBytes();
+  const memPct = (rss) => hostMem > 0 ? pctClamp((Number(rss) || 0) / hostMem * 100) : 0;
+  const totalBar = hostMem > 0
+    ? ` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
+    : "";
+  const totals = `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar} · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`;
   const lat = renderLatency(metrics);
   const sla = renderSLA(d.sla);
   const strip = beats || "";
@@ -1440,7 +1450,7 @@ function renderExpansion(d, metrics, beats) {
           <td>${p.exe ? esc(p.exe) : '<span class="muted">unknown</span>'}</td>
           <td class="muted">${esc(p.user || "")}</td>
           <td class="muted">${esc(p.role || "")}</td>
-          <td>${p.rss ? fmtBytes(p.rss) : '—'}</td>
+          <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           <td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td>
           <td class="muted">${p.fds || '—'}</td>
           <td class="muted">${p.threads || '—'}</td>
@@ -1516,6 +1526,23 @@ function usageBar(pct) {
   return `<span class="usagebar ${usageLevel(p)}" style="--usage-pct:${width}%" title="${label} used · ${freeLabel} free" aria-label="${label} used, ${freeLabel} free"><span class="usagebar-fill"></span><span class="usagebar-label">${label} used</span></span>`;
 }
 
+// usageBarMini is the compact bar used inside dense tables (the process list).
+// Same colour scale as usageBar but narrower, and the caller supplies the label
+// (e.g. the byte value) so the cell stays readable.
+function usageBarMini(pct, label, title) {
+  const p = pctClamp(pct);
+  const lbl = label != null ? label : fmtPct(p);
+  const tip = title != null ? title : `${fmtPct(p)} of host RAM`;
+  return `<span class="usagebar usagebar-sm ${usageLevel(p)}" style="--usage-pct:${p.toFixed(2)}%" title="${esc(tip)}"><span class="usagebar-fill"></span><span class="usagebar-label">${esc(lbl)}</span></span>`;
+}
+
+// hostMemTotalBytes returns the host's total RAM in bytes from the last
+// /api/host snapshot, or 0 when unknown (so callers can skip the bar).
+function hostMemTotalBytes() {
+  const m = (latestHostMetrics || []).find((x) => x.name === "total_memory");
+  return m && m.total > 0 ? Number(m.total) : 0;
+}
+
 function diskUsedPct(d) {
   if (!d) return 0;
   const used = Number(d.used_bytes);
@@ -1536,6 +1563,36 @@ function notifierCell(w) {
   return (w && w.notifier_count > 0) ? esc(String(w.notifier_count)) : "—";
 }
 
+// meterParts returns the [title, detail] strings for a generic usage meter
+// (memory/load/fds/pids), shared by the summary cell, the search index, and the
+// detail panel so the wording can't drift.
+function meterParts(m) {
+  if (!m) return null;
+  switch (m.kind) {
+    case "memory":
+      return [`memory · ${fmtBytes(m.total_bytes)} total`,
+        `${fmtBytes(m.used_bytes)} used · ${fmtBytes(m.free_bytes)} free`];
+    case "load":
+      return [`load · ${m.num_cpu || 0} CPU${(m.num_cpu === 1) ? "" : "s"}`,
+        `load1 ${(m.load || 0).toFixed(2)} · ${fmtPct(m.used_pct)} of capacity`];
+    case "fds":
+      return [`file descriptors · ${(m.max || 0).toLocaleString()} max`,
+        `${(m.count || 0).toLocaleString()} allocated · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
+    case "pids":
+      return [`PID table · ${(m.max || 0).toLocaleString()} max`,
+        `${(m.count || 0).toLocaleString()} in use · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
+    default:
+      return null;
+  }
+}
+
+function meterSummaryCell(m) {
+  const parts = meterParts(m);
+  if (!parts) return "";
+  return `<div>${esc(parts[0])}</div>
+    <div>${usageBar(pctClamp(m.used_pct || 0))} <span class="muted">· ${esc(parts[1])}</span></div>`;
+}
+
 function watchSummaryCell(w) {
   if (!w) return "—";
   const sw = w.swap;
@@ -1544,6 +1601,8 @@ function watchSummaryCell(w) {
     return `<div>swap<span class="muted"> · ${fmtBytes(sw.total_bytes)} total</span></div>
       <div>${usageBar(pctClamp(sw.used_pct || 0))} <span class="muted">· ${fmtBytes(sw.used_bytes)} used · ${fmtBytes(sw.free_bytes)} free</span></div>`;
   }
+  const meterCell = meterSummaryCell(w.meter);
+  if (meterCell) return meterCell;
   const d = w.disk;
   if (d) {
     if (d.sample_error) {
@@ -1622,6 +1681,8 @@ function watchSummaryText(w) {
       fmtPct(diskUsedPct(d)) + " used",
     ].filter(Boolean).join(" ");
   }
+  const parts = meterParts(w.meter);
+  if (parts) return parts.join(" ") + " " + fmtPct(w.meter.used_pct) + " used";
   return w.summary || "";
 }
 
@@ -1774,6 +1835,33 @@ function renderDiskWatch(d) {
     <div><span class="muted">Inodes</span><br>${inodes}</div>
     <div><span class="muted">Options</span><br>${options}</div>
   </div>${errors}`;
+}
+
+// renderMeterWatch shows a memory/load/fds/pids watch's live gauge in the
+// expansion detail, reusing the watch-grid layout that renderDiskWatch uses.
+function renderMeterWatch(m) {
+  if (!m) return "";
+  const usedPct = pctClamp(m.used_pct || 0);
+  const cells = [];
+  if (m.kind === "memory") {
+    cells.push(
+      `<div><span class="muted">Total</span><br><b>${fmtBytes(m.total_bytes)}</b></div>`,
+      `<div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(m.used_bytes)}</b></div>`,
+      `<div><span class="muted">Free</span><br><b>${fmtBytes(m.free_bytes)}</b></div>`);
+  } else if (m.kind === "load") {
+    cells.push(
+      `<div><span class="muted">Load 1m</span><br><b>${(m.load || 0).toFixed(2)}</b></div>`,
+      `<div><span class="muted">CPUs</span><br><b>${m.num_cpu || 0}</b></div>`,
+      `<div><span class="muted">Capacity</span><br>${usageBar(usedPct)} <b>${fmtPct(m.used_pct)}</b></div>`);
+  } else { // fds | pids
+    const label = m.kind === "fds" ? "Allocated" : "In use";
+    cells.push(
+      `<div><span class="muted">${label}</span><br><b>${(m.count || 0).toLocaleString()}</b></div>`,
+      `<div><span class="muted">Max</span><br><b>${(m.max || 0).toLocaleString()}</b></div>`,
+      `<div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtPct(m.used_pct)}</b></div>`,
+      `<div><span class="muted">Free</span><br><b>${((m.max || 0) - (m.count || 0)).toLocaleString()}</b></div>`);
+  }
+  return `<div class="watch-grid">${cells.join("")}</div>`;
 }
 
 function renderWatches(watches) {
@@ -1960,7 +2048,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
   </div>`;
-  const disk = renderDiskWatch(w.disk);
+  const disk = renderDiskWatch(w.disk) + renderMeterWatch(w.meter);
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return cfg + disk + conditions + '<div class="muted">No recent activity.</div>';
   const rows = events.slice(0, 50).map((e) => {
@@ -2264,7 +2352,19 @@ function renderOverview(ctx) {
     tiles.push(tile({ label: "Host swap", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p), target: "daemon-section" }));
   }
   if (load && load.absolute != null) {
-    tiles.push(tile({ label: "Load 1m", value: esc(load.absolute.toFixed(2)), sub: live && live.uptime ? `up ${esc(live.uptime)}` : "", target: "daemon-section" }));
+    // load.total carries the logical CPU count and load.percent the saturation
+    // (load1/CPUs), so the tile gets the same bar as cpu/mem/swap. >100% means
+    // the run queue exceeds the cores.
+    const hasCap = load.total > 0;
+    const p = hasCap ? pctClamp(load.percent || 0) : 0;
+    tiles.push(tile({
+      label: "Load 1m",
+      value: esc(load.absolute.toFixed(2)),
+      sub: hasCap ? `${esc(load.total.toFixed(0))} CPUs · ${fmtPct(load.percent)}` : (live && live.uptime ? `up ${esc(live.uptime)}` : ""),
+      cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
+      extra: hasCap ? usageBar(p) : "",
+      target: "daemon-section",
+    }));
   }
   band.innerHTML = tiles.join("");
 }
@@ -2297,6 +2397,7 @@ async function renderStatus() {
     latestReady = ready;
     liveOpsSlots = ops;
     latestLocks = locks || [];
+    latestHostMetrics = hostMetrics || [];
 
     // System-status line (line 2): host identity + detected backend + OS + live readings.
     const sys = $("#system-status");
@@ -3250,7 +3351,7 @@ function setRefresh(v) {
   try { localStorage.setItem("sermo-refresh", String(ms)); } catch (_) {}
 }
 (function initRefresh() {
-  let ms = 5000;
+  let ms = 30000;
   try { const s = localStorage.getItem("sermo-refresh"); if (s !== null) ms = parseInt(s, 10) || 0; } catch (_) {}
   const sel = $("#refresh-select");
   if (sel) sel.value = String(ms);
