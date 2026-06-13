@@ -1,5 +1,77 @@
 # Sermo — project conventions
 
+## AI / agent workspaces — git worktrees mandatory for code modifications
+
+All AI agents, sub-agents, assistant sessions and automated coding processes that will modify source files **must** operate inside a dedicated `git worktree`. Direct edits from the primary checkout are reserved exclusively for the human operator.
+
+**Goals**
+- Multiple agent instances can execute in parallel (separate directories → no file conflicts).
+- The human's primary tree on the local `main` branch remains permanently clean and is the single integration point.
+- Agent work is trivially inspectable, diffable, discardable or mergeable as an atomic unit.
+- Matches the isolation facilities provided by the environment (e.g. `spawn_subagent` with `isolation: "worktree"`).
+
+**Mandatory workflow**
+
+1. The primary (human-facing) session keeps its working tree on a clean local `main` at all times.
+2. When an agent needs to change code, it (or its spawner) first creates a dedicated worktree + branch from the primary checkout:
+
+   ```sh
+   # Execute from the primary Sermo directory (must be on main, tree clean)
+   git worktree add -b agent/<task-slug> ../sermo-agent-<task-slug>
+   cd ../sermo-agent-<task-slug>
+   ```
+
+   Choose a short descriptive slug (`disk-metrics-refactor`, `add-foo-check-20250613`, ...). Sibling directories keep navigation simple.
+
+3. **All** development work happens inside the worktree:
+   - File creation/edits (editors, `search_replace`, `write`, ...).
+   - Builds, tests, `make lint`, gofmt, etc.
+   - Any locally built `bin/sermoctl` / `bin/sermod` used for manual verification.
+   - The agent must still obey every rule in this document (reuse, safety invariants, documentation lockstep, full quality gates, etc.).
+
+4. When the unit of work is finished and has passed the complete battery:
+   - Commit inside the worktree (the agent may stage but the human usually reviews before the final merge):
+
+     ```sh
+     git add -A
+     git commit -m "agent: <concise description of the change>"
+     ```
+
+5. Integration is always performed **from the primary checkout** (still on local `main`):
+
+   ```sh
+   # From primary Sermo checkout on main
+   git merge --no-ff ../sermo-agent-<task-slug> -m "Merge agent/<task-slug>: <summary>"
+
+   # Clean up
+   git worktree remove ../sermo-agent-<task-slug>
+   git branch -d agent/<task-slug>
+   ```
+
+   You can also use the fetch form if preferred:
+
+   ```sh
+   git fetch ../sermo-agent-<task-slug> agent/<task-slug>
+   git merge --no-ff FETCH_HEAD -m "..."
+   ```
+
+   The human reviews the diff and is the gate for the merge. Agent sessions must never push their branches to `origin`.
+
+6. Tool-spawned sub-agents that will write files **must** request worktree isolation when the launcher supports it:
+
+   When using `spawn_subagent` (or any equivalent sub-task primitive), pass `isolation: "worktree"`. The child receives its own isolated checkout; the framework returns the worktree path. The child agent follows the same "commit inside worktree → parent merges from primary" discipline. After the child finishes, the parent is responsible for the merge + `worktree remove`.
+
+**Prohibitions**
+- Never modify files while your current working directory is the primary checkout (except the human operator for trivial fixes).
+- Never reuse or nest worktrees for unrelated tasks.
+- Never leave a worktree behind after the corresponding branch has been merged or abandoned (`git worktree prune` helps).
+- Never `git push` agent branches unless the human explicitly asks for a PR.
+
+**Relationship to the rest of AGENTS.md**
+This workflow is part of the "Small-change checklist". Every implementation plan, skill, or prompt that drives agents on Sermo must start by establishing (or declaring use of) a worktree and must end by merging the result back into local `main`.
+
+Update this section when the coding environment changes its sub-agent isolation primitives.
+
 ## Reuse and shared behavior
 
 Default to the smallest change that preserves the current design. Before adding
@@ -99,6 +171,7 @@ they bound the test itself rather than production behavior.
 
 Before finishing any code change:
 
+- **Worktree discipline (AI agents):** If you are an agent that edits code, you must have performed the work inside a dedicated `git worktree` created from a clean primary `main`, and the final merge back to local `main` (plus `worktree remove`) must be part of completing the change. See "AI / agent workspaces".
 - Search for the existing owner with `rg` before adding a new helper or switch.
 - Keep the patch close to that owner; avoid unrelated refactors.
 - Preserve public YAML, JSON, CLI and web field names unless the change is
