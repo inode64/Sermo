@@ -158,8 +158,8 @@
   #overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .65rem; margin: .8rem 0 .15rem; }
   .tile {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-    box-shadow: var(--shadow); padding: .6rem .85rem .65rem; min-width: 0;
-    text-align: left; font: inherit; color: inherit; display: block; width: 100%;
+    box-shadow: var(--shadow); padding: .6rem .85rem .65rem; min-width: 0; min-height: 6.8rem;
+    text-align: left; font: inherit; color: inherit; display: flex; flex-direction: column; align-items: stretch; width: 100%;
   }
   button.tile:hover { border-color: var(--line-2); background: var(--panel); }
   .tile .t-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; color: var(--text-2); display: flex; justify-content: space-between; gap: .5rem; }
@@ -169,7 +169,7 @@
   .tile.t-ok .t-value { color: var(--ok); }
   .tile.t-warn .t-value { color: var(--warn); }
   .tile.t-crit .t-value { color: var(--crit); }
-  .tile .usagebar { width: 100%; margin-top: .42rem; }
+  .tile .usagebar { width: 100%; margin-top: auto; }
 
   /* ---- panels (cards) -------------------------------------------------------
      Every section is a <details> card: the summary is the card header, the
