@@ -13,6 +13,11 @@ import (
 	"time"
 )
 
+const (
+	maxInt = int(^uint(0) >> 1)
+	minInt = -maxInt - 1
+)
+
 // AsString returns v when it is a string, or "" otherwise. Use it for fields
 // that must already be strings; a non-string value is ignored (typically caught
 // as a validation error elsewhere). To coerce any scalar to its string form,
@@ -104,11 +109,18 @@ func Int(v any) (int, bool) {
 	case int:
 		return t, true
 	case int64:
+		if t < int64(minInt) || t > int64(maxInt) {
+			return 0, false
+		}
 		return int(t), true
 	case uint64:
+		if t > uint64(maxInt) {
+			return 0, false
+		}
 		return int(t), true
 	case float64:
-		return int(t), true
+		n, err := strconv.ParseInt(strconv.FormatFloat(math.Trunc(t), 'f', 0, 64), 10, 0)
+		return int(n), err == nil
 	case string:
 		n, err := strconv.Atoi(strings.TrimSpace(t))
 		return n, err == nil

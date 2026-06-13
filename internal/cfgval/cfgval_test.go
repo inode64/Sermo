@@ -137,6 +137,7 @@ func TestInt(t *testing.T) {
 		{5, 5, true},
 		{int64(6), 6, true},
 		{uint64(7), 7, true},
+		{uint64(maxInt) + 1, 0, false},
 		{8.9, 8, true}, // float truncates
 		{"10", 10, true},
 		{"  12  ", 12, true}, // whitespace trimmed
