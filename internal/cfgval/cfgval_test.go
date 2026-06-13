@@ -253,3 +253,46 @@ func TestCompareFloatCoversCompareOps(t *testing.T) {
 		t.Fatal("an unknown op must never hold")
 	}
 }
+
+func TestFloat(t *testing.T) {
+	cases := []struct {
+		in   any
+		want float64
+		ok   bool
+	}{
+		{5, 5, true}, {int64(5), 5, true}, {uint64(5), 5, true}, {2.5, 2.5, true},
+		{"3.5", 3.5, true}, {"  7 ", 7, true},
+		{"x", 0, false}, {nil, 0, false}, {true, 0, false},
+	}
+	for _, c := range cases {
+		if got, ok := Float(c.in); got != c.want || ok != c.ok {
+			t.Errorf("Float(%#v) = %v,%v want %v,%v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+func TestIsAssertOp(t *testing.T) {
+	for _, op := range []string{">=", ">", "<=", "<", "==", "!=", "contains", "=~"} {
+		if !IsAssertOp(op) {
+			t.Errorf("IsAssertOp(%q) = false, want true", op)
+		}
+	}
+	for _, op := range []string{"", "~", "in", "matches"} {
+		if IsAssertOp(op) {
+			t.Errorf("IsAssertOp(%q) = true, want false", op)
+		}
+	}
+}
+
+func TestDisabled(t *testing.T) {
+	if !Disabled(map[string]any{"enabled": false}) {
+		t.Error("enabled:false must read as disabled")
+	}
+	for _, entry := range []map[string]any{
+		{"enabled": true}, {}, {"enabled": "false"}, // non-bool enabled is NOT an opt-out
+	} {
+		if Disabled(entry) {
+			t.Errorf("%v must read as enabled", entry)
+		}
+	}
+}
