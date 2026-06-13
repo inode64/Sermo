@@ -116,6 +116,23 @@ func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) (
 	}
 	return nil, false
 }
+func (f *fakeBackend) PruneEvents(_ context.Context, before time.Time) int {
+	if before.IsZero() {
+		n := len(f.events)
+		f.events = nil
+		return n
+	}
+	// simple impl for tests: drop if their (string) Time parses before
+	kept := f.events[:0]
+	for _, e := range f.events {
+		if t, err := time.Parse(time.RFC3339, e.Time); err == nil && !t.Before(before) {
+			kept = append(kept, e)
+		}
+	}
+	cleared := len(f.events) - len(kept)
+	f.events = kept
+	return cleared
+}
 func (f *fakeBackend) Metrics(_ context.Context, name, check, _ string, since time.Duration) (MetricSeries, bool) {
 	for _, s := range f.services {
 		if s.Name == name {
@@ -263,7 +280,8 @@ func TestListServices(t *testing.T) {
 func TestListApplications(t *testing.T) {
 	b := &fakeBackend{applications: []Application{{
 		Name: "nginx", DisplayName: "Nginx", Binary: "/usr/bin/nginx",
-		Permissions: "-rwxr-xr-x (0755)", Version: "nginx version: nginx/1.30.2",
+		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
+		Version:      "nginx version: nginx/1.30.2",
 		VersionShort: "1.30.2", Status: "ok",
 	}}}
 	rec := httptest.NewRecorder()
@@ -276,7 +294,8 @@ func TestListApplications(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
-		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" {
+		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
+		got[0].User != "root" || got[0].Group != "root" {
 		t.Fatalf("unexpected applications: %+v", got)
 	}
 }
@@ -649,6 +668,41 @@ func TestUnknownActionIsBadRequest(t *testing.T) {
 	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/services/web/destroy"))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unknown action = %d, want 400", rec.Code)
+	}
+}
+
+func TestEventsClear(t *testing.T) {
+	b := &fakeBackend{
+		events: []Event{
+			{Time: "2026-06-01T00:00:00Z", Kind: "action"},
+			{Time: "2026-06-10T00:00:00Z", Kind: "alert"},
+			{Time: "2026-06-12T00:00:00Z", Kind: "action"},
+		},
+	}
+	h := newServer(b)
+
+	// clear all
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/events/clear"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear all status %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(b.events) != 0 {
+		t.Fatalf("after clear all, events left: %d", len(b.events))
+	}
+
+	// repopulate and clear before a date
+	b.events = []Event{
+		{Time: "2026-06-01T00:00:00Z", Kind: "old"},
+		{Time: "2026-06-12T00:00:00Z", Kind: "keep"},
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/events/clear?before=2026-06-05T00:00:00Z"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("clear before status %d", rec.Code)
+	}
+	if len(b.events) != 1 || b.events[0].Kind != "keep" {
+		t.Fatalf("after prune before, left=%v", b.events)
 	}
 }
 

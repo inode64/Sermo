@@ -1331,6 +1331,8 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 			DisplayName:  r.DisplayName,
 			Binary:       r.Binary,
 			Permissions:  r.Permissions,
+			User:         r.User,
+			Group:        r.Group,
 			Version:      r.Version,
 			VersionShort: r.VersionShort,
 			Status:       r.Status,
@@ -2091,6 +2093,14 @@ func (b *WebBackend) ServiceEvents(_ context.Context, name string, limit int) ([
 		return nil, true
 	}
 	return toWebEvents(b.events.Recent(name, limit)), true
+}
+
+// PruneEvents removes events older than 'before' (all if zero) from the live log.
+func (b *WebBackend) PruneEvents(_ context.Context, before time.Time) int {
+	if b.events == nil {
+		return 0
+	}
+	return b.events.Prune(before)
 }
 
 func toWebEvents(events []LoggedEvent) []web.Event {
