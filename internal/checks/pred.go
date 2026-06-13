@@ -2,6 +2,7 @@ package checks
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -117,6 +118,9 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 	if err != nil {
 		return "", 0, label + " delta value must be numeric"
 	}
+	if math.IsInf(value, 0) || math.IsNaN(value) {
+		return "", 0, label + " delta value must be a finite number"
+	}
 	return op, value, ""
 }
 
@@ -169,7 +173,7 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 	if strings.HasSuffix(field, "_pct") {
 		s := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(value), "%"))
 		val, err := strconv.ParseFloat(s, 64)
-		if err != nil || val < 0 || val > 100 {
+		if err != nil || math.IsInf(val, 0) || math.IsNaN(val) || val < 0 || val > 100 {
 			return 0, fmt.Errorf("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", field, value)
 		}
 		return val, nil
@@ -177,6 +181,9 @@ func parseLevelPredValue(field string, raw any) (float64, error) {
 	val, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%s value %q is not numeric", field, value)
+	}
+	if math.IsInf(val, 0) || math.IsNaN(val) {
+		return 0, fmt.Errorf("%s value %q must be a finite number", field, value)
 	}
 	return val, nil
 }
