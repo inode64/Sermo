@@ -672,3 +672,34 @@ func TestWorkerShadowModeEvaluatesButDoesNotAct(t *testing.T) {
 		t.Error("shadow must not Record remediation state (no pollution of real cooldown)")
 	}
 }
+
+// TestWorkerShadowModeReportsSuppression verifies that when a firing rule would
+// be blocked (here by the cooldown policy), shadow mode still emits a shadow
+// event whose message records *why* the action would have been suppressed, and
+// that the seeded cooldown state is left untouched.
+func TestWorkerShadowModeReportsSuppression(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	state := &rules.RemediationState{LastActionAt: t0.Add(-30 * time.Second)} // within a 1m cooldown
+	tree := remediationTree("restart-if-down", "http", "restart")
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, state)
+	w.Shadow = true
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("shadow mode executed ops=%v; must not call Operate", h.ops)
+	}
+	if _, ok := h.eventOf("suppressed"); ok {
+		t.Fatalf("shadow mode must report via a shadow event, not a plain suppressed one; events=%+v", h.events)
+	}
+	ev, ok := h.eventOf("shadow")
+	if !ok {
+		t.Fatalf("no shadow event emitted; events=%+v", h.events)
+	}
+	if ev.Action != "restart" || !strings.Contains(ev.Message, "suppressed: cooldown") {
+		t.Fatalf("shadow event = %+v, want action=restart and 'suppressed: cooldown' in message", ev)
+	}
+	if !w.State.LastActionAt.Equal(t0.Add(-30 * time.Second)) {
+		t.Errorf("shadow must not mutate the seeded cooldown state, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
