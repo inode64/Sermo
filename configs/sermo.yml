@@ -101,6 +101,16 @@ notifiers:
 # avoid repeating then.notify everywhere. Use per-watch notify: [none] to suppress.
 # notify: [ops-email]
 
+# Per-service (or defaults) remediation mode.
+# shadow: true  evaluates every remediation rule + its for/within windows +
+# guards + cooldown/policy exactly as normal and emits "shadow" events with
+# precise "would restart (suppressed: cooldown)" style messages, but performs
+# zero operations and does not advance any live timers. Use it to audit what
+# Sermo would do before flipping to active (the default).
+#   remediation:
+#     shadow: true
+# Services in shadow mode still run all their checks and host watches normally.
+
 # Host watches: monitor host resources (storage, …) independently of services and,
 # when a threshold is crossed, run a hook command and/or notify named targets.
 # Paused by default: each watch is built and visible in the web UI, but it does
