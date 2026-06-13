@@ -1288,6 +1288,7 @@ bytes), and — once a rate is available — `SERMO_CPU` (percent) and `SERMO_IO
 restart resets it (the real elapsed-since-start is not tracked across restarts).
 `io` reads `/proc/<pid>/io`, which requires the daemon to have permission to read
 it (typically running as root); when it is unreadable the IO condition never fires.
+The WebUI shows current matches, PIDs and aggregate RSS/IO counters.
 
 Other resource types will be added as new check `type` values using the same
 watch/hook structure.
