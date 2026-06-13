@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"sermo/internal/assist"
@@ -47,6 +48,8 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			Port:        daemonPort(resolved.Tree),
 			ConfigPaths: existingConfigFiles(resolved.Tree),
 		}
+		// Best-effort PID source for the wizard's pidfile/command_match question.
+		c.Pidfile, c.Exe = servicemgr.DetectProc(ctx, nil, nil, backend, unit)
 		if c.Port > 0 {
 			c.PortListening = portListening(c.Port)
 		}
@@ -109,7 +112,7 @@ const servicesIncludeDir = "apps"
 // writeWizardServices renders the generated services, confirms, then writes one
 // `kind: service` file per service into the apps includes directory and
 // ensures that directory is listed in paths.includes.
-func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath string, cfg *config.Config, res assist.Result) int {
+func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath string, cfg *config.Config, res assist.Result, env assist.Env) int {
 	existing := serviceNameSet(cfg)
 	docs := map[string]map[string]any{}
 	for name, body := range res.Services {
@@ -137,13 +140,94 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 		return exitSuccess
 	}
 
+	// Step-9 cleanup: offer to delete managed service files whose catalog daemon
+	// is no longer detected on this host (docs/wizards.md).
+	dir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
+	deletes, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, "service"))
+	if err != nil {
+		a.reportError(opts, err.Error())
+		return exitRuntimeError
+	}
+	if err := deleteWizardWatchFiles(deletes); err != nil {
+		a.reportError(opts, err.Error())
+		return exitRuntimeError
+	}
+
 	dir, written, err := writeServiceFiles(globalPath, docs)
 	if err != nil {
 		a.reportError(opts, err.Error())
 		return exitRuntimeError
 	}
+	if len(deletes) > 0 {
+		fmt.Fprintf(a.Stdout, "Deleted %d stale service file(s).\n", len(deletes))
+	}
 	fmt.Fprintf(a.Stdout, "Wrote %d service file(s) under %s. Run `sermoctl reload` to apply.\n", written, dir)
 	return exitSuccess
+}
+
+// planStaleServiceDeletes offers to delete managed `kind: service` files under
+// the apps includes dir whose `uses:` daemon (or name) is no longer in the
+// detected set. Mirrors planWizardWatchDeletes for the service wizard; a no-op
+// when detection is empty so a valid file is never proposed for deletion.
+func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
+	if len(detected) == 0 {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read services directory %s: %w", dir, err)
+	}
+	type staleFile struct{ path, target string }
+	var stale []staleFile
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		target := serviceFileTarget(path)
+		if target == "" || detected[target] {
+			continue
+		}
+		stale = append(stale, staleFile{path, target})
+	}
+	if len(stale) == 0 {
+		return nil, nil
+	}
+	if !p.Confirm(fmt.Sprintf("Found %d managed service file(s) in %s whose daemon is no longer detected. Review them for deletion?", len(stale), dir), true) {
+		return nil, nil
+	}
+	var deletes []string
+	for _, f := range stale {
+		if p.Confirm("Delete stale service file "+f.path+" ("+f.target+")?", true) {
+			deletes = append(deletes, f.path)
+		}
+	}
+	return deletes, nil
+}
+
+// serviceFileTarget returns the catalog daemon a managed service file targets:
+// its `uses:` value, or the doc `name` when self-contained. "" when unreadable.
+func serviceFileTarget(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return ""
+	}
+	if s, _ := doc["uses"].(string); s != "" {
+		return s
+	}
+	s, _ := doc["name"].(string)
+	return s
 }
 
 func docsPreview(docs map[string]map[string]any) []any {

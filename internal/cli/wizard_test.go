@@ -29,9 +29,9 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// volume assistant: select vol 1; free<10; for 3; notifier ops-email; no expand.
-	// then runWizard: confirm merge with "y".
-	script := strings.Join([]string{"1", "1", "10", "3", "1", "n", "y"}, "\n") + "\n"
+	// volume assistant: select vol 1; monitor enabled; inherit interval; free<10;
+	// for 3; notifier ops-email; no expand. then runWizard: confirm merge with "y".
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{
@@ -247,14 +247,16 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("paths:\n  includes: [storage]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// An existing managed watch for /old — a mountpoint the env no longer detects
+	// (fakeWizardEnv only reports /mnt/backup), so it is offered as stale.
 	oldFile := filepath.Join(storageDir, "storage-old.yml")
 	if err := os.WriteFile(oldFile, []byte("watches:\n  storage-old:\n    check: { type: storage, path: /old, free_pct: { op: \"<\", value: 5 } }\n    then: { notify: [ops-email] }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	// volume assistant answers, then: confirm merge, review existing files, delete
-	// the one existing file.
-	script := strings.Join([]string{"1", "1", "10", "3", "1", "n", "y", "y", "y"}, "\n") + "\n"
+	// volume assistant answers (monitor enabled, inherit interval), then: confirm
+	// merge, review stale files, delete the orphaned /old file.
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "y", "y", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{

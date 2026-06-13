@@ -3,7 +3,6 @@ package assist
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -42,26 +41,42 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	sel := p.MultiChoose("Which services do you want to monitor?", labels)
 
-	services := map[string]any{}
+	// Per-service properties first (these legitimately differ per service: port,
+	// pidfile/exe). The shared monitor-state + interval come after, batched.
+	type pending struct {
+		name string
+		body map[string]any
+	}
+	var items []pending
 	for _, idx := range sel {
-		name, body := askService(p, env, cands[idx])
+		name, body := askServiceProps(p, env, cands[idx])
 		if name != "" {
-			services[name] = body
+			items = append(items, pending{name, body})
 		}
 	}
-
-	// Allow enabling a catalog daemon that was not auto-detected (entered by name).
-	for p.Confirm("Add another service by catalog daemon name (not detected)?", false) {
-		daemon := p.AskNonEmpty("Catalog daemon name (e.g. nginx, mariadb)")
-		name, body := askService(p, env, DaemonCandidate{Name: daemon, Title: daemon})
-		if name != "" {
-			services[name] = body
-		}
-	}
-
-	if len(services) == 0 {
+	if len(items) == 0 {
 		return Result{}, nil
 	}
+
+	// Batch: when more than one service was selected, offer to answer the shared
+	// monitoring questions once and apply them to all (docs/wizards.md step 4).
+	var shared *Monitoring
+	if len(items) > 1 && p.Confirm("Apply the same monitor state and interval to all selected services?", true) {
+		m := p.AskMonitoring("all selected services")
+		shared = &m
+	}
+
+	services := map[string]any{}
+	for _, it := range items {
+		m := shared
+		if m == nil {
+			mm := p.AskMonitoring(it.name)
+			m = &mm
+		}
+		m.apply(it.body)
+		services[it.name] = it.body
+	}
+
 	names := make([]string, 0, len(services))
 	for n := range services {
 		names = append(names, n)
@@ -73,25 +88,29 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}, nil
 }
 
-// askService asks for the instance name and optional port override for one
-// candidate, returning the service name and its body (or "" to skip).
-func askService(p *Prompt, env Env, c DaemonCandidate) (string, map[string]any) {
-	name := p.Ask("Service name for "+c.Name+"?", c.Name)
-	if name == "" {
-		name = c.Name
-	}
-	if _, exists := env.ServiceNames[name]; exists {
-		p.printf("  %q is already configured; skipping.\n", name)
+// askServiceProps asks the per-service properties for one detected candidate —
+// optional port override and the PID source — returning the service name (= the
+// candidate name; the wizard never invents names) and its body, or "" to skip a
+// name already configured. The PID question is prefilled from the init-script
+// analysis: a pidfile path writes `pidfile:`, and if there is none, an exe
+// derived from the unit offers a `command_match` selector.
+func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]any) {
+	if _, exists := env.ServiceNames[c.Name]; exists {
+		p.printf("  %q is already configured; skipping.\n", c.Name)
 		return "", nil
 	}
 	body := map[string]any{"uses": c.Name, "enabled": true}
 	if c.Port > 0 {
-		ans := p.Ask(fmt.Sprintf("Port for %s?", name), strconv.Itoa(c.Port))
-		if n, err := strconv.Atoi(strings.TrimSpace(ans)); err == nil && n > 0 && n != c.Port {
+		if n := p.AskInt(fmt.Sprintf("Port for %s?", c.Name), c.Port); n > 0 && n != c.Port {
 			body["variables"] = map[string]any{"port": n}
 		}
 	}
-	return name, body
+	if pidfile := strings.TrimSpace(p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile)); pidfile != "" {
+		body["pidfile"] = pidfile
+	} else if c.Exe != "" && p.Confirm("No pidfile — match "+c.Name+" by its executable "+c.Exe+"?", true) {
+		body["processes"] = map[string]any{"main": map[string]any{"type": "command_match", "exe": c.Exe}}
+	}
+	return c.Name, body
 }
 
 // serviceLabel renders the candidate's detected facts for the selection menu.

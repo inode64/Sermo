@@ -21,7 +21,9 @@ func TestPromptAskDefault(t *testing.T) {
 }
 
 func TestPromptConfirm(t *testing.T) {
-	p, _ := newTestPrompt("y\nn\n\n")
+	// Forced y/n: y and n answer directly; an empty line re-prompts (it does NOT
+	// take the default) until an explicit answer is typed.
+	p, out := newTestPrompt("y\nn\n\nyes\n")
 	if !p.Confirm("ok?", false) {
 		t.Fatal("y should be true")
 	}
@@ -29,7 +31,10 @@ func TestPromptConfirm(t *testing.T) {
 		t.Fatal("n should be false")
 	}
 	if !p.Confirm("ok?", true) {
-		t.Fatal("empty should use default true")
+		t.Fatal("after the empty line re-prompts, 'yes' should be true")
+	}
+	if !strings.Contains(out.String(), "please answer y or n") {
+		t.Fatalf("an empty answer must re-prompt, got %q", out.String())
 	}
 }
 
@@ -167,6 +172,7 @@ func TestPromptAbortsOnExhaustedInput(t *testing.T) {
 		"Choose invalid then EOF":      {"zzz\n", func(p *Prompt) { p.Choose("pick", []string{"a", "b"}) }},
 		"MultiChoose invalid then EOF": {"zzz\n", func(p *Prompt) { p.MultiChoose("pick", []string{"a", "b"}) }},
 		"AskNonEmpty empty then EOF":   {"\n", func(p *Prompt) { p.AskNonEmpty("value") }},
+		"Confirm empty then EOF":       {"\n", func(p *Prompt) { p.Confirm("ok?", true) }},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -180,14 +186,12 @@ func TestPromptAbortsOnExhaustedInput(t *testing.T) {
 
 func TestPromptDefaultsSurviveEOF(t *testing.T) {
 	// The empty-accepting helpers keep their "empty -> default" contract on a
-	// fully exhausted reader instead of aborting.
+	// fully exhausted reader instead of aborting. Confirm is NOT one of them
+	// anymore (it forces an explicit answer; see TestPromptAbortsOnExhaustedInput).
 	p, _ := newTestPrompt("")
 	err := driveWithRecover(func() {
 		if got := p.Ask("q", "def"); got != "def" {
 			t.Errorf("Ask = %q", got)
-		}
-		if !p.Confirm("ok?", true) {
-			t.Error("Confirm must return its default on EOF")
 		}
 		if got := p.AskInt("n", 7); got != 7 {
 			t.Errorf("AskInt = %d", got)

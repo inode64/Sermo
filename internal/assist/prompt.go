@@ -30,8 +30,9 @@ func NewPrompt(in io.Reader, out io.Writer) *Prompt {
 
 // ErrInputClosed reports that the prompt's input ended (EOF) while an answer
 // was still required — e.g. piped stdin with too few lines. The helpers that
-// accept an empty answer (Ask, Confirm, AskInt) still return their default on
-// EOF; only the ones that would re-prompt forever abort with this error.
+// accept an empty answer (Ask, AskInt) still return their default on EOF; the
+// ones that re-prompt until a valid answer (Confirm, Choose, AskNonEmpty, …)
+// abort with this error.
 var ErrInputClosed = errors.New("input ended before the prompt was answered")
 
 // promptAbort is the panic sentinel Recover translates into ErrInputClosed.
@@ -102,7 +103,11 @@ func (p *Prompt) AskNonEmpty(question string) string {
 	}
 }
 
-// Confirm reads a yes/no answer, returning def on an empty line.
+// Confirm reads a yes/no answer. It always forces an explicit y/n: an empty
+// line re-prompts rather than accepting a default, so a wizard never takes a
+// destructive or shaping decision the operator did not actually type. def only
+// sets which letter the hint capitalizes (the suggested answer). On EOF the
+// re-prompt aborts with ErrInputClosed like every other required prompt.
 func (p *Prompt) Confirm(question string, def bool) bool {
 	hint := "y/N"
 	if def {
@@ -111,14 +116,13 @@ func (p *Prompt) Confirm(question string, def bool) bool {
 	for {
 		p.printf("%s [%s]: ", question, hint)
 		switch strings.ToLower(p.readLine()) {
-		case "":
-			return def
 		case "y", "yes":
 			return true
 		case "n", "no":
 			return false
 		default:
 			p.printf("  please answer y or n\n")
+			p.abortIfClosed()
 		}
 	}
 }
