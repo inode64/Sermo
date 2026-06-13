@@ -47,6 +47,10 @@ type Worker struct {
 	// Sample produces this cycle's metric reader (section 12). Nil when the
 	// service uses no metrics.
 	Sample func(ctx context.Context) checks.MetricReader
+	// LiveSample samples this cycle's live CPU readings (per-process and
+	// aggregate) into the LiveMetrics registry for the web UI. Nil when no live
+	// metrics registry is wired.
+	LiveSample func(ctx context.Context)
 	// Operate runs an action through the operation engine.
 	Operate func(ctx context.Context, action string) operation.Result
 	// Cascade, when set (the service declares also_apply), runs the action across
@@ -112,6 +116,9 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	}
 
 	deps := w.CheckDeps
+	if w.LiveSample != nil {
+		w.LiveSample(ctx) // live CPU gauge for the web; runs every monitored cycle
+	}
 	if w.Sample != nil {
 		deps.Metrics = w.Sample(ctx)
 	}

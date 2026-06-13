@@ -215,6 +215,48 @@ func TestServiceCPURate(t *testing.T) {
 	}
 }
 
+func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
+	// SampleServiceCPU is the web-only path: it returns per-process single-core
+	// rates plus the cpu_thread (max) and whole-machine aggregates, against the
+	// previous call for the service.
+	clock := time.Unix(0, 0)
+	reader := fakeReader{cpu: map[int]uint64{10: 0, 11: 0, 12: 0}, hz: 100, ncpu: 4}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+
+	first := c.SampleServiceCPU("svc", []int{10, 11, 12})
+	if first.CPU.Ready || first.CPUThread.Ready {
+		t.Fatal("no rate on the first observation")
+	}
+	if len(first.PerProc) != 0 {
+		t.Fatalf("PerProc should be empty on first cycle, got %v", first.PerProc)
+	}
+
+	// One second later: pid 11 used 80 ticks (~80% of one core), pid 10 used 20,
+	// pid 12 idle.
+	clock = clock.Add(time.Second)
+	reader.cpu[10], reader.cpu[11], reader.cpu[12] = 20, 80, 0
+	c.Reader = reader
+	sc := c.SampleServiceCPU("svc", []int{10, 11, 12})
+
+	if sc.NumCPU != 4 {
+		t.Fatalf("NumCPU = %d, want 4", sc.NumCPU)
+	}
+	if got := sc.PerProc[11]; got < 79.9 || got > 80.1 {
+		t.Fatalf("PerProc[11] = %v, want ~80 (single-core)", got)
+	}
+	if got := sc.PerProc[10]; got < 19.9 || got > 20.1 {
+		t.Fatalf("PerProc[10] = %v, want ~20", got)
+	}
+	if got := sc.CPUThread.Percent; got < 79.9 || got > 80.1 {
+		t.Fatalf("CPUThread = %v, want ~80 (busiest single process)", got)
+	}
+	// Whole-machine: 100 ticks = 1 CPU-second over 4 cores -> 25%.
+	if got := sc.CPU.Percent; got < 24.9 || got > 25.1 {
+		t.Fatalf("CPU (whole-machine) = %v, want ~25", got)
+	}
+}
+
 func TestServiceCPUThreadMaxOverTree(t *testing.T) {
 	// cpu_thread tracks the busiest single process against ONE thread, regardless
 	// of how many CPUs the host has.
