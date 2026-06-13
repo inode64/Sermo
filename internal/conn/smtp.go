@@ -82,6 +82,8 @@ func smtpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 // a space ends it. This is the RFC 959 reply format, shared by SMTP and FTP.
 func readReplyCode(br *bufio.Reader) (int, string, error) {
 	var parts []string
+	code := 0
+	haveCode := false
 	for {
 		s, err := br.ReadString('\n')
 		if err != nil {
@@ -91,9 +93,15 @@ func readReplyCode(br *bufio.Reader) (int, string, error) {
 		if len(line) < 3 {
 			return 0, "", fmt.Errorf("malformed reply %q", line)
 		}
-		code, err := strconv.Atoi(line[:3])
+		lineCode, err := strconv.Atoi(line[:3])
 		if err != nil {
 			return 0, "", fmt.Errorf("malformed reply code %q", line)
+		}
+		if !haveCode {
+			code = lineCode
+			haveCode = true
+		} else if lineCode != code {
+			return 0, "", fmt.Errorf("malformed multi-line reply: got code %d after %d", lineCode, code)
 		}
 		if len(line) > 4 {
 			parts = append(parts, line[4:])
