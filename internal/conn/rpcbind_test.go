@@ -62,6 +62,16 @@ func TestParseRPCReply(t *testing.T) {
 	if _, err := parseRPCReply(call, 7); err == nil {
 		t.Fatal("a non-reply message must error")
 	}
+	// A hostile verifier length must be rejected as truncated, never drive an
+	// out-of-bounds read: the bounds check must hold even where 20+verfLen+4
+	// would overflow (a near-MaxInt32 length on a 32-bit platform).
+	for _, verfLen := range []uint32{0xFFFFFFFF, 0x7FFFFFF0, 24} {
+		hostile := rpcAcceptedReply(7, 0)
+		binary.BigEndian.PutUint32(hostile[16:], verfLen)
+		if _, err := parseRPCReply(hostile, 7); err == nil {
+			t.Fatalf("verifier length %#x must error", verfLen)
+		}
+	}
 }
 
 func TestRpcbindProbeAgainstFakeServer(t *testing.T) {
