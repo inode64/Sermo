@@ -91,6 +91,31 @@ func (r fakeReader) LoadAverages() (float64, float64, float64, bool) { return 1.
 func (r fakeReader) NumCPU() int                                     { return r.ncpu }
 func (r fakeReader) ClockTicks() float64                             { return r.hz }
 
+type combinedMemoryReader struct {
+	fakeReader
+	memoryTotal, memoryUsed uint64
+	swapTotal, swapUsed     uint64
+	memoryOK, swapOK        bool
+	combinedCalls           int
+	totalMemoryCalls        int
+	totalSwapCalls          int
+}
+
+func (r *combinedMemoryReader) TotalMemory() (uint64, uint64, bool) {
+	r.totalMemoryCalls++
+	return r.memoryTotal, r.memoryUsed, r.memoryOK
+}
+
+func (r *combinedMemoryReader) TotalSwap() (uint64, uint64, bool) {
+	r.totalSwapCalls++
+	return r.swapTotal, r.swapUsed, r.swapOK
+}
+
+func (r *combinedMemoryReader) TotalMemoryAndSwap() (uint64, uint64, uint64, uint64, bool, bool) {
+	r.combinedCalls++
+	return r.memoryTotal, r.memoryUsed, r.swapTotal, r.swapUsed, r.memoryOK, r.swapOK
+}
+
 // readerNoSwap implements the core Reader interface but NOT the optional
 // ProcessSwap, so the swap metric must not appear for it.
 type readerNoSwap struct{}
@@ -211,6 +236,32 @@ func TestServiceSwapAbsentWithoutReaderSupport(t *testing.T) {
 	c := New(readerNoSwap{})
 	if _, ok := c.SampleService("svc", []int{10})["swap"]; ok {
 		t.Fatal("swap metric must be absent when the reader has no ProcessSwap")
+	}
+}
+
+func TestSampleServiceUsesCombinedMemoryTotals(t *testing.T) {
+	reader := &combinedMemoryReader{
+		fakeReader: fakeReader{
+			rss:  map[int]uint64{10: 100},
+			swap: map[int]uint64{10: 50},
+			hz:   100,
+			ncpu: 1,
+		},
+		memoryTotal: 1000,
+		memoryOK:    true,
+		swapTotal:   200,
+		swapOK:      true,
+	}
+	snap := New(reader).SampleService("svc", []int{10})
+
+	if reader.combinedCalls != 1 || reader.totalMemoryCalls != 0 || reader.totalSwapCalls != 0 {
+		t.Fatalf("memory calls combined/mem/swap = %d/%d/%d, want 1/0/0", reader.combinedCalls, reader.totalMemoryCalls, reader.totalSwapCalls)
+	}
+	if snap["memory"].Percent != 10 {
+		t.Fatalf("memory percent = %v, want 10", snap["memory"].Percent)
+	}
+	if snap["swap"].Percent != 25 {
+		t.Fatalf("swap percent = %v, want 25", snap["swap"].Percent)
 	}
 }
 
@@ -389,6 +440,29 @@ func TestCountCPULines(t *testing.T) {
 	}
 	if n := countCPULines([]byte("cpu 1 2 3\n")); n != 0 {
 		t.Fatalf("countCPULines with only the aggregate line = %d, want 0", n)
+	}
+}
+
+func TestSampleSystemUsesCombinedMemoryTotals(t *testing.T) {
+	reader := &combinedMemoryReader{
+		fakeReader:  fakeReader{hz: 100, ncpu: 1},
+		memoryTotal: 1000,
+		memoryUsed:  250,
+		memoryOK:    true,
+		swapTotal:   2000,
+		swapUsed:    500,
+		swapOK:      true,
+	}
+	snap := New(reader).SampleSystem()
+
+	if reader.combinedCalls != 1 || reader.totalMemoryCalls != 0 || reader.totalSwapCalls != 0 {
+		t.Fatalf("memory calls combined/mem/swap = %d/%d/%d, want 1/0/0", reader.combinedCalls, reader.totalMemoryCalls, reader.totalSwapCalls)
+	}
+	if snap["total_memory"].Percent != 25 {
+		t.Fatalf("total_memory percent = %v, want 25", snap["total_memory"].Percent)
+	}
+	if snap["total_swap"].Percent != 25 {
+		t.Fatalf("total_swap percent = %v, want 25", snap["total_swap"].Percent)
 	}
 }
 

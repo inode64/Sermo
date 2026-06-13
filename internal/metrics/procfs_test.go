@@ -27,6 +27,9 @@ func TestOSReaderProcfs(t *testing.T) {
 	if total, used, ok := r.TotalSwap(); ok && used > total {
 		t.Errorf("TotalSwap used %d > total %d", used, total)
 	}
+	if total, used, swapTotal, swapUsed, ok, swapOK := r.TotalMemoryAndSwap(); !ok || total == 0 || used > total || (swapOK && swapUsed > swapTotal) {
+		t.Errorf("TotalMemoryAndSwap = (%d, %d, %d, %d, %v, %v); want valid memory and optional valid swap", total, used, swapTotal, swapUsed, ok, swapOK)
+	}
 	if n := r.NumCPU(); n < 1 {
 		t.Errorf("NumCPU = %d, want >= 1", n)
 	}
@@ -48,6 +51,28 @@ func TestOSReaderProcfs(t *testing.T) {
 	// read/write bytes may legitimately be 0; we only require the file to parse.
 	if _, _, ok := r.ProcessIO(pid); !ok {
 		t.Error("ProcessIO(self) not ok")
+	}
+}
+
+func TestParseProcMeminfoTotals(t *testing.T) {
+	data := []byte("MemTotal:       1000 kB\nMemAvailable:    250 kB\nSwapTotal:       2000 kB\nSwapFree:        500 kB\n")
+	totals := parseProcMeminfoTotals(data)
+	if !totals.memoryOK || totals.memoryTotal != 1000*1024 || totals.memoryUsed != 750*1024 {
+		t.Fatalf("memory totals = %+v, want 1000k total and 750k used", totals)
+	}
+	if !totals.swapOK || totals.swapTotal != 2000*1024 || totals.swapUsed != 1500*1024 {
+		t.Fatalf("swap totals = %+v, want 2000k total and 1500k used", totals)
+	}
+}
+
+func TestParseProcMeminfoTotalsNoSwapDevice(t *testing.T) {
+	data := []byte("MemTotal:       1000 kB\nMemAvailable:    250 kB\nSwapTotal:          0 kB\nSwapFree:           0 kB\n")
+	totals := parseProcMeminfoTotals(data)
+	if !totals.memoryOK {
+		t.Fatalf("memory totals = %+v, want valid memory", totals)
+	}
+	if !totals.swapOK || totals.swapTotal != 0 || totals.swapUsed != 0 {
+		t.Fatalf("swap totals = %+v, want valid zero-swap totals", totals)
 	}
 }
 
