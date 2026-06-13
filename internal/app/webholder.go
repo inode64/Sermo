@@ -194,6 +194,14 @@ func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit
 	return nil, false
 }
 
+// PruneEvents removes old events from the live event log (if the backend is available).
+func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) int {
+	if b := h.backend(); b != nil {
+		return b.PruneEvents(ctx, before)
+	}
+	return 0
+}
+
 // Operate runs a start/stop/restart action through the active backend.
 func (h *WebBackendHolder) Operate(ctx context.Context, name, action string) web.ActionResult {
 	if b := h.backend(); b != nil {

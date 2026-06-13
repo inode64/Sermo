@@ -61,6 +61,8 @@ type Application struct {
 	DisplayName  string `json:"display_name"`
 	Binary       string `json:"binary"`                // resolved binary path (file location)
 	Permissions  string `json:"permissions,omitempty"` // binary mode, e.g. "-rwxr-xr-x (0755)"
+	User         string `json:"user,omitempty"`        // owner username of the binary
+	Group        string `json:"group,omitempty"`       // owner group of the binary
 	Version      string `json:"version"`               // raw first line of the version command
 	VersionShort string `json:"version_short"`         // numeric version, at most the patchlevel
 	Status       string `json:"status"`                // ok, or an error description
@@ -504,6 +506,9 @@ type Backend interface {
 	// ServiceEvents returns up to limit recent events for one service, newest
 	// first; ok is false for unknown names.
 	ServiceEvents(ctx context.Context, name string, limit int) ([]Event, bool)
+	// PruneEvents removes events older than 'before' (or all if zero time).
+	// Intended for the `sermoctl events clear` command.
+	PruneEvents(ctx context.Context, before time.Time) int
 	// Operate runs start|stop|restart on a service through the safe engine.
 	Operate(ctx context.Context, name, action string) ActionResult
 	// Preflight runs a service's preflight checks on demand; ok is false for
@@ -601,6 +606,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
+	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
 	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
@@ -935,6 +941,28 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		fetchLimit = maxEventLimit
 	}
 	writeJSON(w, http.StatusOK, filterEvents(s.Backend.Events(r.Context(), fetchLimit), filter, limit))
+}
+
+// handleEventsClear supports `sermoctl events clear [--before TIME]`.
+// TIME may be RFC3339 or a duration (e.g. "2h" means "before now-2h").
+func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
+	beforeStr := r.URL.Query().Get("before")
+	var before time.Time
+	if beforeStr != "" {
+		if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
+			before = t
+		} else if d, err := time.ParseDuration(beforeStr); err == nil {
+			before = time.Now().Add(-d)
+		} else {
+			writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)"})
+			return
+		}
+	}
+	n := s.Backend.PruneEvents(r.Context(), before)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":     true,
+		"pruned": n,
+	})
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
