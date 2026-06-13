@@ -75,11 +75,22 @@ func validExpectStatus(value string) bool {
 }
 
 func isPositiveDuration(s string) bool {
-	d, err := time.ParseDuration(s)
-	return err == nil && d > 0
+	return isDuration(s, false)
 }
 
 func isNonNegativeDuration(s string) bool {
+	return isDuration(s, true)
+}
+
+// isDuration reports whether s parses as a duration that is either >0 (when
+// !allowZero) or >=0. Centralizes the repeated Parse+check to remove dupe.
+func isDuration(s string, allowZero bool) bool {
 	d, err := time.ParseDuration(s)
-	return err == nil && d >= 0
+	if err != nil {
+		return false
+	}
+	if allowZero {
+		return d >= 0
+	}
+	return d > 0
 }
