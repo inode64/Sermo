@@ -146,6 +146,9 @@ watches:
         command: [/usr/local/bin/sermo-load-alert.sh]
   # Watch system RAM via the kernel's MemAvailable estimate (page cache and
   # reclaimable buffers never read as "used").
+  # Bare form (no `then`): the `for` window produces "firing" visible in the web
+  # UI (Alerts, Watches "firing", failed state) and event log only. No hook or
+  # notify is ever executed (globals are not inherited).
   memory:
     monitor: disabled
     interval: 30s
@@ -153,6 +156,7 @@ watches:
       type: memory
       used_pct: { op: ">=", value: "90%" }
     for: { cycles: 3 }
+    # then omitted => alert-only (web + registros)
     then:
       hook:
         command: [/usr/local/bin/sermo-memory-alert.sh]
