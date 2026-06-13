@@ -50,8 +50,13 @@ func WatchState(enabled, monitored, failed bool) string {
 }
 
 // WatchActivityFailed reports whether an event kind represents a failed watch
-// side-effect. The dashboard uses it as the current best-effort watch health
-// signal because watches do not publish service-style check snapshots.
+// side-effect or an active firing condition. The dashboard uses it as the
+// current best-effort watch health signal (watches do not publish the same
+// check snapshots services do). "firing" is emitted for any watch (including
+// bare ones without a `then`) when its `for` window is satisfied.
 func WatchActivityFailed(kind string) bool {
+	if kind == "firing" {
+		return true
+	}
 	return strings.HasSuffix(kind, "-failed")
 }

@@ -87,7 +87,8 @@ func TestBuildWatchesLegacyDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesDiskInheritsGlobalNotifyWithoutThen(t *testing.T) {
+func TestBuildWatchesAbsentThenIsPureMonitorOnlyDisk(t *testing.T) {
+	// Bare disk watch (no then): alert-only, globals ignored.
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
@@ -95,6 +96,7 @@ func TestBuildWatchesDiskInheritsGlobalNotifyWithoutThen(t *testing.T) {
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
+			// no "then" key (bare = pure alert-only)
 		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{
@@ -108,8 +110,8 @@ func TestBuildWatchesDiskInheritsGlobalNotifyWithoutThen(t *testing.T) {
 	if len(watches) != 1 {
 		t.Fatalf("expected 1 watch, got %d", len(watches))
 	}
-	if len(watches[0].Notifiers) != 1 || watches[0].Notifiers[0].Name() != "ops" {
-		t.Fatalf("watch should inherit global notifier, got %v", watches[0].Notifiers)
+	if len(watches[0].Notifiers) != 0 {
+		t.Fatalf("bare disk (absent then) must not inherit globals (pure monitor-only), got %v", watches[0].Notifiers)
 	}
 }
 
@@ -183,7 +185,9 @@ func TestBuildWatchesNotifyNoneIsMonitorOnly(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesFileInheritsGlobalNotifyWithoutThen(t *testing.T) {
+func TestBuildWatchesAbsentThenIsPureMonitorOnly(t *testing.T) {
+	// Omitting `then` entirely: builds as pure alert-only (firing events for
+	// web+log), globals are ignored, zero notifiers/hook, Cycle still wired.
 	cfg := cfgWithWatches(map[string]any{
 		"app-data": map[string]any{
 			"check": map[string]any{
@@ -191,6 +195,7 @@ func TestBuildWatchesFileInheritsGlobalNotifyWithoutThen(t *testing.T) {
 				"path": "/var/lib/app",
 				"size": map[string]any{"on": "change"},
 			},
+			// no then key
 		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{
@@ -206,6 +211,9 @@ func TestBuildWatchesFileInheritsGlobalNotifyWithoutThen(t *testing.T) {
 	}
 	if watches[0].Cycle == nil {
 		t.Fatal("file watch must wire a Cycle override")
+	}
+	if len(watches[0].Notifiers) != 0 || len(watches[0].Hook.Command) != 0 {
+		t.Fatalf("absent-then must have no notifiers/hook (pure monitor-only): %+v", watches[0])
 	}
 }
 

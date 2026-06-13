@@ -87,6 +87,12 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if !w.state.Fires(w.Window, fired) {
 		return
 	}
+	// Always emit a "firing" event when the `for` (or `within`) window is
+	// satisfied. This makes the alert visible in the web UI (state=failed,
+	// Alerts/Watches counts, failed filter) and in the event log even for
+	// bare watches that have no `then` (pure monitor-only / alert-only case).
+	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message})
+
 	if w.Expand != nil && w.Expander != nil {
 		w.runExpand(ctx, res)
 	}

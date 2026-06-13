@@ -77,9 +77,11 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 func validateHookBlock(prefix string, block map[string]any, allowExpand bool, defaultNotify []string, add func(string, ...any)) {
 	rawThen, present := block["then"]
 	if !present {
-		if len(defaultNotify) == 0 {
-			add("%s.then is required", prefix)
-		}
+		// Absent `then` is valid: the watch is alert/monitor-only. Its `check` +
+		// `for` (or per-metric conditions) will still produce "firing" state
+		// visible in the web UI (Alerts/Watches tiles, failed filter, state badge)
+		// and event log entries, but no hook runs and no notifications are
+		// delivered (global defaults are not inherited for bare watches).
 		return
 	}
 	then, ok := rawThen.(map[string]any)
@@ -103,9 +105,10 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 			add("%s.then.expand.by %q must be a positive size with a K/M/G/T suffix (e.g. 5G)", prefix, cfgval.String(expand["by"]))
 		}
 	}
-	// An explicit `notify: [none]` is a deliberate monitor-only watch (state in
-	// the dashboard and events, no delivery) — an action choice, not an empty
-	// then. Only a then that selects nothing at all is rejected.
+	// An explicit `then: { notify: [none] }` (or with a hook/expand too) is a
+	// deliberate monitor-only watch (state in the dashboard and events, no
+	// delivery). A present `then` that selects nothing is rejected. Omitting the
+	// `then` key entirely is another supported way to get alert-only behavior.
 	if !hasHook && !HasEffectiveNotifyAction(notify, defaultNotify) && !hasExpand && !NotifyOptedOut(notify) {
 		add("%s.then requires a hook, notify and/or expand", prefix)
 		return

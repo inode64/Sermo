@@ -52,6 +52,10 @@ func (c *oomCheck) Run(_ context.Context) Result {
 	return res
 }
 
+// SampleOom returns the cumulative kernel OOM-kill counter using the default
+// /proc/vmstat reader. ok is false when the counter is unavailable.
+func SampleOom() (count uint64, ok bool) { return defaultOomSampler() }
+
 // defaultOomSampler reads the cumulative oom_kill counter from /proc/vmstat.
 func defaultOomSampler() (uint64, bool) {
 	data, err := os.ReadFile("/proc/vmstat")
