@@ -32,24 +32,24 @@ func TestReadEDAC(t *testing.T) {
 	}
 }
 
-func edacWith(st edacCounts, preds ...levelPred) edacCheck {
-	return edacCheck{base: base{name: "e", timeout: time.Second}, sampler: func() (edacCounts, error) { return st, nil }, preds: preds}
+func edacWith(st EdacCounts, preds ...levelPred) edacCheck {
+	return edacCheck{base: base{name: "e", timeout: time.Second}, sampler: func() (EdacCounts, error) { return st, nil }, preds: preds}
 }
 
 func TestEdacCheck(t *testing.T) {
 	// Default: alert on any uncorrectable error.
-	if res := edacWith(edacCounts{Present: true, CE: 2, UE: 1}).Run(context.Background()); !res.OK {
+	if res := edacWith(EdacCounts{Present: true, CE: 2, UE: 1}).Run(context.Background()); !res.OK {
 		t.Error("ue>0 should alert by default")
 	}
-	if res := edacWith(edacCounts{Present: true, CE: 2}).Run(context.Background()); res.OK {
+	if res := edacWith(EdacCounts{Present: true, CE: 2}).Run(context.Background()); res.OK {
 		t.Error("only correctable errors must not alert by default")
 	}
 	// Predicate on correctable errors.
-	if res := edacWith(edacCounts{Present: true, CE: 100}, levelPred{"ce", ">", 50}).Run(context.Background()); !res.OK {
+	if res := edacWith(EdacCounts{Present: true, CE: 100}, levelPred{"ce", ">", 50}).Run(context.Background()); !res.OK {
 		t.Error("ce>50 predicate should alert")
 	}
 	// EDAC unavailable -> failure (so a misconfigured target is noticed).
-	if res := edacWith(edacCounts{Present: false}).Run(context.Background()); res.OK {
+	if res := edacWith(EdacCounts{Present: false}).Run(context.Background()); res.OK {
 		t.Error("absent EDAC must fail the check")
 	}
 }

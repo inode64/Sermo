@@ -21,6 +21,14 @@ type DiskIOSample struct {
 	IOTicksMs       uint64
 }
 
+// DiskIORates is one delta-derived view of a block device's I/O activity.
+type DiskIORates struct {
+	UtilPct    float64
+	ReadBytes  float64
+	WriteBytes float64
+	AwaitMs    float64
+}
+
 // DiskIOSamplerFunc reads the current counters for a block device (e.g. "sda",
 // "nvme0n1"). Injected for tests; the default reads /proc/diskstats.
 type DiskIOSamplerFunc func(device string) (DiskIOSample, error)
@@ -70,38 +78,54 @@ func (c *diskIOCheck) Run(_ context.Context) Result {
 		return c.result(false, fmt.Sprintf("diskio %s baseline", c.device), start)
 	}
 
-	ioTicks := deltaOrZero(s.IOTicksMs, st.last.IOTicksMs)
-	utilPct := min(100, float64(ioTicks)/float64(elapsed.Milliseconds())*100)
-	readBytes := float64(deltaOrZero(s.SectorsRead, st.last.SectorsRead)*512) / elapsed.Seconds()
-	writeBytes := float64(deltaOrZero(s.SectorsWritten, st.last.SectorsWritten)*512) / elapsed.Seconds()
-	ops := deltaOrZero(s.ReadsCompleted, st.last.ReadsCompleted) + deltaOrZero(s.WritesCompleted, st.last.WritesCompleted)
-	awaitMs := 0.0
-	if ops > 0 {
-		awaitMs = float64(deltaOrZero(s.ReadTicksMs, st.last.ReadTicksMs)+deltaOrZero(s.WriteTicksMs, st.last.WriteTicksMs)) / float64(ops)
-	}
+	rates, _ := CalculateDiskIORates(st.last, s, elapsed)
 	st.t, st.last = now, s
 
 	values := map[string]float64{
-		"util_pct":    utilPct,
-		"read_bytes":  readBytes,
-		"write_bytes": writeBytes,
-		"await_ms":    awaitMs,
+		"util_pct":    rates.UtilPct,
+		"read_bytes":  rates.ReadBytes,
+		"write_bytes": rates.WriteBytes,
+		"await_ms":    rates.AwaitMs,
 	}
 
 	ok := levelPredsHold(c.preds, values)
 
 	res := c.result(ok, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
-		c.device, utilPct, readBytes, writeBytes, awaitMs), start)
+		c.device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs), start)
 	res.Data = map[string]any{
 		"device":      c.device,
-		"util_pct":    utilPct,
-		"read_bytes":  readBytes,
-		"write_bytes": writeBytes,
-		"await_ms":    awaitMs,
+		"util_pct":    rates.UtilPct,
+		"read_bytes":  rates.ReadBytes,
+		"write_bytes": rates.WriteBytes,
+		"await_ms":    rates.AwaitMs,
 	}
-	res.Data["value"] = firstPredValue(c.preds, values, utilPct)
+	res.Data["value"] = firstPredValue(c.preds, values, rates.UtilPct)
 	return res
 }
+
+// CalculateDiskIORates derives the same per-second rates used by the diskio
+// check from two cumulative /proc/diskstats samples.
+func CalculateDiskIORates(prev, cur DiskIOSample, elapsed time.Duration) (DiskIORates, bool) {
+	elapsedMs := elapsed.Milliseconds()
+	if elapsed <= 0 || elapsedMs <= 0 {
+		return DiskIORates{}, false
+	}
+	ioTicks := deltaOrZero(cur.IOTicksMs, prev.IOTicksMs)
+	rates := DiskIORates{
+		UtilPct:    min(100, float64(ioTicks)/float64(elapsedMs)*100),
+		ReadBytes:  float64(deltaOrZero(cur.SectorsRead, prev.SectorsRead)*512) / elapsed.Seconds(),
+		WriteBytes: float64(deltaOrZero(cur.SectorsWritten, prev.SectorsWritten)*512) / elapsed.Seconds(),
+	}
+	ops := deltaOrZero(cur.ReadsCompleted, prev.ReadsCompleted) + deltaOrZero(cur.WritesCompleted, prev.WritesCompleted)
+	if ops > 0 {
+		rates.AwaitMs = float64(deltaOrZero(cur.ReadTicksMs, prev.ReadTicksMs)+deltaOrZero(cur.WriteTicksMs, prev.WriteTicksMs)) / float64(ops)
+	}
+	return rates, true
+}
+
+// SampleDiskIO returns one live block-device counter observation using the
+// default /proc/diskstats sampler.
+func SampleDiskIO(device string) (DiskIOSample, error) { return defaultDiskIOSampler(device) }
 
 // defaultDiskIOSampler finds device in /proc/diskstats. Field order after the
 // device name: reads, reads-merged, sectors-read, ms-reading, writes,

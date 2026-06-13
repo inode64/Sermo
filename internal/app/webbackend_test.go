@@ -541,6 +541,133 @@ func TestWebBackendProcessWatchReadings(t *testing.T) {
 	}
 }
 
+func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"autofs-net": map[string]any{"check": map[string]any{
+				"type": "autofs",
+				"path": "/net",
+			}},
+			"diskio-root": map[string]any{"check": map[string]any{
+				"type":     "diskio",
+				"device":   "sda",
+				"util_pct": map[string]any{"op": ">", "value": 80},
+			}},
+			"edac": map[string]any{"check": map[string]any{
+				"type": "edac",
+				"ue":   map[string]any{"op": ">", "value": 0},
+			}},
+			"raid": map[string]any{"check": map[string]any{
+				"type":     "raid",
+				"degraded": map[string]any{"op": ">", "value": 0},
+			}},
+			"route-wan": map[string]any{"check": map[string]any{
+				"type":      "route",
+				"family":    "ipv4",
+				"interface": "ppp0",
+			}},
+			"sensors": map[string]any{"check": map[string]any{
+				"type": "sensors",
+				"temp": map[string]any{"op": ">", "value": 70},
+			}},
+		},
+	}}}
+	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+	diskSamples := []checks.DiskIOSample{
+		{ReadsCompleted: 10, SectorsRead: 100, ReadTicksMs: 100, WritesCompleted: 10, SectorsWritten: 200, WriteTicksMs: 100, IOTicksMs: 1000},
+		{ReadsCompleted: 20, SectorsRead: 102, ReadTicksMs: 130, WritesCompleted: 20, SectorsWritten: 204, WriteTicksMs: 120, IOTicksMs: 1500},
+	}
+	diskCalls := 0
+	b, warns := NewWebBackend(cfg, Deps{
+		MountSampler: func() ([]checks.Mount, error) {
+			return []checks.Mount{{MountPoint: "/net", FSType: "autofs"}}, nil
+		},
+		DiskIOSampler: func(device string) (checks.DiskIOSample, error) {
+			if device != "sda" {
+				t.Fatalf("diskio device = %q, want sda", device)
+			}
+			sample := diskSamples[min(diskCalls, len(diskSamples)-1)]
+			diskCalls++
+			return sample, nil
+		},
+		EdacSampler: func() (checks.EdacCounts, error) {
+			return checks.EdacCounts{CE: 2, UE: 1, Present: true}, nil
+		},
+		RaidSampler: func() (checks.RaidStatus, error) {
+			return checks.RaidStatus{Arrays: 2, Degraded: 1, Recovering: 1, DegradedNames: []string{"md0"}}, nil
+		},
+		RouteSampler: func(family string) ([]checks.DefaultRoute, error) {
+			if family != "ipv4" {
+				t.Fatalf("route family = %q, want ipv4", family)
+			}
+			return []checks.DefaultRoute{{Iface: "ppp0", Gateway: "192.0.2.1"}}, nil
+		},
+		SensorSampler: func() ([]checks.SensorReading, error) {
+			return []checks.SensorReading{
+				{Chip: "coretemp", Kind: "temp", Label: "Package", Value: 82.5},
+				{Chip: "nct", Kind: "fan", Label: "fan1", Value: 900},
+				{Chip: "nct", Kind: "in", Label: "12V", Value: 11.9},
+			}, nil
+		},
+		Now: func() time.Time { return now },
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	_ = b.Watches(context.Background()) // primes diskio's rate baseline.
+	now = now.Add(time.Second)
+	byName := map[string]web.Watch{}
+	for _, w := range b.Watches(context.Background()) {
+		byName[w.Name] = w
+	}
+
+	autofs := byName["autofs-net"]
+	if got := readingByField(autofs.Readings, "mountpoints").Value; got != "/net" {
+		t.Fatalf("autofs mountpoints = %q, want /net", got)
+	}
+	if !strings.Contains(autofs.Summary, "/net active") {
+		t.Fatalf("autofs summary = %q", autofs.Summary)
+	}
+
+	diskio := byName["diskio-root"]
+	if got := readingByField(diskio.Readings, "util_pct").Value; got != "50.00%" {
+		t.Fatalf("diskio util = %q, want 50.00%%", got)
+	}
+	if got := readingByField(diskio.Readings, "read_bytes").Value; got != "1024 B/s" {
+		t.Fatalf("diskio read = %q, want 1024 B/s", got)
+	}
+
+	edac := byName["edac"]
+	if got := readingByField(edac.Readings, "ue").Value; got != "1" {
+		t.Fatalf("edac ue = %q, want 1", got)
+	}
+	if conditionByField(edac.Conditions, "ue").Op != ">" {
+		t.Fatalf("edac conditions = %+v", edac.Conditions)
+	}
+
+	raid := byName["raid"]
+	if got := readingByField(raid.Readings, "degraded_arrays").Value; got != "md0" {
+		t.Fatalf("raid degraded arrays = %q, want md0", got)
+	}
+
+	route := byName["route-wan"]
+	if got := readingByField(route.Readings, "gateway").Value; got != "192.0.2.1" {
+		t.Fatalf("route gateway = %q, want 192.0.2.1", got)
+	}
+	if conditionByField(route.Conditions, "interface").Value != "ppp0" {
+		t.Fatalf("route conditions = %+v", route.Conditions)
+	}
+
+	sensors := byName["sensors"]
+	if got := readingByField(sensors.Readings, "temp").Value; got != "82.5 C" {
+		t.Fatalf("sensors temp = %q, want 82.5 C", got)
+	}
+	if got := readingByField(sensors.Readings, "fan").Value; got != "900 RPM" {
+		t.Fatalf("sensors fan = %q, want 900 RPM", got)
+	}
+}
+
 func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{

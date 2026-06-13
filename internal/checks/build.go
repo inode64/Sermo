@@ -72,6 +72,14 @@ type Deps struct {
 	// DiskIOSampler reads a block device's counters for `diskio` checks. Nil
 	// reads /proc/diskstats.
 	DiskIOSampler DiskIOSamplerFunc
+	// SensorSampler reads hardware sensors for `sensors` checks. Nil reads hwmon.
+	SensorSampler SensorSamplerFunc
+	// RaidSampler reads Linux md RAID state for `raid` checks. Nil reads
+	// /proc/mdstat.
+	RaidSampler RaidSamplerFunc
+	// EdacSampler reads EDAC memory-error counters for `edac` checks. Nil reads
+	// sysfs.
+	EdacSampler EdacSamplerFunc
 	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
 	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
@@ -191,13 +199,13 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	case "hdparm":
 		return buildHdparmCheck(b, entry, runner)
 	case "sensors":
-		return buildSensorsCheck(b, entry)
+		return buildSensorsCheck(b, entry, deps)
 	case "smart":
 		return buildSmartCheck(b, entry, runner)
 	case "raid":
-		return buildRaidCheck(b, entry)
+		return buildRaidCheck(b, entry, deps)
 	case "edac":
-		return buildEdacCheck(b, entry)
+		return buildEdacCheck(b, entry, deps)
 	case "config":
 		return buildConfigCheck(b, entry, runner)
 	case "fds":
@@ -669,12 +677,12 @@ func buildHdparmCheck(b base, entry map[string]any, runner execx.Runner) (Check,
 }
 
 // buildSensorsCheck builds a hardware-sensor check (hwmon temp/fan/voltage).
-func buildSensorsCheck(b base, entry map[string]any) (Check, string) {
+func buildSensorsCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	preds, errs := requireLevelPreds(entry, SensorPredFields, "sensors check")
 	if errs != "" {
 		return nil, errs
 	}
-	return sensorsCheck{base: b, chip: cfgval.AsString(entry["chip"]), label: cfgval.AsString(entry["label"]), preds: preds}, ""
+	return sensorsCheck{base: b, chip: cfgval.AsString(entry["chip"]), label: cfgval.AsString(entry["label"]), preds: preds, sampler: deps.SensorSampler}, ""
 }
 
 // buildSmartCheck builds a drive SMART-health check (smartctl).
@@ -691,21 +699,21 @@ func buildSmartCheck(b base, entry map[string]any, runner execx.Runner) (Check, 
 }
 
 // buildRaidCheck builds a Linux md software-RAID health check.
-func buildRaidCheck(b base, entry map[string]any) (Check, string) {
+func buildRaidCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	preds, err := parseLevelPreds(entry, RaidPredFields)
 	if err != nil {
 		return nil, "raid check: " + err.Error()
 	}
-	return raidCheck{base: b, preds: preds}, ""
+	return raidCheck{base: b, preds: preds, sampler: deps.RaidSampler}, ""
 }
 
 // buildEdacCheck builds an ECC memory-error (EDAC) check.
-func buildEdacCheck(b base, entry map[string]any) (Check, string) {
+func buildEdacCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	preds, err := parseLevelPreds(entry, EdacPredFields)
 	if err != nil {
 		return nil, "edac check: " + err.Error()
 	}
-	return edacCheck{base: b, preds: preds}, ""
+	return edacCheck{base: b, preds: preds, sampler: deps.EdacSampler}, ""
 }
 
 // buildConfigCheck builds a configuration validity/change check.

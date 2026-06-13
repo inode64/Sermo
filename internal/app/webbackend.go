@@ -56,6 +56,11 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		PingSampler:      deps.PingSampler,
 		OomSampler:       deps.OomSampler,
 		PidsSampler:      deps.PidsSampler,
+		DiskIOSampler:    deps.DiskIOSampler,
+		SensorSampler:    deps.SensorSampler,
+		RaidSampler:      deps.RaidSampler,
+		EdacSampler:      deps.EdacSampler,
+		RouteSampler:     deps.RouteSampler,
 		PressureSampler:  deps.PressureSampler,
 		ConntrackSampler: deps.ConntrackSampler,
 		EntropySampler:   deps.EntropySampler,
@@ -153,16 +158,31 @@ type WebBackend struct {
 	entropySampler   checks.EntropySamplerFunc
 	zombieSampler    checks.ZombieSamplerFunc
 	procSampler      ProcSampler
+	diskIOSampler    checks.DiskIOSamplerFunc
+	sensorSampler    checks.SensorSamplerFunc
+	raidSampler      checks.RaidSamplerFunc
+	edacSampler      checks.EdacSamplerFunc
+	routeSampler     checks.RouteSamplerFunc
 	expander         VolumeExpander
 	emit             func(Event)
 	opGate           *OpGate
 	defaultTimeout   time.Duration
 	operationTimeout time.Duration
+	now              func() time.Time
+
+	diskIOMu    sync.Mutex
+	diskIOState map[string]webDiskIOState
 
 	applicationsMu    sync.Mutex
 	applicationsAt    time.Time
 	applicationsCache []web.Application
 	applicationsList  func(context.Context) []web.Application
+}
+
+type webDiskIOState struct {
+	primed bool
+	at     time.Time
+	sample checks.DiskIOSample
 }
 
 // NewWebBackend resolves services for the web UI. All services present in the
@@ -195,8 +215,17 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		entropySampler:   deps.EntropySampler,
 		zombieSampler:    deps.ZombieSampler,
 		procSampler:      deps.ProcSampler,
+		diskIOSampler:    deps.DiskIOSampler,
+		sensorSampler:    deps.SensorSampler,
+		raidSampler:      deps.RaidSampler,
+		edacSampler:      deps.EdacSampler,
+		routeSampler:     deps.RouteSampler,
 		expander:         configuredVolumeExpander(deps),
-		emit:             deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout, operationTimeout: deps.OperationTimeout,
+		emit:             deps.Emit,
+		opGate:           deps.OpGate,
+		defaultTimeout:   deps.DefaultTimeout,
+		operationTimeout: deps.OperationTimeout,
+		now:              deps.Now,
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
@@ -755,12 +784,55 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			Value: cfgval.String(m["value"]),
 		})
 	}
-	if canonicalWatchCheckType(cfgval.AsString(check["type"])) == "process" {
+	switch canonicalWatchCheckType(cfgval.AsString(check["type"])) {
+	case "autofs":
+		if path := cfgval.AsString(check["path"]); path != "" {
+			out = append(out, web.WatchCondition{Field: "path", Op: "==", Value: path})
+		} else if _, ok := check["count"].(map[string]any); !ok {
+			out = append(out, web.WatchCondition{Field: "count", Op: ">=", Value: "1"})
+		}
+	case "count":
+		if path := cfgval.AsString(check["path"]); path != "" {
+			out = append(out, web.WatchCondition{Field: "path", Value: path})
+		}
+		if kind := cfgval.AsString(check["of"]); kind != "" {
+			out = append(out, web.WatchCondition{Field: "of", Value: kind})
+		}
+		if recursive, ok := check["recursive"].(bool); ok {
+			out = append(out, web.WatchCondition{Field: "recursive", Op: "==", Value: fmt.Sprintf("%t", recursive)})
+		}
+		if m, ok := check["count"].(map[string]any); ok {
+			out = append(out, web.WatchCondition{Field: "count", Op: cfgval.AsString(m["op"]), Value: cfgval.String(m["value"])})
+		} else if op := cfgval.AsString(check["op"]); op != "" {
+			out = append(out, web.WatchCondition{Field: "count", Op: op, Value: cfgval.String(check["value"])})
+		}
+	case "file":
+		out = append(out, fileWatchConditions(check)...)
+	case "process":
 		if value := cfgval.String(check["for"]); value != "" {
 			out = append(out, web.WatchCondition{Field: "for", Op: ">=", Value: value})
 		}
 		if gone, ok := check["gone"].(bool); ok && gone {
 			out = append(out, web.WatchCondition{Field: "gone", Op: "==", Value: "true"})
+		}
+	case "route":
+		family := cfgval.AsString(check["family"])
+		if family == "" {
+			family = "ipv4"
+		}
+		out = append(out, web.WatchCondition{Field: "family", Op: "==", Value: family})
+		if iface := cfgval.AsString(check["interface"]); iface != "" {
+			out = append(out, web.WatchCondition{Field: "interface", Op: "==", Value: iface})
+		}
+	case "size":
+		if path := cfgval.AsString(check["path"]); path != "" {
+			out = append(out, web.WatchCondition{Field: "path", Value: path})
+		}
+		if growBy := cfgval.String(check["grow_by"]); growBy != "" {
+			out = append(out, web.WatchCondition{Field: "growth", Op: ">=", Value: growBy})
+		}
+		if within := cfgval.String(check["within"]); within != "" {
+			out = append(out, web.WatchCondition{Field: "within", Value: within})
 		}
 	}
 	if v, ok := check["mounted"].(bool); ok {
@@ -812,9 +884,37 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.RaidPredFields
 	case "edac":
 		return checks.EdacPredFields
+	case "autofs":
+		return []string{"count"}
 	default:
 		return nil
 	}
+}
+
+func fileWatchConditions(check map[string]any) []web.WatchCondition {
+	var out []web.WatchCondition
+	if path := cfgval.AsString(check["path"]); path != "" {
+		out = append(out, web.WatchCondition{Field: "path", Value: path})
+	}
+	if recursive, ok := check["recursive"].(bool); ok {
+		out = append(out, web.WatchCondition{Field: "recursive", Op: "==", Value: fmt.Sprintf("%t", recursive)})
+	}
+	if size, ok := check["size"].(map[string]any); ok {
+		if on := cfgval.AsString(size["on"]); on != "" {
+			out = append(out, web.WatchCondition{Field: "size", Value: on})
+		} else {
+			out = append(out, web.WatchCondition{Field: "size", Op: cfgval.AsString(size["op"]), Value: cfgval.String(size["value"])})
+		}
+	}
+	for _, field := range []string{"permissions", "owner"} {
+		if m, ok := check[field].(map[string]any); ok {
+			out = append(out, web.WatchCondition{Field: field, Value: cfgval.AsString(m["on"])})
+		}
+	}
+	if m, ok := check["existence"].(map[string]any); ok {
+		out = append(out, web.WatchCondition{Field: "existence", Value: cfgval.AsString(m["on"])})
+	}
+	return out
 }
 
 func watchMetricConditions(metrics map[string]any) []web.WatchCondition {
@@ -892,6 +992,18 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 		return b.zombieWatchView()
 	case "process":
 		return b.processWatchView(w)
+	case "autofs":
+		return b.autofsWatchView(w)
+	case "diskio":
+		return b.diskIOWatchView(w)
+	case "sensors":
+		return b.sensorsWatchView(w)
+	case "raid":
+		return b.raidWatchView()
+	case "edac":
+		return b.edacWatchView()
+	case "route":
+		return b.routeWatchView(w)
 	default:
 		return watchMeter(w.checkType, system), nil, ""
 	}
@@ -949,6 +1061,209 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
 	}
 	return nil, readings, summary
+}
+
+func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := b.mountSampler
+	if sampler == nil {
+		sampler = checks.DefaultMounts
+	}
+	mounts, err := sampler()
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "autofs: " + msg
+	}
+	points := autofsMountpoints(mounts)
+	readings := []web.WatchReading{{Field: "count", Label: "Mountpoints", Value: fmt.Sprintf("%d", len(points))}}
+	if len(points) > 0 {
+		readings = append(readings, web.WatchReading{Field: "mountpoints", Label: "Paths", Value: strings.Join(points, ", ")})
+	}
+	if path := cfgval.AsString(w.check["path"]); path != "" {
+		state := "missing"
+		if slices.Contains(points, path) {
+			state = "active"
+		}
+		readings = append(readings, web.WatchReading{Field: "path", Label: "Configured path", Value: path})
+		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: state})
+		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralS(len(points)))
+	}
+	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralS(len(points)))
+}
+
+func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+	device := cfgval.AsString(w.check["device"])
+	if device == "" {
+		msg := "missing device"
+		return nil, watchErrorReadings(msg), "diskio: " + msg
+	}
+	sampler := b.diskIOSampler
+	if sampler == nil {
+		sampler = checks.SampleDiskIO
+	}
+	sample, err := sampler(device)
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "diskio " + device + ": " + msg
+	}
+	now := time.Now
+	if b.now != nil {
+		now = b.now
+	}
+	at := now()
+	key := w.name + "\x00" + device
+
+	b.diskIOMu.Lock()
+	if b.diskIOState == nil {
+		b.diskIOState = map[string]webDiskIOState{}
+	}
+	st := b.diskIOState[key]
+	b.diskIOState[key] = webDiskIOState{primed: true, at: at, sample: sample}
+	b.diskIOMu.Unlock()
+
+	readings := []web.WatchReading{{Field: "device", Label: "Device", Value: device}}
+	if !st.primed {
+		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: "baseline"})
+		return nil, readings, "diskio " + device + " baseline"
+	}
+	rates, ok := checks.CalculateDiskIORates(st.sample, sample, at.Sub(st.at))
+	if !ok {
+		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: "baseline"})
+		return nil, readings, "diskio " + device + " baseline"
+	}
+	readings = append(readings,
+		web.WatchReading{Field: "util_pct", Label: "Utilization", Value: watchPercent(rates.UtilPct)},
+		web.WatchReading{Field: "read_bytes", Label: "Read", Value: fmt.Sprintf("%.0f B/s", rates.ReadBytes)},
+		web.WatchReading{Field: "write_bytes", Label: "Write", Value: fmt.Sprintf("%.0f B/s", rates.WriteBytes)},
+		web.WatchReading{Field: "await_ms", Label: "Await", Value: fmt.Sprintf("%.1f ms", rates.AwaitMs)},
+	)
+	return nil, readings, fmt.Sprintf("diskio %s util %.1f%% read %.0fB/s write %.0fB/s await %.1fms",
+		device, rates.UtilPct, rates.ReadBytes, rates.WriteBytes, rates.AwaitMs)
+}
+
+func (b *WebBackend) sensorsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := b.sensorSampler
+	if sampler == nil {
+		sampler = checks.SampleSensors
+	}
+	readings, err := sampler()
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "sensors: " + msg
+	}
+	chip := cfgval.AsString(w.check["chip"])
+	label := cfgval.AsString(w.check["label"])
+	values := checks.SummarizeSensors(readings, chip, label)
+	out := []web.WatchReading{{Field: "inputs", Label: "Inputs", Value: fmt.Sprintf("%d", values.Count)}}
+	if chip != "" {
+		out = append(out, web.WatchReading{Field: "chip", Label: "Chip filter", Value: chip})
+	}
+	if label != "" {
+		out = append(out, web.WatchReading{Field: "label", Label: "Label filter", Value: label})
+	}
+	parts := make([]string, 0, 3)
+	if values.HasTemp {
+		out = append(out, web.WatchReading{Field: "temp", Label: "Hottest temp", Value: fmt.Sprintf("%.1f C", values.Temp)})
+		parts = append(parts, fmt.Sprintf("temp=%.1fC", values.Temp))
+	}
+	if values.HasFan {
+		out = append(out, web.WatchReading{Field: "fan", Label: "Slowest fan", Value: fmt.Sprintf("%.0f RPM", values.Fan)})
+		parts = append(parts, fmt.Sprintf("fan=%.0fRPM", values.Fan))
+	}
+	if values.HasVoltage {
+		out = append(out, web.WatchReading{Field: "voltage", Label: "Lowest voltage", Value: fmt.Sprintf("%.2f V", values.Voltage)})
+		parts = append(parts, fmt.Sprintf("voltage=%.2fV", values.Voltage))
+	}
+	if len(parts) == 0 {
+		return nil, out, "sensors: no matching inputs"
+	}
+	return nil, out, "sensors " + strings.Join(parts, " ")
+}
+
+func (b *WebBackend) raidWatchView() (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := b.raidSampler
+	if sampler == nil {
+		sampler = checks.SampleRaid
+	}
+	st, err := sampler()
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "raid: " + msg
+	}
+	readings := []web.WatchReading{
+		{Field: "arrays", Label: "Arrays", Value: fmt.Sprintf("%d", st.Arrays)},
+		{Field: "degraded", Label: "Degraded", Value: fmt.Sprintf("%d", st.Degraded)},
+		{Field: "recovering", Label: "Recovering", Value: fmt.Sprintf("%d", st.Recovering)},
+	}
+	summary := fmt.Sprintf("raid: %d arrays, %d degraded, %d recovering", st.Arrays, st.Degraded, st.Recovering)
+	if len(st.DegradedNames) > 0 {
+		names := strings.Join(st.DegradedNames, ", ")
+		readings = append(readings, web.WatchReading{Field: "degraded_arrays", Label: "Degraded arrays", Value: names})
+		summary += " (" + names + ")"
+	}
+	return nil, readings, summary
+}
+
+func (b *WebBackend) edacWatchView() (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := b.edacSampler
+	if sampler == nil {
+		sampler = checks.SampleEdac
+	}
+	st, err := sampler()
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "edac: " + msg
+	}
+	if !st.Present {
+		msg := "no EDAC controllers"
+		return nil, []web.WatchReading{{Field: "present", Label: "EDAC", Error: msg}}, "edac: " + msg
+	}
+	return nil,
+		[]web.WatchReading{
+			{Field: "ce", Label: "Correctable", Value: fmt.Sprintf("%d", st.CE)},
+			{Field: "ue", Label: "Uncorrectable", Value: fmt.Sprintf("%d", st.UE)},
+		},
+		fmt.Sprintf("edac: %d correctable, %d uncorrectable", st.CE, st.UE)
+}
+
+func (b *WebBackend) routeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+	family := cfgval.AsString(w.check["family"])
+	if family == "" {
+		family = "ipv4"
+	}
+	iface := cfgval.AsString(w.check["interface"])
+	sampler := b.routeSampler
+	if sampler == nil {
+		sampler = checks.SampleRoutes
+	}
+	routes, err := sampler(family)
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "route: " + msg
+	}
+	matched := matchingDefaultRoutes(routes, iface)
+	readings := []web.WatchReading{
+		{Field: "family", Label: "Family", Value: family},
+		{Field: "routes", Label: "Default routes", Value: fmt.Sprintf("%d", len(routes))},
+	}
+	if iface != "" {
+		readings = append(readings, web.WatchReading{Field: "interface", Label: "Required interface", Value: iface})
+	}
+	if len(matched) > 0 {
+		readings = append(readings, web.WatchReading{Field: "egress", Label: "Egress", Value: matched[0].Iface})
+		if matched[0].Gateway != "" {
+			readings = append(readings, web.WatchReading{Field: "gateway", Label: "Gateway", Value: matched[0].Gateway})
+		}
+	}
+	switch {
+	case len(matched) > 0 && matched[0].Gateway != "":
+		return nil, readings, fmt.Sprintf("%s default route via %s (gw %s)", family, matched[0].Iface, matched[0].Gateway)
+	case len(matched) > 0:
+		return nil, readings, fmt.Sprintf("%s default route via %s", family, matched[0].Iface)
+	case iface != "" && len(routes) > 0:
+		return nil, readings, fmt.Sprintf("no %s default route via %s (%d elsewhere)", family, iface, len(routes))
+	default:
+		return nil, readings, "no " + family + " default route"
+	}
 }
 
 func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -1202,6 +1517,30 @@ func processPIDList(samples []ProcInfo) string {
 		parts = append(parts, fmt.Sprintf("+%d more", extra))
 	}
 	return strings.Join(parts, ", ")
+}
+
+func autofsMountpoints(mounts []checks.Mount) []string {
+	var points []string
+	for _, mount := range mounts {
+		if mount.FSType == "autofs" {
+			points = append(points, mount.MountPoint)
+		}
+	}
+	sort.Strings(points)
+	return points
+}
+
+func matchingDefaultRoutes(routes []checks.DefaultRoute, iface string) []checks.DefaultRoute {
+	if iface == "" {
+		return routes
+	}
+	var matched []checks.DefaultRoute
+	for _, route := range routes {
+		if route.Iface == iface {
+			matched = append(matched, route)
+		}
+	}
+	return matched
 }
 
 // swapWatchInfo reads the host swap usage from the collector's cached system

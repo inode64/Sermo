@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// raidStatus summarizes the Linux software-RAID (md) state.
-type raidStatus struct {
+// RaidStatus summarizes the Linux software-RAID (md) state.
+type RaidStatus struct {
 	Arrays        int
 	Degraded      int
 	Recovering    int
@@ -20,7 +20,7 @@ type raidStatus struct {
 
 // RaidSamplerFunc reads the current md RAID status. Injected for tests; the
 // default parses /proc/mdstat.
-type RaidSamplerFunc func() (raidStatus, error)
+type RaidSamplerFunc func() (RaidStatus, error)
 
 // raidCheck reports the health of Linux md software-RAID arrays. With no predicate
 // it is a condition check that alerts when any array is degraded; predicates on
@@ -65,14 +65,18 @@ func (c raidCheck) Run(_ context.Context) Result {
 	return r
 }
 
+// SampleRaid returns one live md RAID observation using the default /proc/mdstat
+// sampler.
+func SampleRaid() (RaidStatus, error) { return defaultRaidSampler() }
+
 // defaultRaidSampler parses /proc/mdstat (absent/empty -> no arrays).
-func defaultRaidSampler() (raidStatus, error) {
+func defaultRaidSampler() (RaidStatus, error) {
 	b, err := os.ReadFile("/proc/mdstat")
 	if err != nil {
 		if os.IsNotExist(err) {
-			return raidStatus{}, nil
+			return RaidStatus{}, nil
 		}
-		return raidStatus{}, err
+		return RaidStatus{}, err
 	}
 	return parseMdstat(string(b)), nil
 }
@@ -87,8 +91,8 @@ var (
 // lines that follow it) is degraded when its [n/m] active count is short or its
 // [U_…] member map has a down member ('_'); it is recovering when its block
 // mentions recovery/resync/reshape/check.
-func parseMdstat(s string) raidStatus {
-	var st raidStatus
+func parseMdstat(s string) RaidStatus {
+	var st RaidStatus
 	var cur string
 	var degraded, recovering bool
 	flush := func() {

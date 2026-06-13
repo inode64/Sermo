@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// edacCounts is the aggregated EDAC memory-error count across controllers.
-type edacCounts struct {
+// EdacCounts is the aggregated EDAC memory-error count across controllers.
+type EdacCounts struct {
 	CE      int64 // correctable
 	UE      int64 // uncorrectable
 	Present bool  // false when the platform exposes no EDAC controllers
@@ -17,7 +17,7 @@ type edacCounts struct {
 
 // EdacSamplerFunc reads the current EDAC counters. Injected for tests; the default
 // reads /sys/devices/system/edac.
-type EdacSamplerFunc func() (edacCounts, error)
+type EdacSamplerFunc func() (EdacCounts, error)
 
 // edacCheck reports ECC memory errors from the kernel EDAC subsystem. `ce` is the
 // cumulative correctable-error count and `ue` the uncorrectable count (a single
@@ -56,19 +56,23 @@ func (c edacCheck) Run(_ context.Context) Result {
 	return r
 }
 
+// SampleEdac returns one live EDAC memory-error observation using the default
+// sysfs sampler.
+func SampleEdac() (EdacCounts, error) { return defaultEdacSampler() }
+
 // defaultEdacSampler reads /sys/devices/system/edac.
-func defaultEdacSampler() (edacCounts, error) { return readEDAC("/sys/devices/system/edac") }
+func defaultEdacSampler() (EdacCounts, error) { return readEDAC("/sys/devices/system/edac") }
 
 // readEDAC sums ce_count/ue_count across the memory controllers under root.
-func readEDAC(root string) (edacCounts, error) {
+func readEDAC(root string) (EdacCounts, error) {
 	mcs, err := filepath.Glob(filepath.Join(root, "mc", "mc*"))
 	if err != nil {
-		return edacCounts{}, err
+		return EdacCounts{}, err
 	}
 	if len(mcs) == 0 {
-		return edacCounts{}, nil
+		return EdacCounts{}, nil
 	}
-	var st edacCounts
+	var st EdacCounts
 	st.Present = true
 	for _, mc := range mcs {
 		st.CE += readInt(filepath.Join(mc, "ce_count"))

@@ -19,6 +19,18 @@ type SensorReading struct {
 	Value float64
 }
 
+// SensorValues is the aggregate view used by the sensors check: hottest
+// temperature, slowest fan, and lowest voltage among the matching inputs.
+type SensorValues struct {
+	Temp       float64
+	HasTemp    bool
+	Fan        float64
+	HasFan     bool
+	Voltage    float64
+	HasVoltage bool
+	Count      int
+}
+
 // SensorSamplerFunc reads the current hardware sensor inputs. Injected for tests;
 // the default reads /sys/class/hwmon.
 type SensorSamplerFunc func() ([]SensorReading, error)
@@ -48,12 +60,42 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 		return c.result(false, "sensors: "+err.Error(), start)
 	}
 
+	summary := SummarizeSensors(readings, c.chip, c.label)
+	values := sensorValueMap(summary)
+	if len(values) == 0 {
+		return c.result(false, "sensors: no matching inputs", start)
+	}
+
+	ok := levelPredsHold(c.preds, values)
+
+	parts := make([]string, 0, 3)
+	appendSensorPart := func(field string, value float64, ok bool) {
+		if ok {
+			parts = append(parts, fmt.Sprintf("%s=%.1f", field, value))
+		}
+	}
+	appendSensorPart("temp", summary.Temp, summary.HasTemp)
+	appendSensorPart("fan", summary.Fan, summary.HasFan)
+	appendSensorPart("voltage", summary.Voltage, summary.HasVoltage)
+	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
+	r.Data = map[string]any{}
+	for k, v := range values {
+		r.Data[k] = v
+	}
+	return r
+}
+
+// SummarizeSensors filters sensor readings by chip/label substring and returns
+// the aggregate values evaluated by the sensors check.
+func SummarizeSensors(readings []SensorReading, chip, label string) SensorValues {
 	var temps, fans, volts []float64
+	chip = strings.ToLower(chip)
+	label = strings.ToLower(label)
 	for _, r := range readings {
-		if c.chip != "" && !strings.Contains(strings.ToLower(r.Chip), strings.ToLower(c.chip)) {
+		if chip != "" && !strings.Contains(strings.ToLower(r.Chip), chip) {
 			continue
 		}
-		if c.label != "" && !strings.Contains(strings.ToLower(r.Label), strings.ToLower(c.label)) {
+		if label != "" && !strings.Contains(strings.ToLower(r.Label), label) {
 			continue
 		}
 		switch r.Kind {
@@ -65,38 +107,39 @@ func (c sensorsCheck) Run(_ context.Context) Result {
 			volts = append(volts, r.Value)
 		}
 	}
-	values := map[string]float64{}
+	values := SensorValues{Count: len(temps) + len(fans) + len(volts)}
 	if len(temps) > 0 {
-		values["temp"] = maxFloat(temps)
+		values.Temp, values.HasTemp = maxFloat(temps), true
 	}
 	if len(fans) > 0 {
-		values["fan"] = minFloat(fans)
+		values.Fan, values.HasFan = minFloat(fans), true
 	}
 	if len(volts) > 0 {
-		values["voltage"] = minFloat(volts)
+		values.Voltage, values.HasVoltage = minFloat(volts), true
 	}
-	if len(values) == 0 {
-		return c.result(false, "sensors: no matching inputs", start)
-	}
+	return values
+}
 
-	ok := levelPredsHold(c.preds, values)
-
-	parts := make([]string, 0, 3)
-	for _, f := range []string{"temp", "fan", "voltage"} {
-		if v, present := values[f]; present {
-			parts = append(parts, fmt.Sprintf("%s=%.1f", f, v))
-		}
+func sensorValueMap(summary SensorValues) map[string]float64 {
+	values := map[string]float64{}
+	if summary.HasTemp {
+		values["temp"] = summary.Temp
 	}
-	r := c.result(ok, "sensors "+strings.Join(parts, " "), start)
-	r.Data = map[string]any{}
-	for k, v := range values {
-		r.Data[k] = v
+	if summary.HasFan {
+		values["fan"] = summary.Fan
 	}
-	return r
+	if summary.HasVoltage {
+		values["voltage"] = summary.Voltage
+	}
+	return values
 }
 
 // defaultSensorSampler reads /sys/class/hwmon.
 func defaultSensorSampler() ([]SensorReading, error) { return readHwmon("/sys/class/hwmon") }
+
+// SampleSensors returns one live hardware-sensor observation using the default
+// hwmon sampler.
+func SampleSensors() ([]SensorReading, error) { return defaultSensorSampler() }
 
 // readHwmon parses the hwmon tree at root into temperature (°C), fan (RPM) and
 // voltage (V) readings.
