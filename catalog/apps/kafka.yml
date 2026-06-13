@@ -1,6 +1,7 @@
 kind: app
 name: kafka
 display_name: "Apache Kafka"
+category: messaging
 description: "Apache Kafka distribution (broker/controller, KRaft mode)"
 
 # Kafka ships as JVM shell launchers under <install>/bin. The runtime itself is

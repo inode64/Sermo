@@ -1,6 +1,7 @@
 kind: daemon
 name: dhclient
 display_name: "DHCP Client"
+category: network
 description: "Cliente DHCP"
 service: dhclient
 apps: [dhclient]

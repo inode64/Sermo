@@ -1,6 +1,7 @@
 kind: daemon
 name: openvpn-%i
 display_name: "OpenVPN ${instance}"
+category: network
 uses: openvpn
 service: "openvpn.${instance}"
 versions:

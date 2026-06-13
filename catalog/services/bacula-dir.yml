@@ -1,6 +1,7 @@
 kind: daemon
 name: bacula-dir
 display_name: "Bacula Director"
+category: storage
 description: "Backup director Server"
 service: bacula-dir
 apps: [bacula-dir]

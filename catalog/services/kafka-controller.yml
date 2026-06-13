@@ -1,6 +1,7 @@
 kind: daemon
 name: kafka-controller
 display_name: "Apache Kafka Controller"
+category: messaging
 description: "Kafka controller: maintains the KRaft metadata quorum on the controller listener."
 type: queue
 

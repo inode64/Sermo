@@ -1,6 +1,7 @@
 kind: app
 name: ceph-mon
 display_name: "Ceph Monitor"
+category: storage
 description: "Ceph cluster monitor daemon"
 variables:
   binary: "/usr/bin/ceph-mon"

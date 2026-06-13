@@ -1,6 +1,7 @@
 kind: daemon
 name: homeassistant
 display_name: "Home Assistant"
+category: web
 description: "Home Assistant home-automation platform."
 
 service:

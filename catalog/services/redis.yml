@@ -1,6 +1,7 @@
 kind: daemon
 name: redis
 display_name: "Redis"
+category: database
 type: cache
 
 service:

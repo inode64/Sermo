@@ -1,6 +1,7 @@
 kind: daemon
 name: apache
 display_name: "Apache HTTP Server"
+category: web
 type: webserver
 
 service:

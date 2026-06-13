@@ -1,6 +1,7 @@
 kind: app
 name: avahi-daemon
 display_name: "Avahi"
+category: network
 variables:
   binary: "/usr/bin/avahi-daemon"
 preflight:

@@ -1,6 +1,7 @@
 kind: daemon
 name: ceph-mon
 display_name: "Ceph Monitor"
+category: storage
 description: "Ceph cluster monitor: maintains the cluster maps and the paxos quorum."
 
 # Monitors run as a systemd instance keyed by the mon id, which is the short

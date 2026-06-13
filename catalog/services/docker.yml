@@ -1,6 +1,7 @@
 kind: daemon
 name: docker
 display_name: "Docker Engine"
+category: virtualization
 description: "Docker Engine container runtime."
 
 service:

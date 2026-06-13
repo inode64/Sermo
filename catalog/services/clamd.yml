@@ -1,6 +1,7 @@
 kind: daemon
 name: clamd
 display_name: "ClamAV Daemon"
+category: security
 service: clamd
 apps: [clamd]
 

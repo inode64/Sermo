@@ -1,6 +1,7 @@
 kind: daemon
 name: python%n
 display_name: "Python ${n}"
+category: runtime
 service: python${n}
 variables:
   binary: "/usr/bin/python${n}"

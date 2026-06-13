@@ -1,6 +1,7 @@
 kind: daemon
 name: pptpd
 display_name: "PPTP Server"
+category: network
 service: pptpd
 apps: [pptpd]
 

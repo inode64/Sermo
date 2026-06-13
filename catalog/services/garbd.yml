@@ -1,6 +1,7 @@
 kind: daemon
 name: garbd
 display_name: "Galera Arbitrator"
+category: database
 description: "Synchronous multi-master replication engine that provides the wsrep API"
 service: garbd
 apps: [garbd]

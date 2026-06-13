@@ -1,6 +1,7 @@
 kind: daemon
 name: node_exporter
 display_name: "Prometheus Node Exporter"
+category: observability
 description: "Prometheus node_exporter: host metrics over HTTP /metrics."
 
 service:

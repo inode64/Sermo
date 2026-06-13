@@ -1,6 +1,7 @@
 kind: daemon
 name: kafka-broker
 display_name: "Apache Kafka Broker"
+category: messaging
 description: "Kafka broker: serves the client data plane (produce/fetch) on the broker listener."
 type: queue
 

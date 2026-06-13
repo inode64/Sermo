@@ -1,6 +1,7 @@
 kind: daemon
 name: influxdb
 display_name: "InfluxDB"
+category: database
 description: "InfluxDB time-series database."
 type: database
 

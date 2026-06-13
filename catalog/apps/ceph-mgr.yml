@@ -1,6 +1,7 @@
 kind: app
 name: ceph-mgr
 display_name: "Ceph Manager"
+category: storage
 description: "Ceph manager daemon binary."
 variables:
   binary: /usr/bin/ceph-mgr

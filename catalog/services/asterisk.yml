@@ -1,6 +1,7 @@
 kind: daemon
 name: asterisk
 display_name: "Asterisk PBX"
+category: messaging
 service: asterisk
 apps: [asterisk]
 

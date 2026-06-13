@@ -1,6 +1,7 @@
 kind: app
 name: java
 display_name: "Java"
+category: runtime
 variables:
   binary: "/usr/bin/java"
 preflight:

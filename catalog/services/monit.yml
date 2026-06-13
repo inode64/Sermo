@@ -1,6 +1,7 @@
 kind: daemon
 name: monit
 display_name: "Monit"
+category: observability
 description: "Monit process supervision and monitoring daemon."
 
 service:

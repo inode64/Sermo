@@ -1,6 +1,7 @@
 kind: app
 name: dovecot
 display_name: "Dovecot"
+category: messaging
 variables:
   binary: "/usr/bin/dovecot"
 preflight:

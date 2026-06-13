@@ -1,6 +1,7 @@
 kind: daemon
 name: dmeventd
 display_name: "Device-mapper event daemon"
+category: system
 service: dmeventd
 apps: [dmeventd]
 checks:

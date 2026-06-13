@@ -1,6 +1,7 @@
 kind: daemon
 name: snmpd
 display_name: "Net-SNMP Daemon"
+category: observability
 service: snmpd
 apps: [snmpd]
 

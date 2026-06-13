@@ -1,6 +1,7 @@
 kind: daemon
 name: afpd
 display_name: "Netatalk AFP Daemon"
+category: storage
 service: afpd
 apps: [afpd]
 

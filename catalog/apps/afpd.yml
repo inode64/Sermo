@@ -1,6 +1,7 @@
 kind: app
 name: afpd
 display_name: "Netatalk AFP Daemon"
+category: storage
 variables:
   binary: "/usr/bin/afpd"
 preflight:

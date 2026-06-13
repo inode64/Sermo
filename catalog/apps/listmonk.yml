@@ -1,6 +1,7 @@
 kind: app
 name: listmonk
 display_name: "listmonk"
+category: web
 variables:
   # listmonk is a single self-contained binary; its path is deployment-specific
   # (often under the app's web root). Override `binary` to match your install.

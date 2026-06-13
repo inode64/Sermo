@@ -1,6 +1,7 @@
 kind: daemon
 name: rest-server
 display_name: "Restic REST Server"
+category: storage
 description: "restic rest-server: HTTP backend for restic backups."
 
 service:

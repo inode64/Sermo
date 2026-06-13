@@ -791,9 +791,8 @@ func TestCategoryLabelFallsBack(t *testing.T) {
 	}{
 		{"present", map[string]any{"category": "database"}, "database"},
 		{"trimmed", map[string]any{"category": " database "}, "database"},
-		{"inferred-web", map[string]any{"name": "nginx"}, "web"},
-		{"inferred-database", map[string]any{"display_name": "MariaDB"}, "database"},
-		{"cups-not-ups", map[string]any{"name": "cups-config", "display_name": "CUPS"}, "system"},
+		{"no-inference-from-name", map[string]any{"name": "nginx"}, "service"},
+		{"no-inference-from-display-name", map[string]any{"display_name": "MariaDB"}, "service"},
 		{"absent", map[string]any{}, "service"},
 		{"blank", map[string]any{"category": "   "}, "service"},
 		{"non-string", map[string]any{"category": 7}, "service"},

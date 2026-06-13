@@ -1,6 +1,7 @@
 kind: daemon
 name: zigbee2mqtt
 display_name: "Zigbee2MQTT"
+category: web
 description: "Zigbee to MQTT bridge."
 service: zigbee2mqtt
 

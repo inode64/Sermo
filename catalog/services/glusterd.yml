@@ -1,6 +1,7 @@
 kind: daemon
 name: glusterd
 display_name: "GlusterFS"
+category: storage
 description: "GlusterFS"
 service: glusterd
 apps: [glusterd]

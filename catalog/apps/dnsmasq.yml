@@ -1,6 +1,7 @@
 kind: app
 name: dnsmasq
 display_name: "dnsmasq"
+category: network
 variables:
   binary: /usr/bin/dnsmasq
 preflight:

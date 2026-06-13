@@ -1,6 +1,7 @@
 kind: daemon
 name: smbd
 display_name: "Samba SMB"
+category: storage
 description: "Servidor de ficheros Windows - SMB"
 service: smbd
 apps: [smbd]

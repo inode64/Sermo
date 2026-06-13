@@ -1,6 +1,7 @@
 kind: app
 name: go2rtc
 display_name: "go2rtc"
+category: web
 variables:
   binary: /usr/bin/go2rtc
 preflight:

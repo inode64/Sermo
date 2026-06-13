@@ -1,6 +1,7 @@
 kind: app
 name: mongod
 display_name: "MongoDB"
+category: database
 variables:
   binary: "/usr/bin/mongod"
 preflight:

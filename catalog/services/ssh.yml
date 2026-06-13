@@ -1,6 +1,7 @@
 kind: daemon
 name: ssh
 display_name: "OpenSSH"
+category: network
 service:
   systemd: [sshd, ssh]
   openrc: [sshd]

@@ -1,6 +1,7 @@
 kind: app
 name: syncthing
 display_name: "Syncthing"
+category: storage
 variables:
   binary: /usr/bin/syncthing
 preflight:

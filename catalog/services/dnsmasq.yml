@@ -1,6 +1,7 @@
 kind: daemon
 name: dnsmasq
 display_name: "dnsmasq"
+category: network
 description: "dnsmasq lightweight DNS forwarder and DHCP/TFTP server."
 
 service:

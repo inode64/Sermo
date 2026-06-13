@@ -1,6 +1,7 @@
 kind: app
 name: salt
 display_name: "Salt"
+category: system
 variables:
   binary: "/usr/bin/salt"
 preflight:

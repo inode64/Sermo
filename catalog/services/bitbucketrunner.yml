@@ -1,6 +1,7 @@
 kind: daemon
 name: bitbucketrunner
 display_name: "Bitbucket Pipelines Runner"
+category: system
 description: "Atlassian Bitbucket self-hosted Pipelines runner."
 
 service:

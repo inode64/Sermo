@@ -1,6 +1,7 @@
 kind: daemon
 name: node
 display_name: "Node.js"
+category: runtime
 description: "A JavaScript runtime built on Chrome's V8 JavaScript engine"
 service: node
 apps: [node]

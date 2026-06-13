@@ -1,6 +1,7 @@
 kind: daemon
 name: nginx
 display_name: "Nginx"
+category: web
 service: nginx
 apps: [nginx]
 

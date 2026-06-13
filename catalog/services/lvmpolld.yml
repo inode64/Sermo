@@ -1,6 +1,7 @@
 kind: daemon
 name: lvmpolld
 display_name: "LVM poll daemon"
+category: storage
 service: lvmpolld
 apps: [lvmpolld]
 checks:

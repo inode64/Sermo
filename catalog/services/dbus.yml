@@ -1,6 +1,7 @@
 kind: daemon
 name: dbus-daemon
 display_name: "D-Bus"
+category: system
 description: "DBus Daemon"
 service:
   systemd: [dbus]

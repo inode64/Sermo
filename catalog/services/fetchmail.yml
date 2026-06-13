@@ -1,6 +1,7 @@
 kind: daemon
 name: fetchmail
 display_name: "Fetchmail"
+category: messaging
 service: fetchmail
 apps: [fetchmail]
 

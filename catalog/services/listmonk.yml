@@ -1,6 +1,7 @@
 kind: daemon
 name: listmonk
 display_name: "listmonk"
+category: web
 description: "listmonk newsletter and mailing-list manager."
 
 service:

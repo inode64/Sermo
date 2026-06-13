@@ -1,5 +1,6 @@
 kind: daemon
 name: mdadm
+category: storage
 service: mdadm
 apps: [mdadm]
 

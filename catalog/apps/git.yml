@@ -1,6 +1,7 @@
 kind: app
 name: git
 display_name: "Git"
+category: runtime
 variables:
   binary: "/usr/bin/git"
 preflight:

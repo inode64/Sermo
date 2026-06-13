@@ -1,6 +1,7 @@
 kind: app
 name: virtlockd
 display_name: "libvirt Lock Daemon"
+category: virtualization
 variables:
   binary: "/usr/bin/virtlockd"
 preflight:

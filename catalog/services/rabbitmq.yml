@@ -1,6 +1,7 @@
 kind: daemon
 name: rabbitmq
 display_name: "RabbitMQ"
+category: messaging
 type: queue
 
 service:

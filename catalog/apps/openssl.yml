@@ -1,6 +1,7 @@
 kind: app
 name: openssl
 display_name: "OpenSSL"
+category: security
 description: "Full-strength general purpose cryptography library (including SSL and TLS)"
 variables:
   binary: "/usr/bin/openssl"

@@ -1,6 +1,7 @@
 kind: daemon
 name: prometheus
 display_name: "Prometheus"
+category: observability
 description: "Prometheus monitoring server and time-series database."
 
 service:
