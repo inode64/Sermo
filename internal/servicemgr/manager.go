@@ -232,12 +232,26 @@ func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatu
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
 		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %w", service, err)
 	}
+	status := openrcStatus(result)
+	if status == StatusUnknown {
+		if fallback, ok := m.rcStatus(ctx, service); ok {
+			status = fallback
+		}
+	}
 	return ServiceStatus{
 		Service: service,
 		Backend: BackendOpenRC,
 		Unit:    service,
-		Status:  openrcStatus(result),
+		Status:  status,
 	}, nil
+}
+
+func (m openrcManager) rcStatus(ctx context.Context, service string) (Status, bool) {
+	result, _ := m.runner.Run(ctx, "rc-status", "-a")
+	if strings.TrimSpace(result.Stdout) == "" {
+		return StatusUnknown, false
+	}
+	return openrcStatusLine(result.Stdout, service)
 }
 
 func (m openrcManager) Start(ctx context.Context, service string) error {
@@ -359,4 +373,29 @@ func openrcStatus(result execx.Result) Status {
 	default:
 		return StatusUnknown
 	}
+}
+
+func openrcStatusLine(out, service string) (Status, bool) {
+	for _, line := range strings.Split(out, "\n") {
+		open := strings.Index(line, "[")
+		closeIdx := strings.Index(line, "]")
+		if open < 0 || closeIdx < open {
+			continue
+		}
+		if strings.TrimSpace(line[:open]) != service {
+			continue
+		}
+		state := strings.ToLower(strings.TrimSpace(line[open+1 : closeIdx]))
+		switch {
+		case strings.Contains(state, "crashed"):
+			return StatusFailed, true
+		case strings.Contains(state, "stopped"), strings.Contains(state, "not started"), strings.Contains(state, "inactive"):
+			return StatusInactive, true
+		case strings.Contains(state, "started"):
+			return StatusActive, true
+		default:
+			return StatusUnknown, true
+		}
+	}
+	return StatusUnknown, false
 }

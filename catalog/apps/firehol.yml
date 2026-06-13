@@ -1,0 +1,8 @@
+kind: app
+name: firehol
+display_name: "FireHOL"
+category: security
+variables:
+  binary: "/usr/bin/firehol"
+preflight:
+  binary: { type: binary, path: "${binary}" }
