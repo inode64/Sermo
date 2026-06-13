@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"sermo/internal/diag"
 	"sermo/internal/state"
@@ -15,6 +16,13 @@ import (
 // points that do not exist. Exit code is non-zero when any error-level finding is
 // reported (warnings alone exit 0).
 func (a App) runDiagnose(opts options) int {
+	if len(opts.args) > 0 {
+		if (opts.args[0] == "clean" || opts.args[0] == "clear") && len(opts.args) == 1 {
+			return a.runDiagnoseClean(opts)
+		}
+		return a.usageError("diagnose supports only: diagnose [--json] | diagnose clean [--json]")
+	}
+
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
 		return code
@@ -38,6 +46,42 @@ func (a App) runDiagnose(opts options) int {
 	if result.Errors() > 0 {
 		return exitConfigInvalid
 	}
+	return exitSuccess
+}
+
+func (a App) runDiagnoseClean(opts options) int {
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess {
+		return code
+	}
+	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("open state database: %v", err))
+	}
+	defer store.Close()
+
+	result, err := store.PruneUnconfiguredServices(cfg.SortedServiceNames())
+	if err != nil {
+		return a.fail(opts, fmt.Sprintf("clean diagnostic state: %v", err))
+	}
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{
+			"pruned":   result.Rows,
+			"services": result.Services,
+		})
+		return exitSuccess
+	}
+	if len(result.Services) == 0 {
+		fmt.Fprintln(a.Stdout, "no unconfigured service data found")
+		return exitSuccess
+	}
+	fmt.Fprintf(
+		a.Stdout,
+		"cleared stored data for %d unconfigured service(s): %s (%d row(s))\n",
+		len(result.Services),
+		strings.Join(result.Services, ", "),
+		result.Rows,
+	)
 	return exitSuccess
 }
 
