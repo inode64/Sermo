@@ -90,12 +90,9 @@ func monitorMetaSuffix(rec state.MonitorRecord, found bool) string {
 	if !found {
 		return ""
 	}
-	suffix := ""
-	if rec.Source != "" {
-		suffix += " source=" + rec.Source
-	}
+	changedAt := ""
 	if !rec.UpdatedAt.IsZero() {
-		suffix += " changed=" + rec.UpdatedAt.UTC().Format(time.RFC3339)
+		changedAt = rec.UpdatedAt.UTC().Format(time.RFC3339)
 	}
-	return suffix
+	return metaSuffix(rec.Source, changedAt)
 }

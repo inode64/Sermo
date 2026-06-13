@@ -499,3 +499,26 @@ func TestSystemCPURateAndFreshness(t *testing.T) {
 		t.Fatalf("system sample within freshness window should be cached")
 	}
 }
+
+// A backward CPU counter (a reset) must not underflow into a bogus rate: the
+// sample is simply not ready, like the per-process and IO rate samplers.
+func TestSampleSystemCPUCounterReset(t *testing.T) {
+	clock := time.Unix(0, 0)
+	reader := fakeReader{memTotal: 1000, memUsed: 250, sysBusy: 100, sysTotal: 200, hz: 100, ncpu: 1}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleSystem() // baseline
+
+	clock = clock.Add(time.Hour) // past the freshness window
+	reader.sysBusy = 50          // counter went backward
+	reader.sysTotal = 300
+	c.Reader = reader
+	r := c.SampleSystem()["total_cpu"]
+
+	if r.Ready {
+		t.Fatalf("total_cpu must not be ready after a backward counter, got Percent=%v", r.Percent)
+	}
+	if r.Percent != 0 {
+		t.Fatalf("total_cpu%% = %v, want 0 (no underflow rate)", r.Percent)
+	}
+}

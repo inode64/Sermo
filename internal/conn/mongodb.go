@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/tls"
 	"net"
 	"strconv"
 
@@ -113,7 +112,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 		opts.SetAuth(options.Credential{Username: cfg.User, Password: cfg.Password, AuthSource: authSource})
 	}
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+		tc := tlsClientConfig(host)
 		if mode == "skip-verify" {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
