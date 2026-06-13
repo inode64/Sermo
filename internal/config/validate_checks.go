@@ -52,29 +52,32 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 // disk-style comparison op and a numeric value) at the dotted label. It is the
 // shared core of every delta/threshold/predicate check.
 func validateOpNumeric(label string, m map[string]any, add addFunc) {
-	if !isValidDiskOp(cfgval.String(m["op"])) {
-		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
-	}
+	validateDiskOp(label, m, add)
 	if !isNumeric(cfgval.String(m["value"])) {
 		add("%s value %q must be numeric", label, cfgval.String(m["value"]))
 	}
 }
 
 func validateOpByteSize(label string, m map[string]any, add addFunc) {
-	if !isValidDiskOp(cfgval.String(m["op"])) {
-		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
-	}
+	validateDiskOp(label, m, add)
 	if _, ok := cfgval.ByteSize(m["value"]); !ok {
 		add("%s value %q must include a size suffix (K, M, G or T; e.g. 10G, 500M)", label, cfgval.String(m["value"]))
 	}
 }
 
 func validateOpPercent(label string, m map[string]any, add addFunc) {
-	if !isValidDiskOp(cfgval.String(m["op"])) {
-		add("%s has an invalid op %q", label, cfgval.String(m["op"]))
-	}
+	validateDiskOp(label, m, add)
 	if !isPercentValue(cfgval.String(m["value"])) {
 		add("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", label, cfgval.String(m["value"]))
+	}
+}
+
+// validateDiskOp adds an error when the {op} of an already-extracted threshold
+// map is not one of the comparison operators the disk-style checks share. It is
+// the op-validation prologue every validateOp* helper repeats.
+func validateDiskOp(label string, m map[string]any, add addFunc) {
+	if op := cfgval.String(m["op"]); !isValidDiskOp(op) {
+		add("%s has an invalid op %q", label, op)
 	}
 }
 

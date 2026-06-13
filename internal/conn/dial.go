@@ -38,12 +38,20 @@ func dialConn(ctx context.Context, cfg Config, port int) (net.Conn, error) {
 	case "":
 		return d.DialContext(ctx, "tcp", addr)
 	case "skip-verify":
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12, InsecureSkipVerify: true} //nolint:gosec // operator chose tls: skip-verify
+		tc := tlsClientConfig(host)
+		tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, "tcp", addr)
 	default:
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
-		return (&tls.Dialer{NetDialer: d, Config: tc}).DialContext(ctx, "tcp", addr)
+		return (&tls.Dialer{NetDialer: d, Config: tlsClientConfig(host)}).DialContext(ctx, "tcp", addr)
 	}
+}
+
+// tlsClientConfig is the TLS client config the conn probes share for an upgrade
+// to host: SNI set and TLS 1.2 the floor. Centralizing it keeps the minimum
+// version (and any future policy) in one place across every probe; callers that
+// need to skip verification set InsecureSkipVerify on the returned config.
+func tlsClientConfig(host string) *tls.Config {
+	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 }
 
 // applyDeadline sets the context deadline on a connection (net.Conn or

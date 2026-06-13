@@ -669,6 +669,17 @@ func TestCollectVariablesFirstExistingPath(t *testing.T) {
 	if vars["binary"] != missing {
 		t.Errorf("binary = %q, want fallback to first %q", vars["binary"], missing)
 	}
+
+	// A null/empty first element must not become the fallback: the value should
+	// stay a well-formed (if missing) path, not an empty string.
+	vars = collectVariables(map[string]any{
+		"variables": map[string]any{
+			"binary": []any{nil, missing},
+		},
+	})
+	if vars["binary"] != missing {
+		t.Errorf("binary = %q, want fallback to first non-empty %q", vars["binary"], missing)
+	}
 }
 
 func TestBuiltinNameAndDisplayNameVariables(t *testing.T) {

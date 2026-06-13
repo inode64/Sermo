@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -288,17 +289,7 @@ func (m statusMatcher) matches(code int) bool {
 		ok, _ := compareValue(strconv.Itoa(code), m.op, m.value)
 		return ok
 	}
-	for _, c := range m.codes {
-		if c == code {
-			return true
-		}
-	}
-	for _, cl := range m.classes {
-		if code/100 == cl {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.codes, code) || slices.Contains(m.classes, code/100)
 }
 
 func (m statusMatcher) String() string {

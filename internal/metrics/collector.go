@@ -282,13 +282,15 @@ func (c *Collector) SampleSystem() Snapshot {
 
 	if busy, total, ok := c.Reader.SystemCPU(); ok {
 		cpu := Reading{HasPercent: true}
-		if c.prevSystem != nil {
+		// Require both counters to advance. A backward jump (a counter reset)
+		// would underflow these unsigned deltas into a huge bogus rate that could
+		// spuriously trip a total_cpu threshold — the same guard ioRate and the
+		// per-process samplers already apply.
+		if c.prevSystem != nil && busy >= c.prevSystem.busy && total > c.prevSystem.total {
 			dBusy := busy - c.prevSystem.busy
 			dTotal := total - c.prevSystem.total
-			if dTotal > 0 {
-				cpu.Percent = float64(dBusy) / float64(dTotal) * 100
-				cpu.Ready = true
-			}
+			cpu.Percent = float64(dBusy) / float64(dTotal) * 100
+			cpu.Ready = true
 		}
 		c.prevSystem = &sysSample{busy: busy, total: total}
 		snap["total_cpu"] = cpu

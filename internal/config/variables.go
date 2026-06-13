@@ -45,13 +45,13 @@ func collectVariables(tree map[string]any) map[string]string {
 // missing rather than expanding to an empty string.
 func firstExistingPath(candidates []any) string {
 	var first string
-	for i, c := range candidates {
+	for _, c := range candidates {
 		p := cfgval.String(c)
-		if i == 0 {
-			first = p
-		}
 		if p == "" {
 			continue
+		}
+		if first == "" {
+			first = p // first non-empty candidate, the fallback when none exist
 		}
 		if _, err := os.Stat(p); err == nil {
 			return p
