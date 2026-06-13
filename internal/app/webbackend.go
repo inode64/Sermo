@@ -1144,13 +1144,13 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			d.Locks = append(d.Locks, lockToWeb(lk, name))
 		}
 		if len(report.Warnings) > 0 {
-			d.LockWarnings = append([]string(nil), report.Warnings...)
+			d.LockWarnings = slices.Clone(report.Warnings)
 		}
 	}
 
 	procs, procWarnings := e.discoverer.Discover(e.selectors)
 	if len(procWarnings) > 0 {
-		d.ProcessWarnings = append([]string(nil), procWarnings...)
+		d.ProcessWarnings = slices.Clone(procWarnings)
 	}
 	d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
 	attachLiveCPU(&d, b.live, name)
