@@ -45,6 +45,32 @@ func TestConnCheckRunOKWithVersion(t *testing.T) {
 	}
 }
 
+func TestConnCheckTrimsCapturedText(t *testing.T) {
+	c := connCheck{
+		base:  base{name: "db", timeout: time.Second},
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "127.0.0.1", Port: 3306, User: "monitor"},
+		probe: func(context.Context, conn.Config) (conn.Result, error) {
+			return conn.Result{
+				Version: "\n8.0.36\n",
+				Extra: map[string]string{
+					"greeting": "\nready\n",
+				},
+			}, nil
+		},
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("expected OK, got %q", res.Message)
+	}
+	if res.Data["version"] != "8.0.36" || res.Data["greeting"] != "ready" {
+		t.Fatalf("data should carry trimmed text: %v", res.Data)
+	}
+	if !strings.Contains(res.Message, "(8.0.36)") || strings.Contains(res.Message, "\n") {
+		t.Fatalf("message should carry trimmed version: %q", res.Message)
+	}
+}
+
 func TestConnCheckOnChangeFingerprint(t *testing.T) {
 	fp := "SHA256:aaa"
 	c := connCheck{

@@ -572,3 +572,39 @@ func TestCommandCheckAnalyzeClean(t *testing.T) {
 		t.Fatalf("no pattern match must pass, got %+v", res)
 	}
 }
+
+func TestTrimOutput(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"only ws", "   \t\n  ", ""},
+		{"single line", " hello world \n", "hello world"},
+		{"leading blank lines", "\n\n\nline1\nline2", "line1\nline2"},
+		{"trailing blank lines", "line1\nline2\n\n\n", "line1\nline2"},
+		{"both ends + internal blank", "\n\n  \nfirst\n\nmiddle\n\nlast\n\n  ", "first\n\nmiddle\n\nlast"},
+		{"all blank lines", "\n\n\t\n  \n", ""},
+		{"mixed whitespace lines", "  \r\n\t\nreal\n   \n  ", "real"},
+		{"version banner typical", "\n\nPostgreSQL 15.3\n\n", "PostgreSQL 15.3"},
+		{"sql with trailing", "col1\nval1\n\n", "col1\nval1"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := TrimOutput(tc.in); got != tc.want {
+				t.Fatalf("TrimOutput(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFirstNonEmptyLineUsesTrimOutput(t *testing.T) {
+	if got := FirstNonEmptyLine("\n\n  \nreal line\n\n  \n"); got != "real line" {
+		t.Fatalf("FirstNonEmptyLine after trim gave %q", got)
+	}
+	if got := FirstNonEmptyLine("\n\n\n"); got != "" {
+		t.Fatalf("FirstNonEmptyLine all blank gave %q", got)
+	}
+}

@@ -16,6 +16,8 @@ func TestSQLValueString(t *testing.T) {
 		{nil, ""},
 		{[]byte("42"), "42"},
 		{"text", "text"},
+		{[]byte("\n42\n"), "42"},
+		{"\nfirst\n\nlast\n", "first\n\nlast"},
 		{int64(7), "7"},
 		{3.5, "3.5"},
 	}

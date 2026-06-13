@@ -112,6 +112,13 @@ func TestInspectVersionCommandOutcomes(t *testing.T) {
 		t.Errorf("expect_exit: %+v", expectedExit)
 	}
 
+	mosquittoHelp := inspect(t, fakeRunner{byPath: map[string]execx.Result{
+		bin: {Stdout: "\nmosquitto version 2.0.22\n\nmosquitto is an MQTT broker\n", ExitCode: 1},
+	}}, tree(bin, version(map[string]any{"expect_exit": 1})))
+	if !mosquittoHelp.OK || mosquittoHelp.Version != "mosquitto version 2.0.22" || mosquittoHelp.VersionShort != "2.0.22" {
+		t.Errorf("mosquitto-style help version: %+v", mosquittoHelp)
+	}
+
 	badStdout := inspect(t, fakeRunner{byPath: map[string]execx.Result{
 		bin: {Stdout: "garbage\n", ExitCode: 0},
 	}}, tree(bin, version(map[string]any{"expect_stdout": "Tool"})))

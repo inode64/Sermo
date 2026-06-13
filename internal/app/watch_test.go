@@ -191,6 +191,19 @@ func TestHookEnvDiskKeysStillWork(t *testing.T) {
 	}
 }
 
+func TestHookEnvTrimsCapturedText(t *testing.T) {
+	res := checks.Result{
+		Message: "\nSQL threshold fired\n",
+		Data: map[string]any{
+			"result": "\nready\n",
+		},
+	}
+	env := hookEnv("sql-health", "sql", res)
+	if env["SERMO_MESSAGE"] != "SQL threshold fired" || env["SERMO_RESULT"] != "ready" {
+		t.Fatalf("env should carry trimmed captured text: %v", env)
+	}
+}
+
 func TestWatchDoesNotFireWhenConditionFalse(t *testing.T) {
 	var calls int
 	w := &Watch{

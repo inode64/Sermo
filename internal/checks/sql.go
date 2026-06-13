@@ -80,18 +80,18 @@ func sqlScalar(ctx context.Context, driver, dsn, query string) (string, bool, er
 }
 
 // sqlValueString renders a scanned SQL value as a string. Drivers return numbers
-// as []byte (mysql), int64/float64 (sqlite/pq) or strings; []byte/string are
-// kept verbatim, the rest formatted with %v.
+// as []byte (mysql), int64/float64 (sqlite/pq) or strings; captured text is
+// trimmed so values from queries are stable in messages, data and hook env.
 func sqlValueString(v any) string {
 	switch t := v.(type) {
 	case nil:
 		return ""
 	case []byte:
-		return string(t)
+		return TrimOutput(string(t))
 	case string:
-		return t
+		return TrimOutput(t)
 	default:
-		return fmt.Sprintf("%v", t)
+		return TrimOutput(fmt.Sprintf("%v", t))
 	}
 }
 
