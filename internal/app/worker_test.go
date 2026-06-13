@@ -625,3 +625,23 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		t.Fatal("an alert rule on the same system metric must still fire")
 	}
 }
+
+// TestWorkerRemediationReloadOperates locks the reload action end to end at
+// the worker: validation accepts action: reload, so OperationAction must
+// recognize it and run it through the shared engine — before this, a reload
+// remediation fell into the alert-only branch and silently did nothing.
+func TestWorkerRemediationReloadOperates(t *testing.T) {
+	h := &workerHarness{
+		cache:    failedCache("config"),
+		opResult: operation.Result{Status: operation.ResultOK},
+	}
+	w := h.worker(remediationTree("reload-on-bad-config", "config", "reload"), rules.Policy{Cooldown: time.Minute}, nil)
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 1 || h.ops[0] != "reload" {
+		t.Fatalf("ops = %v, want one reload through the engine", h.ops)
+	}
+	if w.State.LastActionAt.IsZero() {
+		t.Fatal("an executed reload must record remediation state (cooldown)")
+	}
+}

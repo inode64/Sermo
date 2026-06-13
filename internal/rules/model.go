@@ -29,6 +29,7 @@ const (
 	ActionRestart ActionType = "restart"
 	ActionStart   ActionType = "start"
 	ActionStop    ActionType = "stop"
+	ActionReload  ActionType = "reload"
 	ActionAlert   ActionType = "alert"
 	ActionBlock   ActionType = "block"
 )
@@ -69,11 +70,11 @@ type Rule struct {
 }
 
 // Primary is the action other code treats as the rule's main one: the operation
-// (restart/start/stop) if present, else the first.
+// (restart/start/stop/reload) if present, else the first.
 func (r Rule) Primary() Action {
 	for _, a := range r.Actions {
 		switch a.Type {
-		case ActionRestart, ActionStart, ActionStop:
+		case ActionRestart, ActionStart, ActionStop, ActionReload:
 			return a
 		}
 	}
@@ -83,11 +84,11 @@ func (r Rule) Primary() Action {
 	return Action{}
 }
 
-// OperationAction returns the rule's restart/start/stop action, if any.
+// OperationAction returns the rule's restart/start/stop/reload action, if any.
 func (r Rule) OperationAction() (ActionType, bool) {
 	for _, a := range r.Actions {
 		switch a.Type {
-		case ActionRestart, ActionStart, ActionStop:
+		case ActionRestart, ActionStart, ActionStop, ActionReload:
 			return a.Type, true
 		}
 	}
