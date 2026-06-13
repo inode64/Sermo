@@ -82,6 +82,7 @@ web:
   # password: "change-me"        # admin: read + actions
   # guest_password: "read-only"  # optional read-only login
   # guest: false                 # set true to allow anonymous read-only access
+  # disable_diagnostics: false   # set true to hide the Diagnostics panel from the web UI
 
 # Named notification targets, referenced by name from a watch's then.notify.
 # Pluggable by type (email, slack and teams are built in; new transports can be
