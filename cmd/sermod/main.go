@@ -253,6 +253,7 @@ func run(args []string) int {
 			Reload: func() error {
 				return syscall.Kill(os.Getpid(), syscall.SIGHUP)
 			},
+			DiagnosticsDisabled: webDiagnosticsDisabled(cfg),
 		}
 		logger.Debug("starting web ui server", "address", addr, "auth", auth.Enabled())
 		go func() {
@@ -392,4 +393,15 @@ func webAuth(cfg *config.Config) web.Auth {
 	auth.GuestPassword, _ = m["guest_password"].(string)
 	auth.AnonymousGuest, _ = m["guest"].(bool)
 	return auth
+}
+
+// webDiagnosticsDisabled reports whether web.disable_diagnostics is set, which
+// hides the Diagnostics panel and makes /api/diagnostics return nothing.
+func webDiagnosticsDisabled(cfg *config.Config) bool {
+	m, _ := cfg.Global.Raw["web"].(map[string]any)
+	if m == nil {
+		return false
+	}
+	disabled, _ := m["disable_diagnostics"].(bool)
+	return disabled
 }
