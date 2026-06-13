@@ -410,8 +410,7 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 
 	result, err := a.operateWithCascade(ctx, opts, cfg, resolved, service, action)
 	if err != nil {
-		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return a.fail(opts, err.Error())
 	}
 
 	if opts.json {
@@ -603,8 +602,7 @@ func (a App) runConfigRender(globalPath string, rest []string, opts options) int
 
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
 	}
 	if code := a.requireService(opts, cfg, service); code != exitSuccess {
 		return code
@@ -622,8 +620,7 @@ func (a App) runConfigRender(globalPath string, rest []string, opts options) int
 		out, err = config.RenderYAML(resolved)
 	}
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("render failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("render failed: %v", err))
 	}
 
 	_, _ = a.Stdout.Write(out)
@@ -636,8 +633,7 @@ func (a App) runConfigRender(globalPath string, rest []string, opts options) int
 func (a App) runConfigValidate(globalPath string, rest []string, opts options) int {
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
 	}
 
 	issues := config.Validate(cfg)
@@ -828,8 +824,7 @@ func (a App) runLocks(opts options) int {
 	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
 	report, err := locks.NewScanner(dir).Scan(opts.service())
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("scan locks failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("scan locks failed: %v", err))
 	}
 
 	for _, w := range report.Warnings {
@@ -975,6 +970,14 @@ func (a App) reportError(opts options, msg string) {
 	fmt.Fprintln(a.Stderr, msg)
 }
 
+// fail reports msg and returns the runtime-error exit code — the pairing almost
+// every command's error path uses. Commands whose error path returns extra
+// values (or a different exit code) keep calling reportError directly.
+func (a App) fail(opts options, msg string) int {
+	a.reportError(opts, msg)
+	return exitRuntimeError
+}
+
 type statusJSON struct {
 	Service          string `json:"service"`
 	State            string `json:"state"`
@@ -1069,14 +1072,12 @@ func (a App) runReload(ctx context.Context, opts options) int {
 	}
 
 	if pid <= 0 {
-		a.reportError(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
-		return exitRuntimeError
+		return a.fail(opts, "could not find running sermod pid (no pidfile and no running sermod process)")
 	}
 
 	// Send SIGHUP. On Linux this is reliable for the daemon's signal handler.
 	if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
-		a.reportError(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("failed to signal pid %d: %v", pid, err))
 	}
 
 	if opts.json {

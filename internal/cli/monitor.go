@@ -35,15 +35,13 @@ func (a App) runMonitor(opts options, pause bool) int {
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("%s failed: %v", verb, err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("%s failed: %v", verb, err))
 	}
 	defer store.Close()
 
 	if pause {
 		if err := store.SetActive(service, false, state.SourceCLI); err != nil {
-			a.reportError(opts, fmt.Sprintf("unmonitor failed: %v", err))
-			return exitRuntimeError
+			return a.fail(opts, fmt.Sprintf("unmonitor failed: %v", err))
 		}
 		a.reportMonitor(opts, store, service, "paused")
 		return exitSuccess
@@ -51,12 +49,10 @@ func (a App) runMonitor(opts options, pause bool) int {
 
 	active, found, err := store.Active(service)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("monitor failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
 	}
 	if err := store.SetActive(service, true, state.SourceCLI); err != nil {
-		a.reportError(opts, fmt.Sprintf("monitor failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("monitor failed: %v", err))
 	}
 	status := "resumed"
 	if !found || active {
