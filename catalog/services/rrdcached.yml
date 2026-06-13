@@ -1,0 +1,8 @@
+kind: daemon
+name: rrdcached
+display_name: "RRD Cached"
+description: "RRDTool data caching daemon."
+service: rrdcached
+
+checks:
+  service: { type: service, expect: active }

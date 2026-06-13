@@ -1,0 +1,8 @@
+kind: daemon
+name: rngd
+display_name: "RNG Daemon"
+description: "Feeds kernel entropy from hardware/random sources."
+service: rngd
+
+checks:
+  service: { type: service, expect: active }

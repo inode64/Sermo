@@ -1,0 +1,9 @@
+kind: daemon
+name: salt-minion
+display_name: "Salt Minion"
+description: "Salt minion agent."
+service: salt-minion
+apps: [salt]
+
+checks:
+  service: { type: service, expect: active }

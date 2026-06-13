@@ -1,0 +1,10 @@
+kind: daemon
+name: rpc-idmapd
+display_name: "NFS idmapd"
+description: "NFSv4 ID mapping daemon."
+service:
+  systemd: [nfs-idmapd, rpc-idmapd]
+  openrc: [rpc.idmapd, rpc-idmapd]
+
+checks:
+  service: { type: service, expect: active }

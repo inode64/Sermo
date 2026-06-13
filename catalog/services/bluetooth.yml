@@ -1,0 +1,8 @@
+kind: daemon
+name: bluetooth
+display_name: "Bluetooth"
+description: "Bluetooth daemon (bluetoothd)."
+service: bluetooth
+
+checks:
+  service: { type: service, expect: active }
