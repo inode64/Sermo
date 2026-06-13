@@ -20,6 +20,28 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+func TestCompareOperatorsAndErrors(t *testing.T) {
+	r := Reading{Absolute: 50, HasAbsolute: true, Ready: true}
+	for _, c := range []struct {
+		op, thr string
+		want    bool
+	}{
+		{"<=", "50", true}, {"<=", "49", false},
+		{"==", "50", true}, {"==", "51", false},
+		{"!=", "51", true}, {"!=", "50", false},
+	} {
+		if got, err := Compare(r, c.op, c.thr); err != nil || got != c.want {
+			t.Errorf("Compare(50, %q, %q) = %v, %v; want %v", c.op, c.thr, got, err, c.want)
+		}
+	}
+	if _, err := Compare(r, "=~", "50"); err == nil {
+		t.Error("an unsupported metric operator must error")
+	}
+	if _, err := Compare(r, ">", "notanumber"); err == nil {
+		t.Error("an invalid numeric threshold must error")
+	}
+}
+
 func TestCompareNotReadyIsFalse(t *testing.T) {
 	r := Reading{Percent: 99, HasPercent: true, Ready: false}
 	if got, err := Compare(r, ">", "1%"); got || err != nil {
