@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
@@ -333,6 +334,93 @@ func TestEventsList(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"service":"web"`) {
 		t.Fatalf("json events missing service: %s", stdout.String())
+	}
+}
+
+func TestEventsClear(t *testing.T) {
+	var stdout bytes.Buffer
+	app := App{
+		Env: func(string) string { return "" },
+		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
+			if !before.IsZero() {
+				t.Fatalf("before = %v, want zero time", before)
+			}
+			return 3, nil
+		},
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+		Stdin:  strings.NewReader(""),
+	}
+	code := app.Run(context.Background(), []string{"events", "clear"})
+	if code != exitSuccess {
+		t.Fatalf("events clear exit=%d", code)
+	}
+	if got := stdout.String(); got != "cleared 3 events\n" {
+		t.Fatalf("events clear output = %q", got)
+	}
+}
+
+func TestActivityClear(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	var called bool
+	app := App{
+		Env: func(string) string { return "" },
+		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
+			called = true
+			if !before.IsZero() {
+				t.Fatalf("before = %v, want zero time", before)
+			}
+			return 4, nil
+		},
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Stdin:  strings.NewReader(""),
+	}
+	code := app.Run(context.Background(), []string{"activity", "clear"})
+	if code != exitSuccess {
+		t.Fatalf("activity clear exit=%d stderr=%s", code, stderr.String())
+	}
+	if !called {
+		t.Fatal("activity clear did not prune events")
+	}
+	if got := stdout.String(); got != "cleared 4 activity entries\n" {
+		t.Fatalf("activity clear output = %q", got)
+	}
+}
+
+func TestActivityClearBefore(t *testing.T) {
+	var stdout bytes.Buffer
+	want := time.Date(2026, 6, 13, 10, 30, 0, 0, time.UTC)
+	app := App{
+		Env: func(string) string { return "" },
+		PruneEvents: func(ctx context.Context, opts options, before time.Time) (int, error) {
+			if !before.Equal(want) {
+				t.Fatalf("before = %s, want %s", before.Format(time.RFC3339), want.Format(time.RFC3339))
+			}
+			return 2, nil
+		},
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+		Stdin:  strings.NewReader(""),
+	}
+	code := app.Run(context.Background(), []string{"activity", "clear", "--before", want.Format(time.RFC3339)})
+	if code != exitSuccess {
+		t.Fatalf("activity clear --before exit=%d", code)
+	}
+	if got := stdout.String(); got != "cleared 2 activity entries before 2026-06-13T10:30:00Z\n" {
+		t.Fatalf("activity clear --before output = %q", got)
+	}
+}
+
+func TestActivityRequiresClear(t *testing.T) {
+	var stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+	code := app.Run(context.Background(), []string{"activity"})
+	if code != exitUsage {
+		t.Fatalf("activity without clear exit=%d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr.String(), "activity supports only") {
+		t.Fatalf("activity usage error missing detail: %q", stderr.String())
 	}
 }
 

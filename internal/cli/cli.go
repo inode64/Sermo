@@ -77,6 +77,10 @@ type App struct {
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
 	// address/port (and password for auth if present).
 	FetchEvents func(ctx context.Context, opts options, service string, limit int) ([]event, error)
+	// PruneEvents is injectable for `sermoctl events clear` and
+	// `sermoctl activity clear`. Defaults to pruning over HTTP using the config's
+	// web address/port (and password for auth if present).
+	PruneEvents func(ctx context.Context, opts options, before time.Time) (int, error)
 }
 
 type options struct {
@@ -178,6 +182,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	if a.FetchEvents == nil {
 		a.FetchEvents = a.fetchEvents
 	}
+	if a.PruneEvents == nil {
+		a.PruneEvents = a.pruneDaemonEvents
+	}
 	if a.Runner == nil {
 		a.Runner = execx.CommandRunner{}
 	}
@@ -232,6 +239,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runDaemon(opts)
 	case "events":
 		return a.runEvents(ctx, opts)
+	case "activity":
+		return a.runActivity(ctx, opts)
 	case "apps":
 		return a.runApps(ctx, opts)
 	case "libs":
@@ -1057,29 +1066,7 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 func (a App) runEvents(ctx context.Context, opts options) int {
 	args := opts.args
 	if len(args) > 0 && args[0] == "clear" {
-		// clear subcommand (global prune by time; service filter not applied to clear)
-		var before time.Time
-		if opts.before != "" {
-			if d, err := time.ParseDuration(opts.before); err == nil {
-				before = time.Now().Add(-d)
-			} else if t, err := time.Parse(time.RFC3339, opts.before); err == nil {
-				before = t
-			} else {
-				return a.fail(opts, "invalid --before: use RFC3339 (e.g. 2026-06-13T12:00:00Z) or duration (e.g. 1h, 30m)")
-			}
-		}
-		n, err := a.pruneDaemonEvents(ctx, opts, before)
-		if err != nil {
-			return a.fail(opts, err.Error())
-		}
-		if opts.json {
-			writeJSON(a.Stdout, map[string]any{"pruned": n})
-		} else if before.IsZero() {
-			fmt.Fprintf(a.Stdout, "cleared %d events\n", n)
-		} else {
-			fmt.Fprintf(a.Stdout, "cleared %d events before %s\n", n, before.Format(time.RFC3339))
-		}
-		return exitSuccess
+		return a.runEventsClear(ctx, opts, "events")
 	}
 
 	// list mode: `sermoctl events [SERVICE] [--limit N]`
@@ -1142,6 +1129,44 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 			msg = msg[:57] + "..."
 		}
 		fmt.Fprintf(a.Stdout, "%s  %-15s  %-8s  %-7s  %s\n", ts, target, kind, action, msg)
+	}
+	return exitSuccess
+}
+
+// runActivity dispatches activity subcommands. Activity is the dashboard's
+// recent-events view, so clearing it uses the same daemon event-prune path.
+func (a App) runActivity(ctx context.Context, opts options) int {
+	if len(opts.args) > 0 && opts.args[0] == "clear" {
+		return a.runEventsClear(ctx, opts, "activity entries")
+	}
+	return a.usageError("activity supports only: clear [--before TIME]")
+}
+
+func (a App) runEventsClear(ctx context.Context, opts options, noun string) int {
+	var before time.Time
+	if opts.before != "" {
+		if d, err := time.ParseDuration(opts.before); err == nil {
+			before = time.Now().Add(-d)
+		} else if t, err := time.Parse(time.RFC3339, opts.before); err == nil {
+			before = t
+		} else {
+			return a.fail(opts, "invalid --before: use RFC3339 (e.g. 2026-06-13T12:00:00Z) or duration (e.g. 1h, 30m)")
+		}
+	}
+	pruneEvents := a.PruneEvents
+	if pruneEvents == nil {
+		pruneEvents = a.pruneDaemonEvents
+	}
+	n, err := pruneEvents(ctx, opts, before)
+	if err != nil {
+		return a.fail(opts, err.Error())
+	}
+	if opts.json {
+		writeJSON(a.Stdout, map[string]any{"pruned": n})
+	} else if before.IsZero() {
+		fmt.Fprintf(a.Stdout, "cleared %d %s\n", n, noun)
+	} else {
+		fmt.Fprintf(a.Stdout, "cleared %d %s before %s\n", n, noun, before.Format(time.RFC3339))
 	}
 	return exitSuccess
 }
@@ -1473,6 +1498,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          events [SERVICE] [--limit N]   # list recent (global or per-service)")
 	fmt.Fprintln(w, "          events clear [--before TIME]   # TIME=RFC3339 or duration (e.g. 2h); omits TIME => all")
+	fmt.Fprintln(w, "          activity clear [--before TIME] # same event log behind the web Recent activity panel")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }
 
