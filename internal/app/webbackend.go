@@ -518,6 +518,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 	}
 	out := make([]web.Watch, 0, len(b.watchOrder))
 	lastActivities := b.lastWatchActivities()
+	system := b.watchSystemSnapshot()
 	for _, name := range b.watchOrder {
 		w := b.watches[name]
 		if w == nil {
@@ -533,14 +534,14 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		}
 		var swap *web.SwapWatchInfo
 		if w.checkType == "swap" && !w.disabled {
-			swap = swapWatchInfo(b)
+			swap = swapWatchInfo(system)
 		}
 		// memory/load/fds/pids carry a natural capacity, so render them with the
 		// same progress bar as swap. Skip disabled watches (config, not a live
 		// concern) so the UI never probes /proc for something switched off.
 		var meter *web.WatchMeter
 		if !w.disabled {
-			meter = watchMeter(w.checkType, b)
+			meter = watchMeter(w.checkType, system)
 		}
 		monitorMode := w.monitorMode
 		if monitorMode == "" {
@@ -581,6 +582,13 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		out = append(out, ww)
 	}
 	return out
+}
+
+func (b *WebBackend) watchSystemSnapshot() metrics.Snapshot {
+	if b.collector == nil {
+		return nil
+	}
+	return b.collector.SampleSystem()
 }
 
 type watchActivity struct {
@@ -697,11 +705,8 @@ func watchConditions(check map[string]any) []web.WatchCondition {
 // swapWatchInfo reads the host swap usage from the collector's cached system
 // snapshot (shared with the overview tiles, no extra probe). nil when the host
 // has no swap or no collector is wired.
-func swapWatchInfo(b *WebBackend) *web.SwapWatchInfo {
-	if b.collector == nil {
-		return nil
-	}
-	r := b.collector.SampleSystem()["total_swap"]
+func swapWatchInfo(system metrics.Snapshot) *web.SwapWatchInfo {
+	r := system["total_swap"]
 	used, total, free, ok := byteUsage(r)
 	if !ok {
 		return nil
@@ -731,13 +736,10 @@ func byteUsage(r metrics.Reading) (used, total, free uint64, ok bool) {
 // collector's cached system snapshot (shared with the overview tiles, no extra
 // probe); fds and pids read their tiny /proc files live. nil for any other
 // type, or when the needed data is unavailable.
-func watchMeter(checkType string, b *WebBackend) *web.WatchMeter {
+func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 	switch checkType {
 	case "memory":
-		if b.collector == nil {
-			return nil
-		}
-		r := b.collector.SampleSystem()["total_memory"]
+		r := system["total_memory"]
 		used, total, free, ok := byteUsage(r)
 		if !ok {
 			return nil
@@ -750,10 +752,7 @@ func watchMeter(checkType string, b *WebBackend) *web.WatchMeter {
 			FreeBytes:  free,
 		}
 	case "load":
-		if b.collector == nil {
-			return nil
-		}
-		r, ok := b.collector.SampleSystem()["load1"]
+		r, ok := system["load1"]
 		if !ok || !r.HasAbsolute {
 			return nil
 		}
