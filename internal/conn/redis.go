@@ -29,12 +29,7 @@ func (redisProtocol) RequiresUser() bool { return false }
 // set, verifies the server answers PING, and reads its version. The caller's
 // context bounds the probe.
 func (redisProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 6379)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	return redisHandshake(c, cfg)
+	return probeBanner(ctx, cfg, 6379, redisHandshake)
 }
 
 // redisHandshake runs the RESP handshake on rw: optional AUTH, a PING that must
