@@ -39,6 +39,10 @@ sermoctl service list
 sermoctl service show SERVICE
 sermoctl service clone SOURCE TARGET
 
+sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
+sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be RFC3339 or duration (e.g. 1h)
+                                        # only events strictly before the timestamp are removed
+
 sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE --reason REASON --ttl DURATION
 sermoctl lock release SERVICE

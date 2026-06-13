@@ -84,6 +84,55 @@ func (l *EventLog) orderedLocked() []LoggedEvent {
 	return out
 }
 
+// Prune removes events strictly older than 'before'. If before.IsZero(), all
+// events are cleared. Returns the number of events removed. Safe for concurrent use.
+func (l *EventLog) Prune(before time.Time) int {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.count == 0 {
+		return 0
+	}
+	if before.IsZero() {
+		cleared := l.count
+		l.buf = make([]LoggedEvent, l.size)
+		l.next = 0
+		l.count = 0
+		return cleared
+	}
+
+	ordered := l.orderedLocked() // oldest first
+	keepIdx := 0
+	for i := range ordered {
+		if !ordered[i].Time.Before(before) {
+			keepIdx = i
+			break
+		}
+		keepIdx = i + 1
+	}
+	kept := ordered[keepIdx:]
+	cleared := len(ordered) - len(kept)
+
+	// Rebuild the ring with kept events (oldest at [0]).
+	newBuf := make([]LoggedEvent, l.size)
+	for i, e := range kept {
+		if i < l.size {
+			newBuf[i] = e
+		}
+	}
+	l.buf = newBuf
+	l.count = len(kept)
+	if l.count < l.size {
+		l.next = l.count
+	} else {
+		l.next = 0
+	}
+	return cleared
+}
+
 // MultiEmit fans an event out to several emitters (e.g. slog plus the event log),
 // skipping nil ones.
 func MultiEmit(emitters ...func(Event)) func(Event) {

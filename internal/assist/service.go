@@ -107,10 +107,29 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]
 	}
 	if pidfile := strings.TrimSpace(p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile)); pidfile != "" {
 		body["pidfile"] = pidfile
-	} else if c.Exe != "" && p.Confirm("No pidfile — match "+c.Name+" by its executable "+c.Exe+"?", true) {
-		body["processes"] = map[string]any{"main": map[string]any{"type": "command_match", "exe": c.Exe}}
+	} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
+		body["processes"] = map[string]any{"main": selector}
 	}
 	return c.Name, body
+}
+
+func detectedProcessSelector(c DaemonCandidate) (map[string]any, string) {
+	selector := map[string]any{"type": "command_match"}
+	if c.Cmd != "" {
+		selector["cmd"] = c.Cmd
+		if c.User != "" {
+			selector["user"] = c.User
+		}
+		return selector, "command pattern " + c.Cmd
+	}
+	if c.Exe != "" {
+		selector["exe"] = c.Exe
+		if c.User != "" {
+			selector["user"] = c.User
+		}
+		return selector, "executable " + c.Exe
+	}
+	return nil, ""
 }
 
 // serviceLabel renders the candidate's detected facts for the selection menu.
@@ -118,6 +137,9 @@ func serviceLabel(c DaemonCandidate) string {
 	parts := []string{c.Title}
 	if c.Unit != "" {
 		parts = append(parts, "unit: "+c.Unit)
+	}
+	if c.Status != "" {
+		parts = append(parts, "status: "+c.Status)
 	}
 	if c.Port > 0 {
 		port := fmt.Sprintf("port %d", c.Port)
@@ -128,6 +150,13 @@ func serviceLabel(c DaemonCandidate) string {
 	}
 	if len(c.ConfigPaths) > 0 {
 		parts = append(parts, "config: "+c.ConfigPaths[0])
+	}
+	if c.Pidfile != "" {
+		parts = append(parts, "pidfile: "+c.Pidfile)
+	} else if c.Cmd != "" {
+		parts = append(parts, "cmd match")
+	} else if c.Exe != "" {
+		parts = append(parts, "exe: "+c.Exe)
 	}
 	if !c.UnitPresent {
 		parts = append(parts, "unit not found")

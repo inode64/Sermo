@@ -1,17 +1,17 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"maps"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"sermo/internal/assist"
 	"sermo/internal/cfgval"
@@ -29,6 +29,7 @@ import (
 // offered only when it is actually installed.
 func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servicemgr.Backend) ([]assist.DaemonCandidate, error) {
 	resolver := servicemgr.NewUnitResolver()
+	manager, _ := servicemgr.NewManager(backend)
 	var out []assist.DaemonCandidate
 	for _, name := range cfg.DaemonsInCategory(config.CategoryService) {
 		resolved, errs := cfg.ResolveCatalog(config.CategoryService, name)
@@ -36,7 +37,7 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			continue
 		}
 		candidates, _ := config.ServiceCandidates(resolved.Tree, string(backend), name)
-		unit, err := resolver.Resolve(ctx, backend, candidates, false)
+		unit, status, err := resolveWizardDaemonUnit(ctx, resolver, manager, backend, candidates)
 		if err != nil {
 			continue // not installed on this backend
 		}
@@ -44,12 +45,14 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			Name:        name,
 			Title:       daemonTitle(resolved.Tree, name),
 			Unit:        unit,
+			Status:      string(status),
 			UnitPresent: true,
 			Port:        daemonPort(resolved.Tree),
 			ConfigPaths: existingConfigFiles(resolved.Tree),
 		}
 		// Best-effort PID source for the wizard's pidfile/command_match question.
-		c.Pidfile, c.Exe = servicemgr.DetectProc(ctx, nil, nil, backend, unit)
+		proc := servicemgr.DetectProcInfo(ctx, nil, nil, backend, unit)
+		c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
 		if c.Port > 0 {
 			c.PortListening = portListening(c.Port)
 		}
@@ -57,6 +60,43 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+func resolveWizardDaemonUnit(ctx context.Context, resolver servicemgr.UnitResolver, manager servicemgr.Manager, backend servicemgr.Backend, candidates []string) (string, servicemgr.Status, error) {
+	var firstUnit string
+	firstStatus := servicemgr.StatusUnknown
+	for _, candidate := range candidates {
+		unit, err := resolver.Resolve(ctx, backend, []string{candidate}, false)
+		if err != nil {
+			continue
+		}
+		status := daemonUnitStatus(ctx, manager, unit)
+		if firstUnit == "" {
+			firstUnit, firstStatus = unit, status
+		}
+		if status == servicemgr.StatusActive {
+			return unit, status, nil
+		}
+	}
+	if firstUnit != "" {
+		return firstUnit, firstStatus, nil
+	}
+	unit, err := resolver.Resolve(ctx, backend, candidates, false)
+	if err != nil {
+		return "", servicemgr.StatusUnknown, err
+	}
+	return unit, daemonUnitStatus(ctx, manager, unit), nil
+}
+
+func daemonUnitStatus(ctx context.Context, manager servicemgr.Manager, unit string) servicemgr.Status {
+	if manager == nil {
+		return servicemgr.StatusUnknown
+	}
+	status, err := manager.Status(ctx, unit)
+	if err != nil {
+		return servicemgr.StatusUnknown
+	}
+	return status.Status
 }
 
 func daemonTitle(tree map[string]any, fallback string) string {
@@ -90,14 +130,59 @@ func existingConfigFiles(tree map[string]any) []string {
 	return out
 }
 
-// portListening reports whether something accepts TCP on 127.0.0.1:port.
+// portListening reports whether the kernel has a TCP listener or UDP socket on
+// port. Reading /proc catches UDP daemons and services bound away from loopback,
+// which a TCP dial to 127.0.0.1 cannot see.
 func portListening(port int) bool {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 250*time.Millisecond)
+	for _, table := range []struct {
+		path   string
+		states map[string]bool
+	}{
+		{path: "/proc/net/tcp", states: map[string]bool{"0A": true}},
+		{path: "/proc/net/tcp6", states: map[string]bool{"0A": true}},
+		{path: "/proc/net/udp", states: map[string]bool{"07": true}},
+		{path: "/proc/net/udp6", states: map[string]bool{"07": true}},
+	} {
+		if procPortListening(table.path, port, table.states) {
+			return true
+		}
+	}
+	return false
+}
+
+func procPortListening(path string, port int, states map[string]bool) bool {
+	f, err := os.Open(path)
 	if err != nil {
 		return false
 	}
-	_ = conn.Close()
-	return true
+	defer func() { _ = f.Close() }()
+	ok, _ := parseProcSocketTable(f, port, states)
+	return ok
+}
+
+func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, error) {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) < 4 || fields[0] == "sl" {
+			continue
+		}
+		if !states[strings.ToUpper(fields[3])] {
+			continue
+		}
+		_, portHex, ok := strings.Cut(fields[1], ":")
+		if !ok {
+			continue
+		}
+		got, err := strconv.ParseUint(portHex, 16, 16)
+		if err != nil {
+			continue
+		}
+		if int(got) == port {
+			return true, nil
+		}
+	}
+	return false, sc.Err()
 }
 
 func pathExists(p string) bool {

@@ -20,12 +20,15 @@ type DaemonCandidate struct {
 	Name          string   // catalog daemon name, used as `uses:`
 	Title         string   // display name
 	Unit          string   // resolved init unit for the active backend
+	Status        string   // backend status for Unit (active/inactive/failed/unknown)
 	Port          int      // catalog default port (0 = none)
 	ConfigPaths   []string // config file locations that exist on the host
 	UnitPresent   bool     // the init unit exists on the active backend
 	PortListening bool     // something is listening on Port
 	Pidfile       string   // pidfile path derived from the init definition (best-effort)
 	Exe           string   // main executable derived from the init definition (best-effort)
+	Cmd           string   // cmdline regex derived from the init definition (best-effort)
+	User          string   // process owner derived from the init definition (best-effort)
 }
 
 // Env carries the host facts and config an assistant needs, injected so the

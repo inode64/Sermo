@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -71,6 +73,10 @@ type App struct {
 	// production defaults; tests set it (often empty) to keep pidfile discovery
 	// hermetic instead of reading the host's /run/sermo/sermod.pid.
 	pidfileFallbacks []string
+	// FetchEvents is injectable for `sermoctl events` (listing recent events via
+	// the daemon web API). Defaults to fetching over HTTP using the config's web
+	// address/port (and password for auth if present).
+	FetchEvents func(ctx context.Context, opts options, service string, limit int) ([]event, error)
 }
 
 type options struct {
@@ -93,6 +99,22 @@ type options struct {
 	since  time.Duration // series lookback window (0 means the command's default)
 	// apps/libs/services flag
 	long bool // show the full raw version string instead of the short one
+	// events clear flag
+	before string // --before for events clear (RFC3339 or duration)
+	// events list flags
+	eventLimit int
+}
+
+// event is a minimal struct for unmarshaling events from the daemon's /api/events
+// (and per-service) endpoints. Matches the shape returned by web.Event / LoggedEvent.
+type event struct {
+	Time    string `json:"time"`
+	Service string `json:"service"`
+	Watch   string `json:"watch"`
+	Kind    string `json:"kind"`
+	Action  string `json:"action"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 // globalPath returns the --config path, or the packaged default.
@@ -153,6 +175,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	if a.Operate == nil {
 		a.Operate = a.defaultOperate
 	}
+	if a.FetchEvents == nil {
+		a.FetchEvents = a.fetchEvents
+	}
 	if a.Runner == nil {
 		a.Runner = execx.CommandRunner{}
 	}
@@ -205,6 +230,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPreflight(ctx, opts)
 	case "daemon":
 		return a.runDaemon(opts)
+	case "events":
+		return a.runEvents(ctx, opts)
 	case "apps":
 		return a.runApps(ctx, opts)
 	case "libs":
@@ -1024,6 +1051,223 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 	return out
 }
 
+// runEvents dispatches the events subcommands.
+// - `sermoctl events [SERVICE] [--limit N]` lists recent events (global or for a service) via the daemon's web API.
+// - `sermoctl events clear [--before TIME]` clears (all or events before a given time).
+func (a App) runEvents(ctx context.Context, opts options) int {
+	args := opts.args
+	if len(args) > 0 && args[0] == "clear" {
+		// clear subcommand (global prune by time; service filter not applied to clear)
+		var before time.Time
+		if opts.before != "" {
+			if d, err := time.ParseDuration(opts.before); err == nil {
+				before = time.Now().Add(-d)
+			} else if t, err := time.Parse(time.RFC3339, opts.before); err == nil {
+				before = t
+			} else {
+				return a.fail(opts, "invalid --before: use RFC3339 (e.g. 2026-06-13T12:00:00Z) or duration (e.g. 1h, 30m)")
+			}
+		}
+		n, err := a.pruneDaemonEvents(ctx, opts, before)
+		if err != nil {
+			return a.fail(opts, err.Error())
+		}
+		if opts.json {
+			writeJSON(a.Stdout, map[string]any{"pruned": n})
+		} else if before.IsZero() {
+			fmt.Fprintf(a.Stdout, "cleared %d events\n", n)
+		} else {
+			fmt.Fprintf(a.Stdout, "cleared %d events before %s\n", n, before.Format(time.RFC3339))
+		}
+		return exitSuccess
+	}
+
+	// list mode: `sermoctl events [SERVICE] [--limit N]`
+	limit := 50
+	if opts.eventLimit > 0 {
+		limit = opts.eventLimit
+	}
+	service := ""
+	if len(args) > 0 {
+		service = args[0]
+	}
+
+	evs, err := a.FetchEvents(ctx, opts, service, limit)
+	if err != nil {
+		return a.fail(opts, err.Error())
+	}
+	if opts.json {
+		writeJSON(a.Stdout, evs)
+		return exitSuccess
+	}
+
+	if len(evs) == 0 {
+		if service != "" {
+			fmt.Fprintf(a.Stdout, "no recent events for %s\n", service)
+		} else {
+			fmt.Fprintln(a.Stdout, "no recent events")
+		}
+		return exitSuccess
+	}
+
+	fmt.Fprintln(a.Stdout, "TIME                 TARGET           KIND       ACTION   MESSAGE")
+	for _, e := range evs {
+		ts := e.Time
+		if len(ts) >= 19 {
+			ts = ts[:19]
+		}
+		target := e.Service
+		if target == "" {
+			target = e.Watch
+		}
+		if target == "" {
+			target = "-"
+		}
+		if len(target) > 15 {
+			target = target[:15]
+		}
+		kind := e.Kind
+		if len(kind) > 8 {
+			kind = kind[:8]
+		}
+		action := e.Action
+		if action == "" {
+			action = e.Status
+		}
+		if len(action) > 7 {
+			action = action[:7]
+		}
+		msg := e.Message
+		if len(msg) > 60 {
+			msg = msg[:57] + "..."
+		}
+		fmt.Fprintf(a.Stdout, "%s  %-15s  %-8s  %-7s  %s\n", ts, target, kind, action, msg)
+	}
+	return exitSuccess
+}
+
+// pruneDaemonEvents performs the HTTP call to the running sermod's web API
+// to prune its in-memory event log. It reads the web: address/port and any
+// admin password from the shared config so local sermoctl can authenticate
+// the same way the operator would via the UI.
+func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess || cfg == nil {
+		return 0, fmt.Errorf("failed to load config")
+	}
+	base, err := webAPIBase(cfg)
+	if err != nil {
+		return 0, err
+	}
+	u := base + "/api/events/clear"
+	if !before.IsZero() {
+		u += "?before=" + before.Format(time.RFC3339)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("X-Sermo-CSRF", "1")
+
+	// If the config declares an admin password, send Basic auth (any user + pw).
+	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
+		if pw := cfgval.String(wraw["password"]); pw != "" {
+			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
+			req.Header.Set("Authorization", "Basic "+cred)
+		}
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("clear failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var res struct {
+		OK     bool `json:"ok"`
+		Pruned int  `json:"pruned"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		// some responses may be plain
+		return 0, fmt.Errorf("unexpected response: %s", body)
+	}
+	return res.Pruned, nil
+}
+
+// fetchEvents (the default for App.FetchEvents) calls the daemon web API to retrieve
+// recent events. If service != "", uses the per-service endpoint.
+func (a App) fetchEvents(ctx context.Context, opts options, service string, limit int) ([]event, error) {
+	cfg, code := a.loadConfig(opts)
+	if code != exitSuccess || cfg == nil {
+		return nil, fmt.Errorf("failed to load config")
+	}
+	base, err := webAPIBase(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	var u string
+	if service != "" {
+		u = fmt.Sprintf("%s/api/services/%s/events?limit=%d", base, service, limit)
+	} else {
+		u = fmt.Sprintf("%s/api/events?limit=%d", base, limit)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	// no CSRF needed for GET; add auth if configured
+	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
+		if pw := cfgval.String(wraw["password"]); pw != "" {
+			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
+			req.Header.Set("Authorization", "Basic "+cred)
+		}
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("talking to daemon web UI: %w (is sermod running with web.port set?)", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("events fetch failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	var evs []event
+	if err := json.NewDecoder(resp.Body).Decode(&evs); err != nil {
+		return nil, fmt.Errorf("decode events: %w", err)
+	}
+	return evs, nil
+}
+
+func webAPIBase(cfg *config.Config) (string, error) {
+	wraw, _ := cfg.Global.Raw["web"].(map[string]any)
+	if wraw == nil {
+		return "", fmt.Errorf("web UI is not enabled in config (no web: block or no port); the event log only exists inside the running daemon")
+	}
+	addr := cfgval.String(wraw["address"])
+	if addr == "" {
+		addr = "127.0.0.1"
+	}
+	p, ok := cfgval.Int(wraw["port"])
+	if !ok || p <= 0 {
+		return "", fmt.Errorf("web.port is not set in config")
+	}
+	port := p
+	return fmt.Sprintf("http://%s:%d", addr, port), nil
+}
+
 // runReload asks the running sermod to reload its configuration (SIGHUP
 // equivalent). It prefers a pidfile written by the daemon under the configured
 // runtime dir (or the legacy OpenRC location). If no pidfile is found it falls
@@ -1122,6 +1366,22 @@ func parseArgs(args []string) (options, error) {
 			if opts.since, err = time.ParseDuration(v); err != nil {
 				return opts, fmt.Errorf("--since: %w", err)
 			}
+		case isFlag(arg, "--before"):
+			v, ni, err := flagValue(args, i, "--before")
+			if err != nil {
+				return opts, err
+			}
+			i = ni
+			opts.before = v
+		case isFlag(arg, "--limit"):
+			v, ni, err := flagValue(args, i, "--limit")
+			if err != nil {
+				return opts, err
+			}
+			i = ni
+			if opts.eventLimit, err = strconv.Atoi(v); err != nil || opts.eventLimit < 0 {
+				return opts, fmt.Errorf("--limit must be a non-negative integer")
+			}
 		case isFlag(arg, "--backend"):
 			v, ni, err := flagValue(args, i, "--backend")
 			if err != nil {
@@ -1211,6 +1471,8 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          diagnose | wizard [service|volume|net]")
 	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
+	fmt.Fprintln(w, "          events [SERVICE] [--limit N]   # list recent (global or per-service)")
+	fmt.Fprintln(w, "          events clear [--before TIME]   # TIME=RFC3339 or duration (e.g. 2h); omits TIME => all")
 	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }
 

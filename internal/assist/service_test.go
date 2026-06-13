@@ -87,6 +87,25 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantCommandPatternFallback(t *testing.T) {
+	// A shared runtime/script service should use the detected cmdline pattern and
+	// owner instead of assuming the configured command is the resolved exe.
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
+	}}
+	script := strings.Join([]string{"1", "", "y", "1", ""}, "\n") + "\n" // select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	procs := res.Services["homeassistant"].(map[string]any)["processes"].(map[string]any)
+	main := procs["main"].(map[string]any)
+	if main["type"] != "command_match" || main["cmd"] != `(^|[[:space:]])/usr/bin/hass($|[[:space:]])` || main["user"] != "homeassistant" {
+		t.Fatalf("processes.main = %v, want command_match cmd+user", main)
+	}
+}
+
 func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	// Selecting two services and answering "apply to all" asks monitor+interval
 	// once and applies them to every selected service.
