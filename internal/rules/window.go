@@ -54,28 +54,34 @@ func (s *WindowState) Fires(r Rule, conditionTrue bool) bool {
 	return s.consecutive >= r.forNeed()
 }
 
-// IsFiring reports whether the rule would fire from the current window state
-// without advancing it (read-only; use Fires during evaluation).
-func (s *WindowState) IsFiring(r Rule) bool {
+// counters returns the window's read-only counters; a nil state (a rule that
+// has not ticked yet) reads as zero progress. The read-only methods go through
+// this accessor instead of rebinding the receiver.
+func (s *WindowState) counters() (consecutive int, history []bool) {
 	if s == nil {
-		s = &WindowState{}
+		return 0, nil
 	}
+	return s.consecutive, s.history
+}
+
+// IsFiring reports whether the rule would fire from the current window state
+// without advancing it (read-only, nil-safe; use Fires during evaluation).
+func (s *WindowState) IsFiring(r Rule) bool {
+	consecutive, history := s.counters()
 	if _, minMatches, ok := r.withinWindow(); ok {
-		return countTrue(s.history) >= minMatches
+		return countTrue(history) >= minMatches
 	}
-	return s.consecutive >= r.forNeed()
+	return consecutive >= r.forNeed()
 }
 
 // Progress returns an operator-facing window counter such as "2/3" for
-// consecutive windows or "2/3 in 15 cycles" for within windows.
+// consecutive windows or "2/3 in 15 cycles" for within windows. Nil-safe.
 func (s *WindowState) Progress(r Rule) string {
-	if s == nil {
-		s = &WindowState{}
-	}
+	consecutive, history := s.counters()
 	if cycles, minMatches, ok := r.withinWindow(); ok {
-		return fmt.Sprintf("%d/%d in %d cycles", countTrue(s.history), minMatches, cycles)
+		return fmt.Sprintf("%d/%d in %d cycles", countTrue(history), minMatches, cycles)
 	}
-	return fmt.Sprintf("%d/%d", s.consecutive, r.forNeed())
+	return fmt.Sprintf("%d/%d", consecutive, r.forNeed())
 }
 
 // Clone returns a deep copy of the window state for config reload.
