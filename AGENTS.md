@@ -189,21 +189,10 @@ thing. Cohesion across panels is a hard requirement, not a preference.
 
 Concretely, every data panel is a `<details id="{name}-section">` with a
 `<summary>`, an optional flex `#{name}-controls` row (search + filters + count)
-and a `<table class="{name}-table">` with a sticky header. The one deliberate
-distinction:
-
-- **Scrollable panel** — wrap the table in `<div class="table-wrap">`, which
-  adds `overflow:auto; max-height:calc(100vh - 13rem)`. Used by Services (a
-  long, unbounded list).
-- **Non-scrollable panel** — place the bare `<table>` directly inside the
-  `<details>`, no wrapper. Used by Host watches, Events, Notifiers and
-  Applications (the page scrolls as a whole instead of trapping a panel in its
-  own scrollbar).
-
-Pick the variant that matches the panel's nature and reuse it verbatim; never
-hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
-introduce a genuinely new pattern, document it here so the next change can
-follow it.
+and a bare `<table class="{name}-table">` placed directly inside the `<details>`.
+Do not wrap data tables in scroll containers; the page scrolls as a whole
+instead of trapping a panel in its own scrollbar. When you introduce a genuinely
+new pattern, document it here so the next change can follow it.
 
 When adding a host watch/check with useful runtime data, wire its Web UI
 `Watch.Meter` or `Watch.Readings` path and add a `webbackend` regression test;
