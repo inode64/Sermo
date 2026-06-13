@@ -1613,6 +1613,12 @@ an explicit list wins, `notify: none` suppresses, and omitting it inherits the
 global `notify` default. It applies to the rule's alert messages; remediation
 operations are reported as events, not notifications.
 
+Actions and types are coupled: the operation actions (`restart`, `start`,
+`stop`, `reload`) belong to `type: remediation` rules — required there (a
+notify-only rule is `type: alert`) and rejected elsewhere. `alert` (with a
+`message`) may accompany any rule's actions; `block` is guard-only. A `then`
+may carry one `action` or an `actions` list (e.g. alert + restart together).
+
 Conditions form a logical tree with `and`/`or`/`not` and leaves:
 
 ```yaml

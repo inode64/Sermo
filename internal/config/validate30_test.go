@@ -1108,3 +1108,22 @@ stop_policy:
 `)
 	mustHave(t, issues, "refuses to recursively delete")
 }
+
+// TestValidateRuleTypeActionCoupling sharpens the rule-type distinction:
+// operation actions belong to remediation rules only, and a remediation rule
+// must carry one — an alert-only remediation (or an alert rule with a restart)
+// would otherwise validate and then silently not do what it reads like.
+func TestValidateRuleTypeActionCoupling(t *testing.T) {
+	rule := func(rtype, then string) string {
+		return "kind: service\nname: svc\nservice: { name: x }\nchecks:\n  c: { type: tcp, host: 127.0.0.1, port: 80 }\nrules:\n  r:\n    type: " + rtype + "\n    if: { failed: { check: c } }\n" + then
+	}
+	mustHave(t, validateService(t, rule("remediation", "    then: { action: alert, message: m }\n")),
+		"remediation requires an operation action")
+	mustHave(t, validateService(t, rule("alert", "    then: { action: restart }\n")),
+		"only remediation rules may use action restart")
+	mustHave(t, validateService(t, rule("guard", "    blocks: [restart]\n    then:\n      actions: [ { type: block, message: m }, { type: stop } ]\n")),
+		"only remediation rules may use action stop")
+	if issues := validateService(t, rule("remediation", "    then: { action: reload }\n")); hasIssue(issues, "rules.r") {
+		t.Fatalf("a reload remediation must be valid, got %v", issues)
+	}
+}

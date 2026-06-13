@@ -184,6 +184,23 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			add("%s only guard rules may set blocks", path)
 		}
 
+		// Operation actions belong to remediation rules: an alert/guard rule
+		// carrying one would validate and then silently never run it, and a
+		// remediation rule without one is an alert in disguise.
+		hasOperation := false
+		for _, act := range actions {
+			switch act.typ {
+			case "restart", "start", "stop", "reload":
+				hasOperation = true
+				if rtype != "remediation" {
+					add("%s only remediation rules may use action %s", path, act.typ)
+				}
+			}
+		}
+		if rtype == "remediation" && hasThen && !hasOperation {
+			add("%s remediation requires an operation action (restart, start, stop, reload); use type: alert for notify-only rules", path)
+		}
+
 		validateWindow(path, entry, add)
 
 		if hasIf {
