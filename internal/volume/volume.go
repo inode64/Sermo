@@ -189,19 +189,19 @@ func containingMount(mounts []Mount, path string) (Mount, bool) {
 		path = "/"
 	}
 	var best Mount
-	found := false
+	bestLen := -1 // every mount point normalizes to at least "/" (len 1), so -1 means "none yet"
 	for _, m := range mounts {
 		mp := strings.TrimRight(m.Mountpoint, "/")
 		if mp == "" {
 			mp = "/"
 		}
 		if mp == path || mp == "/" || strings.HasPrefix(path, mp+"/") {
-			if !found || len(mp) > len(strings.TrimRight(best.Mountpoint, "/")) {
-				best, found = m, true
+			if len(mp) > bestLen {
+				best, bestLen = m, len(mp)
 			}
 		}
 	}
-	return best, found
+	return best, bestLen >= 0
 }
 
 // List returns the real disk-backed mounts (those whose source is a /dev/
