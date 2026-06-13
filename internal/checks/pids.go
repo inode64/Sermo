@@ -62,6 +62,11 @@ func (c pidsCheck) Run(_ context.Context) Result {
 	return res
 }
 
+// SamplePids returns one live PID-table observation (count/max) using the
+// default /proc/loadavg + kernel.pid_max reader. Exposed so callers like the
+// web backend can render a PID-table gauge without running a full pids check.
+func SamplePids() (PidsSample, error) { return defaultPidsSampler() }
+
 // defaultPidsSampler reads the total scheduling entities from the fourth
 // /proc/loadavg field ("running/total") and the limit from kernel.pid_max.
 func defaultPidsSampler() (PidsSample, error) {
