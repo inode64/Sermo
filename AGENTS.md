@@ -61,12 +61,15 @@ The narrow exceptions are the backend/process implementations that provide the
 primitive operation APIs, and tests/fakes that prove those primitives work. Keep
 those primitives small, injectable and covered by tests.
 
-## External commands
+## Native by default
 
-Production code must not call `os/exec`, `exec.Command` or equivalent directly.
-External commands (`systemctl`, `rc-service`, user checks, hooks, `ldd`, etc.)
-go through an injectable `execx` runner with a context and an explicit timeout.
-`execx` itself and tests/fakes are the only exceptions.
+Avoid external commands whenever practical; prefer the Go standard library or a
+Go-module alternative, unless the entry explicitly requires a third-party library
+or command. When an external command is genuinely required (`systemctl`,
+`rc-service`, user `command` checks, hooks, `ldd`, …), production code must not
+call `os/exec` directly: it goes through an injectable `execx` runner with a
+context and an explicit timeout, invoking an argv directly — never a shell.
+`execx` and tests/fakes are the only exceptions.
 
 ## Documentation lockstep
 
