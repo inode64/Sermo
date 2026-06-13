@@ -41,6 +41,15 @@ func TestFdsUnknownMaxNeverFires(t *testing.T) {
 	}
 }
 
+func TestFdsFreeClampsWhenAllocatedExceedsMax(t *testing.T) {
+	// allocated > max (a transient or misreported sample) must clamp free to 0,
+	// not underflow the unsigned subtraction into a huge bogus value.
+	c := fdsCheck{base: base{name: "f"}, sampler: fakeFds(FdsSample{Allocated: 12000, Max: 10000})}
+	if got := c.Run(context.Background()).Data["free"]; got != uint64(0) {
+		t.Fatalf("data free = %v, want 0 (clamped)", got)
+	}
+}
+
 func TestBuildFdsCheck(t *testing.T) {
 	built, warns := Build(map[string]any{
 		"f": map[string]any{"type": "fds", "used_pct": map[string]any{"op": ">=", "value": 80}},
