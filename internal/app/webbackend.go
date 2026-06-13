@@ -980,7 +980,7 @@ func (b *WebBackend) oomWatchView() (*web.WatchMeter, []web.WatchReading, string
 	}
 	return nil,
 		[]web.WatchReading{{Field: "total", Label: "OOM kills", Value: fmt.Sprintf("%d", count)}},
-		fmt.Sprintf("oom_kill total %d", count)
+		fmt.Sprintf("%d oom_kill total", count)
 }
 
 func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, string) {

@@ -1617,19 +1617,19 @@ function meterParts(m) {
   if (!m) return null;
   switch (m.kind) {
     case "memory":
-      return [`memory · ${fmtBytes(m.total_bytes)} total`,
+      return [`${fmtBytes(m.total_bytes)} total`,
         `${fmtBytes(m.used_bytes)} used · ${fmtBytes(m.free_bytes)} free`];
     case "load":
-      return [`load · ${m.num_cpu || 0} CPU${(m.num_cpu === 1) ? "" : "s"}`,
+      return [`${m.num_cpu || 0} CPU${(m.num_cpu === 1) ? "" : "s"}`,
         `load1 ${(m.load || 0).toFixed(2)} · ${fmtPct(m.used_pct)} of capacity`];
     case "fds":
-      return [`file descriptors · ${(m.max || 0).toLocaleString()} max`,
+      return [`${(m.max || 0).toLocaleString()} file descriptors max`,
         `${(m.count || 0).toLocaleString()} allocated · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
     case "pids":
-      return [`PID table · ${(m.max || 0).toLocaleString()} max`,
+      return [`${(m.max || 0).toLocaleString()} max`,
         `${(m.count || 0).toLocaleString()} in use · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
     case "conntrack":
-      return [`conntrack · ${(m.max || 0).toLocaleString()} max`,
+      return [`${(m.max || 0).toLocaleString()} max`,
         `${(m.count || 0).toLocaleString()} entries · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
     default:
       return null;
@@ -1670,7 +1670,7 @@ function watchSummaryCell(w) {
   const sw = w.swap;
   if (sw) {
     // Volume-style rendering for a swap watch: bar + used/free, like storage.
-    return `<div>swap<span class="muted"> · ${fmtBytes(sw.total_bytes)} total</span></div>
+    return `<div><span class="muted">${fmtBytes(sw.total_bytes)} total</span></div>
       <div>${usageBar(pctClamp(sw.used_pct || 0))} <span class="muted">· ${fmtBytes(sw.used_bytes)} used · ${fmtBytes(sw.free_bytes)} free</span></div>`;
   }
   const meterCell = meterSummaryCell(w.meter);
