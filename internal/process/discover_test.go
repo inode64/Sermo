@@ -24,6 +24,16 @@ func (r fakeReader) Identity(pid int) (Identity, bool) {
 	return id, ok
 }
 
+type countingReader struct {
+	fakeReader
+	pidCalls int
+}
+
+func (r *countingReader) PIDs() ([]int, error) {
+	r.pidCalls++
+	return r.fakeReader.PIDs()
+}
+
 func fakeUsers(m map[string]uint32) UserResolver {
 	return func(name string) (uint32, bool) {
 		uid, ok := m[name]
@@ -59,6 +69,35 @@ func TestDiscoverCommandMatchExeAndUser(t *testing.T) {
 	}
 	if procs[0].Role != "main" || procs[0].Source != sourceCommand {
 		t.Errorf("role/source = %q/%q", procs[0].Role, procs[0].Source)
+	}
+}
+
+func TestDiscoverEmptyInputsAvoidSnapshot(t *testing.T) {
+	reader := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
+	d := Discoverer{Reader: reader}
+
+	procs, warns := d.Discover(nil)
+	if len(procs) != 0 || len(warns) != 0 {
+		t.Fatalf("Discover(nil) = %+v, %v; want empty", procs, warns)
+	}
+	if reader.pidCalls != 0 {
+		t.Fatalf("PIDs called %d times, want 0", reader.pidCalls)
+	}
+}
+
+func TestDiscoverEmptyBackendPIDsAvoidSnapshot(t *testing.T) {
+	reader := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
+	d := Discoverer{
+		Reader:      reader,
+		BackendPIDs: func() []int { return []int{0, -1, 0} },
+	}
+
+	procs, warns := d.Discover(nil)
+	if len(procs) != 0 || len(warns) != 0 {
+		t.Fatalf("Discover(empty backend) = %+v, %v; want empty", procs, warns)
+	}
+	if reader.pidCalls != 0 {
+		t.Fatalf("PIDs called %d times, want 0", reader.pidCalls)
 	}
 }
 
