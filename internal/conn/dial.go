@@ -3,10 +3,24 @@ package conn
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net"
 	"strconv"
 	"time"
 )
+
+// probeBanner dials cfg (port defaulting to defaultPort), runs handshake on the
+// connection and closes it. It folds the dial / defer-close prologue that every
+// banner protocol's Probe repeats; the protocol supplies only its default port
+// and handshake.
+func probeBanner(ctx context.Context, cfg Config, defaultPort int, handshake func(io.ReadWriter, Config) (Result, error)) (Result, error) {
+	c, err := dialDeadline(ctx, cfg, defaultPort)
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { _ = c.Close() }()
+	return handshake(c, cfg)
+}
 
 // dialConn opens a TCP connection to host:port, egressing through cfg.Interface
 // when set (SO_BINDTODEVICE), and wrapping it in TLS when cfg.TLS is truthy

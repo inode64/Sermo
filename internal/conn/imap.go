@@ -21,12 +21,7 @@ func (imapProtocol) DefaultPort() int   { return 143 }
 func (imapProtocol) RequiresUser() bool { return false }
 
 func (imapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 143)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	return imapHandshake(c, cfg)
+	return probeBanner(ctx, cfg, 143, imapHandshake)
 }
 
 // imapHandshake reads the server greeting (which must be OK or PREAUTH), performs

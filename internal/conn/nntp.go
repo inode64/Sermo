@@ -21,12 +21,7 @@ func (nntpProtocol) DefaultPort() int   { return 119 }
 func (nntpProtocol) RequiresUser() bool { return false }
 
 func (nntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 119)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	return nntpHandshake(c, cfg)
+	return probeBanner(ctx, cfg, 119, nntpHandshake)
 }
 
 // nntpHandshake reads the greeting (200 posting allowed / 201 posting

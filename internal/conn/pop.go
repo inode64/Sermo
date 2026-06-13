@@ -22,12 +22,7 @@ func (popProtocol) DefaultPort() int   { return 110 }
 func (popProtocol) RequiresUser() bool { return false }
 
 func (popProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 110)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	return popHandshake(c, cfg)
+	return probeBanner(ctx, cfg, 110, popHandshake)
 }
 
 // popHandshake reads the +OK greeting, authenticates with USER/PASS when a user

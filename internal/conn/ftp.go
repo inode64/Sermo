@@ -20,12 +20,7 @@ func (ftpProtocol) DefaultPort() int   { return 21 }
 func (ftpProtocol) RequiresUser() bool { return false }
 
 func (ftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 21)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	return ftpHandshake(c, cfg)
+	return probeBanner(ctx, cfg, 21, ftpHandshake)
 }
 
 // ftpHandshake reads the 220 greeting, logs in with USER/PASS when credentials

@@ -59,12 +59,7 @@ func (nutProtocol) RequiresUser() bool { return false }
 
 // Probe dials upsd and runs the handshake.
 func (nutProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	c, err := dialDeadline(ctx, cfg, 3493)
-	if err != nil {
-		return Result{}, err
-	}
-	defer func() { _ = c.Close() }()
-	return nutHandshake(c, cfg)
+	return probeBanner(ctx, cfg, 3493, nutHandshake)
 }
 
 // nutHandshake runs the upsd exchange over rw (split out so it is testable with a
