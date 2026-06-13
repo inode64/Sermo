@@ -1197,11 +1197,16 @@ const svcSortKeys = {
   state: (s) => stateRank(serviceState(s)),
   last: (s) => (s.last_event && s.last_event.time) || "",
 };
-function setSvcSort(key) {
-  if (svcSort.key === key) svcSort.dir = -svcSort.dir;
-  else { svcSort.key = key; svcSort.dir = 1; }
-  renderServices();
+// toggleSort flips the direction when the same column is re-selected, otherwise
+// selects the new column ascending, then re-renders. Shared by every sortable
+// panel (sort is mutated in place; render is the panel's renderer).
+function toggleSort(sort, key, render) {
+  if (sort.key === key) sort.dir = -sort.dir;
+  else { sort.key = key; sort.dir = 1; }
+  render();
 }
+
+function setSvcSort(key) { toggleSort(svcSort, key, renderServices); }
 // updateSortIndicatorsFor sets the ▲/▼ arrow on one panel's sortable headers:
 // attr is the data-* key each header carries its sort key in, sort is that
 // panel's {key, dir} state. Shared by the services/watches/apps panels.
@@ -1821,11 +1826,7 @@ const watchSortKeys = {
   state: watchStateRank,
 };
 
-function setWatchSort(key) {
-  if (watchSort.key === key) watchSort.dir = -watchSort.dir;
-  else { watchSort.key = key; watchSort.dir = 1; }
-  renderWatches();
-}
+function setWatchSort(key) { toggleSort(watchSort, key, renderWatches); }
 
 function updateWatchSortIndicators() { updateSortIndicatorsFor("wi", watchSort); }
 
@@ -1985,11 +1986,7 @@ const appSortKeys = {
   name: (a) => (a.name || "").toLowerCase(),
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
 };
-function setAppSort(key) {
-  if (appSort.key === key) appSort.dir = -appSort.dir;
-  else { appSort.key = key; appSort.dir = 1; }
-  renderApps();
-}
+function setAppSort(key) { toggleSort(appSort, key, renderApps); }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); }
 function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
 function appMatches(a) {
