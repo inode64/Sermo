@@ -330,6 +330,11 @@ func publishSnapshots(s *Snapshots, name string) func(map[string]checks.Result, 
 // at least 1. It returns warnings (surfaced at daemon start) when an interval is
 // below the resolution or not an exact multiple of it.
 func checkIntervals(tree map[string]any, resolution time.Duration) (map[string]int, []string) {
+	if resolution <= 0 {
+		// Callers normalise resolution to a positive value; guard anyway so a
+		// misuse can't divide by zero below (round(d/0) -> +Inf -> undefined int).
+		return nil, nil
+	}
 	section, ok := tree["checks"].(map[string]any)
 	if !ok {
 		return nil, nil
