@@ -115,12 +115,15 @@ func (w *fileWatcher) scan() map[string]fileState {
 	out[w.path] = w.stateOf(info)
 	if w.recursive && info.IsDir() {
 		_ = filepath.WalkDir(w.path, func(p string, d fs.DirEntry, err error) error {
-			if err != nil || p == w.path {
-				return nil // skip the root (already added) and unreadable entries
+			if p == w.path {
+				return nil // skip the root; it was already added above
+			}
+			if err != nil {
+				return nil //nolint:nilerr // unreadable entries are skipped during best-effort recursive scans
 			}
 			fi, err := d.Info()
 			if err != nil {
-				return nil
+				return nil //nolint:nilerr // entries that disappear during the scan are skipped
 			}
 			out[p] = w.stateOf(fi)
 			return nil

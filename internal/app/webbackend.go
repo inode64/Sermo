@@ -218,11 +218,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry, _ := raw[name].(map[string]any)
 			disabled := cfgval.Disabled(entry)
 			ctype := ""
-			fireOnFail := false
 			if ce, ok := entry["check"].(map[string]any); ok {
 				ctype = canonicalWatchCheckType(cfgval.AsString(ce["type"]))
 			}
-			fireOnFail = checks.IsHealthType(ctype)
+			fireOnFail := checks.IsHealthType(ctype)
 			iv := cfgval.Duration(entry["interval"])
 			if iv <= 0 {
 				iv = 30 * time.Second

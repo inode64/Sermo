@@ -40,13 +40,14 @@ jobs:
       - run: staticcheck ./...
       - run: revive -config revive.toml ./...
       - run: govulncheck ./...
-      # gosec runs through golangci-lint v2 (see .golangci.yml, version: "2").
+      # gosec and focused bug analyzers run through golangci-lint v2 (see
+      # .golangci.yml, version: "2").
       # install-mode: goinstall builds golangci-lint from source with the Go
       # toolchain selected above, so the lint never breaks when go.mod targets a
       # Go newer than the prebuilt release binaries. v2's stricter gosec findings
       # (G101/G602/G703/G118) are triaged: test-fixture rules live in
       # .golangci.yml, by-design sites carry inline //nolint:gosec justifications.
-      - name: gosec (via golangci-lint)
+      - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.12.2
