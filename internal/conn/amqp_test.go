@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -157,5 +158,17 @@ func TestParseAMQPTable(t *testing.T) {
 	got := parseAMQPTable(body)
 	if got["product"] != "RabbitMQ" {
 		t.Fatalf("product = %q, want RabbitMQ (skipping bool/table must keep alignment)", got["product"])
+	}
+}
+
+// A method frame advertising a size beyond maxAMQPFrame must be rejected before
+// the probe allocates the payload — the guard against a hostile/non-AMQP peer
+// exhausting memory.
+func TestAMQPProbeFrameTooLarge(t *testing.T) {
+	hdr := []byte{1, 0, 0} // type=method, channel=0
+	hdr = binary.BigEndian.AppendUint32(hdr, maxAMQPFrame+1)
+	_, err := amqpProtocol{}.Probe(context.Background(), Config{Host: "127.0.0.1", Port: serveAMQP(t, hdr)})
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("err = %v, want a 'frame too large' rejection", err)
 	}
 }
