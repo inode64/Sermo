@@ -1,0 +1,15 @@
+kind: daemon
+name: nfs
+display_name: "NFS Server"
+description: "Kernel NFS server."
+service:
+  systemd: [nfs-server, nfs]
+  openrc: [nfs]
+
+variables:
+  host: 127.0.0.1
+  port: 2049
+
+checks:
+  service: { type: service, expect: active }
+  nfs: { type: nfs, host: "${host}", port: "${port}", timeout: 3s }
