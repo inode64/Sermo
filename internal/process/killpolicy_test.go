@@ -28,6 +28,20 @@ func TestKillSelectorKillable(t *testing.T) {
 			}
 		})
 	}
+
+	// Multi-entry lists act as OR within users and within exe_any (AND across
+	// the two categories). Also exercises canonicalize fallback to Clean when
+	// EvalSymlinks cannot run in test (nonexistent path).
+	multi := KillSelector{
+		Users:  []string{"nope", "mysql"},
+		ExeAny: []string{"/no", "/opt//sermo-test/./mysqld"},
+	}
+	if !multi.Killable(Process{UID: 110, Exe: testExe, ExeOK: true}, resolve) {
+		t.Error("multi selector should match on second user+exe (canonicalized)")
+	}
+	if multi.Killable(Process{UID: 110, Exe: "/different", ExeOK: true}, resolve) {
+		t.Error("multi selector must not match when exe misses all exe_any")
+	}
 }
 
 func TestKillSelectorEmptyMatchesNothing(t *testing.T) {
