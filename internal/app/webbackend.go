@@ -893,19 +893,27 @@ func formatInterval(d time.Duration) string {
 // Linux, e.g. "Debian GNU/Linux 12 (bookworm)"), falling back to runtime.GOOS.
 func osPrettyName() string {
 	for _, path := range []string{"/etc/os-release", "/usr/lib/os-release"} {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		for _, line := range strings.Split(string(data), "\n") {
-			if v, ok := strings.CutPrefix(strings.TrimSpace(line), "PRETTY_NAME="); ok {
-				if name := strings.Trim(v, `"'`); name != "" {
-					return name
-				}
+		if data, err := os.ReadFile(path); err == nil {
+			if name := parseOSReleasePrettyName(data); name != "" {
+				return name
 			}
 		}
 	}
 	return runtime.GOOS
+}
+
+// parseOSReleasePrettyName extracts the (unquoted) PRETTY_NAME value from
+// os-release content, or "" when absent. Pure, so it is testable without the
+// host files.
+func parseOSReleasePrettyName(data []byte) string {
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "PRETTY_NAME="); ok {
+			if name := strings.Trim(v, `"'`); name != "" {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // HostMetrics returns the current host-level readings from the collector.
