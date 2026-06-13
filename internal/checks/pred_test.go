@@ -34,6 +34,25 @@ func TestParseLevelPredGrammar(t *testing.T) {
 	}, LoadPredFields); err == nil {
 		t.Error("a non-numeric plain value must error")
 	}
+	if _, err := parseLevelPreds(map[string]any{
+		"load1": map[string]any{"op": ">", "value": "inf"},
+	}, LoadPredFields); err == nil {
+		t.Error("an infinite plain numeric predicate value must error")
+	}
+	if _, err := parseLevelPreds(map[string]any{
+		"used_pct": map[string]any{"op": "<=", "value": "nan"},
+	}, SwapUsageFields); err == nil {
+		t.Error("a NaN percentage predicate value must error")
+	}
+}
+
+func TestParseDeltaThresholdRejectsNonFinite(t *testing.T) {
+	if _, _, err := parseDeltaThreshold(map[string]any{"op": ">", "value": "inf"}, "x"); err == "" {
+		t.Error("delta inf must be rejected")
+	}
+	if _, _, err := parseDeltaThreshold(map[string]any{"op": ">=", "value": "NaN"}, "x"); err == "" {
+		t.Error("delta nan must be rejected")
+	}
 }
 
 // deltaOrZero is the clamp every stateful counter check relies on: a counter
