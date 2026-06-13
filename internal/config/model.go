@@ -82,7 +82,7 @@ var metaKeys = map[string]struct{}{
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
 // service (section 8). Engine-wide settings never reach individual services.
-var perServiceDefaults = []string{"stop_policy", "policy", "rule_window"}
+var perServiceDefaults = []string{"stop_policy", "policy", "rule_window", "remediation"}
 
 // Document is a single loaded daemon or service in raw, unexpanded form.
 type Document struct {

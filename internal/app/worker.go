@@ -57,6 +57,14 @@ type Worker struct {
 	// `unmonitor`). A paused cycle still advances cycle but runs no checks, rules
 	// or remediation.
 	IsPaused func() bool
+
+	// Shadow when true causes the worker to fully evaluate remediation rules,
+	// advance their for/within windows, consult guards and the remediation policy,
+	// and emit events, but never perform any Operate/Cascade action and never
+	// Record against the real cooldown/backoff state. This lets operators observe
+	// what Sermo *would* do before enabling live auto-remediation.
+	// Shadow is independent of IsPaused (paused services skip evaluation entirely).
+	Shadow bool
 	// RecordHealth persists this cycle's availability sample for SLA tracking:
 	// up is true when no required check failed. Nil disables recording (tests, or
 	// when no store is wired). Only observed (non-paused) cycles are recorded.
@@ -261,15 +269,32 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			w.emit(Event{Kind: "error", Rule: r.Name, Action: action, Message: "guard: " + err.Error()})
 			continue
 		}
+
+		suppress := ""
 		if blocked {
-			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: "guard: " + reason})
+			suppress = "guard: " + reason
+		} else if ok, why := w.Policy.Allow(w.State, now()); !ok {
+			suppress = why
+		}
+
+		if w.Shadow {
+			// Full evaluation + window advance + guard + policy happened.
+			// Emit rich "shadow" event so the operator sees exactly what Sermo
+			// would have done (and why it would have been suppressed, if at all).
+			// Never execute the action and never Record (real cooldowns unaffected).
+			msg := "would " + action
+			if suppress != "" {
+				msg += " (suppressed: " + suppress + ")"
+			} else {
+				msg += " (would execute)"
+			}
+			w.emit(Event{Kind: "shadow", Rule: r.Name, Action: action, Message: msg})
+			// Report all firing rules in shadow mode for maximum observability.
 			continue
 		}
 
-		// Cooldown/rate limit gate the decision to act (section 16). Like guards,
-		// a suppressed rule does not prevent a later firing rule from acting.
-		if ok, why := w.Policy.Allow(w.State, now()); !ok {
-			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: why})
+		if suppress != "" {
+			w.emit(Event{Kind: "suppressed", Rule: r.Name, Action: action, Message: suppress})
 			continue
 		}
 

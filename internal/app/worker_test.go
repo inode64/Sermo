@@ -645,3 +645,30 @@ func TestWorkerRemediationReloadOperates(t *testing.T) {
 		t.Fatal("an executed reload must record remediation state (cooldown)")
 	}
 }
+
+// TestWorkerShadowModeEvaluatesButDoesNotAct verifies the core of the shadow
+// remediation feature: conditions/windows/guards/policy are all evaluated and
+// appropriate events are emitted, but no Operate is called and real
+// RemediationState is not mutated.
+func TestWorkerShadowModeEvaluatesButDoesNotAct(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	tree := remediationTree("restart-if-down", "http", "restart")
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.Shadow = true
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("shadow mode executed ops=%v; must not call Operate", h.ops)
+	}
+	ev, ok := h.eventOf("shadow")
+	if !ok {
+		t.Fatalf("no shadow event emitted; events=%+v", h.events)
+	}
+	if ev.Action != "restart" || !strings.Contains(ev.Message, "would") {
+		t.Fatalf("shadow event = %+v, want action=restart and 'would' in message", ev)
+	}
+	if !w.State.LastActionAt.IsZero() || len(w.State.RecentActions) != 0 {
+		t.Error("shadow must not Record remediation state (no pollution of real cooldown)")
+	}
+}
