@@ -670,28 +670,33 @@ func watchMeter(checkType string, b *WebBackend) *web.WatchMeter {
 		return &web.WatchMeter{Kind: "load", UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
 	case "fds":
 		s, err := checks.SampleFds()
-		if err != nil || s.Max == 0 {
+		if err != nil {
 			return nil
 		}
-		return &web.WatchMeter{
-			Kind:    "fds",
-			UsedPct: float64(s.Allocated) / float64(s.Max) * 100,
-			Count:   s.Allocated,
-			Max:     s.Max,
-		}
+		return countMeter("fds", s.Allocated, s.Max)
 	case "pids":
 		s, err := checks.SamplePids()
-		if err != nil || s.Max == 0 {
+		if err != nil {
 			return nil
 		}
-		return &web.WatchMeter{
-			Kind:    "pids",
-			UsedPct: float64(s.Threads) / float64(s.Max) * 100,
-			Count:   s.Threads,
-			Max:     s.Max,
-		}
+		return countMeter("pids", s.Threads, s.Max)
 	}
 	return nil
+}
+
+// countMeter builds a count-vs-limit gauge (fds, pids) as a percentage of the
+// kernel maximum. nil when the limit is unknown (max == 0), so the meter is
+// simply absent rather than dividing by zero.
+func countMeter(kind string, count, max uint64) *web.WatchMeter {
+	if max == 0 {
+		return nil
+	}
+	return &web.WatchMeter{
+		Kind:    kind,
+		UsedPct: float64(count) / float64(max) * 100,
+		Count:   count,
+		Max:     max,
+	}
 }
 
 // monitorView reads one monitor record and renders the view fields services
