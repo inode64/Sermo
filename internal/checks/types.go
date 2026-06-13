@@ -369,7 +369,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 	}
 	if c.onChange && c.state != nil {
-		cur := strings.TrimSpace(res.Stdout)
+		cur := TrimOutput(res.Stdout)
 		if c.state.primed && cur != c.state.last {
 			r := c.result(false, fmt.Sprintf("output changed (%s -> %s)", FirstNonEmptyLine(c.state.last), FirstNonEmptyLine(cur)), start)
 			r.Data = map[string]any{"old": c.state.last, "new": cur}
@@ -529,11 +529,18 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	return c.result(true, c.binary+": all shared libraries resolve", start)
 }
 
+// TrimOutput removes surrounding whitespace from captured command, SQL,
+// protocol and hook text while preserving meaningful internal line breaks.
+func TrimOutput(s string) string {
+	return strings.TrimSpace(s)
+}
+
 // FirstNonEmptyLine returns the first non-empty line of s, trimmed — the
 // compact one-line form used in check, hook and version messages. Shared so
 // app and appinspect do not carry their own copies.
 func FirstNonEmptyLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	clean := TrimOutput(s)
+	for _, line := range strings.Split(clean, "\n") {
 		if t := strings.TrimSpace(line); t != "" {
 			return t
 		}

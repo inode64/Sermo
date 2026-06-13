@@ -183,10 +183,10 @@ func hookEnv(name, checkType string, res checks.Result) map[string]string {
 	env := map[string]string{
 		"SERMO_WATCH":      name,
 		"SERMO_CHECK_TYPE": checkType,
-		"SERMO_MESSAGE":    res.Message,
+		"SERMO_MESSAGE":    checks.TrimOutput(res.Message),
 	}
 	for k, v := range res.Data {
-		env["SERMO_"+envKey(k)] = cfgval.String(v)
+		env["SERMO_"+envKey(k)] = checks.TrimOutput(cfgval.String(v))
 	}
 	return env
 }
