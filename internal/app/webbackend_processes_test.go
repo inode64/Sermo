@@ -9,6 +9,8 @@ import (
 
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 func writeWebProcessConfig(t *testing.T, pidfile string) *config.Config {
@@ -100,6 +102,95 @@ func TestWebBackendDetailProcessesNone(t *testing.T) {
 	}
 	if !strings.Contains(detail.ProcessWarnings[0], "/nonexistent/pidfile.pid") {
 		t.Fatalf("ProcessWarnings[0] = %q, want pidfile path", detail.ProcessWarnings[0])
+	}
+}
+
+func TestInitDerivedProcessSelectors(t *testing.T) {
+	tests := []struct {
+		name string
+		info servicemgr.ProcInfo
+		want process.Selector
+	}{
+		{
+			name: "pidfile",
+			info: servicemgr.ProcInfo{Pidfile: "/run/app.pid", Exe: "/usr/bin/app", User: "app"},
+			want: process.Selector{Name: "init", Type: process.SelectorPidfile, Paths: []string{"/run/app.pid"}},
+		},
+		{
+			name: "cmd with user",
+			info: servicemgr.ProcInfo{Cmd: `(^|[[:space:]])/usr/bin/app($|[[:space:]])`, User: "app"},
+			want: process.Selector{Name: "init", Type: process.SelectorCommandMatch, Cmd: `(^|[[:space:]])/usr/bin/app($|[[:space:]])`, User: "app"},
+		},
+		{
+			name: "exe with user",
+			info: servicemgr.ProcInfo{Exe: "/usr/bin/app", User: "app"},
+			want: process.Selector{Name: "init", Type: process.SelectorCommandMatch, Exe: "/usr/bin/app", User: "app"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := initDerivedProcessSelectors(tc.info)
+			if len(got) != 1 {
+				t.Fatalf("selectors = %+v, want one", got)
+			}
+			if got[0].Name != tc.want.Name || got[0].Type != tc.want.Type || got[0].Exe != tc.want.Exe || got[0].Cmd != tc.want.Cmd || got[0].User != tc.want.User || strings.Join(got[0].Paths, ",") != strings.Join(tc.want.Paths, ",") {
+				t.Fatalf("selector = %+v, want %+v", got[0], tc.want)
+			}
+		})
+	}
+}
+
+func TestInitDerivedProcessSelectorsRequireUserForCommandMatch(t *testing.T) {
+	for _, info := range []servicemgr.ProcInfo{
+		{Exe: "/usr/bin/app"},
+		{Cmd: `(^|[[:space:]])/usr/bin/app($|[[:space:]])`},
+	} {
+		if got := initDerivedProcessSelectors(info); len(got) != 0 {
+			t.Fatalf("selectors = %+v, want none without user", got)
+		}
+	}
+}
+
+func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {
+	root := t.TempDir()
+	enabled := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	globalPath := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(globalPath, []byte(`
+paths:
+  includes: [`+enabled+`]
+defaults:
+  policy:
+    cooldown: 5m
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`
+kind: service
+name: web
+service: { name: web }
+processes:
+  main:
+    type: command_match
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(globalPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	wb, warnings := NewWebBackend(cfg, Deps{Backend: servicemgr.BackendOpenRC, Manager: fakeManager{}, ExecxRunner: execx.CommandRunner{}})
+	if len(warnings) > 0 {
+		t.Fatalf("NewWebBackend warnings: %v", warnings)
+	}
+	detail, ok := wb.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	if len(detail.ProcessWarnings) != 1 || !strings.Contains(detail.ProcessWarnings[0], "requires exe or cmd") {
+		t.Fatalf("ProcessWarnings = %+v, want command_match warning", detail.ProcessWarnings)
 	}
 }
 

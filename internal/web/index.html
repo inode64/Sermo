@@ -1443,6 +1443,8 @@ function procIoFdThreadCells(p) {
 
 function renderExpansion(d, metrics, beats) {
   const procs = d.processes || [];
+  const procWarnings = d.process_warnings || [];
+  const unresolvedProcs = procs.filter((p) => !p.exe_resolved);
   const pt = d.process_totals || {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
     io_read: procs.reduce((a, p) => a + (p.io_read || 0), 0),
@@ -1462,6 +1464,10 @@ function renderExpansion(d, metrics, beats) {
   const lat = renderLatency(metrics);
   const sla = renderSLA(d.sla);
   const strip = beats || "";
+  const procWarns = [
+    ...procWarnings.map((w) => `<div class="bad" style="margin:.2rem 0">discovery warning: ${esc(w)}</div>`),
+    ...unresolvedProcs.map((p) => `<div class="inactive" style="margin:.2rem 0">pid ${p.pid}: exe unresolved</div>`),
+  ].join("");
   const procTable = procs.length
     ? `<table style="width:auto; font-size:.85rem;">
         <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>CPU</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
@@ -1475,8 +1481,8 @@ function renderExpansion(d, metrics, beats) {
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           ${procIoFdThreadCells(p)}
         </tr>`).join("")}</tbody></table>`
-    : '<div class="muted">No processes found.</div>';
-  return strip + totals + lat + sla + procTable;
+    : `<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
+  return strip + totals + procWarns + lat + sla + procTable;
 }
 
 // renderLatency shows a measured check's latency over the default window: the
