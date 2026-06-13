@@ -363,6 +363,56 @@ func DisplayName(body map[string]any, fallback string) string {
 	return fallback
 }
 
+// CategoryLabel returns the optional UI grouping category from a document body,
+// falling back to fallback when the field is absent or blank.
+func CategoryLabel(body map[string]any, fallback string) string {
+	if s, ok := body["category"].(string); ok && strings.TrimSpace(s) != "" {
+		return strings.TrimSpace(s)
+	}
+	return inferredCategoryLabel(body, fallback)
+}
+
+type categoryRule struct {
+	label   string
+	needles []string
+}
+
+var categoryRules = []categoryRule{
+	{label: "hardware", needles: []string{"nut ups", "upsmon", "upsd", "upsdrv", "usbhid-ups", "snmp-ups", "apc", "usb hid", "rng", "irqbalance", "numa", "acpi", "bluetooth"}},
+	{label: "observability", needles: []string{"exporter", "prometheus", "grafana loki", "loki", "filebeat", "monit", "pmcd", "pcp", "snmpd", "net-snmp"}},
+	{label: "database", needles: []string{"mysql", "mariadb", "postgres", "postgresql", "mongodb", "mongod", "redis", "keydb", "memcached", "influxdb", "sqlite", "galera", "garbd", "berkeley db"}},
+	{label: "web", needles: []string{"nginx", "apache", "php-fpm", "tomcat", "varnish", "squid", "guacamole", "guacd", "listmonk", "home assistant", "unifi", "go2rtc"}},
+	{label: "messaging", needles: []string{"rabbitmq", "kafka", "mosquitto", "mail", "exim", "dovecot", "rspamd", "spamassassin", "fetchmail"}},
+	{label: "storage", needles: []string{"nfs", "rpc-", "rpc ", "rpcbind", "rpc pipefs", "ceph", "bacula", "bareos", "backrest", "restic", "rest server", "smartd", "smartctl", "lvm", "mdadm", "gluster", "rrdcached", "samba", "smbd", "nmbd", "afp", "netatalk"}},
+	{label: "network", needles: []string{"openssh", "ssh", "openvpn", "nebula", "dhcp", "dnsmasq", "bind", "named", "ntp", "ppp", "pptp", "proftpd", "tftp", "lldp", "avahi", "cloudflare", "cloudflared", "rsync"}},
+	{label: "virtualization", needles: []string{"docker", "libvirt", "qemu", "virtlockd", "virtlogd", "open vswitch", "ovs-", "ovsdb"}},
+	{label: "runtime", needles: []string{"node.js", "node", "java", "python", "go", "ruby", "perl", "php", "bash", "erlang", "beam"}},
+	{label: "security", needles: []string{"fail2ban", "clamav", "clamd", "certbot", "openssl"}},
+	{label: "identity", needles: []string{"ldap", "slapd"}},
+	{label: "system", needles: []string{"systemd", "d-bus", "dbus", "salt", "supervisor", "fcron", "xinetd", "automount", "cups"}},
+}
+
+func inferredCategoryLabel(body map[string]any, fallback string) string {
+	name := strings.TrimSpace(stringField(body, "name"))
+	displayName := strings.TrimSpace(stringField(body, "display_name"))
+	haystack := " " + strings.ToLower(name+" "+displayName) + " "
+	for _, rule := range categoryRules {
+		for _, needle := range rule.needles {
+			if strings.Contains(haystack, needle) {
+				return rule.label
+			}
+		}
+	}
+	return fallback
+}
+
+func stringField(body map[string]any, key string) string {
+	if s, ok := body[key].(string); ok {
+		return s
+	}
+	return ""
+}
+
 func isYAML(name string) bool {
 	ext := filepath.Ext(name)
 	return ext == ".yml" || ext == ".yaml"

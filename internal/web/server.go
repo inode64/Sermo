@@ -35,6 +35,7 @@ var assets embed.FS
 type Service struct {
 	Name             string   `json:"name"`
 	DisplayName      string   `json:"display_name"`
+	Category         string   `json:"category,omitempty"`
 	Backend          string   `json:"backend"`
 	Unit             string   `json:"unit"`
 	State            string   `json:"state"`
@@ -59,6 +60,7 @@ type Service struct {
 type Application struct {
 	Name         string `json:"name"`
 	DisplayName  string `json:"display_name"`
+	Category     string `json:"category,omitempty"`
 	Binary       string `json:"binary"`                // resolved binary path (file location)
 	Permissions  string `json:"permissions,omitempty"` // binary mode, e.g. "-rwxr-xr-x (0755)"
 	User         string `json:"user,omitempty"`        // owner username of the binary

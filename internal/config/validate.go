@@ -167,6 +167,11 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "display_name must be a string"})
 			}
 		}
+		if d, present := doc.Body["category"]; present {
+			if _, ok := d.(string); !ok {
+				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
+			}
+		}
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService:
 		case "":

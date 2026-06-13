@@ -772,6 +772,30 @@ func TestDisplayNameFallsBackToName(t *testing.T) {
 	}
 }
 
+func TestCategoryLabelFallsBack(t *testing.T) {
+	cases := []struct {
+		name string
+		body map[string]any
+		want string
+	}{
+		{"present", map[string]any{"category": "database"}, "database"},
+		{"trimmed", map[string]any{"category": " database "}, "database"},
+		{"inferred-web", map[string]any{"name": "nginx"}, "web"},
+		{"inferred-database", map[string]any{"display_name": "MariaDB"}, "database"},
+		{"cups-not-ups", map[string]any{"name": "cups-config", "display_name": "CUPS"}, "system"},
+		{"absent", map[string]any{}, "service"},
+		{"blank", map[string]any{"category": "   "}, "service"},
+		{"non-string", map[string]any{"category": 7}, "service"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CategoryLabel(tc.body, "service"); got != tc.want {
+				t.Errorf("CategoryLabel(%v) = %q, want %q", tc.body, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestDescriptionHasNoFallback guards the asymmetry: unlike display_name,
 // description is never materialized from name. A document without a description
 // renders without one.
