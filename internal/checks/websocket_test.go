@@ -95,3 +95,19 @@ func TestBuildWebsocketCheckErrors(t *testing.T) {
 		t.Fatal("a non-ws/http scheme should warn")
 	}
 }
+
+// wsSkipVerify gates TLS certificate verification, so it must return true ONLY
+// for the explicit opt-out values — a typo or stray value must keep verification
+// on (the safe default).
+func TestWsSkipVerify(t *testing.T) {
+	for _, v := range []string{"skip-verify", "skip_verify", "insecure", "SKIP-VERIFY", "  Insecure  "} {
+		if !wsSkipVerify(v) {
+			t.Errorf("wsSkipVerify(%q) = false, want true (explicit opt-out)", v)
+		}
+	}
+	for _, v := range []string{"", "verify", "true", "1", "yes", "skipverify", "skip verify", "none"} {
+		if wsSkipVerify(v) {
+			t.Errorf("wsSkipVerify(%q) = true, want false (verification must stay on)", v)
+		}
+	}
+}
