@@ -267,6 +267,267 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	}
 }
 
+func TestWebBackendKernelWatchReadings(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"mem-pressure": map[string]any{"check": map[string]any{
+				"type":       "pressure",
+				"resource":   "memory",
+				"some_avg60": map[string]any{"op": ">", "value": 10},
+			}},
+			"entropy": map[string]any{"check": map[string]any{
+				"type":  "entropy",
+				"avail": map[string]any{"op": "<", "value": 200},
+			}},
+			"zombies": map[string]any{"check": map[string]any{
+				"type":  "zombies",
+				"count": map[string]any{"op": ">", "value": 20},
+			}},
+			"conntrack": map[string]any{"check": map[string]any{
+				"type":  "conntrack",
+				"count": map[string]any{"op": ">", "value": 100},
+			}},
+		},
+	}}}
+
+	b, warns := NewWebBackend(cfg, Deps{
+		PressureSampler: func(resource string) (checks.PressureSample, error) {
+			if resource != "memory" {
+				t.Fatalf("pressure resource = %q, want memory", resource)
+			}
+			return checks.PressureSample{
+				Some: checks.PressureAverages{Avg10: 1.25, Avg60: 2.5, Avg300: 3.75},
+				Full: checks.PressureAverages{Avg10: 0.5, Avg60: 0.75, Avg300: 1},
+			}, nil
+		},
+		ConntrackSampler: func() (checks.ConntrackSample, error) {
+			return checks.ConntrackSample{Count: 25, Max: 100}, nil
+		},
+		EntropySampler: func() (uint64, bool) { return 123, true },
+		ZombieSampler:  func() (uint64, bool) { return 4, true },
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	byName := map[string]web.Watch{}
+	for _, w := range b.Watches(context.Background()) {
+		byName[w.Name] = w
+	}
+
+	pressure := byName["mem-pressure"]
+	if !strings.Contains(pressure.Summary, "pressure memory") || pressure.State != TargetStateOK {
+		t.Fatalf("pressure watch = %+v", pressure)
+	}
+	if got := readingByField(pressure.Readings, "some_avg60").Value; got != "2.50%" {
+		t.Fatalf("pressure some_avg60 reading = %q, want 2.50%%", got)
+	}
+	if got := conditionByField(pressure.Conditions, "some_avg60").Value; got != "10" {
+		t.Fatalf("pressure condition = %q, want 10", got)
+	}
+
+	entropy := byName["entropy"]
+	if got := readingByField(entropy.Readings, "avail").Value; got != "123 bits" {
+		t.Fatalf("entropy reading = %q, want 123 bits", got)
+	}
+	if conditionByField(entropy.Conditions, "avail").Op != "<" {
+		t.Fatalf("entropy conditions = %+v", entropy.Conditions)
+	}
+
+	zombies := byName["zombies"]
+	if got := readingByField(zombies.Readings, "count").Value; got != "4" {
+		t.Fatalf("zombies reading = %q, want 4", got)
+	}
+	if conditionByField(zombies.Conditions, "count").Op != ">" {
+		t.Fatalf("zombies conditions = %+v", zombies.Conditions)
+	}
+
+	conntrack := byName["conntrack"]
+	if conntrack.Meter == nil || conntrack.Meter.Kind != "conntrack" || conntrack.Meter.Count != 25 || conntrack.Meter.Max != 100 {
+		t.Fatalf("conntrack meter = %+v", conntrack.Meter)
+	}
+	if conditionByField(conntrack.Conditions, "count").Value != "100" {
+		t.Fatalf("conntrack conditions = %+v", conntrack.Conditions)
+	}
+}
+
+func TestWebBackendKernelWatchReadingErrorMarksWatchFailed(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"mem-pressure": map[string]any{"check": map[string]any{
+				"type":       "pressure",
+				"resource":   "memory",
+				"some_avg60": map[string]any{"op": ">", "value": 10},
+			}},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{
+		PressureSampler: func(string) (checks.PressureSample, error) {
+			return checks.PressureSample{}, errors.New("PSI disabled")
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("watches = %+v, want one", watches)
+	}
+	w := watches[0]
+	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "PSI disabled" {
+		t.Fatalf("watch = %+v, want failed with PSI error reading", w)
+	}
+}
+
+func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"oom": map[string]any{"check": map[string]any{"type": "oom"}},
+			"pid-table": map[string]any{"check": map[string]any{
+				"type":     "pids",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
+			}},
+			"net-eth0": map[string]any{
+				"check": map[string]any{"type": "net", "interface": "eth0"},
+				"metrics": map[string]any{
+					"state":   map[string]any{"on": "change"},
+					"errors":  map[string]any{"delta": map[string]any{"op": ">", "value": 10}},
+					"address": map[string]any{"expect": "present"},
+					"speed":   map[string]any{"on": "change"},
+				},
+			},
+			"ping-gw": map[string]any{
+				"check": map[string]any{"type": "icmp", "host": "8.8.8.8", "count": 3},
+				"metrics": map[string]any{
+					"state":   map[string]any{"on": "change"},
+					"latency": map[string]any{"threshold": map[string]any{"op": ">", "value": 100}},
+				},
+			},
+		},
+	}}}
+
+	b, warns := NewWebBackend(cfg, Deps{
+		OomSampler:  func() (uint64, bool) { return 7, true },
+		PidsSampler: func() (checks.PidsSample, error) { return checks.PidsSample{Threads: 123, Max: 1000}, nil },
+		NetSampler: func(iface string) (checks.NetSample, error) {
+			if iface != "eth0" {
+				t.Fatalf("net iface = %q, want eth0", iface)
+			}
+			return checks.NetSample{
+				State:      "up",
+				SpeedMbps:  1000,
+				SpeedKnown: true,
+				Counters:   map[string]uint64{"rx_errors": 2, "tx_errors": 3},
+				Addrs:      []string{"192.0.2.10"},
+			}, nil
+		},
+		PingSampler: func(host, iface string, count int, timeout time.Duration) (checks.PingSample, error) {
+			if host != "8.8.8.8" || iface != "" || count != 3 {
+				t.Fatalf("ping args host=%q iface=%q count=%d", host, iface, count)
+			}
+			if timeout <= 0 {
+				t.Fatal("ping timeout must be bounded")
+			}
+			return checks.PingSample{Reachable: true, RTTms: 42.5, RTTKnown: true}, nil
+		},
+		DefaultTimeout: time.Second,
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	byName := map[string]web.Watch{}
+	for _, w := range b.Watches(context.Background()) {
+		byName[w.Name] = w
+	}
+
+	oom := byName["oom"]
+	if got := readingByField(oom.Readings, "total").Value; got != "7" {
+		t.Fatalf("oom reading = %q, want 7", got)
+	}
+	if conditionByField(oom.Conditions, "delta").Op != ">" {
+		t.Fatalf("oom default condition = %+v", oom.Conditions)
+	}
+
+	pids := byName["pid-table"]
+	if pids.Meter == nil || pids.Meter.Kind != "pids" || pids.Meter.Count != 123 || pids.Meter.Max != 1000 {
+		t.Fatalf("pids meter = %+v", pids.Meter)
+	}
+	if !strings.Contains(pids.Summary, "123/1000") {
+		t.Fatalf("pids summary = %q", pids.Summary)
+	}
+
+	netWatch := byName["net-eth0"]
+	if got := readingByField(netWatch.Readings, "state").Value; got != "up" {
+		t.Fatalf("net state reading = %q, want up", got)
+	}
+	if got := readingByField(netWatch.Readings, "speed").Value; got != "1000 Mbps" {
+		t.Fatalf("net speed reading = %q, want 1000 Mbps", got)
+	}
+	if got := readingByField(netWatch.Readings, "errors").Value; got != "5" {
+		t.Fatalf("net errors reading = %q, want 5", got)
+	}
+	if got := conditionByField(netWatch.Conditions, "errors.delta").Value; got != "10" {
+		t.Fatalf("net conditions = %+v", netWatch.Conditions)
+	}
+
+	icmp := byName["ping-gw"]
+	if got := readingByField(icmp.Readings, "state").Value; got != "up" {
+		t.Fatalf("icmp state reading = %q, want up", got)
+	}
+	if got := readingByField(icmp.Readings, "latency").Value; got != "42.5 ms" {
+		t.Fatalf("icmp latency reading = %q, want 42.5 ms", got)
+	}
+	if got := conditionByField(icmp.Conditions, "latency.threshold").Value; got != "100" {
+		t.Fatalf("icmp conditions = %+v", icmp.Conditions)
+	}
+}
+
+func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"pid-table": map[string]any{"check": map[string]any{
+				"type":     "pids",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
+			}},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{
+		PidsSampler: func() (checks.PidsSample, error) {
+			return checks.PidsSample{}, errors.New("loadavg failed")
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("watches = %+v, want one", watches)
+	}
+	w := watches[0]
+	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "loadavg failed" {
+		t.Fatalf("watch = %+v, want failed with pids error reading", w)
+	}
+}
+
+func readingByField(readings []web.WatchReading, field string) web.WatchReading {
+	for _, reading := range readings {
+		if reading.Field == field {
+			return reading
+		}
+	}
+	return web.WatchReading{}
+}
+
+func conditionByField(conditions []web.WatchCondition, field string) web.WatchCondition {
+	for _, condition := range conditions {
+		if condition.Field == field {
+			return condition
+		}
+	}
+	return web.WatchCondition{}
+}
+
 // fakeSwapReader is the minimal metrics.Reader (plus optional TotalSwap) the
 // swap watch view needs.
 type fakeSwapReader struct {

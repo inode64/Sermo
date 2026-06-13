@@ -205,6 +205,10 @@ hand-roll bespoke `overflow`/`max-height` rules on a single panel. When you
 introduce a genuinely new pattern, document it here so the next change can
 follow it.
 
+When adding a host watch/check with useful runtime data, wire its Web UI
+`Watch.Meter` or `Watch.Readings` path and add a `webbackend` regression test;
+do not leave it visible only as static config.
+
 The visual layer is a token-driven design system (June 2026 redesign):
 
 - **Design tokens.** All colors/radii/shadows come from CSS custom properties on

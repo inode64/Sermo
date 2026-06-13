@@ -126,6 +126,18 @@ func (c *icmpCheck) Run(_ context.Context) Result {
 	}
 }
 
+// SampleICMP probes host with the same interface aggregation semantics as the
+// icmp check, using sampler when provided and the default native ICMP sampler
+// otherwise. Exposed so callers like the web backend can render current ping
+// state without running a stateful icmp check.
+func SampleICMP(host string, ifaces []string, ifaceAll bool, count int, timeout time.Duration, sampler PingSamplerFunc) (PingSample, error) {
+	if sampler == nil {
+		sampler = defaultPingSampler
+	}
+	c := &icmpCheck{base: base{timeout: timeout}, host: host, ifaces: ifaces, ifaceAll: ifaceAll, count: count}
+	return c.sample(sampler)
+}
+
 // sample runs the ping sampler over the configured interface set and combines
 // reachability per interface_match (any: reachable if one interface reaches; all:
 // reachable only if every one reaches, reporting the worst RTT). With no

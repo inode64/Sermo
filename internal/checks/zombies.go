@@ -40,6 +40,10 @@ func (c zombieCheck) Run(_ context.Context) Result {
 	return res
 }
 
+// SampleZombies returns one live count of zombie processes using the default
+// /proc scanner. ok is false when /proc cannot be read.
+func SampleZombies() (count uint64, ok bool) { return defaultZombieSampler() }
+
 // defaultZombieSampler counts processes whose /proc/<pid>/stat run state is "Z".
 func defaultZombieSampler() (uint64, bool) {
 	entries, err := os.ReadDir("/proc")

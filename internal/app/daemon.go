@@ -97,6 +97,30 @@ type Deps struct {
 	// MountSampler reads the mount table for storage/autofs checks and web watch
 	// summaries. Optional: nil reads /proc/mounts.
 	MountSampler checks.MountSamplerFunc
+	// NetSampler reads one interface for net checks and web watch summaries.
+	// Optional: nil reads net.Interfaces and /sys/class/net.
+	NetSampler checks.NetSamplerFunc
+	// PingSampler probes ICMP hosts for icmp checks and web watch summaries.
+	// Optional: nil uses native ICMP.
+	PingSampler checks.PingSamplerFunc
+	// OomSampler reads the cumulative OOM-kill counter for checks and web watch
+	// summaries. Optional: nil reads /proc/vmstat.
+	OomSampler checks.OomSamplerFunc
+	// PidsSampler reads the kernel PID table for checks and web watch summaries.
+	// Optional: nil reads /proc/loadavg and kernel.pid_max.
+	PidsSampler checks.PidsSamplerFunc
+	// PressureSampler reads kernel PSI for pressure checks and web watch summaries.
+	// Optional: nil reads /proc/pressure/<resource>.
+	PressureSampler checks.PressureSamplerFunc
+	// ConntrackSampler reads the netfilter conntrack table for checks and web
+	// watch summaries. Optional: nil reads /proc/sys/net/netfilter.
+	ConntrackSampler checks.ConntrackSamplerFunc
+	// EntropySampler reads kernel entropy for entropy checks and web watch
+	// summaries. Optional: nil reads /proc/sys/kernel/random/entropy_avail.
+	EntropySampler checks.EntropySamplerFunc
+	// ZombieSampler counts zombie processes for checks and web watch summaries.
+	// Optional: nil scans /proc.
+	ZombieSampler checks.ZombieSamplerFunc
 	// Notifiers are the configured delivery targets (email, …) addressable by name
 	// from a watch's `then.notify`. Optional: nil/empty means no notifications.
 	Notifiers map[string]notify.Notifier

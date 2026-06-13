@@ -97,9 +97,17 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	typ := canonicalWatchCheckType(cfgval.AsString(checkEntry["type"]))
 	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
-		DefaultTimeout: deps.DefaultTimeout,
-		DiskUsage:      deps.DiskUsage,
-		MountSampler:   deps.MountSampler,
+		DefaultTimeout:   deps.DefaultTimeout,
+		DiskUsage:        deps.DiskUsage,
+		MountSampler:     deps.MountSampler,
+		NetSampler:       deps.NetSampler,
+		PingSampler:      deps.PingSampler,
+		OomSampler:       deps.OomSampler,
+		PidsSampler:      deps.PidsSampler,
+		PressureSampler:  deps.PressureSampler,
+		ConntrackSampler: deps.ConntrackSampler,
+		EntropySampler:   deps.EntropySampler,
+		ZombieSampler:    deps.ZombieSampler,
 	})
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
@@ -117,8 +125,16 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	if !hasWatchAction(hook, names, effectiveNames, expand) {
-		return nil, "watch " + name + ": then requires a hook, notify and/or expand"
+	// Absent `then` key: pure alert/monitor-only (web UI + events only).
+	// Do not inherit globals; produce "firing" events but no actions.
+	if then != nil {
+		if !hasWatchAction(hook, names, effectiveNames, expand) {
+			return nil, "watch " + name + ": then requires a hook, notify and/or expand"
+		}
+	} else {
+		hook = HookSpec{}
+		effectiveNames = nil
+		expand = nil
 	}
 	w := &Watch{
 		Name:       name,
@@ -196,9 +212,17 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		ce["metric"] = key
 
 		check, err := checks.BuildInline(name, ce, checks.Deps{
-			DefaultTimeout: deps.DefaultTimeout,
-			DiskUsage:      deps.DiskUsage,
-			MountSampler:   deps.MountSampler,
+			DefaultTimeout:   deps.DefaultTimeout,
+			DiskUsage:        deps.DiskUsage,
+			MountSampler:     deps.MountSampler,
+			NetSampler:       deps.NetSampler,
+			PingSampler:      deps.PingSampler,
+			OomSampler:       deps.OomSampler,
+			PidsSampler:      deps.PidsSampler,
+			PressureSampler:  deps.PressureSampler,
+			ConntrackSampler: deps.ConntrackSampler,
+			EntropySampler:   deps.EntropySampler,
+			ZombieSampler:    deps.ZombieSampler,
 		})
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
@@ -210,9 +234,15 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-		if !hasWatchAction(hook, names, effectiveNames, nil) {
-			warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
-			continue
+		// Absent per-metric `then`: pure alert (web+logs only); do not inherit.
+		if m, _ := thenMap(mEntry); m != nil {
+			if !hasWatchAction(hook, names, effectiveNames, nil) {
+				warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
+				continue
+			}
+		} else {
+			hook = HookSpec{}
+			effectiveNames = nil
 		}
 		out = append(out, &Watch{
 			Name:      name,
@@ -247,8 +277,14 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if !hasWatchAction(hook, names, effectiveNames, nil) {
-		return nil, "watch " + name + ": then requires a hook and/or notify"
+	// Absent `then`: pure alert (no hook/notify, no global inheritance).
+	if then, _ := thenMap(entry); then != nil {
+		if !hasWatchAction(hook, names, effectiveNames, nil) {
+			return nil, "watch " + name + ": then requires a hook and/or notify"
+		}
+	} else {
+		hook = HookSpec{}
+		effectiveNames = nil
 	}
 	fw := &fileWatcher{
 		name:      name,
@@ -288,8 +324,14 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	if !hasWatchAction(hook, names, effectiveNames, nil) {
-		return nil, "watch " + name + ": then requires a hook and/or notify"
+	// Absent `then`: pure alert (no hook/notify, no global inheritance).
+	if then, _ := thenMap(entry); then != nil {
+		if !hasWatchAction(hook, names, effectiveNames, nil) {
+			return nil, "watch " + name + ": then requires a hook and/or notify"
+		}
+	} else {
+		hook = HookSpec{}
+		effectiveNames = nil
 	}
 	pw := &procWatcher{
 		name:      name,

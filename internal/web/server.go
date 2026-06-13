@@ -89,6 +89,7 @@ type Watch struct {
 	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
 	Swap             *SwapWatchInfo   `json:"swap,omitempty"`
 	Meter            *WatchMeter      `json:"meter,omitempty"`
+	Readings         []WatchReading   `json:"readings,omitempty"`
 	Expand           *WatchExpand     `json:"expand,omitempty"`
 	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
 	LastActivityKind string           `json:"last_activity_kind,omitempty"`
@@ -99,6 +100,15 @@ type WatchCondition struct {
 	Field string `json:"field"`
 	Op    string `json:"op,omitempty"`
 	Value string `json:"value,omitempty"`
+}
+
+// WatchReading is one current host-watch observation rendered in the dashboard
+// for checks that do not naturally fit the volume/meter views.
+type WatchReading struct {
+	Field string `json:"field"`
+	Label string `json:"label,omitempty"`
+	Value string `json:"value,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // WatchExpand is the configured manual/automatic storage growth action.
@@ -116,12 +126,12 @@ type SwapWatchInfo struct {
 }
 
 // WatchMeter is a generic 0-100% usage gauge for a host watch that has a
-// natural capacity (memory, load, fds, pids), giving those watches the same
+// natural capacity (memory, load, fds, pids, conntrack), giving those watches the same
 // progress-bar rendering as swap/disk. UsedPct always drives the bar; the
 // kind-specific fields below carry the human-readable detail (bytes for
-// memory, counts for fds/pids, raw load vs CPU count for load).
+// memory, counts for fds/pids/conntrack, raw load vs CPU count for load).
 type WatchMeter struct {
-	Kind    string  `json:"kind"` // memory | load | fds | pids
+	Kind    string  `json:"kind"` // memory | load | fds | pids | conntrack
 	UsedPct float64 `json:"used_pct"`
 	// Memory: byte capacity.
 	TotalBytes uint64 `json:"total_bytes,omitempty"`
