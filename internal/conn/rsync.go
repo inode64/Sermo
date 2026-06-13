@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"net"
@@ -37,11 +36,10 @@ func (rsyncProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	defer func() { _ = c.Close() }()
 	applyDeadline(ctx, c)
 
-	line, err := bufio.NewReader(c).ReadString('\n')
-	if err != nil && line == "" {
+	line, err := readGreetingLine(c)
+	if err != nil {
 		return Result{}, err
 	}
-	line = strings.TrimRight(line, "\r\n")
 	version, ok := rsyncGreetingVersion(line)
 	if !ok {
 		return Result{}, fmt.Errorf("not an rsync daemon: %q", line)

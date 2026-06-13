@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"strings"
@@ -26,11 +25,10 @@ func (asteriskProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	}
 	defer func() { _ = c.Close() }()
 
-	line, err := bufio.NewReader(c).ReadString('\n')
-	if err != nil && line == "" {
+	line, err := readGreetingLine(c)
+	if err != nil {
 		return Result{}, err
 	}
-	line = strings.TrimRight(line, "\r\n")
 	version, ok := asteriskGreetingVersion(line)
 	if !ok {
 		return Result{}, fmt.Errorf("not an Asterisk AMI greeting: %q", line)
