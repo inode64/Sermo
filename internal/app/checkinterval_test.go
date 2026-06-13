@@ -14,6 +14,7 @@ func TestCheckIntervals(t *testing.T) {
 		"slow":    map[string]any{"type": "command", "interval": "30m"}, // 60 cycles
 		"sub":     map[string]any{"type": "http", "interval": "10s"},    // below resolution
 		"nonmult": map[string]any{"type": "http", "interval": "45s"},    // not a multiple
+		"large":   map[string]any{"type": "tcp", "interval": "1000h"},   // large but exact multiple of res (pins float precision / scheduling edge)
 	}}
 	every, warns := checkIntervals(tree, 30*time.Second)
 
@@ -29,7 +30,10 @@ func TestCheckIntervals(t *testing.T) {
 	if every["nonmult"] != 2 { // round(45/30)=2 -> 60s
 		t.Fatalf("nonmult every = %d, want 2", every["nonmult"])
 	}
-	// two warnings: below-resolution and not-a-multiple.
+	if every["large"] != 120000 {
+		t.Fatalf("large every = %d, want 120000", every["large"])
+	}
+	// two warnings: below-resolution and not-a-multiple. (large exact should not add non-multiple warn)
 	if len(warns) != 2 {
 		t.Fatalf("warnings = %v, want 2 (sub + nonmult)", warns)
 	}
