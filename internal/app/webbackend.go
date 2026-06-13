@@ -38,7 +38,7 @@ const applicationsCacheTTL = 30 * time.Second
 // lock serializes start/stop/restart across the worker and the web.
 func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	discoverer := process.NewDiscoverer()
-	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(deps.Backend, unit)
+	discoverer.BackendPIDs = servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
 	checkDeps := checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
@@ -82,6 +82,17 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		Emit:             recordOperation,
 	})
 	return engine, checkDeps, discoverer
+}
+
+// serviceProcessSelectors returns the process selectors a service should use
+// for both monitoring workers and web detail. Explicit `processes:` entries win;
+// otherwise we derive the safest init-provided identity we can detect.
+func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps, unit string) ([]process.Selector, []string) {
+	selectors, warnings := process.ParseSelectors(tree)
+	if _, configured := tree["processes"]; !configured && len(selectors) == 0 {
+		selectors = initDerivedProcessSelectors(servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit))
+	}
+	return selectors, warnings
 }
 
 // webEntry is one service's web-backend record.
@@ -268,10 +279,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry.disabled = true
 		} else {
 			engine, checkDeps, discoverer := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
-			selectors, processWarnings := process.ParseSelectors(resolved.Tree)
-			if _, configured := resolved.Tree["processes"]; !configured && len(selectors) == 0 {
-				selectors = initDerivedProcessSelectors(servicemgr.DetectProcInfo(context.Background(), deps.ExecxRunner, nil, deps.Backend, unit))
-			}
+			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, deps, unit)
 			names, types := checkCatalog(resolved.Tree)
 			entry.engine = engine
 			entry.status = checkDeps.Status

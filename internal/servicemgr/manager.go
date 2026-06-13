@@ -130,6 +130,12 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 // reports the cgroup process set (preferred) plus the MainPID, deduplicated,
 // backed by the real host (section 21, step 1).
 func BackendPIDsFunc(backend Backend, unit string) func() []int {
+	return BackendPIDsFuncWithRunner(backend, unit, execx.CommandRunner{}, os.ReadFile)
+}
+
+// BackendPIDsFuncWithRunner is BackendPIDsFunc with injectable command and file
+// readers, used by app tests and by callers that already carry an execx runner.
+func BackendPIDsFuncWithRunner(backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
 	return func() []int {
 		seen := map[int]bool{}
 		var pids []int
@@ -139,12 +145,12 @@ func BackendPIDsFunc(backend Backend, unit string) func() []int {
 				pids = append(pids, pid)
 			}
 		}
-		if cg, ok := CgroupPIDs(execx.CommandRunner{}, os.ReadFile, backend, unit); ok {
+		if cg, ok := CgroupPIDs(runner, readFile, backend, unit); ok {
 			for _, pid := range cg {
 				add(pid)
 			}
 		}
-		if pid, ok := MainPID(execx.CommandRunner{}, backend, unit); ok {
+		if pid, ok := MainPID(runner, backend, unit); ok {
 			add(pid)
 		}
 		return pids

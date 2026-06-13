@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -151,6 +153,71 @@ func TestInitDerivedProcessSelectorsRequireUserForCommandMatch(t *testing.T) {
 	}
 }
 
+func TestServiceProcessSelectorsDerivesInitPidfile(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "web.pid")
+	deps := Deps{
+		Backend:     servicemgr.BackendSystemd,
+		ExecxRunner: procInfoRunner{pidfile: pidfile},
+	}
+
+	selectors, warnings := serviceProcessSelectors(context.Background(), map[string]any{}, deps, "web.service")
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+	if len(selectors) != 1 {
+		t.Fatalf("selectors = %+v, want one pidfile selector", selectors)
+	}
+	if selectors[0].Type != process.SelectorPidfile || strings.Join(selectors[0].Paths, ",") != pidfile {
+		t.Fatalf("selector = %+v, want pidfile %s", selectors[0], pidfile)
+	}
+}
+
+func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
+	pid := os.Getpid()
+	pidfile := filepath.Join(t.TempDir(), "web.pid")
+	if err := os.WriteFile(pidfile, []byte(itoa(pid)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	clock := time.Unix(0, 0)
+	reader := &liveCPUReader{cpu: map[int]uint64{pid: 0}, hz: 100, ncpu: 2}
+	collector := metrics.New(reader)
+	collector.Now = func() time.Time { return clock }
+	live := NewLiveMetrics()
+
+	w, warnings := buildWorker("web", "web.service", map[string]any{}, Deps{
+		Backend:          servicemgr.BackendSystemd,
+		Manager:          fakeManager{},
+		Runtime:          t.TempDir(),
+		DefaultTimeout:   time.Second,
+		OperationTimeout: time.Second,
+		Live:             live,
+		LiveCollector:    collector,
+		ExecxRunner:      procInfoRunner{pidfile: pidfile},
+		Now:              func() time.Time { return clock },
+		Emit:             func(Event) {},
+	}, nil)
+	if len(warnings) != 0 {
+		t.Fatalf("buildWorker warnings = %v, want none", warnings)
+	}
+
+	w.RunCycle(context.Background())
+	clock = clock.Add(time.Second)
+	reader.cpu[pid] = 50
+	w.RunCycle(context.Background())
+
+	got, ok := live.Get("web")
+	if !ok {
+		t.Fatal("live CPU sample not published")
+	}
+	if !got.CPUReady || !got.CPUThreadReady {
+		t.Fatalf("live CPU not ready: %+v", got)
+	}
+	if pct := got.PerProcCPU[pid]; pct < 49.9 || pct > 50.1 {
+		t.Fatalf("PerProcCPU[%d] = %v, want ~50", pid, pct)
+	}
+}
+
 func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {
 	root := t.TempDir()
 	enabled := filepath.Join(root, "enabled")
@@ -205,3 +272,45 @@ func itoa(n int) string {
 	}
 	return string(b)
 }
+
+type procInfoRunner struct {
+	pidfile string
+}
+
+func (r procInfoRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	if name != "systemctl" {
+		return execx.Result{}, nil
+	}
+	joined := strings.Join(args, " ")
+	switch {
+	case strings.Contains(joined, "-p PIDFile"):
+		return execx.Result{Stdout: r.pidfile + "\n"}, nil
+	case strings.Contains(joined, "-p MainPID"):
+		return execx.Result{Stdout: "0\n"}, nil
+	default:
+		return execx.Result{Stdout: "\n"}, nil
+	}
+}
+
+type liveCPUReader struct {
+	cpu  map[int]uint64
+	hz   float64
+	ncpu int
+}
+
+func (r *liveCPUReader) ProcessCPU(pid int) (uint64, bool) {
+	v, ok := r.cpu[pid]
+	return v, ok
+}
+
+func (*liveCPUReader) ProcessRSS(int) (uint64, bool)        { return 0, false }
+func (*liveCPUReader) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
+func (*liveCPUReader) ProcessFDs(int) (uint64, bool)        { return 0, false }
+func (*liveCPUReader) ProcessThreads(int) (uint64, bool)    { return 0, false }
+func (*liveCPUReader) TotalMemory() (uint64, uint64, bool)  { return 0, 0, false }
+func (*liveCPUReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
+func (*liveCPUReader) LoadAverages() (float64, float64, float64, bool) {
+	return 0, 0, 0, false
+}
+func (r *liveCPUReader) NumCPU() int         { return r.ncpu }
+func (r *liveCPUReader) ClockTicks() float64 { return r.hz }
