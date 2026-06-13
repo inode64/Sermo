@@ -367,8 +367,9 @@ func watchTypeDirName(checkType string) string {
 }
 
 type wizardWatchFile struct {
-	Path  string
-	Names []string
+	Path    string
+	Names   []string // watch names declared in the file
+	Targets []string // host targets monitored (storage paths, interface names)
 }
 
 // planWizardWatchDeletes offers to delete managed watch files whose target is no
@@ -385,7 +386,7 @@ func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[str
 	}
 	var stale []wizardWatchFile
 	for _, f := range files {
-		if watchFileTargetsStale(f.Path, detected) {
+		if targetsStale(f.Targets, detected) {
 			stale = append(stale, f)
 		}
 	}
@@ -408,17 +409,12 @@ func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[str
 	return deletes, nil
 }
 
-// watchFileTargetsStale reports whether every target a managed watch file
-// monitors (a storage path, a network interface) is absent from the detected
-// set. A file with no extractable target, or any detection-unavailable case
-// (empty set), is never stale — the wizard must not propose deleting a file it
-// cannot prove is orphaned.
-func watchFileTargetsStale(path string, detected map[string]bool) bool {
-	if len(detected) == 0 {
-		return false
-	}
-	targets := watchFileTargets(path)
-	if len(targets) == 0 {
+// targetsStale reports whether every target in the slice is absent from the
+// detected set. An empty target list, or an empty detected set (detection
+// unavailable, or an assistant without host targets), is never stale — the
+// wizard must not propose deleting a file it cannot prove is orphaned.
+func targetsStale(targets []string, detected map[string]bool) bool {
+	if len(detected) == 0 || len(targets) == 0 {
 		return false
 	}
 	for _, t := range targets {
@@ -429,43 +425,11 @@ func watchFileTargetsStale(path string, detected map[string]bool) bool {
 	return true
 }
 
-// watchFileTargets extracts the host targets a managed watch file monitors: the
-// `check.path` of storage watches and the `check.interface` of net/route/icmp/
-// dns watches. Keys match detectedTargetKeys (mountpoints, interface names).
-func watchFileTargets(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	var root map[string]any
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil
-	}
-	watches, _ := root["watches"].(map[string]any)
-	var out []string
-	for _, v := range watches {
-		entry, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		check, ok := entry["check"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if s, _ := check["path"].(string); s != "" {
-			out = append(out, s)
-		}
-		if s, _ := check["interface"].(string); s != "" {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
 // detectedTargetKeys returns the set of host targets the wizard currently
 // detects for an assistant, so the cleanup step can tell which managed files are
-// orphaned. Keys mirror watchFileTargets (mountpoints for volume, interface
-// names for net/uplink) and service daemon names for the service wizard. It
+// orphaned. Keys mirror parseWatchFile's targets (mountpoints for volume,
+// interface names for net/uplink) and service daemon names for the service
+// wizard. It
 // reads from the same Env the assistant used, so tests control it.
 func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 	keys := map[string]bool{}
@@ -516,26 +480,47 @@ func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {
 			continue
 		}
 		path := filepath.Join(targetDir, name)
-		files = append(files, wizardWatchFile{Path: path, Names: watchNamesInFile(path)})
+		names, targets := parseWatchFile(path)
+		files = append(files, wizardWatchFile{Path: path, Names: names, Targets: targets})
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
 }
 
-func watchNamesInFile(path string) []string {
+// parseWatchFile reads a managed watch fragment once and returns both the watch
+// names it declares and the host targets they monitor (the `check.path` of
+// storage watches and the `check.interface` of net/route/icmp/dns watches —
+// keys that match detectedTargetKeys). nil/nil on any read or parse error.
+func parseWatchFile(path string) (names, targets []string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	var root map[string]any
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil
+		return nil, nil
 	}
 	watches, _ := root["watches"].(map[string]any)
-	if len(watches) == 0 {
-		return nil
+	for _, v := range watches {
+		entry, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		check, ok := entry["check"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if s, _ := check["path"].(string); s != "" {
+			targets = append(targets, s)
+		}
+		if s, _ := check["interface"].(string); s != "" {
+			targets = append(targets, s)
+		}
 	}
-	return slices.Sorted(maps.Keys(watches))
+	if len(watches) > 0 {
+		names = slices.Sorted(maps.Keys(watches))
+	}
+	return names, targets
 }
 
 func deleteWizardWatchFiles(files []string) error {
