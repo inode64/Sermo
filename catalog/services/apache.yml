@@ -20,12 +20,12 @@ variables:
 
 commands:
   version:
-    command: ["apachectl", "-v"]
+    command: ["${binary}", "-v"]
 
 preflight:
   config:
     type: command
-    command: ["apachectl", "configtest"]
+    command: ["sh", "-c", "if command -v apache2ctl >/dev/null 2>&1; then exec apache2ctl configtest; else exec apachectl configtest; fi"]
     timeout: 10s
 
   libraries:

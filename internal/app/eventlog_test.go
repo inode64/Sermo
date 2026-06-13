@@ -1,6 +1,9 @@
 package app
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestEventLogRecentNewestFirst(t *testing.T) {
 	l := NewEventLog(10)
@@ -55,5 +58,32 @@ func TestMultiEmit(t *testing.T) {
 	emit(Event{Kind: "action"})
 	if len(a) != 1 || len(b) != 1 {
 		t.Fatalf("MultiEmit did not fan out: a=%d b=%d", len(a), len(b))
+	}
+}
+
+func TestEventLogPrune(t *testing.T) {
+	l := NewEventLog(10)
+	now := time.Now()
+	l.now = func() time.Time { return now }
+
+	l.Add(Event{Message: "old1"})
+	l.Add(Event{Message: "old2"})
+	l.now = func() time.Time { return now.Add(10 * time.Minute) }
+	l.Add(Event{Message: "recent"})
+
+	if got := l.Prune(now.Add(5 * time.Minute)); got != 2 {
+		t.Fatalf("prune before 5m pruned %d, want 2", got)
+	}
+	rem := l.Recent("", 0)
+	if len(rem) != 1 || rem[0].Message != "recent" {
+		t.Fatalf("after prune: %+v", rem)
+	}
+
+	// prune all
+	if got := l.Prune(time.Time{}); got != 1 {
+		t.Fatalf("prune zero-time cleared %d", got)
+	}
+	if len(l.Recent("", 0)) != 0 {
+		t.Fatal("not empty after clear all")
 	}
 }
