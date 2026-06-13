@@ -227,8 +227,18 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
-	sampleMetrics := metricSampler(name, tree, collector, discoverer)
-	liveSample := liveSampler(name, tree, deps.LiveCollector, discoverer, deps.Live)
+	selectors, _ := process.ParseSelectors(tree)
+	var worker *Worker
+	pidsForCycle := cyclePIDSource(func() []int {
+		return discoverPIDs(discoverer, selectors)
+	}, func() int {
+		if worker == nil {
+			return 0
+		}
+		return worker.cycle
+	})
+	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
+	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, pidsForCycle)
 
 	// remediation.shadow (or mode: shadow) allows full rule+window+guard+policy
 	// evaluation and event emission without ever executing operations. It merges
@@ -259,7 +269,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	cache := map[string]checks.Result{}
 	recordMeasurement := measurementRecorder(deps, name, tree)
 
-	worker := &Worker{
+	worker = &Worker{
 		Service:      name,
 		Rules:        ruleSet,
 		Policy:       rules.ParsePolicy(tree),
@@ -567,17 +577,19 @@ func watchMonitorKey(name string) string {
 // service references no metrics (so the daemon does not read /proc every cycle
 // for nothing). Service metrics are sampled over the discovered process set;
 // system metrics come from the shared collector's cached system sample.
-func metricSampler(service string, tree map[string]any, collector *metrics.Collector, discoverer process.Discoverer) func(context.Context) checks.MetricReader {
+func metricSampler(service string, tree map[string]any, collector *metrics.Collector, pids func() []int) func(context.Context) checks.MetricReader {
 	needService, needSystem := usesMetrics(tree)
 	if !needService && !needSystem {
 		return nil
 	}
-	selectors, _ := process.ParseSelectors(tree)
+	if pids == nil {
+		pids = func() []int { return nil }
+	}
 
 	return func(ctx context.Context) checks.MetricReader {
 		var svc, sys metrics.Snapshot
 		if needService {
-			svc = collector.SampleService(service, discoverPIDs(discoverer, selectors))
+			svc = collector.SampleService(service, pids())
 		}
 		if needSystem {
 			sys = collector.SampleSystem()
@@ -593,6 +605,31 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 			r, ok := snap[name]
 			return r, ok
 		}
+	}
+}
+
+// cyclePIDSource reuses one discovered PID set for every sampler in a worker
+// cycle. The cycle key changes once per RunCycle, so service metrics and live CPU
+// can share process discovery without reusing stale PIDs in the next cycle.
+func cyclePIDSource(discover func() []int, cycle func() int) func() []int {
+	if discover == nil {
+		discover = func() []int { return nil }
+	}
+	var cached []int
+	var cachedCycle int
+	var ok bool
+	return func() []int {
+		current := 0
+		if cycle != nil {
+			current = cycle()
+		}
+		if ok && cachedCycle == current {
+			return cached
+		}
+		cached = discover()
+		cachedCycle = current
+		ok = true
+		return cached
 	}
 }
 
@@ -614,13 +651,15 @@ func discoverPIDs(discoverer process.Discoverer, selectors []process.Selector) [
 // registry for the web UI. It uses a dedicated collector (deps.LiveCollector)
 // so its rate deltas never collide with the engine's metric sampling. Returns
 // nil when live metrics are not wired.
-func liveSampler(service string, tree map[string]any, lc *metrics.Collector, discoverer process.Discoverer, live *LiveMetrics) func(context.Context) {
+func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, pids func() []int) func(context.Context) {
 	if lc == nil || live == nil {
 		return nil
 	}
-	selectors, _ := process.ParseSelectors(tree)
+	if pids == nil {
+		pids = func() []int { return nil }
+	}
 	return func(_ context.Context) {
-		sc := lc.SampleServiceCPU(service, discoverPIDs(discoverer, selectors))
+		sc := lc.SampleServiceCPU(service, pids())
 		live.Publish(service, ServiceLive{
 			CPU:            sc.CPU.Percent,
 			CPUReady:       sc.CPU.Ready,
