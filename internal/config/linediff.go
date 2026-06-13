@@ -12,12 +12,12 @@ import (
 func LineDiff(base, other string) (removed, added []string) {
 	baseSet := lineCount(base)
 	otherSet := lineCount(other)
-	for _, l := range strings.Split(strings.TrimRight(base, "\n"), "\n") {
+	for _, l := range lines(base) {
 		if otherSet[l] == 0 && !slices.Contains(removed, l) {
 			removed = append(removed, l)
 		}
 	}
-	for _, l := range strings.Split(strings.TrimRight(other, "\n"), "\n") {
+	for _, l := range lines(other) {
 		if baseSet[l] == 0 && !slices.Contains(added, l) {
 			added = append(added, l)
 		}
@@ -25,9 +25,13 @@ func LineDiff(base, other string) (removed, added []string) {
 	return removed, added
 }
 
+func lines(s string) []string {
+	return strings.Split(strings.TrimRight(s, "\n"), "\n")
+}
+
 func lineCount(s string) map[string]int {
 	out := map[string]int{}
-	for _, l := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
+	for _, l := range lines(s) {
 		out[l]++
 	}
 	return out
