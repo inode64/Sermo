@@ -14,17 +14,20 @@ import (
 // Every builder/threshold form the wizard can emit is exercised here.
 func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 	volPct := buildVolWatch(Volume{Mountpoint: "/data"}, volSettings{
-		metric: "free_pct", op: "<", value: "10%",
+		Monitoring: Monitoring{Monitor: "previous", Interval: "1m"},
+		metric:     "free_pct", op: "<", value: "10%",
 		forCycles: 3, notifiers: []string{"ops"},
 		expand: true, expandBy: "5G", cooldown: "30m",
 	})
 	volBytes := buildVolWatch(Volume{Mountpoint: "/srv"}, volSettings{
-		metric: "used_bytes", op: ">=", value: "100G",
-		notifiers: []string{"ops"},
+		Monitoring: Monitoring{Monitor: "disabled"},
+		metric:     "used_bytes", op: ">=", value: "100G",
+		notifiers: []string{"none"}, // monitor-only watch must also validate
 	})
 	netAll := buildNetWatch(Iface{Name: "eth0"}, netSettings{
-		metrics:  []string{"state", "errors", "speed", "address"},
-		errorsAt: 100, stateDown: true,
+		Monitoring: Monitoring{Monitor: "enabled", Interval: "15s"},
+		metrics:    []string{"state", "errors", "speed", "address"},
+		errorsAt:   100, stateDown: true,
 		notifiers: []string{"ops"},
 	})
 	uplink := buildUplinkWatches("ppp0", uplinkSettings{

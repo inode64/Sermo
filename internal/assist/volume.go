@@ -62,18 +62,20 @@ func (volumeAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 
 // volSettings are the answers gathered for one (or all) volume(s).
 type volSettings struct {
-	metric    string // free_pct | used_pct | free_bytes | used_bytes
-	op        string
-	value     any
-	forCycles int
-	notifiers []string
-	expand    bool
-	expandBy  string
-	cooldown  string
+	Monitoring        // shared monitor-state + interval (asked first, see docs/wizards.md)
+	metric     string // free_pct | used_pct | free_bytes | used_bytes
+	op         string
+	value      any
+	forCycles  int
+	notifiers  []string
+	expand     bool
+	expandBy   string
+	cooldown   string
 }
 
 func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 	var s volSettings
+	s.Monitoring = p.AskMonitoring(label)
 	switch p.Choose("Alert on which condition for "+label+"?", []string{
 		"free space below a %",
 		"used space at/above a %",
@@ -100,9 +102,6 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
 		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", "30m")
 	}
-	// Auto-expand is a valid only-action; otherwise the notify answer must
-	// deliver somewhere — ensureNotifyAction re-asks until the watch acts.
-	s.notifiers = ensureNotifyAction(p, env, s.notifiers, s.expand)
 	return s, nil
 }
 
@@ -129,6 +128,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	if s.expand && s.cooldown != "" {
 		entry["policy"] = map[string]any{"cooldown": s.cooldown}
 	}
+	s.Monitoring.apply(entry)
 	return entry
 }
 

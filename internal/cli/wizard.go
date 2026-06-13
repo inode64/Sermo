@@ -53,7 +53,8 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return code, nil
 	}
 
-	res, err := as.Run(p, a.wizardEnv(ctx, opts, cfg))
+	env := a.wizardEnv(ctx, opts, cfg)
+	res, err := as.Run(p, env)
 	if errors.Is(err, assist.ErrInputClosed) {
 		// The assistants recover the mid-prompt EOF themselves; bubble it up to
 		// runWizard's "wizard aborted" usage exit, same as an EOF outside Run.
@@ -64,7 +65,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitRuntimeError, nil
 	}
 	if len(res.Services) > 0 {
-		return a.writeWizardServices(p, opts, globalPath, cfg, res), nil
+		return a.writeWizardServices(p, opts, globalPath, cfg, res, env), nil
 	}
 	if len(res.Watches) == 0 {
 		fmt.Fprintln(a.Stdout, "Nothing selected; no configuration generated.")
@@ -83,8 +84,9 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitSuccess, nil
 	}
 	var deletes []string
+	detected := detectedTargetKeys(env, as.Name())
 	for _, dir := range wizardCleanupDirs(globalPath, as.Name(), res.Watches) {
-		more, err := planWizardWatchDeletes(p, dir)
+		more, err := planWizardWatchDeletes(p, dir, detected)
 		if err != nil {
 			a.reportError(opts, err.Error())
 			return exitRuntimeError, nil
@@ -369,28 +371,131 @@ type wizardWatchFile struct {
 	Names []string
 }
 
-func planWizardWatchDeletes(p *assist.Prompt, targetDir string) ([]string, error) {
+// planWizardWatchDeletes offers to delete managed watch files whose target is no
+// longer present on the host — the step-9 cleanup of docs/wizards.md ("delete
+// the files whose target we no longer detect"). detected is the set of currently
+// detected target keys (mountpoints / interface names); a file is offered only
+// when every target it monitors is absent from that set. When detection is
+// empty (unavailable, or an assistant without host targets) nothing is offered,
+// so a valid file is never proposed for deletion.
+func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[string]bool) ([]string, error) {
 	files, err := existingWizardWatchFiles(targetDir)
 	if err != nil {
 		return nil, err
 	}
-	if len(files) == 0 {
+	var stale []wizardWatchFile
+	for _, f := range files {
+		if watchFileTargetsStale(f.Path, detected) {
+			stale = append(stale, f)
+		}
+	}
+	if len(stale) == 0 {
 		return nil, nil
 	}
-	if !p.Confirm(fmt.Sprintf("Found %d existing watch file(s) in %s. Review them for deletion?", len(files), targetDir), false) {
+	if !p.Confirm(fmt.Sprintf("Found %d managed watch file(s) in %s whose target is no longer detected. Review them for deletion?", len(stale), targetDir), true) {
 		return nil, nil
 	}
 	var deletes []string
-	for _, f := range files {
+	for _, f := range stale {
 		label := f.Path
 		if len(f.Names) > 0 {
 			label += " (" + strings.Join(f.Names, ", ") + ")"
 		}
-		if p.Confirm("Delete existing watch file "+label+"?", false) {
+		if p.Confirm("Delete stale watch file "+label+"?", true) {
 			deletes = append(deletes, f.Path)
 		}
 	}
 	return deletes, nil
+}
+
+// watchFileTargetsStale reports whether every target a managed watch file
+// monitors (a storage path, a network interface) is absent from the detected
+// set. A file with no extractable target, or any detection-unavailable case
+// (empty set), is never stale — the wizard must not propose deleting a file it
+// cannot prove is orphaned.
+func watchFileTargetsStale(path string, detected map[string]bool) bool {
+	if len(detected) == 0 {
+		return false
+	}
+	targets := watchFileTargets(path)
+	if len(targets) == 0 {
+		return false
+	}
+	for _, t := range targets {
+		if detected[t] {
+			return false
+		}
+	}
+	return true
+}
+
+// watchFileTargets extracts the host targets a managed watch file monitors: the
+// `check.path` of storage watches and the `check.interface` of net/route/icmp/
+// dns watches. Keys match detectedTargetKeys (mountpoints, interface names).
+func watchFileTargets(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return nil
+	}
+	watches, _ := root["watches"].(map[string]any)
+	var out []string
+	for _, v := range watches {
+		entry, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		check, ok := entry["check"].(map[string]any)
+		if !ok {
+			continue
+		}
+		if s, _ := check["path"].(string); s != "" {
+			out = append(out, s)
+		}
+		if s, _ := check["interface"].(string); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// detectedTargetKeys returns the set of host targets the wizard currently
+// detects for an assistant, so the cleanup step can tell which managed files are
+// orphaned. Keys mirror watchFileTargets (mountpoints for volume, interface
+// names for net/uplink) and service daemon names for the service wizard. It
+// reads from the same Env the assistant used, so tests control it.
+func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
+	keys := map[string]bool{}
+	switch wizard {
+	case "volume":
+		if env.Volumes != nil {
+			if vols, err := env.Volumes(); err == nil {
+				for _, v := range vols {
+					keys[v.Mountpoint] = true
+				}
+			}
+		}
+	case "net", "uplink":
+		if env.Ifaces != nil {
+			if ifs, err := env.Ifaces(); err == nil {
+				for _, i := range ifs {
+					keys[i.Name] = true
+				}
+			}
+		}
+	case "service":
+		if env.Daemons != nil {
+			if ds, err := env.Daemons(); err == nil {
+				for _, d := range ds {
+					keys[d.Name] = true
+				}
+			}
+		}
+	}
+	return keys
 }
 
 func existingWizardWatchFiles(targetDir string) ([]wizardWatchFile, error) {

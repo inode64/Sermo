@@ -75,25 +75,30 @@ script-src remains nonce-strict (see `securityHeaders` in
 
 ## Wizard option selection
 
-The interactive wizard (`sermoctl wizard`, `internal/assist`) drives every
-selection through the shared `Prompt` helpers — never hand-roll a bespoke
-question. Multi-selects use `Prompt.MultiChoose` (item numbers, the keyword
-`all`, or an option's name); menus with reserved picks use
-`Prompt.MultiChooseKeyword`, where the numbered list shows **only the real
-options** and the reserved answers ride in the question hint instead of
-occupying rows. Reuse one consistent **all / none / default** vocabulary:
-`all` selects everything; `none` opts out; `default` inherits the global
-setting. In the notifier menu the list shows only the notifiers defined in the
-config, and the `none`/`default` keywords are **accepted even when the config
-defines no notifiers**, so an expand-only or opt-out watch still has a valid
-answer. The reserved `none` is **always accepted** — with or without a global
-notify default — and produces a monitor-only watch (`notify: [none]`: state and
-events, no delivery); it is also rejected as a notifier name. Only an inert
-`default` (no global notify configured, and no other action like auto-expand)
-makes the wizard explain why and **re-ask via the shared `ensureNotifyAction`**
-— never abort the run with a hard error, and never hand-roll that validation
-per assistant. Keep these invariants when adding new assistants or selection
-steps, and update `docs/configuration.md` and this section in the same change.
+The interactive wizard (`sermoctl wizard`, `internal/assist`) follows **one
+canonical question flow for every assistant, present and future** — documented
+in [docs/wizards.md](docs/wizards.md). Read it before adding or changing a
+wizard; the invariants below must not drift per assistant.
+
+Drive every selection through the shared `Prompt` helpers — never hand-roll a
+bespoke question. Multi-selects use `Prompt.MultiChoose` (item numbers, the
+keyword `all`, or an option's name); menus with reserved picks use
+`Prompt.MultiChooseKeyword`. Show detected targets to pick from — **never ask
+the operator to invent a name**. Yes/no questions go through `Prompt.Confirm`,
+which **forces an explicit answer** (an empty line re-prompts; it does not take
+a default). Monitor state and interval come from the shared
+`Prompt.AskMonitoring` and are injected into every generated entry.
+
+Reuse one consistent **all / none / default** vocabulary: `all` selects
+everything; `none` opts out (monitor-only, `notify: [none]`); `default` inherits
+the global notify. `none` and `default` are **always selectable, even with zero
+notifiers configured** — the wizard never blocks on the notifier question. When
+`default` has nothing to inherit (no global notify) it **degrades to
+monitor-only** with a one-line note; it must never re-ask or abort (see
+`chooseNotifiers` in `internal/assist/notify.go`). The final step previews what
+will be written, confirms, and offers to delete managed files whose target is no
+longer detected. Keep `docs/wizards.md`, `docs/configuration.md` and this
+section in step when any of this changes.
 
 ## Catalog: instanced systemd daemons
 

@@ -45,14 +45,11 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 	sel := p.MultiChoose("Which uplink interfaces do you want to monitor?", labels)
 
-	s := uplinkSettings{
-		probeHost: p.Ask("Probe host to ping through the uplink", "1.1.1.1"),
-		probeName: p.Ask("Public DNS name to resolve through the uplink", "example.com"),
-		forCycles: p.AskInt("Require probe failures for how many cycles first?", 3),
-	}
-	// ensureNotifyAction re-asks only an inert 'default'; the explicit 'none'
-	// opt-out builds monitor-only watches and is always accepted.
-	s.notifiers = ensureNotifyAction(p, env, chooseNotifiers(p, env), false)
+	s := uplinkSettings{Monitoring: p.AskMonitoring("the uplink watches")}
+	s.probeHost = p.Ask("Probe host to ping through the uplink", "1.1.1.1")
+	s.probeName = p.Ask("Public DNS name to resolve through the uplink", "example.com")
+	s.forCycles = p.AskInt("Require probe failures for how many cycles first?", 3)
+	s.notifiers = chooseNotifiers(p, env)
 
 	watches := map[string]any{}
 	for _, idx := range sel {
@@ -64,10 +61,11 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 }
 
 type uplinkSettings struct {
-	probeHost string
-	probeName string
-	forCycles int
-	notifiers []string
+	Monitoring // shared monitor-state + interval, applied to every uplink watch
+	probeHost  string
+	probeName  string
+	forCycles  int
+	notifiers  []string
 }
 
 // buildUplinkWatches emits the watch set for one uplink interface: the same
@@ -88,7 +86,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 		}
 		return entry
 	}
-	return map[string]any{
+	watches := map[string]any{
 		"uplink-" + iface: map[string]any{
 			"check": map[string]any{"type": "net", "interface": iface},
 			"metrics": map[string]any{
@@ -117,4 +115,10 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 			"then": newThen(),
 		}),
 	}
+	for _, entry := range watches {
+		if m, ok := entry.(map[string]any); ok {
+			s.Monitoring.apply(m)
+		}
+	}
+	return watches
 }
