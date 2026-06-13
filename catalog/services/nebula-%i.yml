@@ -1,0 +1,9 @@
+kind: daemon
+name: nebula-%i
+display_name: "Nebula ${instance}"
+uses: nebula
+service:
+  systemd: ["nebula@${instance}", "nebula-${instance}", "nebula.${instance}"]
+  openrc: ["nebula.${instance}"]
+versions:
+  from: "/etc/nebula/${instance}.yml"
