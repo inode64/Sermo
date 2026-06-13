@@ -2,66 +2,97 @@
 
 ## Reuse and shared behavior
 
-Before adding a new helper, parser, validator, runner or web/backend adapter,
-look for existing code that already solves the same problem and extend it when
-that keeps the ownership boundary clear. Do not duplicate validation, parsing,
+Default to the smallest change that preserves the current design. Before adding
+a helper, parser, validator, runner, builder or web/backend adapter, look for
+existing code that already solves the same problem and extend it when the
+ownership boundary stays clear. Do not duplicate validation, parsing,
 comparison, notification, monitoring or action-dispatch logic across `sermod`,
 `sermoctl`, web, watches and daemons.
+
+Use this order of preference:
+
+1. Reuse an existing type, helper, builder or command path unchanged.
+2. Extend the existing owner when the new behavior belongs to the same concept.
+3. Add a small private helper next to the owner when it removes real duplication.
+4. Add a new package or abstraction only when behavior is shared across package
+   boundaries and the existing owners are the wrong place for it.
+
+Do not introduce a second way to express the same concept just because the new
+call site is slightly different. If the new behavior needs a different path,
+document why at the dispatch or validation point.
 
 When a new check, option, monitor flag, notification behavior or web action is
 generally useful to both host `watches:` and service daemons, implement it for
 both surfaces in the same change unless there is a documented reason not to. If
 the feature intentionally applies only to one surface, document that limitation
-where the dispatch/validation decision lives and in the user docs. Keep
-`docs/configuration.md`, `docs/rules.md`, daemon docs and `configs/sermo.yml` in
-step with YAML behavior.
+where the dispatch/validation decision lives and in the user docs (see
+Documentation lockstep).
 
 ## Naming and terminology
 
 Names are vocabulary. Use exactly the same name for a given concept across
-variables, parameters, comments and struct fields.
+variables, parameters, comments, struct fields and docs.
 
 This is the naming counterpart of "Reuse and shared behavior". Before choosing
 a name, look at the structs that already model the concept (e.g. `config.Service`,
 `process.Selector`, `app.Event`). When in doubt, treat the field name from the
-public struct or API as the single canonical term.
+public struct or API as the single canonical term. Avoid near-synonyms such as
+target/service/daemon, limit/max/cap or notify/notifier unless the code already
+uses them for distinct concepts.
 
 ## Service operations
 
-Every start, stop, restart, reload or signal action on a service must go through
-the shared `internal/operation` package (and its engine). Do not call backends
-directly, do not send signals from `app/` or `cli/`, and do not bypass locks,
-guards, preflight or policy. The operation path is the single source of truth
-for safe service control.
+Application-level start, stop, restart, reload or signal actions on a service
+must go through the shared `internal/operation` package and its engine. Do not
+call backends directly, do not send signals from `app/` or `cli/`, and do not
+bypass locks, guards, preflight or policy. The operation path is the single
+source of truth for safe service control.
+
+The narrow exceptions are the backend/process implementations that provide the
+primitive operation APIs, and tests/fakes that prove those primitives work. Keep
+those primitives small, injectable and covered by tests.
 
 ## External commands
 
-Never call `os/exec`, `exec.Command` or equivalent directly. All external
-commands (systemctl, rc-service, user checks, hooks, ldd, etc.) must go through
-the `execx` runner with a context and an explicit timeout. `execx` is the only
-sanctioned execution surface.
+Production code must not call `os/exec`, `exec.Command` or equivalent directly.
+External commands (`systemctl`, `rc-service`, user checks, hooks, `ldd`, etc.)
+go through an injectable `execx` runner with a context and an explicit timeout.
+`execx` itself and tests/fakes are the only exceptions.
 
 ## Documentation lockstep
 
 When you change configuration, add a check type, notifier, rule action or
 observable behavior, update the corresponding documentation, catalog examples
-(when generally useful) and `docs/configuration.md` / `docs/rules.md` in the
-same change. Keep `configs/sermo.yml` comments current. Code and docs must
-evolve together.
+(when generally useful) and `docs/configuration.md`, `docs/rules.md` and the
+daemon docs in the same change. Keep `configs/sermo.yml` comments current. Code
+and docs must evolve together.
 
 ## Central builders
 
-New check types, watch kinds, notifiers and rule actions must be introduced
-exclusively through the central builder functions (`internal/checks/build.go`,
-`internal/app/watch_build.go`, `internal/notify/`, rule builders, etc.). Do not
-duplicate construction logic or add ad-hoc cases across packages.
+New check types, watch kinds, notifiers and rule actions start in the central
+builder functions (`internal/checks/build.go`, `internal/app/watch_build.go`,
+`internal/notify/`, rule builders, etc.). Do not duplicate construction logic
+or add ad-hoc cases across packages. If no central builder exists yet, create
+one at the owning package instead of scattering switch cases through callers.
 
 ## Timeout discipline
 
 Every blocking operation (commands, network, database, I/O, etc.) must be
 bounded by a timeout taken from engine configuration (via `app.EngineDuration`
 or `cfgval`) or a named, documented constant. Magic duration literals in
-application logic are forbidden.
+application logic are forbidden. Short literals are acceptable in tests when
+they bound the test itself rather than production behavior.
+
+## Small-change checklist
+
+Before finishing any code change:
+
+- Search for the existing owner with `rg` before adding a new helper or switch.
+- Keep the patch close to that owner; avoid unrelated refactors.
+- Preserve public YAML, JSON, CLI and web field names unless the change is
+  explicitly a migration.
+- Add or move tests when a bug or ambiguous behavior is found.
+- Update docs and examples in the same change when behavior changes.
 
 ## Web UI cohesion
 
@@ -118,7 +149,6 @@ The visual layer is a token-driven design system (June 2026 redesign):
 (section hiding, gauge widths). Do not "harden" style-src back to a nonce;
 script-src remains nonce-strict (see `securityHeaders` in
 `internal/web/server.go`).
-
 
 ## Wizard option selection
 
@@ -201,6 +231,31 @@ Tool notes:
   reads, shutdown-context `G118`) are suppressed at the call site with
   `//nolint:gosec` plus a justifying comment — prefer that over widening the
   config.
+
+## Testing
+
+Tests are part of the change, not an afterthought (see the small-change
+checklist). Match the suite's existing style instead of inventing one.
+
+- **Inject the seam; never touch the host from logic under test.** Every probe
+  that reads the system takes an injectable function or interface, so tests run
+  without real `/proc`, sockets or services: the `*SamplerFunc` fields and the
+  `Deps` samplers on checks (`FdsSamplerFunc`, `MemorySamplerFunc`, …), the
+  `metrics.Reader` interface, `execx.Runner`, `process.Signaler`, and the web
+  `Backend` interface. Add a seam in the same shape when you add a probe.
+- **Reuse the existing fakes** — `fakeReader` (metrics), `fakeRunner`/
+  `scriptRunner` (servicemgr), `fakeFds`/`fakeConntrack` (checks), `fakeBackend`
+  (web). Copy their shape; do not add a mocking framework.
+- **Table-driven subtests.** Express variants as a slice of cases driven by
+  `t.Run(tc.name, …)`, the dominant pattern across the suite.
+- **Split pure logic out of I/O so it is testable directly** (e.g.
+  `parseMeminfoKB`, `parseOSReleasePrettyName`, `levelCountResult`). This serves
+  the reuse rule too.
+- **Prompt-driven flows** (`internal/assist`) abort on truncated input via
+  `assist.Recover(&err)`; drive them with a scripted `strings.NewReader` and
+  assert the result, as the wizard tests do.
+- Short magic durations are fine in tests when they bound the test itself, not
+  production behavior (see Timeout discipline).
 
 ## Security and safety invariants
 
