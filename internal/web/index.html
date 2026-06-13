@@ -1202,11 +1202,16 @@ function setSvcSort(key) {
   else { svcSort.key = key; svcSort.dir = 1; }
   renderServices();
 }
-function updateSortIndicators() {
-  document.querySelectorAll(".sort-ind[data-si]").forEach((el) => {
-    el.textContent = el.dataset.si === svcSort.key ? (svcSort.dir > 0 ? " ▲" : " ▼") : "";
+// updateSortIndicatorsFor sets the ▲/▼ arrow on one panel's sortable headers:
+// attr is the data-* key each header carries its sort key in, sort is that
+// panel's {key, dir} state. Shared by the services/watches/apps panels.
+function updateSortIndicatorsFor(attr, sort) {
+  document.querySelectorAll(`.sort-ind[data-${attr}]`).forEach((el) => {
+    el.textContent = el.dataset[attr] === sort.key ? (sort.dir > 0 ? " ▲" : " ▼") : "";
   });
 }
+
+function updateSortIndicators() { updateSortIndicatorsFor("si", svcSort); }
 
 // renderFilterCounts annotates each status-filter button with how many services
 // match it, for at-a-glance triage.
@@ -1822,11 +1827,7 @@ function setWatchSort(key) {
   renderWatches();
 }
 
-function updateWatchSortIndicators() {
-  document.querySelectorAll(".sort-ind[data-wi]").forEach((el) => {
-    el.textContent = el.dataset.wi === watchSort.key ? (watchSort.dir > 0 ? " ▲" : " ▼") : "";
-  });
-}
+function updateWatchSortIndicators() { updateSortIndicatorsFor("wi", watchSort); }
 
 function renderConditionRows(conditions) {
   const list = conditions || [];
@@ -1990,11 +1991,7 @@ function setAppSort(key) {
   renderApps();
 }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); }
-function updateAppSortIndicators() {
-  document.querySelectorAll(".sort-ind[data-ai]").forEach((el) => {
-    el.textContent = el.dataset.ai === appSort.key ? (appSort.dir > 0 ? " ▲" : " ▼") : "";
-  });
-}
+function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
 function appMatches(a) {
   if (!appQuery) return true;
   const q = appQuery.toLowerCase();
