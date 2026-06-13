@@ -49,7 +49,7 @@ rules:
   # dropping connections. This only alerts (no restart) — a heads-up to raise the
   # limit. `fds` is the open-fd count summed over the process tree.
   alert-if-fds-high:
-    type: remediation
+    type: alert
     if:
       metric:
         scope: service
