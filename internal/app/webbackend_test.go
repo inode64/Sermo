@@ -289,6 +289,36 @@ func (r fakeSwapReader) TotalSwap() (uint64, uint64, bool) {
 	return r.total, r.used, true
 }
 
+type countingSystemReader struct {
+	memoryCalls int
+	loadCalls   int
+	swapCalls   int
+}
+
+func (*countingSystemReader) ProcessCPU(int) (uint64, bool)        { return 0, false }
+func (*countingSystemReader) ProcessRSS(int) (uint64, bool)        { return 0, false }
+func (*countingSystemReader) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
+func (*countingSystemReader) ProcessFDs(int) (uint64, bool)        { return 0, false }
+func (*countingSystemReader) ProcessThreads(int) (uint64, bool)    { return 0, false }
+func (*countingSystemReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
+func (*countingSystemReader) NumCPU() int                          { return 4 }
+func (*countingSystemReader) ClockTicks() float64                  { return 100 }
+
+func (r *countingSystemReader) TotalMemory() (uint64, uint64, bool) {
+	r.memoryCalls++
+	return 1000, 250, true
+}
+
+func (r *countingSystemReader) LoadAverages() (float64, float64, float64, bool) {
+	r.loadCalls++
+	return 1, 2, 3, true
+}
+
+func (r *countingSystemReader) TotalSwap() (uint64, uint64, bool) {
+	r.swapCalls++
+	return 2000, 500, true
+}
+
 func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
@@ -314,6 +344,31 @@ func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
 	sw := watches[0].Swap
 	if sw.TotalBytes != 2048 || sw.UsedBytes != 512 || sw.FreeBytes != 1536 || sw.UsedPct != 25 {
 		t.Fatalf("swap view = %+v, want 512/2048 used (25%%, 1536 free)", sw)
+	}
+}
+
+func TestWebBackendWatchesShareSystemSnapshot(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"load":   map[string]any{"check": map[string]any{"type": "load"}},
+			"memory": map[string]any{"check": map[string]any{"type": "memory"}},
+			"swap":   map[string]any{"check": map[string]any{"type": "swap"}},
+		},
+	}}}
+	reader := &countingSystemReader{}
+	collector := metrics.New(reader)
+	collector.SystemFreshness = 0
+	b, warns := NewWebBackend(cfg, Deps{Collector: collector})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 3 {
+		t.Fatalf("watches = %+v, want 3", watches)
+	}
+	if reader.memoryCalls != 1 || reader.loadCalls != 1 || reader.swapCalls != 1 {
+		t.Fatalf("system samples memory/load/swap = %d/%d/%d, want 1/1/1", reader.memoryCalls, reader.loadCalls, reader.swapCalls)
 	}
 }
 
