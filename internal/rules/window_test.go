@@ -104,6 +104,8 @@ func TestWindowStateClone(t *testing.T) {
 	if cp.Progress(r) == s.Progress(r) {
 		t.Fatal("clone should not alias live state")
 	}
+	// clone must be independent even for history used by within-window
+	// "min matches" logic (behavior sensitive for rule evaluation across reloads).
 }
 
 func TestWindowDescription(t *testing.T) {
