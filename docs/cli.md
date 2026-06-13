@@ -44,6 +44,9 @@ sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be RF
                                         # only events strictly before the timestamp are removed
 sermoctl activity clear [--before TIME] # clears the same log shown as Recent activity
 
+sermoctl diagnose
+sermoctl diagnose clean                 # clears stale state/SLA/measurement rows for removed services
+
 sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE --reason REASON --ttl DURATION
 sermoctl lock release SERVICE

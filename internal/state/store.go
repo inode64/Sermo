@@ -93,6 +93,13 @@ type Store struct {
 	now func() time.Time
 }
 
+// PruneUnconfiguredServicesResult summarizes stale stored service data removed
+// from the persistent state database.
+type PruneUnconfiguredServicesResult struct {
+	Services []string
+	Rows     int64
+}
+
 // Open opens (creating if needed) the database at path, creating the parent
 // directory and running any pending migrations. WAL mode plus a busy timeout let
 // the daemon (long-lived reader/writer) and sermoctl (short-lived writer)
@@ -551,6 +558,60 @@ func (s *Store) TrackedServices() ([]string, error) {
 		out = append(out, name)
 	}
 	return out, rows.Err()
+}
+
+// PruneUnconfiguredServices removes stored data for services absent from the
+// configured service list: monitoring state, SLA samples and measurements. It is
+// used to clear the stale rows that diagnostics report after a service is removed
+// or renamed.
+func (s *Store) PruneUnconfiguredServices(configured []string) (PruneUnconfiguredServicesResult, error) {
+	tracked, err := s.TrackedServices()
+	if err != nil {
+		return PruneUnconfiguredServicesResult{}, err
+	}
+	known := make(map[string]struct{}, len(configured))
+	for _, name := range configured {
+		known[name] = struct{}{}
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return PruneUnconfiguredServicesResult{}, err
+	}
+	defer tx.Rollback()
+
+	var result PruneUnconfiguredServicesResult
+	for _, service := range tracked {
+		if _, ok := known[service]; ok {
+			continue
+		}
+		rows, err := pruneServiceData(tx, service)
+		if err != nil {
+			return PruneUnconfiguredServicesResult{}, err
+		}
+		result.Services = append(result.Services, service)
+		result.Rows += rows
+	}
+	if err := tx.Commit(); err != nil {
+		return PruneUnconfiguredServicesResult{}, err
+	}
+	return result, nil
+}
+
+func pruneServiceData(tx *sql.Tx, service string) (int64, error) {
+	var total int64
+	for _, table := range []string{"monitor_state", "sla_sample", "measurement", "measurement_metric"} {
+		res, err := tx.Exec(`DELETE FROM `+table+` WHERE service = ?;`, service) //nolint:gosec // table is a package-internal literal
+		if err != nil {
+			return 0, err
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		total += rows
+	}
+	return total, nil
 }
 
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly

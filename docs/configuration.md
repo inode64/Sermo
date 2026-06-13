@@ -201,6 +201,8 @@ absent.
 This is the same data the `sermoctl apps` command reports (served from
 `GET /api/applications`). The dashboard caches this application list for up to
 30 seconds, so frequent auto-refreshes don't rerun every app version probe.
+For an editable panel-by-panel map, see
+[webui-representation.md](webui-representation.md).
 
 **The web UI is only activated when `web.port` is explicitly defined.** If the
 `web:` block is omitted, or if a `web:` block is present without a `port` key
@@ -1474,6 +1476,7 @@ further and checks it against the **live host and state database**:
 ```sh
 sermoctl diagnose          # text report
 sermoctl diagnose --json   # machine-readable
+sermoctl diagnose clean    # remove stale stored data for unconfigured services
 ```
 
 It reports, as `error` / `warning` / `info` findings:
@@ -1481,7 +1484,7 @@ It reports, as `error` / `warning` / `info` findings:
 - **Configuration** — every `config validate` issue (errors).
 - **State database** — that the SQLite store passes `PRAGMA integrity_check`, and
   flags **stored data (monitoring state / SLA) for services no longer in the
-  config** (orphaned rows you may want to prune).
+  config**. Use `sermoctl diagnose clean` to prune those orphaned rows.
 - **Interval alignment** — per-check `interval`s that are **not a multiple of the
   global resolution** (`engine.interval`) or below it, so they will be rounded
   (see [per-check interval](#per-check-interval)).
