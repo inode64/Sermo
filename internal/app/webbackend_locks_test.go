@@ -171,6 +171,55 @@ func TestWebBackendViewActiveLocks(t *testing.T) {
 	}
 }
 
+func TestWebBackendServicesActiveLocks(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	expires := time.Now().Add(time.Hour).UTC()
+	ticks := webLockStartTicks(t)
+
+	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+		"service":           "mysql",
+		"name":              "backup",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "redis.lock", map[string]any{
+		"service":           "redis",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "redis.old.lock", map[string]any{
+		"service":    "redis",
+		"name":       "old",
+		"owner_pid":  os.Getpid(),
+		"expires_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+	})
+
+	b := &WebBackend{
+		order: []string{"mysql", "redis"},
+		entries: map[string]*webEntry{
+			"mysql": {},
+			"redis": {},
+		},
+		cfg: &config.Config{Global: config.Global{Runtime: runtime}},
+	}
+
+	services := b.Services(context.Background())
+	byName := map[string][]string{}
+	for _, svc := range services {
+		byName[svc.Name] = svc.ActiveLocks
+	}
+	if len(byName["mysql"]) != 1 || byName["mysql"][0] != "backup" {
+		t.Fatalf("mysql ActiveLocks = %+v, want [backup]", byName["mysql"])
+	}
+	if len(byName["redis"]) != 1 || byName["redis"][0] != "(default)" {
+		t.Fatalf("redis ActiveLocks = %+v, want [(default)]", byName["redis"])
+	}
+}
+
 func TestWebBackendLocksContext(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
