@@ -25,6 +25,13 @@ OPENRC_INITDIR ?= $(sysconfdir)/init.d
 
 INSTALL ?= install
 
+# Go-installed developer tools live in ~/go/bin on local machines.
+LINT_PATH = PATH="$(HOME)/go/bin:$(PATH)"
+# staticcheck/golangci-lint write analyzer caches; the fallback keeps
+# non-interactive/restricted shells from trying to write under ~/.cache when it
+# is unavailable. An explicit XDG_CACHE_HOME still wins.
+LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-/tmp/sermo-lint-cache}"
+
 # Render the init/unit files for the chosen paths: rewrite the binary and config
 # locations baked into the packaging templates.
 unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
@@ -56,14 +63,18 @@ fmt-check:
 	@out="$$(gofmt -l internal cmd)"; \
 	if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
-# Static analysis. Requires the tools on PATH: staticcheck, revive,
+# Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
 # golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and
 # govulncheck.
 lint:
-	staticcheck ./...
-	revive -config revive.toml ./...
-	golangci-lint run
-	govulncheck ./...
+	@echo "staticcheck ./..."
+	@$(LINT_CACHE_ENV) staticcheck ./...
+	@echo "revive -config revive.toml ./..."
+	@$(LINT_PATH) revive -config revive.toml ./...
+	@echo "golangci-lint run"
+	@$(LINT_CACHE_ENV) golangci-lint run
+	@echo "govulncheck ./..."
+	@$(LINT_PATH) govulncheck ./...
 
 # Everything CI enforces: formatting, vet, static analysis, and the test suite.
 check: fmt-check vet lint test
