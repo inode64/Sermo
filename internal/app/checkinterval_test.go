@@ -35,6 +35,20 @@ func TestCheckIntervals(t *testing.T) {
 	}
 }
 
+func TestCheckIntervalsNonPositiveResolution(t *testing.T) {
+	// A non-positive resolution would make round(d/resolution) divide by zero
+	// (+Inf -> undefined int conversion); the guard returns no intervals instead.
+	tree := map[string]any{"checks": map[string]any{
+		"slow": map[string]any{"type": "command", "interval": "30m"},
+	}}
+	for _, res := range []time.Duration{0, -time.Second} {
+		every, warns := checkIntervals(tree, res)
+		if every != nil || warns != nil {
+			t.Fatalf("resolution %s: got every=%v warns=%v, want nil,nil", res, every, warns)
+		}
+	}
+}
+
 func TestDueChecks(t *testing.T) {
 	built := []checks.Built{
 		{Check: stubCheck{name: "fast"}},
