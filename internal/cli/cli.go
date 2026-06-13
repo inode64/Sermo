@@ -595,8 +595,7 @@ func (a App) runConfig(opts options) int {
 
 func (a App) runConfigRender(globalPath string, rest []string, opts options) int {
 	if len(rest) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: config render requires a service name")
-		return exitUsage
+		return a.usageError("config render requires a service name")
 	}
 	service := rest[0]
 
@@ -976,6 +975,15 @@ func (a App) reportError(opts options, msg string) {
 func (a App) fail(opts options, msg string) int {
 	a.reportError(opts, msg)
 	return exitRuntimeError
+}
+
+// usageError writes a subcommand usage error to Stderr and returns the usage
+// exit code, centralising the "usage error:" prefix. Top-level commands that
+// also print the full usage block keep emitting the line inline before
+// writeUsage so the ordering (error line, then usage) is preserved.
+func (a App) usageError(msg string) int {
+	fmt.Fprintln(a.Stderr, "usage error: "+msg)
+	return exitUsage
 }
 
 type statusJSON struct {

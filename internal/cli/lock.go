@@ -41,8 +41,7 @@ func (a App) runLock(ctx context.Context, opts options) int {
 
 func (a App) runLockAcquire(opts options, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: lock acquire requires a service name")
-		return exitUsage
+		return a.usageError("lock acquire requires a service name")
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -59,8 +58,7 @@ func (a App) runLockAcquire(opts options, locker locks.NamedLocker, args []strin
 
 func (a App) runLockRelease(opts options, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: lock release requires a service name")
-		return exitUsage
+		return a.usageError("lock release requires a service name")
 	}
 	service := args[0]
 	if err := locker.Release(service, opts.name); err != nil {
@@ -72,8 +70,7 @@ func (a App) runLockRelease(opts options, locker locks.NamedLocker, args []strin
 
 func (a App) runLockWrap(ctx context.Context, opts options, locker locks.NamedLocker, service string) int {
 	if len(opts.commandArgs) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: lock SERVICE ... -- COMMAND requires a command after --")
-		return exitUsage
+		return a.usageError("lock SERVICE ... -- COMMAND requires a command after --")
 	}
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
@@ -101,12 +98,10 @@ func (a App) runLockWrap(ctx context.Context, opts options, locker locks.NamedLo
 
 func requireLockMeta(a App, opts options) int {
 	if opts.reason == "" {
-		fmt.Fprintln(a.Stderr, "usage error: --reason is required")
-		return exitUsage
+		return a.usageError("--reason is required")
 	}
 	if opts.ttl <= 0 {
-		fmt.Fprintln(a.Stderr, "usage error: --ttl is required and must be positive")
-		return exitUsage
+		return a.usageError("--ttl is required and must be positive")
 	}
 	return exitSuccess
 }

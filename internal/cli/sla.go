@@ -71,8 +71,7 @@ func (a App) runSLA(opts options) int {
 func (a App) runSLASeries(opts options, cfg *config.Config) int {
 	service := opts.service()
 	if service == "" {
-		fmt.Fprintln(a.Stderr, "usage error: sla --series requires a service name")
-		return exitUsage
+		return a.usageError("sla --series requires a service name")
 	}
 	if _, ok := cfg.Services[service]; !ok {
 		return a.fail(opts, fmt.Sprintf("unknown service %q", service))
