@@ -331,6 +331,27 @@ func TestParseWatchFile(t *testing.T) {
 	}
 }
 
+func TestConfirmStaleDeletes(t *testing.T) {
+	stale := []staleFile{{path: "/a.yml", label: "/a.yml (a)"}, {path: "/b.yml", label: "/b.yml (b)"}}
+
+	// Declining the review deletes nothing.
+	p := assist.NewPrompt(strings.NewReader("n\n"), &strings.Builder{})
+	if got := confirmStaleDeletes(p, "/dir", "watch", stale); got != nil {
+		t.Fatalf("declining review must delete nothing, got %v", got)
+	}
+
+	// Review yes; delete the first, keep the second.
+	p = assist.NewPrompt(strings.NewReader("y\ny\nn\n"), &strings.Builder{})
+	if got := confirmStaleDeletes(p, "/dir", "watch", stale); len(got) != 1 || got[0] != "/a.yml" {
+		t.Fatalf("got %v, want [/a.yml]", got)
+	}
+
+	// No stale files: no prompt is issued (safe to pass a nil prompt), nil result.
+	if got := confirmStaleDeletes(nil, "/dir", "service", nil); got != nil {
+		t.Fatalf("no stale files must return nil, got %v", got)
+	}
+}
+
 func TestRunWizardAbortsOnTruncatedInput(t *testing.T) {
 	// A truncated pipe used to spin the re-prompt loop forever at 100% CPU;
 	// now the wizard must abort cleanly with a usage error. The test itself is
