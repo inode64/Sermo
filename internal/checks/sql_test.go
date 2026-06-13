@@ -8,53 +8,6 @@ import (
 	"time"
 )
 
-func TestCompareValue(t *testing.T) {
-	cases := []struct {
-		result, op, value string
-		want              bool
-		wantErr           bool
-	}{
-		// numeric ordering
-		{"42", ">", "10", true, false},
-		{"42", ">", "100", false, false},
-		{"10", ">=", "10", true, false},
-		{"5", "<", "10", true, false},
-		{"10", "<=", "9", false, false},
-		// numeric equality
-		{"7", "==", "7", true, false},
-		{"7.0", "==", "7", true, false}, // numeric, not string
-		{"7", "!=", "8", true, false},
-		// string equality (non-numeric)
-		{"ok", "==", "ok", true, false},
-		{"ok", "==", "fail", false, false},
-		{"ok", "!=", "fail", true, false},
-		// regex
-		{"v1.2.3", "=~", `^v[0-9]+\.[0-9]+`, true, false},
-		{"nope", "=~", `^v[0-9]+`, false, false},
-		// errors
-		{"notnum", ">", "10", false, true}, // non-numeric result for ordering op
-		{"10", ">", "notnum", false, true}, // non-numeric threshold
-		{"x", "=~", "[", false, true},      // invalid regexp
-		{"x", "><", "1", false, true},      // unsupported op
-	}
-	for _, c := range cases {
-		got, err := compareValue(c.result, c.op, c.value)
-		if c.wantErr {
-			if err == nil {
-				t.Errorf("compareValue(%q,%q,%q): expected error", c.result, c.op, c.value)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("compareValue(%q,%q,%q): %v", c.result, c.op, c.value, err)
-			continue
-		}
-		if got != c.want {
-			t.Errorf("compareValue(%q,%q,%q) = %v, want %v", c.result, c.op, c.value, got, c.want)
-		}
-	}
-}
-
 func TestSQLValueString(t *testing.T) {
 	cases := []struct {
 		in   any

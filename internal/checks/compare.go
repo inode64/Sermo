@@ -20,20 +20,20 @@ func compareValue(result, op, value string) (bool, error) {
 	case "contains":
 		return strings.Contains(result, value), nil
 	case ">", ">=", "<", "<=":
-		rf, err := strconv.ParseFloat(strings.TrimSpace(result), 64)
+		rf, err := parseNumericString("result", result)
 		if err != nil {
-			return false, fmt.Errorf("result %q is not numeric for op %s", result, op)
+			return false, fmt.Errorf("%w for op %s", err, op)
 		}
-		vf, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		vf, err := parseNumericString("value", value)
 		if err != nil {
-			return false, fmt.Errorf("value %q is not numeric", value)
+			return false, err
 		}
 		return compareFloat(rf, op, vf), nil
 	case "==", "!=":
-		if rf, err := strconv.ParseFloat(strings.TrimSpace(result), 64); err == nil {
-			if vf, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
-				return compareFloat(rf, op, vf), nil
-			}
+		rf, rerr := parseNumericString("result", result)
+		vf, verr := parseNumericString("value", value)
+		if rerr == nil && verr == nil {
+			return compareFloat(rf, op, vf), nil
 		}
 		if op == "==" {
 			return result == value, nil
@@ -48,6 +48,14 @@ func compareValue(result, op, value string) (bool, error) {
 	default:
 		return false, fmt.Errorf("unsupported op %q", op)
 	}
+}
+
+func parseNumericString(label, value string) (float64, error) {
+	f, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s %q is not numeric", label, value)
+	}
+	return f, nil
 }
 
 // validCompareOp reports whether op is a supported comparison operator (the
