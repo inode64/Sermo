@@ -596,6 +596,34 @@ func TestAlsoServiceRestartWrapOrder(t *testing.T) {
 	}
 }
 
+// With more than one also_service unit the teardown order matters: down in
+// REVERSE declaration order (LIFO nesting), up in declaration order. A
+// single-unit test cannot catch a forward-iteration regression.
+func TestAlsoServiceMultiUnitWrapOrder(t *testing.T) {
+	h := defaultHarness()
+	e := h.engine()
+	e.AlsoUnits = []string{"a.socket", "b.socket"}
+	if res := e.Restart(context.Background()); res.Status != ResultOK {
+		t.Fatalf("status = %q (%s)", res.Status, res.Message)
+	}
+	var seq []string
+	for _, c := range h.mgr.calls {
+		switch c {
+		case "stop mysqld", "stop a.socket", "stop b.socket", "start a.socket", "start b.socket", "start mysqld":
+			seq = append(seq, c)
+		}
+	}
+	want := []string{"stop mysqld", "stop b.socket", "stop a.socket", "start a.socket", "start b.socket", "start mysqld"}
+	if len(seq) != len(want) {
+		t.Fatalf("call seq = %v, want %v", seq, want)
+	}
+	for i := range want {
+		if seq[i] != want[i] {
+			t.Fatalf("call seq = %v, want %v", seq, want)
+		}
+	}
+}
+
 func TestAlsoServiceStartStrictAborts(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.errOn = map[string]error{"start docker.socket": errors.New("socket down")}
