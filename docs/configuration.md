@@ -196,7 +196,8 @@ catalog app daemons whose binary is present), showing each application's name an
 short version; the list is sortable by name or version, and expanding a row
 reveals the full version string, the binary's file location and its permissions.
 This is the same data the `sermoctl apps` command reports (served from
-`GET /api/applications`).
+`GET /api/applications`). The dashboard caches this application list for up to
+30 seconds, so frequent auto-refreshes don't rerun every app version probe.
 
 **The web UI is only activated when `web.port` is explicitly defined.** If the
 `web:` block is omitted, or if a `web:` block is present without a `port` key
