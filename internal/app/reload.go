@@ -2,7 +2,7 @@ package app
 
 import (
 	"maps"
-	"time"
+	"slices"
 
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
@@ -85,7 +85,7 @@ func cloneRemediationState(s *rules.RemediationState) *rules.RemediationState {
 	}
 	out := *s
 	if len(s.RecentActions) > 0 {
-		out.RecentActions = append([]time.Time(nil), s.RecentActions...)
+		out.RecentActions = slices.Clone(s.RecentActions)
 	}
 	return &out
 }
