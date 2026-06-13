@@ -1,6 +1,7 @@
 kind: app
 name: rpc-mountd
 display_name: "NFS Mount Daemon"
+category: storage
 variables:
   binary: "/usr/bin/rpc.mountd"
 preflight:

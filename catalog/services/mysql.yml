@@ -1,6 +1,7 @@
 kind: daemon
 name: mysql
 display_name: "MySQL"
+category: database
 type: database
 
 service:

@@ -1,6 +1,7 @@
 kind: daemon
 name: pppd
 display_name: "PPP Daemon"
+category: network
 description: "PPP daemon — PPPoE/dial-up uplink to an internet provider."
 type: tunnel
 service: pppd

@@ -1,6 +1,7 @@
 kind: daemon
 name: rpcbind
 display_name: "RPC Bind"
+category: storage
 description: "ONC RPC portmapper."
 service: rpcbind
 

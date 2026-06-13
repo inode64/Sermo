@@ -1,6 +1,7 @@
 kind: app
 name: exim
 display_name: "Exim"
+category: messaging
 variables:
   binary: "/usr/bin/exim"
 preflight:

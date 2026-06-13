@@ -1,6 +1,7 @@
 kind: app
 name: smartctl_exporter
 display_name: "Prometheus smartctl Exporter"
+category: observability
 variables:
   binary: /usr/bin/smartctl_exporter
 preflight:

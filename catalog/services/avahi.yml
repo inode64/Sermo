@@ -1,6 +1,7 @@
 kind: daemon
 name: avahi-daemon
 display_name: "Avahi"
+category: network
 description: "Zero Configuration Networking"
 service: avahi-daemon
 apps: [avahi-daemon]

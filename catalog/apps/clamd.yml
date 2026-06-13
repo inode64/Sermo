@@ -1,6 +1,7 @@
 kind: app
 name: clamd
 display_name: "ClamAV Daemon"
+category: security
 variables:
   binary: "/usr/bin/clamd"
 preflight:

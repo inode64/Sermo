@@ -1,6 +1,7 @@
 kind: daemon
 name: spamassassin
 display_name: "SpamAssassin"
+category: messaging
 description: "Antispam"
 service: spamassassin
 

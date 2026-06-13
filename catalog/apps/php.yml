@@ -1,6 +1,7 @@
 kind: app
 name: php
 display_name: "PHP"
+category: runtime
 description: "PHP interpreter (active slot)"
 variables:
   binary: "/usr/bin/php"

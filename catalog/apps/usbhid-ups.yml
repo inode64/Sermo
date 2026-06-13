@@ -1,6 +1,7 @@
 kind: app
 name: usbhid-ups
 display_name: "USB HID UPS Driver"
+category: hardware
 variables:
   binary: "/lib/nut/usbhid-ups"
 preflight:

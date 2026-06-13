@@ -1,6 +1,7 @@
 kind: daemon
 name: in.tftpd
 display_name: "TFTP Server"
+category: network
 description: "In.tftpd"
 service: in-tftpd
 apps: [in.tftpd]

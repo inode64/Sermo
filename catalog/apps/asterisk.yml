@@ -1,6 +1,7 @@
 kind: app
 name: asterisk
 display_name: "Asterisk PBX"
+category: messaging
 variables:
   binary: "/usr/bin/asterisk"
 preflight:

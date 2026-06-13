@@ -1,6 +1,7 @@
 kind: daemon
 name: mongod
 display_name: "MongoDB"
+category: database
 description: "Mongo DB"
 service: mongod
 apps: [mongod]

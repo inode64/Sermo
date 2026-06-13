@@ -1,6 +1,7 @@
 kind: app
 name: bash
 display_name: "Bash"
+category: runtime
 variables:
   binary: "/bin/bash"
 preflight:

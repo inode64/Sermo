@@ -1,6 +1,7 @@
 kind: daemon
 name: bacula-fd
 display_name: "Bacula File Daemon"
+category: storage
 description: "Backup file Server"
 service: bacula-fd
 apps: [bacula-fd]

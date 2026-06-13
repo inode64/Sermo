@@ -1,6 +1,7 @@
 kind: app
 name: node_exporter
 display_name: "Prometheus Node Exporter"
+category: observability
 variables:
   binary: /usr/bin/node_exporter
 preflight:

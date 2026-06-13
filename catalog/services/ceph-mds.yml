@@ -1,6 +1,7 @@
 kind: daemon
 name: ceph-mds
 display_name: "Ceph Metadata Server"
+category: storage
 description: "Ceph MDS (CephFS metadata). Binds dynamic ports in the 6800-7300 range assigned at startup, so it is monitored by service state and process presence rather than a fixed port."
 
 # One MDS instance per host, keyed by the mds id, which is the short hostname

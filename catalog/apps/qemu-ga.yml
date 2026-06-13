@@ -1,6 +1,7 @@
 kind: app
 name: qemu-ga
 display_name: "QEMU Guest Agent"
+category: virtualization
 variables:
   binary: "/usr/bin/qemu-ga"
 preflight:

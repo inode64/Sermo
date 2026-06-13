@@ -1,6 +1,7 @@
 kind: app
 name: lvmpolld
 display_name: "LVM poll daemon"
+category: storage
 description: "Monitors long-running LVM operations (pvmove, lvconvert)"
 variables:
   binary: /usr/bin/lvmpolld

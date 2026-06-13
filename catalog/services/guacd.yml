@@ -1,6 +1,7 @@
 kind: daemon
 name: guacd
 display_name: "Apache Guacamole"
+category: web
 description: "Guacamole daemon"
 service: guacd
 apps: [guacd]

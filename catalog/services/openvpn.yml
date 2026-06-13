@@ -1,6 +1,7 @@
 kind: daemon
 name: openvpn
 display_name: "OpenVPN"
+category: network
 service: openvpn
 apps: [openvpn]
 

@@ -1,6 +1,7 @@
 kind: daemon
 name: php-fpm%v
 display_name: "PHP-FPM ${version}"
+category: web
 type: appserver
 
 service:

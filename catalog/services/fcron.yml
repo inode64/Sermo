@@ -1,6 +1,7 @@
 kind: daemon
 name: fcron
 display_name: "Fcron"
+category: system
 service: fcron
 apps: [fcron]
 

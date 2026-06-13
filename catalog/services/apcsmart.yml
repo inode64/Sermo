@@ -1,6 +1,7 @@
 kind: daemon
 name: apcsmart
 display_name: "APC Smart UPS Driver"
+category: hardware
 service: apcsmart
 apps: [apcsmart]
 

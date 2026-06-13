@@ -1,6 +1,7 @@
 kind: app
 name: rest-server
 display_name: "Restic REST Server"
+category: storage
 variables:
   binary: /usr/bin/rest-server
 preflight:

@@ -1,6 +1,7 @@
 kind: daemon
 name: supervisord
 display_name: "Supervisor"
+category: system
 service: supervisord
 apps: [supervisord]
 

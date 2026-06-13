@@ -1,6 +1,7 @@
 kind: app
 name: numad
 display_name: "NUMA Daemon"
+category: hardware
 variables:
   binary: "/usr/bin/numad"
 preflight:

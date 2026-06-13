@@ -1,6 +1,7 @@
 kind: app
 name: supervisord
 display_name: "Supervisor"
+category: system
 variables:
   binary: "/usr/bin/supervisord"
 preflight:

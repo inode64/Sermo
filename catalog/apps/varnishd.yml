@@ -1,6 +1,7 @@
 kind: app
 name: varnishd
 display_name: "Varnish"
+category: web
 variables:
   binary: "/usr/bin/varnishd"
 preflight:

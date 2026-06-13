@@ -52,9 +52,9 @@ category: "database"      # optional WebUI grouping/filter label
   `name`.
 - `description` is optional free text with NO fallback: when absent, nothing is
   shown — never substitute `name`.
-- `category` groups/filters Services and Apps in the WebUI; when absent Sermo
-  infers a broad family from name/display_name, then falls back to `service` or
-  `app`. All three must be strings if present.
+- `category` groups/filters Services and Apps in the WebUI; when absent,
+  services fall back to `service` and apps to `app`. All three must be strings
+  if present.
 
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
@@ -261,7 +261,7 @@ kill_only_if without both exe_any and users
 SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
-display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps and is inferred when absent)
+display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps)
 service without service.name
 service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog

@@ -1,6 +1,7 @@
 kind: app
 name: lldpd
 display_name: "LLDP Daemon"
+category: network
 variables:
   binary: "/usr/bin/lldpd"
 preflight:

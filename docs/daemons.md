@@ -227,9 +227,7 @@ These fields are optional and behave differently when missing:
   is absent, nothing is shown for it — Sermo never substitutes `name`. Use it for
   a real sentence, not a restatement of the name.
 - **`category`** groups and filters Services and Installed applications in the
-  WebUI. When absent or blank, Sermo infers a broad family from `name` /
-  `display_name` (for example `web`, `database`, `storage`) and falls back to
-  `service` or `app` when unknown.
+  WebUI. When absent or blank, services use `service` and apps use `app`.
 
 All metadata fields must be strings if present; validation rejects non-string
 values.

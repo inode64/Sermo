@@ -1,5 +1,6 @@
 kind: app
 name: irqbalance
+category: hardware
 variables:
   binary: "/usr/bin/irqbalance"
 preflight:

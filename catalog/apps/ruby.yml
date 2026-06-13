@@ -1,6 +1,7 @@
 kind: app
 name: ruby
 display_name: "Ruby"
+category: runtime
 description: "An object-oriented scripting language"
 variables:
   binary: "/usr/bin/ruby"

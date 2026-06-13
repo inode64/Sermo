@@ -1,6 +1,7 @@
 kind: app
 name: upsmon
 display_name: "NUT UPS Monitor"
+category: hardware
 variables:
   binary: "/usr/bin/upsmon"
 preflight:

@@ -1,6 +1,7 @@
 kind: app
 name: virtlogd
 display_name: "libvirt Log Daemon"
+category: virtualization
 variables:
   binary: "/usr/bin/virtlogd"
 preflight:

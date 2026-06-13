@@ -1,5 +1,6 @@
 kind: daemon
 name: rsync
+category: storage
 service: rsync
 apps: [rsync]
 

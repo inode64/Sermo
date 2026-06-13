@@ -1,6 +1,7 @@
 kind: app
 name: dbus-daemon
 display_name: "D-Bus"
+category: system
 variables:
   binary: "/usr/bin/dbus-daemon"
 preflight:

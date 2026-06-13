@@ -1,6 +1,7 @@
 kind: daemon
 name: lldpd
 display_name: "LLDP Daemon"
+category: network
 description: "Link Layer Discovery Protocol"
 service: lldpd
 apps: [lldpd]

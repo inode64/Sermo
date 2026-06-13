@@ -1,6 +1,7 @@
 kind: app
 name: erlang
 display_name: "Erlang/OTP"
+category: messaging
 description: "Erlang runtime (BEAM VM)"
 variables:
   binary: "/usr/bin/erl"

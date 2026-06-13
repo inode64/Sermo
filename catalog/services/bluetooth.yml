@@ -1,6 +1,7 @@
 kind: daemon
 name: bluetooth
 display_name: "Bluetooth"
+category: hardware
 description: "Bluetooth daemon (bluetoothd)."
 service: bluetooth
 

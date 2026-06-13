@@ -1,6 +1,7 @@
 kind: app
 name: mail
 display_name: "Mail"
+category: messaging
 variables:
   binary: "/usr/bin/mail"
 preflight:

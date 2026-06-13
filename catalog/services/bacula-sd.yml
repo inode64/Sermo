@@ -1,6 +1,7 @@
 kind: daemon
 name: bacula-sd
 display_name: "Bacula Storage Daemon"
+category: storage
 description: "Backup storage Server"
 service: bacula-sd
 apps: [bacula-sd]

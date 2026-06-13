@@ -1,6 +1,7 @@
 kind: daemon
 name: acpid
 display_name: "ACPI Daemon"
+category: hardware
 service: acpid
 
 # Binary + version are owned by the `acpid` app (same name, kind app) and linked

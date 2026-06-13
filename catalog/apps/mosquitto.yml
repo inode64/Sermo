@@ -1,6 +1,7 @@
 kind: app
 name: mosquitto
 display_name: "Eclipse Mosquitto"
+category: messaging
 variables:
   binary: /usr/bin/mosquitto
 preflight:

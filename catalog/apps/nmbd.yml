@@ -1,6 +1,7 @@
 kind: app
 name: nmbd
 display_name: "Samba NMB"
+category: storage
 variables:
   binary: "/usr/bin/nmbd"
 preflight:

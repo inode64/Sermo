@@ -1,5 +1,6 @@
 kind: app
 name: mdadm
+category: storage
 variables:
   binary: "/usr/bin/mdadm"
 preflight:

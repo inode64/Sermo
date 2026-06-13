@@ -1,6 +1,7 @@
 kind: app
 name: systemd
 display_name: "systemd"
+category: system
 description: "systemd system and service manager"
 variables:
   binary: /usr/bin/systemctl

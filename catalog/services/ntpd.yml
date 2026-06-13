@@ -1,6 +1,7 @@
 kind: daemon
 name: ntpd
 display_name: "NTP Daemon"
+category: network
 description: "Network Time Protocol Daemon"
 service: ntpd
 apps: [ntpd]

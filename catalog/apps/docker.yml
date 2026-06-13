@@ -1,6 +1,7 @@
 kind: app
 name: docker
 display_name: "Docker Engine"
+category: virtualization
 variables:
   binary: /usr/bin/docker
 preflight:

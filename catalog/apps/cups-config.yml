@@ -1,6 +1,7 @@
 kind: app
 name: cups-config
 display_name: "CUPS"
+category: system
 variables:
   binary: "/usr/bin/cups-config"
 preflight:

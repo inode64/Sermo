@@ -1,6 +1,7 @@
 kind: app
 name: grafana
 display_name: "Grafana"
+category: observability
 variables:
   binary: /usr/bin/grafana
 preflight:

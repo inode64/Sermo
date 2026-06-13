@@ -1,6 +1,7 @@
 kind: daemon
 name: unifi
 display_name: "UniFi Network Controller"
+category: web
 description: "Ubiquiti UniFi Network controller (management API over HTTPS)."
 
 service:

@@ -1,6 +1,7 @@
 kind: app
 name: fcron
 display_name: "Fcron"
+category: system
 variables:
   binary: "/usr/libexec/fcron"
 preflight:

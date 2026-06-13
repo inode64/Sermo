@@ -1,6 +1,7 @@
 kind: daemon
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
+category: database
 service:
   systemd: [postgres, postgresql, "postgresql-${version}", "postgres-${version}"]
   openrc: ["postgresql-${version}", "postgres-${version}", postgres]

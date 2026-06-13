@@ -1,6 +1,7 @@
 kind: daemon
 name: exim
 display_name: "Exim"
+category: messaging
 description: "Gestor de correo SMTP Exim"
 service: exim
 apps: [exim]

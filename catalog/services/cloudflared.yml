@@ -1,6 +1,7 @@
 kind: daemon
 name: cloudflared
 display_name: "Cloudflare Tunnel"
+category: network
 description: "Cloudflare Tunnel daemon (cloudflared)"
 type: tunnel
 
