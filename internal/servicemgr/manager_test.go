@@ -93,6 +93,44 @@ func TestOpenRCManagerStatus(t *testing.T) {
 	}
 }
 
+func TestOpenRCManagerStatusFallsBackToRCStatus(t *testing.T) {
+	runner := &multiResultRunner{results: map[string]runnerResult{
+		"rc-service firehol status": {
+			result: execx.Result{
+				Stdout:   " * Showing FireHOL status ...\n'unknown': I need something more specific.\n",
+				ExitCode: 1,
+			},
+			err: errors.New("exit 1"),
+		},
+		"rc-status -a": {
+			result: execx.Result{Stdout: " sshd [  started  ]\n firehol [  started  ]\n"},
+		},
+	}}
+
+	m := openrcManager{runner: runner}
+	got, err := m.Status(context.Background(), "firehol")
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if got.Status != StatusActive {
+		t.Fatalf("Status = %q, want %q", got.Status, StatusActive)
+	}
+	if calls := strings.Join(runner.calls, ","); calls != "rc-service firehol status,rc-status -a" {
+		t.Fatalf("calls = %v", runner.calls)
+	}
+}
+
+func TestOpenRCStatusLineMatchesExactService(t *testing.T) {
+	out := "firehol-extra [  started  ]\nfirehol [  stopped  ]\n"
+	got, ok := openrcStatusLine(out, "firehol")
+	if !ok {
+		t.Fatal("openrcStatusLine ok = false")
+	}
+	if got != StatusInactive {
+		t.Fatalf("status = %q, want %q", got, StatusInactive)
+	}
+}
+
 func TestSystemdManagerActionsUseRunner(t *testing.T) {
 	rec := &recordRunner{}
 	m := systemdManager{runner: rec}
@@ -253,4 +291,24 @@ func (r *recordRunner) Run(_ context.Context, name string, args ...string) (exec
 	}
 	r.calls = append(r.calls, call)
 	return execx.Result{}, nil
+}
+
+type runnerResult struct {
+	result execx.Result
+	err    error
+}
+
+type multiResultRunner struct {
+	results map[string]runnerResult
+	calls   []string
+}
+
+func (r *multiResultRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	call := name
+	for _, arg := range args {
+		call += " " + arg
+	}
+	r.calls = append(r.calls, call)
+	res := r.results[call]
+	return res.result, res.err
 }
