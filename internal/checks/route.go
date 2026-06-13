@@ -47,15 +47,7 @@ func (c routeCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "route: "+err.Error(), start)
 	}
-	matched := routes
-	if c.iface != "" {
-		matched = nil
-		for _, r := range routes {
-			if r.Iface == c.iface {
-				matched = append(matched, r)
-			}
-		}
-	}
+	matched := matchingRoutes(routes, c.iface)
 	ok := len(matched) > 0
 	var msg string
 	switch {
@@ -77,6 +69,19 @@ func (c routeCheck) Run(_ context.Context) Result {
 		}
 	}
 	return res
+}
+
+func matchingRoutes(routes []DefaultRoute, iface string) []DefaultRoute {
+	if iface == "" {
+		return routes
+	}
+	var matched []DefaultRoute
+	for _, r := range routes {
+		if r.Iface == iface {
+			matched = append(matched, r)
+		}
+	}
+	return matched
 }
 
 // defaultRouteSampler reads the kernel routing tables from procfs.
