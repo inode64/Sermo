@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -42,7 +41,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	url, useTLS := buildLDAPURL(host, port, cfg.TLS)
 	opts := []ldap.DialOpt{ldap.DialWithDialer(&net.Dialer{Timeout: timeout})}
 	if useTLS {
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+		tc := tlsClientConfig(host)
 		if normalizeTLS(cfg.TLS) == "skip-verify" {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}

@@ -3,7 +3,6 @@ package conn
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -43,7 +42,7 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
 		scheme = "https"
 		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+		tc := tlsClientConfig(host)
 		if mode == "skip-verify" {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
