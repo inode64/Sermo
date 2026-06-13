@@ -2,6 +2,8 @@ package rules
 
 import (
 	"fmt"
+	"slices"
+
 	"sermo/internal/cfgval"
 )
 
@@ -91,7 +93,7 @@ func (s *WindowState) Clone() *WindowState {
 	}
 	cp := &WindowState{consecutive: s.consecutive}
 	if len(s.history) > 0 {
-		cp.history = append([]bool(nil), s.history...)
+		cp.history = slices.Clone(s.history)
 	}
 	return cp
 }
