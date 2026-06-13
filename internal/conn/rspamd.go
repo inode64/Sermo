@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -38,7 +37,7 @@ func (rspamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
 		scheme = "https"
 		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+		tc := tlsClientConfig(host)
 		if mode == "skip-verify" {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}

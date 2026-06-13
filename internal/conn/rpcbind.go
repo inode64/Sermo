@@ -104,10 +104,14 @@ func parseRPCReply(b []byte, xid uint32) (string, error) {
 		return "", errors.New("short accepted RPC reply")
 	}
 	verfLen := int(binary.BigEndian.Uint32(b[16:20]))
-	off := 20 + verfLen
-	if verfLen < 0 || len(b) < off+4 {
+	// verfLen comes off the wire untrusted. Bound it against the bytes left for
+	// the verifier body plus the 4-byte accept_stat without forming 20+verfLen
+	// first: a hostile length overflows that sum to a negative offset on 32-bit
+	// platforms, slipping past a `len(b) < off+4` guard into an out-of-bounds slice.
+	if verfLen < 0 || verfLen > len(b)-24 {
 		return "", errors.New("truncated accepted RPC reply")
 	}
+	off := 20 + verfLen
 	return rpcAcceptStatName(binary.BigEndian.Uint32(b[off : off+4])), nil
 }
 

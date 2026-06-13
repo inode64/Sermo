@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -136,7 +135,7 @@ func dockerClient(cfg Config) (*http.Client, string, error) {
 	scheme := "http"
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
 		scheme = "https"
-		tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+		tc := tlsClientConfig(host)
 		if mode == "skip-verify" {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}

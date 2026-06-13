@@ -28,6 +28,34 @@ func staticMounts(ms ...Mount) MountSource {
 	return func() ([]Mount, error) { return ms, nil }
 }
 
+func TestContainingMountLongestPrefixWins(t *testing.T) {
+	mounts := []Mount{
+		{Mountpoint: "/"},
+		{Mountpoint: "/data"},
+		{Mountpoint: "/data/db/"}, // trailing slash must normalize
+	}
+	cases := []struct {
+		path string
+		want string
+		ok   bool
+	}{
+		{"/data/db/x", "/data/db/", true}, // most specific mount
+		{"/data/other", "/data", true},
+		{"/etc", "/", true},      // falls back to root
+		{"/data", "/data", true}, // exact match
+	}
+	for _, tc := range cases {
+		// Order independence: the longest matching prefix must win regardless of
+		// the order mounts are scanned in.
+		for _, ms := range [][]Mount{mounts, {mounts[2], mounts[1], mounts[0]}} {
+			got, ok := containingMount(ms, tc.path)
+			if ok != tc.ok || got.Mountpoint != tc.want {
+				t.Fatalf("containingMount(%q) = %q/%v, want %q/%v", tc.path, got.Mountpoint, ok, tc.want, tc.ok)
+			}
+		}
+	}
+}
+
 func TestResolveLVM(t *testing.T) {
 	r := &fakeRunner{out: map[string]execx.Result{
 		"lvs": {Stdout: "  vg0,data\n"},

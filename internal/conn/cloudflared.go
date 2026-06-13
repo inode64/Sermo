@@ -3,7 +3,6 @@ package conn
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -70,7 +69,7 @@ func cloudflaredClient(cfg Config) (*http.Client, string) {
 		}
 		if mode != "" {
 			scheme = "https"
-			tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+			tc := tlsClientConfig(host)
 			if mode == "skip-verify" {
 				tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 			}

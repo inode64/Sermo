@@ -60,7 +60,9 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	ordered := l.orderedLocked() // oldest..newest
 	l.mu.Unlock()
 
-	out := make([]LoggedEvent, 0, l.count)
+	// Size from the snapshot, not l.count: l.count is mutated by Add under the
+	// lock we just released, so reading it here would be a data race.
+	out := make([]LoggedEvent, 0, len(ordered))
 	for i := len(ordered) - 1; i >= 0; i-- {
 		if limit > 0 && len(out) >= limit {
 			break

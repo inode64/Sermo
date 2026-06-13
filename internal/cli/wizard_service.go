@@ -165,7 +165,7 @@ func parseSystemdActiveUnits(stdout string) []string {
 			out = append(out, fields[0])
 		}
 	}
-	return slices.Compact(out)
+	return appendUniqueStrings(nil, out...)
 }
 
 func parseOpenRCActiveUnits(stdout string) []string {
@@ -201,7 +201,10 @@ func parseOpenRCActiveUnits(stdout string) []string {
 		}
 		out = append(out, fields[0])
 	}
-	return slices.Compact(out)
+	// A service started in more than one matched runlevel appears once per
+	// section, and those duplicates are not adjacent in out (other services sit
+	// between them), so slices.Compact would not collapse them — dedup by value.
+	return appendUniqueStrings(nil, out...)
 }
 
 func openRCWizardRunlevel(name string) bool {
