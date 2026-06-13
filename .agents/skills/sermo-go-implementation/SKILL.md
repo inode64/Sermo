@@ -20,8 +20,10 @@ You are implementing Go code for Sermo.
 11. Use exactly the same name for a concept in variables, parameters, comments
     and struct fields. Look at the model structs first; prefer the public field
     name as the canonical term (see AGENTS.md "Naming and terminology").
-12. Never call `os/exec` directly. Route everything through the `execx` runner
-    (context + timeout). See AGENTS.md "External commands".
+12. Prefer the Go standard library or a Go-module alternative over external
+    commands. When one is genuinely required, never call `os/exec` directly:
+    route it through the `execx` runner (context + timeout). See AGENTS.md
+    "Native by default".
 13. All service start/stop/restart/reload/signals must go through the
     `internal/operation` package. Do not bypass it. See AGENTS.md "Service
     operations".

@@ -488,7 +488,7 @@ notifiers:
     to: [ops@example.com, oncall@example.com]       # one or more recipients
 ```
 
-Notifier types (all use only the Go standard library — no external dependency):
+Notifier types:
 
 - **`email`** — sends over SMTP.
   - **`dsn`** — `smtp://[user:pass@]host[:port]` (STARTTLS when offered; default

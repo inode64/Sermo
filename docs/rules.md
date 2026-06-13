@@ -535,8 +535,6 @@ A connection-protocol check connects to a server over its wire protocol and
 verifies it responds; the check type **is** the protocol name. A few conventions
 keep the per-protocol entries short:
 
-- **Native by default.** The probe is implemented in pure Go unless the entry
-  names a third-party library.
 - **`tls`** (where listed) accepts `false` (plaintext, the default), `true`
   (verified TLS) or `skip-verify` (TLS without certificate verification). Entries
   add only protocol-specific notes — the implicit-TLS port (e.g. IMAPS 993) or
