@@ -86,18 +86,19 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 
 // webEntry is one service's web-backend record.
 type webEntry struct {
-	displayName    string
-	unit           string
-	backend        string
-	interval       time.Duration // resolved per-service cycle cadence (own interval or engine default)
-	policyCooldown time.Duration
-	engine         operation.Engine
-	status         func(context.Context) (servicemgr.Status, error)
-	checkNames     []string          // sorted
-	checkTypes     map[string]string // check name -> type
-	discoverer     process.Discoverer
-	selectors      []process.Selector
-	disabled       bool // true when the service had `enabled: false` (still listed for visibility)
+	displayName     string
+	unit            string
+	backend         string
+	interval        time.Duration // resolved per-service cycle cadence (own interval or engine default)
+	policyCooldown  time.Duration
+	engine          operation.Engine
+	status          func(context.Context) (servicemgr.Status, error)
+	checkNames      []string          // sorted
+	checkTypes      map[string]string // check name -> type
+	discoverer      process.Discoverer
+	selectors       []process.Selector
+	processWarnings []string
+	disabled        bool // true when the service had `enabled: false` (still listed for visibility)
 }
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
@@ -265,7 +266,10 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry.disabled = true
 		} else {
 			engine, checkDeps, discoverer := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
-			selectors, _ := process.ParseSelectors(resolved.Tree)
+			selectors, processWarnings := process.ParseSelectors(resolved.Tree)
+			if _, configured := resolved.Tree["processes"]; !configured && len(selectors) == 0 {
+				selectors = initDerivedProcessSelectors(servicemgr.DetectProcInfo(context.Background(), deps.ExecxRunner, nil, deps.Backend, unit))
+			}
 			names, types := checkCatalog(resolved.Tree)
 			entry.engine = engine
 			entry.status = checkDeps.Status
@@ -273,6 +277,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			entry.checkTypes = types
 			entry.discoverer = discoverer
 			entry.selectors = selectors
+			entry.processWarnings = processWarnings
 		}
 		wb.entries[name] = entry
 		wb.order = append(wb.order, name)
@@ -345,6 +350,33 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	}
 
 	return wb, warnings
+}
+
+func initDerivedProcessSelectors(info servicemgr.ProcInfo) []process.Selector {
+	if info.Pidfile != "" {
+		return []process.Selector{{
+			Name:  "init",
+			Type:  process.SelectorPidfile,
+			Paths: []string{info.Pidfile},
+		}}
+	}
+	if info.Cmd != "" && info.User != "" {
+		return []process.Selector{{
+			Name: "init",
+			Type: process.SelectorCommandMatch,
+			Cmd:  info.Cmd,
+			User: info.User,
+		}}
+	}
+	if info.Exe != "" && info.User != "" {
+		return []process.Selector{{
+			Name: "init",
+			Type: process.SelectorCommandMatch,
+			Exe:  info.Exe,
+			User: info.User,
+		}}
+	}
+	return nil
 }
 
 // checkCatalog returns a service's check names (sorted) and their types, from the
@@ -2107,8 +2139,9 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	}
 
 	procs, procWarnings := e.discoverer.Discover(e.selectors)
+	procWarnings = append(slices.Clone(e.processWarnings), procWarnings...)
 	if len(procWarnings) > 0 {
-		d.ProcessWarnings = slices.Clone(procWarnings)
+		d.ProcessWarnings = procWarnings
 	}
 	d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
 	attachLiveCPU(&d, b.live, name)
