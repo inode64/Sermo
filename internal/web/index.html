@@ -1519,12 +1519,19 @@ function usageLevel(pct) {
   return "usage-ok";
 }
 
+// usageBarSpan is the shared markup for both bars: a coloured fill sized to the
+// clamped percentage with a centered label. extraClass adds a size modifier
+// (e.g. " usagebar-sm"); label/title/aria are interpolated raw, so callers pass
+// already-escaped (or known-safe) strings.
+function usageBarSpan(p, extraClass, label, title, aria) {
+  return `<span class="usagebar${extraClass} ${usageLevel(p)}" style="--usage-pct:${p.toFixed(2)}%" title="${title}"${aria}><span class="usagebar-fill"></span><span class="usagebar-label">${label}</span></span>`;
+}
+
 function usageBar(pct) {
   const p = pctClamp(pct);
-  const width = p.toFixed(2);
   const label = fmtPct(p);
   const freeLabel = fmtPct(100 - p);
-  return `<span class="usagebar ${usageLevel(p)}" style="--usage-pct:${width}%" title="${label} used · ${freeLabel} free" aria-label="${label} used, ${freeLabel} free"><span class="usagebar-fill"></span><span class="usagebar-label">${label} used</span></span>`;
+  return usageBarSpan(p, "", `${label} used`, `${label} used · ${freeLabel} free`, ` aria-label="${label} used, ${freeLabel} free"`);
 }
 
 // usageBarMini is the compact bar used inside dense tables (the process list).
@@ -1532,9 +1539,9 @@ function usageBar(pct) {
 // (e.g. the byte value) so the cell stays readable.
 function usageBarMini(pct, label, title) {
   const p = pctClamp(pct);
-  const lbl = label != null ? label : fmtPct(p);
-  const tip = title != null ? title : `${fmtPct(p)} of host RAM`;
-  return `<span class="usagebar usagebar-sm ${usageLevel(p)}" style="--usage-pct:${p.toFixed(2)}%" title="${esc(tip)}"><span class="usagebar-fill"></span><span class="usagebar-label">${esc(lbl)}</span></span>`;
+  const lbl = esc(label != null ? label : fmtPct(p));
+  const tip = esc(title != null ? title : `${fmtPct(p)} of host RAM`);
+  return usageBarSpan(p, " usagebar-sm", lbl, tip, "");
 }
 
 // hostMemTotalBytes returns the host's total RAM in bytes from the last
