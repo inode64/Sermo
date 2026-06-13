@@ -383,21 +383,27 @@ func (s *Store) RecordMeasurement(service, check string, valueMs float64, at tim
 // MeasurementSummary returns the average/min/max and sample count for a check over
 // the rolling window ending at now (buckets with start >= now-span).
 func (s *Store) MeasurementSummary(service, check string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	var count sql.NullInt64
-	var sum, minMs, maxMs sql.NullFloat64
-	err := s.db.QueryRow(
+	return summaryFromRow(s.db.QueryRow(
 		`SELECT COALESCE(SUM(n),0), SUM(sum_ms), MIN(min_ms), MAX(max_ms)
 		   FROM measurement WHERE service = ? AND check_name = ? AND bucket >= ?;`,
-		service, check, minuteBucket(now.Add(-span)),
-	).Scan(&count, &sum, &minMs, &maxMs)
-	if err != nil {
+		service, check, minuteBucket(now.Add(-span))))
+}
+
+// summaryFromRow scans the COALESCE(SUM(n),0), SUM, MIN, MAX aggregate row
+// shared by the measurement and metric summaries into a MeasurementStat (avg =
+// sum/count, guarded against an empty bucket set), so both summaries express
+// only their differing query.
+func summaryFromRow(row *sql.Row) (MeasurementStat, error) {
+	var count sql.NullInt64
+	var sum, minV, maxV sql.NullFloat64
+	if err := row.Scan(&count, &sum, &minV, &maxV); err != nil {
 		return MeasurementStat{}, err
 	}
 	stat := MeasurementStat{Count: count.Int64}
 	if count.Int64 > 0 && sum.Valid {
 		stat.Avg = sum.Float64 / float64(count.Int64)
-		stat.Min = minMs.Float64
-		stat.Max = maxMs.Float64
+		stat.Min = minV.Float64
+		stat.Max = maxV.Float64
 	}
 	return stat, nil
 }
@@ -469,23 +475,10 @@ func (s *Store) RecordMetric(service, check, metric string, value float64, at ti
 // MetricSummary returns a named metric's average/min/max and sample count over the
 // rolling window ending at now.
 func (s *Store) MetricSummary(service, check, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
-	var count sql.NullInt64
-	var sum, minV, maxV sql.NullFloat64
-	err := s.db.QueryRow(
+	return summaryFromRow(s.db.QueryRow(
 		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
 		   FROM measurement_metric WHERE service = ? AND check_name = ? AND metric = ? AND bucket >= ?;`,
-		service, check, metric, minuteBucket(now.Add(-span)),
-	).Scan(&count, &sum, &minV, &maxV)
-	if err != nil {
-		return MeasurementStat{}, err
-	}
-	stat := MeasurementStat{Count: count.Int64}
-	if count.Int64 > 0 && sum.Valid {
-		stat.Avg = sum.Float64 / float64(count.Int64)
-		stat.Min = minV.Float64
-		stat.Max = maxV.Float64
-	}
-	return stat, nil
+		service, check, metric, minuteBucket(now.Add(-span))))
 }
 
 // MetricSeries returns a named metric's per-minute points in [from, to), oldest
