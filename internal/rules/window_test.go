@@ -250,3 +250,27 @@ func TestParseWithinWindowDefaultsMinMatches(t *testing.T) {
 		t.Fatalf("ParseWithinWindow({cycles:5}) = %+v, want {5 1}", w)
 	}
 }
+
+// TestWindowStateNilReceiver locks the nil-state semantics the rule-window
+// view relies on (a rule that has not ticked yet has no WindowState): the
+// read-only methods must not panic and must read as zero progress, for both
+// window kinds. Fires intentionally requires a non-nil state — it mutates.
+func TestWindowStateNilReceiver(t *testing.T) {
+	var s *WindowState
+
+	forRule := Rule{For: &ForWindow{Cycles: 3}}
+	if s.IsFiring(forRule) {
+		t.Fatal("nil state must not read as firing")
+	}
+	if got := s.Progress(forRule); got != "0/3" {
+		t.Fatalf("Progress = %q, want 0/3", got)
+	}
+
+	withinRule := Rule{Within: &WithinWindow{Cycles: 15, MinMatches: 5}}
+	if s.IsFiring(withinRule) {
+		t.Fatal("nil state must not read as firing (within)")
+	}
+	if got := s.Progress(withinRule); got != "0/5 in 15 cycles" {
+		t.Fatalf("Progress = %q, want 0/5 in 15 cycles", got)
+	}
+}
