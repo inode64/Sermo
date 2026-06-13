@@ -356,29 +356,46 @@ func planWizardWatchDeletes(p *assist.Prompt, targetDir string, detected map[str
 	if err != nil {
 		return nil, err
 	}
-	var stale []wizardWatchFile
+	var stale []staleFile
 	for _, f := range files {
-		if targetsStale(f.Targets, detected) {
-			stale = append(stale, f)
+		if !targetsStale(f.Targets, detected) {
+			continue
 		}
-	}
-	if len(stale) == 0 {
-		return nil, nil
-	}
-	if !p.Confirm(fmt.Sprintf("Found %d managed watch file(s) in %s whose target is no longer detected. Review them for deletion?", len(stale), targetDir), true) {
-		return nil, nil
-	}
-	var deletes []string
-	for _, f := range stale {
 		label := f.Path
 		if len(f.Names) > 0 {
 			label += " (" + strings.Join(f.Names, ", ") + ")"
 		}
-		if p.Confirm("Delete stale watch file "+label+"?", true) {
-			deletes = append(deletes, f.Path)
+		stale = append(stale, staleFile{path: f.Path, label: label})
+	}
+	return confirmStaleDeletes(p, targetDir, "watch", stale), nil
+}
+
+// staleFile is a managed config file whose target is no longer detected on the
+// host, offered for deletion by the step-9 cleanup. label is the path plus a
+// human hint (the watch names, or the daemon a service uses).
+type staleFile struct {
+	path  string
+	label string
+}
+
+// confirmStaleDeletes asks whether to review the stale files, then confirms each
+// one, returning the paths the operator chose to delete. noun is the file kind
+// ("watch" / "service") used in the prompts. With no stale files it asks nothing
+// and returns nil. Shared by the watch and service cleanup planners.
+func confirmStaleDeletes(p *assist.Prompt, dir, noun string, stale []staleFile) []string {
+	if len(stale) == 0 {
+		return nil
+	}
+	if !p.Confirm(fmt.Sprintf("Found %d managed %s file(s) in %s whose target is no longer detected. Review them for deletion?", len(stale), noun, dir), true) {
+		return nil
+	}
+	var deletes []string
+	for _, f := range stale {
+		if p.Confirm("Delete stale "+noun+" file "+f.label+"?", true) {
+			deletes = append(deletes, f.path)
 		}
 	}
-	return deletes, nil
+	return deletes
 }
 
 // targetsStale reports whether every target in the slice is absent from the

@@ -180,7 +180,6 @@ func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]b
 	if err != nil {
 		return nil, fmt.Errorf("read services directory %s: %w", dir, err)
 	}
-	type staleFile struct{ path, target string }
 	var stale []staleFile
 	for _, e := range entries {
 		if e.IsDir() {
@@ -195,21 +194,9 @@ func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]b
 		if target == "" || detected[target] {
 			continue
 		}
-		stale = append(stale, staleFile{path, target})
+		stale = append(stale, staleFile{path: path, label: path + " (" + target + ")"})
 	}
-	if len(stale) == 0 {
-		return nil, nil
-	}
-	if !p.Confirm(fmt.Sprintf("Found %d managed service file(s) in %s whose daemon is no longer detected. Review them for deletion?", len(stale), dir), true) {
-		return nil, nil
-	}
-	var deletes []string
-	for _, f := range stale {
-		if p.Confirm("Delete stale service file "+f.path+" ("+f.target+")?", true) {
-			deletes = append(deletes, f.path)
-		}
-	}
-	return deletes, nil
+	return confirmStaleDeletes(p, dir, "service", stale), nil
 }
 
 // serviceFileTarget returns the catalog daemon a managed service file targets:
