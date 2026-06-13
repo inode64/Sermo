@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"sermo/internal/appinspect"
@@ -28,6 +29,8 @@ import (
 	"sermo/internal/state"
 	"sermo/internal/web"
 )
+
+const applicationsCacheTTL = 30 * time.Second
 
 // serviceRuntime builds the per-service runtime pieces shared by a worker and the
 // web backend: a process discoverer, the check deps (with a backend-status
@@ -137,6 +140,11 @@ type WebBackend struct {
 	opGate           *OpGate
 	defaultTimeout   time.Duration
 	operationTimeout time.Duration
+
+	applicationsMu    sync.Mutex
+	applicationsAt    time.Time
+	applicationsCache []web.Application
+	applicationsList  func(context.Context) []web.Application
 }
 
 // NewWebBackend resolves services for the web UI. All services present in the
@@ -832,6 +840,22 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 // binary is present) with their version and binary location, reusing the same
 // inspection the sermoctl `apps` listing uses so both surfaces agree.
 func (b *WebBackend) Applications(ctx context.Context) []web.Application {
+	b.applicationsMu.Lock()
+	defer b.applicationsMu.Unlock()
+
+	if !b.applicationsAt.IsZero() && time.Since(b.applicationsAt) < applicationsCacheTTL {
+		return slices.Clone(b.applicationsCache)
+	}
+	apps := b.loadApplications(ctx)
+	b.applicationsAt = time.Now()
+	b.applicationsCache = slices.Clone(apps)
+	return apps
+}
+
+func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
+	if b.applicationsList != nil {
+		return b.applicationsList(ctx)
+	}
 	reports := appinspect.List(ctx, execx.CommandRunner{}, b.cfg, config.CategoryApp, false)
 	if len(reports) == 0 {
 		return nil
