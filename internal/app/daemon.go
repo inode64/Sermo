@@ -572,12 +572,7 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 	return func(ctx context.Context) checks.MetricReader {
 		var svc, sys metrics.Snapshot
 		if needService {
-			procs, _ := discoverer.Discover(selectors)
-			pids := make([]int, 0, len(procs))
-			for _, p := range procs {
-				pids = append(pids, p.PID)
-			}
-			svc = collector.SampleService(service, pids)
+			svc = collector.SampleService(service, discoverPIDs(discoverer, selectors))
 		}
 		if needSystem {
 			sys = collector.SampleSystem()
@@ -596,6 +591,19 @@ func metricSampler(service string, tree map[string]any, collector *metrics.Colle
 	}
 }
 
+// discoverPIDs returns the PIDs of the processes matching selectors — the input
+// the collector samples. Discovery warnings are dropped: the metric and live
+// samplers only need the PID set, and surfacing those warnings is the process
+// checks' job, not the sampler's.
+func discoverPIDs(discoverer process.Discoverer, selectors []process.Selector) []int {
+	procs, _ := discoverer.Discover(selectors)
+	pids := make([]int, 0, len(procs))
+	for _, p := range procs {
+		pids = append(pids, p.PID)
+	}
+	return pids
+}
+
 // liveSampler returns a per-cycle closure that discovers the service's process
 // tree and samples its live CPU (per-process + aggregate) into the LiveMetrics
 // registry for the web UI. It uses a dedicated collector (deps.LiveCollector)
@@ -607,12 +615,7 @@ func liveSampler(service string, tree map[string]any, lc *metrics.Collector, dis
 	}
 	selectors, _ := process.ParseSelectors(tree)
 	return func(_ context.Context) {
-		procs, _ := discoverer.Discover(selectors)
-		pids := make([]int, 0, len(procs))
-		for _, p := range procs {
-			pids = append(pids, p.PID)
-		}
-		sc := lc.SampleServiceCPU(service, pids)
+		sc := lc.SampleServiceCPU(service, discoverPIDs(discoverer, selectors))
 		live.Publish(service, ServiceLive{
 			CPU:            sc.CPU.Percent,
 			CPUReady:       sc.CPU.Ready,
