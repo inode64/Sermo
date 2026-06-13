@@ -95,6 +95,22 @@ Dynamic Runlevel: manual
 	}
 }
 
+// A service started in two matched runlevels, interleaved with other services,
+// produces non-adjacent duplicates that slices.Compact would not collapse.
+func TestParseOpenRCActiveUnitsDedupsAcrossRunlevels(t *testing.T) {
+	const stdout = `Runlevel: default
+ sshd                                                              [  started  ]
+ cron                                                              [  started  ]
+Dynamic Runlevel: manual
+ sshd                                                              [  started  ]
+`
+	got := parseOpenRCActiveUnits(stdout)
+	want := []string{"sshd", "cron"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("parseOpenRCActiveUnits() = %v, want %v (duplicates not collapsed)", got, want)
+	}
+}
+
 type wizardProbe struct {
 	paths map[string]bool
 }
