@@ -598,15 +598,18 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	c := &netCheck{base: b, iface: iface, metric: metric, sampler: deps.NetSampler}
 	switch metric {
 	case "state":
-		if exp := cfgval.AsString(entry["expect"]); exp != "" {
-			if exp != "up" && exp != "down" {
+		expect := cfgval.AsString(entry["expect"])
+		onChange := cfgval.AsString(entry["on"]) == "change"
+		if expect == "" && !onChange {
+			return nil, "net state requires expect: up|down or on: change"
+		}
+		if expect != "" {
+			if expect != "up" && expect != "down" {
 				return nil, "net state expect must be up or down"
 			}
-			c.expect = exp
-		} else if cfgval.AsString(entry["on"]) == "change" {
+			c.expect = expect
+		} else if onChange {
 			c.onChange = true
-		} else {
-			return nil, "net state requires expect: up|down or on: change"
 		}
 	case "speed":
 		if cfgval.AsString(entry["on"]) != "change" {
@@ -624,15 +627,18 @@ func buildNetCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		}
 		c.op, c.value = op, v
 	case "address":
-		if exp := cfgval.AsString(entry["expect"]); exp != "" {
-			if exp != "present" && exp != "absent" {
+		expect := cfgval.AsString(entry["expect"])
+		onChange := cfgval.AsString(entry["on"]) == "change"
+		if expect == "" && !onChange {
+			return nil, "net address requires expect: present|absent or on: change"
+		}
+		if expect != "" {
+			if expect != "present" && expect != "absent" {
 				return nil, "net address expect must be present or absent"
 			}
-			c.expect = exp
-		} else if cfgval.AsString(entry["on"]) == "change" {
+			c.expect = expect
+		} else if onChange {
 			c.onChange = true
-		} else {
-			return nil, "net address requires expect: present|absent or on: change"
 		}
 	default:
 		return nil, "net check metric must be state, speed, errors or address"
@@ -905,18 +911,26 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	c := &icmpCheck{base: b, host: host, ifaces: parseInterfaces(entry["interface"]), ifaceAll: allIf, count: count, metric: metric, sampler: deps.PingSampler}
 	switch metric {
 	case "state":
-		if exp := cfgval.AsString(entry["expect"]); exp != "" {
-			if exp != "up" && exp != "down" {
-				return nil, "icmp state expect must be up or down"
-			}
-			c.expect = exp
-		} else if cfgval.AsString(entry["on"]) == "change" {
-			c.onChange = true
-		} else {
+		expect := cfgval.AsString(entry["expect"])
+		onChange := cfgval.AsString(entry["on"]) == "change"
+		if expect == "" && !onChange {
 			return nil, "icmp state requires expect: up|down or on: change"
 		}
+		if expect != "" {
+			if expect != "up" && expect != "down" {
+				return nil, "icmp state expect must be up or down"
+			}
+			c.expect = expect
+		} else if onChange {
+			c.onChange = true
+		}
 	case "latency":
-		if th, ok := entry["threshold"].(map[string]any); ok {
+		th, hasTh := entry["threshold"].(map[string]any)
+		ch, hasCh := entry["change"].(map[string]any)
+		if !hasTh && !hasCh {
+			return nil, "icmp latency requires threshold {op, value} or change {delta}"
+		}
+		if hasTh {
 			op := cfgval.AsString(th["op"])
 			if !cfgval.IsCompareOp(op) {
 				return nil, "icmp latency threshold has an invalid op"
@@ -926,14 +940,12 @@ func buildICMPCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 				return nil, "icmp latency threshold value must be numeric"
 			}
 			c.hasThreshold, c.op, c.value = true, op, v
-		} else if ch, ok := entry["change"].(map[string]any); ok {
+		} else if hasCh {
 			d, err := strconv.ParseFloat(cfgval.String(ch["delta"]), 64)
 			if err != nil {
 				return nil, "icmp latency change delta must be numeric"
 			}
 			c.hasChange, c.delta = true, d
-		} else {
-			return nil, "icmp latency requires threshold {op, value} or change {delta}"
 		}
 	default:
 		return nil, "icmp check metric must be state or latency"
