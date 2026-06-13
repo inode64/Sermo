@@ -70,3 +70,30 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
+	cfg := &config.Config{
+		Global: config.Global{
+			Raw:      map[string]any{},
+			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+		},
+		Services: map[string]*config.Document{
+			"customd": {
+				Kind: "service",
+				Name: "customd",
+				Body: map[string]any{
+					"enabled": true,
+					"service": map[string]any{"name": "customd"},
+					"checks":  map[string]any{"service": map[string]any{"type": "service", "expect": "active"}},
+					"pidfile": "/run/customd.pid",
+				},
+			},
+		},
+		ServiceNames: []string{"customd"},
+	}
+	for _, issue := range config.Validate(cfg) {
+		if issue.Scope == "customd" {
+			t.Errorf("wizard-generated generic service failed validation: %s", issue)
+		}
+	}
+}

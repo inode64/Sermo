@@ -171,7 +171,7 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 			if backend == "" {
 				return nil, nil
 			}
-			return listInstalledDaemons(ctx, cfg, servicemgr.Backend(backend))
+			return listInstalledDaemons(ctx, cfg, servicemgr.Backend(backend), a.Runner, opts.timeout)
 		},
 	}
 }
@@ -417,9 +417,8 @@ func targetsStale(targets []string, detected map[string]bool) bool {
 // detectedTargetKeys returns the set of host targets the wizard currently
 // detects for an assistant, so the cleanup step can tell which managed files are
 // orphaned. Keys mirror parseWatchFile's targets (mountpoints for volume,
-// interface names for net/uplink) and service daemon names for the service
-// wizard. It
-// reads from the same Env the assistant used, so tests control it.
+// interface names for net/uplink) and service target names for the service
+// wizard. It reads from the same Env the assistant used, so tests control it.
 func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 	keys := map[string]bool{}
 	switch wizard {
