@@ -29,7 +29,7 @@ func TestConnVersionChange(t *testing.T) {
 		cfg:             conn.Config{Host: "h", Port: 1},
 		onVersionChange: true,
 		state:           &connState{},
-		probe:           probeSeq(conn.Result{Version: "8.0.36"}, conn.Result{Version: "8.0.36"}, conn.Result{Version: "8.4.0"}),
+		probe:           probeSeq(conn.Result{Version: "\n8.0.36\n"}, conn.Result{Version: "8.0.36"}, conn.Result{Version: "\n8.4.0\n"}),
 	}
 	// First cycle primes, no alert.
 	if r := c.Run(context.Background()); !r.OK {
