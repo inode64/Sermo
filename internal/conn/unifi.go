@@ -2,7 +2,6 @@ package conn
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,7 +35,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		port = 8443
 	}
 
-	tc := &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+	tc := tlsClientConfig(host)
 	// UniFi controllers ship a self-signed certificate; skip verification unless
 	// the operator explicitly opts into it with tls: true.
 	if normalizeTLS(cfg.TLS) != "true" {
