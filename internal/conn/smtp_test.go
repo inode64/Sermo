@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"strings"
@@ -86,5 +87,12 @@ func TestSMTPHandshakeHELOFallback(t *testing.T) {
 	}
 	if !strings.Contains(conn.out.String(), "HELO ") {
 		t.Fatalf("must fall back to HELO: %q", conn.out.String())
+	}
+}
+
+func TestReadReplyCodeRejectsMismatchedMultilineTerminator(t *testing.T) {
+	br := bufio.NewReader(strings.NewReader("220-Welcome\r\n421 service closing\r\n"))
+	if _, _, err := readReplyCode(br); err == nil {
+		t.Fatal("mismatched final code in a multi-line reply must fail")
 	}
 }
