@@ -79,12 +79,13 @@ the service's init definition, best-effort (unknown fields come back `""`):
 
 - **systemd**: `systemctl show` `PIDFile` and `ExecStart` (the `path=` token).
 - **OpenRC**: the init script and its `conf.d` override — `pidfile=`, a
-  `start-stop-daemon --pidfile`, and `command=`. Only literal values are used
-  (a `$`-built path is skipped).
+  `start-stop-daemon --pidfile`, `--exec`, `command=`, `command_user=`, and
+  simple OpenRC variables/defaults (`${RC_SVCNAME}`, `${VAR:-default}`).
+  Unknown `$`-built paths are skipped.
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
-`DaemonCandidate.Pidfile`/`Exe`; the service assistant prefills the PID question
-from them.
+`DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`; the service assistant prefills the
+PID question from them.
 
 ## Adding a new wizard
 

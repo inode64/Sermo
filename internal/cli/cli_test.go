@@ -300,6 +300,42 @@ func TestReloadNoPid(t *testing.T) {
 	}
 }
 
+func TestEventsList(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	sample := []event{
+		{Time: "2026-06-13T10:05:00Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restarted"},
+		{Time: "2026-06-13T10:00:00Z", Watch: "disk-root", Kind: "alert", Message: "high usage"},
+	}
+	app := App{
+		FetchEvents: func(ctx context.Context, opts options, service string, limit int) ([]event, error) {
+			return sample, nil
+		},
+		Stdout: &stdout,
+		Stderr: &stderr,
+		Stdin:  strings.NewReader(""),
+	}
+
+	// global list
+	code := app.runEvents(context.Background(), options{args: nil, json: false})
+	if code != exitSuccess {
+		t.Fatalf("events list exit=%d stderr=%s", code, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "web") || !strings.Contains(out, "disk-root") || !strings.Contains(out, "restart") {
+		t.Fatalf("events list output missing data:\n%s", out)
+	}
+
+	// json
+	stdout.Reset()
+	code = app.runEvents(context.Background(), options{args: []string{"web"}, json: true})
+	if code != exitSuccess {
+		t.Fatalf("events json exit=%d", code)
+	}
+	if !strings.Contains(stdout.String(), `"service":"web"`) {
+		t.Fatalf("json events missing service: %s", stdout.String())
+	}
+}
+
 // TestReloadPidProbeFallback exercises the by-name discovery fallback inside
 // runReload using an injected FindPID. It verifies that when no pidfile exists,
 // the code resolves the daemon pid natively (no pidof/pgrep shell-out) and
