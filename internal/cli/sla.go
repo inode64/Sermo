@@ -35,8 +35,7 @@ func (a App) runSLA(opts options) int {
 	var services []string
 	if s := opts.service(); s != "" {
 		if _, ok := cfg.Services[s]; !ok {
-			a.reportError(opts, fmt.Sprintf("unknown service %q", s))
-			return exitRuntimeError
+			return a.fail(opts, fmt.Sprintf("unknown service %q", s))
 		}
 		services = []string{s}
 	} else {
@@ -45,8 +44,7 @@ func (a App) runSLA(opts options) int {
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("sla failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
 	defer store.Close()
 
@@ -55,8 +53,7 @@ func (a App) runSLA(opts options) int {
 	for _, name := range services {
 		values, err := store.SLAReport(name, now)
 		if err != nil {
-			a.reportError(opts, fmt.Sprintf("sla %s failed: %v", name, err))
-			return exitRuntimeError
+			return a.fail(opts, fmt.Sprintf("sla %s failed: %v", name, err))
 		}
 		reports = append(reports, serviceSLA{Service: name, Windows: values})
 	}
@@ -78,8 +75,7 @@ func (a App) runSLASeries(opts options, cfg *config.Config) int {
 		return exitUsage
 	}
 	if _, ok := cfg.Services[service]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", service))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("unknown service %q", service))
 	}
 
 	window := opts.since
@@ -89,16 +85,14 @@ func (a App) runSLASeries(opts options, cfg *config.Config) int {
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("sla failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("sla failed: %v", err))
 	}
 	defer store.Close()
 
 	now := time.Now()
 	points, err := store.SLASeries(service, now.Add(-window), now)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("sla %s failed: %v", service, err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("sla %s failed: %v", service, err))
 	}
 
 	if opts.json {
