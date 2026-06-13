@@ -145,6 +145,37 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 }
 
+func TestWebBackendApplicationsCache(t *testing.T) {
+	calls := 0
+	b := &WebBackend{
+		applicationsList: func(context.Context) []web.Application {
+			calls++
+			name := "first"
+			if calls > 1 {
+				name = "second"
+			}
+			return []web.Application{{Name: name}}
+		},
+	}
+
+	first := b.Applications(context.Background())
+	if calls != 1 || len(first) != 1 || first[0].Name != "first" {
+		t.Fatalf("first Applications = %v, calls=%d", first, calls)
+	}
+	first[0].Name = "mutated"
+
+	second := b.Applications(context.Background())
+	if calls != 1 || len(second) != 1 || second[0].Name != "first" {
+		t.Fatalf("cached Applications = %v, calls=%d; want cached first", second, calls)
+	}
+
+	b.applicationsAt = time.Now().Add(-applicationsCacheTTL - time.Nanosecond)
+	third := b.Applications(context.Background())
+	if calls != 2 || len(third) != 1 || third[0].Name != "second" {
+		t.Fatalf("expired Applications = %v, calls=%d; want refreshed second", third, calls)
+	}
+}
+
 func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
