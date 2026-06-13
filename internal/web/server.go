@@ -866,15 +866,7 @@ func (s *Server) handleConfigRender(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, ok, err := s.Backend.ConfigRender(r.Context(), r.PathValue("name"), format)
-	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusConflict, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, res)
+	writeLookup(w, res, ok, err)
 }
 
 func (s *Server) handleConfigDiff(w http.ResponseWriter, r *http.Request) {
@@ -884,15 +876,7 @@ func (s *Server) handleConfigDiff(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, ok, err := s.Backend.ConfigDiff(r.Context(), base, r.PathValue("name"))
-	if !ok {
-		writeError(w, http.StatusNotFound, "unknown service")
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusConflict, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, res)
+	writeLookup(w, res, ok, err)
 }
 
 // seriesSince reads the `since` query param, defaulting and capping it.
@@ -1092,4 +1076,18 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // every JSON handler returns.
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, ActionResult{OK: false, Message: msg})
+}
+
+// writeLookup renders a backend lookup that can miss or conflict: ok=false →
+// 404, a non-nil err → 409, otherwise 200 with res. Shared by the per-service
+// config handlers so the status mapping stays in one place.
+func writeLookup(w http.ResponseWriter, res any, ok bool, err error) {
+	switch {
+	case !ok:
+		writeError(w, http.StatusNotFound, "unknown service")
+	case err != nil:
+		writeError(w, http.StatusConflict, err.Error())
+	default:
+		writeJSON(w, http.StatusOK, res)
+	}
 }
