@@ -163,3 +163,16 @@ func TestNetAssistantNotifyNoneMonitorOnly(t *testing.T) {
 		t.Fatalf("notify = %v, want [none]", notify)
 	}
 }
+
+func TestBuildNetWatchSkipsAbsentAddressMetricWhenAlreadyAddressless(t *testing.T) {
+	settings := netSettings{metrics: []string{"address"}, addrAbsent: true, notifiers: []string{"none"}}
+	without := buildNetWatch(Iface{Name: "eth0", HasAddress: false}, settings)
+	if _, ok := without["metrics"].(map[string]any)["address"]; ok {
+		t.Fatalf("address metric should be omitted for an already addressless interface: %v", without)
+	}
+	with := buildNetWatch(Iface{Name: "wg0", HasAddress: true}, settings)
+	address, ok := with["metrics"].(map[string]any)["address"].(map[string]any)
+	if !ok || address["expect"] != "absent" {
+		t.Fatalf("address metric = %v, want expect:absent", with["metrics"])
+	}
+}

@@ -100,6 +100,24 @@ func TestResolveOpenRCByInitScript(t *testing.T) {
 	}
 }
 
+func TestResolvePrefersActiveKnownUnit(t *testing.T) {
+	r := resolver(nil, map[string]bool{
+		"/etc/init.d/php-fpm": true,
+		"/etc/init.d/php8.2":  true,
+	})
+	r.Manager = resolverManager{statuses: map[string]Status{
+		"php-fpm": StatusInactive,
+		"php8.2":  StatusActive,
+	}}
+	unit, err := r.Resolve(context.Background(), BackendOpenRC, []string{"php-fpm", "php8.2"}, false)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if unit != "php8.2" {
+		t.Fatalf("unit = %q, want active php8.2", unit)
+	}
+}
+
 type stdoutRunner struct{ out string }
 
 func (r stdoutRunner) Run(_ context.Context, _ string, _ ...string) (execx.Result, error) {
@@ -165,3 +183,21 @@ func TestResolveDeduplicatesCandidates(t *testing.T) {
 		t.Fatalf("mysql.service probed %d times, want 1 (deduped)", rr.calls["systemctl cat -- mysql.service"])
 	}
 }
+
+type resolverManager struct {
+	statuses map[string]Status
+}
+
+func (m resolverManager) Status(_ context.Context, service string) (ServiceStatus, error) {
+	status := m.statuses[service]
+	if status == "" {
+		status = StatusUnknown
+	}
+	return ServiceStatus{Service: service, Backend: BackendOpenRC, Unit: service, Status: status}, nil
+}
+func (m resolverManager) Start(context.Context, string) error                  { return nil }
+func (m resolverManager) Stop(context.Context, string) error                   { return nil }
+func (m resolverManager) Restart(context.Context, string) error                { return nil }
+func (m resolverManager) Reload(context.Context, string) error                 { return nil }
+func (m resolverManager) SupportsReload(context.Context, string) (bool, error) { return false, nil }
+func (m resolverManager) ResetState(context.Context, string) error             { return nil }

@@ -60,7 +60,7 @@ func (a App) runDiagnoseClean(opts options) int {
 	}
 	defer store.Close()
 
-	result, err := store.PruneUnconfiguredServices(cfg.SortedServiceNames())
+	result, err := store.PruneUnconfiguredServices(diag.ConfiguredStoredNames(cfg))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("clean diagnostic state: %v", err))
 	}

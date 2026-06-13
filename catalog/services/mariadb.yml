@@ -66,6 +66,7 @@ checks:
 
   mariabackup:
     type: process
+    optional: true
     exe: /usr/bin/mariabackup
     user: "${user}"
     state: running

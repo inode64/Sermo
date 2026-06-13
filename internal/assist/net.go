@@ -121,6 +121,9 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		case "speed":
 			metrics["speed"] = map[string]any{"on": "change", "then": newThen()}
 		case "address":
+			if s.addrAbsent && !iface.HasAddress {
+				continue
+			}
 			cond := map[string]any{"then": newThen()}
 			if s.addrAbsent {
 				cond["expect"] = "absent"

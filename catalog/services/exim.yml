@@ -27,6 +27,7 @@ checks:
   # certs; a TLS/connection error is not an alert, so a non-TLS server stays quiet.
   cert:
     type: cert
+    optional: true
     host: "${host}"
     port: "${tls_port}"
     verify: false

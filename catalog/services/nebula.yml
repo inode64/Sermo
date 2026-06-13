@@ -28,6 +28,7 @@ checks:
   # Requires listen.send_recv_error "always" (the default).
   handshake:
     type: nebula
+    optional: true
     host: "${host}"
     port: "${port}"
     timeout: 3s

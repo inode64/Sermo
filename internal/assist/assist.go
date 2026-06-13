@@ -9,9 +9,10 @@ type Volume struct {
 
 // Iface is a candidate network interface the net assistant can monitor.
 type Iface struct {
-	Name     string
-	Up       bool
-	Loopback bool
+	Name       string
+	Up         bool
+	Loopback   bool
+	HasAddress bool
 }
 
 // DaemonCandidate is a service target detected on the host that the service

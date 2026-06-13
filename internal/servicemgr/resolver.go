@@ -14,6 +14,7 @@ import (
 type UnitResolver struct {
 	Runner  execx.Runner
 	Probe   Probe
+	Manager Manager
 	Timeout time.Duration
 }
 
@@ -40,15 +41,27 @@ func (r UnitResolver) Resolve(ctx context.Context, backend Backend, candidates [
 
 	candidates = dedupe(candidates)
 	var tried []string
+	var known []string
+	seenUnits := map[string]struct{}{}
 	for _, candidate := range candidates {
 		unit := candidate
 		if backend == BackendSystemd {
 			unit = systemdUnit(candidate)
 		}
+		if _, ok := seenUnits[unit]; ok {
+			continue
+		}
+		seenUnits[unit] = struct{}{}
 		tried = append(tried, unit)
 		if r.knows(ctx, backend, unit, candidate, runner, probe) {
-			return unit, nil
+			known = append(known, unit)
 		}
+	}
+	if active := r.activeKnownUnit(ctx, known); active != "" {
+		return active, nil
+	}
+	if len(known) > 0 {
+		return known[0], nil
 	}
 
 	if trust && len(candidates) > 0 {
@@ -75,6 +88,19 @@ func (r UnitResolver) knows(ctx context.Context, backend Backend, unit, candidat
 	default:
 		return false
 	}
+}
+
+func (r UnitResolver) activeKnownUnit(ctx context.Context, units []string) string {
+	if r.Manager == nil {
+		return ""
+	}
+	for _, unit := range units {
+		status, err := r.Manager.Status(ctx, unit)
+		if err == nil && status.Status == StatusActive {
+			return unit
+		}
+	}
+	return ""
 }
 
 func (r UnitResolver) timeout() time.Duration {

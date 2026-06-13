@@ -59,13 +59,14 @@ checks:
   http:
     type: http
     url: "http://${host}:${port}${health_path}"
-    expect_status: 200
+    expect_status: { op: "<", value: 500 }
     timeout: 5s
 
   # HTTPS certificate expiry. verify:false avoids alarms on self-signed certs; a
   # TLS/connection error is not an alert, so a host without 443 stays quiet.
   cert:
     type: cert
+    optional: true
     host: "${host}"
     port: "${tls_port}"
     verify: false

@@ -67,6 +67,44 @@ func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 	}
 }
 
+func TestDetectProcOpenRCCleansAbsolutePaths(t *testing.T) {
+	read := func(path string) ([]byte, error) {
+		switch path {
+		case "/etc/init.d/dhcpd":
+			return []byte(`pidfile="//var/run/dhcp/dhcpd.pid"
+command="//usr/sbin/dhcpd"
+`), nil
+		}
+		return nil, errNotFound
+	}
+	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "dhcpd")
+	if info.Pidfile != "/var/run/dhcp/dhcpd.pid" {
+		t.Fatalf("pidfile = %q, want /var/run/dhcp/dhcpd.pid", info.Pidfile)
+	}
+	if info.Exe != "/usr/sbin/dhcpd" {
+		t.Fatalf("exe = %q, want /usr/sbin/dhcpd", info.Exe)
+	}
+	if info.Cmd != `(^|[[:space:]])/usr/sbin/dhcpd($|[[:space:]])` {
+		t.Fatalf("cmd = %q", info.Cmd)
+	}
+}
+
+func TestDetectProcOpenRCSkipsNonAbsoluteExec(t *testing.T) {
+	read := func(path string) ([]byte, error) {
+		switch path {
+		case "/etc/init.d/net.eth0":
+			return []byte(`command="' config_index='"
+start-stop-daemon --start --exec ' config_index='
+`), nil
+		}
+		return nil, errNotFound
+	}
+	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "net.eth0")
+	if info.Exe != "" || info.Cmd != "" {
+		t.Fatalf("Exe/Cmd = %q/%q, want empty for non-absolute executable", info.Exe, info.Cmd)
+	}
+}
+
 func TestDetectProcOpenRCApacheGentooDefaults(t *testing.T) {
 	read := func(path string) ([]byte, error) {
 		switch path {
@@ -199,6 +237,38 @@ command_user="${user}:${group}"
 		t.Fatalf("user = %q, want influxdb", info.User)
 	}
 	if info.Cmd != `(^|[[:space:]])/usr/bin/influxd($|[[:space:]])` {
+		t.Fatalf("cmd = %q", info.Cmd)
+	}
+}
+
+func TestDetectProcOpenRCRuntimeOptionsFallback(t *testing.T) {
+	read := func(path string) ([]byte, error) {
+		switch path {
+		case "/etc/init.d/mysql":
+			return []byte(`MY_CNF="${MY_CNF:-/etc/${SVCNAME}/my.cnf}"
+start() {
+	pidfile=$(get_config "${MY_CNF}" 'pid[_-]file' | tail -n1)
+	start-stop-daemon --start --exec /usr/sbin/mysqld --pidfile "${pidfile}"
+	save_options pidfile "${pidfile}"
+}
+`), nil
+		case "/run/openrc/daemons/mysql/001":
+			return []byte(`exec=/usr/sbin/mysqld
+argv_0=/usr/sbin/mysqld
+argv_1=--defaults-file=/etc/mysql/my.cnf
+pidfile=/var/run/mysqld/mariadb.pid
+`), nil
+		}
+		return nil, errNotFound
+	}
+	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "mysql")
+	if info.Pidfile != "/var/run/mysqld/mariadb.pid" {
+		t.Fatalf("pidfile = %q, want /var/run/mysqld/mariadb.pid", info.Pidfile)
+	}
+	if info.Exe != "/usr/sbin/mysqld" {
+		t.Fatalf("exe = %q, want /usr/sbin/mysqld", info.Exe)
+	}
+	if info.Cmd != `(^|[[:space:]])/usr/sbin/mysqld($|[[:space:]])` {
 		t.Fatalf("cmd = %q", info.Cmd)
 	}
 }

@@ -119,6 +119,26 @@ func TestServiceAssistantDetectedPidfile(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Pidfile: "/run/nginx.pid"}}, nil
+	}}
+	script := strings.Join([]string{"1", "y", "", "1", ""}, "\n") + "\n" // invalid pidfile; accept default; monitor enabled; inherit interval
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !strings.Contains(out.String(), "pidfile must be an absolute path or blank") {
+		t.Fatalf("expected validation message, got:\n%s", out.String())
+	}
+	svc := res.Services["nginx"].(map[string]any)
+	if svc["pidfile"] != "/run/nginx.pid" {
+		t.Fatalf("pidfile = %v, want /run/nginx.pid", svc["pidfile"])
+	}
+}
+
 func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	// No pidfile, but an exe was detected: accepting the fallback writes a
 	// command_match process selector.
