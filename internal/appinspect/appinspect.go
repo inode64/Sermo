@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"regexp"
+	"syscall"
 	"time"
 
 	"sermo/internal/cfgval"
@@ -27,6 +29,8 @@ type Report struct {
 	DisplayName  string `json:"display_name"`
 	Binary       string `json:"binary"`
 	Permissions  string `json:"permissions,omitempty"`
+	User         string `json:"user,omitempty"`
+	Group        string `json:"group,omitempty"`
 	Version      string `json:"version"`
 	VersionShort string `json:"version_short"`
 	Installed    bool   `json:"installed"`
@@ -62,26 +66,48 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		Binary:      binaryPath(resolved.Tree),
 	}
 
-	switch info, err := os.Stat(r.Binary); {
+	var info os.FileInfo
+	switch fi, err := os.Stat(r.Binary); {
 	case r.Binary == "":
 		r.Status = "no binary configured"
 		return r
 	case err != nil:
 		r.Status = "not installed"
 		return r
-	case info.IsDir():
+	case fi.IsDir():
+		info = fi
 		r.Permissions = modeString(info)
 		r.Status = "error: " + r.Binary + " is a directory"
 		return r
-	case info.Mode().Perm()&0o111 == 0:
+	case fi.Mode().Perm()&0o111 == 0:
+		info = fi
 		r.Permissions = modeString(info)
 		r.Installed = true
 		r.Status = "error: " + r.Binary + " is not executable"
 		return r
 	default:
+		info = fi
 		r.Permissions = modeString(info)
 	}
 	r.Installed = true
+
+	// Resolve the binary's owner user/group from the stat info (Linux *syscall.Stat_t).
+	if info != nil {
+		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
+			uidStr := fmt.Sprintf("%d", sys.Uid)
+			if u, err := user.LookupId(uidStr); err == nil && u.Username != "" {
+				r.User = u.Username
+			} else {
+				r.User = uidStr
+			}
+			gidStr := fmt.Sprintf("%d", sys.Gid)
+			if g, err := user.LookupGroupId(gidStr); err == nil && g.Name != "" {
+				r.Group = g.Name
+			} else {
+				r.Group = gidStr
+			}
+		}
+	}
 
 	vc := versionCommandFor(resolved.Tree, "version")
 	if len(vc.argv) == 0 {
