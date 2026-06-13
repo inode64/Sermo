@@ -225,7 +225,7 @@ go build ./... && go test ./...   # must pass
 govulncheck ./...                 # no known vulnerabilities
 staticcheck ./...                 # no findings
 revive -config revive.toml ./...  # no findings
-golangci-lint run                 # gosec via .golangci.yml: no findings
+golangci-lint run                 # gosec + focused bug linters: no findings
 ```
 
 Tool notes:
@@ -233,13 +233,14 @@ Tool notes:
 - **`revive`** (`revive.toml`): default rule set minus `unused-parameter` (many
   methods implement interfaces whose `ctx` they legitimately ignore). Document
   new exported symbols — the `exported` rule is on.
-- **`gosec`** runs through golangci-lint (`.golangci.yml`, **v2 format** — the
-  binary must be v2). Accepted exceptions live in that config: `G115`, and in
-  test fixtures `G306`/`G101`/`G703`. By-design cases (`G204`
-  operator-configured commands, intentional `0644` writes, bounded `args[i]`
-  reads, shutdown-context `G118`) are suppressed at the call site with
-  `//nolint:gosec` plus a justifying comment — prefer that over widening the
-  config.
+- **`golangci-lint`** uses `.golangci.yml` (**v2 format** — the binary must be
+  v2) for `gosec`, `bodyclose`, `copyloopvar`, `ineffassign`, `nilerr` and
+  `wastedassign`.
+  Accepted gosec exceptions live in that config: `G115`, and in test fixtures
+  `G306`/`G101`/`G703`. By-design cases (`G204` operator-configured commands,
+  intentional `0644` writes, bounded `args[i]` reads, shutdown-context `G118`)
+  are suppressed at the call site with `//nolint:gosec` plus a justifying
+  comment — prefer that over widening the config.
 
 ## Testing
 
