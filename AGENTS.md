@@ -219,20 +219,23 @@ Two rules, one battery:
   `.go` file; editing outside Claude Code, run it yourself (editor
   format-on-save).
 - **Every change must pass the whole battery before committing** (the tools
-  analyze the full module and are too slow per-edit; binaries in `~/go/bin`):
+  analyze the full module and are too slow per-edit). Use `make lint` for the
+  analyzer set; the Makefile already finds Go-installed tools in `~/go/bin` and
+  gives static-analysis caches a writable fallback for non-interactive agents:
 
 ```sh
-export PATH="$HOME/go/bin:$PATH"
 gofmt -l ./internal ./cmd         # must print nothing
 go build ./... && go test ./...   # must pass
-govulncheck ./...                 # no known vulnerabilities
-staticcheck ./...                 # no findings
-revive -config revive.toml ./...  # no findings
-golangci-lint run                 # gosec + focused bug linters: no findings
+make lint                         # govulncheck/staticcheck/revive/golangci-lint
 ```
 
 Tool notes:
 
+- **`make lint`** is the canonical analyzer entrypoint. Do not hand-prefix
+  `PATH` or call the analyzer binaries one by one unless you are debugging the
+  lint target itself. `govulncheck` may need network access to refresh the
+  vulnerability DB; a network/DNS failure there is an environment issue, not a
+  code finding.
 - **`revive`** (`revive.toml`): default rule set minus `unused-parameter` (many
   methods implement interfaces whose `ctx` they legitimately ignore). Document
   new exported symbols — the `exported` rule is on.
