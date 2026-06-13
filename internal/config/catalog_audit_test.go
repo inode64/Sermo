@@ -28,8 +28,8 @@ func repoRoot(t *testing.T) string {
 }
 
 // TestRealCatalogAllDaemonsValidate enables every instantiable catalog daemon
-// as a service and validates the whole set. Version templates (%v/%n) cannot be
-// materialized off-host, so only the concrete daemon names are exercised.
+// as a service and validates the whole set. Version templates (%v/%n/%i) cannot
+// be materialized off-host, so only the concrete daemon names are exercised.
 func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")

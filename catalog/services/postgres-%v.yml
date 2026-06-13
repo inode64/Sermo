@@ -1,7 +1,9 @@
 kind: daemon
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-service: postgres
+service:
+  systemd: [postgres, postgresql, "postgresql-${version}", "postgres-${version}"]
+  openrc: ["postgresql-${version}", "postgres-${version}", postgres]
 variables:
   port: 5432
   binary: "/usr/lib64/postgresql-${version}/bin/postgres"

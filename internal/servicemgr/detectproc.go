@@ -30,6 +30,8 @@ var (
 	// OpenRC start-stop-daemon command after `--`, possibly on the next line.
 	openrcCommandAfterDash = regexp.MustCompile(`--[[:space:]]*\\?[[:space:]]*(?:\r?\n[[:space:]]*)?("[^"]+"|'[^']+'|\$\{?[A-Za-z_][A-Za-z0-9_]*\}?|/[^[:space:]\\]+)`)
 	openrcSimpleVarRef     = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(%/)|#([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)`)
+	openrcNonEmptyCond     = regexp.MustCompile(`^\[[[:space:]]+-n[[:space:]]+(.+)[[:space:]]+\]$`)
+	openrcNotEqualCond     = regexp.MustCompile(`^\[[[:space:]]+(.+)[[:space:]]+!=[[:space:]]+(.+)[[:space:]]+\]$`)
 )
 
 // ProcInfo is the init-derived process identity the wizard can offer as a
@@ -39,6 +41,12 @@ type ProcInfo struct {
 	Exe     string
 	Cmd     string
 	User    string
+}
+
+type openRCBranch struct {
+	parent bool
+	cond   bool
+	known  bool
 }
 
 // DetectProc inspects a service's init definition to derive a stable pidfile
@@ -124,28 +132,95 @@ func openRCAssignments(text, unit string) map[string]string {
 		"RC_SVCNAME": unit,
 		"SVCNAME":    unit,
 	}
+	active := true
+	var stack []openRCBranch
 	for _, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, ":") {
+		if b, ok := openRCIfBranch(line, active, vars); ok {
+			stack = append(stack, b)
+			if b.known {
+				active = b.parent && b.cond
+			}
 			continue
 		}
-		expr := strings.TrimSpace(strings.TrimPrefix(line, ":"))
-		name, _, ok := defaultExpr(expr)
-		if !ok {
+		if line == "else" && len(stack) > 0 {
+			b := stack[len(stack)-1]
+			if b.known {
+				active = b.parent && !b.cond
+			} else {
+				active = b.parent
+			}
 			continue
 		}
-		if value, ok := resolveOpenRCValue(expr, vars); ok {
-			vars[name] = value
+		if line == "fi" && len(stack) > 0 {
+			b := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			active = b.parent
+			continue
 		}
-	}
-	for _, m := range openrcAssign.FindAllStringSubmatch(text, -1) {
-		name := m[1]
-		value, ok := resolveOpenRCValue(m[2], vars)
-		if ok {
-			vars[name] = value
+		if !active {
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			expr := strings.TrimSpace(strings.TrimPrefix(line, ":"))
+			name, _, ok := defaultExpr(expr)
+			if !ok {
+				continue
+			}
+			if value, ok := resolveOpenRCValue(expr, vars); ok {
+				vars[name] = value
+			}
+			continue
+		}
+		if m := openrcAssign.FindStringSubmatch(line); m != nil {
+			name := m[1]
+			value, ok := resolveOpenRCValue(m[2], vars)
+			if ok {
+				vars[name] = value
+			}
 		}
 	}
 	return vars
+}
+
+func openRCIfBranch(line string, active bool, vars map[string]string) (openRCBranch, bool) {
+	if !strings.HasPrefix(line, "if ") || !strings.HasSuffix(line, "then") {
+		return openRCBranch{}, false
+	}
+	expr := strings.TrimSpace(strings.TrimPrefix(line, "if "))
+	expr = strings.TrimSpace(strings.TrimSuffix(expr, "then"))
+	expr = strings.TrimSpace(strings.TrimSuffix(expr, ";"))
+	cond, known := evalOpenRCCondition(expr, vars)
+	return openRCBranch{parent: active, cond: cond, known: known}, true
+}
+
+func evalOpenRCCondition(expr string, vars map[string]string) (bool, bool) {
+	result := true
+	for _, part := range strings.Split(expr, "&&") {
+		part = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(part), "\\"))
+		ok, known := evalOpenRCTerm(part, vars)
+		if !known {
+			return false, false
+		}
+		result = result && ok
+	}
+	return result, true
+}
+
+func evalOpenRCTerm(term string, vars map[string]string) (bool, bool) {
+	if m := openrcNonEmptyCond.FindStringSubmatch(term); m != nil {
+		value, ok := resolveOpenRCValue(m[1], vars)
+		return value != "", ok
+	}
+	if m := openrcNotEqualCond.FindStringSubmatch(term); m != nil {
+		left, ok := resolveOpenRCValue(m[1], vars)
+		if !ok {
+			return false, false
+		}
+		right := shellWord(m[2])
+		return left != right, true
+	}
+	return false, false
 }
 
 func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
@@ -178,7 +253,7 @@ func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 				value = strings.TrimSuffix(value, "/")
 			}
 			if m[3] != "" {
-				value = strings.TrimPrefix(value, m[3])
+				value = trimShellPrefixPattern(value, m[3])
 			}
 			return value
 		})
@@ -194,6 +269,20 @@ func resolveOpenRCValue(raw string, vars map[string]string) (string, bool) {
 		s = next
 	}
 	return "", false
+}
+
+func trimShellPrefixPattern(value, pattern string) string {
+	if strings.HasPrefix(pattern, "*") {
+		suffix := strings.TrimPrefix(pattern, "*")
+		if suffix == "" {
+			return value
+		}
+		if i := strings.Index(value, suffix); i >= 0 {
+			return value[i+len(suffix):]
+		}
+		return value
+	}
+	return strings.TrimPrefix(value, pattern)
 }
 
 func defaultExpr(s string) (name, def string, ok bool) {

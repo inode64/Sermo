@@ -135,6 +135,31 @@ pidfile="/run/php-fpm-${PHP_SLOT}.pid"
 	}
 }
 
+func TestDetectProcOpenRCPatternPrefixRemoval(t *testing.T) {
+	read := func(path string) ([]byte, error) {
+		switch path {
+		case "/etc/init.d/openvpn.tun1":
+			return []byte(`VPN=${SVCNAME#*.}
+if [ -n "${VPN}" ] && [ ${SVCNAME} != "openvpn" ]; then
+	VPNPID="/run/openvpn.${VPN}.pid"
+else
+	VPNPID="/run/openvpn.pid"
+fi
+start-stop-daemon --start --exec /usr/sbin/openvpn -- \
+	--config "/etc/openvpn/${VPN}.conf" --writepid "${VPNPID}" --daemon
+`), nil
+		}
+		return nil, errNotFound
+	}
+	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "openvpn.tun1")
+	if info.Pidfile != "/run/openvpn.tun1.pid" {
+		t.Fatalf("pidfile = %q, want /run/openvpn.tun1.pid", info.Pidfile)
+	}
+	if info.Exe != "/usr/sbin/openvpn" {
+		t.Fatalf("exe = %q, want /usr/sbin/openvpn", info.Exe)
+	}
+}
+
 func TestDetectProcOpenRCChrootDefaultsToHostRoot(t *testing.T) {
 	read := func(path string) ([]byte, error) {
 		switch path {

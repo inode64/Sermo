@@ -1410,6 +1410,7 @@ restart_on_change:
 func TestDiscoverVersions(t *testing.T) {
 	vtok := *tokenFor("x%v")
 	ntok := *tokenFor("x%n")
+	itok := *tokenFor("x%i")
 	root := t.TempDir()
 	for _, v := range []string{"7.4", "8.3", "12.0.2"} {
 		dir := filepath.Join(root, "pkg-"+v, "bin")
@@ -1486,6 +1487,21 @@ func TestDiscoverVersions(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("integer discoverVersions = %v, want %v", got, want)
 	}
+
+	initd := filepath.Join(root, "init.d")
+	if err := os.MkdirAll(initd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"openvpn.tun1", "openvpn.client-a", "openvpn._bad", "openvpn"} {
+		if err := os.WriteFile(filepath.Join(initd, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got = discoverVersions(initd+"/openvpn.${instance}", itok)
+	want = []string{"client-a", "tun1"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("instance discoverVersions = %v, want %v", got, want)
+	}
 }
 
 // TestVersionTemplateDiscoverFrom covers a template whose monitored binary is
@@ -1557,6 +1573,89 @@ defaults: { policy: { cooldown: 5m } }
 		// Discovery metadata stripped from the concrete daemon.
 		if _, present := doc.Body["versions"]; present {
 			t.Errorf("php-fpm%s still carries versions block", v)
+		}
+	}
+}
+
+func TestInstanceTemplateMaterialization(t *testing.T) {
+	root := t.TempDir()
+	initd := filepath.Join(root, "init.d")
+	if err := os.MkdirAll(initd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"openvpn.tun1", "openvpn.client-a"} {
+		if err := os.WriteFile(filepath.Join(initd, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	daemonsDir := filepath.Join(root, "daemons")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(daemonsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(daemonsDir, "openvpn.yml"), []byte(`
+kind: daemon
+name: openvpn
+display_name: OpenVPN
+service: openvpn
+variables: { port: 1194 }
+checks:
+  port: { type: openvpn, port: "${port}" }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmpl := fmt.Sprintf(`
+kind: daemon
+name: openvpn-%%i
+uses: openvpn
+display_name: "OpenVPN ${instance}"
+service: "openvpn.${instance}"
+versions:
+  from: "%s/openvpn.${instance}"
+variables:
+  config: "/etc/openvpn/${instance}.conf"
+`, initd)
+	if err := os.WriteFile(filepath.Join(daemonsDir, "openvpn-%i.yml"), []byte(tmpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, daemonsDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Daemons["openvpn-%i"]; ok {
+		t.Fatal("template openvpn-%i should not be registered")
+	}
+	for _, inst := range []string{"client-a", "tun1"} {
+		name := "openvpn-" + inst
+		doc, ok := cfg.Daemons[name]
+		if !ok {
+			t.Fatalf("expected materialized daemon %q", name)
+		}
+		if got := ServiceUnit(doc.Body, name); got != "openvpn."+inst {
+			t.Fatalf("%s service unit = %q, want openvpn.%s", name, got, inst)
+		}
+		if got := DisplayName(doc.Body, name); got != "OpenVPN "+inst {
+			t.Fatalf("%s display_name = %q, want OpenVPN %s", name, got, inst)
+		}
+		vars := nested(t, doc.Body, "variables")
+		if got := cfgval.String(vars["config"]); got != "/etc/openvpn/"+inst+".conf" {
+			t.Fatalf("%s config = %q, want /etc/openvpn/%s.conf", name, got, inst)
+		}
+		if _, ok := nested(t, doc.Body, "checks")["port"]; !ok {
+			t.Fatalf("%s did not inherit base checks", name)
 		}
 	}
 }
