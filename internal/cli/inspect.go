@@ -12,8 +12,7 @@ import (
 // runDaemon dispatches `daemon list` and `daemon show DAEMON` (post-MVP).
 func (a App) runDaemon(opts options) int {
 	if len(opts.args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: daemon requires a subcommand (list|show)")
-		return exitUsage
+		return a.usageError("daemon requires a subcommand (list|show)")
 	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
@@ -26,8 +25,7 @@ func (a App) runDaemon(opts options) int {
 		return exitSuccess
 	case "show":
 		if len(opts.args) < 2 {
-			fmt.Fprintln(a.Stderr, "usage error: daemon show requires a daemon name")
-			return exitUsage
+			return a.usageError("daemon show requires a daemon name")
 		}
 		name := opts.args[1]
 		doc, ok := cfg.Daemons[name]
@@ -36,8 +34,7 @@ func (a App) runDaemon(opts options) int {
 		}
 		return a.renderTree(opts, config.Resolved{Name: name, Tree: doc.Body})
 	default:
-		fmt.Fprintf(a.Stderr, "usage error: unknown daemon subcommand %q\n", opts.args[0])
-		return exitUsage
+		return a.usageError(fmt.Sprintf("unknown daemon subcommand %q", opts.args[0]))
 	}
 }
 
@@ -45,8 +42,7 @@ func (a App) runDaemon(opts options) int {
 // `service clone SOURCE TARGET` (post-MVP).
 func (a App) runService(opts options) int {
 	if len(opts.args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: service requires a subcommand (list|show|clone)")
-		return exitUsage
+		return a.usageError("service requires a subcommand (list|show|clone)")
 	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
@@ -59,19 +55,16 @@ func (a App) runService(opts options) int {
 		return exitSuccess
 	case "show":
 		if len(opts.args) < 2 {
-			fmt.Fprintln(a.Stderr, "usage error: service show requires a service name")
-			return exitUsage
+			return a.usageError("service show requires a service name")
 		}
 		return a.showResolvedService(opts, cfg, opts.args[1])
 	case "clone":
 		if len(opts.args) < 3 {
-			fmt.Fprintln(a.Stderr, "usage error: service clone requires SOURCE and TARGET")
-			return exitUsage
+			return a.usageError("service clone requires SOURCE and TARGET")
 		}
 		return a.cloneService(opts, cfg, opts.args[1], opts.args[2])
 	default:
-		fmt.Fprintf(a.Stderr, "usage error: unknown service subcommand %q\n", opts.args[0])
-		return exitUsage
+		return a.usageError(fmt.Sprintf("unknown service subcommand %q", opts.args[0]))
 	}
 }
 
@@ -111,8 +104,7 @@ func (a App) cloneService(opts options, cfg *config.Config, source, target strin
 // runConfigDiff renders two resolved services and reports their line difference.
 func (a App) runConfigDiff(globalPath string, rest []string, opts options) int {
 	if len(rest) < 2 {
-		fmt.Fprintln(a.Stderr, "usage error: config diff requires BASE and SERVICE")
-		return exitUsage
+		return a.usageError("config diff requires BASE and SERVICE")
 	}
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {

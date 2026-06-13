@@ -21,8 +21,7 @@ func (a App) runMonitor(opts options, pause bool) int {
 	}
 	service := opts.service()
 	if service == "" {
-		fmt.Fprintf(a.Stderr, "usage error: %s requires a service name\n", verb)
-		return exitUsage
+		return a.usageError(fmt.Sprintf("%s requires a service name", verb))
 	}
 
 	cfg, code := a.loadConfig(opts)
