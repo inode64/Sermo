@@ -85,6 +85,9 @@ type Deps struct {
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
 	// Nil reads /proc/sys/net/netfilter.
 	ConntrackSampler ConntrackSamplerFunc
+	// FirewallRulesSampler reads loaded nftables/iptables rules for
+	// `firewall_rules` checks. Nil runs nft/iptables-save through Runner.
+	FirewallRulesSampler FirewallRulesSamplerFunc
 	// EntropySampler reads the kernel entropy pool for `entropy` checks. Nil reads
 	// /proc/sys/kernel/random/entropy_avail.
 	EntropySampler EntropySamplerFunc
@@ -159,7 +162,7 @@ var SingleShotCheckTypes = []string{
 	"fds", "memory", "pressure", "pids", "diskio", "conntrack", "entropy",
 	"zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query",
 	"influxdb-query", "size", "websocket", "ws", "net", "icmp", "swap",
-	"route",
+	"route", "firewall_rules",
 }
 
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
@@ -220,6 +223,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildDiskIOCheck(b, entry, deps)
 	case "conntrack":
 		return buildConntrackCheck(b, entry, deps)
+	case "firewall_rules":
+		return buildFirewallRulesCheck(b, entry, runner, deps)
 	case "entropy":
 		return buildEntropyCheck(b, entry, deps)
 	case "zombies":

@@ -230,6 +230,14 @@ watches:
     then:
       hook:
         command: [/usr/local/bin/sermo-conntrack-alert.sh]
+  # Watch that nftables/iptables still has rules loaded (useful for firewall loaders).
+  firewall-rules:
+    monitor: disabled
+    interval: 30s
+    check: { type: firewall_rules, backend: auto, min_rules: 1 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-firewall-alert.sh]
   oom:
     monitor: disabled
     interval: 30s

@@ -130,6 +130,9 @@ type Deps struct {
 	// ConntrackSampler reads the netfilter conntrack table for checks and web
 	// watch summaries. Optional: nil reads /proc/sys/net/netfilter.
 	ConntrackSampler checks.ConntrackSamplerFunc
+	// FirewallRulesSampler reads loaded packet-filter rules for checks.
+	// Optional: nil runs nft/iptables-save through ExecxRunner.
+	FirewallRulesSampler checks.FirewallRulesSamplerFunc
 	// EntropySampler reads kernel entropy for entropy checks and web watch
 	// summaries. Optional: nil reads /proc/sys/kernel/random/entropy_avail.
 	EntropySampler checks.EntropySamplerFunc
@@ -267,8 +270,12 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
 	selectors, _ := serviceProcessSelectors(context.Background(), tree, deps, unit)
+	noResident := noResidentProcess(tree)
 	var worker *Worker
 	pidsForCycle := cyclePIDSource(func() []int {
+		if noResident {
+			return nil
+		}
 		return discoverPIDs(discoverer, selectors)
 	}, func() int {
 		if worker == nil {
@@ -278,6 +285,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	})
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
 	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, pidsForCycle)
+	if noResident {
+		liveSample = nil
+	}
 
 	// remediation.shadow (or mode: shadow) allows full rule+window+guard+policy
 	// evaluation and event emission without ever executing operations. It merges

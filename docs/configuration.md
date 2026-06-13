@@ -755,7 +755,7 @@ receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `entropy`, `zombies`, `oom`, `cert`) *and* the service
+`pids`, `conntrack`, `firewall_rules`, `entropy`, `zombies`, `oom`, `cert`) *and* the service
 checks (`tcp`, `ports`, `http`,
 `command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`, `route`,
 `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
@@ -1161,6 +1161,22 @@ Predicates: `used_pct` (percent of the max), `free` (`nf_conntrack_max − count
 and `count` (absolute). Needs the `nf_conntrack` module loaded; without it the
 check never fires. Hook extras: `SERMO_COUNT`, `SERMO_MAX`, `SERMO_USED_PCT`,
 `SERMO_FREE`.
+
+### `firewall_rules` — loaded firewall rules
+
+Use `firewall_rules` for firewall loaders such as FireHOL that exit after
+installing rules. It is a health check: as a watch it fires when the loaded
+nftables/iptables rule count drops below `min_rules` (default `1`).
+
+```yaml
+watches:
+  firewall:
+    check: { type: firewall_rules, backend: auto, min_rules: 1 }
+    then: { hook: { command: [/usr/local/bin/firewall-missing.sh] } }
+```
+
+`backend` is `auto`, `nftables` or `iptables`. Hook extras:
+`SERMO_BACKEND`, `SERMO_RULES`, `SERMO_MIN_RULES`.
 
 ### `entropy` — kernel entropy pool
 

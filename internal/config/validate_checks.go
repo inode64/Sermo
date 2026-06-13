@@ -691,6 +691,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateDiskIOFields(path, entry, add)
 	case "conntrack":
 		validateThresholdPreds(path, entry, checks.ConntrackPredFields, add)
+	case "firewall_rules":
+		validateFirewallRulesFields(path, entry, add)
 	case "net":
 		if cfgval.String(entry["interface"]) == "" {
 			add("%s.interface is required for a net check", path)
@@ -741,6 +743,24 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateWebsocketFields(path, entry, add)
 	}
 	return true
+}
+
+func validateFirewallRulesFields(prefix string, fields map[string]any, add addFunc) {
+	backend := cfgval.String(fields["backend"])
+	if backend == "nft" {
+		backend = "nftables"
+	}
+	switch backend {
+	case "", "auto", "nftables", "iptables":
+	default:
+		add("%s.backend must be auto, nftables or iptables", prefix)
+	}
+	if v, present := fields["min_rules"]; present {
+		n, ok := cfgval.Int(v)
+		if !ok || n < 1 {
+			add("%s.min_rules must be a positive integer", prefix)
+		}
+	}
 }
 
 // validateWebsocketFields validates a websocket check: a required url with a

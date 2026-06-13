@@ -172,6 +172,74 @@ func TestServiceProcessSelectorsDerivesInitPidfile(t *testing.T) {
 	}
 }
 
+func TestServiceProcessSelectorsExplicitEmptySkipsInitDerivation(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "web.pid")
+	deps := Deps{
+		Backend:     servicemgr.BackendSystemd,
+		ExecxRunner: procInfoRunner{pidfile: pidfile},
+	}
+
+	selectors, warnings := serviceProcessSelectors(context.Background(), map[string]any{"processes": map[string]any{}}, deps, "web.service")
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+	if len(selectors) != 0 {
+		t.Fatalf("selectors = %+v, want none for explicit empty processes", selectors)
+	}
+	if !noResidentProcess(map[string]any{"processes": map[string]any{}}) {
+		t.Fatal("explicit empty processes must mark no resident process")
+	}
+}
+
+func TestWebBackendDetailNoResidentProcess(t *testing.T) {
+	root := t.TempDir()
+	enabled := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	globalPath := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(globalPath, []byte(`
+paths:
+  includes: [`+enabled+`]
+defaults:
+  policy:
+    cooldown: 5m
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(enabled, "firehol.yml"), []byte(`
+kind: service
+name: firehol
+service: { name: firehol }
+processes: {}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(globalPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	wb, warnings := NewWebBackend(cfg, Deps{
+		Backend:     servicemgr.BackendSystemd,
+		Manager:     fakeManager{},
+		ExecxRunner: procInfoRunner{pidfile: filepath.Join(t.TempDir(), "firehol.pid")},
+	})
+	if len(warnings) > 0 {
+		t.Fatalf("NewWebBackend warnings: %v", warnings)
+	}
+
+	detail, ok := wb.Detail(context.Background(), "firehol")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	if !detail.NoResidentProcess {
+		t.Fatal("detail should mark firehol as no resident process")
+	}
+	if len(detail.Processes) != 0 || detail.ProcessTotals != nil || len(detail.ProcessWarnings) != 0 {
+		t.Fatalf("process fields = processes:%+v totals:%+v warnings:%+v, want all empty", detail.Processes, detail.ProcessTotals, detail.ProcessWarnings)
+	}
+}
+
 func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	pid := os.Getpid()
 	pidfile := filepath.Join(t.TempDir(), "web.pid")
