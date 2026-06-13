@@ -728,7 +728,7 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 		default:
 			add("%s is not a supported icmp metric (state, latency)", prefix)
 		}
-		validateHookBlock(prefix, m, add)
+		validateHookBlock(prefix, m, add)  // only enforces if `then` present on the metric
 		validateMetricWindow(prefix, m, add)
 	}
 }
@@ -741,6 +741,10 @@ func validateICMPCheck(name string, check, entry map[string]any, add func(string
 Run: `go test ./internal/config/ -run TestValidateWatches -v`
 Then: `go test ./internal/config/` (net validation still green via the shared `validateStateMetric`).
 Expected: PASS.
+
+(Note: later evolution relaxed the hook requirement — a watch/metric may omit
+`then` entirely for alert-only mode. "firing" events still appear in web + logs.
+See current `validateHookBlock` and docs/configuration.md.)
 
 - [ ] **Step 5: Commit**
 

@@ -1377,6 +1377,13 @@ func validateDiskCheck(name string, check map[string]any, add func(string, ...an
 func validateWatchHook(name string, entry map[string]any, add func(string, ...any)) {
 	then, ok := entry["then"].(map[string]any)
 	if !ok {
+		// NOTE (post-plan evolution): the strict "then is required" was later relaxed.
+		// Omitting the `then` key entirely on a watch is now valid and produces
+		// alert-only / monitor-only behaviour (the `for` window still produces
+		// "firing" events visible in the web UI state + event log, but with no
+		// hook or notify delivery and no inheritance of global defaults).
+		// See current `validateHookBlock` and docs/configuration.md for bare examples.
+		// The old behaviour here forced a then for every watch.
 		add("watches.%s.then is required", name)
 		return
 	}

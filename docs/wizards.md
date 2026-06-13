@@ -58,6 +58,12 @@ otherwise they are asked per target.
     nothing to inherit it **degrades to monitor-only** with a one-line note. It
     must never re-ask or abort. This logic lives once in `chooseNotifiers`
     (`internal/assist/notify.go`) — do not reimplement it per assistant.
+
+  Hand-written configs have an additional form: omitting the `then` key entirely
+  on a watch (or per-metric block) is also valid and produces alert-only
+  behaviour (firing state visible in web UI + "firing" events in logs, but no
+  hook/notify and no inheritance of globals). The wizard always generates an
+  explicit `then` (using `none` / `default` / names as chosen).
 - **Monitor + interval everywhere.** Every generated entry carries the step-5/6
   answers via `Monitoring.apply` (`internal/assist/common.go`).
 - **Detection drives cleanup.** Step 9 only offers files whose target is absent

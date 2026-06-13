@@ -129,8 +129,13 @@ Add `case "icmp"` to `validateWatches` calling `validateICMPCheck`:
 - `latency`: exactly one of `threshold` or `change` is required; `threshold` is a
   `{op, value}` mapping (valid op, numeric value); `change` is a `{delta}` mapping
   (numeric delta).
-- per-metric hook via `validateHookBlock(prefix, m, add)` and window via
-  `validateMetricWindow(prefix, m, add)` (both already shared).
+- per-metric hook via `validateHookBlock(prefix, m, add)` (only if a `then` is
+  present on the metric) and window via `validateMetricWindow(prefix, m, add)`
+  (both already shared).
+
+(Note: design assumed every metric would declare a `then`. The final
+implementation allows omitting `then` on a metric/watch for alert-only mode:
+"firing" events are still emitted for the web UI and logs.)
 
 The net `state` validation is refactored to call the shared
 `validateStateMetric` (no behaviour change).
