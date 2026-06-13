@@ -47,3 +47,32 @@ func TestUsesMetrics(t *testing.T) {
 		})
 	}
 }
+
+func TestCyclePIDSourceCachesWithinCycle(t *testing.T) {
+	cycle := 1
+	calls := 0
+	source := cyclePIDSource(func() []int {
+		calls++
+		return []int{calls}
+	}, func() int {
+		return cycle
+	})
+
+	first := source()
+	second := source()
+	if calls != 1 {
+		t.Fatalf("same cycle discoveries = %d, want 1", calls)
+	}
+	if first[0] != 1 || second[0] != 1 {
+		t.Fatalf("same cycle PIDs = %v then %v, want cached [1]", first, second)
+	}
+
+	cycle = 2
+	third := source()
+	if calls != 2 {
+		t.Fatalf("next cycle discoveries = %d, want 2", calls)
+	}
+	if third[0] != 2 {
+		t.Fatalf("next cycle PIDs = %v, want [2]", third)
+	}
+}
