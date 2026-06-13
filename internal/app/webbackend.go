@@ -1066,7 +1066,7 @@ func (b *WebBackend) entropyWatchView() (*web.WatchMeter, []web.WatchReading, st
 	}
 	return nil,
 		[]web.WatchReading{{Field: "avail", Label: "Available", Value: fmt.Sprintf("%d bits", avail)}},
-		fmt.Sprintf("entropy_avail %d bits", avail)
+		fmt.Sprintf("%d available bits", avail)
 }
 
 func (b *WebBackend) zombieWatchView() (*web.WatchMeter, []web.WatchReading, string) {
