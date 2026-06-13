@@ -1144,12 +1144,19 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 }
 
 // MonitoringStatus returns how many services are monitored versus paused.
-func (b *WebBackend) MonitoringStatus(ctx context.Context) web.MonitoringStatus {
-	svcs := b.Services(ctx) // this already includes the live Monitored flag from store
-	total := len(svcs)
+func (b *WebBackend) MonitoringStatus(_ context.Context) web.MonitoringStatus {
+	total := len(b.order)
 	monitored := 0
-	for _, s := range svcs {
-		if s.Monitored {
+	for _, name := range b.order {
+		e := b.entries[name]
+		if e == nil || e.disabled {
+			continue
+		}
+		active := true
+		if monitoredState, _, _, ok := b.monitorView(name); ok {
+			active = monitoredState
+		}
+		if active {
 			monitored++
 		}
 	}
