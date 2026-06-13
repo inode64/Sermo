@@ -48,7 +48,7 @@ func (c fdsCheck) Run(_ context.Context) Result {
 	if s.Max > 0 {
 		usedPct = float64(s.Allocated) / float64(s.Max) * 100
 		values["used_pct"] = usedPct
-		values["free"] = float64(s.Max - s.Allocated)
+		values["free"] = float64(s.Max - min(s.Allocated, s.Max))
 	}
 
 	ok := levelPredsHold(c.preds, values)
@@ -56,7 +56,7 @@ func (c fdsCheck) Run(_ context.Context) Result {
 	res := c.result(ok, fmt.Sprintf("fds %d/%d allocated (%.1f%%)", s.Allocated, s.Max, usedPct), start)
 	res.Data = map[string]any{"allocated": s.Allocated, "max": s.Max, "used_pct": usedPct}
 	if s.Max > 0 {
-		res.Data["free"] = s.Max - s.Allocated
+		res.Data["free"] = s.Max - min(s.Allocated, s.Max)
 	}
 	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
 	return res
