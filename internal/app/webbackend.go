@@ -432,11 +432,8 @@ func activeLockNamesFromReport(report locks.Report) []string {
 }
 
 func (b *WebBackend) activeLockNamesByService() map[string][]string {
-	if b.cfg == nil || len(b.order) == 0 {
-		return nil
-	}
-	reports, err := locksScanner(b.cfg).ScanServices(b.order)
-	if err != nil {
+	reports := b.lockReportsByService()
+	if len(reports) == 0 {
 		return nil
 	}
 	out := make(map[string][]string, len(reports))
@@ -444,6 +441,28 @@ func (b *WebBackend) activeLockNamesByService() map[string][]string {
 		out[name] = activeLockNamesFromReport(report)
 	}
 	return out
+}
+
+func (b *WebBackend) lockReportsByService() map[string]locks.Report {
+	if b.cfg == nil || len(b.order) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(b.order))
+	for _, name := range b.order {
+		e := b.entries[name]
+		if e == nil || e.disabled {
+			continue
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	reports, err := locksScanner(b.cfg).ScanServices(names)
+	if err != nil {
+		return nil
+	}
+	return reports
 }
 
 // checkHealthSummary reports required-check health for the service list. It uses
@@ -1063,18 +1082,16 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 }
 
 // Locks returns the active and stale runtime locks across services.
-func (b *WebBackend) Locks(ctx context.Context) []web.Lock {
+func (b *WebBackend) Locks(_ context.Context) []web.Lock {
 	var out []web.Lock
 	now := time.Now()
+	reports := b.lockReportsByService()
 	for _, name := range b.order {
 		e := b.entries[name]
 		if e == nil || e.disabled {
 			continue
 		}
-		report, err := serviceLocksReport(b.cfg, name)
-		if err != nil {
-			continue
-		}
+		report := reports[name]
 		for _, lk := range report.Locks {
 			out = append(out, lockToWebAt(lk, name, now))
 		}

@@ -276,6 +276,56 @@ func TestWebBackendLocksContext(t *testing.T) {
 	}
 }
 
+func TestWebBackendLocksSeveralServices(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
+	locksDir := filepath.Join(runtime, "locks")
+	expires := time.Now().Add(time.Hour).UTC()
+	ticks := webLockStartTicks(t)
+
+	writeWebLockFixture(t, locksDir, "mysql.lock", map[string]any{
+		"service":           "mysql",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "redis.cache.lock", map[string]any{
+		"service":           "redis",
+		"name":              "cache",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+	writeWebLockFixture(t, locksDir, "disabled.lock", map[string]any{
+		"service":           "disabled",
+		"owner_pid":         os.Getpid(),
+		"owner_start_ticks": ticks,
+		"expires_at":        expires.Format(time.RFC3339),
+	})
+
+	b := &WebBackend{
+		order: []string{"mysql", "redis", "disabled"},
+		entries: map[string]*webEntry{
+			"mysql":    {},
+			"redis":    {},
+			"disabled": {disabled: true},
+		},
+		cfg: &config.Config{Global: config.Global{Runtime: runtime}},
+	}
+
+	locks := b.Locks(context.Background())
+	got := map[string]string{}
+	for _, lk := range locks {
+		got[lk.Service] = lk.Name
+	}
+	if got["mysql"] != "" || got["redis"] != "cache" {
+		t.Fatalf("locks = %+v, want mysql default and redis cache", locks)
+	}
+	if _, ok := got["disabled"]; ok {
+		t.Fatalf("disabled service lock should not be listed: %+v", locks)
+	}
+}
+
 func TestWebBackendReleaseLockOnlyInactive(t *testing.T) {
 	root := t.TempDir()
 	runtime := filepath.Join(root, "run")
