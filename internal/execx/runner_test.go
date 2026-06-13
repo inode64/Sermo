@@ -187,6 +187,26 @@ func TestPackageRunEnv(t *testing.T) {
 			t.Errorf("expected error about missing EnvRunner support, got: %v", err)
 		}
 	})
+
+	t.Run("success path with timeout>0 and timeout=0 for quick command", func(t *testing.T) {
+		env := []string{"REVIEW_VAR=from_review_test"}
+		// timeout=0: parent as-is
+		res, err := RunEnv(context.Background(), CommandRunner{}, env, 0, "sh", "-c", "printf $REVIEW_VAR")
+		if err != nil {
+			t.Fatalf("RunEnv timeout=0 quick: %v", err)
+		}
+		if res.Stdout != "from_review_test" {
+			t.Errorf("stdout = %q, want from_review_test", res.Stdout)
+		}
+		// positive timeout that succeeds
+		res, err = RunEnv(context.Background(), CommandRunner{}, env, 2*time.Second, "sh", "-c", "printf ok")
+		if err != nil {
+			t.Fatalf("RunEnv positive-timeout quick: %v", err)
+		}
+		if res.Stdout != "ok" {
+			t.Errorf("stdout = %q, want ok", res.Stdout)
+		}
+	})
 }
 
 // basicRunner is a test double that only satisfies Runner (not EnvRunner).
