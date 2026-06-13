@@ -685,17 +685,17 @@ func watchMeter(checkType string, b *WebBackend) *web.WatchMeter {
 }
 
 // countMeter builds a count-vs-limit gauge (fds, pids) as a percentage of the
-// kernel maximum. nil when the limit is unknown (max == 0), so the meter is
+// kernel maximum. nil when the limit is unknown (limit == 0), so the meter is
 // simply absent rather than dividing by zero.
-func countMeter(kind string, count, max uint64) *web.WatchMeter {
-	if max == 0 {
+func countMeter(kind string, count, limit uint64) *web.WatchMeter {
+	if limit == 0 {
 		return nil
 	}
 	return &web.WatchMeter{
 		Kind:    kind,
-		UsedPct: float64(count) / float64(max) * 100,
+		UsedPct: float64(count) / float64(limit) * 100,
 		Count:   count,
-		Max:     max,
+		Max:     limit,
 	}
 }
 

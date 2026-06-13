@@ -338,12 +338,12 @@ func systemdStatus(state string) Status {
 func openrcStatus(result execx.Result) Status {
 	out := strings.ToLower(result.Stdout)
 	switch {
-	case strings.Contains(out, "started"):
-		return StatusActive
 	case strings.Contains(out, "crashed"):
 		return StatusFailed
-	case strings.Contains(out, "stopped"):
+	case strings.Contains(out, "stopped"), strings.Contains(out, "not started"):
 		return StatusInactive
+	case strings.Contains(out, "started"):
+		return StatusActive
 	}
 	switch result.ExitCode {
 	case 0:
