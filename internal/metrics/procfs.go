@@ -121,46 +121,76 @@ func (OSReader) ProcessThreads(pid int) (uint64, bool) {
 
 // TotalMemory reads MemTotal and MemAvailable from /proc/meminfo.
 func (OSReader) TotalMemory() (total, used uint64, ok bool) {
-	data, err := os.ReadFile("/proc/meminfo")
-	if err != nil {
+	totals := readProcMeminfoTotals()
+	if !totals.memoryOK {
 		return 0, 0, false
 	}
-	var memTotal, memAvail uint64
-	var haveTotal, haveAvail bool
-	for _, line := range strings.Split(string(data), "\n") {
-		switch {
-		case strings.HasPrefix(line, "MemTotal:"):
-			memTotal, haveTotal = parseMeminfoKB(line)
-		case strings.HasPrefix(line, "MemAvailable:"):
-			memAvail, haveAvail = parseMeminfoKB(line)
-		}
-	}
-	if !haveTotal || !haveAvail || memTotal < memAvail {
-		return 0, 0, false
-	}
-	return memTotal, memTotal - memAvail, true
+	return totals.memoryTotal, totals.memoryUsed, true
 }
 
 // TotalSwap reads SwapTotal and SwapFree from /proc/meminfo. used = total - free.
 func (OSReader) TotalSwap() (total, used uint64, ok bool) {
+	totals := readProcMeminfoTotals()
+	if !totals.swapOK {
+		return 0, 0, false
+	}
+	return totals.swapTotal, totals.swapUsed, true
+}
+
+// TotalMemoryAndSwap reads memory and swap totals from /proc/meminfo with one
+// file read. The collector uses it when available so system and service metric
+// sampling do not reread meminfo for memory and swap separately.
+func (OSReader) TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUsed uint64, memoryOK, swapOK bool) {
+	totals := readProcMeminfoTotals()
+	return totals.memoryTotal, totals.memoryUsed, totals.swapTotal, totals.swapUsed, totals.memoryOK, totals.swapOK
+}
+
+type procMeminfoTotals struct {
+	memoryTotal uint64
+	memoryUsed  uint64
+	memoryOK    bool
+	swapTotal   uint64
+	swapUsed    uint64
+	swapOK      bool
+}
+
+func readProcMeminfoTotals() procMeminfoTotals {
 	data, err := os.ReadFile("/proc/meminfo")
 	if err != nil {
-		return 0, 0, false
+		return procMeminfoTotals{}
 	}
-	var swapTotal, swapFree uint64
-	var haveTotal, haveFree bool
+	return parseProcMeminfoTotals(data)
+}
+
+func parseProcMeminfoTotals(data []byte) procMeminfoTotals {
+	var totals procMeminfoTotals
+	var memoryAvailable, swapFree uint64
+	var haveMemoryAvailable, haveSwapFree bool
 	for _, line := range strings.Split(string(data), "\n") {
 		switch {
+		case strings.HasPrefix(line, "MemTotal:"):
+			totals.memoryTotal, totals.memoryOK = parseMeminfoKB(line)
+		case strings.HasPrefix(line, "MemAvailable:"):
+			memoryAvailable, haveMemoryAvailable = parseMeminfoKB(line)
 		case strings.HasPrefix(line, "SwapTotal:"):
-			swapTotal, haveTotal = parseMeminfoKB(line)
+			totals.swapTotal, totals.swapOK = parseMeminfoKB(line)
 		case strings.HasPrefix(line, "SwapFree:"):
-			swapFree, haveFree = parseMeminfoKB(line)
+			swapFree, haveSwapFree = parseMeminfoKB(line)
 		}
 	}
-	if !haveTotal || !haveFree || swapTotal < swapFree {
-		return 0, 0, false
+	if !totals.memoryOK || !haveMemoryAvailable || totals.memoryTotal < memoryAvailable {
+		totals.memoryOK = false
+		totals.memoryTotal = 0
+	} else {
+		totals.memoryUsed = totals.memoryTotal - memoryAvailable
 	}
-	return swapTotal, swapTotal - swapFree, true
+	if !totals.swapOK || !haveSwapFree || totals.swapTotal < swapFree {
+		totals.swapOK = false
+		totals.swapTotal = 0
+	} else {
+		totals.swapUsed = totals.swapTotal - swapFree
+	}
+	return totals
 }
 
 // SystemCPU reads the aggregate cpu line of /proc/stat. busy excludes idle and

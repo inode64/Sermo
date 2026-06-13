@@ -131,8 +131,9 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	}
 
 	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: true}
-	if total, _, ok := c.Reader.TotalMemory(); ok && total > 0 {
-		mem.Percent = float64(rss) / float64(total) * 100
+	totals := readerMemoryTotals(c.Reader, hasSwap)
+	if totals.memoryOK && totals.memoryTotal > 0 {
+		mem.Percent = float64(rss) / float64(totals.memoryTotal) * 100
 		mem.HasPercent = true
 	}
 	snap["memory"] = mem
@@ -141,8 +142,8 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	// — when a swap device exists — its share of total swap.
 	if hasSwap {
 		sw := Reading{Absolute: float64(swap), HasAbsolute: true, Ready: true}
-		if total, _, ok := readerTotalSwap(c.Reader); ok && total > 0 {
-			sw.Percent = float64(swap) / float64(total) * 100
+		if totals.swapOK && totals.swapTotal > 0 {
+			sw.Percent = float64(swap) / float64(totals.swapTotal) * 100
 			sw.HasPercent = true
 		}
 		snap["swap"] = sw
@@ -268,12 +269,13 @@ func (c *Collector) SampleSystem() Snapshot {
 	}
 
 	snap := Snapshot{}
-	if total, used, ok := c.Reader.TotalMemory(); ok {
-		r := Reading{Absolute: float64(used), HasAbsolute: true, Ready: true}
-		if total > 0 {
-			r.Percent = float64(used) / float64(total) * 100
+	totals := readerMemoryTotals(c.Reader, true)
+	if totals.memoryOK {
+		r := Reading{Absolute: float64(totals.memoryUsed), HasAbsolute: true, Ready: true}
+		if totals.memoryTotal > 0 {
+			r.Percent = float64(totals.memoryUsed) / float64(totals.memoryTotal) * 100
 			r.HasPercent = true
-			r.Total, r.HasTotal = float64(total), true
+			r.Total, r.HasTotal = float64(totals.memoryTotal), true
 		}
 		snap["total_memory"] = r
 	}
@@ -301,13 +303,13 @@ func (c *Collector) SampleSystem() Snapshot {
 	// Swap is optional: only readers that implement TotalSwap contribute it, and
 	// only when a swap device exists (total > 0). Percent is always computed so a
 	// 0%-used swap still reports a value.
-	if total, used, ok := readerTotalSwap(c.Reader); ok && total > 0 {
+	if totals.swapOK && totals.swapTotal > 0 {
 		snap["total_swap"] = Reading{
-			Absolute:    float64(used),
+			Absolute:    float64(totals.swapUsed),
 			HasAbsolute: true,
-			Percent:     float64(used) / float64(total) * 100,
+			Percent:     float64(totals.swapUsed) / float64(totals.swapTotal) * 100,
 			HasPercent:  true,
-			Total:       float64(total),
+			Total:       float64(totals.swapTotal),
 			HasTotal:    true,
 			Ready:       true,
 		}
@@ -318,16 +320,46 @@ func (c *Collector) SampleSystem() Snapshot {
 	return snap
 }
 
-// readerTotalSwap returns the host swap totals when the reader implements the
-// optional TotalSwap method (kept out of the core Reader interface so swap stays
-// optional). Shared by the per-service swap metric and the system total_swap.
-func readerTotalSwap(r Reader) (total, used uint64, ok bool) {
+type memoryTotals struct {
+	memoryTotal uint64
+	memoryUsed  uint64
+	memoryOK    bool
+	swapTotal   uint64
+	swapUsed    uint64
+	swapOK      bool
+}
+
+// readerMemoryTotals returns host memory totals and, when requested and
+// supported, swap totals. Readers can implement TotalMemoryAndSwap to supply
+// both from one underlying probe; older readers still use the separate methods.
+func readerMemoryTotals(r Reader, needSwap bool) memoryTotals {
+	if mr, has := r.(interface {
+		TotalMemoryAndSwap() (memoryTotal, memoryUsed, swapTotal, swapUsed uint64, memoryOK, swapOK bool)
+	}); has {
+		memoryTotal, memoryUsed, swapTotal, swapUsed, memoryOK, swapOK := mr.TotalMemoryAndSwap()
+		if !needSwap {
+			swapTotal, swapUsed, swapOK = 0, 0, false
+		}
+		return memoryTotals{
+			memoryTotal: memoryTotal,
+			memoryUsed:  memoryUsed,
+			memoryOK:    memoryOK,
+			swapTotal:   swapTotal,
+			swapUsed:    swapUsed,
+			swapOK:      swapOK,
+		}
+	}
+	memoryTotal, memoryUsed, memoryOK := r.TotalMemory()
+	totals := memoryTotals{memoryTotal: memoryTotal, memoryUsed: memoryUsed, memoryOK: memoryOK}
+	if !needSwap {
+		return totals
+	}
 	if sr, has := r.(interface {
 		TotalSwap() (total, used uint64, ok bool)
 	}); has {
-		return sr.TotalSwap()
+		totals.swapTotal, totals.swapUsed, totals.swapOK = sr.TotalSwap()
 	}
-	return 0, 0, false
+	return totals
 }
 
 // Reset clears a service's CPU history (section 12: reset on reload).
