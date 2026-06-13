@@ -1420,6 +1420,17 @@ function beatStrip(points) {
     <div class="beats-meta"><span>24h ago</span><span>now</span></div>`;
 }
 
+// procCpuCell and procIoFdThreadCells render the per-process metric columns
+// shared by the expansion and detail process tables, keeping the two identical
+// (only the memory column differs: the expansion shows a host-RAM bar).
+function procCpuCell(p) {
+  return p.has_cpu ? cpuBarMini(p.cpu) : '—';
+}
+function procIoFdThreadCells(p) {
+  const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
+  return `<td>${io}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td>`;
+}
+
 function renderExpansion(d, metrics, beats) {
   const procs = d.processes || [];
   const pt = d.process_totals || {
@@ -1450,11 +1461,9 @@ function renderExpansion(d, metrics, beats) {
           <td>${p.exe ? esc(p.exe) : '<span class="muted">unknown</span>'}</td>
           <td class="muted">${esc(p.user || "")}</td>
           <td class="muted">${esc(p.role || "")}</td>
-          <td>${p.has_cpu ? cpuBarMini(p.cpu) : '—'}</td>
+          <td>${procCpuCell(p)}</td>
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
-          <td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td>
-          <td class="muted">${p.fds || '—'}</td>
-          <td class="muted">${p.threads || '—'}</td>
+          ${procIoFdThreadCells(p)}
         </tr>`).join("")}</tbody></table>`
     : '<div class="muted">No processes found.</div>';
   return strip + totals + lat + sla + procTable;
@@ -2737,7 +2746,7 @@ function renderDetail(d) {
     const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
     return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
       <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
-      <td>${p.has_cpu ? cpuBarMini(p.cpu) : '—'}</td><td>${p.rss ? fmtBytes(p.rss) : '—'}</td><td>${(p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—'}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td></tr>`;
+      <td>${procCpuCell(p)}</td><td>${p.rss ? fmtBytes(p.rss) : '—'}</td>${procIoFdThreadCells(p)}</tr>`;
   }).join("") || `<tr><td colspan="12" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
 
   const wins = winButtons([["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
