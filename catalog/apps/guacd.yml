@@ -1,6 +1,7 @@
 kind: app
 name: guacd
 display_name: "Apache Guacamole"
+category: web
 variables:
   binary: "/usr/bin/guacd"
 preflight:

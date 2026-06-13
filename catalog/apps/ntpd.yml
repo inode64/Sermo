@@ -1,6 +1,7 @@
 kind: app
 name: ntpd
 display_name: "NTP Daemon"
+category: network
 variables:
   binary: "/usr/bin/ntpd"
 preflight:

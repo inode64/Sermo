@@ -1,6 +1,7 @@
 kind: daemon
 name: nebula-%i
 display_name: "Nebula ${instance}"
+category: network
 uses: nebula
 service:
   systemd: ["nebula@${instance}", "nebula-${instance}", "nebula.${instance}"]

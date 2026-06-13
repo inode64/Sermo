@@ -1,6 +1,7 @@
 kind: app
 name: mysql
 display_name: "MySQL"
+category: database
 variables:
   binary: /usr/bin/mysqld
 preflight:

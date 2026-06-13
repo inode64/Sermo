@@ -1,6 +1,7 @@
 kind: daemon
 name: salt
 display_name: "Salt"
+category: system
 service: salt
 apps: [salt]
 

@@ -1,6 +1,7 @@
 kind: app
 name: smartd
 display_name: "S.M.A.R.T. Daemon"
+category: storage
 variables:
   binary: "/usr/bin/smartd"
 preflight:

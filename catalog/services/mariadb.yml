@@ -1,6 +1,7 @@
 kind: daemon
 name: mariadb
 display_name: "MariaDB"
+category: database
 type: database
 
 service:

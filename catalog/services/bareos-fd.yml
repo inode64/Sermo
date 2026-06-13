@@ -1,6 +1,7 @@
 kind: daemon
 name: bareos-fd
 display_name: "Bareos File Daemon"
+category: storage
 description: "Backup file Server"
 service: bareos-fd
 apps: [bareos-fd]

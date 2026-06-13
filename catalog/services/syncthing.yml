@@ -1,6 +1,7 @@
 kind: daemon
 name: syncthing
 display_name: "Syncthing"
+category: storage
 description: "Syncthing continuous file-synchronization daemon."
 
 # Syncthing runs as a per-user systemd instance (syncthing@<user>, often the

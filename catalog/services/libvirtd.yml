@@ -1,6 +1,7 @@
 kind: daemon
 name: libvirtd
 display_name: "libvirt"
+category: virtualization
 service: libvirtd
 apps: [libvirtd]
 

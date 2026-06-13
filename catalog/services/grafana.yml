@@ -1,6 +1,7 @@
 kind: daemon
 name: grafana
 display_name: "Grafana"
+category: observability
 description: "Grafana observability and dashboarding server."
 
 service:

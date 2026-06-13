@@ -1,6 +1,7 @@
 kind: app
 name: go
 display_name: "Go"
+category: runtime
 description: "A concurrent garbage collected and typesafe programming language"
 variables:
   binary: "/usr/bin/go"

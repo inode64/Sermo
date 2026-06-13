@@ -1,6 +1,7 @@
 kind: daemon
 name: memcached
 display_name: "Memcached"
+category: database
 description: "Memcached in-memory cache"
 type: cache
 service: memcached

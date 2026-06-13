@@ -1,6 +1,7 @@
 kind: daemon
 name: usbhid-ups
 display_name: "USB HID UPS Driver"
+category: hardware
 service: usbhid-ups
 apps: [usbhid-ups]
 

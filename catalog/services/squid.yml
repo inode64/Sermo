@@ -1,6 +1,7 @@
 kind: daemon
 name: squid
 display_name: "Squid"
+category: web
 service: squid
 apps: [squid]
 

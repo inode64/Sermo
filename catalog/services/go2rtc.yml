@@ -1,6 +1,7 @@
 kind: daemon
 name: go2rtc
 display_name: "go2rtc"
+category: web
 description: "go2rtc real-time camera streaming server (WebRTC/RTSP)."
 
 # go2rtc runs as a plain OpenRC service or a systemd instance (go2rtc@<config>).

@@ -1,6 +1,7 @@
 kind: app
 name: node
 display_name: "Node.js"
+category: runtime
 variables:
   binary: "/usr/bin/node"
 preflight:

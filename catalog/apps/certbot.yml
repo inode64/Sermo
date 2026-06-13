@@ -1,6 +1,7 @@
 kind: app
 name: certbot
 display_name: "Certbot"
+category: security
 description: "Generador de certificados"
 variables:
   binary: "/usr/bin/certbot"

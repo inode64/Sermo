@@ -1,6 +1,7 @@
 kind: daemon
 name: ceph-osd%n
 display_name: "Ceph OSD ${n}"
+category: storage
 description: "Ceph object storage daemon (one per backing device). Binds dynamic ports in the 6800-7300 range across the public and cluster networks, so it is monitored by service state rather than a fixed port."
 
 # OSDs run as systemd instances keyed by the numeric OSD id (ceph-osd@0, @1, …).

@@ -1,6 +1,7 @@
 kind: daemon
 name: tomcat-%v
 display_name: "Apache Tomcat ${version}"
+category: web
 service: tomcat
 
 # Tomcat is a Java application: the JVM runtime is owned by the `java` app and

@@ -1,6 +1,7 @@
 kind: daemon
 name: rpc-pipefs
 display_name: "RPC pipefs"
+category: storage
 description: "RPC pipefs mount helper used by NFS services."
 service:
   systemd: [rpc-pipefs]

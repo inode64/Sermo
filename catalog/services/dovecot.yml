@@ -1,6 +1,7 @@
 kind: daemon
 name: dovecot
 display_name: "Dovecot"
+category: messaging
 description: "Dovecot IMAP/POP3"
 service: dovecot
 apps: [dovecot]

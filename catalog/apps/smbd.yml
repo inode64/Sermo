@@ -1,6 +1,7 @@
 kind: app
 name: smbd
 display_name: "Samba SMB"
+category: storage
 variables:
   binary: "/usr/bin/smbd"
 preflight:

@@ -1,6 +1,7 @@
 kind: app
 name: sqlite
 display_name: "SQLite"
+category: database
 variables:
   binary: "/usr/bin/sqlite3"
 preflight:

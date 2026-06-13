@@ -1,6 +1,7 @@
 kind: app
 name: python
 display_name: "Python 3"
+category: runtime
 description: "Python 3 interpreter"
 variables:
   binary: "/usr/bin/python3"

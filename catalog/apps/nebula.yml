@@ -1,6 +1,7 @@
 kind: app
 name: nebula
 display_name: "Nebula"
+category: network
 variables:
   binary: /usr/bin/nebula
 preflight:

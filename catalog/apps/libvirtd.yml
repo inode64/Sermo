@@ -1,6 +1,7 @@
 kind: app
 name: libvirtd
 display_name: "libvirt"
+category: virtualization
 variables:
   binary: "/usr/bin/libvirtd"
 preflight:

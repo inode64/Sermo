@@ -1,6 +1,7 @@
 kind: daemon
 name: loki
 display_name: "Grafana Loki"
+category: observability
 description: "Grafana Loki log-aggregation server."
 
 service:

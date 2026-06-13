@@ -1,5 +1,6 @@
 kind: app
 name: rsync
+category: storage
 variables:
   binary: "/usr/bin/rsync"
 preflight:

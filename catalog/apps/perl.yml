@@ -1,6 +1,7 @@
 kind: app
 name: perl
 display_name: "Perl"
+category: runtime
 variables:
   binary: "/usr/bin/perl"
 preflight:

@@ -1,6 +1,7 @@
 kind: daemon
 name: rpc-idmapd
 display_name: "NFS idmapd"
+category: storage
 description: "NFSv4 ID mapping daemon."
 service:
   systemd: [nfs-idmapd, rpc-idmapd]

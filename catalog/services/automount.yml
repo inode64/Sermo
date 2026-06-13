@@ -1,6 +1,7 @@
 kind: daemon
 name: automount
 display_name: "Automount"
+category: system
 service: automount
 apps: [automount]
 

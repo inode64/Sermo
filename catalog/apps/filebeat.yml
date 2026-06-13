@@ -1,6 +1,7 @@
 kind: app
 name: filebeat
 display_name: "Filebeat"
+category: observability
 variables:
   binary: "/usr/bin/filebeat"
 preflight:

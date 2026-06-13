@@ -1,6 +1,7 @@
 kind: daemon
 name: smartctl_exporter
 display_name: "Prometheus smartctl Exporter"
+category: observability
 description: "Prometheus smartctl_exporter: S.M.A.R.T. disk metrics over HTTP /metrics."
 
 service:

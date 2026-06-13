@@ -19,8 +19,8 @@ Keep changes concrete:
 - Data panels are `<details>` cards. The page scrolls as a whole; do not add
   panel-local scrollbars.
 - Services and Applications can be filtered, sorted and grouped by `category`.
-- A top-level YAML `category` field wins. If it is absent, Sermo infers a broad
-  family from `name` / `display_name`, then falls back to `service` or `app`.
+- A top-level YAML `category` field is the category source. If it is absent,
+  services fall back to `service` and applications fall back to `app`.
 - State-changing buttons use the same safe backend path as `sermoctl`.
 
 ## Data sources
@@ -117,7 +117,7 @@ Columns:
 | Column | Meaning |
 | --- | --- |
 | Service | name plus optional display name |
-| Category | explicit/inferred category |
+| Category | YAML category or fallback |
 | Unit | resolved systemd/OpenRC unit |
 | State | normalized state plus monitor hint |
 | Interval | resolved service interval |
@@ -161,7 +161,7 @@ Columns:
 | Column | Meaning |
 | --- | --- |
 | Application | name plus optional display name |
-| Category | explicit/inferred category |
+| Category | YAML category or fallback |
 | Version | short version, falling back to raw version |
 
 Row expansion:
@@ -169,7 +169,7 @@ Row expansion:
 | Field | Meaning |
 | --- | --- |
 | Version | full version output |
-| Category | explicit/inferred category |
+| Category | YAML category or fallback |
 | Location | resolved binary path |
 | Permissions | mode string |
 | User | binary owner |

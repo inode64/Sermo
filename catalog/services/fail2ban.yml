@@ -1,6 +1,7 @@
 kind: daemon
 name: fail2ban-server
 display_name: "Fail2ban"
+category: security
 service: fail2ban-server
 
 # fail2ban-server runs on the Python 3 runtime, owned by the `python` app and

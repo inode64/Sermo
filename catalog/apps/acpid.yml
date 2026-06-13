@@ -1,6 +1,7 @@
 kind: app
 name: acpid
 display_name: "ACPI Daemon"
+category: hardware
 variables:
   binary: "/usr/bin/acpid"
 preflight:

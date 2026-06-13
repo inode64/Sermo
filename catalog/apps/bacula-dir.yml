@@ -1,6 +1,7 @@
 kind: app
 name: bacula-dir
 display_name: "Bacula Director"
+category: storage
 variables:
   binary: "/usr/bin/bacula-dir"
 preflight:

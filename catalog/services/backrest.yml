@@ -1,6 +1,7 @@
 kind: daemon
 name: backrest
 display_name: "Backrest"
+category: storage
 description: "Backrest web UI/orchestrator for restic backups."
 
 service:

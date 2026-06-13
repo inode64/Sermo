@@ -1,6 +1,7 @@
 kind: app
 name: memcached
 display_name: "Memcached"
+category: database
 description: "Memcached in-memory cache"
 variables:
   binary: "/usr/bin/memcached"

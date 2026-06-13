@@ -1,6 +1,7 @@
 kind: daemon
 name: mosquitto
 display_name: "Eclipse Mosquitto"
+category: messaging
 description: "Mosquitto MQTT message broker."
 type: queue
 

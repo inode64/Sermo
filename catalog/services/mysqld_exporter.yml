@@ -1,6 +1,7 @@
 kind: daemon
 name: mysqld_exporter
 display_name: "Prometheus MySQL Exporter"
+category: observability
 description: "Prometheus mysqld_exporter: MySQL/MariaDB metrics over HTTP /metrics."
 
 service:

@@ -1,6 +1,7 @@
 kind: app
 name: named
 display_name: "BIND (named)"
+category: network
 variables:
   binary: "/usr/bin/named"
 preflight:

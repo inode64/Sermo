@@ -1,6 +1,7 @@
 kind: daemon
 name: varnishd
 display_name: "Varnish"
+category: web
 description: "Varnish"
 service: varnishd
 apps: [varnishd]

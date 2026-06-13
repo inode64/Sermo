@@ -1,6 +1,7 @@
 kind: app
 name: proftpd
 display_name: "ProFTPD"
+category: network
 variables:
   binary: "/usr/bin/proftpd"
 preflight:

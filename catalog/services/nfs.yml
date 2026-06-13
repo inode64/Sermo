@@ -1,6 +1,7 @@
 kind: daemon
 name: nfs
 display_name: "NFS Server"
+category: storage
 description: "Kernel NFS server."
 service:
   systemd: [nfs-server, nfs]

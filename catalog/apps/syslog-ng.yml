@@ -1,5 +1,6 @@
 kind: app
 name: syslog-ng
+category: observability
 variables:
   binary: "/usr/bin/syslog-ng"
 preflight:

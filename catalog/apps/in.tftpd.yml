@@ -1,6 +1,7 @@
 kind: app
 name: in.tftpd
 display_name: "TFTP Server"
+category: network
 variables:
   binary: "/usr/bin/in.tftpd"
 preflight:

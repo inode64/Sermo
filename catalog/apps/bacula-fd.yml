@@ -1,6 +1,7 @@
 kind: app
 name: bacula-fd
 display_name: "Bacula File Daemon"
+category: storage
 variables:
   binary: "/usr/bin/bacula-fd"
 preflight:

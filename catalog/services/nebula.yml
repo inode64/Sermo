@@ -1,6 +1,7 @@
 kind: daemon
 name: nebula
 display_name: "Nebula"
+category: network
 description: "Nebula mesh-VPN node (Slack/Defined Networking)."
 type: tunnel
 

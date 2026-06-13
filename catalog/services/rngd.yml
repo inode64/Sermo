@@ -1,6 +1,7 @@
 kind: daemon
 name: rngd
 display_name: "RNG Daemon"
+category: hardware
 description: "Feeds kernel entropy from hardware/random sources."
 service: rngd
 

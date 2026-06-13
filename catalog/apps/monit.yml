@@ -1,6 +1,7 @@
 kind: app
 name: monit
 display_name: "Monit"
+category: observability
 variables:
   binary: /usr/bin/monit
 preflight:

@@ -1,6 +1,7 @@
 kind: daemon
 name: rpc-statd
 display_name: "NFS Status Monitor"
+category: storage
 description: "RPC"
 service:
   systemd: [rpc-statd]

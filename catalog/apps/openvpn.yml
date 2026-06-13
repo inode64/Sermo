@@ -1,6 +1,7 @@
 kind: app
 name: openvpn
 display_name: "OpenVPN"
+category: network
 variables:
   binary: "/usr/bin/openvpn"
 preflight:

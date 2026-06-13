@@ -1,6 +1,7 @@
 kind: app
 name: fetchmail
 display_name: "Fetchmail"
+category: messaging
 variables:
   binary: "/usr/bin/fetchmail"
 preflight:

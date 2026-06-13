@@ -1,6 +1,7 @@
 kind: app
 name: redis
 display_name: "Redis"
+category: database
 variables:
   binary: /usr/bin/redis-server
 preflight:

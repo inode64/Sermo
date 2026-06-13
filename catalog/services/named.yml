@@ -1,6 +1,7 @@
 kind: daemon
 name: named
 display_name: "BIND (named)"
+category: network
 service: named
 apps: [named]
 

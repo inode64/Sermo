@@ -1,6 +1,7 @@
 kind: daemon
 name: numad
 display_name: "NUMA Daemon"
+category: hardware
 description: "Gestor NUMA"
 service: numad
 apps: [numad]

@@ -1,6 +1,7 @@
 kind: app
 name: automount
 display_name: "Automount"
+category: system
 variables:
   binary: "/usr/bin/automount"
 preflight:

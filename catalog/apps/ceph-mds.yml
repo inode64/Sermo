@@ -1,6 +1,7 @@
 kind: app
 name: ceph-mds
 display_name: "Ceph Metadata Server"
+category: storage
 description: "Ceph CephFS metadata server daemon"
 variables:
   binary: "/usr/bin/ceph-mds"

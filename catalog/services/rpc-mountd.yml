@@ -1,6 +1,7 @@
 kind: daemon
 name: rpc-mountd
 display_name: "NFS Mount Daemon"
+category: storage
 description: "RPC.mountd"
 service: rpc-mountd
 apps: [rpc-mountd]

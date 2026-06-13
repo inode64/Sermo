@@ -1,6 +1,7 @@
 kind: daemon
 name: proftpd
 display_name: "ProFTPD"
+category: network
 service: proftpd
 apps: [proftpd]
 

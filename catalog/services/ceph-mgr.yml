@@ -1,6 +1,7 @@
 kind: daemon
 name: ceph-mgr
 display_name: "Ceph Manager"
+category: storage
 description: "Ceph manager daemon: hosts the cluster's management modules (dashboard, prometheus, balancer, …)."
 
 # Managers run as a systemd instance keyed by the mgr id, which is the short
