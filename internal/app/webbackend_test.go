@@ -114,6 +114,37 @@ func TestWebBackendViewInterval(t *testing.T) {
 	}
 }
 
+func TestWebBackendLastEventIndexes(t *testing.T) {
+	events := NewEventLog(10)
+	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
+	add := func(at time.Time, e Event) {
+		events.now = func() time.Time { return at }
+		events.Add(e)
+	}
+	add(t0, Event{Service: "web", Kind: "action", Action: "start", Status: "ok"})
+	add(t0.Add(time.Minute), Event{Service: "db", Kind: "action", Action: "restart", Status: "ok"})
+	add(t0.Add(2*time.Minute), Event{Watch: "disk", Kind: "notify", Message: "sent"})
+	add(t0.Add(3*time.Minute), Event{Watch: "disk", Kind: "error", Message: "ignored"})
+	add(t0.Add(4*time.Minute), Event{Service: "web", Kind: "action", Action: "restart", Status: "blocked"})
+	add(t0.Add(5*time.Minute), Event{Watch: "disk", Kind: "hook-failed", Message: "failed"})
+
+	b := &WebBackend{events: events}
+
+	services := b.lastServiceEvents()
+	if got := services["web"]; got == nil || got.Action != "restart" || got.Status != "blocked" {
+		t.Fatalf("web last event = %+v, want restart/blocked", got)
+	}
+	if got := services["db"]; got == nil || got.Action != "restart" || got.Status != "ok" {
+		t.Fatalf("db last event = %+v, want restart/ok", got)
+	}
+
+	activities := b.lastWatchActivities()
+	wantAt := t0.Add(5 * time.Minute).Format(time.RFC3339)
+	if got := activities["disk"]; got.Kind != "hook-failed" || got.At != wantAt {
+		t.Fatalf("disk activity = %+v, want hook-failed at %s", got, wantAt)
+	}
+}
+
 func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{

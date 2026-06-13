@@ -299,6 +299,10 @@ func checkCatalog(tree map[string]any) ([]string, map[string]string) {
 }
 
 func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Service {
+	return b.viewWithEvent(ctx, name, e, b.lastServiceEvent(name))
+}
+
+func (b *WebBackend) viewWithEvent(ctx context.Context, name string, e *webEntry, lastEvent *web.Event) web.Service {
 	svc := web.Service{
 		Name:        name,
 		DisplayName: e.displayName,
@@ -313,9 +317,7 @@ func (b *WebBackend) view(ctx context.Context, name string, e *webEntry) web.Ser
 	if e.policyCooldown > 0 {
 		svc.PolicyCooldown = formatInterval(e.policyCooldown)
 	}
-	if ev := b.lastServiceEvent(name); ev != nil {
-		svc.LastEvent = ev
-	}
+	svc.LastEvent = lastEvent
 	if e.disabled {
 		svc.Status = "disabled"
 		svc.State = ServiceState(false, false, svc.Status, "")
@@ -448,8 +450,9 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, moni
 // Services returns the web view of every configured service.
 func (b *WebBackend) Services(ctx context.Context) []web.Service {
 	out := make([]web.Service, 0, len(b.order))
+	lastEvents := b.lastServiceEvents()
 	for _, name := range b.order {
-		out = append(out, b.view(ctx, name, b.entries[name]))
+		out = append(out, b.viewWithEvent(ctx, name, b.entries[name], lastEvents[name]))
 	}
 	return out
 }
@@ -460,6 +463,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		return nil
 	}
 	out := make([]web.Watch, 0, len(b.watchOrder))
+	lastActivities := b.lastWatchActivities()
 	for _, name := range b.watchOrder {
 		w := b.watches[name]
 		if w == nil {
@@ -514,18 +518,56 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 				ww.Monitored, ww.MonitorSource, ww.MonitorChangedAt = active, source, changed
 			}
 		}
-		// Compute last activity for this watch from the event log (best effort)
-		if b.events != nil {
-			for _, e := range b.events.Recent("", 200) { // small scan is fine for UI
-				if e.Watch == name && isWatchActivityKind(e.Kind) {
-					ww.LastActivity = e.Time.Format(time.RFC3339)
-					ww.LastActivityKind = e.Kind
-					break
-				}
-			}
+		// Compute last activity for this watch from the request-local event index.
+		if activity, ok := lastActivities[name]; ok {
+			ww.LastActivity = activity.At
+			ww.LastActivityKind = activity.Kind
 		}
 		ww.State = WatchState(ww.Enabled, ww.Monitored, watchViewFailed(ww))
 		out = append(out, ww)
+	}
+	return out
+}
+
+type watchActivity struct {
+	At   string
+	Kind string
+}
+
+func (b *WebBackend) lastServiceEvents() map[string]*web.Event {
+	if b.events == nil {
+		return nil
+	}
+	out := map[string]*web.Event{}
+	for _, e := range b.events.Recent("", 0) {
+		if e.Service == "" {
+			continue
+		}
+		if _, seen := out[e.Service]; seen {
+			continue
+		}
+		ev := loggedEventToWeb(e)
+		out[e.Service] = &ev
+	}
+	return out
+}
+
+func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
+	if b.events == nil {
+		return nil
+	}
+	out := map[string]watchActivity{}
+	for _, e := range b.events.Recent("", 200) {
+		if e.Watch == "" || !isWatchActivityKind(e.Kind) {
+			continue
+		}
+		if _, seen := out[e.Watch]; seen {
+			continue
+		}
+		out[e.Watch] = watchActivity{
+			At:   e.Time.Format(time.RFC3339),
+			Kind: e.Kind,
+		}
 	}
 	return out
 }
