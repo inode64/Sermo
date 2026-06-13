@@ -87,3 +87,22 @@ func TestEventLogPrune(t *testing.T) {
 		t.Fatal("not empty after clear all")
 	}
 }
+
+func TestEventLogConcurrentAddRecent(t *testing.T) {
+	l := NewEventLog(64)
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 5000; i++ {
+			l.Add(Event{Service: "a", Kind: "action", Message: "x"})
+		}
+		close(done)
+	}()
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			_ = l.Recent("", 10)
+		}
+	}
+}
