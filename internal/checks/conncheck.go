@@ -61,6 +61,19 @@ func versionIdentity(res conn.Result) string {
 	return res.Extra["greeting"]
 }
 
+func trimConnResult(res conn.Result) conn.Result {
+	res.Version = TrimOutput(res.Version)
+	if len(res.Extra) == 0 {
+		return res
+	}
+	extra := make(map[string]string, len(res.Extra))
+	for k, v := range res.Extra {
+		extra[k] = TrimOutput(v)
+	}
+	res.Extra = extra
+	return res
+}
+
 func (c connCheck) Run(ctx context.Context) Result {
 	start := time.Now()
 	ctx, cancel := c.withTimeout(ctx)
@@ -82,7 +95,7 @@ func (c connCheck) Run(ctx context.Context) Result {
 		t0 := time.Now()
 		r, e := probe(ctx, cfg)
 		if e == nil {
-			res, elapsed = r, time.Since(t0)
+			res, elapsed = trimConnResult(r), time.Since(t0)
 		}
 		return e
 	})
