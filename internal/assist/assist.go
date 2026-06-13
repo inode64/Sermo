@@ -14,13 +14,16 @@ type Iface struct {
 	Loopback bool
 }
 
-// DaemonCandidate is a catalog daemon detected on the host that the service
-// assistant can enable, with the facts the wizard shows and confirms.
+// DaemonCandidate is a service target detected on the host that the service
+// assistant can enable, with the facts the wizard shows and confirms. Catalog
+// candidates write `uses: Name`; Generic candidates are active backend units not
+// backed by a catalog daemon and write a self-contained service check.
 type DaemonCandidate struct {
-	Name          string   // catalog daemon name, used as `uses:`
+	Name          string   // service name to write; catalog daemon name unless Generic
 	Title         string   // display name
 	Unit          string   // resolved init unit for the active backend
 	Status        string   // backend status for Unit (active/inactive/failed/unknown)
+	Generic       bool     // active backend unit without a catalog daemon
 	Port          int      // catalog default port (0 = none)
 	ConfigPaths   []string // config file locations that exist on the host
 	UnitPresent   bool     // the init unit exists on the active backend

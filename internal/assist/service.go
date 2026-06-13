@@ -31,15 +31,10 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if env.Backend != "" {
 		p.printf("Detected init system: %s\n\n", env.Backend)
 	}
-	if len(cands) == 0 {
-		return Result{}, fmt.Errorf("no catalog services were detected as installed on this host")
+	activeCatalog, generic := splitServiceCandidates(cands)
+	if len(activeCatalog) == 0 && len(generic) == 0 {
+		return Result{}, fmt.Errorf("no active services were detected on this host")
 	}
-
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		labels[i] = serviceLabel(c)
-	}
-	sel := p.MultiChoose("Which services do you want to monitor?", labels)
 
 	// Per-service properties first (these legitimately differ per service: port,
 	// pidfile/exe). The shared monitor-state + interval come after, batched.
@@ -47,34 +42,52 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		name string
 		body map[string]any
 	}
-	var items []pending
-	for _, idx := range sel {
-		name, body := askServiceProps(p, env, cands[idx])
-		if name != "" {
-			items = append(items, pending{name, body})
-		}
-	}
-	if len(items) == 0 {
-		return Result{}, nil
-	}
-
-	// Batch: when more than one service was selected, offer to answer the shared
-	// monitoring questions once and apply them to all (docs/wizards.md step 4).
-	var shared *Monitoring
-	if len(items) > 1 && p.Confirm("Apply the same monitor state and interval to all selected services?", true) {
-		m := p.AskMonitoring("all selected services")
-		shared = &m
-	}
-
 	services := map[string]any{}
-	for _, it := range items {
-		m := shared
-		if m == nil {
-			mm := p.AskMonitoring(it.name)
-			m = &mm
+	addGroup := func(cands []DaemonCandidate, question string) {
+		if len(cands) == 0 {
+			return
 		}
-		m.apply(it.body)
-		services[it.name] = it.body
+		selected := chooseServices(p, question, cands)
+		var items []pending
+		for _, c := range selected {
+			name, body := askServiceProps(p, env, c)
+			if name != "" {
+				items = append(items, pending{name, body})
+			}
+		}
+		if len(items) == 0 {
+			return
+		}
+
+		// Batch: when more than one service was selected, offer to answer the shared
+		// monitoring questions once and apply them to all (docs/wizards.md step 4).
+		var shared *Monitoring
+		if len(items) > 1 && p.Confirm("Apply the same monitor state and interval to all selected services?", true) {
+			m := p.AskMonitoring("all selected services")
+			shared = &m
+		}
+
+		for _, it := range items {
+			m := shared
+			if m == nil {
+				mm := p.AskMonitoring(it.name)
+				m = &mm
+			}
+			m.apply(it.body)
+			services[it.name] = it.body
+		}
+	}
+
+	if len(activeCatalog) > 0 {
+		addGroup(activeCatalog, "Which active catalog services do you want to monitor?")
+	} else {
+		p.printf("No active catalog services were detected.\n\n")
+	}
+	if len(generic) > 0 && p.Confirm("Review active services without catalog profiles?", false) {
+		addGroup(generic, "Which uncataloged active services do you want to monitor?")
+	}
+	if len(services) == 0 {
+		return Result{}, nil
 	}
 
 	names := make([]string, 0, len(services))
@@ -88,6 +101,37 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}, nil
 }
 
+func splitServiceCandidates(cands []DaemonCandidate) (activeCatalog, generic []DaemonCandidate) {
+	for _, c := range cands {
+		if !serviceCandidateActive(c) {
+			continue
+		}
+		if c.Generic {
+			generic = append(generic, c)
+			continue
+		}
+		activeCatalog = append(activeCatalog, c)
+	}
+	return activeCatalog, generic
+}
+
+func serviceCandidateActive(c DaemonCandidate) bool {
+	return c.Status == "" || c.Status == "active"
+}
+
+func chooseServices(p *Prompt, question string, cands []DaemonCandidate) []DaemonCandidate {
+	labels := make([]string, len(cands))
+	for i, c := range cands {
+		labels[i] = serviceLabel(c)
+	}
+	sel := p.MultiChoose(question, labels)
+	out := make([]DaemonCandidate, 0, len(sel))
+	for _, idx := range sel {
+		out = append(out, cands[idx])
+	}
+	return out
+}
+
 // askServiceProps asks the per-service properties for one detected candidate —
 // optional port override and the PID source — returning the service name (= the
 // candidate name; the wizard never invents names) and its body, or "" to skip a
@@ -99,7 +143,17 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]
 		p.printf("  %q is already configured; skipping.\n", c.Name)
 		return "", nil
 	}
-	body := map[string]any{"uses": c.Name, "enabled": true}
+	body := map[string]any{"enabled": true}
+	if c.Generic {
+		unit := c.Unit
+		if unit == "" {
+			unit = c.Name
+		}
+		body["service"] = map[string]any{"name": unit}
+		body["checks"] = map[string]any{"service": map[string]any{"type": "service", "expect": "active"}}
+	} else {
+		body["uses"] = c.Name
+	}
 	if c.Port > 0 {
 		if n := p.AskInt(fmt.Sprintf("Port for %s?", c.Name), c.Port); n > 0 && n != c.Port {
 			body["variables"] = map[string]any{"port": n}
@@ -140,6 +194,9 @@ func serviceLabel(c DaemonCandidate) string {
 	}
 	if c.Status != "" {
 		parts = append(parts, "status: "+c.Status)
+	}
+	if c.Generic {
+		parts = append(parts, "not in catalog")
 	}
 	if c.Port > 0 {
 		port := fmt.Sprintf("port %d", c.Port)

@@ -12,24 +12,30 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/assist"
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 
 	"github.com/goccy/go-yaml"
 )
 
-// listInstalledDaemons returns the catalog service daemons whose init unit exists
-// on the active backend, with each one's resolved unit, default port (and whether
-// it is listening) and any declared config files that exist — the facts the
-// service wizard shows. Forcing trust=false makes the resolver verify unit
-// existence (systemd `systemctl cat`, OpenRC the init script), so a daemon is
-// offered only when it is actually installed.
-func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servicemgr.Backend) ([]assist.DaemonCandidate, error) {
+// listInstalledDaemons returns active service targets for the wizard: catalog
+// daemons whose init unit exists, plus active backend units not backed by the
+// catalog. Catalog candidates keep their resolved unit/status/default port and
+// config-file hints; generic candidates write self-contained service checks.
+func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]assist.DaemonCandidate, error) {
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
 	resolver := servicemgr.NewUnitResolver()
+	resolver.Runner = runner
+	resolver.Timeout = timeout
 	manager, _ := servicemgr.NewManager(backend)
+	catalogUnits := map[string]struct{}{}
 	var out []assist.DaemonCandidate
 	for _, name := range cfg.DaemonsInCategory(config.CategoryService) {
 		resolved, errs := cfg.ResolveCatalog(config.CategoryService, name)
@@ -37,10 +43,12 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			continue
 		}
 		candidates, _ := config.ServiceCandidates(resolved.Tree, string(backend), name)
+		addWizardCatalogUnits(catalogUnits, backend, candidates...)
 		unit, status, err := resolveWizardDaemonUnit(ctx, resolver, manager, backend, candidates)
 		if err != nil {
 			continue // not installed on this backend
 		}
+		addWizardCatalogUnits(catalogUnits, backend, unit)
 		c := assist.DaemonCandidate{
 			Name:        name,
 			Title:       daemonTitle(resolved.Tree, name),
@@ -51,15 +59,166 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			ConfigPaths: existingConfigFiles(resolved.Tree),
 		}
 		// Best-effort PID source for the wizard's pidfile/command_match question.
-		proc := servicemgr.DetectProcInfo(ctx, nil, nil, backend, unit)
+		proc := servicemgr.DetectProcInfo(ctx, runner, nil, backend, unit)
 		c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
 		if c.Port > 0 {
 			c.PortListening = portListening(c.Port)
 		}
 		out = append(out, c)
 	}
+
+	if units, err := listActiveBackendUnits(ctx, backend, runner, timeout); err == nil {
+		for _, unit := range units {
+			if wizardUnitKnown(catalogUnits, backend, unit) {
+				continue
+			}
+			name := wizardServiceNameForUnit(backend, unit)
+			if name == "" {
+				continue
+			}
+			c := assist.DaemonCandidate{
+				Name:        name,
+				Title:       name,
+				Unit:        unit,
+				Status:      string(servicemgr.StatusActive),
+				Generic:     true,
+				UnitPresent: true,
+			}
+			proc := servicemgr.DetectProcInfo(ctx, runner, nil, backend, unit)
+			c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
+			out = append(out, c)
+			addWizardCatalogUnits(catalogUnits, backend, unit)
+		}
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+func addWizardCatalogUnits(keys map[string]struct{}, backend servicemgr.Backend, units ...string) {
+	for _, unit := range units {
+		unit = strings.TrimSpace(unit)
+		if unit == "" {
+			continue
+		}
+		keys[unit] = struct{}{}
+		if backend == servicemgr.BackendSystemd {
+			if !strings.Contains(unit, ".") {
+				keys[unit+".service"] = struct{}{}
+			}
+			if name := strings.TrimSuffix(unit, ".service"); name != unit {
+				keys[name] = struct{}{}
+			}
+		}
+	}
+}
+
+func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit string) bool {
+	unit = strings.TrimSpace(unit)
+	if unit == "" {
+		return true
+	}
+	if _, ok := keys[unit]; ok {
+		return true
+	}
+	if backend == servicemgr.BackendSystemd {
+		if strings.HasSuffix(unit, ".service") {
+			_, ok := keys[strings.TrimSuffix(unit, ".service")]
+			return ok
+		}
+		_, ok := keys[unit+".service"]
+		return ok
+	}
+	return false
+}
+
+func listActiveBackendUnits(ctx context.Context, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	switch backend {
+	case servicemgr.BackendSystemd:
+		res, err := execx.Run(ctx, runner, timeout, "systemctl", "list-units", "--type=service", "--state=active", "--no-legend", "--no-pager")
+		if err != nil && strings.TrimSpace(res.Stdout) == "" {
+			return nil, err
+		}
+		return parseSystemdActiveUnits(res.Stdout), nil
+	case servicemgr.BackendOpenRC:
+		res, err := execx.Run(ctx, runner, timeout, "rc-status", "--all")
+		if err != nil && strings.TrimSpace(res.Stdout) == "" {
+			return nil, err
+		}
+		return parseOpenRCActiveUnits(res.Stdout), nil
+	default:
+		return nil, fmt.Errorf("no active-unit listing for backend %q", backend)
+	}
+}
+
+func parseSystemdActiveUnits(stdout string) []string {
+	var out []string
+	sc := bufio.NewScanner(strings.NewReader(stdout))
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) == 0 || fields[0] == "UNIT" {
+			continue
+		}
+		if strings.HasSuffix(fields[0], ".service") {
+			out = append(out, fields[0])
+		}
+	}
+	return slices.Compact(out)
+}
+
+func parseOpenRCActiveUnits(stdout string) []string {
+	var out []string
+	inServiceRunlevel := false
+	sc := bufio.NewScanner(strings.NewReader(stdout))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		lower := strings.ToLower(line)
+		switch {
+		case strings.HasPrefix(lower, "runlevel:"):
+			name := strings.TrimSpace(strings.TrimPrefix(lower, "runlevel:"))
+			inServiceRunlevel = openRCWizardRunlevel(name)
+			continue
+		case strings.HasPrefix(lower, "dynamic runlevel:"):
+			name := strings.TrimSpace(strings.TrimPrefix(lower, "dynamic runlevel:"))
+			inServiceRunlevel = openRCWizardRunlevel(name)
+			continue
+		}
+		if !inServiceRunlevel || !strings.Contains(lower, "started") {
+			continue
+		}
+		if strings.Contains(lower, "not started") || strings.Contains(lower, "stopped") || strings.Contains(lower, "crashed") {
+			continue
+		}
+		beforeState := line
+		if i := strings.Index(beforeState, "["); i >= 0 {
+			beforeState = beforeState[:i]
+		}
+		fields := strings.Fields(beforeState)
+		if len(fields) == 0 {
+			continue
+		}
+		out = append(out, fields[0])
+	}
+	return slices.Compact(out)
+}
+
+func openRCWizardRunlevel(name string) bool {
+	switch name {
+	case "default", "needed/wanted", "manual", "hotplugged":
+		return true
+	default:
+		return false
+	}
+}
+
+func wizardServiceNameForUnit(backend servicemgr.Backend, unit string) string {
+	name := strings.TrimSpace(unit)
+	if backend == servicemgr.BackendSystemd {
+		name = strings.TrimSuffix(name, ".service")
+	}
+	return name
 }
 
 func resolveWizardDaemonUnit(ctx context.Context, resolver servicemgr.UnitResolver, manager servicemgr.Manager, backend servicemgr.Backend, candidates []string) (string, servicemgr.Status, error) {

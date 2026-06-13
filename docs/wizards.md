@@ -15,9 +15,12 @@ and the invariants below, and update this file in the same change.
 1. **Wizard type.** `sermoctl wizard <type>` runs that assistant; with no type,
    the wizard lists them and asks (`selectAssistant`). Never require the type.
 2. **Select detected targets.** Each assistant detects what is monitorable
-   (services → installed catalog daemons; `volume` → mounts; `net`/`uplink` →
+   (services → active installed catalog daemons first, then optional active
+   units with no catalog profile; `volume` → mounts; `net`/`uplink` →
    interfaces) and offers them with `Prompt.MultiChoose`. **Never ask the
-   operator to type a name** — the target's identity comes from detection.
+   operator to type a name** — the target's identity comes from detection. The
+   service assistant completes the catalog group before asking about uncataloged
+   units.
 3. **Per-service properties (services only).** For each selected service, ask
    the properties that legitimately differ per service: a port override, and the
    **PID source**. The PID question is prefilled from the init definition (see
@@ -85,7 +88,8 @@ the service's init definition, best-effort (unknown fields come back `""`):
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`; the service assistant prefills the
-PID question from them.
+PID question from them. Catalog services write `uses:`; uncataloged active units
+write `service.name` plus a basic `checks.service`.
 
 ## Adding a new wizard
 

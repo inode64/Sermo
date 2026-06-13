@@ -50,6 +50,57 @@ func TestServiceAssistant(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{
+			{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: "active", Port: 80},
+			{Name: "redis", Title: "Redis", Unit: "redis", Status: "inactive"},
+			{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"},
+		}, nil
+	}}
+	script := strings.Join([]string{
+		"1", // choose nginx from the active catalog list; redis is inactive
+		"",  // keep catalog port
+		"",  // no pidfile for nginx
+		"1", // monitor nginx
+		"",  // interval inherit
+		"y", // review active units without catalog profiles
+		"1", // choose customd
+		"",  // accept detected pidfile
+		"1", // monitor customd
+		"",  // interval inherit
+	}, "\n") + "\n"
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if strings.Contains(out.String(), "Redis") {
+		t.Fatalf("inactive catalog service was offered:\n%s", out.String())
+	}
+	nginx := res.Services["nginx"].(map[string]any)
+	if nginx["uses"] != "nginx" {
+		t.Fatalf("nginx uses = %v, want nginx", nginx["uses"])
+	}
+	custom := res.Services["customd"].(map[string]any)
+	if _, ok := custom["uses"]; ok {
+		t.Fatalf("generic service must not use catalog profile: %v", custom)
+	}
+	service := custom["service"].(map[string]any)
+	if service["name"] != "customd" {
+		t.Fatalf("generic service.name = %v, want customd", service["name"])
+	}
+	checks := custom["checks"].(map[string]any)
+	serviceCheck := checks["service"].(map[string]any)
+	if serviceCheck["type"] != "service" || serviceCheck["expect"] != "active" {
+		t.Fatalf("generic service check = %v, want service/active", serviceCheck)
+	}
+	if custom["pidfile"] != "/run/customd.pid" {
+		t.Fatalf("generic pidfile = %v, want /run/customd.pid", custom["pidfile"])
+	}
+}
+
 func TestServiceAssistantDetectedPidfile(t *testing.T) {
 	// A candidate whose init definition yielded a pidfile path: it is prefilled
 	// and written as `pidfile:` when accepted (blank keeps the default).

@@ -62,6 +62,39 @@ func TestResolveWizardDaemonUnitPrefersActiveCandidate(t *testing.T) {
 	}
 }
 
+func TestParseSystemdActiveUnits(t *testing.T) {
+	const stdout = `nginx.service loaded active running A high performance web server
+sshd.service loaded active running OpenSSH server daemon
+dbus.socket loaded active running D-Bus System Message Bus Socket
+`
+	got := parseSystemdActiveUnits(stdout)
+	want := []string{"nginx.service", "sshd.service"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("parseSystemdActiveUnits() = %v, want %v", got, want)
+	}
+}
+
+func TestParseOpenRCActiveUnits(t *testing.T) {
+	const stdout = `Runlevel: sysinit
+ dmesg                                                             [  started  ]
+ sysfs                                                             [  started  ]
+Runlevel: boot
+ localmount                                                        [  started  ]
+Runlevel: default
+ bluetooth                                                         [  started  ]
+ mqtt-exporter                                                     [  crashed  ]
+Dynamic Runlevel: needed/wanted
+ rpcbind                                                           [  started  ]
+Dynamic Runlevel: manual
+ zigbee2mqtt                                                       [  started  ]
+`
+	got := parseOpenRCActiveUnits(stdout)
+	want := []string{"bluetooth", "rpcbind", "zigbee2mqtt"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("parseOpenRCActiveUnits() = %v, want %v", got, want)
+	}
+}
+
 type wizardProbe struct {
 	paths map[string]bool
 }
