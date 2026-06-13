@@ -123,6 +123,31 @@ func TestParseArgsCatalog(t *testing.T) {
 	}
 }
 
+func TestParseArgsConfig(t *testing.T) {
+	// Both --config and --config= forms.
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"run", "--config", "/etc/sermo/sermo.yml"}, "/etc/sermo/sermo.yml"},
+		{[]string{"run", "--config=/tmp/c.yml"}, "/tmp/c.yml"},
+		{[]string{"run", "--config=./local.yml", "-v"}, "./local.yml"},
+	} {
+		parsed, err := parseArgs(c.args)
+		if err != nil {
+			t.Fatalf("parseArgs(%v): %v", c.args, err)
+		}
+		if parsed.globalPath != c.want {
+			t.Errorf("globalPath = %q, want %q for %v", parsed.globalPath, c.want, c.args)
+		}
+	}
+
+	// Missing value errors (same helper path as catalog).
+	if _, err := parseArgs([]string{"run", "--config"}); err == nil {
+		t.Fatal("parseArgs(--config) without value: want error, got nil")
+	}
+}
+
 func TestWebListenAddr(t *testing.T) {
 	cases := []struct {
 		name       string
