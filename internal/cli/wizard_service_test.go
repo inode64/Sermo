@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"sermo/internal/assist"
 	"sermo/internal/servicemgr"
 )
 
@@ -108,6 +109,24 @@ Dynamic Runlevel: manual
 	want := []string{"sshd", "cron"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("parseOpenRCActiveUnits() = %v, want %v (duplicates not collapsed)", got, want)
+	}
+}
+
+func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
+	cands := []assist.DaemonCandidate{
+		{Name: "mariadb", Unit: "mysql"},
+		{Name: "mysql", Unit: "mysql"},
+		{Name: "sshd", Unit: "sshd"},
+		{Name: "customd", Unit: "mysql", Generic: true},
+	}
+	got := dedupeWizardCatalogCandidates(cands, servicemgr.BackendOpenRC)
+	var names []string
+	for _, c := range got {
+		names = append(names, c.Name)
+	}
+	want := []string{"mariadb", "sshd", "customd"}
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Fatalf("dedupeWizardCatalogCandidates() = %v, want %v", names, want)
 	}
 }
 

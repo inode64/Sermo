@@ -158,6 +158,9 @@ watches:
   sda-busy:
     check: { type: diskio, device: sdz, util_pct: { op: ">=", value: 90 } }
     then: { hook: { command: [/bin/true] } }
+  disabled-mem-stall:
+    monitor: disabled
+    check: { type: pressure, resource: memory, some_avg60: { op: ">", value: 10 } }
   mem-stall:
     check: { type: pressure, resource: memory, some_avg60: { op: ">", value: 10 } }
     then: { hook: { command: [/bin/true] } }
@@ -180,6 +183,9 @@ watches:
 		if !has(r, LevelWarning, want) {
 			t.Fatalf("missing warning %q in %+v", want, r.Findings)
 		}
+	}
+	if has(r, LevelWarning, "watch disabled-mem-stall") {
+		t.Fatalf("disabled watch should not be diagnosed: %+v", r.Findings)
 	}
 
 	// With every resource present there are no warnings.

@@ -69,6 +69,7 @@ checks:
   # blocked by the engine automatically and needs no check or guard here.
   mariabackup:
     type: process
+    optional: true
     exe: /usr/bin/mariabackup
     user: "${user}"
     state: running

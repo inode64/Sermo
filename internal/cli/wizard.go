@@ -200,13 +200,34 @@ func listIfaces() ([]assist.Iface, error) {
 	}
 	out := make([]assist.Iface, 0, len(ifs))
 	for _, in := range ifs {
+		addrs, _ := in.Addrs()
 		out = append(out, assist.Iface{
-			Name:     in.Name,
-			Up:       in.Flags&net.FlagUp != 0 && in.Flags&net.FlagRunning != 0,
-			Loopback: in.Flags&net.FlagLoopback != 0,
+			Name:       in.Name,
+			Up:         in.Flags&net.FlagUp != 0 && in.Flags&net.FlagRunning != 0,
+			Loopback:   in.Flags&net.FlagLoopback != 0,
+			HasAddress: ifaceHasUsableAddress(addrs),
 		})
 	}
 	return out, nil
+}
+
+func ifaceHasUsableAddress(addrs []net.Addr) bool {
+	for _, addr := range addrs {
+		var ip net.IP
+		switch v := addr.(type) {
+		case *net.IPNet:
+			ip = v.IP
+		case *net.IPAddr:
+			ip = v.IP
+		}
+		if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+		if ip.IsGlobalUnicast() {
+			return true
+		}
+	}
+	return false
 }
 
 type wizardMergeResult struct {

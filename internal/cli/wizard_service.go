@@ -66,6 +66,7 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 		}
 		out = append(out, c)
 	}
+	out = dedupeWizardCatalogCandidates(out, backend)
 
 	if units, err := listActiveBackendUnits(ctx, backend, runner, timeout); err == nil {
 		for _, unit := range units {
@@ -92,6 +93,23 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+func dedupeWizardCatalogCandidates(cands []assist.DaemonCandidate, backend servicemgr.Backend) []assist.DaemonCandidate {
+	seen := map[string]struct{}{}
+	out := cands[:0]
+	for _, c := range cands {
+		if c.Generic || c.Unit == "" {
+			out = append(out, c)
+			continue
+		}
+		if wizardUnitKnown(seen, backend, c.Unit) {
+			continue
+		}
+		addWizardCatalogUnits(seen, backend, c.Unit)
+		out = append(out, c)
+	}
+	return out
 }
 
 func addWizardCatalogUnits(keys map[string]struct{}, backend servicemgr.Backend, units ...string) {

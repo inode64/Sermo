@@ -17,7 +17,7 @@ pidfile: /run/dhcp/dhcpd.pid
 
 checks:
   service: { type: service, expect: active }
-  port: { type: dhcp, port: "${port}" }
+  port: { type: dhcp, optional: true, port: "${port}" }
 rules:
   block-restart-if-config-invalid:
     type: guard

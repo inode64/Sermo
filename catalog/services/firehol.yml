@@ -6,7 +6,7 @@ description: "Firewall ruleset applied through FireHOL."
 service:
   systemd: [firehol]
   openrc: [firehol]
-apps: [firehol]
+apps: [firehol, iptables]
 
 # FireHOL is a oneshot firewall loader: it applies rules and exits. The explicit
 # empty process map prevents derived process CPU/memory tracking in the WebUI.

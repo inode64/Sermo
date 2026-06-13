@@ -61,6 +61,7 @@ checks:
 
   tcp:
     type: tcp
+    optional: true
     host: "${host}"
     port: "${port}"
     timeout: 3s
@@ -71,6 +72,7 @@ checks:
   # the result data, assertable via expect:.
   fpm:
     type: fpm
+    optional: true
     host: "${host}"
     port: "${port}"
     status_path: "${status_path}"

@@ -109,17 +109,43 @@ func detectOpenRCProc(readFile func(string) ([]byte, error), unit string) ProcIn
 	text := blob.String()
 	vars := openRCAssignments(text, unit)
 	info := ProcInfo{
-		Pidfile: firstNonEmpty(vars["pidfile"], vars["PIDFILE"], suffixVar(vars, "_PIDFILE")),
-		Exe:     vars["command"],
+		Pidfile: cleanProcPath(firstNonEmpty(vars["pidfile"], vars["PIDFILE"], suffixVar(vars, "_PIDFILE"))),
+		Exe:     cleanProcPath(vars["command"]),
 		User:    serviceUser(firstNonEmpty(vars["command_user"], userFromArgs(vars["start_stop_daemon_args"]), userFromArgs(text))),
 	}
 	if info.Pidfile == "" {
-		info.Pidfile = firstResolvedArg(text, vars, openrcPidfileArg, openrcWritePIDArg)
+		info.Pidfile = cleanProcPath(firstResolvedArg(text, vars, openrcPidfileArg, openrcWritePIDArg))
 	}
 	if info.Exe == "" {
-		info.Exe = firstResolvedArg(text, vars, openrcExecArg, openrcCommandAfterDash)
+		info.Exe = cleanProcPath(firstResolvedArg(text, vars, openrcExecArg, openrcCommandAfterDash))
 	}
-	if command := vars["command"]; command != "" {
+	if command := cleanProcPath(vars["command"]); command != "" {
+		info.Cmd = commandRegex(command)
+	}
+	runtime := detectOpenRCRuntimeProc(readFile, unit)
+	if info.Pidfile == "" {
+		info.Pidfile = runtime.Pidfile
+	}
+	if info.Exe == "" {
+		info.Exe = runtime.Exe
+	}
+	if info.Cmd == "" {
+		info.Cmd = runtime.Cmd
+	}
+	return info
+}
+
+func detectOpenRCRuntimeProc(readFile func(string) ([]byte, error), unit string) ProcInfo {
+	data, err := readFile(filepath.Join("/run/openrc/daemons", unit, "001"))
+	if err != nil {
+		return ProcInfo{}
+	}
+	vars := openRCAssignments(string(data), unit)
+	info := ProcInfo{
+		Pidfile: cleanProcPath(vars["pidfile"]),
+		Exe:     cleanProcPath(firstNonEmpty(vars["exec"], vars["argv_0"])),
+	}
+	if command := cleanProcPath(vars["argv_0"]); command != "" {
 		info.Cmd = commandRegex(command)
 	}
 	return info
@@ -378,6 +404,13 @@ func serviceUser(s string) string {
 
 func commandRegex(command string) string {
 	return `(^|[[:space:]])` + regexp.QuoteMeta(command) + `($|[[:space:]])`
+}
+
+func cleanProcPath(s string) string {
+	if strings.HasPrefix(s, "/") {
+		return filepath.Clean(s)
+	}
+	return ""
 }
 
 func firstNonEmpty(values ...string) string {

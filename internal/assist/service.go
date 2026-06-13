@@ -2,6 +2,7 @@ package assist
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 )
@@ -159,12 +160,22 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]
 			body["variables"] = map[string]any{"port": n}
 		}
 	}
-	if pidfile := strings.TrimSpace(p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile)); pidfile != "" {
+	if pidfile := askServicePidfile(p, c); pidfile != "" {
 		body["pidfile"] = pidfile
 	} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
 		body["processes"] = map[string]any{"main": selector}
 	}
 	return c.Name, body
+}
+
+func askServicePidfile(p *Prompt, c DaemonCandidate) string {
+	for {
+		pidfile := strings.TrimSpace(p.Ask("Pidfile path for "+c.Name+" (blank to skip)", c.Pidfile))
+		if pidfile == "" || filepath.IsAbs(pidfile) {
+			return pidfile
+		}
+		p.printf("  pidfile must be an absolute path or blank\n")
+	}
 }
 
 func detectedProcessSelector(c DaemonCandidate) (map[string]any, string) {
