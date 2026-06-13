@@ -1,0 +1,64 @@
+kind: service
+name: nginx-site
+uses: nginx
+
+# EXAMPLE — adapt the values to your host, then keep it, or delete it.
+#
+# This shows the checks that belong on an INSTANCE rather than on the bundled
+# `nginx` daemon: the thresholds and the certificate path are deployment
+# specific, so baking them into daemons/nginx.yml would false-alarm on other
+# hosts. The service inherits everything from the nginx daemon (service / tcp /
+# http / live-endpoint cert checks + the config guard); the blocks below ADD to
+# it.
+
+variables:
+  # The TLS certificate this vhost serves on disk. Adjust to your site.
+  cert_file: /etc/letsencrypt/live/example.com/fullchain.pem
+
+checks:
+  # Certificate expiry read from the cert FILE (complements the daemon's
+  # live-endpoint cert check). Unlike the endpoint form, a missing/unreadable/
+  # unparseable file IS an alert here — which is exactly why the path must be
+  # correct and so lives on the instance, not the base daemon.
+  tls-cert-file:
+    type: cert
+    path: "${cert_file}"
+    expires_in_days: 21
+    on_issuer_change: true # alert on a CA change / re-issue between cycles
+
+rules:
+  # Sustained high resident memory across the whole nginx process tree (workers
+  # + helpers) → restart, to recover from a worker/module leak. The percentage
+  # is of total RAM; `within` counts this service's own cycles (5 of the last 15
+  # over the limit), so a brief spike does not trip it. Tune to the box.
+  restart-if-memory-high:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: ">"
+        value: 25%
+    within:
+      cycles: 15
+      min_matches: 5
+    then:
+      action: restart
+
+  # File-descriptor pressure: nginx under load can approach its ulimit and start
+  # dropping connections. This only alerts (no restart) — a heads-up to raise the
+  # limit. `fds` is the open-fd count summed over the process tree.
+  alert-if-fds-high:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: ">"
+        value: 50000
+    within:
+      cycles: 10
+      min_matches: 3
+    then:
+      action: alert
+      message: "${display_name} file descriptors high (>50k) — raise the ulimit"
