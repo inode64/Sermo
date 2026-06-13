@@ -40,26 +40,7 @@ func (c pidsCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, "pids: "+err.Error(), start)
 	}
-
-	values := map[string]float64{"count": float64(s.Threads)}
-	// used_pct/free need the limit; an unknown limit leaves them "unknown" so a
-	// predicate on them cannot hold (the level check is an AND).
-	var usedPct float64
-	if s.Max > 0 {
-		usedPct = float64(s.Threads) / float64(s.Max) * 100
-		values["used_pct"] = usedPct
-		values["free"] = float64(s.Max - min(s.Threads, s.Max))
-	}
-
-	ok := levelPredsHold(c.preds, values)
-
-	res := c.result(ok, fmt.Sprintf("pids %d/%d in use (%.1f%%)", s.Threads, s.Max, usedPct), start)
-	res.Data = map[string]any{"count": s.Threads, "max": s.Max, "used_pct": usedPct}
-	if s.Max > 0 {
-		res.Data["free"] = s.Max - min(s.Threads, s.Max)
-	}
-	res.Data["value"] = firstPredValue(c.preds, values, usedPct)
-	return res
+	return levelCountResult(c.base, c.preds, "pids", "in use", "count", s.Threads, s.Max, start)
 }
 
 // SamplePids returns one live PID-table observation (count/max) using the
