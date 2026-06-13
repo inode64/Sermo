@@ -381,13 +381,20 @@ func maxProcCPURate(prev, cur procCPUSample, hz float64) Reading {
 	return Reading{Percent: max, HasPercent: true, Ready: true}
 }
 
-// cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100 (section 12).
+// cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100 (section 12). A drop
+// in the cumulative tick count — a worker restarting, or a busy PID leaving the
+// matched set and being replaced by a fresh one starting at zero — clamps to 0
+// rather than underflowing the unsigned subtraction into a bogus huge rate (the
+// same guard ioRate and perProcCPURates apply).
 func cpuRate(prev, cur cpuSample, hz float64, ncpu int) Reading {
 	wall := cur.at.Sub(prev.at).Seconds()
 	if wall <= 0 || ncpu <= 0 || hz <= 0 {
 		return Reading{HasPercent: true, Ready: false}
 	}
-	cpuSeconds := float64(cur.ticks-prev.ticks) / hz
+	var cpuSeconds float64
+	if cur.ticks > prev.ticks {
+		cpuSeconds = float64(cur.ticks-prev.ticks) / hz
+	}
 	pct := cpuSeconds / (wall * float64(ncpu)) * 100
 	return Reading{Percent: pct, HasPercent: true, Ready: true}
 }

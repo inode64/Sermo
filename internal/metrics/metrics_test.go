@@ -215,6 +215,28 @@ func TestServiceCPURate(t *testing.T) {
 	}
 }
 
+func TestServiceCPURateClampsOnTickDrop(t *testing.T) {
+	// When the tree's cumulative CPU ticks drop between cycles (a worker restarts,
+	// or a busy PID is replaced by a fresh one), cur < prev. The rate must clamp
+	// to 0, not underflow the unsigned subtraction into a bogus huge percentage.
+	clock := time.Unix(0, 0)
+	reader := fakeReader{cpu: map[int]uint64{10: 500}, hz: 100, ncpu: 2}
+	c := New(reader)
+	c.Now = func() time.Time { return clock }
+	c.SampleService("svc", []int{10}) // baseline at 500 ticks
+
+	clock = clock.Add(time.Second)
+	reader.cpu[10] = 100 // dropped below the baseline
+	c.Reader = reader
+	snap := c.SampleService("svc", []int{10})
+	if got := snap["cpu"].Percent; got != 0 {
+		t.Fatalf("cpu%% on a tick drop = %v, want 0 (clamped)", got)
+	}
+	if !snap["cpu"].Ready {
+		t.Fatal("cpu should still be ready after two samples")
+	}
+}
+
 func TestSampleServiceCPUPerProcessAndAggregate(t *testing.T) {
 	// SampleServiceCPU is the web-only path: it returns per-process single-core
 	// rates plus the cpu_thread (max) and whole-machine aggregates, against the
