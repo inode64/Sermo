@@ -758,6 +758,8 @@ multi-metric (`net`, `icmp`, `swap`) watch shape below (a `metrics:` map, one
 hook per metric) and the multi-target (`file`, `process`) types are watch-only;
 the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
 works in a service's `checks:` (see [Checks](rules.md#checks)).
+The WebUI shows live readings only for cheap local probes; command/network-heavy
+checks rely on their normal watch events.
 
 ```yaml
 watches:

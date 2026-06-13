@@ -100,6 +100,10 @@ func defaultRouteSampler(family string) ([]DefaultRoute, error) {
 	return parseRouteTable(string(data)), nil
 }
 
+// SampleRoutes returns one live default-route observation using the default
+// procfs sampler.
+func SampleRoutes(family string) ([]DefaultRoute, error) { return defaultRouteSampler(family) }
+
 // rtfUp is the kernel RTF_UP route flag (the route is usable).
 const rtfUp = 0x1
 

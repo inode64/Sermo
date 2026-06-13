@@ -109,6 +109,21 @@ type Deps struct {
 	// PidsSampler reads the kernel PID table for checks and web watch summaries.
 	// Optional: nil reads /proc/loadavg and kernel.pid_max.
 	PidsSampler checks.PidsSamplerFunc
+	// DiskIOSampler reads block-device counters for diskio checks and web watch
+	// summaries. Optional: nil reads /proc/diskstats.
+	DiskIOSampler checks.DiskIOSamplerFunc
+	// SensorSampler reads hardware sensors for sensors checks and web watch
+	// summaries. Optional: nil reads hwmon.
+	SensorSampler checks.SensorSamplerFunc
+	// RaidSampler reads Linux md RAID state for raid checks and web watch
+	// summaries. Optional: nil reads /proc/mdstat.
+	RaidSampler checks.RaidSamplerFunc
+	// EdacSampler reads EDAC memory-error counters for edac checks and web watch
+	// summaries. Optional: nil reads sysfs.
+	EdacSampler checks.EdacSamplerFunc
+	// RouteSampler reads default routes for route checks and web watch summaries.
+	// Optional: nil reads /proc/net/route and /proc/net/ipv6_route.
+	RouteSampler checks.RouteSamplerFunc
 	// PressureSampler reads kernel PSI for pressure checks and web watch summaries.
 	// Optional: nil reads /proc/pressure/<resource>.
 	PressureSampler checks.PressureSamplerFunc

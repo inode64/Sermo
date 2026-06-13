@@ -41,24 +41,24 @@ func TestParseMdstat(t *testing.T) {
 	}
 }
 
-func raidWith(st raidStatus, preds ...levelPred) raidCheck {
-	return raidCheck{base: base{name: "r", timeout: time.Second}, sampler: func() (raidStatus, error) { return st, nil }, preds: preds}
+func raidWith(st RaidStatus, preds ...levelPred) raidCheck {
+	return raidCheck{base: base{name: "r", timeout: time.Second}, sampler: func() (RaidStatus, error) { return st, nil }, preds: preds}
 }
 
 func TestRaidCheck(t *testing.T) {
 	// Default: alert when any array is degraded.
-	if res := raidWith(raidStatus{Arrays: 2, Degraded: 1}).Run(context.Background()); !res.OK {
+	if res := raidWith(RaidStatus{Arrays: 2, Degraded: 1}).Run(context.Background()); !res.OK {
 		t.Error("a degraded array should alert by default")
 	}
-	if res := raidWith(raidStatus{Arrays: 2}).Run(context.Background()); res.OK {
+	if res := raidWith(RaidStatus{Arrays: 2}).Run(context.Background()); res.OK {
 		t.Error("a healthy array must not alert")
 	}
 	// No md arrays -> never alerts.
-	if res := raidWith(raidStatus{}).Run(context.Background()); res.OK {
+	if res := raidWith(RaidStatus{}).Run(context.Background()); res.OK {
 		t.Error("no arrays must not alert")
 	}
 	// Predicate override: alert while recovering.
-	res := raidWith(raidStatus{Arrays: 1, Recovering: 1}, levelPred{"recovering", ">", 0}).Run(context.Background())
+	res := raidWith(RaidStatus{Arrays: 1, Recovering: 1}, levelPred{"recovering", ">", 0}).Run(context.Background())
 	if !res.OK {
 		t.Error("recovering>0 predicate should alert")
 	}
