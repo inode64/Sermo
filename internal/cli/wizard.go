@@ -234,19 +234,6 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 // loader can merge them into global watch configuration without rewriting
 // sermo.yml on every generated watch.
 func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
-	orig, err := os.ReadFile(path)
-	if err != nil {
-		return wizardMergeResult{}, fmt.Errorf("read %s: %w", path, err)
-	}
-	var root map[string]any
-	if err := yaml.Unmarshal(orig, &root); err != nil {
-		return wizardMergeResult{}, fmt.Errorf("parse %s: %w", path, err)
-	}
-	if root == nil {
-		root = map[string]any{}
-	}
-
-	base := filepath.Dir(filepath.Clean(path))
 	relDir, targetDir := wizardTargetDir(path, wizard, fragment)
 
 	var files []string
@@ -260,24 +247,9 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		files = append(files, file)
 	}
 
-	changed, err := ensureIncludesPath(root, base, relDir, targetDir)
+	bak, err := ensureIncludeDir(path, relDir, targetDir)
 	if err != nil {
 		return wizardMergeResult{}, err
-	}
-
-	var bak string
-	if changed {
-		out, err := yaml.Marshal(root)
-		if err != nil {
-			return wizardMergeResult{}, fmt.Errorf("render %s: %w", path, err)
-		}
-		bak = path + ".bak"
-		if err := os.WriteFile(bak, orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return wizardMergeResult{}, fmt.Errorf("write backup %s: %w", bak, err)
-		}
-		if err := os.WriteFile(path, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return wizardMergeResult{}, fmt.Errorf("write %s: %w", path, err)
-		}
 	}
 
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
@@ -538,6 +510,45 @@ func watchConfigFileName(name string) string {
 		base = "watch"
 	}
 	return base + ".yml"
+}
+
+// ensureIncludeDir makes sure targetDir (whose path relative to the config dir
+// is relDir) is listed in paths.includes of the global config, rewriting the
+// file — keeping a .bak of the original — only when a change is needed. It
+// returns the backup path written, or "" when paths.includes already covered it.
+// Shared by the watch and service writers so the read/parse/backup dance lives
+// in one place.
+func ensureIncludeDir(globalPath, relDir, targetDir string) (string, error) {
+	orig, err := os.ReadFile(globalPath)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", globalPath, err)
+	}
+	var root map[string]any
+	if err := yaml.Unmarshal(orig, &root); err != nil {
+		return "", fmt.Errorf("parse %s: %w", globalPath, err)
+	}
+	if root == nil {
+		root = map[string]any{}
+	}
+	changed, err := ensureIncludesPath(root, filepath.Dir(filepath.Clean(globalPath)), relDir, targetDir)
+	if err != nil {
+		return "", err
+	}
+	if !changed {
+		return "", nil
+	}
+	out, err := yaml.Marshal(root)
+	if err != nil {
+		return "", fmt.Errorf("render %s: %w", globalPath, err)
+	}
+	bak := globalPath + ".bak"
+	if err := os.WriteFile(bak, orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+		return "", fmt.Errorf("write backup %s: %w", bak, err)
+	}
+	if err := os.WriteFile(globalPath, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+		return "", fmt.Errorf("write %s: %w", globalPath, err)
+	}
+	return bak, nil
 }
 
 func ensureIncludesPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
