@@ -241,35 +241,9 @@ func docsPreview(docs map[string]map[string]any) []any {
 // writeServiceFiles writes each service doc to its own file under the
 // apps includes dir, ensuring that dir is in paths.includes.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
-	orig, err := os.ReadFile(globalPath)
-	if err != nil {
-		return "", 0, fmt.Errorf("read %s: %w", globalPath, err)
-	}
-	var root map[string]any
-	if err := yaml.Unmarshal(orig, &root); err != nil {
-		return "", 0, fmt.Errorf("parse %s: %w", globalPath, err)
-	}
-	if root == nil {
-		root = map[string]any{}
-	}
-	base := filepath.Dir(filepath.Clean(globalPath))
-	targetDir := filepath.Join(base, servicesIncludeDir)
-
-	changed, err := ensureIncludesPath(root, base, servicesIncludeDir, targetDir)
-	if err != nil {
+	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
+	if _, err := ensureIncludeDir(globalPath, servicesIncludeDir, targetDir); err != nil {
 		return "", 0, err
-	}
-	if changed {
-		out, err := yaml.Marshal(root)
-		if err != nil {
-			return "", 0, fmt.Errorf("render %s: %w", globalPath, err)
-		}
-		if err := os.WriteFile(globalPath+".bak", orig, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return "", 0, fmt.Errorf("write backup: %w", err)
-		}
-		if err := os.WriteFile(globalPath, out, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return "", 0, fmt.Errorf("write %s: %w", globalPath, err)
-		}
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return "", 0, fmt.Errorf("create %s: %w", targetDir, err)
