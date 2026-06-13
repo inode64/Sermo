@@ -23,6 +23,21 @@ func TestHostMetricLoad1Saturation(t *testing.T) {
 	}
 }
 
+func TestByteUsage(t *testing.T) {
+	used, total, free, ok := byteUsage(metrics.Reading{Absolute: 3, Total: 8, HasTotal: true})
+	if !ok || used != 3 || total != 8 || free != 5 {
+		t.Fatalf("got used=%d total=%d free=%d ok=%v, want 3/8/5/true", used, total, free, ok)
+	}
+	// used above total must clamp free to 0, never underflow the unsigned subtraction.
+	if _, _, free, ok := byteUsage(metrics.Reading{Absolute: 10, Total: 8, HasTotal: true}); !ok || free != 0 {
+		t.Fatalf("over-capacity free = %d ok=%v, want 0/true", free, ok)
+	}
+	// No capacity (missing metric / no total) reports not-ok.
+	if _, _, _, ok := byteUsage(metrics.Reading{Absolute: 5}); ok {
+		t.Fatal("a reading with no total must report ok=false")
+	}
+}
+
 func TestHostMetricBytesUnitAndPassthrough(t *testing.T) {
 	mem := hostMetric("total_memory", metrics.Reading{
 		Absolute: 4, Percent: 50, Total: 8,
