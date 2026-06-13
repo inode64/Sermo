@@ -1105,94 +1105,60 @@ func parseArgs(args []string) (options, error) {
 			opts.series = true
 		case arg == "--long":
 			opts.long = true
-		case strings.HasPrefix(arg, "--since="):
-			d, err := time.ParseDuration(strings.TrimPrefix(arg, "--since="))
-			if err != nil {
-				return opts, fmt.Errorf("--since: %w", err)
-			}
-			opts.since = d
-		case arg == "--since":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--since requires a value")
-			}
-			d, err := time.ParseDuration(args[i])
-			if err != nil {
-				return opts, fmt.Errorf("--since: %w", err)
-			}
-			opts.since = d
-		case strings.HasPrefix(arg, "--backend="):
-			backend, err := servicemgr.ParseBackend(strings.TrimPrefix(arg, "--backend="))
+		case isFlag(arg, "--since"):
+			v, ni, err := flagValue(args, i, "--since")
 			if err != nil {
 				return opts, err
 			}
-			opts.backend = backend
-		case arg == "--backend":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--backend requires a value")
+			i = ni
+			if opts.since, err = time.ParseDuration(v); err != nil {
+				return opts, fmt.Errorf("--since: %w", err)
 			}
-			backend, err := servicemgr.ParseBackend(args[i])
+		case isFlag(arg, "--backend"):
+			v, ni, err := flagValue(args, i, "--backend")
 			if err != nil {
 				return opts, err
 			}
-			opts.backend = backend
-		case strings.HasPrefix(arg, "--timeout="):
-			timeout, err := time.ParseDuration(strings.TrimPrefix(arg, "--timeout="))
+			i = ni
+			if opts.backend, err = servicemgr.ParseBackend(v); err != nil {
+				return opts, err
+			}
+		case isFlag(arg, "--timeout"):
+			v, ni, err := flagValue(args, i, "--timeout")
 			if err != nil {
+				return opts, err
+			}
+			i = ni
+			if opts.timeout, err = time.ParseDuration(v); err != nil {
 				return opts, fmt.Errorf("--timeout: %w", err)
 			}
-			opts.timeout = timeout
-		case arg == "--timeout":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--timeout requires a value")
-			}
-			timeout, err := time.ParseDuration(args[i])
+		case isFlag(arg, "--config"):
+			v, ni, err := flagValue(args, i, "--config")
 			if err != nil {
-				return opts, fmt.Errorf("--timeout: %w", err)
+				return opts, err
 			}
-			opts.timeout = timeout
-		case strings.HasPrefix(arg, "--config="):
-			opts.config = strings.TrimPrefix(arg, "--config=")
-		case arg == "--config":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--config requires a value")
-			}
-			opts.config = args[i]
-		case strings.HasPrefix(arg, "--name="):
-			opts.name = strings.TrimPrefix(arg, "--name=")
-		case arg == "--name":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--name requires a value")
-			}
-			opts.name = args[i]
-		case strings.HasPrefix(arg, "--reason="):
-			opts.reason = strings.TrimPrefix(arg, "--reason=")
-		case arg == "--reason":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--reason requires a value")
-			}
-			opts.reason = args[i]
-		case strings.HasPrefix(arg, "--ttl="):
-			d, err := time.ParseDuration(strings.TrimPrefix(arg, "--ttl="))
+			i, opts.config = ni, v
+		case isFlag(arg, "--name"):
+			v, ni, err := flagValue(args, i, "--name")
 			if err != nil {
+				return opts, err
+			}
+			i, opts.name = ni, v
+		case isFlag(arg, "--reason"):
+			v, ni, err := flagValue(args, i, "--reason")
+			if err != nil {
+				return opts, err
+			}
+			i, opts.reason = ni, v
+		case isFlag(arg, "--ttl"):
+			v, ni, err := flagValue(args, i, "--ttl")
+			if err != nil {
+				return opts, err
+			}
+			i = ni
+			if opts.ttl, err = time.ParseDuration(v); err != nil {
 				return opts, fmt.Errorf("--ttl: %w", err)
 			}
-			opts.ttl = d
-		case arg == "--ttl":
-			i++
-			if i >= len(args) {
-				return opts, fmt.Errorf("--ttl requires a value")
-			}
-			d, err := time.ParseDuration(args[i])
-			if err != nil {
-				return opts, fmt.Errorf("--ttl: %w", err)
-			}
-			opts.ttl = d
 		case arg == "--":
 			// Everything after `--` is a literal command (the lock wrapper).
 			opts.commandArgs = append(opts.commandArgs, args[i+1:]...)
@@ -1206,6 +1172,26 @@ func parseArgs(args []string) (options, error) {
 		}
 	}
 	return opts, nil
+}
+
+// isFlag reports whether arg is the named value flag in either form: exactly
+// `--flag` (value follows as the next arg) or `--flag=value` (inline).
+func isFlag(arg, flag string) bool {
+	return arg == flag || strings.HasPrefix(arg, flag+"=")
+}
+
+// flagValue extracts a value flag's value at args[i], handling both
+// `--flag=value` (inline) and `--flag value` (next arg). It returns the value
+// and the index to continue the scan from (advanced past a consumed next arg),
+// or an error when the space form has no following value.
+func flagValue(args []string, i int, flag string) (string, int, error) {
+	if v, ok := strings.CutPrefix(args[i], flag+"="); ok {
+		return v, i, nil
+	}
+	if i+1 >= len(args) {
+		return "", i, fmt.Errorf("%s requires a value", flag)
+	}
+	return args[i+1], i + 1, nil
 }
 
 func writeUsage(w io.Writer) {
