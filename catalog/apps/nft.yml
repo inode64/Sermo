@@ -1,0 +1,10 @@
+kind: app
+name: nft
+display_name: "nft"
+category: security
+variables:
+  binary: "/usr/bin/nft"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}"], "--version", timeout: 10s }
+
