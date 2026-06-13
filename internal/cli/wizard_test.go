@@ -282,6 +282,55 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 	}
 }
 
+func TestTargetsStale(t *testing.T) {
+	detected := map[string]bool{"/mnt/backup": true, "eth0": true}
+	cases := []struct {
+		name     string
+		targets  []string
+		detected map[string]bool
+		want     bool
+	}{
+		{"orphaned target", []string{"/old"}, detected, true},
+		{"still detected", []string{"/mnt/backup"}, detected, false},
+		{"mixed keeps the file", []string{"/old", "eth0"}, detected, false},
+		{"no targets is never stale", nil, detected, false},
+		{"no detection never deletes", []string{"/old"}, nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := targetsStale(tc.targets, tc.detected); got != tc.want {
+				t.Fatalf("targetsStale(%v) = %v, want %v", tc.targets, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseWatchFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "w.yml")
+	body := "watches:\n" +
+		"  storage-data:\n    check: { type: storage, path: /data }\n" +
+		"  net-eth0:\n    check: { type: net, interface: eth0 }\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	names, targets := parseWatchFile(path)
+	if strings.Join(names, ",") != "net-eth0,storage-data" {
+		t.Fatalf("names = %v, want sorted [net-eth0 storage-data]", names)
+	}
+	gotTargets := map[string]bool{}
+	for _, x := range targets {
+		gotTargets[x] = true
+	}
+	if !gotTargets["/data"] || !gotTargets["eth0"] || len(targets) != 2 {
+		t.Fatalf("targets = %v, want /data and eth0", targets)
+	}
+	// A missing file yields no names/targets rather than erroring.
+	if n, tg := parseWatchFile(filepath.Join(dir, "absent.yml")); n != nil || tg != nil {
+		t.Fatalf("missing file = (%v, %v), want (nil, nil)", n, tg)
+	}
+}
+
 func TestRunWizardAbortsOnTruncatedInput(t *testing.T) {
 	// A truncated pipe used to spin the re-prompt loop forever at 100% CPU;
 	// now the wizard must abort cleanly with a usage error. The test itself is
