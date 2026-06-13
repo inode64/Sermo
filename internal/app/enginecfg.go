@@ -3,6 +3,7 @@ package app
 import (
 	"time"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/config"
 )
 
@@ -31,33 +32,19 @@ func EngineInt(cfg *config.Config, key string, fallback int) int {
 
 // EngineString reads a string field from the engine block ("" when unset).
 func EngineString(cfg *config.Config, key string) string {
-	s, _ := engineMap(cfg)[key].(string)
-	return s
+	return cfgval.AsString(engineMap(cfg)[key])
 }
 
 func engineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
-	s, _ := engineMap(cfg)[key].(string)
-	if s == "" {
-		return fallback
+	if d := cfgval.Duration(engineMap(cfg)[key]); d > 0 {
+		return d
 	}
-	d, err := time.ParseDuration(s)
-	if err != nil || d <= 0 {
-		return fallback
-	}
-	return d
+	return fallback
 }
 
 func engineInt(cfg *config.Config, key string, fallback int) int {
-	switch v := engineMap(cfg)[key].(type) {
-	case int:
+	if v, ok := cfgval.Int(engineMap(cfg)[key]); ok {
 		return v
-	case int64:
-		return int(v)
-	case uint64:
-		return int(v)
-	case float64:
-		return int(v)
-	default:
-		return fallback
 	}
+	return fallback
 }

@@ -241,6 +241,28 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	if app.EngineString(bare, "backend") != "" || bare.Notifiers() != nil {
 		t.Fatal("accessors on an empty config must return zero values")
 	}
+
+	// Exercise improved coercion (now via cfgval): string forms for ints and durations are accepted
+	// (previously engineInt only accepted bare numeric types; durations already string-only).
+	cfg2 := &config.Config{Global: config.Global{Raw: map[string]any{
+		"engine": map[string]any{
+			"max_parallel_checks":     "16", // string form (e.g. from some expansions)
+			"default_timeout":         "45s",
+			"max_parallel_operations": 4, // int form
+		},
+	}}}
+	if got := app.EngineInt(cfg2, "max_parallel_checks", 8); got != 16 {
+		t.Fatalf("EngineInt string-num = %d, want 16", got)
+	}
+	if got := app.EngineInt(cfg2, "max_parallel_operations", 2); got != 4 {
+		t.Fatalf("EngineInt bare-int = %d, want 4", got)
+	}
+	if got := app.EngineDuration(cfg2, "default_timeout", 10*time.Second); got != 45*time.Second {
+		t.Fatalf("EngineDuration = %v, want 45s", got)
+	}
+	if got := app.EngineDuration(cfg2, "missing_dur", 99*time.Second); got != 99*time.Second {
+		t.Fatalf("EngineDuration missing fallback failed")
+	}
 	var nilCfg *config.Config
 	if nilCfg.Notifiers() != nil {
 		t.Fatal("Notifiers() on a nil config must return nil")
