@@ -483,6 +483,64 @@ func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
 	}
 }
 
+func TestWebBackendProcessWatchReadings(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"hot-workers": map[string]any{
+				"check": map[string]any{
+					"type":   "process",
+					"name":   "apache2",
+					"user":   "apache",
+					"for":    "5m",
+					"cpu":    map[string]any{"op": ">", "value": 80},
+					"memory": map[string]any{"op": ">", "value": 524288000},
+					"io":     map[string]any{"op": ">", "value": 10485760},
+					"gone":   true,
+				},
+			},
+		},
+	}}}
+	sampler := &webProcSampler{samples: []ProcInfo{
+		{PID: 42, CPUTicks: 20, RSS: 100, IOBytes: 500, HasIO: true},
+		{PID: 7, CPUTicks: 30, RSS: 200},
+	}}
+	b, warns := NewWebBackend(cfg, Deps{ProcSampler: sampler})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("watches = %+v, want one", watches)
+	}
+	w := watches[0]
+	if sampler.match != (ProcMatch{Name: "apache2", User: "apache"}) {
+		t.Fatalf("process sample match = %+v", sampler.match)
+	}
+	if !strings.Contains(w.Summary, "2 matching processes") || !strings.Contains(w.Summary, "rss 300 bytes") {
+		t.Fatalf("process summary = %q", w.Summary)
+	}
+	if got := readingByField(w.Readings, "pids").Value; got != "7, 42" {
+		t.Fatalf("process pids reading = %q, want sorted pids", got)
+	}
+	if got := readingByField(w.Readings, "rss").Value; got != "300 bytes" {
+		t.Fatalf("process rss reading = %q, want 300 bytes", got)
+	}
+	if got := readingByField(w.Readings, "cpu_ticks").Value; got != "50" {
+		t.Fatalf("process cpu ticks reading = %q, want 50", got)
+	}
+	if got := readingByField(w.Readings, "io").Value; got != "500 bytes" {
+		t.Fatalf("process io reading = %q, want 500 bytes", got)
+	}
+	if conditionByField(w.Conditions, "for").Value != "5m" ||
+		conditionByField(w.Conditions, "gone").Value != "true" ||
+		conditionByField(w.Conditions, "cpu").Op != ">" ||
+		conditionByField(w.Conditions, "memory").Value != "524288000" ||
+		conditionByField(w.Conditions, "io").Value != "10485760" {
+		t.Fatalf("process conditions = %+v", w.Conditions)
+	}
+}
+
 func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
@@ -526,6 +584,16 @@ func conditionByField(conditions []web.WatchCondition, field string) web.WatchCo
 		}
 	}
 	return web.WatchCondition{}
+}
+
+type webProcSampler struct {
+	match   ProcMatch
+	samples []ProcInfo
+}
+
+func (s *webProcSampler) Sample(match ProcMatch) []ProcInfo {
+	s.match = match
+	return s.samples
 }
 
 // fakeSwapReader is the minimal metrics.Reader (plus optional TotalSwap) the

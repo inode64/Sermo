@@ -152,6 +152,7 @@ type WebBackend struct {
 	conntrackSampler checks.ConntrackSamplerFunc
 	entropySampler   checks.EntropySamplerFunc
 	zombieSampler    checks.ZombieSamplerFunc
+	procSampler      ProcSampler
 	expander         VolumeExpander
 	emit             func(Event)
 	opGate           *OpGate
@@ -193,6 +194,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		conntrackSampler: deps.ConntrackSampler,
 		entropySampler:   deps.EntropySampler,
 		zombieSampler:    deps.ZombieSampler,
+		procSampler:      deps.ProcSampler,
 		expander:         configuredVolumeExpander(deps),
 		emit:             deps.Emit, opGate: deps.OpGate, defaultTimeout: deps.DefaultTimeout, operationTimeout: deps.OperationTimeout,
 	}
@@ -753,6 +755,14 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			Value: cfgval.String(m["value"]),
 		})
 	}
+	if canonicalWatchCheckType(cfgval.AsString(check["type"])) == "process" {
+		if value := cfgval.String(check["for"]); value != "" {
+			out = append(out, web.WatchCondition{Field: "for", Op: ">=", Value: value})
+		}
+		if gone, ok := check["gone"].(bool); ok && gone {
+			out = append(out, web.WatchCondition{Field: "gone", Op: "==", Value: "true"})
+		}
+	}
 	if v, ok := check["mounted"].(bool); ok {
 		out = append(out, web.WatchCondition{Field: "mounted", Op: "==", Value: fmt.Sprintf("%t", v)})
 	}
@@ -788,6 +798,8 @@ func watchConditionFields(check map[string]any) []string {
 		return checks.ZombiePredFields
 	case "oom":
 		return []string{"delta"}
+	case "process":
+		return []string{"cpu", "memory", "io"}
 	case "diskio":
 		return checks.DiskIOPredFields
 	case "sensors":
@@ -878,9 +890,65 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 		return b.entropyWatchView()
 	case "zombies":
 		return b.zombieWatchView()
+	case "process":
+		return b.processWatchView(w)
 	default:
 		return watchMeter(w.checkType, system), nil, ""
 	}
+}
+
+func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
+	name := cfgval.AsString(w.check["name"])
+	if name == "" {
+		msg := "missing name"
+		return nil, watchErrorReadings(msg), "process: " + msg
+	}
+	user := cfgval.AsString(w.check["user"])
+	sampler := b.procSampler
+	if sampler == nil {
+		sampler = osProcSampler{}
+	}
+	samples := sampler.Sample(ProcMatch{Name: name, User: user})
+	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
+
+	var rssTotal, cpuTicksTotal, ioTotal uint64
+	ioKnown := false
+	for _, sample := range samples {
+		rssTotal += sample.RSS
+		cpuTicksTotal += sample.CPUTicks
+		if sample.HasIO {
+			ioKnown = true
+			ioTotal += sample.IOBytes
+		}
+	}
+
+	readings := []web.WatchReading{
+		{Field: "process", Label: "Process", Value: name},
+		{Field: "matches", Label: "Matches", Value: fmt.Sprintf("%d", len(samples))},
+	}
+	if user != "" {
+		readings = append(readings, web.WatchReading{Field: "user", Label: "User", Value: user})
+	}
+	if len(samples) > 0 {
+		readings = append(readings,
+			web.WatchReading{Field: "pids", Label: "PIDs", Value: processPIDList(samples)},
+			web.WatchReading{Field: "rss", Label: "RSS total", Value: fmt.Sprintf("%d bytes", rssTotal)},
+			web.WatchReading{Field: "cpu_ticks", Label: "CPU ticks", Value: fmt.Sprintf("%d", cpuTicksTotal)},
+		)
+		if ioKnown {
+			readings = append(readings, web.WatchReading{Field: "io", Label: "IO total", Value: fmt.Sprintf("%d bytes", ioTotal)})
+		}
+	}
+
+	target := "process " + name
+	if user != "" {
+		target += " user " + user
+	}
+	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralS(len(samples)))
+	if len(samples) > 0 {
+		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
+	}
+	return nil, readings, summary
 }
 
 func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -1119,6 +1187,21 @@ func pluralS(count int) string {
 		return ""
 	}
 	return "es"
+}
+
+func processPIDList(samples []ProcInfo) string {
+	const limit = 20
+	parts := make([]string, 0, min(len(samples), limit)+1)
+	for i, sample := range samples {
+		if i >= limit {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%d", sample.PID))
+	}
+	if extra := len(samples) - limit; extra > 0 {
+		parts = append(parts, fmt.Sprintf("+%d more", extra))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // swapWatchInfo reads the host swap usage from the collector's cached system
