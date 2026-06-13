@@ -23,6 +23,17 @@ func TestHostMetricLoad1Saturation(t *testing.T) {
 	}
 }
 
+func TestCountMeter(t *testing.T) {
+	m := countMeter("fds", 8000, 10000)
+	if m == nil || m.Kind != "fds" || m.Count != 8000 || m.Max != 10000 || m.UsedPct != 80 {
+		t.Fatalf("countMeter = %+v, want fds 8000/10000 80%%", m)
+	}
+	// An unknown limit yields no meter rather than a divide-by-zero.
+	if countMeter("pids", 100, 0) != nil {
+		t.Fatal("max == 0 must produce no meter")
+	}
+}
+
 func TestByteUsage(t *testing.T) {
 	used, total, free, ok := byteUsage(metrics.Reading{Absolute: 3, Total: 8, HasTotal: true})
 	if !ok || used != 3 || total != 8 || free != 5 {
