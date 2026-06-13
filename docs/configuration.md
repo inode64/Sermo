@@ -81,6 +81,8 @@ counts as usable) and OpenRC (`rc-service` exists, `/run/openrc` exists or
 never mere command presence; with neither, or an unresolvable tie, startup
 fails asking for `--backend`, `SERMO_BACKEND` or `engine.backend`. That is
 also the override order: CLI flag > environment > config > auto-detection.
+For OpenRC oneshot services whose `status` command cannot report cleanly, Sermo
+falls back to `rc-status -a` and trusts the init state.
 
 `engine.max_parallel_operations` limits how many safe service actions
 (`start`, `stop`, `restart`) may run at the same time across automatic
