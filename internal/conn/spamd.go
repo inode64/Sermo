@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -30,11 +29,10 @@ func (spamdProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := io.WriteString(c, "PING SPAMC/1.5\r\n\r\n"); err != nil {
 		return Result{}, err
 	}
-	line, err := bufio.NewReader(c).ReadString('\n')
-	if err != nil && line == "" {
+	line, err := readGreetingLine(c)
+	if err != nil {
 		return Result{}, err
 	}
-	line = strings.TrimRight(line, "\r\n")
 	version, ok := parseSpamdPong(line)
 	if !ok {
 		return Result{}, fmt.Errorf("not a spamd PONG reply: %q", line)

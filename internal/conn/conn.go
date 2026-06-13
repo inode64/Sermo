@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"io"
 	"sort"
 	"strings"
 	"sync"
@@ -104,6 +105,19 @@ func Names() []string { return defaultRegistry.names() }
 func readCRLFLine(br *bufio.Reader) (string, error) {
 	s, err := br.ReadString('\n')
 	return strings.TrimRight(s, "\r\n"), err
+}
+
+// readGreetingLine reads one CR/LF-terminated greeting line from a fresh reader
+// over r, trimmed. It tolerates a read error as long as some data arrived — a
+// server that sends its banner then closes without a final newline — returning
+// the error only when nothing was read. For single-line greetings; a probe that
+// reads more lines must keep its own bufio.Reader.
+func readGreetingLine(r io.Reader) (string, error) {
+	line, err := bufio.NewReader(r).ReadString('\n')
+	if err != nil && line == "" {
+		return "", err
+	}
+	return strings.TrimRight(line, "\r\n"), nil
 }
 
 // randXID32 returns a random 32-bit transaction id with a fixed fallback when
