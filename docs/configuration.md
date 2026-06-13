@@ -590,12 +590,14 @@ a service.
 > for notification targets the numbered list shows only the notifiers defined in
 > the config; the reserved answers `all` / `none` / `default` are offered in the
 > question itself — even when the config defines no notifiers: type `all` to
-> notify every configured notifier, `default` to omit `then.notify` and inherit
-> the global default, or `none` to generate `notify: [none]` and suppress
-> delivery — always accepted, with or without a global default (a monitor-only
-> watch). Only an inert `default` (no global `notify` configured, and no other
-> action such as auto-expand) makes the wizard explain why and ask again
-> instead of aborting.
+> notify every configured notifier, `default` to inherit the global default, or
+> `none` to generate `notify: [none]` and suppress delivery. `none` and
+> `default` are always accepted. When `default` has nothing to inherit (no
+> global `notify` configured) it degrades to a monitor-only watch
+> (`notify: [none]`) with a one-line note — it never re-asks or aborts. The
+> wizard also asks the monitor state (`enabled`/`disabled`/`previous`) and an
+> optional check interval, and on finishing offers to delete any managed file
+> whose target it no longer detects. See [wizards](wizards.md) for the full flow.
 
 A watch's `then` block declares the actions taken when it fires — a `hook`, a
 `notify` list, an `expand` (storage only), or any combination. If the top-level

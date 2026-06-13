@@ -144,31 +144,12 @@ func (p *Prompt) Choose(question string, options []string) int {
 
 // MultiChoose presents a numbered list and returns the chosen 0-based indices.
 // The answer is a comma/space separated list of numbers, the keyword "all", or a
-// single option name (its leading word, e.g. "none" or "default" in the notifier
-// menu). An empty or unrecognized answer re-prompts. This keeps one consistent
-// all/none/default vocabulary across every wizard selection.
+// single option name. An empty or unrecognized answer re-prompts. It is
+// MultiChooseKeyword with no reserved keywords, so the all/name vocabulary stays
+// identical across every wizard selection.
 func (p *Prompt) MultiChoose(question string, options []string) []int {
-	for {
-		p.printList(question, options)
-		p.printf("choices (numbers like 1,3, 'all', or a name): ")
-		ans := strings.TrimSpace(p.readLine())
-		if strings.EqualFold(ans, "all") {
-			idx := make([]int, len(options))
-			for i := range options {
-				idx[i] = i
-			}
-			return idx
-		}
-		if i, ok := matchOptionWord(ans, options); ok {
-			return []int{i}
-		}
-		idx, ok := parseIndices(ans, len(options))
-		if ok && len(idx) > 0 {
-			return idx
-		}
-		p.printf("  enter numbers between 1 and %d (e.g. 1,3), 'all', or an option name\n", len(options))
-		p.abortIfClosed()
-	}
+	idx, _ := p.MultiChooseKeyword(question, options)
+	return idx
 }
 
 // MultiChooseKeyword is MultiChoose for menus with reserved answers: the
