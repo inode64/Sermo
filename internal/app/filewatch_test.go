@@ -213,3 +213,39 @@ func TestFileWatchWithRealOSHookRunner(t *testing.T) {
 		t.Fatalf("expected one successful hook event, got %d: %v", len(hookEvents), hookEvents)
 	}
 }
+
+// TestFileWatchMissingRootDeletion pins the sensitive "root Lstat fails -> treat
+// all baseline entries as gone and fire onDelete if configured" path (used for
+// watched config files, data dirs etc that can be removed).
+func TestFileWatchMissingRootDeletion(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "watched.txt")
+	writeSize(t, f, 42)
+
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{onDelete: true, sizeChange: true})
+
+	w.runCycle(context.Background()) // adopt baseline
+	if len(h.events) != 0 {
+		t.Fatal("adopt must be silent")
+	}
+
+	if err := os.Remove(f); err != nil {
+		t.Fatal(err)
+	}
+
+	w.runCycle(context.Background())
+
+	if len(h.events) != 1 || h.events[0].Kind != "hook" {
+		t.Fatalf("expected one delete hook event, got %d: %v", len(h.events), h.events)
+	}
+	if msg := h.events[0].Message; msg == "" || !(len(msg) > 0) {
+		t.Errorf("delete message = %q", msg)
+	}
+	// baseline should have been cleaned
+	if w.baseline != nil {
+		if _, still := w.baseline[f]; still {
+			t.Error("baseline entry for deleted root must be removed")
+		}
+	}
+}
