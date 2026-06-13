@@ -117,8 +117,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	docs := map[string]map[string]any{}
 	for name, body := range res.Services {
 		if _, dup := existing[name]; dup {
-			a.reportError(opts, "service "+name+" is already configured; not overwriting")
-			return exitRuntimeError
+			return a.fail(opts, "service "+name+" is already configured; not overwriting")
 		}
 		doc := map[string]any{"kind": "service", "name": name}
 		if b, ok := body.(map[string]any); ok {
@@ -131,8 +130,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 
 	preview, err := yaml.Marshal(docsPreview(docs))
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("render services: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("render services: %v", err))
 	}
 	fmt.Fprintf(a.Stdout, "\nGenerated services (%s):\n\n%s\n", res.Summary, preview)
 	if !p.Confirm("Write these service files and enable them?", false) {
@@ -145,18 +143,15 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	dir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
 	deletes, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, "service"))
 	if err != nil {
-		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return a.fail(opts, err.Error())
 	}
 	if err := deleteWizardWatchFiles(deletes); err != nil {
-		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return a.fail(opts, err.Error())
 	}
 
 	dir, written, err := writeServiceFiles(globalPath, docs)
 	if err != nil {
-		a.reportError(opts, err.Error())
-		return exitRuntimeError
+		return a.fail(opts, err.Error())
 	}
 	if len(deletes) > 0 {
 		fmt.Fprintf(a.Stdout, "Deleted %d stale service file(s).\n", len(deletes))

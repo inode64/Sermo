@@ -64,8 +64,7 @@ func (a App) runLockRelease(opts options, locker locks.NamedLocker, args []strin
 	}
 	service := args[0]
 	if err := locker.Release(service, opts.name); err != nil {
-		a.reportError(opts, fmt.Sprintf("release failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
 	fmt.Fprintf(a.Stdout, "released %s\n", lockID(service, opts.name))
 	return exitSuccess
@@ -95,8 +94,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, locker locks.NamedLo
 		if errors.As(err, &exitErr) {
 			return exitErr.ExitCode()
 		}
-		a.reportError(opts, fmt.Sprintf("run command: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("run command: %v", err))
 	}
 	return exitSuccess
 }
@@ -123,8 +121,7 @@ func (a App) reportLockError(opts options, err error) int {
 		}
 		return exitBlocked
 	}
-	a.reportError(opts, fmt.Sprintf("lock failed: %v", err))
-	return exitRuntimeError
+	return a.fail(opts, fmt.Sprintf("lock failed: %v", err))
 }
 
 func lockID(service, name string) string {

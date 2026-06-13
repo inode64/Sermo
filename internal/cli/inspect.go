@@ -32,8 +32,7 @@ func (a App) runDaemon(opts options) int {
 		name := opts.args[1]
 		doc, ok := cfg.Daemons[name]
 		if !ok {
-			a.reportError(opts, fmt.Sprintf("unknown daemon %q", name))
-			return exitRuntimeError
+			return a.fail(opts, fmt.Sprintf("unknown daemon %q", name))
 		}
 		return a.renderTree(opts, config.Resolved{Name: name, Tree: doc.Body})
 	default:
@@ -90,24 +89,20 @@ func (a App) showResolvedService(opts options, cfg *config.Config, name string) 
 // cloneService writes a new included service that clones SOURCE.
 func (a App) cloneService(opts options, cfg *config.Config, source, target string) int {
 	if _, ok := cfg.Services[source]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown source service %q", source))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("unknown source service %q", source))
 	}
 	if _, ok := cfg.Services[target]; ok {
-		a.reportError(opts, fmt.Sprintf("target service %q already exists", target))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("target service %q already exists", target))
 	}
 	if len(cfg.Global.Includes) == 0 {
-		a.reportError(opts, "no include directory configured (paths.includes)")
-		return exitRuntimeError
+		return a.fail(opts, "no include directory configured (paths.includes)")
 	}
 
 	dir := cfg.Global.Includes[0]
 	path := filepath.Join(dir, target+".yml")
 	content := fmt.Sprintf("kind: service\nname: %s\nclone: %s\n", target, source)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil { //nolint:gosec // G306: generated service YAML is non-sensitive (0644)
-		a.reportError(opts, fmt.Sprintf("write %s: %v", path, err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("write %s: %v", path, err))
 	}
 	fmt.Fprintf(a.Stdout, "created %s\n", path)
 	return exitSuccess
@@ -121,8 +116,7 @@ func (a App) runConfigDiff(globalPath string, rest []string, opts options) int {
 	}
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("load config failed: %v", err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
 	}
 
 	base, code := a.renderForDiff(opts, cfg, rest[0])
@@ -180,8 +174,7 @@ func (a App) renderForDiff(opts options, cfg *config.Config, name string) (strin
 // It returns exitSuccess when the service exists.
 func (a App) requireService(opts options, cfg *config.Config, name string) int {
 	if _, ok := cfg.Services[name]; !ok {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", name))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("unknown service %q", name))
 	}
 	return exitSuccess
 }
@@ -216,8 +209,7 @@ func (a App) renderTree(opts options, r config.Resolved) int {
 		data, err = config.RenderYAML(r)
 	}
 	if err != nil {
-		a.reportError(opts, fmt.Sprintf("render %s: %v", r.Name, err))
-		return exitRuntimeError
+		return a.fail(opts, fmt.Sprintf("render %s: %v", r.Name, err))
 	}
 	_, _ = a.Stdout.Write(data)
 	if n := len(data); n == 0 || data[n-1] != '\n' {
