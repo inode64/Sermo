@@ -96,26 +96,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
 	typ := canonicalWatchCheckType(cfgval.AsString(checkEntry["type"]))
-	check, err := checks.BuildInline(name, checkEntry, checks.Deps{
-		DefaultTimeout:       deps.DefaultTimeout,
-		Runner:               deps.ExecxRunner,
-		DiskUsage:            deps.DiskUsage,
-		MountSampler:         deps.MountSampler,
-		NetSampler:           deps.NetSampler,
-		PingSampler:          deps.PingSampler,
-		OomSampler:           deps.OomSampler,
-		PidsSampler:          deps.PidsSampler,
-		DiskIOSampler:        deps.DiskIOSampler,
-		SensorSampler:        deps.SensorSampler,
-		RaidSampler:          deps.RaidSampler,
-		EdacSampler:          deps.EdacSampler,
-		RouteSampler:         deps.RouteSampler,
-		PressureSampler:      deps.PressureSampler,
-		ConntrackSampler:     deps.ConntrackSampler,
-		FirewallRulesSampler: deps.FirewallRulesSampler,
-		EntropySampler:       deps.EntropySampler,
-		ZombieSampler:        deps.ZombieSampler,
-	})
+	check, err := checks.BuildInline(name, checkEntry, watchInlineDeps(deps))
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
@@ -218,26 +199,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		}
 		ce["metric"] = key
 
-		check, err := checks.BuildInline(name, ce, checks.Deps{
-			DefaultTimeout:       deps.DefaultTimeout,
-			Runner:               deps.ExecxRunner,
-			DiskUsage:            deps.DiskUsage,
-			MountSampler:         deps.MountSampler,
-			NetSampler:           deps.NetSampler,
-			PingSampler:          deps.PingSampler,
-			OomSampler:           deps.OomSampler,
-			PidsSampler:          deps.PidsSampler,
-			DiskIOSampler:        deps.DiskIOSampler,
-			SensorSampler:        deps.SensorSampler,
-			RaidSampler:          deps.RaidSampler,
-			EdacSampler:          deps.EdacSampler,
-			RouteSampler:         deps.RouteSampler,
-			PressureSampler:      deps.PressureSampler,
-			ConntrackSampler:     deps.ConntrackSampler,
-			FirewallRulesSampler: deps.FirewallRulesSampler,
-			EntropySampler:       deps.EntropySampler,
-			ZombieSampler:        deps.ZombieSampler,
-		})
+		check, err := checks.BuildInline(name, ce, watchInlineDeps(deps))
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
@@ -658,6 +620,33 @@ func configTestCommandRaw(tree map[string]any) any {
 		}
 	}
 	return nil
+}
+
+// watchInlineDeps maps the app-level Deps (from daemon) to the checks.Deps
+// subset required for checks.BuildInline calls in host-watch construction
+// (buildSingleWatch, buildMetricWatches). It forwards every sampler that host
+// resource checks and multi-metric watches may use.
+func watchInlineDeps(deps Deps) checks.Deps {
+	return checks.Deps{
+		DefaultTimeout:       deps.DefaultTimeout,
+		Runner:               deps.ExecxRunner,
+		DiskUsage:            deps.DiskUsage,
+		MountSampler:         deps.MountSampler,
+		NetSampler:           deps.NetSampler,
+		PingSampler:          deps.PingSampler,
+		OomSampler:           deps.OomSampler,
+		PidsSampler:          deps.PidsSampler,
+		DiskIOSampler:        deps.DiskIOSampler,
+		SensorSampler:        deps.SensorSampler,
+		RaidSampler:          deps.RaidSampler,
+		EdacSampler:          deps.EdacSampler,
+		RouteSampler:         deps.RouteSampler,
+		PressureSampler:      deps.PressureSampler,
+		ConntrackSampler:     deps.ConntrackSampler,
+		FirewallRulesSampler: deps.FirewallRulesSampler,
+		EntropySampler:       deps.EntropySampler,
+		ZombieSampler:        deps.ZombieSampler,
+	}
 }
 
 // monitorDeps maps the app Deps to the checks.Deps a synthesized monitor needs.
