@@ -172,22 +172,7 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
 			}
 		}
-		if d, present := doc.Body["catalog_aliases"]; present {
-			aliases, ok := d.([]any)
-			if !ok || len(aliases) == 0 {
-				issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases must be a non-empty list"})
-			}
-			for _, raw := range aliases {
-				alias, ok := raw.(string)
-				if !ok || alias == "" {
-					issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases entries must be non-empty strings"})
-					continue
-				}
-				if !validDocumentName(alias) {
-					issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("catalog_aliases entry %q must be a simple name without path separators", alias)})
-				}
-			}
-		}
+		issues = append(issues, validateCatalogAliases(doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService:
 		case "":
@@ -212,6 +197,29 @@ func validateDocuments(cfg *Config) []Issue {
 			if counts[kind][name] > 1 {
 				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})
 			}
+		}
+	}
+	return issues
+}
+
+func validateCatalogAliases(doc *Document, scope string) []Issue {
+	raw, present := doc.Body["catalog_aliases"]
+	if !present {
+		return nil
+	}
+	aliases, ok := raw.([]any)
+	if !ok || len(aliases) == 0 {
+		return []Issue{{Scope: scope, Msg: "catalog_aliases must be a non-empty list"}}
+	}
+	var issues []Issue
+	for _, rawAlias := range aliases {
+		alias, ok := rawAlias.(string)
+		if !ok || alias == "" {
+			issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases entries must be non-empty strings"})
+			continue
+		}
+		if !validDocumentName(alias) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("catalog_aliases entry %q must be a simple name without path separators", alias)})
 		}
 	}
 	return issues
