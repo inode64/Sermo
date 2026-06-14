@@ -5,5 +5,7 @@ category: hardware
 description: "Feeds kernel entropy from hardware/random sources."
 service: rngd
 
+pidfile: /run/rngd.pid
+
 checks:
   service: { type: service, expect: active }

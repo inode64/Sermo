@@ -37,8 +37,10 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		return Result{}, fmt.Errorf("no active services were detected on this host")
 	}
 
-	// Per-service properties first (these legitimately differ per service: port,
-	// pidfile/exe). The shared monitor-state + interval come after, batched.
+	// Per-service properties first. Catalog services inherit PID/process
+	// detection from their daemon profile, while generic services still need a
+	// local PID source because they have no catalog owner. The shared
+	// monitor-state + interval come after, batched.
 	type pending struct {
 		name string
 		body map[string]any
@@ -133,12 +135,14 @@ func chooseServices(p *Prompt, question string, cands []DaemonCandidate) []Daemo
 	return out
 }
 
-// askServiceProps asks the per-service properties for one detected candidate —
-// optional port override and the PID source — returning the service name (= the
-// candidate name; the wizard never invents names) and its body, or "" to skip a
-// name already configured. The PID question is prefilled from the init-script
-// analysis: a pidfile path writes `pidfile:`, and if there is none, an exe
-// derived from the unit offers a `command_match` selector.
+// askServiceProps asks the per-service properties for one detected candidate,
+// returning the service name (= the candidate name; the wizard never invents
+// names) and its body, or "" to skip a name already configured. Catalog
+// services write only service-level overrides such as port; their PID/process
+// selectors live in catalog/services. Generic services have no catalog owner, so
+// their PID question is prefilled from the init-script analysis: a pidfile path
+// writes `pidfile:`, and if there is none, an exe derived from the unit offers a
+// `command_match` selector.
 func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]any) {
 	if _, exists := env.ServiceNames[c.Name]; exists {
 		p.printf("  %q is already configured; skipping.\n", c.Name)
@@ -160,10 +164,12 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]
 			body["variables"] = map[string]any{"port": n}
 		}
 	}
-	if pidfile := askServicePidfile(p, c); pidfile != "" {
-		body["pidfile"] = pidfile
-	} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
-		body["processes"] = map[string]any{"main": selector}
+	if c.Generic {
+		if pidfile := askServicePidfile(p, c); pidfile != "" {
+			body["pidfile"] = pidfile
+		} else if selector, label := detectedProcessSelector(c); selector != nil && p.Confirm("No pidfile — match "+c.Name+" by "+label+"?", true) {
+			body["processes"] = map[string]any{"main": selector}
+		}
 	}
 	return c.Name, body
 }

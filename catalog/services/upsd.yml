@@ -8,6 +8,8 @@ apps: [upsd]
 variables:
   port: 3493
 
+pidfile: /run/nut/upsd.pid
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

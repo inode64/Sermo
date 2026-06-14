@@ -6,5 +6,7 @@ description: "Salt minion agent."
 service: salt-minion
 apps: [salt]
 
+pidfile: /var/run/supervisor-salt-minion.pid
+
 checks:
   service: { type: service, expect: active }

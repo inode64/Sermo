@@ -10,6 +10,9 @@ apps: [cups-config]
 
 variables:
   port: 631
+
+pidfile: /run/cupsd.pid
+
 preflight:
   config: { type: command, command: ["/usr/sbin/cupsd","-t"], timeout: 30s }
 
