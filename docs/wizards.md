@@ -93,6 +93,8 @@ the service's init definition, best-effort (unknown fields come back `""`):
 Detected pidfile and socket paths must be written with canonical `/run`
 spelling. If the backend reports `/var/run/...`, normalize it to `/run/...`
 before adding it to `catalog/services` or a generated uncataloged service.
+Before storing a newly detected path, resolve symlinks on the target host
+(`readlink -f <path>` or `namei -l <path>`) and keep the canonical target path.
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
