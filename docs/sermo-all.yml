@@ -11,8 +11,8 @@
 #
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is
-# configs/sermo.yml; the field-by-field reference is docs/configuration.md and
-# docs/rules.md.
+# configs/sermo.yml; the field-by-field reference is docs/configuration.md,
+# docs/daemons.md and docs/rules.md.
 
 # ---------------------------------------------------------------------------
 # 1. Global configuration (sermo.yml)
@@ -35,8 +35,16 @@ paths:
     - apps             # relative to this file's directory
   runtime: /run/sermo          # volatile: locks, op slots (tmpfs)
   state: /var/lib/sermo        # persistent: monitor state, SLA, measurements
+  # Do not add /var/run paths to new config. Use /run directly; /var/run is
+  # normally only a compatibility symlink to /run. Before adding a runtime path,
+  # check whether the candidate directory is itself a symlink.
+  # paths.locks is intentionally unsupported: lock dirs derive from runtime.
 
 defaults:                      # merged into every service as the base layer
+  variables:                   # global custom vars; services may override them
+    owner: ops
+    region: local
+    helper_bin: [/usr/local/bin/sermo-helper, /usr/bin/sermo-helper]
   stop_policy:
     graceful_timeout: 30s
     term_timeout: 15s
@@ -44,28 +52,38 @@ defaults:                      # merged into every service as the base layer
     force_kill: false          # SIGKILL never allowed by default
   policy:
     cooldown: 5m               # required and positive: loop prevention
-  # rule_window:               # fallback for rules without for/within
-  #   cycles: 1
-  #   mode: consecutive        # consecutive | within (min_matches optional)
+    max_actions: 4
+    max_actions_window: 1h
+    backoff: { initial: 1m, factor: 2, max: 30m }
+  rule_window:                 # fallback for rules without for/within
+    cycles: 1
+    mode: consecutive          # consecutive | within
+    # min_matches: 1           # only meaningful with mode: within
+  remediation:
+    shadow: false              # true (or mode: shadow) evaluates without action
 
 logging:
   level: info
   format: text
 
+# Security invariants are hard-coded. Config keys such as
+# security.allow_sigkill_by_default are rejected rather than honored.
+
 # Web dashboard. NOT activated unless `port` is defined.
 web:
   address: 127.0.0.1
   port: 9797
-  # password: "change-me"        # admin: read + actions
-  # guest_password: "read-only"  # optional read-only login
-  # guest: false                 # true allows anonymous read-only access
-  # disable_diagnostics: false   # true hides the Diagnostics panel from the web UI
+  password: "${env:SERMO_WEB_PASSWORD:-change-me}" # admin: read + actions
+  guest_password: "${env:SERMO_GUEST_PASSWORD:-read-only}"
+  guest: false                 # true allows anonymous read-only access
+  disable_diagnostics: false   # true hides the Diagnostics panel from the web UI
 
 # Named notification targets (email, slack and teams are built in).
 notifiers:
   ops-email:
+    enabled: true
     type: email
-    dsn: "smtp://user:pass@smtp.example.com:587"  # smtp:// or smtps://
+    dsn: "${env:SERMO_SMTP_DSN:-smtp://user:pass@smtp.example.com:587}"
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com]
   team-slack:
@@ -80,21 +98,89 @@ notifiers:
 # delivery per site (a watch whose only action is [none] is monitor-only).
 notify: [ops-email]
 
-# Host watches: one entry per concern; `monitor: disabled` builds them paused.
+# Host watches: one entry per concern; `enabled: false` omits the watch entirely,
+# while `monitor: disabled` builds it paused. `monitor: previous` restores the
+# persisted state from paths.state.
 watches:
   # -- storage with auto-expand (LVM) ---------------------------------------
   data-space:
     monitor: disabled
     interval: 1m
     check:
-      type: storage
+      type: storage             # disk is a legacy alias
       path: /var/lib/data
+      mounted: true
       free_pct: { op: "<", value: "10%" }    # *_bytes need a K/M/G/T suffix
     for: { cycles: 3 }                       # debounce: N consecutive cycles
     then:
       notify: [team-slack]
       expand: { by: 5G }                     # storage-only action
     policy: { cooldown: 30m }                # pace the expand action
+
+  # -- single-shot checks as host watches -----------------------------------
+  webapp-health:
+    monitor: disabled
+    check:
+      type: http
+      url: "http://127.0.0.1:8080/health"
+      expect_status: 2xx
+      expect_latency: { op: "<", value: 250 }
+    for: { cycles: 3 }
+    then: { notify: [ops-email] }
+
+  http3-health:
+    monitor: disabled
+    check:
+      type: http
+      url: "https://example.com/health"
+      http3: true
+      expect_status: 2xx
+      cert_expires_in_days: 21
+      cert_verify: true
+    then: { notify: [none] }
+
+  mail-version:
+    monitor: disabled
+    check:
+      type: smtp
+      host: mail.example.com
+      on_version_change: true
+      expect_latency: { op: "<", value: 500 }
+    then: { notify: [ops-email] }
+
+  api-websocket:
+    monitor: disabled
+    check:
+      type: websocket           # alias: ws
+      url: "wss://example.com/ws"
+      subprotocol: "chat"
+      headers: { Authorization: "Bearer ${env:API_TOKEN:-demo}" }
+    then: { notify: [ops-email] }
+
+  audit-log-growth:
+    monitor: disabled
+    check: { type: size, path: /var/log/audit/audit.log, grow_by: 500M, within: 1h }
+    then: { notify: [ops-email] }
+
+  file-count:
+    monitor: disabled
+    check:
+      type: count
+      path: /var/spool/demo
+      of: file                  # any | file | dir | symlink
+      recursive: true
+      count: { op: ">", value: 1000 }
+    then: { notify: [ops-email] }
+
+  sqlite-health:
+    monitor: disabled
+    check: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
+    then: { notify: [ops-email] }
+
+  firewall-loaded:
+    monitor: disabled
+    check: { type: firewall_rules, backend: auto, min_rules: 1 }
+    then: { notify: [ops-email] }
 
   # -- multi-metric icmp: per-metric conditions, each with its own then -----
   ping-gw:
@@ -106,8 +192,13 @@ watches:
         then: { notify: [ops-email] }
       latency:
         threshold: { op: ">", value: 100 }    # ms; or change: { delta: N }
+        within: { cycles: 5, min_matches: 2 }
         then:
-          hook: { command: [/usr/local/bin/latency-alert.sh, "8.8.8.8"] }
+          hook:
+            command: [/usr/local/bin/latency-alert.sh, "8.8.8.8"]
+            timeout: 10s
+            expect_exit: 0
+            expect_stdout: { op: "contains", value: ok }
 
   # -- multi-metric net: link state, errors, speed, addresses ---------------
   uplink:
@@ -115,7 +206,10 @@ watches:
     check: { type: net, interface: ppp0 }
     metrics:
       state:   { expect: down, then: { notify: [ops-email] } }
-      errors:  { delta: { op: ">", value: 100 }, then: { notify: [ops-email] } }
+      errors:
+        delta: { op: ">", value: 100 }
+        counters: [rx_errors, tx_errors]
+        then: { notify: [ops-email] }
       speed:   { on: change, then: { notify: [none] } }   # monitor-only metric
       address:                                # renumbering -> dynamic-DNS hook
         on: change                            # or expect: present|absent
@@ -125,7 +219,7 @@ watches:
   # -- default route pinned to an egress interface --------------------------
   uplink-route:
     monitor: disabled
-    check: { type: route, interface: ppp0 }   # family: ipv6 for the v6 table
+    check: { type: route, family: ipv4, interface: ppp0 }
     then: { notify: [ops-email] }
 
   # -- DNS resolution through the system resolver ---------------------------
@@ -151,12 +245,37 @@ watches:
     check: { type: memory, used_pct: { op: ">=", value: "90%" } }
     for: { cycles: 3 }
     then: { notify: [ops-email] }
-  # Same level-check grammar: pressure (PSI), fds, pids, conntrack, entropy,
-  # zombies, diskio, hdparm, sensors, smart, raid, edac — see configs/sermo.yml
-  # for one tuned entry of each and docs/rules.md for their fields.
+  pressure:
+    monitor: disabled
+    check: { type: pressure, resource: memory, some_avg60: { op: ">", value: 20 } }
+    then: { notify: [ops-email] }
+  fds:
+    monitor: disabled
+    check: { type: fds, used_pct: { op: ">=", value: "80%" } }
+    then: { notify: [ops-email] }
+  diskio:
+    monitor: disabled
+    check: { type: diskio, device: nvme0n1, util_pct: { op: ">=", value: "80%" } }
+    then: { notify: [ops-email] }
+  pids:
+    monitor: disabled
+    check: { type: pids, used_pct: { op: ">=", value: "80%" } }
+    then: { notify: [ops-email] }
+  conntrack:
+    monitor: disabled
+    check: { type: conntrack, used_pct: { op: ">=", value: "80%" } }
+    then: { notify: [ops-email] }
+  entropy:
+    monitor: disabled
+    check: { type: entropy, avail: { op: "<", value: 256 } }
+    then: { notify: [ops-email] }
+  zombies:
+    monitor: disabled
+    check: { type: zombies, count: { op: ">", value: 0 } }
+    then: { notify: [ops-email] }
   oom:
     monitor: disabled
-    check: { type: oom }                      # fires on any OOM kill
+    check: { type: oom, delta: { op: ">", value: 0 } }
     then: { notify: [ops-email] }
 
   # -- multi-metric swap: usage level + paging rate -------------------------
@@ -164,8 +283,12 @@ watches:
     monitor: disabled
     check: { type: swap }
     metrics:
-      usage: { used_pct: { op: ">=", value: 80 }, then: { notify: [ops-email] } }
-      io:    { delta: { op: ">", value: 1000 }, then: { notify: [ops-email] } }
+      usage:
+        free_pct: { op: "<", value: 10 }
+        then: { notify: [ops-email] }
+      io:
+        delta: { op: ">", value: 1000 }
+        then: { notify: [ops-email] }
 
   # -- file watch: one event per changed path -------------------------------
   app-data:
@@ -191,16 +314,10 @@ watches:
       for: 5m                                 # PID alive at least this long
       cpu: { op: ">", value: 80 }
       memory: { op: ">", value: 524288000 }
+      io: { op: ">", value: 10485760 }
       gone: true                              # also fire when a PID disappears
     then:
       hook: { command: [/usr/local/bin/proc-alert.sh] }
-
-  # -- any single-shot service check as a host watch (fires on failure) -----
-  webapp-health:
-    monitor: disabled
-    check: { type: http, url: "http://127.0.0.1:8080/health", expect_status: 2xx }
-    for: { cycles: 3 }
-    then: { notify: [ops-email] }
 
 ---
 # ---------------------------------------------------------------------------
@@ -209,85 +326,365 @@ watches:
 kind: daemon
 name: demo
 display_name: "Demo HTTP Server"
-description: "Reference daemon showing every section."
+description: "Reference daemon showing every service/catalog section."
+category: web
 type: webserver
 
-service:                       # per-backend unit candidates, first match wins
+# A daemon name may also be a template:
+#   demo-%v      -> ${version}, discovered from versions.from or variables.binary
+#   demo%n       -> ${n}, numeric only
+#   demo-%i      -> ${instance}, named init instances
+service:                       # scalar, legacy {name: ...}, or per-backend map
   systemd: [demo, demo-server]
   openrc: [demo]
 
-apps: [demo-app]               # binary + version owned by the linked app
+also_service:                  # auxiliary init units of this same service
+  systemd: [demo.socket]
+  openrc: [demo-socket]
 
-variables:                     # flat strings; ${var} expands after all merging
-  binary: /usr/bin/demo
+apps: [demo-app]               # app preflight checks are injected by app name
+
+variables:                     # flat strings or first-existing path lists
+  binary: [/usr/bin/demo, /usr/local/bin/demo]
   user: demo
+  group: demo
   host: 127.0.0.1
   port: 8080
   health_path: /health
+  data_dir: /var/lib/demo
 
-commands:                      # informational; never run automatically
+commands:                      # informational or reserved names such as version
   version:
     command: ["${binary}", "--version"]
     timeout: 5s
+    expect_exit: 0
+    expect_stdout: { op: "=~", value: "Demo [0-9.]+" }
+  version_short:
+    command: ["${binary}", "--version-short"]
+    timeout: 5s
+  status:
+    command: ["${binary}", "status"]
+    timeout: 5s
 
-# pidfile auto-wires process-tree monitoring and a requires:[service] health check.
+# pidfile auto-wires process-tree monitoring and a requires:[service] health check
+# unless the service already declares an equivalent process selector/check.
 pidfile: /run/demo.pid
 
-config_files: [/etc/demo/demo.conf]
+config_files: [/etc/demo/demo.conf, /etc/demo/conf.d]
 
-preflight:                     # gate start/restart
+preflight:                     # gate start/restart/reload
   config:
     type: command
     command: ["${binary}", "--test-config"]
     timeout: 10s
+    expect_exit: 0
+    skip_when_changed: /etc/demo/demo.conf
+  binary:
+    type: binary
+    path: "${binary}"
   libraries:
     type: libraries
     binary: "${binary}"
     optional: true             # best-effort: warns, never blocks
 
-postflight:                    # assert health after start/restart
+postflight:                    # assert health after start/restart/reload
   http:
     type: http
     url: "http://${host}:${port}${health_path}"
     expect_status: 200
     timeout: 5s
+  pidfile:
+    type: pidfile
+    path: /run/demo.pid
+    requires: [http]
 
-processes:                     # discovery selectors (exact exe + real UID)
+processes:                     # discovery selectors (used by metrics/reaper)
   main:
-    type: command_match
-    exe: "${binary}"
-    user: root
+    type: pidfile
+    path: [/run/demo.pid, /run/demo/demo.pid]
   workers:
     type: command_match
-    exe: "${binary}"
+    exe: "${binary}"           # exact resolved /proc/<pid>/exe
+    user: "${user}"
+    group: "${group}"
+  java-worker:
+    type: command_match
+    cmd: "java .*demo-worker"  # Go/RE2 regex over cmdline
     user: "${user}"
 
-reload:                        # native reload (signal or command)
-  signal: HUP                  # when: defaults to auto (init reload if defined)
+reload:                        # native reload: signal OR command, not both
+  command: ["${binary}", "reload"]
+  when: auto                   # auto | always
+  # signal: HUP
 
-restart_on_change:             # restart when a linked library changes on disk
+restart_on_change:             # desugars to remediation restart rules
   libraries: [demo-lib]
 
+reload_on_change:              # desugars to remediation reload rules
+  paths: [/etc/demo/demo.conf, /etc/demo/conf.d]
+
+version:
+  on_change: { notify: [ops-email] }          # reuses commands.version
+config:
+  on_change: { notify: [ops-email] }          # reuses preflight.config/config_files
+
 checks:
+  # Check-level common fields: enabled, optional, interval, timeout, requires and
+  # skip_when_changed. Disable inherited entries with enabled:false; delete:true
+  # removes an inherited map entry during merge.
   service: { type: service, expect: active }
-  port:    { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
+  tcp:     { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
+  ports:
+    type: ports
+    host: "${host}"
+    ports: "80,443,8000-8010"
+    expect: open
+    match: any
+    connect_timeout: 500ms
+    on_change: true
   http:
     type: http
     url: "http://${host}:${port}${health_path}"
-    expect_status: 2xx         # code, class, list, or {op, value}
+    expect_status: 2xx
+    expect_body: ok
+    expect_latency: { op: "<", value: 250 }
     timeout: 5s
-  cert:
-    type: cert
-    host: "${host}"
-    port: 443
-    verify: false
-    expires_in_days: 21
-  mem:
+  http-json:
+    type: http
+    method: POST
+    url: "http://${host}:${port}/api/health"
+    headers: { X-Token: demo }
+    json: { probe: true }
+    expect_status: { op: "==", value: 200 }
+    expect_json:
+      status: ok
+      uptime: { op: ">", value: 0 }
+  http-cert:
+    type: http
+    url: "https://example.com/health"
+    expect_status: 2xx
+    cert_expires_in_days: 21
+    cert_verify: true
+    cert_on_change: true
+    cert_on_issuer_change: true
+    cert_on_algorithm_change: true
+  command-output:
+    type: command
+    command: ["${binary}", "doctor"]
+    timeout: 20s
+    expect_exit: 0
+    expect_stdout: { op: "contains", value: ok }
+    expect_stderr: ""
+    on_change: false
+    analyze:
+      use: [demo-patterns]
+      silence: [degraded]
+      rules:
+        - { id: benign, match: '(?i)known benign warning', severity: ok, stream: both }
+  file-present: { type: file_exists, path: /etc/demo/demo.conf }
+  binary: { type: binary, path: "${binary}" }
+  pidfile: { type: pidfile, path: /run/demo.pid, requires: [service] }
+  process: { type: process, exe: "${binary}", user: "${user}", state: running }
+  service-memory:
     type: metric
-    scope: service             # service metrics may drive remediation
-    name: memory
+    scope: service
+    name: memory              # service: memory/swap/cpu/cpu_thread/process_count/io/io_read/io_write/fds/threads
     op: ">"
     value: 40%
+  system-load:
+    type: metric
+    scope: system             # system metrics may only drive alert rules
+    name: load5               # system: total_memory/total_cpu/load1/load5/load15
+    op: ">"
+    value: 4
+    optional: true
+  libraries: { type: libraries, binary: "${binary}", optional: true }
+  count:
+    type: count
+    path: /var/spool/demo
+    of: any                   # any | file | dir | symlink
+    recursive: true
+    count: { op: ">", value: 1000 }
+  storage:
+    type: storage
+    path: "${data_dir}"
+    mounted: true
+    free_pct: { op: "<", value: "10%" }
+    inodes_free: { op: "<", value: 1000 }
+  disk-alias:
+    type: disk
+    path: /var/log
+    used_bytes: { op: ">", value: 10G }
+  autofs:
+    type: autofs
+    count: { op: ">=", value: 1 }
+    optional: true
+  load: { type: load, per_cpu: true, load1: { op: ">", value: 2 } }
+  hdparm: { type: hdparm, device: /dev/sda, read: { op: "<", value: 100 } }
+  sensors:
+    type: sensors
+    chip: coretemp
+    label: Package
+    temp: { op: ">", value: 80 }
+  smart:
+    type: smart
+    device: /dev/sda
+    temperature: { op: ">", value: 50 }
+  raid: { type: raid, degraded: { op: ">", value: 0 } }
+  edac: { type: edac, ue: { op: ">", value: 0 } }
+  config-watch:
+    type: config
+    command: ["${binary}", "--test-config"]
+    path: [/etc/demo/demo.conf, /etc/demo/conf.d]
+    on_change: true
+  fds: { type: fds, used_pct: { op: ">", value: "80%" } }
+  memory: { type: memory, available_pct: { op: "<", value: "10%" } }
+  pressure: { type: pressure, resource: io, some_avg60: { op: ">", value: 20 } }
+  pids: { type: pids, used_pct: { op: ">", value: "80%" } }
+  diskio: { type: diskio, device: nvme0n1, util_pct: { op: ">", value: "80%" } }
+  conntrack: { type: conntrack, used_pct: { op: ">", value: "80%" } }
+  entropy: { type: entropy, avail: { op: "<", value: 256 } }
+  zombies: { type: zombies, count: { op: ">", value: 0 } }
+  oom: { type: oom, delta: { op: ">", value: 0 } }
+  cert-file:
+    type: cert
+    path: /etc/ssl/certs/demo.pem
+    expires_in_days: 21
+    on_change: true
+  cert-host:
+    type: cert
+    host: example.com
+    port: 443
+    server_name: example.com
+    verify: true
+    on_algorithm_change: true
+    on_issuer_change: true
+  sqlite: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
+  sqlite3: { type: sqlite3, path: /var/lib/demo/demo.db }
+  sql-sqlite:
+    type: sql
+    engine: sqlite
+    path: /var/lib/demo/demo.db
+    query: "select count(*) from sqlite_master"
+    op: ">="
+    value: 0
+  sql-mysql:
+    type: sql
+    engine: mysql              # mysql|mariadb|postgres|postgresql|sqlite|sqlite3
+    host: 127.0.0.1
+    port: 3306
+    user: monitor
+    password: "${env:DEMO_DB_PASSWORD:-secret}"
+    database: demo
+    tls: false
+    query: "select 1"
+    op: "=="
+    value: 1
+  mongo-command:
+    type: mongodb-query
+    host: 127.0.0.1
+    database: admin
+    command: '{"ping": 1}'
+    result: ok
+    op: "=="
+    value: 1
+  mongo-count:
+    type: mongodb-query
+    host: 127.0.0.1
+    database: demo
+    collection: jobs
+    filter: '{"state": "queued"}'
+    op: "<"
+    value: 1000
+  mongo-aggregate:
+    type: mongodb-query
+    host: 127.0.0.1
+    database: demo
+    collection: jobs
+    pipeline: '[{"$group":{"_id":null,"n":{"$sum":1}}}]'
+    result: "0.n"
+    op: "<"
+    value: 1000
+  influxql:
+    type: influxdb-query
+    host: 127.0.0.1
+    database: demo
+    query: "select last(value) from health"
+    op: "=="
+    value: 1
+  flux:
+    type: influxdb-query
+    host: 127.0.0.1
+    language: flux
+    org: demo
+    token: "${env:INFLUX_TOKEN:-token}"
+    query: 'from(bucket:"demo") |> range(start:-5m) |> count()'
+    op: ">="
+    value: 0
+  size: { type: size, path: /var/log/demo/demo.log, grow_by: 500M, within: 1h }
+  websocket:
+    type: websocket            # alias: ws
+    url: "ws://127.0.0.1:8080/ws"
+    origin: "https://example.com"
+    subprotocol: "chat"
+    headers: { X-Probe: sermo }
+  net-state: { type: net, interface: eth0, metric: state, expect: up }
+  net-speed: { type: net, interface: eth0, metric: speed, on: change }
+  net-errors:
+    type: net
+    interface: eth0
+    metric: errors
+    delta: { op: ">", value: 100 }
+    counters: [rx_errors, tx_errors]
+  net-address: { type: net, interface: eth0, metric: address, on: change }
+  icmp-state: { type: icmp, host: 1.1.1.1, count: 3, metric: state, expect: up }
+  icmp-latency:
+    type: icmp
+    host: 1.1.1.1
+    metric: latency
+    threshold: { op: "<", value: 100 }
+  swap-usage: { type: swap, metric: usage, used_pct: { op: ">", value: 80 } }
+  swap-io: { type: swap, metric: io, delta: { op: ">", value: 1000 } }
+  route: { type: route, family: ipv4, interface: eth0 }
+  firewall: { type: firewall_rules, backend: auto, min_rules: 1 }
+  mysql:
+    type: mysql
+    host: 127.0.0.1
+    port: 3306
+    user: monitor
+    password: "${env:DEMO_DB_PASSWORD:-secret}"
+    database: demo
+    tls: false
+    expect: { version: { op: "=~", value: "^[0-9]" } }
+    expect_latency: { op: "<", value: 50 }
+    on_version_change: true
+  redis:
+    type: redis
+    host: 127.0.0.1
+    password: "${env:REDIS_PASS:-}"
+    on_version_change: true
+  docker:
+    type: docker
+    socket: /run/docker.sock
+    container: demo
+    on_change: true
+  dns:
+    type: dns
+    host: 1.1.1.1
+    query: example.com
+    expect: { rcode: NOERROR, answers: { op: ">", value: 0 } }
+  # Other registered connection-protocol check types:
+  # acpid, ajp, amqp/rabbitmq, asterisk/ami, avahi, ceph/ceph-mon, clamd/clamav,
+  # cloudflared/cloudflare-tunnel, dbus, dhclient/dhcp-client, dhcp, docker,
+  # fail2ban, fpm/php-fpm, ftp, glusterfs/glusterd/gluster, guacd/guacamole,
+  # imap, influxdb/influx, ipp/cups, kafka, ldap, libvirt/libvirtd, lvmpolld,
+  # memcached/memcache, mongodb/mongo, mountd/rpc.mountd/nfs-mountd, mqtt,
+  # nebula/nebula-vpn, nfs/nfs-server/nfsd, nntp/nntps, ntp, nut/ups/upsd,
+  # openvpn/ovpn, openvswitch/ovs/ovsdb/ovsdb-server, pop/pop3, postgres/postgresql,
+  # prometheus/prom, rdp/ms-wbt-server, redis/valkey, rpcbind/portmap/portmapper,
+  # rsync/rsyncd, rspamd, sieve/managesieve, smb/samba/cifs, smtp, snmp,
+  # spamd/spamassassin, ssh, statd/rpc.statd/nsm/nfs-statd, syncthing, tftp,
+  # unifi/unifi-controller/unifi-network, varnish/varnishadm.
 
 stop_policy:
   graceful_timeout: 30s
@@ -297,6 +694,13 @@ stop_policy:
   kill_only_if:
     users: ["${user}", root]
     exe_any: ["${binary}"]
+  pidfile_absent: true
+  files_absent: [/run/demo/*.sock, /run/demo/*.lock]
+  clean_after_stop: false      # true enables deletion after a clean stop
+  clean_on_stop:
+    - /run/demo/tmpfile
+    - /run/demo/*.tmp
+    - { path: /var/cache/demo/runtime, recursive: true }
 
 policy:                        # overrides defaults.policy for this daemon
   cooldown: 10m
@@ -304,34 +708,75 @@ policy:                        # overrides defaults.policy for this daemon
   max_actions_window: 1h
   backoff: { initial: 1m, factor: 2, max: 30m }
 
+remediation:
+  mode: shadow                 # alternative to remediation.shadow: true
+
+rule_window:
+  cycles: 3
+  mode: within
+  min_matches: 2
+
 rules:
   block-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks: [restart, start, reload]
     if: { failed: { check: config } }
     then: { action: block, message: "demo config is invalid" }
   restart-if-http-failed:
     type: remediation
-    if: { failed: { check: http } }
-    for: { cycles: 3, mode: consecutive }     # or within: {cycles, min_matches}
-    then: { action: restart }
+    if:
+      and:
+        - failed: { check: http }
+        - not: { service: { state: inactive } }
+    for: { cycles: 3 }          # consecutive cycles
+    then:
+      actions:
+        - { type: alert, message: "demo HTTP health failed" }
+        - { type: restart }
+  reload-if-inline-tcp-active:
+    type: remediation
+    if:
+      active:
+        tcp: { host: "${host}", port: "${port}" }
+    within: { cycles: 5, min_matches: 2 }
+    then: { action: reload }
+  stop-if-process-gone:
+    type: remediation
+    if: { process: { exe: "${binary}", user: "${user}", state: absent } }
+    then: { action: stop }
   alert-host-pressure:
-    type: alert                # system metrics may only alert, never remediate
+    type: alert                 # system metrics may only alert
+    notify: [team-slack]
     if: { metric: { scope: system, name: total_memory, op: ">", value: 90% } }
     then: { action: alert, message: "host memory high" }
+  alert-file-missing:
+    type: alert
+    if:
+      or:
+        - file: { path: /etc/demo/demo.conf, exists: false }
+        - command: { command: ["${binary}", "status"], timeout: 5s }
+    then: { action: alert, message: "demo config/status needs attention" }
+  restart-if-library-changed:
+    type: remediation
+    if: { changed: { library: demo-lib } }    # library resolves to its binary path
+    then: { action: restart }
 
 ---
 # ---------------------------------------------------------------------------
-# 3. kind: app — a tool/runtime with a binary and a version (catalog)
+# 3. kind: app — a tool/runtime with binary and version preflight (catalog)
 # ---------------------------------------------------------------------------
 kind: app
 name: demo-app
 display_name: "Demo Server"
+description: "Runtime/tool dependency injected into services that list apps: [demo-app]."
+category: app
 variables:
   binary: /usr/bin/demo
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+commands:
+  version_short: { command: ["${binary}", "--version-short"], timeout: 10s }
 
 ---
 # ---------------------------------------------------------------------------
@@ -340,10 +785,13 @@ preflight:
 kind: lib
 name: demo-lib
 display_name: "Demo Library"
+description: "Shared object whose file changes can restart linked services."
+category: library
 variables:
   binary: /usr/lib/libdemo.so.1
 preflight:
   binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["/usr/bin/strings", "${binary}"], timeout: 10s, optional: true }
 
 ---
 # ---------------------------------------------------------------------------
@@ -352,9 +800,10 @@ preflight:
 kind: patterns
 name: demo-patterns
 display_name: "Demo output signals"
+description: "Reusable line classifiers for command checks."
 rules:
-  - { id: corrupt,  match: '(?i)corruption detected', severity: error }
-  - { id: degraded, match: '(?i)\bdegraded\b',        severity: warning }
+  - { id: corrupt,  match: '(?i)corruption detected', severity: error, stream: both }
+  - { id: degraded, match: '(?i)\bdegraded\b',        severity: warning, stream: stdout }
 
 ---
 # ---------------------------------------------------------------------------
@@ -364,25 +813,55 @@ kind: service
 name: demo-main
 uses: demo                     # inherit the daemon, then override below
 interval: 15s                  # check more often than engine.interval
-# enabled: false               # keep configured but fully off
-# monitor: disabled            # build paused; or `previous` to restore state
+monitor: previous              # enabled | disabled | previous
+enabled: true                  # false keeps it configured but no worker is built
+also_apply: [demo-sidecar]     # cascade start/stop/restart to other services
+
+service: demo-main             # scalar override; legacy map form is {name: demo-main}
 
 variables:
   health_path: /status         # changes every ${health_path} use at once
+  port: 8080
+
+version:
+  on_change: { notify: [none] }
+config:
+  on_change: { notify: [ops-email] }
 
 checks:
-  cert: { enabled: false }     # disable one inherited check (delete: true removes)
+  cert-host: { enabled: false } # disable one inherited check
+  redis: { delete: true }       # remove one inherited map entry during merge
+  http:
+    expect_status: [200, 204]   # override one field of an inherited check
 
 rules:
-  restart-if-http-failed:      # override one inherited rule field
+  restart-if-http-failed:       # override one inherited rule field
     for: { cycles: 5 }
 
 ---
 # ---------------------------------------------------------------------------
-# 7. kind: service clone — copy another service pre-expansion and tweak it
+# 7. kind: service — target used by also_apply
+# ---------------------------------------------------------------------------
+kind: service
+name: demo-sidecar
+uses: demo
+service: demo-sidecar
+monitor: disabled
+variables:
+  port: 8082
+  health_path: /sidecar-health
+checks:
+  http:
+    url: "http://${host}:${port}${health_path}"
+
+---
+# ---------------------------------------------------------------------------
+# 8. kind: service clone — copy another service pre-expansion and tweak it
 # ---------------------------------------------------------------------------
 kind: service
 name: demo-second
 clone: demo-main               # copies demo-main BEFORE variable expansion...
+service: demo-second
+also_apply: [demo-sidecar]
 variables:
   port: 8081                   # ...so this override reaches every ${port}
