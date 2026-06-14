@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/goccy/go-yaml"
 )
 
 // These audits load the real repo artifacts — the packaged catalog, the shipped
@@ -104,10 +106,13 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "sermo.yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The shipped config enables no services out of the box; when a bundled
-	// "apps" include dir reappears, copy it so its services validate too.
-	if bundled := filepath.Join(root, "configs", "apps"); dirExists(bundled) {
-		copyYAMLDir(t, bundled, filepath.Join(dir, "apps"))
+	// The shipped config enables no services out of the box; when bundled
+	// include dirs reappear, copy them so their services validate too. `apps`
+	// is a legacy include alias for concrete service files.
+	for _, include := range []string{"services", "apps"} {
+		if bundled := filepath.Join(root, "configs", include); dirExists(bundled) {
+			copyYAMLDir(t, bundled, filepath.Join(dir, include))
+		}
 	}
 
 	cfg, err := Load(filepath.Join(dir, "sermo.yml"))
@@ -116,6 +121,157 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	}
 	for _, issue := range Validate(cfg) {
 		t.Errorf("shipped sermo.yml fails validation: %s", issue)
+	}
+}
+
+func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
+	root := repoRoot(t)
+	servicesDir := filepath.Join(root, "configs", "services")
+	if !dirExists(servicesDir) {
+		t.Fatalf("configs/services is missing")
+	}
+	services, err := yamlFiles(servicesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(services) == 0 {
+		t.Fatalf("configs/services has no service examples")
+	}
+
+	appsDir := filepath.Join(root, "configs", "apps")
+	if !dirExists(appsDir) {
+		return
+	}
+	apps, err := yamlFiles(appsDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(apps) > 0 {
+		t.Fatalf("configs/apps is a legacy alias; move service YAML examples to configs/services: %s", strings.Join(apps, ", "))
+	}
+}
+
+func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
+	root := repoRoot(t)
+	dir := filepath.Join(root, "catalog", "apps")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		var found []string
+		collectForbiddenKeys(doc, "", map[string]struct{}{"pidfile": {}, "processes": {}}, &found)
+		if len(found) > 0 {
+			t.Errorf("%s declares service process selector keys in catalog/apps: %s", path, strings.Join(found, ", "))
+		}
+	}
+}
+
+func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	want := map[string][]string{
+		"avahi":    {"avahi", "avahi-daemon"},
+		"dbus":     {"dbus", "dbus-daemon"},
+		"fail2ban": {"fail2ban", "fail2ban-server"},
+		"keydb":    {"keydb", "keydb-server"},
+	}
+	for name, openrcCandidates := range want {
+		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+		if len(errs) > 0 {
+			t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+		}
+		if resolved.Name != name {
+			t.Fatalf("ResolveCatalog(%s) resolved name = %q", name, resolved.Name)
+		}
+		candidates, trust := ServiceCandidates(resolved.Tree, "openrc", name)
+		if trust {
+			t.Fatalf("ServiceCandidates(%s) trust = true, want explicit aliases", name)
+		}
+		if strings.Join(candidates, ",") != strings.Join(openrcCandidates, ",") {
+			t.Fatalf("ServiceCandidates(%s) = %v, want %v", name, candidates, openrcCandidates)
+		}
+	}
+
+	legacy := map[string]string{
+		"avahi-daemon":    "avahi",
+		"dbus-daemon":     "dbus",
+		"fail2ban-server": "fail2ban",
+		"keydb-server":    "keydb",
+	}
+	listed := map[string]struct{}{}
+	for _, name := range cfg.DaemonsInCategory(CategoryService) {
+		listed[name] = struct{}{}
+	}
+	for oldName, canonical := range legacy {
+		if _, ok := listed[oldName]; ok {
+			t.Fatalf("legacy daemon alias %q should not be listed as a catalog service", oldName)
+		}
+		doc, ok := cfg.Daemons[oldName]
+		if !ok {
+			t.Fatalf("legacy daemon alias %q does not resolve", oldName)
+		}
+		if doc.Name != canonical {
+			t.Fatalf("legacy daemon alias %q resolves to %q, want %q", oldName, doc.Name, canonical)
+		}
+	}
+}
+
+func yamlFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, entry := range entries {
+		if !entry.IsDir() && isYAML(entry.Name()) {
+			out = append(out, entry.Name())
+		}
+	}
+	return out, nil
+}
+
+func collectForbiddenKeys(node any, keyPath string, forbidden map[string]struct{}, found *[]string) {
+	switch v := node.(type) {
+	case map[string]any:
+		for key, child := range v {
+			next := key
+			if keyPath != "" {
+				next = keyPath + "." + key
+			}
+			if _, ok := forbidden[key]; ok {
+				*found = append(*found, next)
+			}
+			collectForbiddenKeys(child, next, forbidden, found)
+		}
+	case []any:
+		for _, child := range v {
+			collectForbiddenKeys(child, keyPath, forbidden, found)
+		}
 	}
 }
 

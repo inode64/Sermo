@@ -19,27 +19,14 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("list interfaces: %w", err)
 	}
-	var cands []Iface
-	for _, i := range ifaces {
-		if !i.Loopback {
-			cands = append(cands, i)
-		}
-	}
+	cands := nonLoopbackIfaces(ifaces)
 	if len(cands) == 0 {
 		return Result{}, fmt.Errorf("no non-loopback network interfaces found")
 	}
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		st := "down"
-		if c.Up {
-			st = "up"
-		}
-		labels[i] = fmt.Sprintf("%s (%s)", c.Name, st)
-	}
-	sel := p.MultiChoose("Which interfaces do you want to monitor?", labels)
+	selected := chooseIfaces(p, "Which interfaces do you want to monitor?", cands, env.DefaultIfaces, false)
 
 	var shared *netSettings
-	if len(sel) > 1 && p.Confirm("Apply the same settings to all selected interfaces?", true) {
+	if len(selected) > 1 && p.Confirm("Apply the same settings to all selected interfaces?", true) {
 		s, err := askNetSettings(p, env, "the selected interfaces")
 		if err != nil {
 			return Result{}, err
@@ -48,8 +35,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 
 	watches := map[string]any{}
-	for _, i := range sel {
-		c := cands[i]
+	for _, c := range selected {
 		s := shared
 		if s == nil {
 			t, err := askNetSettings(p, env, c.Name)
@@ -61,6 +47,77 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		watches["net-"+c.Name] = buildNetWatch(c, *s)
 	}
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d net watch(es)", len(watches))}, nil
+}
+
+func nonLoopbackIfaces(ifaces []Iface) []Iface {
+	out := make([]Iface, 0, len(ifaces))
+	for _, iface := range ifaces {
+		if !iface.Loopback {
+			out = append(out, iface)
+		}
+	}
+	return out
+}
+
+func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []string, allowDefault bool) []Iface {
+	defaults := stringSet(defaultIfaces)
+	labels := make([]string, len(cands))
+	var hasActive, hasDefault bool
+	for i, c := range cands {
+		labels[i] = ifaceLabel(c, defaults[c.Name])
+		hasActive = hasActive || c.Up
+		hasDefault = hasDefault || defaults[c.Name]
+	}
+	var keywords []string
+	if hasActive {
+		keywords = append(keywords, "active")
+	}
+	if allowDefault && hasDefault {
+		keywords = append(keywords, "default")
+	}
+	sel, keyword := p.MultiChooseKeyword(question, labels, keywords...)
+	switch keyword {
+	case "active":
+		return filterIfaces(cands, func(c Iface) bool { return c.Up })
+	case "default":
+		return filterIfaces(cands, func(c Iface) bool { return defaults[c.Name] })
+	default:
+		out := make([]Iface, 0, len(sel))
+		for _, idx := range sel {
+			out = append(out, cands[idx])
+		}
+		return out
+	}
+}
+
+func ifaceLabel(iface Iface, defaultRoute bool) string {
+	state := "down"
+	if iface.Up {
+		state = "up"
+	}
+	label := fmt.Sprintf("%s (%s)", iface.Name, state)
+	if defaultRoute {
+		label += ", default route"
+	}
+	return label
+}
+
+func filterIfaces(ifaces []Iface, keep func(Iface) bool) []Iface {
+	out := make([]Iface, 0, len(ifaces))
+	for _, iface := range ifaces {
+		if keep(iface) {
+			out = append(out, iface)
+		}
+	}
+	return out
+}
+
+func stringSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		out[value] = true
+	}
+	return out
 }
 
 type netSettings struct {
@@ -98,12 +155,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 
 func buildNetWatch(iface Iface, s netSettings) map[string]any {
 	newThen := func() map[string]any {
-		then := map[string]any{}
-		if len(s.notifiers) > 0 {
-			then["notify"] = s.notifiers
-		}
-		applyDryRun(then, s.dryRun)
-		return then
+		return watchThen(s.notifiers, s.dryRun)
 	}
 	metrics := map[string]any{}
 	for _, m := range s.metrics {

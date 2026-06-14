@@ -83,6 +83,16 @@ otherwise they are asked per target.
   `remediation: {shadow: true}` for each generated service (or once for the
   selected batch). This rehearses service remediation rules and operations; it
   does not suppress host watch actions.
+- **Batch service setup avoids port noise.** When several catalog services are
+  selected, the service assistant asks whether to review per-service port
+  overrides. The default is no: generated services inherit catalog ports and the
+  wizard moves straight to the shared monitor/interval/shadow questions. Select
+  review only when the host runs a service on a non-catalog port.
+- **Interface shortcuts.** Network assistants accept the keyword `active` at the
+  interface multi-select prompt to pick only currently up non-loopback
+  interfaces. The uplink assistant also accepts `default` when a default-route
+  interface is detected; use it to generate route/ping/DNS checks for the
+  current internet egress instead of hand-picking tunnel or helper interfaces.
 - **Detection drives cleanup.** Step 9 only offers files whose target is absent
   from the current detection; with detection unavailable it offers nothing, so a
   valid file is never proposed for deletion.
@@ -114,6 +124,12 @@ they write `uses:` and inherit PID/process selectors from `catalog/services`.
 Uncataloged active units write `service.name` plus a basic `checks.service`, and
 their PID question is prefilled from detection and only accepts absolute pidfile
 paths.
+
+The service wizard writes new generated `kind: service` files under a
+`services/` include directory. Older installs may already load `apps/` as an
+include directory for concrete service files; keep that path configured while
+those files exist. The wizard preserves any loaded `apps/` include and appends
+`services/` instead of moving or deleting legacy files.
 
 ## Adding a new wizard
 

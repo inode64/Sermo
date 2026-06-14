@@ -116,14 +116,10 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 			"value": s.value,
 		},
 	}
-	then := map[string]any{}
-	if len(s.notifiers) > 0 {
-		then["notify"] = s.notifiers
-	}
+	then := watchThen(s.notifiers, s.dryRun)
 	if s.expand {
 		then["expand"] = map[string]any{"by": s.expandBy}
 	}
-	applyDryRun(then, s.dryRun)
 	entry := map[string]any{"check": check, "then": then}
 	if s.forCycles > 0 {
 		entry["for"] = map[string]any{"cycles": s.forCycles}

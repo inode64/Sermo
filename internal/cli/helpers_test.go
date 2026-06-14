@@ -64,6 +64,11 @@ func TestWizardDaemonHelpers(t *testing.T) {
 	if got := daemonPort(map[string]any{}); got != 0 {
 		t.Fatalf("daemonPort without variables = %d", got)
 	}
+	for _, port := range []any{0, -1, 65536, "70000", "not-a-port"} {
+		if got := daemonPort(map[string]any{"variables": map[string]any{"port": port}}); got != 0 {
+			t.Fatalf("daemonPort(%v) = %d, want 0", port, got)
+		}
+	}
 
 	set := serviceNameSet(&config.Config{ServiceNames: []string{"a", "b"}})
 	if _, ok := set["a"]; !ok || len(set) != 2 {
@@ -100,6 +105,9 @@ func TestWriteServiceFiles(t *testing.T) {
 	if target != filepath.Join(dir, servicesIncludeDir) {
 		t.Fatalf("target dir = %q", target)
 	}
+	if servicesIncludeDir != "services" {
+		t.Fatalf("service wizard must write new service files under services/, got %q", servicesIncludeDir)
+	}
 	written, err := os.ReadFile(filepath.Join(target, "web-main.yml"))
 	if err != nil || !strings.Contains(string(written), "uses: nginx") {
 		t.Fatalf("service file = %q, err %v", written, err)
@@ -116,5 +124,35 @@ func TestWriteServiceFiles(t *testing.T) {
 	// Re-writing the same service must refuse to overwrite.
 	if _, _, err := writeServiceFiles(global, docs); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Fatalf("overwrite err = %v", err)
+	}
+}
+
+func TestWriteServiceFilesPreservesLegacyAppsInclude(t *testing.T) {
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	if err := os.WriteFile(global, []byte("paths:\n  includes: [apps]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	docs := map[string]map[string]any{
+		"ssh": {"kind": "service", "name": "ssh", "uses": "ssh"},
+	}
+
+	target, _, err := writeServiceFiles(global, docs)
+	if err != nil {
+		t.Fatalf("writeServiceFiles: %v", err)
+	}
+	if target != filepath.Join(dir, "services") {
+		t.Fatalf("target dir = %q, want services", target)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "apps")); !os.IsNotExist(err) {
+		t.Fatalf("legacy apps dir should not be created or removed, stat err=%v", err)
+	}
+	data, err := os.ReadFile(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "apps") || !strings.Contains(body, "services") {
+		t.Fatalf("legacy apps include must be preserved while services is added: %s", body)
 	}
 }

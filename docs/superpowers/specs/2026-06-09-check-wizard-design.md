@@ -112,7 +112,7 @@ merge, LVM verification inside the wizard, assistants beyond volume/net.
 ## Since v1
 
 The registry has grown past this spec: a **service** assistant now detects
-installed catalog daemons and writes `kind: service` files into `apps/`
+installed catalog daemons and writes `kind: service` files into `services/`
 (`Result.Services`, handled by `writeWizardServices`), so "non-watch config" is
 no longer out of scope. The Prompt also aborts cleanly (`assist.ErrInputClosed`)
 when stdin ends mid-question instead of re-prompting forever.

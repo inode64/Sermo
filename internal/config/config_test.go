@@ -385,6 +385,42 @@ watches:
 	}
 }
 
+func TestDefaultIncludeDirsPreferServicesAndKeepAppsAlias(t *testing.T) {
+	want := []string{"/etc/sermo/services", "/etc/sermo/apps"}
+	if strings.Join(defaultIncludeDirs, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("defaultIncludeDirs = %v, want %v", defaultIncludeDirs, want)
+	}
+}
+
+func TestLoadUsesDefaultIncludeDirsWhenIncludesOmitted(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  catalog: [ @ROOT@/catalog ]
+  runtime: /run/sermo
+`,
+		"services/web.yml": `
+kind: service
+name: web
+`,
+	})
+	root := filepath.Dir(global)
+	oldDefaultIncludeDirs := defaultIncludeDirs
+	defaultIncludeDirs = []string{filepath.Join(root, "services"), filepath.Join(root, "apps")}
+	t.Cleanup(func() { defaultIncludeDirs = oldDefaultIncludeDirs })
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := strings.Join(cfg.Global.Includes, "\n"); got != strings.Join(defaultIncludeDirs, "\n") {
+		t.Fatalf("Global.Includes = %v, want %v", cfg.Global.Includes, defaultIncludeDirs)
+	}
+	if _, ok := cfg.Services["web"]; !ok {
+		t.Fatalf("service from default services include was not loaded")
+	}
+}
+
 func TestLoadLegacyEnabledPathAlias(t *testing.T) {
 	root := t.TempDir()
 	includeDir := filepath.Join(root, "enabled")
@@ -1336,6 +1372,41 @@ func TestDaemonCategoryFromDirectory(t *testing.T) {
 	}
 	if got := cfg.DaemonsInCategory(CategoryApp); len(got) != 1 || got[0] != "git" {
 		t.Errorf("DaemonsInCategory(app) = %v, want [git]", got)
+	}
+}
+
+func TestCatalogAliasDoesNotShadowCanonicalDaemon(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/a.yml": `
+kind: daemon
+name: a
+catalog_aliases: [b]
+service: { name: a }
+`,
+		"catalog/b.yml": `
+kind: daemon
+name: b
+service: { name: b }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	doc, ok := cfg.Daemons["b"]
+	if !ok {
+		t.Fatal("daemon b is not indexed")
+	}
+	if doc.Name != "b" {
+		t.Fatalf("daemon b resolves to %q, want canonical b", doc.Name)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "b")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(b) errors = %v", errs)
+	}
+	if resolved.Name != "b" {
+		t.Fatalf("ResolveCatalog(b) = %q, want b", resolved.Name)
 	}
 }
 

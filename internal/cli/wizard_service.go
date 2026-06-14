@@ -293,7 +293,9 @@ func daemonPort(tree map[string]any) int {
 		return 0
 	}
 	if p, ok := cfgval.Int(vars["port"]); ok {
-		return p
+		if p >= 1 && p <= 65535 {
+			return p
+		}
 	}
 	return 0
 }
@@ -371,11 +373,16 @@ func pathExists(p string) bool {
 }
 
 // servicesIncludeDir is the includes subdirectory the service wizard writes
-// kind:service files into (the conventional enabled-services location).
-const servicesIncludeDir = "apps"
+// kind:service files into.
+const servicesIncludeDir = "services"
+
+// legacyServicesIncludeDir is the pre-services include directory. Keep it
+// active when an operator already lists it so existing service files are not
+// silently orphaned.
+const legacyServicesIncludeDir = "apps"
 
 // writeWizardServices renders the generated services, confirms, then writes one
-// `kind: service` file per service into the apps includes directory and
+// `kind: service` file per service into the services includes directory and
 // ensures that directory is listed in paths.includes.
 func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath string, cfg *config.Config, res assist.Result, env assist.Env) int {
 	existing := serviceNameSet(cfg)
@@ -405,10 +412,13 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 
 	// Step-9 cleanup: offer to delete managed service files whose catalog daemon
 	// is no longer detected on this host (docs/wizards.md).
-	dir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
-	deletes, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, "service"))
-	if err != nil {
-		return a.fail(opts, err.Error())
+	var deletes []string
+	for _, dir := range serviceCleanupDirs(globalPath, cfg) {
+		more, err := planStaleServiceDeletes(p, dir, detectedTargetKeys(env, "service"))
+		if err != nil {
+			return a.fail(opts, err.Error())
+		}
+		deletes = append(deletes, more...)
 	}
 	if err := deleteWizardWatchFiles(deletes); err != nil {
 		return a.fail(opts, err.Error())
@@ -425,10 +435,26 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	return exitSuccess
 }
 
+func serviceCleanupDirs(globalPath string, cfg *config.Config) []string {
+	base := filepath.Dir(filepath.Clean(globalPath))
+	dirs := []string{filepath.Join(base, servicesIncludeDir)}
+	if cfg == nil {
+		return dirs
+	}
+	legacy := filepath.Join(base, legacyServicesIncludeDir)
+	for _, include := range cfg.Global.Includes {
+		if filepath.Clean(include) == filepath.Clean(legacy) {
+			dirs = append(dirs, legacy)
+			break
+		}
+	}
+	return dirs
+}
+
 // planStaleServiceDeletes offers to delete managed `kind: service` files under
-// the apps includes dir whose `uses:` daemon (or name) is no longer in the
-// detected set. Mirrors planWizardWatchDeletes for the service wizard; a no-op
-// when detection is empty so a valid file is never proposed for deletion.
+// an includes dir whose `uses:` daemon (or name) is no longer in the detected
+// set. Mirrors planWizardWatchDeletes for the service wizard; a no-op when
+// detection is empty so a valid file is never proposed for deletion.
 func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]bool) ([]string, error) {
 	if len(detected) == 0 {
 		return nil, nil
@@ -485,8 +511,8 @@ func docsPreview(docs map[string]map[string]any) []any {
 	return out
 }
 
-// writeServiceFiles writes each service doc to its own file under the
-// apps includes dir, ensuring that dir is in paths.includes.
+// writeServiceFiles writes each service doc to its own file under the services
+// includes dir, ensuring that dir is in paths.includes.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
 	if _, err := ensureIncludeDir(globalPath, servicesIncludeDir, targetDir); err != nil {
