@@ -142,7 +142,7 @@ func splitServiceCandidates(cands []DaemonCandidate) (activeCatalog, generic []D
 }
 
 func serviceCandidateActive(c DaemonCandidate) bool {
-	return c.Status == "" || c.Status == "active"
+	return c.Status == "active"
 }
 
 func chooseServices(p *Prompt, question string, cands []DaemonCandidate) []DaemonCandidate {

@@ -11,8 +11,8 @@ func serviceTestEnv() Env {
 		ServiceNames: map[string]struct{}{"redis": {}}, // redis already configured -> skipped if chosen
 		Daemons: func() ([]DaemonCandidate, error) {
 			return []DaemonCandidate{
-				{Name: "nginx", Title: "Nginx", Unit: "nginx", Port: 80, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}},
-				{Name: "named", Title: "BIND", Unit: "named", Port: 53, UnitPresent: true, PortListening: true},
+				{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: "active", Port: 80, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}},
+				{Name: "named", Title: "BIND", Unit: "named", Status: "active", Port: 53, UnitPresent: true, PortListening: true},
 			}, nil
 		},
 	}
@@ -112,11 +112,33 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantSkipsMissingStatus(t *testing.T) {
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{
+			{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: "active"},
+			{Name: "redis", Title: "Redis", Unit: "redis"},
+		}, nil
+	}}
+	script := strings.Join([]string{"all", "1", "", "n"}, "\n") + "\n"
+	var out strings.Builder
+	p := NewPrompt(strings.NewReader(script), &out)
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if strings.Contains(out.String(), "Redis") {
+		t.Fatalf("missing-status service was offered:\n%s", out.String())
+	}
+	if _, ok := res.Services["redis"]; ok {
+		t.Fatalf("missing-status service was configured: %v", res.Services["redis"])
+	}
+}
+
 func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 	// Catalog daemon profiles own PID detection. A detected pidfile must not be
 	// written into the generated service override.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Pidfile: "/run/nginx.pid"}}, nil
+		return []DaemonCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Status: "active", Pidfile: "/run/nginx.pid"}}, nil
 	}}
 	script := strings.Join([]string{"1", "1", "", "n"}, "\n") + "\n" // select; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -137,7 +159,7 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 	// Generic services have no catalog daemon profile, so accepting the detected
 	// pidfile writes it into the generated service entry.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Generic: true, Pidfile: "/run/customd.pid"}}, nil
+		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
 	script := strings.Join([]string{"y", "1", "", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -153,7 +175,7 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 
 func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Generic: true, Pidfile: "/run/customd.pid"}}, nil
+		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
 	script := strings.Join([]string{"y", "1", "y", "", "1", "", "n"}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval; no shadow
 	var out strings.Builder
@@ -175,7 +197,7 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	// No pidfile, but an exe was detected: accepting the fallback writes a
 	// command_match process selector.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Generic: true, Exe: "/usr/sbin/sshd"}}, nil
+		return []DaemonCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Status: "active", Generic: true, Exe: "/usr/sbin/sshd"}}, nil
 	}}
 	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -194,7 +216,7 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	// A shared runtime/script service should use the detected cmdline pattern and
 	// owner instead of assuming the configured command is the resolved exe.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
+		return []DaemonCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Status: "active", Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
 	}}
 	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -213,7 +235,7 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	// Selecting two services and answering "apply to all" asks monitor+interval
 	// once and applies them to every selected service.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "nginx", Unit: "nginx"}, {Name: "sshd", Unit: "sshd"}}, nil
+		return []DaemonCandidate{{Name: "nginx", Unit: "nginx", Status: "active"}, {Name: "sshd", Unit: "sshd", Status: "active"}}, nil
 	}}
 	// select 1,2; batch=yes; monitor disabled; interval 30s; shadow=no.
 	script := strings.Join([]string{"1,2", "y", "2", "30s", "n"}, "\n") + "\n"
@@ -233,8 +255,8 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{
-			{Name: "apache", Unit: "apache2", Port: 80},
-			{Name: "redis", Unit: "redis", Port: 6379},
+			{Name: "apache", Unit: "apache2", Status: "active", Port: 80},
+			{Name: "redis", Unit: "redis", Status: "active", Port: 6379},
 		}, nil
 	}}
 	// select all; do not review port overrides; batch=yes; monitor enabled;
