@@ -231,9 +231,11 @@ same safe operation engine the CLI uses.
 
 Below the services table the dashboard lists the **installed applications** (the
 catalog app daemons whose binary is present), showing each application's name and
-short version; the list is sortable by name, category or version, and expanding a
-row reveals the full version string, the binary's file location and its
-permissions. Services and applications can be filtered and grouped by their
+short version; an app `health` command, when configured, decides OK/error from
+its exit code before the version command is considered. The list is sortable by
+name, category or version, and expanding a row reveals the full version string,
+the binary's file location and its permissions. Services and applications can be
+filtered and grouped by their
 top-level `category` metadata field.
 This is the same data the `sermoctl apps` command reports (served from
 `GET /api/applications`). The dashboard caches this application list for up to
