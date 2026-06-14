@@ -305,28 +305,34 @@ func loadDocument(path string) (*Document, error) {
 // indexing; duplicate-name detection is reported by validation, which sees the
 // later document's path.
 func (c *Config) add(doc *Document) {
-	index := func(m map[string]*Document, names *[]string) {
-		if existing, exists := m[doc.Name]; !exists && doc.Name != "" {
-			m[doc.Name] = doc
-		} else if exists && existing.Name != doc.Name {
-			m[doc.Name] = doc
-		}
-		*names = append(*names, doc.Name)
-	}
 	switch doc.Kind {
 	case kindDaemon:
-		index(c.Daemons, &c.DaemonNames)
+		indexDocument(c.Daemons, &c.DaemonNames, doc)
 		c.addCatalogAliases(doc)
 	case kindApp:
-		index(c.Apps, &c.AppNames)
+		indexDocument(c.Apps, &c.AppNames, doc)
 	case kindLibrary:
-		index(c.Libraries, &c.LibraryNames)
+		indexDocument(c.Libraries, &c.LibraryNames, doc)
 	case kindPatterns:
-		index(c.Patterns, &c.PatternNames)
+		indexDocument(c.Patterns, &c.PatternNames, doc)
 	case kindService:
-		index(c.Services, &c.ServiceNames)
+		indexDocument(c.Services, &c.ServiceNames, doc)
 	}
 	c.docs = append(c.docs, doc)
+}
+
+func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
+	*names = append(*names, doc.Name)
+	if doc.Name == "" {
+		return
+	}
+	existing, exists := reg[doc.Name]
+	// A canonical document may replace a registry entry that was created by a
+	// previous daemon's catalog_aliases, but duplicate canonical names still keep
+	// the first document and are reported by validation.
+	if !exists || existing.Name != doc.Name {
+		reg[doc.Name] = doc
+	}
 }
 
 func (c *Config) addCatalogAliases(doc *Document) {
