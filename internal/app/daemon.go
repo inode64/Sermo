@@ -318,6 +318,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 
 	cache := map[string]checks.Result{}
 	recordMeasurement := measurementRecorder(deps, name, tree)
+	section, _ := tree["checks"].(map[string]any)
+	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
+	warnings = append(warnings, checkWarnings...)
 
 	worker = &Worker{
 		Service:      name,
@@ -344,8 +347,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Emit:         deps.Emit,
 	}
 	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
-		section, _ := tree["checks"].(map[string]any)
-		built, _ := checks.Build(section, d)
+		setCycleMetrics(d.Metrics)
 		due := dueChecks(worker.cycle, built, every)
 		ran := make(map[string]bool, len(due))
 		for _, b := range due {
@@ -372,6 +374,26 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		return cache
 	}
 	return worker, warnings
+}
+
+func buildWorkerCheckSet(section map[string]any, deps checks.Deps, dynamicMetrics bool) ([]checks.Built, []string, func(checks.MetricReader)) {
+	if !dynamicMetrics {
+		built, warnings := checks.Build(section, deps)
+		return built, warnings, func(checks.MetricReader) {}
+	}
+
+	var current checks.MetricReader
+	buildDeps := deps
+	buildDeps.Metrics = func(scope, name string) (metrics.Reading, bool) {
+		if current == nil {
+			return metrics.Reading{}, false
+		}
+		return current(scope, name)
+	}
+	built, warnings := checks.Build(section, buildDeps)
+	return built, warnings, func(reader checks.MetricReader) {
+		current = reader
+	}
 }
 
 // publishSnapshots returns the worker's per-cycle check-cache publisher, or nil
