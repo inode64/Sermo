@@ -65,6 +65,8 @@ with app-specific runtime directories.
 Catalog daemons may declare `catalog_aliases` for old names after a catalog
 rename. A service may still use an alias in `uses:`, but aliases are compatibility
 entries only and are not shown as separate daemons in wizard selection lists.
+`catalog_aliases` must be a non-empty list of simple names, without path
+separators.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
