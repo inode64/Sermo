@@ -18,11 +18,6 @@ variables:
   host: 127.0.0.1
   port: 60123
 
-commands:
-  version:
-    command: ["${binary}", "--version"]
-    timeout: 10s
-
 processes:
   main:
     type: command_match
