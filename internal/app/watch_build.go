@@ -100,22 +100,18 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	then, err := thenMap(entry)
-	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
-	}
-	hook, names, err := parseActions(then)
+	hook, names, thenBlock, err := parseThenAndExplicit(entry)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	expand, err := parseExpand(then, typ)
+	expand, err := parseExpand(thenBlock, typ)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	// Absent `then` key: pure alert/monitor-only (web UI + events only).
 	// Do not inherit globals; produce "firing" events but no actions.
-	if then != nil {
+	if thenBlock != nil {
 		if !hasWatchAction(hook, names, effectiveNames, expand) {
 			return nil, "watch " + name + ": then requires a hook, notify and/or expand"
 		}
@@ -204,14 +200,14 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
 		}
-		hook, names, err := parseThen(mEntry)
+		hook, names, thenBlock, err := parseThenAndExplicit(mEntry)
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
 		}
 		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
 		// Absent per-metric `then`: pure alert (web+logs only); do not inherit.
-		if m, _ := thenMap(mEntry); m != nil {
+		if thenBlock != nil {
 			if !hasWatchAction(hook, names, effectiveNames, nil) {
 				warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
 				continue
@@ -248,13 +244,13 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, names, err := parseThen(entry)
+	hook, names, thenBlock, err := parseThenAndExplicit(entry)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
 	// Absent `then`: pure alert (no hook/notify, no global inheritance).
-	if then, _ := thenMap(entry); then != nil {
+	if thenBlock != nil {
 		if !hasWatchAction(hook, names, effectiveNames, nil) {
 			return nil, "watch " + name + ": then requires a hook and/or notify"
 		}
@@ -295,13 +291,13 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, names, err := parseThen(entry)
+	hook, names, thenBlock, err := parseThenAndExplicit(entry)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
 	// Absent `then`: pure alert (no hook/notify, no global inheritance).
-	if then, _ := thenMap(entry); then != nil {
+	if thenBlock != nil {
 		if !hasWatchAction(hook, names, effectiveNames, nil) {
 			return nil, "watch " + name + ": then requires a hook and/or notify"
 		}
@@ -422,18 +418,24 @@ func parseFileCond(check map[string]any) (fileCond, error) {
 	return c, nil
 }
 
-// parseThen reads a `then` block into an optional hook and an optional list of
-// notifier names. A missing block means no per-watch action was declared; callers
-// decide whether a global notify default makes that valid.
-func parseThen(entry map[string]any) (HookSpec, []string, error) {
+// parseThenAndExplicit reads the (optional) `then` block and returns the hook +
+// notifier names, plus the raw then-block map (non-nil iff an explicit `then:` key
+// was present and was a valid mapping). Callers use the presence of the then-block
+// to decide whether to allow global notify inheritance or force pure monitor/alert
+// behavior (no actions, no inheritance).
+//
+// This removes the previous need for every call site to re-invoke thenMap just to
+// test presence (the source of the duplicated if/else blocks).
+func parseThenAndExplicit(entry map[string]any) (HookSpec, []string, map[string]any, error) {
 	then, err := thenMap(entry)
 	if err != nil {
-		return HookSpec{}, nil, err
+		return HookSpec{}, nil, nil, err
 	}
 	if then == nil {
-		return HookSpec{}, nil, nil
+		return HookSpec{}, nil, nil, nil
 	}
-	return parseActions(then)
+	hook, names, err := parseActions(then)
+	return hook, names, then, err
 }
 
 func thenMap(entry map[string]any) (map[string]any, error) {
