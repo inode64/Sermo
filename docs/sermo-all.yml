@@ -346,7 +346,7 @@ also_service:                  # auxiliary init units of this same service
   systemd: [demo.socket]
   openrc: [demo-socket]
 
-apps: [demo-app]               # app preflight checks are injected by app name
+apps: [demo-app]               # injects app preflight and exposes ${demo_app_binary}
 
 variables:                     # flat strings or first-existing path lists
   binary: [/usr/bin/demo, /usr/local/bin/demo]
@@ -771,6 +771,7 @@ rules:
 # ---------------------------------------------------------------------------
 kind: app
 name: demo-app
+catalog_aliases: [demo-app-legacy] # old app names still accepted by services' apps:
 display_name: "Demo Server"
 description: "Runtime/tool dependency injected into services that list apps: [demo-app]."
 category: app

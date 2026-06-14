@@ -6,7 +6,7 @@ category: database
 service:
   systemd: [keydb, keydb-server]
   openrc: [keydb, keydb-server]
-apps: [keydb-server]
+apps: [keydb]
 
 variables:
   host: 127.0.0.1
