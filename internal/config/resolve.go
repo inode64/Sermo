@@ -512,15 +512,16 @@ func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []st
 
 // expandApps links a service (or service daemon) to one or more apps from the
 // catalog via `apps: [name, …]`. Each named app contributes its preflight
-// binary+version checks to this service under keys namespaced by the app name
-// (`<app>-<check>`, e.g. `restic-binary`, `backrest-version`), so when a service
-// links several apps each one's checks stay distinct and a missing or
-// wrong-version runtime fails the service's preflight — which blocks
-// start/restart. The app definition is the
-// single source of truth for the tool's binary path and version command, shared
-// across every service that lists it (many-to-many). The `apps` key is consumed
-// here. App preflight entries are already variable-expanded by ResolveDaemon, so
-// they carry concrete paths regardless of this service's own variables.
+// binary, health and version checks to this service under keys namespaced by the
+// app name (`<app>-<check>`, e.g. `restic-binary`, `backrest-health`,
+// `backrest-version`), so when a service links several apps each one's checks
+// stay distinct and a missing, unhealthy or wrong-version runtime fails the
+// service's preflight — which blocks start/restart. The app definition is the
+// single source of truth for the tool's binary path, health probe and version
+// command, shared across every service that lists it (many-to-many). The `apps`
+// key is consumed here. App preflight entries are already variable-expanded by
+// ResolveDaemon, so they carry concrete paths regardless of this service's own
+// variables.
 func (c *Config) expandApps(tree map[string]any) []string {
 	_, present := tree["apps"]
 	names := cfgval.StringList(tree["apps"])

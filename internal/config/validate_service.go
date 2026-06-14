@@ -249,9 +249,10 @@ func validateReload(tree map[string]any, add addFunc) {
 
 // validateCommands checks the optional `commands` section: each entry uses array
 // form with an optional valid duration timeout and output expectations
-// (section 30). Reserved names are consumed by features — `version`/
-// `version_short` by the apps listings and the version.on_change monitor,
-// `reload` by the safe reload operation; any other entry is informational.
+// (section 30). Reserved names are consumed by features — `health`, `version`
+// and `version_short` by the apps listings, `version` by the version.on_change
+// monitor, `reload` by the safe reload operation; any other entry is
+// informational.
 func validateCommands(tree map[string]any, add addFunc) {
 	commands, ok := tree["commands"].(map[string]any)
 	if !ok {
