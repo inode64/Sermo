@@ -293,7 +293,9 @@ func daemonPort(tree map[string]any) int {
 		return 0
 	}
 	if p, ok := cfgval.Int(vars["port"]); ok {
-		return p
+		if p >= 1 && p <= 65535 {
+			return p
+		}
 	}
 	return 0
 }
