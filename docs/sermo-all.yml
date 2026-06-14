@@ -358,6 +358,10 @@ variables:                     # flat strings or first-existing path lists
   data_dir: /var/lib/demo
 
 commands:                      # informational or reserved names such as version
+  health:
+    command: ["${binary}", "--health"]
+    timeout: 5s
+    expect_exit: 0
   version:
     command: ["${binary}", "--version"]
     timeout: 5s
@@ -779,6 +783,7 @@ variables:
   binary: /usr/bin/demo
 preflight:
   binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s, expect_exit: 0 }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 commands:
   version_short: { command: ["${binary}", "--version-short"], timeout: 10s }

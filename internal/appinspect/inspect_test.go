@@ -15,16 +15,26 @@ import (
 // fakeRunner returns a canned result per command path; commands without an
 // entry fail like a missing binary would.
 type fakeRunner struct {
-	byPath map[string]execx.Result
-	err    error
+	byPath    map[string]execx.Result
+	byCommand map[string]execx.Result
+	err       error
 }
 
-func (f fakeRunner) Run(_ context.Context, name string, _ ...string) (execx.Result, error) {
+func (f fakeRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	if f.byCommand != nil {
+		if res, ok := f.byCommand[commandKey(name, args...)]; ok {
+			return res, f.err
+		}
+	}
 	res, ok := f.byPath[name]
 	if !ok {
 		return execx.Result{ExitCode: 127, Stderr: "not found"}, f.err
 	}
 	return res, f.err
+}
+
+func commandKey(name string, args ...string) string {
+	return strings.Join(append([]string{name}, args...), "\x00")
 }
 
 // tree builds a resolved daemon tree around one binary path and optional
@@ -142,6 +152,40 @@ func TestInspectVersionCommandOutcomes(t *testing.T) {
 	}, tree(bin, version(nil)))
 	if failed.OK || !strings.Contains(failed.Status, "exec format error") {
 		t.Errorf("runner error: %+v", failed)
+	}
+}
+
+func TestInspectHealthCommandTakesPriority(t *testing.T) {
+	bin := writeBinary(t, 0o755)
+	version := map[string]any{"command": []any{bin, "--version"}}
+	health := map[string]any{
+		"type":          "command",
+		"command":       []any{bin, "-h"},
+		"expect_stdout": "this matcher is ignored for health",
+	}
+	tr := tree(bin, version)
+	tr["preflight"] = map[string]any{"health": health}
+
+	r := inspect(t, fakeRunner{byCommand: map[string]execx.Result{
+		commandKey(bin, "-h"):        {Stdout: "usage without a version\n", Stderr: "noise\n", ExitCode: 0},
+		commandKey(bin, "--version"): {Stderr: "not supported\n", ExitCode: 2},
+	}}, tr)
+	if !r.OK || r.Status != "ok" {
+		t.Fatalf("health success should make app ok regardless of output/version failure: %+v", r)
+	}
+	if r.Version != "" || r.VersionShort != "" {
+		t.Fatalf("failing version command should not populate version when health succeeds: %+v", r)
+	}
+
+	r = inspect(t, fakeRunner{byCommand: map[string]execx.Result{
+		commandKey(bin, "-h"):        {Stdout: "usage without a version\n", Stderr: "health details\n", ExitCode: 1},
+		commandKey(bin, "--version"): {Stdout: "Tool 9.9.9\n", ExitCode: 0},
+	}}, tr)
+	if r.OK || !strings.Contains(r.Status, "exit 1 (want 0)") {
+		t.Fatalf("health failure should take priority over version success: %+v", r)
+	}
+	if strings.Contains(r.Status, "health details") || r.Version != "" {
+		t.Fatalf("health must ignore command output and not run version after failure: %+v", r)
 	}
 }
 

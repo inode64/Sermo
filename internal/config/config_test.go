@@ -230,6 +230,7 @@ name: java
 variables: { binary: /usr/bin/java }
 preflight:
   binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "-help"] }
   version: { type: command, command: ["${binary}", "-version"] }
 `,
 		"catalog/tomcat.yml": `
@@ -271,6 +272,9 @@ uses: tomcat
 	}
 	if _, ok := pf["java-version"]; !ok {
 		t.Errorf("java-version not injected: %v", pf)
+	}
+	if _, ok := pf["java-health"]; !ok {
+		t.Errorf("java-health not injected: %v", pf)
 	}
 	// `apps` is consumed, not left in the resolved tree.
 	if _, ok := resolved.Tree["apps"]; ok {
