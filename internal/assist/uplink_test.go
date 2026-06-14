@@ -62,6 +62,30 @@ func TestUplinkAssistant(t *testing.T) {
 	}
 }
 
+func TestUplinkAssistantDefaultRouteKeyword(t *testing.T) {
+	env := testEnv()
+	env.Ifaces = func() ([]Iface, error) {
+		return []Iface{
+			{Name: "eth0", Up: true},
+			{Name: "wg0", Up: true},
+			{Name: "lo", Up: true, Loopback: true},
+		}, nil
+	}
+	env.DefaultIfaces = []string{"wg0"}
+	script := strings.Join([]string{"default", "1", "", "", "", "", "1", "y"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := uplinkAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, ok := res.Watches["uplink-wg0-route"]; !ok {
+		t.Fatalf("default route interface was not selected: %v", res.Watches)
+	}
+	if _, ok := res.Watches["uplink-eth0-route"]; ok {
+		t.Fatalf("non-default interface should not be selected: %v", res.Watches)
+	}
+}
+
 func TestUplinkAssistantInheritsDefaultNotify(t *testing.T) {
 	// Custom probe host and name; 'default' inherits the global notify, so
 	// every generated then block omits notify.

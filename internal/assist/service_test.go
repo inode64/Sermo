@@ -230,6 +230,34 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{
+			{Name: "apache", Unit: "apache2", Port: 80},
+			{Name: "redis", Unit: "redis", Port: 6379},
+		}, nil
+	}}
+	// select all; do not review port overrides; batch=yes; monitor enabled;
+	// inherit interval; shadow=yes. The script deliberately has no blank lines
+	// for individual port prompts.
+	script := strings.Join([]string{"all", "n", "y", "1", "", "y"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, name := range []string{"apache", "redis"} {
+		svc := res.Services[name].(map[string]any)
+		if _, hasVars := svc["variables"]; hasVars {
+			t.Fatalf("%s should not have port override variables when review is skipped: %v", name, svc)
+		}
+		remediation := svc["remediation"].(map[string]any)
+		if remediation["shadow"] != true {
+			t.Fatalf("%s remediation = %v, want shadow true", name, remediation)
+		}
+	}
+}
+
 func TestServiceLabel(t *testing.T) {
 	got := serviceLabel(DaemonCandidate{Title: "Nginx", Unit: "nginx", Port: 80, PortListening: true, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}})
 	for _, want := range []string{"Nginx", "unit: nginx", "port 80 (listening)", "config: /etc/nginx/nginx.conf"} {

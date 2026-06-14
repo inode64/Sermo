@@ -35,15 +35,7 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if len(cands) == 0 {
 		return Result{}, fmt.Errorf("no candidate interfaces found")
 	}
-	labels := make([]string, len(cands))
-	for i, c := range cands {
-		state := "down"
-		if c.Up {
-			state = "up"
-		}
-		labels[i] = fmt.Sprintf("%s (%s)", c.Name, state)
-	}
-	sel := p.MultiChoose("Which uplink interfaces do you want to monitor?", labels)
+	selected := chooseIfaces(p, "Which uplink interfaces do you want to monitor?", cands, env.DefaultIfaces, true)
 
 	s := uplinkSettings{Monitoring: p.AskMonitoring("the uplink watches")}
 	s.probeHost = p.Ask("Probe host to ping through the uplink", "1.1.1.1")
@@ -53,8 +45,8 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	s.dryRun = p.AskWatchDryRun("the uplink watches", env, s.notifiers, false)
 
 	watches := map[string]any{}
-	for _, idx := range sel {
-		for name, entry := range buildUplinkWatches(cands[idx].Name, s) {
+	for _, iface := range selected {
+		for name, entry := range buildUplinkWatches(iface.Name, s) {
 			watches[name] = entry
 		}
 	}

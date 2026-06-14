@@ -1,9 +1,12 @@
 kind: daemon
-name: avahi-daemon
+name: avahi
+catalog_aliases: [avahi-daemon]
 display_name: "Avahi"
 category: network
 description: "Zero Configuration Networking"
-service: avahi-daemon
+service:
+  systemd: [avahi, avahi-daemon]
+  openrc: [avahi, avahi-daemon]
 apps: [avahi-daemon]
 
 checks:
