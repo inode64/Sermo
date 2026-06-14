@@ -133,6 +133,11 @@ When systemd, OpenRC or a host file reports a pidfile or socket under
 `/var/run`, normalize it to the equivalent `/run/...` path before writing it to a
 catalog service, generated service config or documentation example.
 
+Before adding any new runtime path, check whether the path or one of its parent
+directories is a symlink (`readlink -f <path>` or `namei -l <path>`). Register
+the canonical target path, not the symlink spelling, so the catalog does not grow
+duplicate aliases for the same pidfile or socket.
+
 ## Service operations
 
 Application-level start, stop, restart, reload or signal actions on a service
