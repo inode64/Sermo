@@ -1,8 +1,8 @@
 // Package appinspect probes the applications described by catalog daemons: it
-// stats their binary and runs their version command to report installation,
-// version and health. It is the single source of this logic shared by the
-// sermoctl `apps`/`libs`/`services` listings and the web dashboard, so both
-// surfaces report identically.
+// stats their binary, runs their health command when present, and reports
+// installation, version and health. It is the single source of this logic shared
+// by the sermoctl `apps`/`libs`/`services` listings and the web dashboard, so
+// both surfaces report identically.
 package appinspect
 
 import (
@@ -20,7 +20,7 @@ import (
 	"sermo/internal/execx"
 )
 
-// probeTimeout bounds each version command invocation.
+// probeTimeout bounds each app probe command invocation.
 const probeTimeout = 5 * time.Second
 
 // Report is one application's installed/version/health summary.
@@ -58,8 +58,8 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 	return reports
 }
 
-// Inspect probes a single resolved daemon: it stats the binary and, when
-// present, runs the version command to capture the version and confirm it runs.
+// Inspect probes a single resolved daemon: it stats the binary, runs health to
+// confirm it runs when configured, and captures the version when available.
 func Inspect(ctx context.Context, runner execx.Runner, name string, resolved config.Resolved) Report {
 	r := Report{
 		Name:        name,
@@ -111,38 +111,73 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		}
 	}
 
-	vc := versionCommandFor(resolved.Tree, "version")
-	if len(vc.argv) == 0 {
+	health := probeCommandFor(resolved.Tree, "health")
+	version := probeCommandFor(resolved.Tree, "version")
+	if len(health.argv) > 0 {
+		r.OK, r.Status = runExitProbe(ctx, runner, health)
+		if r.OK && len(version.argv) > 0 {
+			r.Version, r.VersionShort = captureVersion(ctx, runner, resolved.Tree, version)
+		}
+		return r
+	}
+
+	if len(version.argv) == 0 {
 		r.OK = true
 		r.Status = "ok"
 		return r
 	}
 
-	res, err := execx.Run(ctx, runner, probeTimeout, vc.argv[0], vc.argv[1:]...)
+	ok, status, raw, short := runVersionProbe(ctx, runner, resolved.Tree, version)
+	r.OK = ok
+	r.Status = status
+	r.Version = raw
+	r.VersionShort = short
+	return r
+}
+
+func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string) {
+	res, err := execx.Run(ctx, runner, probeTimeout, cmd.argv[0], cmd.argv[1:]...)
 	switch {
 	case err != nil && res.ExitCode == 0:
-		r.Status = "error: " + err.Error()
-	case res.ExitCode != vc.expectExit:
-		r.Status = fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, vc.expectExit)
-		if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
-			r.Status += ": " + line
-		}
+		return false, "error: " + err.Error()
+	case res.ExitCode != cmd.expectExit:
+		return false, fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, cmd.expectExit)
 	default:
-		if ok, detail := vc.stdout.Match(res.Stdout); !ok {
-			r.Status = "error: stdout " + detail
-		} else if ok, detail := vc.stderr.Match(res.Stderr); !ok {
-			r.Status = "error: stderr " + detail
-		} else {
-			r.OK = true
-			r.Status = "ok"
-			r.Version = checks.FirstNonEmptyLine(res.Stdout)
-			if r.Version == "" {
-				r.Version = checks.FirstNonEmptyLine(res.Stderr)
-			}
-			r.VersionShort = shortVersionFor(ctx, runner, resolved.Tree, r.Version)
-		}
+		return true, "ok"
 	}
-	return r
+}
+
+func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) (bool, string, string, string) {
+	res, err := execx.Run(ctx, runner, probeTimeout, cmd.argv[0], cmd.argv[1:]...)
+	switch {
+	case err != nil && res.ExitCode == 0:
+		return false, "error: " + err.Error(), "", ""
+	case res.ExitCode != cmd.expectExit:
+		status := fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, cmd.expectExit)
+		if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
+			status += ": " + line
+		}
+		return false, status, "", ""
+	}
+	if ok, detail := cmd.stdout.Match(res.Stdout); !ok {
+		return false, "error: stdout " + detail, "", ""
+	}
+	if ok, detail := cmd.stderr.Match(res.Stderr); !ok {
+		return false, "error: stderr " + detail, "", ""
+	}
+	raw := checks.FirstNonEmptyLine(res.Stdout)
+	if raw == "" {
+		raw = checks.FirstNonEmptyLine(res.Stderr)
+	}
+	return true, "ok", raw, shortVersionFor(ctx, runner, tree, raw)
+}
+
+func captureVersion(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) (string, string) {
+	ok, _, raw, short := runVersionProbe(ctx, runner, tree, cmd)
+	if !ok {
+		return "", ""
+	}
+	return raw, short
 }
 
 // modeString renders the binary's permissions like `ls -l` does, with the octal
@@ -157,7 +192,7 @@ func modeString(info os.FileInfo) string {
 // Otherwise (no such command, or it errors or prints nothing) it falls back to
 // parsing the raw version line with ShortVersion.
 func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]any, rawVersion string) string {
-	if vc := versionCommandFor(tree, "version_short"); len(vc.argv) > 0 {
+	if vc := probeCommandFor(tree, "version_short"); len(vc.argv) > 0 {
 		res, err := execx.Run(ctx, runner, probeTimeout, vc.argv[0], vc.argv[1:]...)
 		if err == nil || res.ExitCode != 0 {
 			if line := checks.FirstNonEmptyLine(res.Stdout); line != "" {
@@ -187,25 +222,25 @@ func binaryPath(tree map[string]any) string {
 	return ""
 }
 
-// versionCommand is a daemon's resolved version command and the expectations its
-// result must meet: the exit code and optional stdout/stderr matchers.
-type versionCommand struct {
+// probeCommand is a daemon's resolved app probe command and the expectations
+// its result must meet: the exit code and optional stdout/stderr matchers.
+type probeCommand struct {
 	argv       []string
 	expectExit int
 	stdout     checks.OutputMatcher
 	stderr     checks.OutputMatcher
 }
 
-// versionCommandFor returns a daemon's version command and outcome expectations
-// for the named entry (`version` or `version_short`), resolved through the
-// shared preflight-then-commands lookup. argv is nil when no such command is
+// probeCommandFor returns a daemon's app probe command and outcome expectations
+// for the named entry (`health`, `version` or `version_short`), resolved through
+// the shared preflight-then-commands lookup. argv is nil when no such command is
 // configured.
-func versionCommandFor(tree map[string]any, key string) versionCommand {
-	entry := checks.VersionCommandEntry(tree, key)
+func probeCommandFor(tree map[string]any, key string) probeCommand {
+	entry := checks.ReservedCommandEntry(tree, key)
 	if entry == nil {
-		return versionCommand{}
+		return probeCommand{}
 	}
-	vc := versionCommand{argv: cfgval.StringList(entry["command"])}
+	vc := probeCommand{argv: cfgval.StringList(entry["command"])}
 	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
 		vc.expectExit = v
 	}
