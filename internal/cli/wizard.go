@@ -17,6 +17,7 @@ import (
 	"github.com/goccy/go-yaml"
 
 	"sermo/internal/assist"
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 	"sermo/internal/volume"
@@ -166,6 +167,7 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 		Backend:       backend,
 		Volumes:       listVolumes,
 		Ifaces:        listIfaces,
+		DefaultIfaces: defaultRouteIfaces(),
 		ServiceNames:  serviceNameSet(cfg),
 		Daemons: func() ([]assist.DaemonCandidate, error) {
 			if backend == "" {
@@ -209,6 +211,26 @@ func listIfaces() ([]assist.Iface, error) {
 		})
 	}
 	return out, nil
+}
+
+func defaultRouteIfaces() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, family := range []string{"ipv4", "ipv6"} {
+		routes, err := checks.SampleRoutes(family)
+		if err != nil {
+			continue
+		}
+		for _, route := range routes {
+			if route.Iface == "" || seen[route.Iface] {
+				continue
+			}
+			seen[route.Iface] = true
+			out = append(out, route.Iface)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func ifaceHasUsableAddress(addrs []net.Addr) bool {
@@ -609,10 +631,10 @@ func ensureIncludesPath(root map[string]any, base, relDir, targetDir string) (bo
 		changed = true
 	}
 	if len(list) == 0 {
-		// Seeding the conventional services dir is itself a change: the loader
-		// has no implicit default, so an unwritten seed would leave the files
-		// the wizard writes under apps never loaded.
-		list = append(list, "apps")
+		// Seeding the conventional services dir is itself a change: wizard
+		// output lives next to this config file, so the config must explicitly
+		// include that relative directory instead of relying on global fallbacks.
+		list = append(list, servicesIncludeDir)
 		changed = true
 	}
 	for _, item := range list {

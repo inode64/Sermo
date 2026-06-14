@@ -55,6 +55,42 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 	}
 }
 
+func TestNetAssistantActiveKeyword(t *testing.T) {
+	env := testEnv()
+	env.Ifaces = func() ([]Iface, error) {
+		return []Iface{
+			{Name: "dummy0", Up: false},
+			{Name: "eth0", Up: true},
+			{Name: "wg0", Up: true},
+			{Name: "lo", Up: true, Loopback: true},
+		}, nil
+	}
+	script := strings.Join([]string{
+		"active", // only eth0 and wg0
+		"y",      // shared settings
+		"1",      // monitor enabled
+		"",       // interval inherit
+		"1",      // link state
+		"1",      // on any change
+		"1",      // ops-email
+		"y",      // dry-run
+	}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := netAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, ok := res.Watches["net-eth0"]; !ok {
+		t.Fatalf("net-eth0 missing from %v", res.Watches)
+	}
+	if _, ok := res.Watches["net-wg0"]; !ok {
+		t.Fatalf("net-wg0 missing from %v", res.Watches)
+	}
+	if _, ok := res.Watches["net-dummy0"]; ok {
+		t.Fatalf("down interface should not be selected by active keyword: %v", res.Watches)
+	}
+}
+
 func TestNetAssistantStateDownOnly(t *testing.T) {
 	// Select eth0; monitor enabled, inherit interval; only state; "only when
 	// down"; notifier team-slack.

@@ -19,7 +19,8 @@ import (
 // subdirectory — `daemon` (services), `app` (tools/runtimes), `lib` (shared
 // libraries) — so they live in separate registries and a service may share a
 // name with the app that owns its binary (e.g. `apache` daemon + `apache` app).
-// `service` is an enabled instance (apps) that `uses` a daemon.
+// `service` is an enabled instance (usually under an include dir such as
+// services/) that `uses` a daemon.
 const (
 	kindDaemon   = "daemon"
 	kindApp      = "app"
@@ -74,10 +75,11 @@ func categoryFromDir(name string) string {
 // metaKeys are the document keys that control resolution and are not part of a
 // service's merged body.
 var metaKeys = map[string]struct{}{
-	"kind":  {},
-	"name":  {},
-	"uses":  {},
-	"clone": {},
+	"kind":            {},
+	"name":            {},
+	"uses":            {},
+	"clone":           {},
+	"catalog_aliases": {},
 }
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a

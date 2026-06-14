@@ -188,7 +188,7 @@ commands:
 preflight:
   config: { type: command, command: [apachectl, configtest] }
 
-# service (apps/apache.yml) — opt into the monitors:
+# service (services/apache.yml) — opt into the monitors:
 kind: service
 uses: apache
 version:

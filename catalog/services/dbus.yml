@@ -1,10 +1,11 @@
 kind: daemon
-name: dbus-daemon
+name: dbus
+catalog_aliases: [dbus-daemon]
 display_name: "D-Bus"
 category: system
 description: "DBus Daemon"
 service:
-  systemd: [dbus]
+  systemd: [dbus, dbus-daemon]
   openrc: [dbus, dbus-daemon]
 apps: [dbus-daemon]
 
