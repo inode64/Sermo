@@ -207,11 +207,14 @@ func validateCatalogAliases(doc *Document, scope string) []Issue {
 	if !present {
 		return nil
 	}
+	var issues []Issue
+	if doc.Kind != kindDaemon {
+		issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases is only supported on daemon catalog documents"})
+	}
 	aliases, ok := raw.([]any)
 	if !ok || len(aliases) == 0 {
-		return []Issue{{Scope: scope, Msg: "catalog_aliases must be a non-empty list"}}
+		return append(issues, Issue{Scope: scope, Msg: "catalog_aliases must be a non-empty list"})
 	}
-	var issues []Issue
 	for _, rawAlias := range aliases {
 		alias, ok := rawAlias.(string)
 		if !ok || alias == "" {
