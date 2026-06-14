@@ -40,6 +40,11 @@ paths:
 internal operation locks (`<runtime>/ops`). It lives on tmpfs and is wiped on
 reboot. `paths.locks` is **not** supported.
 
+Use `/run` for runtime paths in Sermo configuration and examples. `/var/run` is
+the historical compatibility alias for `/run`; do not write new `/var/run`
+pidfiles, sockets or runtime directories. If an init system reports `/var/run`,
+normalize the configured path to the equivalent `/run/...` spelling.
+
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
