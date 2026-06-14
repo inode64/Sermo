@@ -7,7 +7,7 @@ import (
 func init() { Register(acpidProtocol{}) }
 
 // acpidDefaultSocket is acpid's well-known local event socket.
-const acpidDefaultSocket = "/var/run/acpid.socket"
+const acpidDefaultSocket = "/run/acpid.socket"
 
 // acpidProtocol probes the ACPI event daemon (acpid). acpid is an event
 // broadcaster with no request/response protocol: clients connect to its Unix

@@ -7,7 +7,7 @@ import (
 func init() { Register(fail2banProtocol{}) }
 
 // fail2banDefaultSocket is fail2ban-server's well-known control socket.
-const fail2banDefaultSocket = "/var/run/fail2ban/fail2ban.sock"
+const fail2banDefaultSocket = "/run/fail2ban/fail2ban.sock"
 
 // fail2banProtocol probes fail2ban-server. fail2ban speaks a Python pickle
 // command protocol over a Unix socket, which is not worth reimplementing for a

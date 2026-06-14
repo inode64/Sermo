@@ -292,7 +292,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 			cfg.Query = c
 		}
 		if cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
-			cfg.Socket = "/var/run/docker.sock"
+			cfg.Socket = "/run/docker.sock"
 		}
 	}
 	// libvirt defaults to the local Unix socket; an explicit host selects TCP. An
@@ -300,7 +300,7 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	// stays in cfg.Query, so the VM name is carried in cfg.Params).
 	if proto.Name() == "libvirt" {
 		if cfg.Socket == "" && cfgval.AsString(entry["host"]) == "" {
-			cfg.Socket = "/var/run/libvirt/libvirt-sock"
+			cfg.Socket = "/run/libvirt/libvirt-sock"
 		}
 		if d := cfgval.AsString(entry["domain"]); d != "" {
 			cfg.Params = map[string]string{"domain": d}
@@ -308,11 +308,11 @@ func buildConnCheck(b base, proto conn.Protocol, entry map[string]any) (Check, s
 	}
 	// acpid is socket-only; default to its well-known event socket.
 	if proto.Name() == "acpid" && cfg.Socket == "" {
-		cfg.Socket = "/var/run/acpid.socket"
+		cfg.Socket = "/run/acpid.socket"
 	}
 	// fail2ban is socket-only; default to its well-known control socket.
 	if proto.Name() == "fail2ban" && cfg.Socket == "" {
-		cfg.Socket = "/var/run/fail2ban/fail2ban.sock"
+		cfg.Socket = "/run/fail2ban/fail2ban.sock"
 	}
 	// lvmpolld is socket-only; default to its well-known control socket.
 	if proto.Name() == "lvmpolld" && cfg.Socket == "" {

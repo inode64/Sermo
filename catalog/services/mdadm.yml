@@ -4,7 +4,7 @@ category: storage
 service: mdadm
 apps: [mdadm]
 
-pidfile: /var/run/mdadm.pid
+pidfile: /run/mdadm.pid
 
 checks:
   service: { type: service, expect: active }
