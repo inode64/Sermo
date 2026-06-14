@@ -62,11 +62,12 @@ If the path resolves through a symlink, configure the canonical target path
 instead. This is especially common for `/var/run` → `/run`, but can also happen
 with app-specific runtime directories.
 
-Catalog daemons may declare `catalog_aliases` for old names after a catalog
-rename. A service may still use an alias in `uses:`, but aliases are compatibility
-entries only and are not shown as separate daemons in wizard selection lists.
-`catalog_aliases` must be a non-empty list of simple names, without path
-separators.
+Catalog daemons and apps may declare `catalog_aliases` for old names after a
+catalog rename. A service may still use a daemon alias in `uses:` or an app alias
+in `apps:`, but aliases are compatibility entries only and are not shown as
+separate daemons/apps in wizard selection lists. New configuration should use the
+canonical name. `catalog_aliases` must be a non-empty list of simple names,
+without path separators.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which

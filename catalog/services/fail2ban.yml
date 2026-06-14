@@ -7,10 +7,10 @@ service:
   systemd: [fail2ban, fail2ban-server]
   openrc: [fail2ban, fail2ban-server]
 
-# fail2ban-server runs on the Python 3 runtime, owned by the `python` app and
+# fail2ban runs on the Python 3 runtime, owned by the `python` app and
 # linked here so its binary + version checks run in this service's preflight
 # (a missing Python blocks start).
-apps: [python, fail2ban-server]
+apps: [python, fail2ban]
 
 variables:
   binary: "/usr/bin/fail2ban-server"
