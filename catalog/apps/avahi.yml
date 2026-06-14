@@ -1,5 +1,6 @@
 kind: app
-name: avahi-daemon
+name: avahi
+catalog_aliases: [avahi-daemon]
 display_name: "Avahi"
 category: network
 variables:

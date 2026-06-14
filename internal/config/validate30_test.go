@@ -698,7 +698,7 @@ name: svc
 catalog_aliases: [stale]
 service: { name: x }
 `)
-	mustHave(t, issues, "catalog_aliases is only supported on daemon catalog documents")
+	mustHave(t, issues, "catalog_aliases is only supported on daemon and app catalog documents")
 
 	issues = validateService(t, `
 kind: service
