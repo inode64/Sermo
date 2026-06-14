@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"sermo/internal/notify"
 )
 
 // fileWatchHarness records each hook firing (its env) and the emitted events.
@@ -66,6 +68,30 @@ func TestFileWatchSizeChange(t *testing.T) {
 	}
 	if len(h.events) != 1 || h.events[0].Kind != "hook" {
 		t.Fatalf("want one hook event, got %+v", h.events)
+	}
+}
+
+func TestFileWatchDryRunSkipsHookAndNotify(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "a.txt")
+	writeSize(t, f, 10)
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{sizeChange: true})
+	n := &fakeNotifier{name: "ops"}
+	w.notifiers = []notify.Notifier{n}
+	w.dryRun = true
+
+	w.runCycle(context.Background()) // adopt
+	writeSize(t, f, 25)
+	w.runCycle(context.Background()) // would fire
+
+	if len(h.fired) != 0 {
+		t.Fatalf("dry-run must not execute hook, fired=%v", h.fired)
+	}
+	if len(n.msgs) != 0 {
+		t.Fatalf("dry-run must not notify, got %d messages", len(n.msgs))
+	}
+	if len(h.events) != 1 || h.events[0].Kind != "dry-run" {
+		t.Fatalf("expected one dry-run event, got %+v", h.events)
 	}
 }
 

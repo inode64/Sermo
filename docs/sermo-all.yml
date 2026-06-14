@@ -60,7 +60,7 @@ defaults:                      # merged into every service as the base layer
     mode: consecutive          # consecutive | within
     # min_matches: 1           # only meaningful with mode: within
   remediation:
-    shadow: false              # true (or mode: shadow) evaluates without action
+    shadow: false              # service remediation shadow; watch actions use then.dry_run
 
 logging:
   level: info
@@ -302,6 +302,7 @@ watches:
       owner: { on: change }
       existence: { on: delete }
     then:
+      dry_run: true                         # emit dry-run events; skip hook until removed
       hook: { command: [/usr/local/bin/file-change.sh], timeout: 10s }
 
   # -- process watch: per-PID thresholds, edge-triggered ---------------------

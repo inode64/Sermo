@@ -105,6 +105,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	dryRun := dryRunEnabled(thenBlock)
 	expand, err := parseExpand(thenBlock, typ)
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
@@ -119,6 +120,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		hook = HookSpec{}
 		effectiveNames = nil
 		expand = nil
+		dryRun = false
 	}
 	w := &Watch{
 		Name:       name,
@@ -127,6 +129,7 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Window:     rules.ParseWindowRule(entry),
 		Hook:       hook,
 		Notifiers:  resolveNotifiers(effectiveNames, deps.Notifiers),
+		DryRun:     dryRun,
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),
@@ -162,6 +165,10 @@ func configuredVolumeExpander(deps Deps) VolumeExpander {
 
 func hasWatchAction(hook HookSpec, names, effectiveNames []string, expand *ExpandSpec) bool {
 	return len(hook.Command) > 0 || config.HasNotifyAction(effectiveNames) || expand != nil || config.NotifyOptedOut(names)
+}
+
+func dryRunEnabled(then map[string]any) bool {
+	return then != nil && cfgval.Bool(then["dry_run"])
 }
 
 // buildMetricWatches expands one multi-metric watch entry (net/icmp/swap) into
@@ -206,6 +213,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+		dryRun := dryRunEnabled(thenBlock)
 		// Absent per-metric `then`: pure alert (web+logs only); do not inherit.
 		if thenBlock != nil {
 			if !hasWatchAction(hook, names, effectiveNames, nil) {
@@ -215,6 +223,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 		} else {
 			hook = HookSpec{}
 			effectiveNames = nil
+			dryRun = false
 		}
 		out = append(out, &Watch{
 			Name:      name,
@@ -223,6 +232,7 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			Window:    rules.ParseWindowRule(mEntry),
 			Hook:      hook,
 			Notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
+			DryRun:    dryRun,
 			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:  interval,
 			IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
@@ -249,6 +259,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	dryRun := dryRunEnabled(thenBlock)
 	// Absent `then`: pure alert (no hook/notify, no global inheritance).
 	if thenBlock != nil {
 		if !hasWatchAction(hook, names, effectiveNames, nil) {
@@ -257,6 +268,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	} else {
 		hook = HookSpec{}
 		effectiveNames = nil
+		dryRun = false
 	}
 	fw := &fileWatcher{
 		name:      name,
@@ -265,6 +277,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		cond:      cond,
 		hook:      hook,
 		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
+		dryRun:    dryRun,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
 	}
@@ -273,6 +286,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		CheckType: "file",
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
+		DryRun:    dryRun,
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     fw.runCycle,
@@ -296,6 +310,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	dryRun := dryRunEnabled(thenBlock)
 	// Absent `then`: pure alert (no hook/notify, no global inheritance).
 	if thenBlock != nil {
 		if !hasWatchAction(hook, names, effectiveNames, nil) {
@@ -304,6 +319,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	} else {
 		hook = HookSpec{}
 		effectiveNames = nil
+		dryRun = false
 	}
 	pw := &procWatcher{
 		name:      name,
@@ -311,6 +327,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		cond:      cond,
 		hook:      hook,
 		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
+		dryRun:    dryRun,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		now:       deps.Now,
 		emit:      deps.Emit,
@@ -321,6 +338,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		CheckType: "process",
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
+		DryRun:    dryRun,
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     pw.runCycle,

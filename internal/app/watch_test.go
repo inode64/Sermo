@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/notify"
 	"sermo/internal/rules"
 	"sermo/internal/volume"
 )
@@ -136,6 +138,60 @@ func TestWatchExpandFailureEmitsEvent(t *testing.T) {
 	if !hasEventKind(events, "expand-failed") {
 		t.Fatalf("expected an 'expand-failed' event, got %v", events)
 	}
+}
+
+func TestWatchDryRunSkipsHookNotifyAndExpand(t *testing.T) {
+	exp := &fakeExpander{res: volume.Result{VG: "vg0", LV: "data", GrewBytes: 1 << 30}}
+	n := &fakeNotifier{name: "ops"}
+	var calls int
+	var events []Event
+	at := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	w := &Watch{
+		Name:      "dry-storage",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/data"}},
+		Hook:      HookSpec{Command: []string{"/usr/local/bin/alert"}},
+		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
+			calls++
+			return nil
+		}),
+		Notifiers: []notify.Notifier{n},
+		DryRun:    true,
+		Expand:    &ExpandSpec{By: 1 << 30},
+		Expander:  exp,
+		Policy:    rules.Policy{Cooldown: time.Hour},
+		Now:       func() time.Time { return at },
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+	w.policyState.LastActionAt = at.Add(-time.Minute)
+	w.RunCycle(context.Background())
+	if calls != 0 {
+		t.Fatalf("dry-run must not execute hook, got %d calls", calls)
+	}
+	if len(n.msgs) != 0 {
+		t.Fatalf("dry-run must not notify, got %d messages", len(n.msgs))
+	}
+	if len(exp.calls) != 0 {
+		t.Fatalf("dry-run must not expand, calls = %v", exp.calls)
+	}
+	if !hasEventKind(events, "firing") || !hasEventKind(events, "dry-run") {
+		t.Fatalf("dry-run should emit firing and dry-run events, got %v", events)
+	}
+	if !hasEventMessage(events, "dry-run", "suppressed: cooldown") {
+		t.Fatalf("dry-run should report expand policy suppression, got %v", events)
+	}
+	if hasEventKind(events, "hook") || hasEventKind(events, "notify") || hasEventKind(events, "expand") {
+		t.Fatalf("dry-run emitted side-effect event: %v", events)
+	}
+}
+
+func hasEventMessage(events []Event, kind, substr string) bool {
+	for _, e := range events {
+		if e.Kind == kind && strings.Contains(e.Message, substr) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasEventKind(events []Event, kind string) bool {

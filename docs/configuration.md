@@ -662,6 +662,58 @@ another action (for example `expand`), or on its own as a monitor-only watch
 (state and events without delivery). It is always valid, whether or not a
 global `notify` default is configured.
 
+Use `then.dry_run: true` when you want to keep the watch and its actions wired
+for a trial run, but you do not want any side effects yet. The watch still runs
+its check and window, emits the normal `firing` event when it would fire, then
+emits a `dry-run` event describing the actions it would run. It does **not**
+execute `hook`, send `notify`, or run `expand`. `dry_run` is a modifier on an
+explicit action block, so it must be paired with a real `hook`, `notify`, or
+`expand` action; by itself it is not an action.
+
+```yaml
+watches:
+  load:
+    monitor: previous
+    check:
+      type: load
+      per_cpu: true
+      load5: { op: ">", value: 1.5 }
+    for: { cycles: 3 }
+    then:
+      dry_run: true
+      hook: { command: [/usr/local/bin/sermo-load-alert.sh] }
+      notify: [ops-email]
+```
+
+Use `dry_run` for host watches while you are proving thresholds, hook argv/env,
+notifier routing or `then.expand` policy gating. If an expansion would currently
+be blocked by policy, the `dry-run` event reports the suppression, but dry-run
+does not advance cooldown/backoff state. Remove it when the action should
+actually execute. If you only want a long-term dashboard/log signal, omit
+`then` entirely or use `notify: [none]`; those are monitor-only configurations,
+not action rehearsals.
+
+`dry_run` and remediation `shadow` are intentionally separate:
+
+- `then.dry_run` belongs to a host watch under `watches:`. It skips watch
+  side effects: `hook`, `notify` and `expand`.
+- `remediation.shadow` belongs to service remediation. It evaluates service
+  remediation rules, `for`/`within` windows, guards and policy, then emits
+  `shadow` events without running service operations such as `restart`, `start`,
+  `stop` or `reload`. It does not suppress host watch hooks.
+
+```yaml
+kind: service
+service: apache
+remediation:
+  shadow: true
+rules:
+  restart-http:
+    type: remediation
+    when: { check: http }
+    then: { action: restart }
+```
+
 A watch supports the same top-level `monitor` flag as a service/daemon:
 `enabled` (the default) forces monitoring on at daemon start/reload, `disabled`
 builds the watch but starts it paused, and `previous` restores the last persisted
@@ -1433,8 +1485,9 @@ defaults:
   # backoff) still occur and produce "shadow" events with rich detail about
   # what Sermo would have done and why (including suppressions). No operations
   # are executed and the live RemediationState is not advanced. Perfect for
-  # safely tuning rules before going live. A per-service setting overrides the
-  # default.
+  # safely tuning rules before going live. This does not affect host watches;
+  # put dry_run: true inside a watch's then block to rehearse hooks/notifies/
+  # expand without executing them. A per-service setting overrides the default.
   #   remediation: { shadow: true }
   #   # remediation: { mode: shadow }  # alternative spelling
   remediation: { shadow: false }
