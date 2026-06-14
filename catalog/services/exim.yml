@@ -10,9 +10,8 @@ variables:
   host: 127.0.0.1
   port: 25
   tls_port: 465
-  binary: "/usr/bin/exim"
 preflight:
-  config: { type: command, command: ["${binary}","-bV"], timeout: 10s }
+  config: { type: command, command: ["${exim_binary}","-bV"], timeout: 10s }
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
