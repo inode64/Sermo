@@ -48,8 +48,9 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	}
 
 	// volume assistant: select vol 1; monitor enabled; inherit interval; free<10;
-	// for 3; notifier ops-email; no expand. then runWizard: confirm merge with "y".
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "y"}, "\n") + "\n"
+	// for 3; notifier ops-email; no expand; no dry-run. then runWizard:
+	// confirm merge with "y".
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "n", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{
@@ -274,7 +275,7 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 
 	// volume assistant answers (monitor enabled, inherit interval), then: confirm
 	// merge, review stale files, delete the orphaned /old file.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "y", "y", "y"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "1", "n", "n", "y", "y", "y"}, "\n") + "\n"
 
 	var out bytes.Buffer
 	app := App{

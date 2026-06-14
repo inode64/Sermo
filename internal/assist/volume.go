@@ -68,6 +68,7 @@ type volSettings struct {
 	value      any
 	forCycles  int
 	notifiers  []string
+	dryRun     bool
 	expand     bool
 	expandBy   string
 	cooldown   string
@@ -102,6 +103,7 @@ func askVolSettings(p *Prompt, env Env, label string) (volSettings, error) {
 		s.expandBy = askSize(p, "Grow by how much each time (e.g. 5G)", "5G")
 		s.cooldown = askDuration(p, "Minimum time between expansions (cooldown)", "30m")
 	}
+	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, s.expand)
 	return s, nil
 }
 
@@ -121,6 +123,7 @@ func buildVolWatch(v Volume, s volSettings) map[string]any {
 	if s.expand {
 		then["expand"] = map[string]any{"by": s.expandBy}
 	}
+	applyDryRun(then, s.dryRun)
 	entry := map[string]any{"check": check, "then": then}
 	if s.forCycles > 0 {
 		entry["for"] = map[string]any{"cycles": s.forCycles}

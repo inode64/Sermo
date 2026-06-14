@@ -26,6 +26,7 @@ func TestServiceAssistant(t *testing.T) {
 		"8080", // port override
 		"1",    // monitor state: enabled
 		"",     // interval: inherit
+		"y",    // remediation shadow mode
 	}, "\n") + "\n"
 
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -42,6 +43,10 @@ func TestServiceAssistant(t *testing.T) {
 	}
 	if svc["monitor"] != "enabled" {
 		t.Fatalf("monitor = %v, want enabled", svc["monitor"])
+	}
+	remediation := svc["remediation"].(map[string]any)
+	if remediation["shadow"] != true {
+		t.Fatalf("remediation = %v, want shadow true", remediation)
 	}
 	vars, _ := svc["variables"].(map[string]any)
 	if vars == nil || vars["port"] != 8080 {
@@ -62,11 +67,13 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 		"",  // keep catalog port
 		"1", // monitor nginx
 		"",  // interval inherit
+		"n", // remediation shadow
 		"y", // review active units without catalog profiles
 		"1", // choose customd
 		"",  // accept detected pidfile
 		"1", // monitor customd
 		"",  // interval inherit
+		"n", // remediation shadow
 	}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
@@ -111,7 +118,7 @@ func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Pidfile: "/run/nginx.pid"}}, nil
 	}}
-	script := strings.Join([]string{"1", "1", ""}, "\n") + "\n" // select; monitor enabled; interval inherit
+	script := strings.Join([]string{"1", "1", "", "n"}, "\n") + "\n" // select; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -132,7 +139,7 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "", "1", ""}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit
+	script := strings.Join([]string{"y", "1", "", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -148,7 +155,7 @@ func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "y", "", "1", ""}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval
+	script := strings.Join([]string{"y", "1", "y", "", "1", "", "n"}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval; no shadow
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
 	res, err := serviceAssistant{}.Run(p, env)
@@ -170,7 +177,7 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Generic: true, Exe: "/usr/sbin/sshd"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "", "y", "1", ""}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit
+	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -189,7 +196,7 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
 	}}
-	script := strings.Join([]string{"y", "1", "", "y", "1", ""}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit
+	script := strings.Join([]string{"y", "1", "", "y", "1", "", "n"}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit; no shadow
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -208,8 +215,8 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "nginx", Unit: "nginx"}, {Name: "sshd", Unit: "sshd"}}, nil
 	}}
-	// select 1,2; batch=yes; monitor disabled; interval 30s.
-	script := strings.Join([]string{"1,2", "y", "2", "30s"}, "\n") + "\n"
+	// select 1,2; batch=yes; monitor disabled; interval 30s; shadow=no.
+	script := strings.Join([]string{"1,2", "y", "2", "30s", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
