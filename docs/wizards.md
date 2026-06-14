@@ -35,8 +35,12 @@ and the invariants below, and update this file in the same change.
    previous`.
 6. **Interval.** `Prompt.AskInterval` → `interval:` (blank inherits the global
    engine interval). Steps 5–6 are `Prompt.AskMonitoring`.
-7. **Wizard-specific options (non-services).** Thresholds (`volume`), metrics
-   (`net`), probes (`uplink`), and the **notifier** question (`chooseNotifiers`).
+7. **Wizard-specific options.** For watches: thresholds (`volume`), metrics
+   (`net`), probes (`uplink`), the **notifier** question (`chooseNotifiers`),
+   and the optional `then.dry_run` rehearsal flag when the generated `then`
+   block has a real action to skip. For services: ask whether service
+   remediation should start in `shadow` mode (`remediation.shadow: true`) after
+   the shared monitor/interval answers.
 8. **Preview & accept.** Render the YAML that will be written and confirm.
 9. **Cleanup.** Offer to delete managed files whose target is **no longer
    detected** on the host (`planWizardWatchDeletes` / `planStaleServiceDeletes`).
@@ -72,6 +76,13 @@ otherwise they are asked per target.
   explicit `then` (using `none` / `default` / names as chosen).
 - **Monitor + interval everywhere.** Every generated entry carries the step-5/6
   answers via `Monitoring.apply` (`internal/assist/common.go`).
+- **Dry-run is watch-local.** Watch assistants ask for `then.dry_run` only when
+  the chosen `then` block has a real side effect (`notify`, inherited global
+  notify, or native `expand`). `dry_run` never stands alone as the only action.
+- **Shadow is service-local.** The service assistant asks whether to write
+  `remediation: {shadow: true}` for each generated service (or once for the
+  selected batch). This rehearses service remediation rules and operations; it
+  does not suppress host watch actions.
 - **Detection drives cleanup.** Step 9 only offers files whose target is absent
   from the current detection; with detection unavailable it offers nothing, so a
   valid file is never proposed for deletion.
@@ -111,7 +122,8 @@ paths.
 3. Gather monitor + interval with `Prompt.AskMonitoring`; inject with
    `Monitoring.apply` (steps 5–6). Batch them with `Prompt.Confirm` when >1.
 4. Ask notifiers (if any) through `chooseNotifiers` (step 7) — never duplicate
-   its `none`/`default` handling.
+   its `none`/`default` handling. If the assistant emits watch actions, use
+   `Prompt.AskWatchDryRun` instead of hand-rolling `dry_run`.
 5. Register it in `registry` (`internal/assist/assist.go`).
 6. If it has host targets, extend `detectedTargetKeys` and (for watches)
    `watchFileTargets` so step-9 cleanup works.

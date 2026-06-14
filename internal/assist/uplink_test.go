@@ -8,7 +8,7 @@ import (
 func TestUplinkAssistant(t *testing.T) {
 	// Select eth0 (lo filtered out); monitor enabled, inherit interval; accept the
 	// probe-host/name/cycles defaults (empty lines); notifier ops-email.
-	script := strings.Join([]string{"1", "1", "", "", "", "", "1"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "", "", "", "1", "y"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := uplinkAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -48,6 +48,9 @@ func TestUplinkAssistant(t *testing.T) {
 	if notify := state["then"].(map[string]any)["notify"].([]string); len(notify) != 1 || notify[0] != "ops-email" {
 		t.Fatalf("ping notify = %v, want [ops-email]", notify)
 	}
+	if state["then"].(map[string]any)["dry_run"] != true {
+		t.Fatalf("ping dry_run = %v, want true", state["then"])
+	}
 
 	dns := res.Watches["uplink-eth0-dns"].(map[string]any)
 	check := dns["check"].(map[string]any)
@@ -62,7 +65,7 @@ func TestUplinkAssistant(t *testing.T) {
 func TestUplinkAssistantInheritsDefaultNotify(t *testing.T) {
 	// Custom probe host and name; 'default' inherits the global notify, so
 	// every generated then block omits notify.
-	script := strings.Join([]string{"1", "1", "", "8.8.8.8", "cloudflare.com", "2", "default"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "8.8.8.8", "cloudflare.com", "2", "default", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := uplinkAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
