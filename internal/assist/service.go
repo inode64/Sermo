@@ -40,7 +40,7 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	// Per-service properties first. Catalog services inherit PID/process
 	// detection from their daemon profile, while generic services still need a
 	// local PID source because they have no catalog owner. The shared
-	// monitor-state + interval come after, batched.
+	// monitor-state + interval + shadow mode come after, batched.
 	type pending struct {
 		name string
 		body map[string]any
@@ -63,20 +63,20 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		}
 
 		// Batch: when more than one service was selected, offer to answer the shared
-		// monitoring questions once and apply them to all (docs/wizards.md step 4).
-		var shared *Monitoring
-		if len(items) > 1 && p.Confirm("Apply the same monitor state and interval to all selected services?", true) {
-			m := p.AskMonitoring("all selected services")
-			shared = &m
+		// service questions once and apply them to all (docs/wizards.md step 4).
+		var shared *serviceSettings
+		if len(items) > 1 && p.Confirm("Apply the same monitor state, interval and shadow mode to all selected services?", true) {
+			s := askServiceSettings(p, "all selected services")
+			shared = &s
 		}
 
 		for _, it := range items {
-			m := shared
-			if m == nil {
-				mm := p.AskMonitoring(it.name)
-				m = &mm
+			s := shared
+			if s == nil {
+				ss := askServiceSettings(p, it.name)
+				s = &ss
 			}
-			m.apply(it.body)
+			s.apply(it.body)
 			services[it.name] = it.body
 		}
 	}
@@ -102,6 +102,25 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		Services: services,
 		Summary:  fmt.Sprintf("%d service(s): %s", len(names), strings.Join(names, ", ")),
 	}, nil
+}
+
+type serviceSettings struct {
+	Monitoring
+	Shadow bool
+}
+
+func askServiceSettings(p *Prompt, label string) serviceSettings {
+	return serviceSettings{
+		Monitoring: p.AskMonitoring(label),
+		Shadow:     p.Confirm("Start "+label+" remediation in shadow mode (evaluate rules but skip service actions)?", false),
+	}
+}
+
+func (s serviceSettings) apply(body map[string]any) {
+	s.Monitoring.apply(body)
+	if s.Shadow {
+		body["remediation"] = map[string]any{"shadow": true}
+	}
 }
 
 func splitServiceCandidates(cands []DaemonCandidate) (activeCatalog, generic []DaemonCandidate) {

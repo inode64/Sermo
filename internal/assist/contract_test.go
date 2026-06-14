@@ -17,7 +17,7 @@ func TestGeneratedWatchesPassConfigValidation(t *testing.T) {
 		Monitoring: Monitoring{Monitor: "previous", Interval: "1m"},
 		metric:     "free_pct", op: "<", value: "10%",
 		forCycles: 3, notifiers: []string{"ops"},
-		expand: true, expandBy: "5G", cooldown: "30m",
+		dryRun: true, expand: true, expandBy: "5G", cooldown: "30m",
 	})
 	volBytes := buildVolWatch(Volume{Mountpoint: "/srv"}, volSettings{
 		Monitoring: Monitoring{Monitor: "disabled"},
@@ -86,6 +86,9 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 					"service": map[string]any{"name": "customd"},
 					"checks":  map[string]any{"service": map[string]any{"type": "service", "expect": "active"}},
 					"pidfile": "/run/customd.pid",
+					"remediation": map[string]any{
+						"shadow": true,
+					},
 				},
 			},
 		},
