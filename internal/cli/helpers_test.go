@@ -64,6 +64,11 @@ func TestWizardDaemonHelpers(t *testing.T) {
 	if got := daemonPort(map[string]any{}); got != 0 {
 		t.Fatalf("daemonPort without variables = %d", got)
 	}
+	for _, port := range []any{0, -1, 65536, "70000", "not-a-port"} {
+		if got := daemonPort(map[string]any{"variables": map[string]any{"port": port}}); got != 0 {
+			t.Fatalf("daemonPort(%v) = %d, want 0", port, got)
+		}
+	}
 
 	set := serviceNameSet(&config.Config{ServiceNames: []string{"a", "b"}})
 	if _, ok := set["a"]; !ok || len(set) != 2 {
