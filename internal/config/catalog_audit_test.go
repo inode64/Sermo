@@ -283,6 +283,33 @@ func TestCatalogAppsUseCanonicalNames(t *testing.T) {
 	}
 }
 
+func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "cups-config")
+	if len(errs) != 0 {
+		t.Fatalf("ResolveCatalog(cups-config): %v", errs)
+	}
+	preflight := resolved.Tree["preflight"].(map[string]any)
+	config := preflight["config"].(map[string]any)
+	command := config["command"].([]any)
+	if got := command[0]; got != "/usr/bin/cupsd" {
+		t.Fatalf("cups config command = %v, want cupsd app binary", command)
+	}
+}
+
 func yamlFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

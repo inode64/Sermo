@@ -1,0 +1,8 @@
+kind: app
+name: cupsd
+display_name: "CUPS"
+category: system
+variables:
+  binary: "/usr/bin/cupsd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
