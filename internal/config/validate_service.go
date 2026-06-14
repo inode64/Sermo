@@ -87,7 +87,7 @@ func validateStopPolicy(tree map[string]any, add addFunc) {
 var protectedDirs = set("/", "/etc", "/usr", "/var", "/home", "/root", "/boot",
 	"/bin", "/sbin", "/lib", "/lib32", "/lib64", "/proc", "/sys", "/dev", "/run",
 	"/tmp", "/opt", "/srv", "/mnt", "/media", "/usr/bin", "/usr/sbin", "/usr/lib",
-	"/usr/local", "/var/lib", "/var/log", "/var/run")
+	"/usr/local", "/var/lib", "/var/log", "/run")
 
 // validateCleanOnStop validates the clean_on_stop list: each entry is a path
 // string or a {path, recursive} mapping; paths must be absolute, and a recursive

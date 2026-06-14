@@ -14,7 +14,7 @@ variables:
   host: 127.0.0.1
   port: 8086
 
-pidfile: /var/run/supervise-influxdb.pid
+pidfile: /run/supervise-influxdb.pid
 
 checks:
   service:

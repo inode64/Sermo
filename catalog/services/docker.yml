@@ -15,7 +15,7 @@ apps: [docker]
 variables:
   # The engine API on its local Unix socket; set `host` (and tls for 2376) for a
   # TCP daemon instead.
-  socket: /var/run/docker.sock
+  socket: /run/docker.sock
 
 checks:
   service:

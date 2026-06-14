@@ -6,7 +6,7 @@ apps: [xinetd]
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
-pidfile: /var/run/xinetd.pid
+pidfile: /run/xinetd.pid
 
 checks:
   service: { type: service, expect: active }

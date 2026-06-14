@@ -47,7 +47,7 @@ processes:
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
-pidfile: /var/run/apache2.pid
+pidfile: /run/apache2.pid
 
 config_files: [/etc/apache2/httpd.conf, /etc/apache2/apache2.conf, /etc/httpd/conf/httpd.conf]
 

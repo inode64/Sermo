@@ -21,7 +21,7 @@ const avahiServerRunning = 2
 // up and registered on the bus — reporting the version and, best-effort, the
 // host name and server state (RUNNING).
 //
-// Targets the system bus (unix:path=/var/run/dbus/system_bus_socket) by default;
+// Targets the system bus (unix:path=/run/dbus/system_bus_socket) by default;
 // set `socket` for a different bus socket or `query` for a full D-Bus address.
 // Socket-based, no TCP port. No user/password (bus permissions govern access).
 type avahiProtocol struct{}

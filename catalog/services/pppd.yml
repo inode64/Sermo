@@ -12,7 +12,7 @@ variables:
   probe_host: 1.1.1.1      # well-known anycast host pinged through the uplink
   probe_name: example.com  # stable public name resolved through the uplink
 
-# pppd writes /var/run/<iface>.pid for the session. Defining pidfile auto-wires
+# pppd writes /run/<iface>.pid for the session. Defining pidfile auto-wires
 # process-tree monitoring and a requires:[service] pidfile health check (error
 # if missing while active).
 pidfile: /run/${ppp_iface}.pid
