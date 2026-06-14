@@ -5,5 +5,7 @@ category: web
 description: "Zigbee to MQTT bridge."
 service: zigbee2mqtt
 
+pidfile: /run/zigbee2mqtt.pid
+
 checks:
   service: { type: service, expect: active }

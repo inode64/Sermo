@@ -13,7 +13,7 @@ preflight:
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
-pidfile: /run/dhcp/dhcpd.pid
+pidfile: /var/run/dhcp/dhcpd.pid
 
 checks:
   service: { type: service, expect: active }

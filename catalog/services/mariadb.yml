@@ -16,7 +16,9 @@ variables:
   user: mysql
   host: 127.0.0.1
   port: 3306
-  pidfile: /run/mysqld/mariadb.pid
+  pidfile: /var/run/mysqld/mariadb.pid
+
+pidfile: "${pidfile}"
 
 commands:
   version:
