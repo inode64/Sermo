@@ -17,8 +17,10 @@ variables:
   user: www-data
   host: 127.0.0.1
   port: 9000
-  pidfile: /run/php/php-fpm${version}.pid
+  pidfile: /run/php-fpm-php${version}.pid
   status_path: /status
+
+pidfile: "${pidfile}"
 
 commands:
   version:
