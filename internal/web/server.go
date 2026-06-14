@@ -89,6 +89,7 @@ type Watch struct {
 	HookCommand      []string         `json:"hook_command,omitempty"`
 	Notifiers        []string         `json:"notifiers,omitempty"`
 	NotifierCount    int              `json:"notifier_count"`
+	DryRun           bool             `json:"dry_run"`
 	Conditions       []WatchCondition `json:"conditions,omitempty"`
 	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
 	Swap             *SwapWatchInfo   `json:"swap,omitempty"`
