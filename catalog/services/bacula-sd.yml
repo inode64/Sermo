@@ -8,9 +8,8 @@ apps: [bacula-sd]
 
 variables:
   port: 9103
-  binary: "/usr/bin/bacula-sd"
 preflight:
-  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+  config: { type: command, command: ["${bacula_sd_binary}","-t"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }

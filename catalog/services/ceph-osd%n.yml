@@ -21,7 +21,6 @@ apps: [ceph-osd]
 
 variables:
   user: ceph
-  binary: /usr/bin/ceph-osd
 
 # No `processes:` block on purpose. Every OSD on a host shares the same binary
 # and user, so an exe+user match cannot isolate one instance from its siblings
