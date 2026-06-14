@@ -1375,6 +1375,41 @@ func TestDaemonCategoryFromDirectory(t *testing.T) {
 	}
 }
 
+func TestCatalogAliasDoesNotShadowCanonicalDaemon(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/a.yml": `
+kind: daemon
+name: a
+catalog_aliases: [b]
+service: { name: a }
+`,
+		"catalog/b.yml": `
+kind: daemon
+name: b
+service: { name: b }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	doc, ok := cfg.Daemons["b"]
+	if !ok {
+		t.Fatal("daemon b is not indexed")
+	}
+	if doc.Name != "b" {
+		t.Fatalf("daemon b resolves to %q, want canonical b", doc.Name)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "b")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(b) errors = %v", errs)
+	}
+	if resolved.Name != "b" {
+		t.Fatalf("ResolveCatalog(b) = %q, want b", resolved.Name)
+	}
+}
+
 func TestReloadOnChangeDesugarsToReloadRule(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
