@@ -306,7 +306,9 @@ func loadDocument(path string) (*Document, error) {
 // later document's path.
 func (c *Config) add(doc *Document) {
 	index := func(m map[string]*Document, names *[]string) {
-		if _, exists := m[doc.Name]; !exists && doc.Name != "" {
+		if existing, exists := m[doc.Name]; !exists && doc.Name != "" {
+			m[doc.Name] = doc
+		} else if exists && existing.Name != doc.Name {
 			m[doc.Name] = doc
 		}
 		*names = append(*names, doc.Name)
