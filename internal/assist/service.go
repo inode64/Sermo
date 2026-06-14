@@ -51,9 +51,13 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 			return
 		}
 		selected := chooseServices(p, question, cands)
+		reviewPorts := len(selected) == 1
+		if len(selected) > 1 && groupHasPortDefaults(selected) {
+			reviewPorts = p.Confirm("Review per-service port overrides?", false)
+		}
 		var items []pending
 		for _, c := range selected {
-			name, body := askServiceProps(p, env, c)
+			name, body := askServiceProps(p, env, c, reviewPorts)
 			if name != "" {
 				items = append(items, pending{name, body})
 			}
@@ -154,6 +158,15 @@ func chooseServices(p *Prompt, question string, cands []DaemonCandidate) []Daemo
 	return out
 }
 
+func groupHasPortDefaults(cands []DaemonCandidate) bool {
+	for _, c := range cands {
+		if c.Port > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // askServiceProps asks the per-service properties for one detected candidate,
 // returning the service name (= the candidate name; the wizard never invents
 // names) and its body, or "" to skip a name already configured. Catalog
@@ -162,7 +175,7 @@ func chooseServices(p *Prompt, question string, cands []DaemonCandidate) []Daemo
 // their PID question is prefilled from the init-script analysis: a pidfile path
 // writes `pidfile:`, and if there is none, an exe derived from the unit offers a
 // `command_match` selector.
-func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]any) {
+func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (string, map[string]any) {
 	if _, exists := env.ServiceNames[c.Name]; exists {
 		p.printf("  %q is already configured; skipping.\n", c.Name)
 		return "", nil
@@ -178,7 +191,7 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate) (string, map[string]
 	} else {
 		body["uses"] = c.Name
 	}
-	if c.Port > 0 {
+	if reviewPort && c.Port > 0 {
 		if n := p.AskInt(fmt.Sprintf("Port for %s?", c.Name), c.Port); n > 0 && n != c.Port {
 			body["variables"] = map[string]any{"port": n}
 		}

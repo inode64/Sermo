@@ -43,6 +43,7 @@ type Env struct {
 	Backend       string                            // active init system: "systemd" | "openrc"
 	Volumes       func() ([]Volume, error)          // candidate disk volumes
 	Ifaces        func() ([]Iface, error)           // host network interfaces
+	DefaultIfaces []string                          // interfaces with an up default route
 	Daemons       func() ([]DaemonCandidate, error) // catalog daemons detected as installed
 	ServiceNames  map[string]struct{}               // already-configured service names (collision check)
 }

@@ -87,12 +87,12 @@ func detectSystemdProc(ctx context.Context, runner execx.Runner, unit string) Pr
 	var info ProcInfo
 	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, "systemctl", "show", "-p", "PIDFile", "--value", "--", unit); err == nil {
 		if v := strings.TrimSpace(res.Stdout); v != "" {
-			info.Pidfile = v
+			info.Pidfile = cleanProcPath(v)
 		}
 	}
 	if res, err := execx.Run(ctx, runner, defaultDetectTimeout, "systemctl", "show", "-p", "ExecStart", "--value", "--", unit); err == nil {
 		if m := systemdExecPath.FindStringSubmatch(res.Stdout); m != nil {
-			info.Exe = m[1]
+			info.Exe = cleanProcPath(m[1])
 		}
 	}
 	return info
@@ -408,7 +408,14 @@ func commandRegex(command string) string {
 
 func cleanProcPath(s string) string {
 	if strings.HasPrefix(s, "/") {
-		return filepath.Clean(s)
+		clean := filepath.Clean(s)
+		if clean == "/var/run" {
+			return "/run"
+		}
+		if strings.HasPrefix(clean, "/var/run/") {
+			return "/run/" + strings.TrimPrefix(clean, "/var/run/")
+		}
+		return clean
 	}
 	return ""
 }

@@ -1,8 +1,11 @@
 kind: daemon
-name: keydb-server
+name: keydb
+catalog_aliases: [keydb-server]
 display_name: "KeyDB"
 category: database
-service: keydb-server
+service:
+  systemd: [keydb, keydb-server]
+  openrc: [keydb, keydb-server]
 apps: [keydb-server]
 
 variables:

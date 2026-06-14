@@ -385,6 +385,42 @@ watches:
 	}
 }
 
+func TestDefaultIncludeDirsPreferServicesAndKeepAppsAlias(t *testing.T) {
+	want := []string{"/etc/sermo/services", "/etc/sermo/apps"}
+	if strings.Join(defaultIncludeDirs, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("defaultIncludeDirs = %v, want %v", defaultIncludeDirs, want)
+	}
+}
+
+func TestLoadUsesDefaultIncludeDirsWhenIncludesOmitted(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  catalog: [ @ROOT@/catalog ]
+  runtime: /run/sermo
+`,
+		"services/web.yml": `
+kind: service
+name: web
+`,
+	})
+	root := filepath.Dir(global)
+	oldDefaultIncludeDirs := defaultIncludeDirs
+	defaultIncludeDirs = []string{filepath.Join(root, "services"), filepath.Join(root, "apps")}
+	t.Cleanup(func() { defaultIncludeDirs = oldDefaultIncludeDirs })
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := strings.Join(cfg.Global.Includes, "\n"); got != strings.Join(defaultIncludeDirs, "\n") {
+		t.Fatalf("Global.Includes = %v, want %v", cfg.Global.Includes, defaultIncludeDirs)
+	}
+	if _, ok := cfg.Services["web"]; !ok {
+		t.Fatalf("service from default services include was not loaded")
+	}
+}
+
 func TestLoadLegacyEnabledPathAlias(t *testing.T) {
 	root := t.TempDir()
 	includeDir := filepath.Join(root, "enabled")

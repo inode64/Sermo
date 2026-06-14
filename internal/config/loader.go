@@ -14,6 +14,8 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
+var defaultIncludeDirs = []string{"/etc/sermo/services", "/etc/sermo/apps"}
+
 // Option customizes Load.
 type Option func(*loadOptions)
 
@@ -48,6 +50,16 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		global.Catalog = absCatalogDirs(o.catalogDirs)
 	}
 
+	catalogDirs := global.Catalog
+	if len(catalogDirs) == 0 {
+		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
+	}
+	includeDirs := global.Includes
+	if len(includeDirs) == 0 {
+		includeDirs = append([]string(nil), defaultIncludeDirs...)
+		global.Includes = append([]string(nil), includeDirs...)
+	}
+
 	cfg := &Config{
 		Global:    global,
 		Daemons:   map[string]*Document{},
@@ -55,15 +67,6 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Libraries: map[string]*Document{},
 		Patterns:  map[string]*Document{},
 		Services:  map[string]*Document{},
-	}
-
-	catalogDirs := global.Catalog
-	if len(catalogDirs) == 0 {
-		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
-	}
-	includeDirs := global.Includes
-	if len(includeDirs) == 0 {
-		includeDirs = []string{"/etc/sermo/apps"}
 	}
 
 	for _, dir := range catalogDirs {
@@ -136,8 +139,8 @@ func absCatalogDirs(dirs []string) []string {
 
 // resolveConfigPaths makes catalog/includes/runtime/state paths absolute. Relative
 // entries are resolved against the global config file's directory so a tree like
-// configs/sermo.yml with `includes: [apps]` loads configs/apps
-// when run from the repository.
+// configs/sermo.yml with `includes: [services]` loads configs/services when run
+// from the repository. `apps` remains supported as a legacy include alias.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Catalog = resolvePathList(base, g.Catalog)
@@ -311,6 +314,14 @@ func (c *Config) add(doc *Document) {
 	switch doc.Kind {
 	case kindDaemon:
 		index(c.Daemons, &c.DaemonNames)
+		for _, alias := range cfgval.StringList(doc.Body["catalog_aliases"]) {
+			if alias == "" || alias == doc.Name {
+				continue
+			}
+			if _, exists := c.Daemons[alias]; !exists {
+				c.Daemons[alias] = doc
+			}
+		}
 	case kindApp:
 		index(c.Apps, &c.AppNames)
 	case kindLibrary:
