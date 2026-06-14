@@ -1,5 +1,6 @@
 kind: app
-name: keydb-server
+name: keydb
+catalog_aliases: [keydb-server]
 display_name: "KeyDB"
 category: database
 variables:

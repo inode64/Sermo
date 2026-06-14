@@ -241,6 +241,75 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	}
 }
 
+func TestCatalogAppsUseCanonicalNames(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	legacy := map[string]string{
+		"avahi-daemon":    "avahi",
+		"dbus-daemon":     "dbus",
+		"fail2ban-server": "fail2ban",
+		"keydb-server":    "keydb",
+	}
+	listed := map[string]struct{}{}
+	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+		listed[name] = struct{}{}
+	}
+	for oldName, canonical := range legacy {
+		if _, ok := listed[oldName]; ok {
+			t.Fatalf("legacy app alias %q should not be listed as a catalog app", oldName)
+		}
+		doc, ok := cfg.Apps[oldName]
+		if !ok {
+			t.Fatalf("legacy app alias %q does not resolve", oldName)
+		}
+		if doc.Name != canonical {
+			t.Fatalf("legacy app alias %q resolves to %q, want %q", oldName, doc.Name, canonical)
+		}
+		if _, ok := listed[canonical]; !ok {
+			t.Fatalf("canonical app %q should be listed", canonical)
+		}
+	}
+}
+
+func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "cups-config")
+	if len(errs) != 0 {
+		t.Fatalf("ResolveCatalog(cups-config): %v", errs)
+	}
+	preflight := resolved.Tree["preflight"].(map[string]any)
+	config := preflight["config"].(map[string]any)
+	command := config["command"].([]any)
+	if got := command[0]; got != "/usr/bin/cupsd" {
+		t.Fatalf("cups config command = %v, want cupsd app binary", command)
+	}
+}
+
 func yamlFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

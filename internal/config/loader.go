@@ -308,9 +308,10 @@ func (c *Config) add(doc *Document) {
 	switch doc.Kind {
 	case kindDaemon:
 		indexDocument(c.Daemons, &c.DaemonNames, doc)
-		c.addCatalogAliases(doc)
+		addCatalogAliases(c.Daemons, doc)
 	case kindApp:
 		indexDocument(c.Apps, &c.AppNames, doc)
+		addCatalogAliases(c.Apps, doc)
 	case kindLibrary:
 		indexDocument(c.Libraries, &c.LibraryNames, doc)
 	case kindPatterns:
@@ -328,20 +329,20 @@ func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
 	}
 	existing, exists := reg[doc.Name]
 	// A canonical document may replace a registry entry that was created by a
-	// previous daemon's catalog_aliases, but duplicate canonical names still keep
+	// previous document's catalog_aliases, but duplicate canonical names still keep
 	// the first document and are reported by validation.
 	if !exists || existing.Name != doc.Name {
 		reg[doc.Name] = doc
 	}
 }
 
-func (c *Config) addCatalogAliases(doc *Document) {
+func addCatalogAliases(reg map[string]*Document, doc *Document) {
 	for _, alias := range cfgval.StringList(doc.Body["catalog_aliases"]) {
 		if alias == "" || alias == doc.Name {
 			continue
 		}
-		if _, exists := c.Daemons[alias]; !exists {
-			c.Daemons[alias] = doc
+		if _, exists := reg[alias]; !exists {
+			reg[alias] = doc
 		}
 	}
 }

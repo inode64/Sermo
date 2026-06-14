@@ -1,5 +1,6 @@
 kind: app
-name: dbus-daemon
+name: dbus
+catalog_aliases: [dbus-daemon]
 display_name: "D-Bus"
 category: system
 variables:
