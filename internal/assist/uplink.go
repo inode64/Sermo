@@ -50,6 +50,7 @@ func (uplinkAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	s.probeName = p.Ask("Public DNS name to resolve through the uplink", "example.com")
 	s.forCycles = p.AskInt("Require probe failures for how many cycles first?", 3)
 	s.notifiers = chooseNotifiers(p, env)
+	s.dryRun = p.AskWatchDryRun("the uplink watches", env, s.notifiers, false)
 
 	watches := map[string]any{}
 	for _, idx := range sel {
@@ -66,6 +67,7 @@ type uplinkSettings struct {
 	probeName  string
 	forCycles  int
 	notifiers  []string
+	dryRun     bool
 }
 
 // buildUplinkWatches emits the watch set for one uplink interface: the same
@@ -78,6 +80,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 		if len(s.notifiers) > 0 {
 			then["notify"] = s.notifiers
 		}
+		applyDryRun(then, s.dryRun)
 		return then
 	}
 	debounce := func(entry map[string]any) map[string]any {
