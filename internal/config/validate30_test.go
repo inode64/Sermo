@@ -695,6 +695,14 @@ func TestValidateCatalogAliases(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
+catalog_aliases: [stale]
+service: { name: x }
+`)
+	mustHave(t, issues, "catalog_aliases is only supported on daemon catalog documents")
+
+	issues = validateService(t, `
+kind: service
+name: svc
 catalog_aliases: stale
 service: { name: x }
 `)
