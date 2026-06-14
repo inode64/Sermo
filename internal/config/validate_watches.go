@@ -91,6 +91,11 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 	}
 	hook, hasHook := then["hook"].(map[string]any)
 	notify := cfgval.StringList(then["notify"])
+	if v, present := then["dry_run"]; present {
+		if _, ok := v.(bool); !ok {
+			add("%s.then.dry_run must be a boolean", prefix)
+		}
+	}
 	rawExpand, expandPresent := then["expand"]
 	expand, hasExpand := rawExpand.(map[string]any)
 	switch {

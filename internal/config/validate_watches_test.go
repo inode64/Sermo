@@ -384,6 +384,10 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  map[string]any{"notify": []any{"none"}, "expand": map[string]any{"by": "5G"}},
 			},
+			"disk-dry-run": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"dry_run": true, "notify": []any{"ops-email"}},
+			},
 			"disk-inherit": map[string]any{
 				"check": diskCheck,
 				"then":  map[string]any{},
@@ -417,11 +421,16 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  "notify me",
 			},
+			"bad-dry-run": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"dry_run": "yes", "notify": []any{"none"}},
+			},
 		},
 	})
 	for _, w := range []string{
 		"watches.disk-root.then.notify references unknown notifier \"ghost\"",
 		"watches.bad-then.then must be a mapping",
+		"watches.bad-dry-run.then.dry_run must be a boolean",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
@@ -440,10 +449,17 @@ func TestValidateNotifyReferences(t *testing.T) {
 				"check": diskCheck,
 				"then":  map[string]any{},
 			},
+			"dry-run-only": map[string]any{
+				"check": diskCheck,
+				"then":  map[string]any{"dry_run": true},
+			},
 		},
 	})
 	if !hasIssue(noDefault, "watches.no-action.then requires a hook, notify and/or expand") {
 		t.Fatalf("expected empty then without global notify to fail, got %v", noDefault)
+	}
+	if !hasIssue(noDefault, "watches.dry-run-only.then requires a hook, notify and/or expand") {
+		t.Fatalf("expected dry_run alone without an action to fail, got %v", noDefault)
 	}
 
 	// Bare watch (no "then" key at all) with check+for is valid as alert-only:
