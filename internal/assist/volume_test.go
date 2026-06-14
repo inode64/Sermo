@@ -43,6 +43,7 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 		"y",   // auto-expand
 		"5G",  // by
 		"30m", // cooldown
+		"y",   // dry-run actions first
 	}, "\n") + "\n"
 
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -71,6 +72,9 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 	if exp["by"] != "5G" {
 		t.Fatalf("expand by = %v", exp["by"])
 	}
+	if then["dry_run"] != true {
+		t.Fatalf("dry_run = %v, want true", then["dry_run"])
+	}
 	if entry["policy"].(map[string]any)["cooldown"] != "30m" {
 		t.Fatalf("policy = %v", entry["policy"])
 	}
@@ -81,7 +85,7 @@ func TestVolumeAssistantFreePctWithExpand(t *testing.T) {
 
 func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90, for 1, notifier team-slack, no expand.
-	script := strings.Join([]string{"2", "1", "", "2", "90", "1", "2", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"2", "1", "", "2", "90", "1", "2", "n", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -104,7 +108,7 @@ func TestVolumeAssistantUsedPctNoExpand(t *testing.T) {
 
 func TestVolumeAssistantPercentSuffix(t *testing.T) {
 	// Select volume 2 (/), used-space condition 90%, for 1, notifier team-slack, no expand.
-	script := strings.Join([]string{"2", "1", "", "2", "90%", "1", "2", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"2", "1", "", "2", "90%", "1", "2", "n", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -120,7 +124,7 @@ func TestVolumeAssistantPercentSuffix(t *testing.T) {
 
 func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 	// Select volume 1; free-space size condition 10G; for 2; notifier ops-email.
-	script := strings.Join([]string{"1", "1", "", "3", "10G", "2", "1", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "3", "10G", "2", "1", "n", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -136,7 +140,7 @@ func TestVolumeAssistantFreeBytesNoExpand(t *testing.T) {
 
 func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
 	// Select volume 1; size condition first tries unitless 100, then valid 100G.
-	script := strings.Join([]string{"1", "1", "", "4", "100", "100G", "2", "1", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "4", "100", "100G", "2", "1", "n", "n"}, "\n") + "\n"
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
 	res, err := volumeAssistant{}.Run(p, testEnv())
@@ -156,7 +160,7 @@ func TestVolumeAssistantSizeRequiresSuffix(t *testing.T) {
 
 func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 	// Select volume 1; used-space size condition 100G; for 2; notifier ops-email.
-	script := strings.Join([]string{"1", "1", "", "4", "100G", "2", "1", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "4", "100G", "2", "1", "n", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -173,7 +177,7 @@ func TestVolumeAssistantUsedBytesNoExpand(t *testing.T) {
 func TestVolumeAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; inherit
 	// global notify; no expand.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "default", "n"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "default", "n", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
@@ -233,7 +237,7 @@ func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; default
 	// notify (not configured); enable expand. default degrades to monitor-only
 	// (notify [none]); the expand action is still attached.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "default", "y", "5G", "30m"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "default", "y", "5G", "30m", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, env)
 	if err != nil {
@@ -252,7 +256,7 @@ func TestVolumeAssistantDefaultWithoutGlobalWithExpand(t *testing.T) {
 func TestVolumeAssistantNotifyNoneWithExpand(t *testing.T) {
 	// Select volume 1; monitor enabled; inherit interval; free 10; for 3; explicit
 	// none; enable expand.
-	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "none", "y", "5G", "30m"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "10", "3", "none", "y", "5G", "30m", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := volumeAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -278,7 +282,7 @@ func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
 	t.Run("none", func(t *testing.T) {
 		// Select volume 1; monitor enabled; inherit interval; free 10; for 3; type
 		// "none"; enable expand.
-		script := strings.Join([]string{"1", "1", "", "1", "10", "3", "none", "y", "5G", "30m"}, "\n") + "\n"
+		script := strings.Join([]string{"1", "1", "", "1", "10", "3", "none", "y", "5G", "30m", "n"}, "\n") + "\n"
 		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 		res, err := volumeAssistant{}.Run(p, base)
 		if err != nil {
@@ -294,7 +298,7 @@ func TestVolumeAssistantNotifyKeywordsWithoutNotifiers(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		// With no notifiers and no global default, "default" is still selectable
 		// and degrades to monitor-only (notify [none]).
-		script := strings.Join([]string{"1", "1", "", "1", "10", "3", "default", "y", "5G", "30m"}, "\n") + "\n"
+		script := strings.Join([]string{"1", "1", "", "1", "10", "3", "default", "y", "5G", "30m", "n"}, "\n") + "\n"
 		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 		res, err := volumeAssistant{}.Run(p, base)
 		if err != nil {

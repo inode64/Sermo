@@ -70,6 +70,7 @@ type netSettings struct {
 	addrAbsent bool     // expect:absent instead of on:change
 	errorsAt   int
 	notifiers  []string
+	dryRun     bool
 }
 
 func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
@@ -91,6 +92,7 @@ func askNetSettings(p *Prompt, env Env, label string) (netSettings, error) {
 		}
 	}
 	s.notifiers = chooseNotifiers(p, env)
+	s.dryRun = p.AskWatchDryRun(label, env, s.notifiers, false)
 	return s, nil
 }
 
@@ -100,6 +102,7 @@ func buildNetWatch(iface Iface, s netSettings) map[string]any {
 		if len(s.notifiers) > 0 {
 			then["notify"] = s.notifiers
 		}
+		applyDryRun(then, s.dryRun)
 		return then
 	}
 	metrics := map[string]any{}
