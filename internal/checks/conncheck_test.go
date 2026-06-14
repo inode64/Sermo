@@ -600,7 +600,7 @@ func TestBuildDBusCheck(t *testing.T) {
 	if cc.proto.Name() != "dbus" || cc.cfg.Port != 0 {
 		t.Fatalf("cfg = %+v", cc.cfg)
 	}
-	if cc.cfg.Socket != "unix:path=/var/run/dbus/system_bus_socket" {
+	if cc.cfg.Socket != "unix:path=/run/dbus/system_bus_socket" {
 		t.Fatalf("default address = %q", cc.cfg.Socket)
 	}
 
@@ -635,7 +635,7 @@ func TestBuildAvahiCheck(t *testing.T) {
 		if cc.proto.Name() != "avahi" || cc.cfg.Port != 0 {
 			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
 		}
-		if cc.cfg.Socket != "unix:path=/var/run/dbus/system_bus_socket" {
+		if cc.cfg.Socket != "unix:path=/run/dbus/system_bus_socket" {
 			t.Fatalf("default address = %q", cc.cfg.Socket)
 		}
 	}
@@ -663,7 +663,7 @@ func TestBuildLibvirtCheck(t *testing.T) {
 		if cc.proto.Name() != "libvirt" || cc.cfg.Port != 16509 {
 			t.Fatalf("%s cfg = %+v", typ, cc.cfg)
 		}
-		if cc.cfg.Socket != "/var/run/libvirt/libvirt-sock" {
+		if cc.cfg.Socket != "/run/libvirt/libvirt-sock" {
 			t.Fatalf("%s should default to the local socket, got %q", typ, cc.cfg.Socket)
 		}
 	}
@@ -1122,7 +1122,7 @@ func TestBuildFail2banCheck(t *testing.T) {
 	if cc.proto.Name() != "fail2ban" || cc.cfg.Port != 0 {
 		t.Fatalf("cfg = %+v", cc.cfg)
 	}
-	if cc.cfg.Socket != "/var/run/fail2ban/fail2ban.sock" {
+	if cc.cfg.Socket != "/run/fail2ban/fail2ban.sock" {
 		t.Fatalf("default socket = %q", cc.cfg.Socket)
 	}
 
@@ -1153,9 +1153,9 @@ func TestBuildLvmpolldCheck(t *testing.T) {
 
 	// An explicit socket is kept.
 	built, _ = Build(map[string]any{
-		"lvm": map[string]any{"type": "lvmpolld", "socket": "/var/run/lvm/lvmpolld.socket"},
+		"lvm": map[string]any{"type": "lvmpolld", "socket": "/run/lvm/lvmpolld.socket"},
 	}, Deps{DefaultTimeout: time.Second})
-	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/var/run/lvm/lvmpolld.socket" {
+	if cc := built[0].Check.(connCheck); cc.cfg.Socket != "/run/lvm/lvmpolld.socket" {
 		t.Fatalf("socket = %q", cc.cfg.Socket)
 	}
 }
@@ -1172,7 +1172,7 @@ func TestBuildAcpidCheck(t *testing.T) {
 	if cc.proto.Name() != "acpid" || cc.cfg.Port != 0 {
 		t.Fatalf("cfg = %+v", cc.cfg)
 	}
-	if cc.cfg.Socket != "/var/run/acpid.socket" {
+	if cc.cfg.Socket != "/run/acpid.socket" {
 		t.Fatalf("default socket = %q", cc.cfg.Socket)
 	}
 

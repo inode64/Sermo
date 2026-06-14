@@ -71,15 +71,15 @@ func TestDetectProcOpenRCCleansAbsolutePaths(t *testing.T) {
 	read := func(path string) ([]byte, error) {
 		switch path {
 		case "/etc/init.d/dhcpd":
-			return []byte(`pidfile="//var/run/dhcp/dhcpd.pid"
+			return []byte(`pidfile="//run/dhcp/dhcpd.pid"
 command="//usr/sbin/dhcpd"
 `), nil
 		}
 		return nil, errNotFound
 	}
 	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "dhcpd")
-	if info.Pidfile != "/var/run/dhcp/dhcpd.pid" {
-		t.Fatalf("pidfile = %q, want /var/run/dhcp/dhcpd.pid", info.Pidfile)
+	if info.Pidfile != "/run/dhcp/dhcpd.pid" {
+		t.Fatalf("pidfile = %q, want /run/dhcp/dhcpd.pid", info.Pidfile)
 	}
 	if info.Exe != "/usr/sbin/dhcpd" {
 		t.Fatalf("exe = %q, want /usr/sbin/dhcpd", info.Exe)
@@ -109,7 +109,7 @@ func TestDetectProcOpenRCApacheGentooDefaults(t *testing.T) {
 	read := func(path string) ([]byte, error) {
 		switch path {
 		case "/etc/init.d/apache2":
-			return []byte(`PIDFILE="${PIDFILE:-/var/run/apache2.pid}"
+			return []byte(`PIDFILE="${PIDFILE:-/run/apache2.pid}"
 APACHE2="/usr/sbin/apache2"
 start() {
 	start-stop-daemon --start --pidfile "${PIDFILE}" -- \
@@ -120,8 +120,8 @@ start() {
 		return nil, errNotFound
 	}
 	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "apache2")
-	if info.Pidfile != "/var/run/apache2.pid" {
-		t.Fatalf("pidfile = %q, want /var/run/apache2.pid", info.Pidfile)
+	if info.Pidfile != "/run/apache2.pid" {
+		t.Fatalf("pidfile = %q, want /run/apache2.pid", info.Pidfile)
 	}
 	if info.Exe != "/usr/sbin/apache2" {
 		t.Fatalf("exe = %q, want /usr/sbin/apache2", info.Exe)
@@ -256,14 +256,14 @@ start() {
 			return []byte(`exec=/usr/sbin/mysqld
 argv_0=/usr/sbin/mysqld
 argv_1=--defaults-file=/etc/mysql/my.cnf
-pidfile=/var/run/mysqld/mariadb.pid
+pidfile=/run/mysqld/mariadb.pid
 `), nil
 		}
 		return nil, errNotFound
 	}
 	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "mysql")
-	if info.Pidfile != "/var/run/mysqld/mariadb.pid" {
-		t.Fatalf("pidfile = %q, want /var/run/mysqld/mariadb.pid", info.Pidfile)
+	if info.Pidfile != "/run/mysqld/mariadb.pid" {
+		t.Fatalf("pidfile = %q, want /run/mysqld/mariadb.pid", info.Pidfile)
 	}
 	if info.Exe != "/usr/sbin/mysqld" {
 		t.Fatalf("exe = %q, want /usr/sbin/mysqld", info.Exe)

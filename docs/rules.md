@@ -701,7 +701,7 @@ Protocols, in the order of the table above:
 - `libvirt` (alias `libvirtd`) — opens an RPC connection to a libvirt daemon and
   reads its version; both succeeding prove libvirtd is up. It runs no write
   operation. **Transport:** with no `socket` and no `host` it dials the local Unix
-  socket `/var/run/libvirt/libvirt-sock`; set `socket` for a different path, or set
+  socket `/run/libvirt/libvirt-sock`; set `socket` for a different path, or set
   `host` to use plain **TCP** (default port 16509). TLS/SASL is not supported.
   **Connect URI:** `query` selects the driver, default `qemu:///system` (e.g.
   `lxc:///`, `xen://`). No auth — local socket access is governed by the socket's
@@ -718,7 +718,7 @@ Protocols, in the order of the table above:
   ```yaml
   checks:
     libvirt-local:
-      type: libvirt              # dials /var/run/libvirt/libvirt-sock
+      type: libvirt              # dials /run/libvirt/libvirt-sock
       expect:
         domains.active: { op: ">=", value: 3 }   # alert if fewer than 3 VMs are running
     libvirt-tcp:
@@ -736,7 +736,7 @@ Protocols, in the order of the table above:
   `org.freedesktop.DBus.Hello` handshake — which alone proves the bus is up — then
   calls `org.freedesktop.DBus.GetId` to read the bus UUID. It runs no write
   operation. **Target:** defaults to the system bus
-  (`unix:path=/var/run/dbus/system_bus_socket`); set `socket` for a different
+  (`unix:path=/run/dbus/system_bus_socket`); set `socket` for a different
   socket path, or `query` for a full D-Bus address (`unix:abstract=…`,
   `tcp:host=…,port=…`). Socket-based, so there is no TCP port. No auth — access is
   governed by the socket's permissions. Result data: the bus id, address and the
@@ -744,7 +744,7 @@ Protocols, in the order of the table above:
 
   ```yaml
   checks:
-    dbus-system:                 # dials unix:path=/var/run/dbus/system_bus_socket
+    dbus-system:                 # dials unix:path=/run/dbus/system_bus_socket
       type: dbus
     dbus-custom:
       type: dbus
@@ -842,7 +842,7 @@ Protocols, in the order of the table above:
   `on_version_change`. Because `ups.status` is a space-separated flag list (e.g.
   `OL CHRG`), match it with `=~` rather than `==`.
 - `docker` — the Docker Engine API. By default it talks to the local Unix socket
-  `/var/run/docker.sock`; set `host` (and `port`, default 2375 / 2376 with `tls`)
+  `/run/docker.sock`; set `host` (and `port`, default 2375 / 2376 with `tls`)
   for a TCP daemon, or `socket` for a non-default path. No `user`. It GETs `/info`
   (proving the daemon is up), reports the engine `version` (pair with
   `on_version_change`), and exposes counts: **`containers`**,
@@ -894,13 +894,13 @@ Protocols, in the order of the table above:
       query: "data"                   # optional: verify this share mounts
   ```
 - `acpid` — the ACPI event daemon. **Socket-only** (no TCP port; defaults to
-  `/var/run/acpid.socket`, override with `socket`). It is an event broadcaster with
+  `/run/acpid.socket`, override with `socket`). It is an event broadcaster with
   no request/response protocol, so the check is the **connect itself**: a
   successful connection proves acpid is listening (a stale socket left by a dead
   daemon refuses the connection). It reads nothing — reading would block until an
   ACPI event — and there is no version. No auth.
 - `fail2ban` — fail2ban-server. **Socket-only** (defaults to
-  `/var/run/fail2ban/fail2ban.sock`, override with `socket`). Its Python pickle
+  `/run/fail2ban/fail2ban.sock`, override with `socket`). Its Python pickle
   command protocol is not worth reimplementing for a liveness check, so — like
   `acpid` — the check is the **connect itself**; it exchanges no commands. No auth.
 - `lvmpolld` — LVM's poll daemon. **Socket-only** (defaults to

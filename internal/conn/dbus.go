@@ -9,7 +9,7 @@ import (
 func init() { Register(dbusProtocol{}) }
 
 // dbusDefaultAddress is the well-known system bus address.
-const dbusDefaultAddress = "unix:path=/var/run/dbus/system_bus_socket"
+const dbusDefaultAddress = "unix:path=/run/dbus/system_bus_socket"
 
 // dbusProtocol probes a D-Bus daemon natively over its wire protocol using the
 // pure-Go github.com/godbus/dbus/v5 client. Connecting performs the SASL auth
@@ -17,7 +17,7 @@ const dbusDefaultAddress = "unix:path=/var/run/dbus/system_bus_socket"
 // up; it then calls org.freedesktop.DBus.GetId to read the bus UUID. No write
 // operation is performed.
 //
-// The target defaults to the system bus (unix:path=/var/run/dbus/system_bus_socket).
+// The target defaults to the system bus (unix:path=/run/dbus/system_bus_socket).
 // Set `socket` for a different socket path, or `query` for a full D-Bus address
 // (e.g. unix:abstract=..., tcp:host=...,port=...). It is socket-based and has no
 // standard TCP port (a tcp: address carries its own host/port). No user/password:

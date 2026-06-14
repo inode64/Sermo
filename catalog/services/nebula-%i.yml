@@ -9,4 +9,4 @@ service:
 versions:
   from: "/etc/nebula/${instance}.yml"
 
-pidfile: "/var/run/supervise-nebula.${instance}.pid"
+pidfile: "/run/supervise-nebula.${instance}.pid"

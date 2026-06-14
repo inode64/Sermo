@@ -14,7 +14,7 @@ import (
 func init() { Register(dockerProtocol{}) }
 
 // dockerProtocol probes a Docker Engine daemon over its HTTP API, by default on
-// the local Unix socket /var/run/docker.sock (set `host` for a TCP daemon, with
+// the local Unix socket /run/docker.sock (set `host` for a TCP daemon, with
 // `tls` for 2376). It GETs /info — proving the daemon is up — and exposes the
 // container counts (total/running/paused/stopped), image count and daemon warning
 // count as variables, plus the engine version. With a `container` selected it also
