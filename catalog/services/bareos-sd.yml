@@ -8,9 +8,8 @@ apps: [bareos-sd]
 
 variables:
   port: 9103
-  binary: "/usr/bin/bareos-sd"
 preflight:
-  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+  config: { type: command, command: ["${bareos_sd_binary}","-t"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }

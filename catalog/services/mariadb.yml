@@ -12,7 +12,6 @@ service:
 apps: [mariadb]
 
 variables:
-  binary: /usr/bin/mariadbd
   user: mysql
   host: 127.0.0.1
   port: 3306
@@ -20,19 +19,15 @@ variables:
 
 pidfile: "${pidfile}"
 
-commands:
-  version:
-    command: ["${binary}", "--version"]
-
 preflight:
   config:
     type: command
-    command: ["${binary}", "--help", "--verbose"]
+    command: ["${mariadb_binary}", "--help", "--verbose"]
     timeout: 15s
 
   libraries:
     type: libraries
-    binary: "${binary}"
+    binary: "${mariadb_binary}"
 
 processes:
   pidfile:
@@ -41,7 +36,7 @@ processes:
 
   mariadbd:
     type: command_match
-    exe: "${binary}"
+    exe: "${mariadb_binary}"
     user: "${user}"
 
 config_files: [/etc/mysql/my.cnf, /etc/my.cnf]
@@ -79,7 +74,7 @@ stop_policy:
   kill_only_if:
     users: ["${user}"]
     exe_any:
-      - "${binary}"
+      - "${mariadb_binary}"
 
 policy:
   cooldown: 15m

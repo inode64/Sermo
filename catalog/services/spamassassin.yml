@@ -12,9 +12,8 @@ apps: [perl, spamassassin]
 
 variables:
   port: 783
-  binary: "/usr/bin/spamassassin"
 preflight:
-  config: { type: command, command: ["${binary}","--lint"], timeout: 30s }
+  config: { type: command, command: ["${spamassassin_binary}","--lint"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }
