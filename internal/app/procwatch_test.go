@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/execx"
+	"sermo/internal/notify"
 )
 
 // fakeProcSampler returns a scripted sequence of samples, one per cycle.
@@ -93,6 +94,29 @@ func TestProcWatchMemoryThreshold(t *testing.T) {
 	}
 	if h.fired[0]["SERMO_MEMORY"] != "900" {
 		t.Fatalf("unexpected memory env: %v", h.fired[0])
+	}
+}
+
+func TestProcWatchDryRunSkipsHookAndNotify(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	n := &fakeNotifier{name: "ops"}
+	s := &fakeProcSampler{cycles: [][]ProcInfo{
+		{{PID: 7, RSS: 900}},
+	}}
+	w := h.watcher(procCond{memOp: ">", memValue: 500}, s)
+	w.notifiers = []notify.Notifier{n}
+	w.dryRun = true
+
+	h.tick(w, time.Second)
+
+	if len(h.fired) != 0 {
+		t.Fatalf("dry-run must not execute hook, fired=%v", h.fired)
+	}
+	if len(n.msgs) != 0 {
+		t.Fatalf("dry-run must not notify, got %d messages", len(n.msgs))
+	}
+	if len(h.events) != 1 || h.events[0].Kind != "dry-run" {
+		t.Fatalf("expected one dry-run event, got %+v", h.events)
 	}
 }
 

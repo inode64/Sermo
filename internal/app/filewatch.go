@@ -48,6 +48,7 @@ type fileWatcher struct {
 	cond      fileCond
 	hook      HookSpec
 	notifiers []notify.Notifier
+	dryRun    bool
 	runner    HookRunner
 	emit      func(Event)
 
@@ -192,6 +193,10 @@ func (w *fileWatcher) fire(ctx context.Context, path, change, msg string, extra 
 	}
 	for k, v := range extra {
 		env[k] = v
+	}
+	if w.dryRun {
+		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
+		return
 	}
 	if len(w.hook.Command) > 0 {
 		runner := defaultHookRunner(w.runner)

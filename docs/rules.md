@@ -1703,3 +1703,10 @@ actions): an action is suppressed within `cooldown` (extended by `backoff`
 after consecutive remediations) or once `max_actions` is reached in the window.
 `for`/`within` decide *when* a rule fires; policy decides whether it may act
 *now*.
+
+Use `remediation.shadow: true` when you want these service remediation rules to
+evaluate windows, guards and policy without executing the resulting
+start/stop/restart/reload operation. It emits `shadow` events and does not
+advance live remediation cooldown state. This is separate from host watch
+`then.dry_run: true`, which skips watch `hook`, `notify` and `expand` actions;
+see [configuration](configuration.md#host-watches) for examples.

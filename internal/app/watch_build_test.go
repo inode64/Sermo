@@ -25,7 +25,7 @@ func TestBuildWatchesStorageExpandAction(t *testing.T) {
 				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
 			"policy": map[string]any{"cooldown": "30m"},
-			"then":   map[string]any{"expand": map[string]any{"by": "5G"}},
+			"then":   map[string]any{"dry_run": true, "expand": map[string]any{"by": "5G"}},
 		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
@@ -38,6 +38,9 @@ func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	w := watches[0]
 	if w.Expand == nil || w.Expand.By != 5<<30 {
 		t.Fatalf("expand not parsed: %+v", w.Expand)
+	}
+	if !w.DryRun {
+		t.Fatal("dry_run not parsed")
 	}
 	if w.Expander == nil {
 		t.Fatal("expander must be injected")
