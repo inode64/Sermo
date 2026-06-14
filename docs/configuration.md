@@ -69,6 +69,13 @@ separate daemons/apps in wizard selection lists. New configuration should use th
 canonical name. `catalog_aliases` must be a non-empty list of simple names,
 without path separators.
 
+When a daemon or service lists apps, every app variable is also available to that
+daemon/service with a normalized app-name prefix: `apps: [cups-config, cupsd]`
+exposes `${cups_config_binary}` and `${cupsd_binary}`. Dashes and other
+non-alphanumeric characters become underscores. This lets a service reuse binary
+paths owned by several apps without naming collisions. A local `variables:` entry
+with the same prefixed name still wins for host-specific overrides.
+
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
