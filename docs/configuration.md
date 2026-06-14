@@ -45,6 +45,17 @@ the historical compatibility alias for `/run`; do not write new `/var/run`
 pidfiles, sockets or runtime directories. If an init system reports `/var/run`,
 normalize the configured path to the equivalent `/run/...` spelling.
 
+Before adding a new runtime path, resolve it on the target host:
+
+```sh
+readlink -f /var/run/example.pid
+namei -l /var/run/example.pid
+```
+
+If the path resolves through a symlink, configure the canonical target path
+instead. This is especially common for `/var/run` → `/run`, but can also happen
+with app-specific runtime directories.
+
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
