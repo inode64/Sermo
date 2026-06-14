@@ -10,6 +10,35 @@ All AI agents, sub-agents, assistant sessions and automated coding processes tha
 - Agent work is trivially inspectable, diffable, discardable or mergeable as an atomic unit.
 - Matches the isolation facilities provided by the environment (e.g. `spawn_subagent` with `isolation: "worktree"`).
 
+**Concurrency model**
+
+Use one worktree per agent and per task. The primary checkout is an integration
+queue, not a shared work area: agents never edit it directly, and parallel agents
+never share a worktree. This is the preferred coordination mechanism for Sermo
+because it prevents file-level write races while preserving normal Git review,
+test and merge workflows.
+
+Create agent worktrees as sibling directories of the primary checkout:
+
+```sh
+../sermo-agent-<task-slug>
+```
+
+Do not place normal agent worktrees under `/tmp`; temporary directories are easy
+to lose and make human review harder. Use `/tmp` only for disposable build
+artifacts, caches, packages or remote-transfer files.
+
+When several agent branches are active, integrate them **serially**:
+
+1. Review and merge one agent branch into local `main`.
+2. Update the remaining agent branches from the new `main` before they are
+   considered mergeable.
+3. Re-run the relevant tests/lint in each updated worktree.
+4. Merge the next branch only after it is current and clean.
+
+Do not merge a stale agent branch just because it passed tests before another
+agent branch landed.
+
 **Mandatory workflow**
 
 1. The primary (human-facing) session keeps its working tree on a clean local `main` at all times.
@@ -37,7 +66,19 @@ All AI agents, sub-agents, assistant sessions and automated coding processes tha
      git commit -m "agent: <concise description of the change>"
      ```
 
-5. Integration is always performed **from the primary checkout** (still on local `main`):
+5. Integration is always performed **from the primary checkout** (still on local `main`).
+   The human operator is the merge gate: an agent merges only when the human has
+   explicitly asked for integration, or when the current task explicitly includes
+   "commit and merge" as part of the requested deliverable.
+
+   Before merging, inspect what will enter `main`:
+
+   ```sh
+   git log --oneline main..agent/<task-slug>
+   git diff --stat main..agent/<task-slug>
+   ```
+
+   Then merge and clean up:
 
    ```sh
    # From primary Sermo checkout on main
@@ -68,7 +109,11 @@ All AI agents, sub-agents, assistant sessions and automated coding processes tha
 - Never `git push` agent branches unless the human explicitly asks for a PR.
 
 **Relationship to the rest of AGENTS.md**
-This workflow is part of the "Small-change checklist". Every implementation plan, skill, or prompt that drives agents on Sermo must start by establishing (or declaring use of) a worktree and must end by merging the result back into local `main`.
+This workflow is part of the "Small-change checklist". Every implementation
+plan, skill, or prompt that drives agents on Sermo must start by establishing
+(or declaring use of) a worktree and must end with a committed worktree ready
+for review, or with a merge back into local `main` when the human explicitly
+requests integration.
 
 Update this section when the coding environment changes its sub-agent isolation primitives.
 
@@ -188,7 +233,7 @@ they bound the test itself rather than production behavior.
 
 Before finishing any code change:
 
-- **Worktree discipline (AI agents):** If you are an agent that edits code, you must have performed the work inside a dedicated `git worktree` created from a clean primary `main`, and the final merge back to local `main` (plus `worktree remove`) must be part of completing the change. See "AI / agent workspaces".
+- **Worktree discipline (AI agents):** If you are an agent that edits code, you must have performed the work inside a dedicated `git worktree` created from a clean primary `main`, and the result must finish as either a committed worktree ready for human review or, when explicitly requested, a merge back to local `main` plus `worktree remove`. See "AI / agent workspaces".
 - Search for the existing owner with `rg` before adding a new helper or switch.
 - Keep the patch close to that owner; avoid unrelated refactors.
 - Preserve public YAML, JSON, CLI and web field names unless the change is
