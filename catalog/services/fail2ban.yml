@@ -11,11 +11,8 @@ service:
 # linked here so its binary + version checks run in this service's preflight
 # (a missing Python blocks start).
 apps: [python, fail2ban]
-
-variables:
-  binary: "/usr/bin/fail2ban-server"
 preflight:
-  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+  config: { type: command, command: ["${fail2ban_binary}","-t"], timeout: 30s }
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/goccy/go-yaml"
+
+	"sermo/internal/cfgval"
 )
 
 // These audits load the real repo artifacts — the packaged catalog, the shipped
@@ -308,6 +310,65 @@ func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
 	if got := command[0]; got != "/usr/bin/cupsd" {
 		t.Fatalf("cups config command = %v, want cupsd app binary", command)
 	}
+}
+
+func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	for _, name := range cfg.DaemonNames {
+		doc := cfg.Daemons[name]
+		serviceBinary := catalogBinary(doc)
+		if serviceBinary == "" {
+			continue
+		}
+		for _, appName := range cfgval.StringList(doc.Body["apps"]) {
+			appDoc, ok := cfg.Apps[appName]
+			if !ok {
+				continue
+			}
+			if serviceBinary != catalogBinary(appDoc) {
+				continue
+			}
+			t.Errorf("%s defines variables.binary %q already owned by app %s; use ${%s_binary} instead", name, serviceBinary, appName, appVariablePrefix(appName))
+			if hasVersionProbe(doc.Body) {
+				t.Errorf("%s defines a service-level version probe already owned by app %s", name, appName)
+			}
+		}
+	}
+}
+
+func catalogBinary(doc *Document) string {
+	if doc == nil {
+		return ""
+	}
+	vars, _ := doc.Body["variables"].(map[string]any)
+	return cfgval.String(vars["binary"])
+}
+
+func hasVersionProbe(body map[string]any) bool {
+	if preflight, _ := body["preflight"].(map[string]any); preflight != nil {
+		if _, ok := preflight["version"]; ok {
+			return true
+		}
+	}
+	if commands, _ := body["commands"].(map[string]any); commands != nil {
+		if _, ok := commands["version"]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func yamlFiles(dir string) ([]string, error) {

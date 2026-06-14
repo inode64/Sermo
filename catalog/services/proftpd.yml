@@ -7,9 +7,8 @@ apps: [proftpd]
 
 variables:
   port: 21
-  binary: "/usr/bin/proftpd"
 preflight:
-  config: { type: command, command: ["${binary}","--configtest"], timeout: 30s }
+  config: { type: command, command: ["${proftpd_binary}","--configtest"], timeout: 30s }
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
