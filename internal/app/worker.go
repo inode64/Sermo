@@ -131,10 +131,11 @@ func (w *Worker) RunCycle(ctx context.Context) {
 		w.Publish(cache, w.cycleRan)
 	}
 	ev := &rules.Evaluator{Cache: cache, Deps: deps, Changed: w.changed}
+	evals := w.ruleEvalCache()
 
-	w.runRemediation(ctx, ev, now)
-	w.runAlerts(ctx, ev)
-	w.publishRuleWindows(ctx, ev)
+	w.runRemediation(ctx, ev, now, evals)
+	w.runAlerts(ctx, ev, evals)
+	w.publishRuleWindows(ctx, ev, evals)
 }
 
 // CheckGate is one check's interdependencies: it is skipped this cycle when any
@@ -236,7 +237,19 @@ func requiredChecksOK(cache map[string]checks.Result) bool {
 	return true
 }
 
-func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time) {
+type ruleEvalResult struct {
+	cond bool
+	err  error
+}
+
+func (w *Worker) ruleEvalCache() map[string]ruleEvalResult {
+	if w.RuleWindows == nil || len(w.Rules) == 0 {
+		return nil
+	}
+	return make(map[string]ruleEvalResult, len(w.Rules))
+}
+
+func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time, evals map[string]ruleEvalResult) {
 	if w.State == nil {
 		w.State = &rules.RemediationState{}
 	}
@@ -248,7 +261,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		if r.Type != rules.RuleRemediation {
 			continue
 		}
-		if w.fires(ctx, ev, r) {
+		if w.fires(ctx, ev, r, evals) {
 			firing = append(firing, r)
 		}
 	}
@@ -329,12 +342,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	}
 }
 
-func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator) {
+func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, evals map[string]ruleEvalResult) {
 	for _, r := range w.Rules {
 		if r.Type != rules.RuleAlert {
 			continue
 		}
-		if w.fires(ctx, ev, r) {
+		if w.fires(ctx, ev, r, evals) {
 			w.emitAlerts(ctx, r)
 		}
 	}
@@ -370,7 +383,7 @@ func alertMessage(service, rule, msg string) notify.Message {
 // fires evaluates a rule's condition this cycle and advances its window state,
 // returning whether the rule fires now (section 15). An evaluation error counts
 // as a false cycle.
-func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule) bool {
+func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) bool {
 	// Defense-in-depth for safety invariant 13: a system-scoped metric must
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
@@ -378,12 +391,25 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule) b
 		w.emit(Event{Kind: "error", Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
 		return false
 	}
-	cond, err := ev.Eval(ctx, r.If)
+	cond, err := w.evalRule(ctx, ev, r, evals)
 	if err != nil {
 		w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})
 		cond = false
 	}
 	return w.windowState(r.Name).Fires(r, cond)
+}
+
+func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
+	if evals != nil {
+		if res, ok := evals[r.Name]; ok {
+			return res.cond, res.err
+		}
+	}
+	cond, err := ev.Eval(ctx, r.If)
+	if evals != nil {
+		evals[r.Name] = ruleEvalResult{cond: cond, err: err}
+	}
+	return cond, err
 }
 
 // changed reports whether the file at path differs from the acknowledged
@@ -444,12 +470,12 @@ func (w *Worker) publishRemediation() {
 	w.Remediation.Publish(w.Service, w.Policy, w.State, now())
 }
 
-func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator) {
+func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator, evals map[string]ruleEvalResult) {
 	if w.RuleWindows == nil || ev == nil {
 		return
 	}
 	reports := rules.BuildRuleWindowReports(ctx, w.Rules, w.windows, func(ctx context.Context, r rules.Rule) (bool, error) {
-		return ev.Eval(ctx, r.If)
+		return w.evalRule(ctx, ev, r, evals)
 	})
 	w.RuleWindows.Publish(w.Service, reports)
 }
