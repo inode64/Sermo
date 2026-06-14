@@ -292,6 +292,11 @@ account such as `www-data`) or `pidfile` variable always wins. They pair with th
 pidfile selector — e.g. `processes.main: { type: pidfile, path: "${pidfile}" }` —
 and the `command_match` user — `user: "${user}"`.
 
+Runtime paths in Sermo config use the canonical `/run` spelling. Do not write
+new `/var/run` pidfiles or sockets in catalog profiles, generated services or
+examples; `/var/run` is the legacy compatibility alias for `/run`, and detected
+paths should be normalized to `/run/...` before they are committed to config.
+
 ² `${date}`/`${event}`/`${action}` are substituted when the worker emits a rule
 message, so they belong in `message:` strings — e.g.
 `message: "[${host}] ${service}: ${event} → ${action} at ${date}"`. Elsewhere they
@@ -497,6 +502,10 @@ pidfile from one line:
 ```yaml
 pidfile: /run/named/named.pid
 ```
+
+Use `/run` here, not `/var/run`. If a distro init script or service manager
+reports the legacy `/var/run/...` spelling, write the equivalent `/run/...` path
+in the daemon profile.
 
 On resolution this desugars into (a) a `processes` pidfile selector — so the
 parent process **and its descendants** are discovered and monitored — and (b) a
