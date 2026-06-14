@@ -7,5 +7,11 @@ service:
   systemd: [nfs-idmapd, rpc-idmapd]
   openrc: [rpc.idmapd, rpc-idmapd]
 
+processes:
+  main:
+    type: command_match
+    exe: /usr/bin/rpc.idmapd
+    user: root
+
 checks:
   service: { type: service, expect: active }

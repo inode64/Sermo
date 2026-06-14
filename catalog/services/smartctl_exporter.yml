@@ -13,6 +13,8 @@ variables:
   host: 127.0.0.1
   port: 9633
 
+pidfile: /run/smartctl_exporter.pid
+
 checks:
   service:
     type: service

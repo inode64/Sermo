@@ -21,11 +21,14 @@ and the invariants below, and update this file in the same change.
    operator to type a name** — the target's identity comes from detection. The
    service assistant completes the catalog group before asking about uncataloged
    units.
-3. **Per-service properties (services only).** For each selected service, ask
-   the properties that legitimately differ per service: a port override, and the
-   **PID source**. The PID question is prefilled from the init definition (see
-   "PID detection"): a pidfile path writes `pidfile:`; with no pidfile, an
-   executable derived from the unit offers a `command_match` process selector.
+3. **Per-service properties (services only).** For each selected catalog service,
+   ask only the properties that legitimately differ per service, such as a port
+   override. PID/process ownership belongs in the catalog daemon under
+   `catalog/services`, so generated catalog service entries should normally only
+   write `uses:` plus explicit overrides. For active units with no catalog
+   profile, ask the **PID source** because there is no daemon profile to inherit:
+   a pidfile path writes `pidfile:`; with no pidfile, an executable derived from
+   the unit offers a `command_match` process selector.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
 5. **Monitor state.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
@@ -88,10 +91,12 @@ the service's init definition, best-effort (unknown fields come back `""`):
   options may fill dynamic pidfiles/executables.
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
-`DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`; the service assistant prefills the
-PID question from them and only accepts absolute pidfile paths. Catalog services
-write `uses:`; uncataloged active units write `service.name` plus a basic
-`checks.service`.
+`DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
+improve the catalog daemon profile, not the generated `kind: service` entry:
+they write `uses:` and inherit PID/process selectors from `catalog/services`.
+Uncataloged active units write `service.name` plus a basic `checks.service`, and
+their PID question is prefilled from detection and only accepts absolute pidfile
+paths.
 
 ## Adding a new wizard
 
