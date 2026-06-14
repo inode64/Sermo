@@ -8,9 +8,8 @@ apps: [bareos-dir]
 
 variables:
   port: 9101
-  binary: "/usr/bin/bareos-dir"
 preflight:
-  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+  config: { type: command, command: ["${bareos_dir_binary}","-t"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }

@@ -8,9 +8,8 @@ apps: [varnishd]
 
 variables:
   port: 6082
-  binary: "/usr/bin/varnishd"
 preflight:
-  config: { type: command, command: ["${binary}","-C","-f","/etc/varnish/default.vcl"], timeout: 30s }
+  config: { type: command, command: ["${varnishd_binary}","-C","-f","/etc/varnish/default.vcl"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }
