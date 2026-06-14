@@ -8,3 +8,6 @@ versions:
   from: "/etc/init.d/openvpn.${instance}"
 variables:
   config: "/etc/openvpn/${instance}.conf"
+  pidfile: "/run/openvpn.${instance}.pid"
+
+pidfile: "${pidfile}"

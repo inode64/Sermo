@@ -16,6 +16,8 @@ variables:
   host: 127.0.0.1
   port: 8123
 
+pidfile: /run/homeassistant.pid
+
 checks:
   service:
     type: service
