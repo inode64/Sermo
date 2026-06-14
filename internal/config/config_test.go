@@ -278,6 +278,47 @@ uses: tomcat
 	}
 }
 
+func TestAppsLinkAcceptsCatalogAlias(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/dbus.yml": `
+kind: app
+name: dbus
+catalog_aliases: [dbus-daemon]
+variables: { binary: /usr/bin/dbus-daemon }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/dbus.yml": `
+kind: daemon
+name: dbus
+apps: [dbus-daemon]
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/dbus-main.yml": `
+kind: service
+name: dbus-main
+uses: dbus
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("dbus-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	pf := nested(t, resolved.Tree, "preflight")
+	if got := cfgval.String(nested(t, pf, "dbus-daemon-binary")["path"]); got != "/usr/bin/dbus-daemon" {
+		t.Fatalf("alias-linked app binary path = %q, want /usr/bin/dbus-daemon", got)
+	}
+	if names := cfg.DaemonsInCategory(CategoryApp); strings.Join(names, ",") != "dbus" {
+		t.Fatalf("listed apps = %v, want only canonical dbus", names)
+	}
+}
+
 func TestAppsLinkUnknownAppErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

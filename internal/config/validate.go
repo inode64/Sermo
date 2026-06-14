@@ -208,8 +208,8 @@ func validateCatalogAliases(doc *Document, scope string) []Issue {
 		return nil
 	}
 	var issues []Issue
-	if doc.Kind != kindDaemon {
-		issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases is only supported on daemon catalog documents"})
+	if doc.Kind != kindDaemon && doc.Kind != kindApp {
+		issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases is only supported on daemon and app catalog documents"})
 	}
 	aliases, ok := raw.([]any)
 	if !ok || len(aliases) == 0 {
