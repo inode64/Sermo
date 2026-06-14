@@ -9,9 +9,8 @@ apps: [ssh]
 
 variables:
   port: 22
-  binary: "/usr/bin/sshd"
 preflight:
-  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+  config: { type: command, command: ["${ssh_binary}","-t"], timeout: 30s }
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).

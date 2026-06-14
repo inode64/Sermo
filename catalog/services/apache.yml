@@ -12,16 +12,11 @@ service:
 apps: [apache]
 
 variables:
-  binary: /usr/bin/apache2
   user: www-data
   host: 127.0.0.1
   port: 80
   tls_port: 443
   health_path: /
-
-commands:
-  version:
-    command: ["${binary}", "-v"]
 
 preflight:
   config:
@@ -31,18 +26,18 @@ preflight:
 
   libraries:
     type: libraries
-    binary: "${binary}"
+    binary: "${apache_binary}"
     optional: true
 
 processes:
   main:
     type: command_match
-    exe: "${binary}"
+    exe: "${apache_binary}"
     user: root
 
   workers:
     type: command_match
-    exe: "${binary}"
+    exe: "${apache_binary}"
     user: "${user}"
 
 # Defining pidfile auto-wires process-tree monitoring and a
@@ -79,7 +74,7 @@ stop_policy:
   kill_only_if:
     users: ["${user}", root]
     exe_any:
-      - "${binary}"
+      - "${apache_binary}"
 
 rules:
   block-restart-if-config-invalid:

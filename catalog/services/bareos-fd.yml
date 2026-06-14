@@ -8,9 +8,8 @@ apps: [bareos-fd]
 
 variables:
   port: 9102
-  binary: "/usr/bin/bareos-fd"
 preflight:
-  config: { type: command, command: ["${binary}","-t"], timeout: 30s }
+  config: { type: command, command: ["${bareos_fd_binary}","-t"], timeout: 30s }
 
 checks:
   service: { type: service, expect: active }

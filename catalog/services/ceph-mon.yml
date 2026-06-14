@@ -15,7 +15,6 @@ apps: [ceph-mon]
 
 variables:
   user: ceph
-  binary: /usr/bin/ceph-mon
   # Monitors bind their configured public address, not localhost. Point `host`
   # at the local mon address; the v2 messenger is 3300, legacy v1 is 6789.
   host: 127.0.0.1
@@ -26,7 +25,7 @@ processes:
   # unambiguously.
   ceph-mon:
     type: command_match
-    exe: "${binary}"
+    exe: "${ceph_mon_binary}"
     user: "${user}"
 
 checks:

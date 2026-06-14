@@ -15,7 +15,6 @@ apps: [ceph-mgr]
 
 variables:
   user: ceph
-  binary: /usr/bin/ceph-mgr
 
 processes:
   # Exactly one ceph-mgr runs per host, so an exe+user match selects it
@@ -23,7 +22,7 @@ processes:
   # so process liveness — not a tcp probe — is the reliable signal here.
   ceph-mgr:
     type: command_match
-    exe: "${binary}"
+    exe: "${ceph_mgr_binary}"
     user: "${user}"
 
 restart_on_change:

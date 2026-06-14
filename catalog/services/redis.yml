@@ -12,20 +12,15 @@ service:
 apps: [redis]
 
 variables:
-  binary: /usr/bin/redis-server
   user: redis
   host: 127.0.0.1
   port: 6379
   pidfile: /run/redis/redis.pid
 
-commands:
-  version:
-    command: ["${binary}", "--version"]
-
 preflight:
   libraries:
     type: libraries
-    binary: "${binary}"
+    binary: "${redis_binary}"
 
 processes:
   pidfile:
@@ -34,7 +29,7 @@ processes:
 
   redis:
     type: command_match
-    exe: "${binary}"
+    exe: "${redis_binary}"
     user: "${user}"
 
 config_files: [/etc/redis/redis.conf, /etc/redis.conf]
