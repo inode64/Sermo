@@ -844,8 +844,9 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 					},
 				},
 				"then": map[string]any{
-					"notify": []any{"ops", "pager"},
-					"expand": map[string]any{"by": "5G"},
+					"dry_run": true,
+					"notify":  []any{"ops", "pager"},
+					"expand":  map[string]any{"by": "5G"},
 					"hook": map[string]any{
 						"command": []any{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"},
 					},
@@ -894,6 +895,9 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	}
 	if !slices.Equal(w.Notifiers, []string{"ops", "pager"}) {
 		t.Fatalf("notifiers = %v, want ops,pager", w.Notifiers)
+	}
+	if !w.DryRun {
+		t.Fatal("dry_run flag not exposed")
 	}
 	if !slices.Equal(w.HookCommand, []string{"/usr/local/bin/sermo-disk-alert", "--path", "/data/app"}) {
 		t.Fatalf("hook command = %v", w.HookCommand)
