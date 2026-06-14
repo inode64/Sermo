@@ -19,12 +19,11 @@ func serviceTestEnv() Env {
 }
 
 func TestServiceAssistant(t *testing.T) {
-	// Select nginx (1) with a port override; no pidfile; monitor enabled, inherit
-	// interval. The wizard never asks for a name — it is the candidate's.
+	// Select nginx (1) with a port override; monitor enabled, inherit interval.
+	// The wizard never asks for a name; it is the candidate's.
 	script := strings.Join([]string{
 		"1",    // MultiChoose -> nginx
 		"8080", // port override
-		"",     // pidfile: skip (candidate has none detected)
 		"1",    // monitor state: enabled
 		"",     // interval: inherit
 	}, "\n") + "\n"
@@ -61,7 +60,6 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	script := strings.Join([]string{
 		"1", // choose nginx from the active catalog list; redis is inactive
 		"",  // keep catalog port
-		"",  // no pidfile for nginx
 		"1", // monitor nginx
 		"",  // interval inherit
 		"y", // review active units without catalog profiles
@@ -83,6 +81,12 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	if nginx["uses"] != "nginx" {
 		t.Fatalf("nginx uses = %v, want nginx", nginx["uses"])
 	}
+	if _, ok := nginx["pidfile"]; ok {
+		t.Fatalf("catalog service must inherit pidfile from catalog: %v", nginx)
+	}
+	if _, ok := nginx["processes"]; ok {
+		t.Fatalf("catalog service must inherit processes from catalog: %v", nginx)
+	}
 	custom := res.Services["customd"].(map[string]any)
 	if _, ok := custom["uses"]; ok {
 		t.Fatalf("generic service must not use catalog profile: %v", custom)
@@ -101,29 +105,50 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	}
 }
 
-func TestServiceAssistantDetectedPidfile(t *testing.T) {
-	// A candidate whose init definition yielded a pidfile path: it is prefilled
-	// and written as `pidfile:` when accepted (blank keeps the default).
+func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
+	// Catalog daemon profiles own PID detection. A detected pidfile must not be
+	// written into the generated service override.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Pidfile: "/run/nginx.pid"}}, nil
 	}}
-	script := strings.Join([]string{"1", "", "1", ""}, "\n") + "\n" // select; pidfile=default; monitor enabled; interval inherit
+	script := strings.Join([]string{"1", "1", ""}, "\n") + "\n" // select; monitor enabled; interval inherit
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	svc := res.Services["nginx"].(map[string]any)
-	if svc["pidfile"] != "/run/nginx.pid" {
-		t.Fatalf("pidfile = %v, want /run/nginx.pid", svc["pidfile"])
+	if _, ok := svc["pidfile"]; ok {
+		t.Fatalf("catalog service must not write pidfile override: %v", svc)
+	}
+	if _, ok := svc["processes"]; ok {
+		t.Fatalf("catalog service must not write processes override: %v", svc)
+	}
+}
+
+func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
+	// Generic services have no catalog daemon profile, so accepting the detected
+	// pidfile writes it into the generated service entry.
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Generic: true, Pidfile: "/run/customd.pid"}}, nil
+	}}
+	script := strings.Join([]string{"y", "1", "", "1", ""}, "\n") + "\n" // review generic; select; pidfile=default; monitor enabled; interval inherit
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	svc := res.Services["customd"].(map[string]any)
+	if svc["pidfile"] != "/run/customd.pid" {
+		t.Fatalf("pidfile = %v, want /run/customd.pid", svc["pidfile"])
 	}
 }
 
 func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "nginx", Title: "Nginx", Unit: "nginx", Pidfile: "/run/nginx.pid"}}, nil
+		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Generic: true, Pidfile: "/run/customd.pid"}}, nil
 	}}
-	script := strings.Join([]string{"1", "y", "", "1", ""}, "\n") + "\n" // invalid pidfile; accept default; monitor enabled; inherit interval
+	script := strings.Join([]string{"y", "1", "y", "", "1", ""}, "\n") + "\n" // review generic; invalid pidfile; accept default; monitor enabled; inherit interval
 	var out strings.Builder
 	p := NewPrompt(strings.NewReader(script), &out)
 	res, err := serviceAssistant{}.Run(p, env)
@@ -133,9 +158,9 @@ func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 	if !strings.Contains(out.String(), "pidfile must be an absolute path or blank") {
 		t.Fatalf("expected validation message, got:\n%s", out.String())
 	}
-	svc := res.Services["nginx"].(map[string]any)
-	if svc["pidfile"] != "/run/nginx.pid" {
-		t.Fatalf("pidfile = %v, want /run/nginx.pid", svc["pidfile"])
+	svc := res.Services["customd"].(map[string]any)
+	if svc["pidfile"] != "/run/customd.pid" {
+		t.Fatalf("pidfile = %v, want /run/customd.pid", svc["pidfile"])
 	}
 }
 
@@ -143,9 +168,9 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	// No pidfile, but an exe was detected: accepting the fallback writes a
 	// command_match process selector.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Exe: "/usr/sbin/sshd"}}, nil
+		return []DaemonCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Generic: true, Exe: "/usr/sbin/sshd"}}, nil
 	}}
-	script := strings.Join([]string{"1", "", "y", "1", ""}, "\n") + "\n" // select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit
+	script := strings.Join([]string{"y", "1", "", "y", "1", ""}, "\n") + "\n" // review generic; select; pidfile skip; match-by-exe yes; monitor enabled; interval inherit
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -162,9 +187,9 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	// A shared runtime/script service should use the detected cmdline pattern and
 	// owner instead of assuming the configured command is the resolved exe.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
-		return []DaemonCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
+		return []DaemonCandidate{{Name: "homeassistant", Title: "Home Assistant", Unit: "homeassistant", Generic: true, Cmd: `(^|[[:space:]])/usr/bin/hass($|[[:space:]])`, User: "homeassistant"}}, nil
 	}}
-	script := strings.Join([]string{"1", "", "y", "1", ""}, "\n") + "\n" // select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit
+	script := strings.Join([]string{"y", "1", "", "y", "1", ""}, "\n") + "\n" // review generic; select; pidfile skip; match-by-cmd yes; monitor enabled; interval inherit
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {
@@ -183,8 +208,8 @@ func TestServiceAssistantBatchMonitoring(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "nginx", Unit: "nginx"}, {Name: "sshd", Unit: "sshd"}}, nil
 	}}
-	// select 1,2; per-service pidfile skips; batch=yes; monitor disabled; interval 30s.
-	script := strings.Join([]string{"1,2", "", "", "y", "2", "30s"}, "\n") + "\n"
+	// select 1,2; batch=yes; monitor disabled; interval 30s.
+	script := strings.Join([]string{"1,2", "y", "2", "30s"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := serviceAssistant{}.Run(p, env)
 	if err != nil {

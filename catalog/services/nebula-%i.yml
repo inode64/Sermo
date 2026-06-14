@@ -8,3 +8,5 @@ service:
   openrc: ["nebula.${instance}"]
 versions:
   from: "/etc/nebula/${instance}.yml"
+
+pidfile: "/var/run/supervise-nebula.${instance}.pid"

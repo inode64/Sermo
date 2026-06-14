@@ -9,6 +9,12 @@ variables:
   host: 127.0.0.1
   port: 111
 
+processes:
+  main:
+    type: command_match
+    exe: /usr/bin/rpcbind
+    user: root
+
 checks:
   service: { type: service, expect: active }
   rpcbind: { type: rpcbind, host: "${host}", port: "${port}", timeout: 3s }

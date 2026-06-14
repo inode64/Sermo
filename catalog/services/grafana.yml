@@ -13,6 +13,8 @@ variables:
   host: 127.0.0.1
   port: 3000
 
+pidfile: /run/grafana.pid
+
 checks:
   service:
     type: service

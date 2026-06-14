@@ -11,6 +11,12 @@ variables:
   host: 127.0.0.1
   port: 2049
 
+processes:
+  mountd:
+    type: command_match
+    exe: /usr/bin/rpc.mountd
+    user: root
+
 checks:
   service: { type: service, expect: active }
   nfs: { type: nfs, host: "${host}", port: "${port}", timeout: 3s }
