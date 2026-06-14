@@ -6,3 +6,4 @@ variables:
   binary: "/usr/bin/cupsd"
 preflight:
   binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "-h"], timeout: 10s, expect_exit: 0 }

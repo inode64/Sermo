@@ -308,6 +308,11 @@ func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
 	if got := command[0]; got != "/usr/bin/cupsd" {
 		t.Fatalf("cups config command = %v, want cupsd app binary", command)
 	}
+	health := preflight["cupsd-health"].(map[string]any)
+	healthCommand := health["command"].([]any)
+	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cupsd" || healthCommand[1] != "-h" {
+		t.Fatalf("cupsd health command = %v, want /usr/bin/cupsd -h", healthCommand)
+	}
 }
 
 func yamlFiles(dir string) ([]string, error) {

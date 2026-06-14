@@ -178,8 +178,8 @@ script's own `reload` (`when: auto`).
 ## App dependencies (`apps`)
 
 A service often runs on top of one or more **apps** — the runtimes/tools in
-`catalog/apps` (java, openssl, perl, …). An app owns the **binary** and
-**version** checks for that tool; it is the single source of truth, shared by
+`catalog/apps` (java, openssl, perl, …). An app owns the **binary**, **health**
+and **version** checks for that tool; it is the single source of truth, shared by
 every service that uses it. A service (or daemon definition) links the apps it
 needs with `apps:` — a list, since a service may depend on several:
 
@@ -190,14 +190,17 @@ apps: [java]
 
 On resolution each linked app's preflight checks are injected into the service's
 preflight under keys namespaced by the app name (`<app>-<check>`), carrying the
-app's own binary path and version command. When a service links several apps,
-each one's checks stay distinct — e.g. `backrest`'s `apps: [backrest, restic]`
-yields `backrest-binary`, `backrest-version`, `restic-binary`, `restic-version`,
-so a missing `restic` raises its own alert separate from `backrest`:
+app's own binary path, health probe and version command. When a service links
+several apps, each one's checks stay distinct — e.g. `backrest`'s
+`apps: [backrest, restic]`
+yields `backrest-binary`, `backrest-health`, `backrest-version`,
+`restic-binary`, `restic-health`, `restic-version`, so a missing or unhealthy
+`restic` raises its own alert separate from `backrest`:
 
 ```yaml
 preflight:
   java-binary:  { type: binary, path: /usr/bin/java }
+  java-health:  { type: command, command: ["/usr/bin/java", "-help"] }
   java-version: { type: command, command: ["/usr/bin/java", "-version"] }
 ```
 
@@ -601,9 +604,10 @@ for example `versions: { from: "/etc/init.d/openvpn.${instance}" }`.
 ### Listing installed applications
 
 `sermoctl apps` reports the applications described by daemons: which are
-installed (their binary is present and executable), the version their version
-command reports, and whether they resolve without error. The VERSION column
-shows the short version by default; add `--long` to show the full raw string.
+installed (their binary is present and executable), whether their `health`
+command succeeds when configured, and the version their `version` command
+reports. The VERSION column shows the short version by default; add `--long` to
+show the full raw string.
 
 ```text
 APPLICATION   VERSION  STATUS
@@ -626,6 +630,13 @@ its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` is unaffected by
 `--long` — it always emits both, with the structured `name`, `display_name`,
 `binary`, `version`, `version_short`, `installed`, `ok` and `status`.
 
+When an app declares `health`, Sermo uses it as the preferred health probe for
+`sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit
+code is evaluated (`expect_exit`, default `0`); stdout/stderr matchers and the
+printed output are ignored for health. This is useful for tools such as
+`cupsd`, where `cupsd -h` proves the binary starts and parses its options but
+does not print a version.
+
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
 most the patchlevel (`1.30.2`), taking the first `major.minor[.patch]` token and
@@ -645,6 +656,7 @@ parsing. When no such command is configured (or it errors or prints nothing),
 
 ```yaml
 preflight:
+  health:        { type: command, command: ["${binary}","-h"], timeout: 10s }
   version:       { type: command, command: ["${binary}","-v"], timeout: 10s }
   version_short: { type: command, command: ["${binary}","-r","echo PHP_VERSION;"], timeout: 10s }
 ```
@@ -806,6 +818,11 @@ the global `watches:` section; see [configuration](configuration.md#host-watches
 `commands` declares named auxiliary commands. Sermo never runs them as generic
 checks, but the **reserved names** are consumed by features:
 
+- **`health`** — run by the `sermoctl apps`/`libs`/`services` listings and the
+  WebUI application list to decide whether an installed application is healthy.
+  It uses the same `preflight.<name>` then `commands.<name>` lookup as
+  `version`, but only checks the exit code. When present, it takes precedence
+  over `version` for app health.
 - **`version`** (and `version_short`) — run by the `sermoctl apps`/`libs`/
   `services` listings to report a daemon's version, and **each cycle** by the
   `version.on_change` monitor (see [Service health conditions](rules.md#service-health-conditions-version--state--config)).
