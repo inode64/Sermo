@@ -121,6 +121,18 @@ documented alias — `limit` for `max`. So the kernel-maximum concept is `Max` /
 `levelCountResult` in `internal/checks/check.go` and `countMeter` in
 `internal/app/webbackend.go`). Do not "fix" those `limit` locals back to `max`.
 
+## Runtime paths
+
+Use `/run` for volatile runtime artifacts in catalog profiles, generated
+configuration, examples and docs: pidfiles, sockets, OpenRC runtime metadata,
+Sermo runtime directories and locks. Do not write new `/var/run` paths. Modern
+Linux systems expose `/var/run` as a legacy compatibility symlink to `/run`, and
+Sermo configuration should use the canonical `/run` spelling.
+
+When systemd, OpenRC or a host file reports a pidfile or socket under
+`/var/run`, normalize it to the equivalent `/run/...` path before writing it to a
+catalog service, generated service config or documentation example.
+
 ## Service operations
 
 Application-level start, stop, restart, reload or signal actions on a service

@@ -90,6 +90,10 @@ the service's init definition, best-effort (unknown fields come back `""`):
   Unknown `$`-built paths are skipped; runtime `/run/openrc/daemons/<unit>/001`
   options may fill dynamic pidfiles/executables.
 
+Detected pidfile and socket paths must be written with canonical `/run`
+spelling. If the backend reports `/var/run/...`, normalize it to `/run/...`
+before adding it to `catalog/services` or a generated uncataloged service.
+
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
 improve the catalog daemon profile, not the generated `kind: service` entry:
