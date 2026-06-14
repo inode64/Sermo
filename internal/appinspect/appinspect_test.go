@@ -2,7 +2,7 @@ package appinspect
 
 import "testing"
 
-func TestVersionCommandFor(t *testing.T) {
+func TestProbeCommandFor(t *testing.T) {
 	tree := map[string]any{
 		"commands": map[string]any{
 			"version": map[string]any{
@@ -13,7 +13,7 @@ func TestVersionCommandFor(t *testing.T) {
 			},
 		},
 	}
-	vc := versionCommandFor(tree, "version")
+	vc := probeCommandFor(tree, "version")
 	if len(vc.argv) != 2 || vc.argv[0] != "/bin/tool" {
 		t.Fatalf("argv = %v", vc.argv)
 	}
