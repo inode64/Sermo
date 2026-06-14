@@ -229,6 +229,7 @@
   .kind-error, .kind-hook-failed, .kind-notify-failed { color: var(--crit); }
   .kind-alert, .kind-suppressed { color: var(--warn); }
   .kind-action, .kind-hook, .kind-notify, .kind-cascade { color: var(--ok); }
+  .kind-shadow, .kind-dry-run { color: var(--info); }
   .lvl-error { color: var(--crit); font-weight: 600; }
   .lvl-warning { color: var(--warn); font-weight: 600; }
   .lvl-info { color: var(--text-2); }
@@ -1878,6 +1879,7 @@ function watchSearchText(w) {
     notifierNames(w).join(" "),
     watchHasNotify(w) ? "notify notifiers" : "",
     watchHasExpand(w) ? "expand" : "",
+    w.dry_run ? "dry run dry-run" : "",
     watchStateText(w),
     watchMonitorized(w) ? "monitorized" : "",
     watchUnmonitorized(w) ? "unmonitorized" : "",
@@ -2280,6 +2282,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Monitor flag</span><br><code>${esc(mode)}</code></div>
     <div><span class="muted">Hook</span><br>${hook}</div>
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
+    <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
   const live = renderDiskWatch(w.disk) + renderMeterWatch(w.meter) + renderWatchReadings(w.readings);
   const conditions = renderConditionRows(w.conditions || []);

@@ -90,6 +90,7 @@ type procWatcher struct {
 	cond      procCond
 	hook      HookSpec
 	notifiers []notify.Notifier
+	dryRun    bool
 	runner    HookRunner
 	now       func() time.Time
 	emit      func(Event)
@@ -218,6 +219,10 @@ func (w *procWatcher) fire(ctx context.Context, msg string, env map[string]strin
 	env["SERMO_WATCH"] = w.name
 	env["SERMO_CHECK_TYPE"] = "process"
 	env["SERMO_MESSAGE"] = msg
+	if w.dryRun {
+		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
+		return
+	}
 
 	if len(w.hook.Command) > 0 {
 		runner := defaultHookRunner(w.runner)

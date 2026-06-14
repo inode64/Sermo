@@ -132,6 +132,7 @@ type webWatch struct {
 	hasHook       bool
 	hookCommand   []string
 	notifiers     []string
+	dryRun        bool
 	notifierCount int
 	check         map[string]any
 	metrics       map[string]any
@@ -324,6 +325,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			var hookCommand []string
 			var notifierNames []string
 			var expand *ExpandSpec
+			dryRun := false
 			if then, ok := entry["then"].(map[string]any); ok {
 				if h, ok := then["hook"].(map[string]any); ok && len(h) > 0 {
 					if cmd := h["command"]; cmd != nil {
@@ -332,6 +334,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 					}
 				}
 				notifierNames = effectiveNotify(cfgval.StringList(then["notify"]), deps.GlobalNotify)
+				dryRun = cfgval.Bool(then["dry_run"])
 				if parsed, err := parseExpand(then, ctype); err != nil {
 					warnings = append(warnings, "watch "+name+": "+err.Error())
 				} else {
@@ -348,6 +351,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 				hasHook:       hasHook,
 				hookCommand:   hookCommand,
 				notifiers:     notifierNames,
+				dryRun:        dryRun,
 				notifierCount: len(notifierNames),
 				check:         checkMap(entry),
 				metrics:       metricsMap(entry),
@@ -677,6 +681,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			HookCommand:   slices.Clone(w.hookCommand),
 			Notifiers:     slices.Clone(w.notifiers),
 			NotifierCount: w.notifierCount,
+			DryRun:        w.dryRun,
 			Conditions:    watchConditions(w.check, w.metrics),
 			Disk:          disk,
 			Swap:          swap,
@@ -770,7 +775,7 @@ func watchReadingsFailed(readings []web.WatchReading) bool {
 
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case "firing", "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
+	case "firing", "dry-run", "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
 		return true
 	default:
 		return false

@@ -111,6 +111,8 @@ notifiers:
 #   remediation:
 #     shadow: true
 # Services in shadow mode still run all their checks and host watches normally.
+# To rehearse a host watch without executing hook/notify/expand actions, add
+# dry_run: true inside that watch's then block.
 
 # Host watches: monitor host resources (storage, …) independently of services and,
 # when a threshold is crossed, run a hook command and/or notify named targets.
@@ -146,10 +148,9 @@ watches:
       hook:
         command: [/usr/local/bin/sermo-load-alert.sh]
   # Watch system RAM via the kernel's MemAvailable estimate (page cache and
-  # reclaimable buffers never read as "used").
-  # Bare form (no `then`): the `for` window produces "firing" visible in the web
-  # UI (Alerts, Watches "firing", failed state) and event log only. No hook or
-  # notify is ever executed (globals are not inherited).
+  # reclaimable buffers never read as "used"). During hook rollout, dry_run keeps
+  # the watch active and emits "firing" + "dry-run" events, but does not execute
+  # the configured hook/notify/expand actions. Remove dry_run when ready to act.
   memory:
     monitor: disabled
     interval: 30s
@@ -157,8 +158,8 @@ watches:
       type: memory
       used_pct: { op: ">=", value: "90%" }
     for: { cycles: 3 }
-    # then omitted => alert-only (web + registros)
     then:
+      dry_run: true
       hook:
         command: [/usr/local/bin/sermo-memory-alert.sh]
   # Watch kernel PSI: % of wall time tasks stalled waiting on memory. The

@@ -41,9 +41,12 @@ type Watch struct {
 	// Notifiers receive a notification when the watch fires (the resolved
 	// `then.notify` targets, or the inherited global default).
 	Notifiers []notify.Notifier
-	Interval  time.Duration
-	Now       func() time.Time
-	Emit      func(Event)
+	// DryRun keeps watch evaluation and firing events active, but reports the
+	// configured actions without executing hook, notify or expand side effects.
+	DryRun   bool
+	Interval time.Duration
+	Now      func() time.Time
+	Emit     func(Event)
 	// IsPaused reports whether this watch is currently paused by an operator.
 	// Paused watches skip checks/hooks/notifies/expand until monitored again.
 	IsPaused func() bool
@@ -92,6 +95,10 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	// Alerts/Watches counts, failed filter) and in the event log even for
 	// bare watches that have no `then` (pure monitor-only / alert-only case).
 	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message})
+	if w.DryRun {
+		w.emit(Event{Watch: w.Name, Kind: "dry-run", Message: w.dryRunMessage()})
+		return
+	}
 
 	if w.Expand != nil && w.Expander != nil {
 		w.runExpand(ctx, res)
@@ -134,6 +141,38 @@ func (w *Watch) runExpand(ctx context.Context, res checks.Result) {
 
 func expandSuccessMessage(path string, r volume.Result) string {
 	return fmt.Sprintf("%s: grew %s/%s by %d bytes", path, r.VG, r.LV, r.GrewBytes)
+}
+
+func watchDryRunMessage(hook HookSpec, notifiers []notify.Notifier, expand *ExpandSpec) string {
+	actions := make([]string, 0, 3)
+	if expand != nil {
+		actions = append(actions, "expand")
+	}
+	if len(hook.Command) > 0 {
+		actions = append(actions, "hook")
+	}
+	if len(notifiers) > 0 {
+		actions = append(actions, "notify")
+	}
+	if len(actions) == 0 {
+		return "dry-run: no configured watch actions"
+	}
+	return "dry-run: would run " + strings.Join(actions, ", ")
+}
+
+func (w *Watch) dryRunMessage() string {
+	msg := watchDryRunMessage(w.Hook, w.Notifiers, w.Expand)
+	if w.Expand == nil {
+		return msg
+	}
+	now := time.Now
+	if w.Now != nil {
+		now = w.Now
+	}
+	if allowed, reason := w.Policy.Allow(&w.policyState, now()); !allowed && reason != "" {
+		return msg + " (suppressed: " + reason + ")"
+	}
+	return msg
 }
 
 func (w *Watch) emit(e Event) {
