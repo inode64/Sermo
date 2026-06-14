@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"sermo/internal/assist"
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
 
@@ -127,6 +129,24 @@ func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
 	want := []string{"mariadb", "sshd", "customd"}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("dedupeWizardCatalogCandidates() = %v, want %v", names, want)
+	}
+}
+
+func TestServiceCleanupDirsIncludesLegacyAppsOnlyWhenLoaded(t *testing.T) {
+	tmp := t.TempDir()
+	global := filepath.Join(tmp, "sermo.yml")
+	cfg := &config.Config{Global: config.Global{Includes: []string{filepath.Join(tmp, legacyServicesIncludeDir)}}}
+
+	got := serviceCleanupDirs(global, cfg)
+	want := []string{filepath.Join(tmp, servicesIncludeDir), filepath.Join(tmp, legacyServicesIncludeDir)}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("serviceCleanupDirs() = %v, want %v", got, want)
+	}
+
+	got = serviceCleanupDirs(global, &config.Config{})
+	want = []string{filepath.Join(tmp, servicesIncludeDir)}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("serviceCleanupDirs without legacy include = %v, want %v", got, want)
 	}
 }
 

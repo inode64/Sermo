@@ -1,5 +1,6 @@
 // Package checks runs a service's monitoring/preflight/postflight checks
-// (sections 12 and 19). Each check is single-shot and stateless; the runner
+// (sections 12 and 19). Each Run invocation is single-shot; checks that track
+// change over time keep their state in the built check instance. The runner
 // executes a set concurrently and returns one Result per check.
 //
 // Service checks/preflight/postflight support tcp, ports, http, command, service,

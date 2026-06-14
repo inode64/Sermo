@@ -691,6 +691,33 @@ service: { name: x }
 	}
 }
 
+func TestValidateCatalogAliases(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+catalog_aliases: [stale]
+service: { name: x }
+`)
+	mustHave(t, issues, "catalog_aliases is only supported on daemon catalog documents")
+
+	issues = validateService(t, `
+kind: service
+name: svc
+catalog_aliases: stale
+service: { name: x }
+`)
+	mustHave(t, issues, "catalog_aliases must be a non-empty list")
+
+	issues = validateService(t, `
+kind: service
+name: svc
+catalog_aliases: ["../stale", 42]
+service: { name: x }
+`)
+	mustHave(t, issues, `catalog_aliases entry "../stale" must be a simple name`)
+	mustHave(t, issues, "catalog_aliases entries must be non-empty strings")
+}
+
 func TestValidateCommandExpectExit(t *testing.T) {
 	issues := validateService(t, `
 kind: service
