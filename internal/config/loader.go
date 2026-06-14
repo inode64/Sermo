@@ -14,6 +14,8 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
+var defaultIncludeDirs = []string{"/etc/sermo/services", "/etc/sermo/apps"}
+
 // Option customizes Load.
 type Option func(*loadOptions)
 
@@ -48,6 +50,16 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		global.Catalog = absCatalogDirs(o.catalogDirs)
 	}
 
+	catalogDirs := global.Catalog
+	if len(catalogDirs) == 0 {
+		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
+	}
+	includeDirs := global.Includes
+	if len(includeDirs) == 0 {
+		includeDirs = append([]string(nil), defaultIncludeDirs...)
+		global.Includes = append([]string(nil), includeDirs...)
+	}
+
 	cfg := &Config{
 		Global:    global,
 		Daemons:   map[string]*Document{},
@@ -55,15 +67,6 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Libraries: map[string]*Document{},
 		Patterns:  map[string]*Document{},
 		Services:  map[string]*Document{},
-	}
-
-	catalogDirs := global.Catalog
-	if len(catalogDirs) == 0 {
-		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
-	}
-	includeDirs := global.Includes
-	if len(includeDirs) == 0 {
-		includeDirs = []string{"/etc/sermo/apps"}
 	}
 
 	for _, dir := range catalogDirs {
@@ -136,8 +139,8 @@ func absCatalogDirs(dirs []string) []string {
 
 // resolveConfigPaths makes catalog/includes/runtime/state paths absolute. Relative
 // entries are resolved against the global config file's directory so a tree like
-// configs/sermo.yml with `includes: [apps]` loads configs/apps
-// when run from the repository.
+// configs/sermo.yml with `includes: [services]` loads configs/services when run
+// from the repository. `apps` remains supported as a legacy include alias.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Catalog = resolvePathList(base, g.Catalog)
@@ -302,25 +305,45 @@ func loadDocument(path string) (*Document, error) {
 // indexing; duplicate-name detection is reported by validation, which sees the
 // later document's path.
 func (c *Config) add(doc *Document) {
-	index := func(m map[string]*Document, names *[]string) {
-		if _, exists := m[doc.Name]; !exists && doc.Name != "" {
-			m[doc.Name] = doc
-		}
-		*names = append(*names, doc.Name)
-	}
 	switch doc.Kind {
 	case kindDaemon:
-		index(c.Daemons, &c.DaemonNames)
+		indexDocument(c.Daemons, &c.DaemonNames, doc)
+		c.addCatalogAliases(doc)
 	case kindApp:
-		index(c.Apps, &c.AppNames)
+		indexDocument(c.Apps, &c.AppNames, doc)
 	case kindLibrary:
-		index(c.Libraries, &c.LibraryNames)
+		indexDocument(c.Libraries, &c.LibraryNames, doc)
 	case kindPatterns:
-		index(c.Patterns, &c.PatternNames)
+		indexDocument(c.Patterns, &c.PatternNames, doc)
 	case kindService:
-		index(c.Services, &c.ServiceNames)
+		indexDocument(c.Services, &c.ServiceNames, doc)
 	}
 	c.docs = append(c.docs, doc)
+}
+
+func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
+	*names = append(*names, doc.Name)
+	if doc.Name == "" {
+		return
+	}
+	existing, exists := reg[doc.Name]
+	// A canonical document may replace a registry entry that was created by a
+	// previous daemon's catalog_aliases, but duplicate canonical names still keep
+	// the first document and are reported by validation.
+	if !exists || existing.Name != doc.Name {
+		reg[doc.Name] = doc
+	}
+}
+
+func (c *Config) addCatalogAliases(doc *Document) {
+	for _, alias := range cfgval.StringList(doc.Body["catalog_aliases"]) {
+		if alias == "" || alias == doc.Name {
+			continue
+		}
+		if _, exists := c.Daemons[alias]; !exists {
+			c.Daemons[alias] = doc
+		}
+	}
 }
 
 // DaemonsInCategory returns the names of catalog definitions in a category

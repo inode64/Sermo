@@ -35,6 +35,20 @@ func TestDetectProcSystemdExecStartOnly(t *testing.T) {
 	}
 }
 
+func TestDetectProcSystemdNormalizesLegacyVarRun(t *testing.T) {
+	runner := fakeRunner{results: map[string]execx.Result{
+		"systemctl show -p PIDFile --value -- apache.service":   {Stdout: "/var/run/apache2.pid\n"},
+		"systemctl show -p ExecStart --value -- apache.service": {Stdout: "{ path=/usr/sbin/apache2 ; argv[]=/usr/sbin/apache2 -k start ; ignore_errors=no }\n"},
+	}}
+	pidfile, exe := DetectProc(context.Background(), runner, nil, BackendSystemd, "apache.service")
+	if pidfile != "/run/apache2.pid" {
+		t.Fatalf("pidfile = %q, want /run/apache2.pid", pidfile)
+	}
+	if exe != "/usr/sbin/apache2" {
+		t.Fatalf("exe = %q, want /usr/sbin/apache2", exe)
+	}
+}
+
 func TestDetectProcOpenRCPidfile(t *testing.T) {
 	read := func(path string) ([]byte, error) {
 		switch path {
@@ -86,6 +100,22 @@ command="//usr/sbin/dhcpd"
 	}
 	if info.Cmd != `(^|[[:space:]])/usr/sbin/dhcpd($|[[:space:]])` {
 		t.Fatalf("cmd = %q", info.Cmd)
+	}
+}
+
+func TestDetectProcNormalizesLegacyVarRun(t *testing.T) {
+	read := func(path string) ([]byte, error) {
+		switch path {
+		case "/etc/init.d/apache2":
+			return []byte(`pidfile="/var/run/apache2.pid"
+command="/usr/sbin/apache2"
+`), nil
+		}
+		return nil, errNotFound
+	}
+	info := DetectProcInfo(context.Background(), nil, read, BackendOpenRC, "apache2")
+	if info.Pidfile != "/run/apache2.pid" {
+		t.Fatalf("pidfile = %q, want /run/apache2.pid", info.Pidfile)
 	}
 }
 

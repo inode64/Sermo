@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/execx"
+	"sermo/internal/metrics"
 )
 
 func TestCheckIntervals(t *testing.T) {
@@ -122,4 +124,104 @@ func TestPausedCyclesAdvanceCheckInterval(t *testing.T) {
 	if !slowRan {
 		t.Fatal("slow check must run on cycle 4 to stay aligned with the scheduler")
 	}
+}
+
+func TestWorkerChecksPreserveStateAcrossCycles(t *testing.T) {
+	runner := &sequenceRunner{stdout: []string{"v1\n", "v1\n", "v2\n"}}
+	tree := map[string]any{
+		"processes": map[string]any{},
+		"checks": map[string]any{
+			"version": map[string]any{
+				"type":      "command",
+				"command":   []any{"sermo-version"},
+				"on_change": true,
+			},
+		},
+	}
+	w, warnings := buildWorker("svc", "svc.service", tree, Deps{
+		Manager:        fakeManager{},
+		Runtime:        t.TempDir(),
+		DefaultTimeout: time.Second,
+		ExecxRunner:    runner,
+	}, nil)
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
+	}
+
+	var latest checks.Result
+	w.Publish = func(cache map[string]checks.Result, _ map[string]bool) {
+		latest = cache["version"]
+	}
+	for i := 0; i < 3; i++ {
+		w.RunCycle(context.Background())
+	}
+
+	if runner.calls != 3 {
+		t.Fatalf("runner calls = %d, want 3", runner.calls)
+	}
+	if latest.OK {
+		t.Fatalf("third cycle should detect changed output, got %+v", latest)
+	}
+	if got, _ := latest.Data["old"].(string); got != "v1" {
+		t.Fatalf("old output = %q, want v1", got)
+	}
+	if got, _ := latest.Data["new"].(string); got != "v2" {
+		t.Fatalf("new output = %q, want v2", got)
+	}
+}
+
+func TestWorkerCheckSetUsesCurrentCycleMetrics(t *testing.T) {
+	section := map[string]any{
+		"cpu": map[string]any{
+			"type":  "metric",
+			"name":  "cpu",
+			"op":    ">",
+			"value": "50",
+		},
+	}
+	built, warnings, setMetrics := buildWorkerCheckSet(section, checks.Deps{Service: "svc"}, true)
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
+	}
+	if len(built) != 1 {
+		t.Fatalf("built checks = %d, want 1", len(built))
+	}
+
+	reader := func(value float64) checks.MetricReader {
+		return func(scope, name string) (metrics.Reading, bool) {
+			if scope != "service" || name != "cpu" {
+				return metrics.Reading{}, false
+			}
+			return metrics.Reading{Absolute: value, HasAbsolute: true, Ready: true}, true
+		}
+	}
+	setMetrics(reader(10))
+	if res := built[0].Check.Run(context.Background()); res.OK {
+		t.Fatalf("10 > 50 should not fire: %+v", res)
+	}
+	setMetrics(reader(90))
+	if res := built[0].Check.Run(context.Background()); !res.OK {
+		t.Fatalf("90 > 50 should fire with current cycle metrics: %+v", res)
+	}
+	setMetrics(nil)
+	if res := built[0].Check.Run(context.Background()); res.OK {
+		t.Fatalf("nil cycle metrics should not fire: %+v", res)
+	}
+}
+
+type sequenceRunner struct {
+	stdout []string
+	calls  int
+}
+
+func (r *sequenceRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	if len(r.stdout) == 0 {
+		return execx.Result{ExitCode: 0}, nil
+	}
+	idx := r.calls
+	if idx >= len(r.stdout) {
+		idx = len(r.stdout) - 1
+	}
+	r.calls++
+	return execx.Result{Stdout: r.stdout[idx], ExitCode: 0}, nil
 }
