@@ -278,6 +278,145 @@ uses: tomcat
 	}
 }
 
+func TestAppsLinkAcceptsCatalogAlias(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/dbus.yml": `
+kind: app
+name: dbus
+catalog_aliases: [dbus-daemon]
+variables: { binary: /usr/bin/dbus-daemon }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/dbus.yml": `
+kind: daemon
+name: dbus
+apps: [dbus-daemon]
+preflight:
+  config: { type: command, command: ["${dbus_binary}", "--check"] }
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/dbus-main.yml": `
+kind: service
+name: dbus-main
+uses: dbus
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("dbus-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	pf := nested(t, resolved.Tree, "preflight")
+	if got := cfgval.String(nested(t, pf, "dbus-daemon-binary")["path"]); got != "/usr/bin/dbus-daemon" {
+		t.Fatalf("alias-linked app binary path = %q, want /usr/bin/dbus-daemon", got)
+	}
+	configCmd, _ := nested(t, pf, "config")["command"].([]any)
+	if got := fmt.Sprint(configCmd...); got != "/usr/bin/dbus-daemon--check" {
+		t.Fatalf("alias-linked canonical app variable command = %v, want dbus binary", configCmd)
+	}
+	if names := cfg.DaemonsInCategory(CategoryApp); strings.Join(names, ",") != "dbus" {
+		t.Fatalf("listed apps = %v, want only canonical dbus", names)
+	}
+}
+
+func TestAppsExposeNamespacedVariables(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/cups-config.yml": `
+kind: app
+name: cups-config
+variables: { binary: /usr/bin/cups-config }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/apps/cupsd.yml": `
+kind: app
+name: cupsd
+variables: { binary: /usr/sbin/cupsd }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/cups.yml": `
+kind: daemon
+name: cups
+apps: [cups-config, cupsd]
+preflight:
+  config: { type: command, command: ["${cupsd_binary}", "-t"] }
+  version: { type: command, command: ["${cups_config_binary}", "--version"] }
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/cups.yml": `
+kind: service
+name: cups
+uses: cups
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("cups")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	configCmd, _ := nested(t, preflight, "config")["command"].([]any)
+	if got := fmt.Sprint(configCmd...); got != "/usr/sbin/cupsd-t" {
+		t.Fatalf("config command = %v, want cupsd binary from app", configCmd)
+	}
+	versionCmd, _ := nested(t, preflight, "version")["command"].([]any)
+	if got := fmt.Sprint(versionCmd...); got != "/usr/bin/cups-config--version" {
+		t.Fatalf("version command = %v, want cups-config binary from app", versionCmd)
+	}
+}
+
+func TestServiceVariablesOverrideAppVariables(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/cupsd.yml": `
+kind: app
+name: cupsd
+variables: { binary: /usr/sbin/cupsd }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/cups.yml": `
+kind: daemon
+name: cups
+apps: [cupsd]
+variables: { cupsd_binary: /opt/cups/sbin/cupsd }
+preflight:
+  config: { type: command, command: ["${cupsd_binary}", "-t"] }
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/cups.yml": `
+kind: service
+name: cups
+uses: cups
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("cups")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	configCmd, _ := nested(t, nested(t, resolved.Tree, "preflight"), "config")["command"].([]any)
+	if got := fmt.Sprint(configCmd...); got != "/opt/cups/sbin/cupsd-t" {
+		t.Fatalf("config command = %v, want service variable override", configCmd)
+	}
+}
+
 func TestAppsLinkUnknownAppErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

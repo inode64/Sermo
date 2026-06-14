@@ -7,7 +7,7 @@ description: "DBus Daemon"
 service:
   systemd: [dbus, dbus-daemon]
   openrc: [dbus, dbus-daemon]
-apps: [dbus-daemon]
+apps: [dbus]
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).

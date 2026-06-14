@@ -7,7 +7,7 @@ description: "Zero Configuration Networking"
 service:
   systemd: [avahi, avahi-daemon]
   openrc: [avahi, avahi-daemon]
-apps: [avahi-daemon]
+apps: [avahi]
 
 checks:
   service: { type: service, expect: active }

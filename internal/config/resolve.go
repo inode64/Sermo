@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"sermo/internal/cfgval"
 )
@@ -26,10 +27,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 
-	vars := c.globalVars()
-	maps.Copy(vars, collectVariables(merged)) // service variables override global custom ones
-	errs := validateVariableValues(vars)
-	injectBuiltinVariables(vars, name, merged)
+	vars, errs := c.expansionVariables(merged, name)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
@@ -310,6 +308,83 @@ func (c *Config) globalVars() map[string]string {
 	return collectVariables(map[string]any{"variables": c.Global.Defaults["variables"]})
 }
 
+func (c *Config) expansionVariables(tree map[string]any, name string) (map[string]string, []string) {
+	vars := c.globalVars()
+	appVars, errs := c.appVariables(tree)
+	maps.Copy(vars, appVars)
+	maps.Copy(vars, collectVariables(tree)) // service/doc variables override app and global custom ones
+	errs = append(errs, validateVariableValues(vars)...)
+	injectBuiltinVariables(vars, name, tree)
+	return vars, errs
+}
+
+func (c *Config) appVariables(tree map[string]any) (map[string]string, []string) {
+	names := cfgval.StringList(tree["apps"])
+	if len(names) == 0 {
+		return nil, nil
+	}
+
+	var errs []string
+	out := map[string]string{}
+	source := map[string]string{}
+	for _, name := range names {
+		doc, ok := c.Apps[name]
+		if !ok {
+			continue // expandApps reports the missing app in the usual place.
+		}
+		prefixes := []string{appVariablePrefix(name)}
+		if doc.Name != name {
+			prefixes = append(prefixes, appVariablePrefix(doc.Name))
+		}
+		for varName, value := range collectVariables(stripMeta(doc.Body)) {
+			for _, prefix := range prefixes {
+				key := appVariableKey(prefix, varName)
+				if key == "" {
+					continue
+				}
+				if prev, exists := out[key]; exists && prev != value {
+					errs = append(errs, fmt.Sprintf("apps variable ${%s} from app %q conflicts with app %q", key, name, source[key]))
+					continue
+				}
+				out[key] = value
+				source[key] = name
+			}
+		}
+	}
+	return out, errs
+}
+
+func appVariableKey(prefix, name string) string {
+	suffix := appVariablePrefix(name)
+	if prefix == "" || suffix == "" {
+		return ""
+	}
+	return prefix + "_" + suffix
+}
+
+func appVariablePrefix(name string) string {
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range name {
+		switch {
+		case r == '_':
+			if b.Len() > 0 && !lastUnderscore {
+				b.WriteRune('_')
+				lastUnderscore = true
+			}
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(unicode.ToLower(r))
+			lastUnderscore = false
+		default:
+			if b.Len() > 0 && !lastUnderscore {
+				b.WriteRune('_')
+				lastUnderscore = true
+			}
+		}
+	}
+	return strings.TrimRight(b.String(), "_")
+}
+
 // ResolveWatches returns the global `watches` section with ${var} expanded
 // against the custom global variables and the host-level builtins. Watches have
 // no per-watch builtins (name/port/pidfile). nil when no watches are configured.
@@ -524,10 +599,7 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 // shared by ResolveDaemon and the `apps` linkage (which resolves app documents).
 func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
-	vars := c.globalVars()
-	maps.Copy(vars, collectVariables(body)) // doc variables override global custom ones
-	errs := validateVariableValues(vars)
-	injectBuiltinVariables(vars, name, body)
+	vars, errs := c.expansionVariables(body, name)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandApps(expanded)...)
