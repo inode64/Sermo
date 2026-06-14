@@ -314,14 +314,7 @@ func (c *Config) add(doc *Document) {
 	switch doc.Kind {
 	case kindDaemon:
 		index(c.Daemons, &c.DaemonNames)
-		for _, alias := range cfgval.StringList(doc.Body["catalog_aliases"]) {
-			if alias == "" || alias == doc.Name {
-				continue
-			}
-			if _, exists := c.Daemons[alias]; !exists {
-				c.Daemons[alias] = doc
-			}
-		}
+		c.addCatalogAliases(doc)
 	case kindApp:
 		index(c.Apps, &c.AppNames)
 	case kindLibrary:
@@ -332,6 +325,17 @@ func (c *Config) add(doc *Document) {
 		index(c.Services, &c.ServiceNames)
 	}
 	c.docs = append(c.docs, doc)
+}
+
+func (c *Config) addCatalogAliases(doc *Document) {
+	for _, alias := range cfgval.StringList(doc.Body["catalog_aliases"]) {
+		if alias == "" || alias == doc.Name {
+			continue
+		}
+		if _, exists := c.Daemons[alias]; !exists {
+			c.Daemons[alias] = doc
+		}
+	}
 }
 
 // DaemonsInCategory returns the names of catalog definitions in a category
