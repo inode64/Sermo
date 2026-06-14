@@ -19,12 +19,7 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("list interfaces: %w", err)
 	}
-	var cands []Iface
-	for _, i := range ifaces {
-		if !i.Loopback {
-			cands = append(cands, i)
-		}
-	}
+	cands := nonLoopbackIfaces(ifaces)
 	if len(cands) == 0 {
 		return Result{}, fmt.Errorf("no non-loopback network interfaces found")
 	}
@@ -52,6 +47,16 @@ func (netAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		watches["net-"+c.Name] = buildNetWatch(c, *s)
 	}
 	return Result{Watches: watches, Summary: fmt.Sprintf("%d net watch(es)", len(watches))}, nil
+}
+
+func nonLoopbackIfaces(ifaces []Iface) []Iface {
+	out := make([]Iface, 0, len(ifaces))
+	for _, iface := range ifaces {
+		if !iface.Loopback {
+			out = append(out, iface)
+		}
+	}
+	return out
 }
 
 func chooseIfaces(p *Prompt, question string, cands []Iface, defaultIfaces []string, allowDefault bool) []Iface {
