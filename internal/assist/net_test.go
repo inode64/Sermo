@@ -16,6 +16,7 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 		"1",   // state: any change
 		"100", // errors threshold
 		"1",   // notifier ops-email
+		"y",   // dry-run actions first
 	}, "\n") + "\n"
 
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
@@ -41,6 +42,9 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 	if state["then"].(map[string]any)["notify"].([]string)[0] != "ops-email" {
 		t.Fatalf("state.then = %v", state["then"])
 	}
+	if state["then"].(map[string]any)["dry_run"] != true {
+		t.Fatalf("state.then dry_run = %v, want true", state["then"])
+	}
 	errs := metrics["errors"].(map[string]any)
 	delta := errs["delta"].(map[string]any)
 	if delta["op"] != ">" || delta["value"] != 100 {
@@ -54,7 +58,7 @@ func TestNetAssistantStateAndErrors(t *testing.T) {
 func TestNetAssistantStateDownOnly(t *testing.T) {
 	// Select eth0; monitor enabled, inherit interval; only state; "only when
 	// down"; notifier team-slack.
-	script := strings.Join([]string{"1", "1", "", "1", "2", "2"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "2", "2", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnv())
 	if err != nil {
@@ -73,7 +77,7 @@ func TestNetAssistantStateDownOnly(t *testing.T) {
 func TestNetAssistantInheritsGlobalNotify(t *testing.T) {
 	// Select eth0; monitor enabled, inherit interval; only state; any change;
 	// inherit global notify.
-	script := strings.Join([]string{"1", "1", "", "1", "1", "default"}, "\n") + "\n"
+	script := strings.Join([]string{"1", "1", "", "1", "1", "default", "n"}, "\n") + "\n"
 	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 	res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
 	if err != nil {
@@ -121,7 +125,7 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 	// The shared all/none/default vocabulary works in the net wizard too:
 	// notifiers can be picked by name, and "default" inherits the global default.
 	t.Run("notifier by name", func(t *testing.T) {
-		script := strings.Join([]string{"1", "1", "", "1", "1", "team-slack"}, "\n") + "\n"
+		script := strings.Join([]string{"1", "1", "", "1", "1", "team-slack", "n"}, "\n") + "\n"
 		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 		res, err := netAssistant{}.Run(p, testEnv())
 		if err != nil {
@@ -135,7 +139,7 @@ func TestNetAssistantNotifyByName(t *testing.T) {
 	})
 
 	t.Run("default by name", func(t *testing.T) {
-		script := strings.Join([]string{"1", "1", "", "1", "1", "default"}, "\n") + "\n"
+		script := strings.Join([]string{"1", "1", "", "1", "1", "default", "n"}, "\n") + "\n"
 		p := NewPrompt(strings.NewReader(script), &strings.Builder{})
 		res, err := netAssistant{}.Run(p, testEnvWithDefaultNotify())
 		if err != nil {
