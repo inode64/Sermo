@@ -100,3 +100,12 @@ func applyDryRun(then map[string]any, dryRun bool) {
 		then["dry_run"] = true
 	}
 }
+
+func watchThen(notifiers []string, dryRun bool) map[string]any {
+	then := map[string]any{}
+	if len(notifiers) > 0 {
+		then["notify"] = notifiers
+	}
+	applyDryRun(then, dryRun)
+	return then
+}
