@@ -139,6 +139,7 @@
   #err { color: var(--crit); min-height: 1.2rem; }
   body.disconnected #services-section, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
+  .process-cmd { font-family: var(--mono); font-size: .82em; overflow-wrap: anywhere; }
   a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
   a.name:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -1492,11 +1493,24 @@ function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
   return `<td>${io}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td>`;
 }
+function procCmd(p) {
+  return (p.cmdline || []).join(" ").trim();
+}
+function procLabel(p) {
+  const cmd = procCmd(p);
+  if (p.exe_resolved && p.exe) {
+    return cmd ? `${esc(p.exe)} <span class="muted" title="${esc(cmd)}">…</span>` : esc(p.exe);
+  }
+  if (cmd) {
+    return `<span class="process-cmd" title="${esc(cmd)}">${esc(cmd)}</span>`;
+  }
+  if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
+  return '<span class="muted">unknown</span>';
+}
 
 function renderExpansion(d, metrics) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
-  const unresolvedProcs = procs.filter((p) => !p.exe_resolved);
   const noResidentProcess = !!d.no_resident_process;
   const pt = d.process_totals || (noResidentProcess ? null : {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
@@ -1519,7 +1533,6 @@ function renderExpansion(d, metrics) {
   const lat = renderLatency(metrics);
   const procWarns = [
     ...procWarnings.map((w) => `<div class="bad" style="margin:.2rem 0">discovery warning: ${esc(w)}</div>`),
-    ...unresolvedProcs.map((p) => `<div class="inactive" style="margin:.2rem 0">pid ${p.pid}: exe unresolved</div>`),
   ].join("");
   const procTable = noResidentProcess
     ? `<div class="muted">No resident process expected.</div>`
@@ -1529,7 +1542,7 @@ function renderExpansion(d, metrics) {
         <tbody>${procs.map((p) => `<tr>
           <td>${p.pid}</td>
           <td class="muted">${p.ppid}</td>
-          <td>${p.exe ? esc(p.exe) : '<span class="muted">unknown</span>'}</td>
+          <td>${procLabel(p)}</td>
           <td class="muted">${esc(p.user || "")}</td>
           <td class="muted">${esc(p.role || "")}</td>
           ${procCpuCells(p)}
@@ -2747,7 +2760,6 @@ function renderActionConfirm() {
   const d = ctx.detail || {};
   const activeLocks = (d.locks || []).filter((l) => l.state === "active");
   const failingChecks = (d.checks || []).filter((c) => c.ran && !c.ok && !c.optional);
-  const unresolved = (d.processes || []).filter((p) => !p.exe_resolved);
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const ev = ctx.lastEvent;
@@ -2763,7 +2775,7 @@ function renderActionConfirm() {
     : '<span class="ok">no required check failures observed</span>';
   const procLine = noResidentProcess
     ? '<span class="muted">No resident process expected</span>'
-    : `${(d.processes || []).length} discovered${unresolved.length ? ` <span class="inactive">· ${unresolved.length} unresolved exe</span>` : ""}${procWarnings.length ? ` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : ""}`;
+    : `${(d.processes || []).length} discovered${procWarnings.length ? ` <span class="bad">· ${procWarnings.length} warning${procWarnings.length === 1 ? "" : "s"}</span>` : ""}`;
   const lastEvent = ev
     ? `${esc(fmtTime(ev.time))} · <span class="kind kind-${esc(ev.kind)}">${esc(ev.kind || "")}</span> ${esc([ev.action, ev.status].filter(Boolean).join(" "))} <span class="muted">${esc(ev.message || "")}</span>`
     : '<span class="muted">none recorded</span>';
@@ -2856,32 +2868,23 @@ function renderDetail(d) {
     `<div class="inactive" style="margin-top:.25rem">warning: ${esc(w)}</div>`
   ).join("");
 
-  const unresolvedProcs = (d.processes || []).filter((p) => !p.exe_resolved);
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
   const procWarns = [
     ...procWarnings.map((w) => `<div class="bad" style="margin-top:.25rem">discovery warning: ${esc(w)}</div>`),
-    ...unresolvedProcs.map((p) => `<div class="inactive" style="margin-top:.25rem">pid ${p.pid}: exe is unresolved, so it cannot satisfy safe process matching</div>`),
   ].join("");
   const procSummary = noResidentProcess
     ? `<p class="muted" style="margin-top:-.25rem">No resident process expected.</p>`
-    : `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}${unresolvedProcs.length ? ` · ${unresolvedProcs.length} unresolved exe` : ""}</p>`;
+    : `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
   const pt = d.process_totals;
   const procTotals = !noResidentProcess && pt
     ? `<p class="muted" style="margin:-.1rem 0 .35rem">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : "";
-  const procExe = (p) => {
-    if (p.exe_resolved && p.exe) return esc(p.exe);
-    if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
-    return '<span class="muted">unknown</span>';
-  };
   const procRows = noResidentProcess ? "" : (d.processes || []).map((p) => {
-    const cmd = (p.cmdline || []).join(" ");
-    const exeCell = cmd ? `${procExe(p)} <span class="muted" title="${esc(cmd)}">…</span>` : procExe(p);
     const user = p.user ? esc(p.user) : '<span class="muted">unknown</span>';
     const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
     return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
-      <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
+      <td>${procLabel(p)}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
       ${procCpuCells(p)}<td>${p.rss ? fmtBytes(p.rss) : '—'}</td>${procIoFdThreadCells(p)}</tr>`;
   }).join("") || `<tr><td colspan="13" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
   const processSection = noResidentProcess

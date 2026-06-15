@@ -48,7 +48,7 @@ func TestProcessesUsesSelectorsAndReports(t *testing.T) {
 			gotSelectors = sel
 			return []process.Process{
 				{PID: 100, PPID: 1, User: "mysql", UID: 110, Exe: "/usr/sbin/mysqld", ExeOK: true, Role: "pidfile", Source: "pidfile"},
-				{PID: 200, PPID: 100, UID: 110, ExeOK: false, Source: "child"},
+				{PID: 200, PPID: 100, UID: 110, ExeOK: false, Cmdline: []string{"/usr/sbin/apache2", "-D", "INFO"}, Source: "child"},
 			}, nil
 		},
 	}
@@ -64,8 +64,8 @@ func TestProcessesUsesSelectorsAndReports(t *testing.T) {
 	if !strings.Contains(out, "pid=100 ppid=1 user=mysql exe=/usr/sbin/mysqld source=pidfile role=pidfile") {
 		t.Fatalf("stdout missing main process line:\n%s", out)
 	}
-	if !strings.Contains(out, "pid=200 ppid=100 user=unknown exe=unknown source=child") {
-		t.Fatalf("stdout missing child line with unknown exe:\n%s", out)
+	if !strings.Contains(out, `pid=200 ppid=100 user=unknown cmd="/usr/sbin/apache2 -D INFO" source=child`) {
+		t.Fatalf("stdout missing child line with command fallback:\n%s", out)
 	}
 }
 

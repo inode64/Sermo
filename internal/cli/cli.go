@@ -588,11 +588,8 @@ func (a App) printOperation(r operation.Result) {
 		}
 	}
 	for _, p := range r.Processes {
-		exe := p.Exe
-		if !p.ExeOK {
-			exe = "unknown"
-		}
-		fmt.Fprintf(a.Stdout, "  residual pid=%d exe=%s\n", p.PID, exe)
+		key, value := processDisplayField(p)
+		fmt.Fprintf(a.Stdout, "  residual pid=%d %s=%s\n", p.PID, key, value)
 	}
 }
 
@@ -960,15 +957,25 @@ func (a App) runProcesses(opts options) int {
 }
 
 func formatProcess(p process.Process) string {
-	exe := p.Exe
-	if !p.ExeOK {
-		exe = "unknown"
-	}
-	line := fmt.Sprintf("pid=%d ppid=%d user=%s exe=%s source=%s", p.PID, p.PPID, orUnknown(p.User), exe, p.Source)
+	key, value := processDisplayField(p)
+	line := fmt.Sprintf("pid=%d ppid=%d user=%s %s=%s source=%s", p.PID, p.PPID, orUnknown(p.User), key, value, p.Source)
 	if p.Role != "" {
 		line += " role=" + p.Role
 	}
 	return line
+}
+
+func processDisplayField(p process.Process) (key, value string) {
+	if p.ExeOK && p.Exe != "" {
+		return "exe", p.Exe
+	}
+	if cmd := strings.TrimSpace(strings.Join(p.Cmdline, " ")); cmd != "" {
+		return "cmd", strconv.Quote(cmd)
+	}
+	if p.Exe != "" {
+		return "exe", p.Exe
+	}
+	return "exe", "unknown"
 }
 
 func orUnknown(s string) string {
