@@ -6,8 +6,6 @@ service:
   systemd: [postgres, postgresql, "postgresql-${version}", "postgres-${version}"]
   openrc: ["postgresql-${version}", "postgres-${version}", postgres]
 apps: ["postgres-${version}"]
-versions:
-  from: "/usr/lib64/postgresql-${version}/bin/postgres"
 variables:
   port: 5432
 
