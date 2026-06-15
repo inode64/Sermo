@@ -8,9 +8,9 @@ service:
   systemd: [unifi]
   openrc: [unifi]
 
-# The controller runs on the JVM: the runtime is owned by the `java` app and
-# linked here so a missing Java blocks start and its preflight runs first.
-apps: [java]
+# The controller runs on the JVM and embeds MongoDB: both runtimes are owned by
+# apps, so missing Java or mongod blocks start and their preflight runs first.
+apps: [java, mongod]
 
 variables:
   host: 127.0.0.1
@@ -25,7 +25,7 @@ pidfile: /run/unifi.pid
 # per-service kill lists did. These also feed the residual reaper on stop.
 processes:
   controller: { type: command_match, cmd: "java .*unifi", user: unifi }
-  mongo: { type: command_match, exe: /usr/bin/mongod, user: unifi }
+  mongo: { type: command_match, exe: "${mongod_binary}", user: unifi }
 
 checks:
   service:
