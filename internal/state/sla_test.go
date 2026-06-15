@@ -23,6 +23,37 @@ func TestRecordSLAAccumulatesPerMinuteBucket(t *testing.T) {
 	}
 }
 
+func TestRecordCheckSLAAccumulatesPerMinuteBucket(t *testing.T) {
+	s := openTemp(t)
+	base := time.Date(2026, 6, 7, 10, 0, 30, 0, time.UTC)
+
+	if err := s.RecordCheckSLA("web", "http", true, base); err != nil {
+		t.Fatalf("RecordCheckSLA ok: %v", err)
+	}
+	if err := s.RecordCheckSLA("web", "http", false, base.Add(20*time.Second)); err != nil {
+		t.Fatalf("RecordCheckSLA fail: %v", err)
+	}
+	if err := s.RecordCheckSLA("web", "tcp", true, base.Add(40*time.Second)); err != nil {
+		t.Fatalf("RecordCheckSLA tcp: %v", err)
+	}
+
+	up, total, err := s.CheckSLA("web", "http", time.Hour, base.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("CheckSLA: %v", err)
+	}
+	if up != 1 || total != 2 {
+		t.Fatalf("http accumulation: up=%d total=%d, want 1/2", up, total)
+	}
+
+	up, total, err = s.CheckSLA("web", "tcp", time.Hour, base.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("CheckSLA tcp: %v", err)
+	}
+	if up != 1 || total != 1 {
+		t.Fatalf("tcp accumulation: up=%d total=%d, want 1/1", up, total)
+	}
+}
+
 func TestSLAWindowsSumOnlyWithinSpan(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
@@ -89,19 +120,56 @@ func TestSLAReportRatioAndNoData(t *testing.T) {
 	}
 }
 
+func TestCheckSLAReportAndSeries(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+
+	if err := s.RecordCheckSLA("web", "http", true, now.Add(-10*time.Minute)); err != nil {
+		t.Fatalf("RecordCheckSLA old ok: %v", err)
+	}
+	if err := s.RecordCheckSLA("web", "http", false, now.Add(-2*time.Minute)); err != nil {
+		t.Fatalf("RecordCheckSLA recent fail: %v", err)
+	}
+
+	report, err := s.CheckSLAReport("web", "http", now)
+	if err != nil {
+		t.Fatalf("CheckSLAReport: %v", err)
+	}
+	if len(report) != len(SLAWindows) {
+		t.Fatalf("report has %d windows, want %d", len(report), len(SLAWindows))
+	}
+	if ratio, ok := report[0].Ratio(); !ok || ratio != 0.5 {
+		t.Fatalf("hour ratio = %.2f ok=%v, want 0.50 true", ratio, ok)
+	}
+
+	points, err := s.CheckSLASeries("web", "http", now.Add(-time.Hour), now)
+	if err != nil {
+		t.Fatalf("CheckSLASeries: %v", err)
+	}
+	if len(points) != 2 || points[1].Up != 0 || points[1].Total != 1 {
+		t.Fatalf("points = %+v, want two points ending with down sample", points)
+	}
+}
+
 func TestPruneSLARemovesOldBuckets(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 
 	mustRecord(t, s, "web", true, now.Add(-400*24*time.Hour)) // old
 	mustRecord(t, s, "web", true, now.Add(-1*time.Hour))      // recent
+	if err := s.RecordCheckSLA("web", "http", true, now.Add(-400*24*time.Hour)); err != nil {
+		t.Fatalf("RecordCheckSLA old: %v", err)
+	}
+	if err := s.RecordCheckSLA("web", "http", true, now.Add(-1*time.Hour)); err != nil {
+		t.Fatalf("RecordCheckSLA recent: %v", err)
+	}
 
 	removed, err := s.PruneSLA(now.Add(-366 * 24 * time.Hour))
 	if err != nil {
 		t.Fatalf("PruneSLA: %v", err)
 	}
-	if removed != 1 {
-		t.Fatalf("pruned %d rows, want 1", removed)
+	if removed != 2 {
+		t.Fatalf("pruned %d rows, want 2", removed)
 	}
 
 	_, total, err := s.SLA("web", 367*24*time.Hour, now)
@@ -110,6 +178,13 @@ func TestPruneSLARemovesOldBuckets(t *testing.T) {
 	}
 	if total != 1 {
 		t.Fatalf("after prune total=%d, want 1 (recent sample kept)", total)
+	}
+	_, total, err = s.CheckSLA("web", "http", 367*24*time.Hour, now)
+	if err != nil {
+		t.Fatalf("CheckSLA: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("after prune check total=%d, want 1 (recent sample kept)", total)
 	}
 }
 

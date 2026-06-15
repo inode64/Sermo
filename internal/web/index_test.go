@@ -82,6 +82,10 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"function serviceCpuCell(s)",
 		"function loadServiceRuntimeMetrics(name)",
 		`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`,
+		"function renderSLAWindows(wins, compact)",
+		`<h2>SLA</h2>`,
+		`<th>SLA</th>`,
+		`class="app-sla"`,
 		`<h2>General data</h2>`,
 		`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>`,
 	} {

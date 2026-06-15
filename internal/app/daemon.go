@@ -36,6 +36,7 @@ type MonitorStore interface {
 // internal/state.Store; nil disables SLA tracking.
 type SLARecorder interface {
 	RecordSLA(service string, up bool, at time.Time) error
+	RecordCheckSLA(service, check string, up bool, at time.Time) error
 }
 
 // SLAReader reports a service's availability for the web detail view: the rolling
@@ -43,6 +44,8 @@ type SLARecorder interface {
 type SLAReader interface {
 	SLAReport(service string, now time.Time) ([]state.SLAValue, error)
 	SLASeries(service string, from, to time.Time) ([]state.SLAPoint, error)
+	CheckSLAReport(service, check string, now time.Time) ([]state.SLAValue, error)
+	CheckSLASeries(service, check string, from, to time.Time) ([]state.SLAPoint, error)
 }
 
 // MeasurementRecorder persists per-check observations per observed cycle: the
@@ -357,6 +360,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Shadow:       shadow,
 		ResolveRefs:  func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth: healthRecorder(deps, name),
+		RecordChecks: checkSLARecorder(deps, name),
 		Publish:      publishSnapshots(deps.Snapshots, name),
 		Now:          deps.Now,
 		Emit:         deps.Emit,
@@ -507,6 +511,29 @@ func measurementRecorder(deps Deps, name string, tree map[string]any) func(check
 		for _, m := range graphable[r.Check] {
 			if v, ok := numericData(r.Data[m.Key]); ok {
 				fail(store.RecordMetric(name, r.Check, m.Key, v, now()))
+			}
+		}
+	}
+}
+
+// checkSLARecorder returns the worker's per-check SLA recording hook. Called
+// only for checks that actually ran this cycle, so per-check interval caching
+// does not create duplicate availability samples.
+func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map[string]bool) {
+	if deps.SLA == nil {
+		return nil
+	}
+	now := deps.Now
+	if now == nil {
+		now = time.Now
+	}
+	return func(cache map[string]checks.Result, ran map[string]bool) {
+		for check, r := range cache {
+			if !ran[check] || r.Skipped {
+				continue
+			}
+			if err := deps.SLA.RecordCheckSLA(name, check, r.OK, now()); err != nil && deps.Emit != nil {
+				deps.Emit(Event{Service: name, Kind: "error", Message: "record check sla: " + err.Error()})
 			}
 		}
 	}

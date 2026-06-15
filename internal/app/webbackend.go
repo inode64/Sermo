@@ -1833,7 +1833,7 @@ func (b *WebBackend) Applications(ctx context.Context) []web.Application {
 
 func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	if b.applicationsList != nil {
-		return b.applicationsList(ctx)
+		return b.withApplicationSLA(b.applicationsList(ctx))
 	}
 	reports := appinspect.List(ctx, execx.CommandRunner{}, b.cfg, config.CategoryApp, false)
 	if len(reports) == 0 {
@@ -1853,6 +1853,20 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 			VersionShort: r.VersionShort,
 			Status:       r.Status,
 		})
+	}
+	return b.withApplicationSLA(out)
+}
+
+func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Application {
+	if len(apps) == 0 {
+		return apps
+	}
+	out := slices.Clone(apps)
+	now := time.Now()
+	for i := range out {
+		if b.entries[out[i].Name] != nil {
+			out[i].SLA = b.serviceSLAWindows(out[i].Name, now)
+		}
 	}
 	return out
 }
@@ -2197,6 +2211,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		return web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}, true
 	}
 	d := web.Detail{Service: b.view(ctx, name, e), NoResidentProcess: e.noResidentProcess}
+	now := time.Now()
 
 	snap := b.snapshots.Get(name)
 	for _, cn := range e.checkNames {
@@ -2216,20 +2231,11 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		for _, m := range checks.GraphMetrics(e.checkTypes[cn]) {
 			ch.Metrics = append(ch.Metrics, web.CheckMetric{Name: m.Key, Unit: m.Unit})
 		}
+		ch.SLA = b.checkSLAWindows(name, cn, now)
 		d.Checks = append(d.Checks, ch)
 	}
 
-	if b.sla != nil {
-		if vals, err := b.sla.SLAReport(name, time.Now()); err == nil {
-			for _, v := range vals {
-				win := web.SLAWindow{Window: v.Window, Up: v.Up, Total: v.Total}
-				if ratio, ok := v.Ratio(); ok {
-					win.Ratio = &ratio
-				}
-				d.SLA = append(d.SLA, win)
-			}
-		}
-	}
+	d.SLA = b.serviceSLAWindows(name, now)
 
 	if report, err := serviceLocksReport(b.cfg, name); err == nil {
 		for _, lk := range report.Locks {
@@ -2264,6 +2270,40 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		}
 	}
 	return d, true
+}
+
+func (b *WebBackend) serviceSLAWindows(name string, now time.Time) []web.SLAWindow {
+	if b.sla == nil {
+		return nil
+	}
+	vals, err := b.sla.SLAReport(name, now)
+	if err != nil {
+		return nil
+	}
+	return toWebSLAWindows(vals)
+}
+
+func (b *WebBackend) checkSLAWindows(service, check string, now time.Time) []web.SLAWindow {
+	if b.sla == nil {
+		return nil
+	}
+	vals, err := b.sla.CheckSLAReport(service, check, now)
+	if err != nil {
+		return nil
+	}
+	return toWebSLAWindows(vals)
+}
+
+func toWebSLAWindows(vals []state.SLAValue) []web.SLAWindow {
+	out := make([]web.SLAWindow, 0, len(vals))
+	for _, v := range vals {
+		win := web.SLAWindow{Window: v.Window, Up: v.Up, Total: v.Total}
+		if ratio, ok := v.Ratio(); ok {
+			win.Ratio = &ratio
+		}
+		out = append(out, win)
+	}
+	return out
 }
 
 func ruleWindowToWeb(rep rules.RuleWindowReport) web.RuleWindow {
