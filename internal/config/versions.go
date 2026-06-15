@@ -18,17 +18,19 @@ type tmplToken struct {
 	placeholder string // in the name, e.g. "%v"
 	variable    string // in the body, e.g. "version" → ${version}
 	capture     string // regex for the value, e.g. "[0-9][^/]*"
+	allowEmpty  bool   // whether the marker-less binary materializes an active-slot instance
 }
 
 func (t tmplToken) marker() string { return "${" + t.variable + "}" }
 
 // tmplTokens are the supported placeholders. `%v` is a free-form version
-// (`8.3`, `12.0.2`); `%n` is a plain integer (`2`, `3`) — both must start with a
-// digit, but `%n` rejects anything past the digits so `python%n` matches
-// `python3` but not `python3.11`.
+// (`8.3`, `12.0.2`); `%n` is a plain integer (`2`, `3`). Discovered values must
+// start with a digit, and `%n` rejects anything past the digits so `python%n`
+// matches `python3` but not `python3.11`; `%v` and `%n` may additionally
+// materialize one empty active-slot value when the marker-less binary exists.
 var tmplTokens = []tmplToken{
-	{placeholder: "%v", variable: "version", capture: "[0-9][^/]*"},
-	{placeholder: "%n", variable: "n", capture: "[0-9]+"},
+	{placeholder: "%v", variable: "version", capture: "[0-9][^/]*", allowEmpty: true},
+	{placeholder: "%n", variable: "n", capture: "[0-9]+", allowEmpty: true},
 	{placeholder: "%i", variable: "instance", capture: "[A-Za-z0-9][A-Za-z0-9_.-]*"},
 }
 
@@ -48,11 +50,11 @@ func tokenFor(name string) *tmplToken {
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // daemon yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
 // template's discovery path (`versions.from`, else `binary`) with the token's
-// `${...}` wildcarded. `versions.unversioned` additionally registers the same
-// template with an empty token value when the marker-less binary exists (e.g.
-// `php%v` -> `php`). The template itself is dropped; if nothing is installed it
-// yields nothing. A template may `uses` a base daemon (e.g. php-fpm%v uses
-// php-fpm) to inherit its checks, rules and processes; only the binary differs.
+// `${...}` wildcarded. `%v` and `%n` also register the same template with an
+// empty token value when the marker-less binary exists (e.g. `php%v` -> `php`).
+// The template itself is dropped; if nothing is installed it yields nothing. A
+// template may `uses` a base daemon (e.g. php-fpm%v uses php-fpm) to inherit its
+// checks, rules and processes; only the binary differs.
 func (c *Config) materializeVersionTemplates() {
 	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
 	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
@@ -89,7 +91,7 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 
 func materializedVersionValues(discoverPath string, body map[string]any, tok tmplToken) []string {
 	values := discoverVersions(discoverPath, tok)
-	if versionUnversionedEnabled(body) && unversionedVersionExists(discoverPath, tok) {
+	if versionUnversionedEnabled(body, tok) && unversionedVersionExists(discoverPath, tok) {
 		values = append(values, "")
 		sort.Strings(values)
 	}
@@ -133,14 +135,14 @@ func linkedAppTemplateName(name string, tok tmplToken) string {
 	return strings.ReplaceAll(name, tok.marker(), tok.placeholder)
 }
 
-func versionUnversionedEnabled(body map[string]any) bool {
+func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {
 	versions, ok := body["versions"].(map[string]any)
 	if !ok {
-		return false
+		return tok.allowEmpty
 	}
 	raw, present := versions["unversioned"]
 	if !present {
-		return false
+		return tok.allowEmpty
 	}
 	if b, ok := raw.(bool); ok {
 		return b
@@ -225,15 +227,24 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 // for that token in the body (binary path, display_name, service, ...) is
 // substituted. Other `${var}` references are left for normal resolution.
 func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path, kind string) *Document {
-	name := strings.ReplaceAll(templateName, tok.placeholder, value)
+	name := strings.TrimSpace(strings.ReplaceAll(templateName, tok.placeholder, value))
 	out := bindToken(cloneMap(body), tok.marker(), value).(map[string]any)
 	if value == "" {
 		applyUnversionedOverrides(out)
 	}
 	out["kind"] = kind
 	out["name"] = name
+	trimMaterializedMetadata(out)
 	delete(out, "versions") // discovery metadata, not part of the concrete definition
 	return &Document{Kind: kind, Name: name, Path: path, Body: out}
+}
+
+func trimMaterializedMetadata(out map[string]any) {
+	for _, key := range []string{"name", "display_name", "description"} {
+		if value, ok := out[key].(string); ok {
+			out[key] = strings.TrimSpace(value)
+		}
+	}
 }
 
 func applyUnversionedOverrides(out map[string]any) {
