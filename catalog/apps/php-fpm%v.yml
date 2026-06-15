@@ -1,0 +1,13 @@
+kind: app
+name: php-fpm%v
+display_name: "PHP-FPM ${version}"
+category: runtime
+description: "PHP-FPM interpreter"
+versions:
+  unversioned:
+    display_name: "PHP-FPM"
+variables:
+  binary: "/usr/bin/php-fpm${version}"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }
