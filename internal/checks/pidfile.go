@@ -18,8 +18,9 @@ import (
 // injectable for tests; it defaults to a /proc-or-signal liveness check.
 type pidfileCheck struct {
 	base
-	path  string
-	alive func(int) bool
+	path         string
+	alive        func(int) bool
+	fallbackPIDs func() []int
 }
 
 func (c pidfileCheck) Run(_ context.Context) Result {
@@ -31,6 +32,11 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 	pid, err := process.ReadPidfile(c.path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
+				r := c.result(true, fmt.Sprintf("%s absent; backend reports %d running pid(s)", c.path, len(pids)), start)
+				r.Data = map[string]any{"pids": pids, "source": "backend"}
+				return r
+			}
 			return c.result(false, c.path+" does not exist (service active but no pidfile)", start)
 		}
 		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
@@ -43,6 +49,22 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 	r := c.result(true, fmt.Sprintf("%s -> pid %d running", c.path, pid), start)
 	r.Data = map[string]any{"pid": pid}
 	return r
+}
+
+func (c pidfileCheck) liveFallbackPIDs(alive func(int) bool) []int {
+	if c.fallbackPIDs == nil {
+		return nil
+	}
+	seen := map[int]bool{}
+	var out []int
+	for _, pid := range c.fallbackPIDs() {
+		if pid <= 0 || seen[pid] || !alive(pid) {
+			continue
+		}
+		seen[pid] = true
+		out = append(out, pid)
+	}
+	return out
 }
 
 // pidAlive reports whether a process with the given PID exists. Signal 0 probes

@@ -57,6 +57,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 
 	found := map[int]Process{}
 	var order []int
+	var hasBackendProcess bool
 	add := func(id Identity, role, source string) {
 		if _, ok := found[id.PID]; ok {
 			return
@@ -69,6 +70,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	for _, pid := range backendPIDs {
 		if id, ok := snapshot[pid]; ok {
 			add(id, "main", sourceBackend)
+			hasBackendProcess = true
 		}
 	}
 
@@ -96,7 +98,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 			matched = true
 			break
 		}
-		if !matched && lastWarn != "" {
+		if !matched && lastWarn != "" && !hasBackendProcess {
 			warnings = append(warnings, lastWarn)
 		}
 	}

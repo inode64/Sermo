@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
@@ -286,6 +287,28 @@ func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	}
 }
 
+func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t *testing.T) {
+	_, checkDeps, _ := serviceRuntime("node_exporter", "node_exporter.service", map[string]any{}, Deps{
+		Backend:          servicemgr.BackendSystemd,
+		Manager:          fakeManager{},
+		Runtime:          t.TempDir(),
+		DefaultTimeout:   time.Second,
+		OperationTimeout: time.Second,
+		ExecxRunner:      systemdPIDRunner{pid: os.Getpid()},
+		Emit:             func(Event) {},
+	}, nil)
+	built, warnings := checks.Build(map[string]any{
+		"pidfile": map[string]any{"type": "pidfile", "path": filepath.Join(t.TempDir(), "missing.pid")},
+	}, checkDeps)
+	if len(warnings) != 0 {
+		t.Fatalf("Build warnings = %v", warnings)
+	}
+	results := checks.Run(context.Background(), built, 1)
+	if len(results) != 1 || !results[0].OK {
+		t.Fatalf("pidfile result = %+v, want OK via backend fallback", results)
+	}
+}
+
 func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {
 	root := t.TempDir()
 	enabled := filepath.Join(root, "enabled")
@@ -355,6 +378,27 @@ func (r procInfoRunner) Run(_ context.Context, name string, args ...string) (exe
 		return execx.Result{Stdout: r.pidfile + "\n"}, nil
 	case strings.Contains(joined, "-p MainPID"):
 		return execx.Result{Stdout: "0\n"}, nil
+	default:
+		return execx.Result{Stdout: "\n"}, nil
+	}
+}
+
+type systemdPIDRunner struct {
+	pid int
+}
+
+func (r systemdPIDRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	if name != "systemctl" {
+		return execx.Result{}, nil
+	}
+	joined := strings.Join(args, " ")
+	switch {
+	case strings.Contains(joined, "-p PIDFile"):
+		return execx.Result{Stdout: "\n"}, nil
+	case strings.Contains(joined, "-p ControlGroup"):
+		return execx.Result{Stdout: "\n"}, nil
+	case strings.Contains(joined, "-p MainPID"):
+		return execx.Result{Stdout: itoa(r.pid) + "\n"}, nil
 	default:
 		return execx.Result{Stdout: "\n"}, nil
 	}

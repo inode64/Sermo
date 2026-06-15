@@ -143,7 +143,6 @@ func Main(ctx context.Context, args []string) int {
 		Detector:   servicemgr.NewDetector(),
 		NewManager: servicemgr.NewManager,
 		LoadConfig: config.Load,
-		Discover:   process.NewDiscoverer().Discover,
 		Env:        os.Getenv,
 		Stdout:     os.Stdout,
 		Stderr:     os.Stderr,
@@ -172,9 +171,6 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.LoadConfig == nil {
 		a.LoadConfig = config.Load
-	}
-	if a.Discover == nil {
-		a.Discover = process.NewDiscoverer().Discover
 	}
 	if a.Operate == nil {
 		a.Operate = a.defaultOperate
@@ -932,7 +928,7 @@ func (a App) runProcesses(opts options) int {
 	}
 
 	selectors, warnings := process.ParseSelectors(resolved.Tree)
-	procs, discWarnings := a.Discover(selectors)
+	procs, discWarnings := a.discoverProcesses(context.Background(), opts, resolved, service, selectors)
 	warnings = append(warnings, discWarnings...)
 
 	for _, w := range warnings {
@@ -954,6 +950,24 @@ func (a App) runProcesses(opts options) int {
 		fmt.Fprintln(a.Stdout, formatProcess(p))
 	}
 	return exitSuccess
+}
+
+func (a App) discoverProcesses(ctx context.Context, opts options, resolved config.Resolved, service string, selectors []process.Selector) ([]process.Process, []string) {
+	if a.Discover != nil {
+		return a.Discover(selectors)
+	}
+	discoverer := process.NewDiscoverer()
+	detection, err := a.Detector.Detect(ctx, opts.backend)
+	if err != nil {
+		return discoverer.Discover(selectors)
+	}
+	candidates, trust := config.ServiceCandidates(resolved.Tree, string(detection.Backend), service)
+	unit, err := servicemgr.UnitResolver{Runner: a.Runner}.Resolve(ctx, detection.Backend, candidates, trust)
+	if err != nil {
+		return discoverer.Discover(selectors)
+	}
+	discoverer.BackendPIDs = servicemgr.BackendPIDsFuncWithRunner(detection.Backend, unit, a.Runner, nil)
+	return discoverer.Discover(selectors)
 }
 
 func formatProcess(p process.Process) string {
