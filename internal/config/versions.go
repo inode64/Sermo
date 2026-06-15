@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
@@ -47,7 +48,9 @@ func tokenFor(name string) *tmplToken {
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // daemon yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
 // template's discovery path (`versions.from`, else `binary`) with the token's
-// `${...}` wildcarded. The template itself is dropped; if nothing is installed it
+// `${...}` wildcarded. `versions.unversioned` additionally registers the same
+// template with an empty token value when the marker-less binary exists (e.g.
+// `php%v` -> `php`). The template itself is dropped; if nothing is installed it
 // yields nothing. A template may `uses` a base daemon (e.g. php-fpm%v uses
 // php-fpm) to inherit its checks, rules and processes; only the binary differs.
 func (c *Config) materializeVersionTemplates() {
@@ -71,13 +74,26 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 	for _, tmpl := range templates {
 		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl, kind)
-		for _, value := range discoverVersions(versionDiscoverySource(body), *tok) {
+		values := materializedVersionValues(versionDiscoverySource(body), body, *tok)
+		for _, value := range values {
 			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind)
+			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
+				continue
+			}
 			inst.Category = tmpl.Category
 			c.add(inst)
 		}
 		c.dropTemplate(tmpl.Name, reg, kind)
 	}
+}
+
+func materializedVersionValues(discoverPath string, body map[string]any, tok tmplToken) []string {
+	values := discoverVersions(discoverPath, tok)
+	if versionUnversionedEnabled(body) && unversionedVersionExists(discoverPath, tok) {
+		values = append(values, "")
+		sort.Strings(values)
+	}
+	return values
 }
 
 // versionDiscoverySource returns the placeholder-bearing filesystem path Sermo
@@ -91,6 +107,37 @@ func versionDiscoverySource(body map[string]any) string {
 		}
 	}
 	return daemonBinary(body)
+}
+
+func versionUnversionedEnabled(body map[string]any) bool {
+	versions, ok := body["versions"].(map[string]any)
+	if !ok {
+		return false
+	}
+	raw, present := versions["unversioned"]
+	if !present {
+		return false
+	}
+	if b, ok := raw.(bool); ok {
+		return b
+	}
+	opts, ok := raw.(map[string]any)
+	if !ok {
+		return false
+	}
+	if enabled, present := opts["enabled"]; present {
+		return cfgval.Bool(enabled)
+	}
+	return true
+}
+
+func unversionedVersionExists(discoverPath string, tok tmplToken) bool {
+	marker := tok.marker()
+	if !strings.Contains(discoverPath, marker) {
+		return false
+	}
+	_, err := os.Stat(strings.ReplaceAll(discoverPath, marker, ""))
+	return err == nil
 }
 
 // templateBody returns the template's body folded onto its `uses` base (if any),
@@ -156,10 +203,30 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path, kind string) *Document {
 	name := strings.ReplaceAll(templateName, tok.placeholder, value)
 	out := bindToken(cloneMap(body), tok.marker(), value).(map[string]any)
+	if value == "" {
+		applyUnversionedOverrides(out)
+	}
 	out["kind"] = kind
 	out["name"] = name
 	delete(out, "versions") // discovery metadata, not part of the concrete definition
 	return &Document{Kind: kind, Name: name, Path: path, Body: out}
+}
+
+func applyUnversionedOverrides(out map[string]any) {
+	versions, ok := out["versions"].(map[string]any)
+	if !ok {
+		return
+	}
+	overrides, ok := versions["unversioned"].(map[string]any)
+	if !ok {
+		return
+	}
+	for key, value := range overrides {
+		if key == "enabled" {
+			continue
+		}
+		out[key] = value
+	}
 }
 
 // bindToken replaces every occurrence of marker in every string of the tree with

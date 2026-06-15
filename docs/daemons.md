@@ -598,6 +598,22 @@ variables: { binary: "/usr/bin/python${n}" }
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
 `python-config`.
 
+When a versioned tool also ships an unversioned active-slot binary, opt into that
+explicitly with `versions.unversioned`. If `/usr/bin/python` exists, this
+materializes `python` in addition to `python2`/`python3`; when it is absent,
+only the numbered binaries are registered. A map form can override fields for
+the unversioned instance, commonly the display name:
+
+```yaml
+kind: app
+name: python%n
+display_name: "Python ${n}"
+versions:
+  unversioned:
+    display_name: "Python"
+variables: { binary: "/usr/bin/python${n}" }
+```
+
 Use `%i`/`${instance}` for named init instances discovered from a bounded path,
 for example `versions: { from: "/etc/init.d/openvpn.${instance}" }`.
 
@@ -648,8 +664,8 @@ A daemon may instead declare a dedicated `version_short` command (under
 `preflight` or `commands`, alongside `version`) that prints the bare version
 itself, sidestepping the regex when a tool can report it directly. Its first
 non-empty output line is then used verbatim. The packaged interpreter apps do
-this — e.g. PHP runs `php -r 'echo PHP_VERSION;'`, Python
-`python3 -c 'import platform;print(platform.python_version())'`, Node
+this with their resolved binary — e.g. PHP runs `php -r 'echo PHP_VERSION;'`,
+Python runs `python -c 'import platform;print(platform.python_version())'`, Node
 `node -p process.versions.node` — so their short version never depends on
 parsing. When no such command is configured (or it errors or prints nothing),
 `version_short` falls back to parsing the `version` line as above.
