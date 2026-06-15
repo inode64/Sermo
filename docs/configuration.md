@@ -1484,9 +1484,10 @@ Worked examples (cloning, disabling, multiple instances) live in
 [daemons](daemons.md#cloning).
 Catalog templates for installed versions/instances use `%v`, `%n` and `%i`; see
 [versioned daemons](daemons.md#versioned-daemons).
-Templates may explicitly include an active-slot binary with
-`versions.unversioned`, so versioned app families such as `python%n` or `php%v`
-can also expose `python`/`php` when those unversioned binaries exist.
+When `%v` or `%n` templates also have an active-slot binary without a suffix,
+such as `php` next to `php8.4` or `python` next to `python3`, Sermo materializes
+that unversioned entry automatically. Set `versions.unversioned: false` only when
+the marker-less binary should be ignored.
 
 ## Variables
 
