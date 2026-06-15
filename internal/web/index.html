@@ -80,8 +80,12 @@
   .services-table .actions { min-width: 14rem; }
   #rows tr:hover td, #watch-rows tr:hover td, #app-rows tr:hover td { background: color-mix(in srgb, var(--text) 4%, transparent); }
   #rows tr.group-row:hover td, #app-rows tr.group-row:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
-  #rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
-  #rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+  #rows tr.row-warning td, #app-rows tr.row-warning td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
+  #rows tr.row-warning td:first-child, #app-rows tr.row-warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+  #rows tr.row-failing td, #app-rows tr.row-failing td { background: color-mix(in srgb, var(--crit) 9%, transparent); }
+  #rows tr.row-failing td:first-child, #app-rows tr.row-failing td:first-child { box-shadow: inset 3px 0 0 var(--crit); }
+  #rows tr.row-warning:hover td, #app-rows tr.row-warning:hover td { background: color-mix(in srgb, var(--warn) 13%, transparent); }
+  #rows tr.row-failing:hover td, #app-rows tr.row-failing:hover td { background: color-mix(in srgb, var(--crit) 13%, transparent); }
   tr.clickable { cursor: pointer; }
   .exp { color: var(--text-2); margin-right: .35rem; user-select: none; font-size: .9em; display: inline-block; }
   .category-badge { display: inline-block; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; vertical-align: top; color: var(--text-2); }
@@ -141,10 +145,6 @@
   body.disconnected #services-section, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
-  td.status-warning { background: color-mix(in srgb, var(--warn) 12%, transparent); }
-  td.status-failed { background: color-mix(in srgb, var(--crit) 12%, transparent); }
-  tr:hover td.status-warning { background: color-mix(in srgb, var(--warn) 18%, transparent); }
-  tr:hover td.status-failed { background: color-mix(in srgb, var(--crit) 18%, transparent); }
   .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .process-cmd { font-family: var(--mono); font-size: .82em; }
   .check-message { max-width: min(42rem, 54vw); }
@@ -1380,7 +1380,8 @@ function renderServices() {
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const name = `<a class="name" data-service-expand="${esc(s.name)}">${label}</a>`;
-    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" data-exp-key="${esc(key)}">
+    const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${categoryBadge(category)}</td>
       <td>${stateBadge(state)}${state === "running" || state === "stopped" ? monitorHint(s) : ""}</td>
@@ -2390,12 +2391,14 @@ function renderApps(apps) {
   if (filterCount) filterCount.textContent = (appQuery || appCategory !== "all") ? `showing ${list.length} of ${total}` : "";
   const appRow = (a) => {
     const category = categoryOf(a, "app");
+    const state = appStateText(a);
+    const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
     const label = esc(displayName(a));
     const key = "app:" + a.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const ver = a.version_short || a.version || "—";
-    const row = `<tr class="clickable" data-exp-key="${esc(key)}">
+    const row = `<tr class="clickable ${rowClass}" data-exp-key="${esc(key)}">
       <td>${chev}${label}</td>
       <td>${categoryBadge(category)}</td>
       ${appStatusCell(a)}
