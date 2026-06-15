@@ -8,8 +8,9 @@ service:
   systemd: [mysql, mysqld]
   openrc: [mysql, mysqld]
 
-# Binary + version are owned by the `mysql` app (same name) and linked here.
-apps: [mysql]
+# Binary + version are owned by linked apps. mariabackup is optional: it only
+# feeds the backup guard and must not block MySQL on hosts without the tool.
+apps: [mysql, mariabackup]
 
 variables:
   user: mysql
@@ -65,7 +66,7 @@ checks:
   mariabackup:
     type: process
     optional: true
-    exe: /usr/bin/mariabackup
+    exe: "${mariabackup_binary}"
     user: "${user}"
     state: running
 

@@ -1,0 +1,8 @@
+kind: app
+name: rpcbind
+display_name: "RPC Bind"
+category: storage
+variables:
+  binary: "/usr/bin/rpcbind"
+preflight:
+  binary: { type: binary, path: "${binary}" }

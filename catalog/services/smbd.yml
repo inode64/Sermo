@@ -14,7 +14,7 @@ preflight:
   # warnings (e.g. deprecated options) grade orange. Local rules win (first-match).
   config:
     type: command
-    command: ["/usr/bin/testparm", "-s"]
+    command: ["${smbd_testparm}", "-s"]
     timeout: 30s
     analyze:
       use: [common]

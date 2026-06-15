@@ -331,6 +331,128 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	}
 }
 
+func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name              string
+		service           string
+		path              []any
+		wantRaw           string
+		wantResolved      string
+		preflight         string
+		preflightOptional bool
+	}{
+		{
+			name:         "rspamd config uses rspamadm from app",
+			service:      "rspamd",
+			path:         []any{"preflight", "config", "command", 0},
+			wantRaw:      "${rspamd_rspamadm}",
+			wantResolved: "/usr/bin/rspamadm",
+			preflight:    "rspamd-rspamadm",
+		},
+		{
+			name:         "smbd config uses testparm from app",
+			service:      "smbd",
+			path:         []any{"preflight", "config", "command", 0},
+			wantRaw:      "${smbd_testparm}",
+			wantResolved: "/usr/bin/testparm",
+			preflight:    "smbd-testparm",
+		},
+		{
+			name:         "dovecot config uses doveconf from app",
+			service:      "dovecot",
+			path:         []any{"preflight", "config", "command", 0},
+			wantRaw:      "${dovecot_doveconf}",
+			wantResolved: "/usr/bin/doveconf",
+			preflight:    "dovecot-doveconf",
+		},
+		{
+			name:         "rpcbind process uses app binary",
+			service:      "rpcbind",
+			path:         []any{"processes", "main", "exe"},
+			wantRaw:      "${rpcbind_binary}",
+			wantResolved: "/usr/bin/rpcbind",
+			preflight:    "rpcbind-binary",
+		},
+		{
+			name:         "rpc idmapd process uses app binary",
+			service:      "rpc-idmapd",
+			path:         []any{"processes", "main", "exe"},
+			wantRaw:      "${rpc_idmapd_binary}",
+			wantResolved: "/usr/bin/rpc.idmapd",
+			preflight:    "rpc-idmapd-binary",
+		},
+		{
+			name:         "nfs mountd process uses app binary",
+			service:      "nfs",
+			path:         []any{"processes", "mountd", "exe"},
+			wantRaw:      "${rpc_mountd_binary}",
+			wantResolved: "/usr/bin/rpc.mountd",
+			preflight:    "rpc-mountd-binary",
+		},
+		{
+			name:              "mariadb backup guard uses optional app binary",
+			service:           "mariadb",
+			path:              []any{"checks", "mariabackup", "exe"},
+			wantRaw:           "${mariabackup_binary}",
+			wantResolved:      "/usr/bin/mariabackup",
+			preflight:         "mariabackup-binary",
+			preflightOptional: true,
+		},
+		{
+			name:              "mysql backup guard uses optional app binary",
+			service:           "mysql",
+			path:              []any{"checks", "mariabackup", "exe"},
+			wantRaw:           "${mariabackup_binary}",
+			wantResolved:      "/usr/bin/mariabackup",
+			preflight:         "mariabackup-binary",
+			preflightOptional: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, ok := cfg.Daemons[tt.service]
+			if !ok {
+				t.Fatalf("service %q not found", tt.service)
+			}
+			if got := cfgval.String(valueAt(t, doc.Body, tt.path...)); got != tt.wantRaw {
+				t.Fatalf("raw %s = %q, want %q", tt.service, got, tt.wantRaw)
+			}
+			resolved, errs := cfg.ResolveCatalog(CategoryService, tt.service)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tt.service, errs)
+			}
+			if got := cfgval.String(valueAt(t, resolved.Tree, tt.path...)); got != tt.wantResolved {
+				t.Fatalf("resolved %s = %q, want %q", tt.service, got, tt.wantResolved)
+			}
+			if tt.preflight == "" {
+				return
+			}
+			preflight := nested(t, resolved.Tree, "preflight")
+			entry, ok := preflight[tt.preflight].(map[string]any)
+			if !ok {
+				t.Fatalf("resolved %s lacks preflight %q: %v", tt.service, tt.preflight, preflight)
+			}
+			if got := cfgval.Bool(entry["optional"]); got != tt.preflightOptional {
+				t.Fatalf("%s preflight %q optional = %v, want %v", tt.service, tt.preflight, got, tt.preflightOptional)
+			}
+		})
+	}
+}
+
 func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
@@ -388,6 +510,37 @@ func hasVersionProbe(body map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func valueAt(t *testing.T, tree map[string]any, path ...any) any {
+	t.Helper()
+	var cur any = tree
+	for _, elem := range path {
+		switch key := elem.(type) {
+		case string:
+			m, ok := cur.(map[string]any)
+			if !ok {
+				t.Fatalf("path %v: expected map before key %q, got %T", path, key, cur)
+			}
+			var found bool
+			cur, found = m[key]
+			if !found {
+				t.Fatalf("path %v: key %q not found", path, key)
+			}
+		case int:
+			a, ok := cur.([]any)
+			if !ok {
+				t.Fatalf("path %v: expected array before index %d, got %T", path, key, cur)
+			}
+			if key < 0 || key >= len(a) {
+				t.Fatalf("path %v: index %d out of range", path, key)
+			}
+			cur = a[key]
+		default:
+			t.Fatalf("path %v: unsupported path element %T", path, elem)
+		}
+	}
+	return cur
 }
 
 func yamlFiles(dir string) ([]string, error) {
