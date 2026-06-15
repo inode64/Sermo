@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1851,6 +1852,10 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 		info.Hostname = h
 	}
 	info.OS = osPrettyName()
+	if up, ok := hostUptime(); ok {
+		info.HostUptimeSeconds = int64(up.Seconds())
+		info.HostUptime = formatInterval(up.Round(time.Second))
+	}
 
 	if b.cfg != nil {
 		g := b.cfg.Global
@@ -1929,6 +1934,33 @@ func formatInterval(d time.Duration) string {
 		}
 	}
 	return b.String()
+}
+
+// hostUptime returns how long the host/server has been running since boot,
+// read natively from /proc/uptime. The second return is false when the host
+// uptime is unavailable (e.g. the file is missing on non-Linux systems).
+func hostUptime() (time.Duration, bool) {
+	data, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0, false
+	}
+	return parseProcUptime(data)
+}
+
+// parseProcUptime extracts the boot-relative uptime from the contents of
+// /proc/uptime, whose first whitespace-separated field is the number of
+// seconds (a float) since boot. It returns false when the value is missing or
+// unparseable.
+func parseProcUptime(data []byte) (time.Duration, bool) {
+	fields := strings.Fields(string(data))
+	if len(fields) == 0 {
+		return 0, false
+	}
+	secs, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || secs < 0 {
+		return 0, false
+	}
+	return time.Duration(secs * float64(time.Second)), true
 }
 
 // osPrettyName returns a human-friendly OS label (PRETTY_NAME from os-release on
