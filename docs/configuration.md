@@ -1490,8 +1490,8 @@ Catalog templates for installed versions/instances use `%v`, `%n` and `%i`; see
 [versioned daemons](daemons.md#versioned-daemons).
 When `%v` or `%n` templates also have an active-slot binary without a suffix,
 such as `php` next to `php8.4` or `python` next to `python3`, Sermo materializes
-that unversioned entry automatically. Set `versions.unversioned: false` only when
-the marker-less binary should be ignored.
+that unversioned entry automatically. Set `versions.unversioned: false` on the
+app template only when the marker-less binary should be ignored.
 
 ## Variables
 

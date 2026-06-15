@@ -45,17 +45,17 @@ func tokenFor(name string) *tmplToken {
 	return nil
 }
 
-// materializeVersionTemplates replaces every version-template daemon with one
-// concrete daemon per installed value. Multiple versions of the same
+// materializeVersionTemplates replaces every version-template document with one
+// concrete document per installed value. Multiple versions of the same
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
-// daemon yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
-// template's discovery path (`versions.from`, else `binary`, else a linked
-// versioned app's discovery path) with the token's `${...}` wildcarded. `%v` and
-// `%n` also register the same template with an empty token value when the
-// marker-less binary exists (e.g. `php%v` -> `php`). The template itself is
-// dropped; if nothing is installed it yields nothing. A template may `uses` a
-// base daemon (e.g. php-fpm%v uses php-fpm) to inherit its checks, rules and
-// processes; only the binary differs.
+// yields `foo1.2`, `foo3.4`, ... with the token's `${...}` wildcarded. Apps and
+// libraries discover from their own `versions.from`/`binary`; daemons discover
+// exclusively from a linked app template (`apps: ["php-fpm${version}"]`). `%v`
+// and `%n` may also register an empty active-slot value when the marker-less app
+// binary exists (e.g. `php%v` -> `php`). The template itself is dropped; if
+// nothing is installed it yields nothing. A daemon template may `uses` a base
+// daemon (e.g. php-fpm%v uses php-fpm) to inherit its checks, rules and
+// processes.
 func (c *Config) materializeVersionTemplates() {
 	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
 	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
@@ -77,7 +77,8 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 	for _, tmpl := range templates {
 		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl, kind)
-		values := materializedVersionValues(c.versionDiscoverySource(body, *tok), body, *tok)
+		source := c.versionDiscoverySource(body, *tok, kind)
+		values := materializedVersionValues(source.path, source.options, *tok)
 		for _, value := range values {
 			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind)
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
@@ -90,37 +91,41 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 	}
 }
 
-func materializedVersionValues(discoverPath string, body map[string]any, tok tmplToken) []string {
+func materializedVersionValues(discoverPath string, options map[string]any, tok tmplToken) []string {
 	values := discoverVersions(discoverPath, tok)
-	if versionUnversionedEnabled(body, tok) && unversionedVersionExists(discoverPath, tok) {
+	if versionUnversionedEnabled(options, tok) && unversionedVersionExists(discoverPath, tok) {
 		values = append(values, "")
 		sort.Strings(values)
 	}
 	return values
 }
 
+type versionDiscovery struct {
+	path    string
+	options map[string]any
+}
+
 // versionDiscoverySource returns the placeholder-bearing filesystem path Sermo
-// globs to find installed values. It is `versions.from` when set, otherwise the
-// `binary` variable. A service template may omit both when it links exactly to a
-// versioned app (`apps: ["php-fpm${version}"]`); in that case the app template's
-// own discovery source is reused. Decoupling them lets a template monitor a
-// generic binary (e.g. /usr/sbin/php-fpm) while discovering from a slot-specific
-// path.
-func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken) string {
-	if source := directVersionDiscoverySource(body); source != "" {
-		return source
+// globs to find installed values, plus the document whose `versions.unversioned`
+// option controls active-slot behavior. Apps and libraries own their discovery
+// path directly. Daemons intentionally do not: they must link a matching app
+// template, and that app owns the installed-version source.
+func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind string) versionDiscovery {
+	if kind != kindDaemon {
+		return versionDiscovery{path: directVersionDiscoverySource(body), options: body}
 	}
 	for _, name := range cfgval.StringList(body["apps"]) {
 		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
 		if !ok {
 			continue
 		}
-		source := directVersionDiscoverySource(stripMeta(doc.Body))
+		appBody := stripMeta(doc.Body)
+		source := directVersionDiscoverySource(appBody)
 		if strings.Contains(source, tok.marker()) {
-			return source
+			return versionDiscovery{path: source, options: appBody}
 		}
 	}
-	return ""
+	return versionDiscovery{options: body}
 }
 
 func directVersionDiscoverySource(body map[string]any) string {
