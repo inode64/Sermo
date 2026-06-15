@@ -6,11 +6,12 @@ description: "NFSv4 ID mapping daemon."
 service:
   systemd: [nfs-idmapd, rpc-idmapd]
   openrc: [rpc.idmapd, rpc-idmapd]
+apps: [rpc-idmapd]
 
 processes:
   main:
     type: command_match
-    exe: /usr/bin/rpc.idmapd
+    exe: "${rpc_idmapd_binary}"
     user: root
 
 checks:

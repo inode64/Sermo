@@ -4,6 +4,8 @@ display_name: "Rspamd"
 category: messaging
 variables:
   binary: "/usr/bin/rspamd"
+  rspamadm: "/usr/bin/rspamadm"
 preflight:
   binary: { type: binary, path: "${binary}" }
+  rspamadm: { type: binary, path: "${rspamadm}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

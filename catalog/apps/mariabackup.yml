@@ -1,0 +1,9 @@
+kind: app
+name: mariabackup
+display_name: "MariaDB Backup"
+category: database
+variables:
+  binary: "/usr/bin/mariabackup"
+preflight:
+  binary: { type: binary, path: "${binary}", optional: true }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }
