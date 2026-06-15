@@ -653,7 +653,7 @@ func TestCatalogCommandEntriesDoNotUseArgumentKeys(t *testing.T) {
 		if entry.IsDir() || !isYAML(entry.Name()) {
 			return nil
 		}
-		data, err := os.ReadFile(path)
+		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog root.
 		if err != nil {
 			return err
 		}
