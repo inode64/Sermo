@@ -332,27 +332,21 @@ uses: dbus
 func TestAppsExposeNamespacedVariables(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"catalog/apps/cups-config.yml": `
-kind: app
-name: cups-config
-variables: { binary: /usr/bin/cups-config }
-preflight:
-  binary: { type: binary, path: "${binary}" }
-`,
 		"catalog/apps/cupsd.yml": `
 kind: app
 name: cupsd
-variables: { binary: /usr/sbin/cupsd }
+variables: { binary: /usr/sbin/cupsd, cups_config: /usr/bin/cups-config }
 preflight:
   binary: { type: binary, path: "${binary}" }
+  cups-config: { type: binary, path: "${cups_config}" }
 `,
 		"catalog/cups.yml": `
 kind: daemon
 name: cups
-apps: [cups-config, cupsd]
+apps: [cupsd]
 preflight:
   config: { type: command, command: ["${cupsd_binary}", "-t"] }
-  version: { type: command, command: ["${cups_config_binary}", "--version"] }
+  version: { type: command, command: ["${cupsd_cups_config}", "--version"] }
 checks:
   service: { type: service, expect: active }
 `,
@@ -377,7 +371,7 @@ uses: cups
 	}
 	versionCmd, _ := nested(t, preflight, "version")["command"].([]any)
 	if got := fmt.Sprint(versionCmd...); got != "/usr/bin/cups-config--version" {
-		t.Fatalf("version command = %v, want cups-config binary from app", versionCmd)
+		t.Fatalf("version command = %v, want extra app variable", versionCmd)
 	}
 }
 
