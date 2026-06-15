@@ -70,11 +70,12 @@ canonical name. `catalog_aliases` must be a non-empty list of simple names,
 without path separators.
 
 When a daemon or service lists apps, every app variable is also available to that
-daemon/service with a normalized app-name prefix: `apps: [cups-config, cupsd]`
-exposes `${cups_config_binary}` and `${cupsd_binary}`. Dashes and other
+daemon/service with a normalized app-name prefix: an app `cupsd` with
+`variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
+exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Dashes and other
 non-alphanumeric characters become underscores. This lets a service reuse binary
-paths owned by several apps without naming collisions. A local `variables:` entry
-with the same prefixed name still wins for host-specific overrides.
+paths owned by one or more apps without naming collisions. A local `variables:`
+entry with the same prefixed name still wins for host-specific overrides.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
@@ -232,10 +233,11 @@ same safe operation engine the CLI uses.
 Below the services table the dashboard lists the **installed applications** (the
 catalog app daemons whose binary is present), showing each application's name and
 short version; an app `health` command, when configured, decides OK/error from
-its exit code before the version command is considered. The list is sortable by
-name, category or version, and expanding a row reveals the full version string,
-the binary's file location and its permissions. Services and applications can be
-filtered and grouped by their
+its exit code before the version command is considered. If no `health` command
+is configured, the `version` command is the fallback probe while fetching the
+displayed version. The list is sortable by name, category or version, and
+expanding a row reveals the full version string, the binary's file location and
+its permissions. Services and applications can be filtered and grouped by their
 top-level `category` metadata field.
 This is the same data the `sermoctl apps` command reports (served from
 `GET /api/applications`). The dashboard caches this application list for up to
