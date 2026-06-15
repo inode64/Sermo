@@ -24,6 +24,9 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"summarizeSLA(",
 		"1-core peak",
 		"CPU/core",
+		"exe unresolved",
+		"unresolved exe",
+		"exe is unresolved",
 	} {
 		if strings.Contains(html, forbidden) {
 			t.Fatalf("index.html still contains %q", forbidden)
@@ -36,5 +39,8 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 	}
 	if !strings.Contains(html, "function procCpuCells(p)") {
 		t.Fatalf("index.html missing process CPU/core peak cell renderer")
+	}
+	if !strings.Contains(html, "function procLabel(p)") || !strings.Contains(html, "function procCmd(p)") {
+		t.Fatalf("index.html missing process command fallback renderer")
 	}
 }
