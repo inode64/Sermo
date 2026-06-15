@@ -6,6 +6,7 @@ description: "Kernel NFS server."
 service:
   systemd: [nfs-server, nfs]
   openrc: [nfs]
+apps: [rpc-mountd]
 
 variables:
   host: 127.0.0.1
@@ -14,7 +15,7 @@ variables:
 processes:
   mountd:
     type: command_match
-    exe: /usr/bin/rpc.mountd
+    exe: "${rpc_mountd_binary}"
     user: root
 
 checks:

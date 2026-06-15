@@ -8,7 +8,7 @@ apps: [rspamd]
 variables:
   port: 11334
 preflight:
-  config: { type: command, command: ["/usr/bin/rspamadm","configtest"], timeout: 30s }
+  config: { type: command, command: ["${rspamd_rspamadm}", "configtest"], timeout: 30s }
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
