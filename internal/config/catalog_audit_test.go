@@ -643,6 +643,57 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 	}
 }
 
+func TestCatalogCommandEntriesDoNotUseArgumentKeys(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	err := filepath.WalkDir(catalogDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		checkCommandArgumentKeys(t, path, doc, "")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func checkCommandArgumentKeys(t *testing.T, file string, node any, keyPath string) {
+	t.Helper()
+	switch v := node.(type) {
+	case map[string]any:
+		if cfgval.String(v["type"]) == "command" {
+			for key := range v {
+				if strings.HasPrefix(key, "-") {
+					t.Errorf("%s %s has command argument key %q outside command list", file, keyPath, key)
+				}
+			}
+		}
+		for key, child := range v {
+			next := key
+			if keyPath != "" {
+				next = keyPath + "." + key
+			}
+			checkCommandArgumentKeys(t, file, child, next)
+		}
+	case []any:
+		for _, child := range v {
+			checkCommandArgumentKeys(t, file, child, keyPath+"[]")
+		}
+	}
+}
+
 func catalogBinary(doc *Document) string {
 	if doc == nil {
 		return ""
