@@ -84,8 +84,9 @@ to avoid ambiguity.
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
-monitoring state. The schema is versioned and migrated forward automatically, so
-future features can add tables without a manual upgrade.
+monitoring state. It also stores SLA/check measurements and the daemon process
+metric history shown in the web UI. The schema is versioned and migrated forward
+automatically, so future features can add tables without a manual upgrade.
 
 Both directories are created **0700, owner root**. On systemd they come from the
 shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -461,6 +462,11 @@ avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Measurements are kept
 per minute for roughly a year (pruned like the SLA samples); a check that only
 runs every N cycles ([per-check interval](#per-check-interval)) records a sample
 only when it actually runs, so the average is not skewed.
+
+The `Daemon / Engine settings` process charts use the same persistent state
+database for sermod's own CPU, memory and IO history, so those graphs survive a
+daemon restart or host reboot. They are pruned to roughly the same one-year
+retention window.
 
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and

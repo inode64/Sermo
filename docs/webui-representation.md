@@ -38,7 +38,7 @@ Keep changes concrete:
 | Applications | `GET /api/applications` | installed catalog apps |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
-| Daemon process metrics | `GET /api/daemon/metrics` | in-memory sermod CPU/memory/IO history |
+| Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |
 | Locks | `GET /api/locks` | named runtime locks |
 | Events | `GET /api/events` | service/watch activity |
 | Recent activity | `GET /api/activity` | summary of recent events |
