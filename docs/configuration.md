@@ -373,7 +373,10 @@ cycles)),
 for the window; `since` is a duration, default 24h, capped at the ~1-year
 retention),
 `GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
-history + summary, see below), `GET /api/events?limit=N` (the **global event feed**, newest first),
+history + summary, see below),
+`GET /api/daemon/metrics?since=24h` (in-memory sermod process CPU, memory and IO
+history for the current daemon process, plus current PID, file descriptors and
+threads), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
 malformed lock files under `<paths.runtime>/locks`),
