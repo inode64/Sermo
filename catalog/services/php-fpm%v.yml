@@ -8,12 +8,11 @@ service:
   systemd: ["php-fpm", "php${version}-fpm", "php-fpm${version}"]
   openrc: ["php-fpm", "php-fpm${version}", "php${version}"]
 
-# The PHP runtime is owned by the matching `php${version}` app and linked here,
+# The PHP-FPM runtime is owned by the matching `php-fpm${version}` app and linked here,
 # so its binary + version checks run in this service's preflight.
-apps: ["php${version}"]
+apps: ["php-fpm${version}"]
 
 variables:
-  binary: /usr/bin/php-fpm${version}
   user: www-data
   host: 127.0.0.1
   port: 9000
@@ -21,10 +20,6 @@ variables:
   status_path: /status
 
 pidfile: "${pidfile}"
-
-commands:
-  version:
-    command: ["${binary}", "--version"]
 
 preflight:
   binary:

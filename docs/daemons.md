@@ -204,6 +204,14 @@ preflight:
   java-version: { type: command, command: ["/usr/bin/java", "-version"] }
 ```
 
+App variables are also available to the service. They are always exposed with a
+normalized app-name prefix (`${java_binary}`, `${php_fpm_binary}`, ...). If the
+service links exactly one app, those variables are additionally available without
+the prefix as defaults, so service-specific checks can use `${binary}` while the
+app keeps ownership of the actual path. Local `variables:` entries on the daemon
+or service override either form; when several apps are linked, use the prefixed
+names.
+
 Because they run in **preflight**, a missing or wrong-version runtime fails the
 service's preflight, which **blocks start/restart** (a preflight-failed operation
 never executes the action) — you do not start a service whose runtime is absent.
@@ -574,6 +582,12 @@ variables:
 
 `versions.from` is discovery-only metadata; it never appears in the materialized
 daemon. When omitted, discovery falls back to the `binary` path.
+
+If a versioned service template has no `versions.from` and no own
+`variables.binary`, but links a matching versioned app such as
+`apps: ["php-fpm${version}"]`, discovery falls back to that app template's
+`versions.from` or `variables.binary`. This lets a service reuse the app-owned
+binary path instead of duplicating it only to materialize versions.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken

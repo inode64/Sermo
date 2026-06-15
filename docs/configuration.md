@@ -74,8 +74,12 @@ daemon/service with a normalized app-name prefix: an app `cupsd` with
 `variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
 exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Dashes and other
 non-alphanumeric characters become underscores. This lets a service reuse binary
-paths owned by one or more apps without naming collisions. A local `variables:`
-entry with the same prefixed name still wins for host-specific overrides.
+paths owned by one or more apps without naming collisions. When exactly one app
+is linked, its variables are also exposed without the prefix as defaults, so a
+service can use `${binary}` while the app remains the owner of the binary path.
+A local `variables:` entry with the same prefixed or unprefixed name still wins
+for host-specific overrides. When several apps are linked, use the prefixed names
+to avoid ambiguity.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
