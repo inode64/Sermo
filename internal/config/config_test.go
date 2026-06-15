@@ -2018,9 +2018,7 @@ func TestVersionTemplateUnversionedMaterialization(t *testing.T) {
 kind: app
 name: python%%n
 display_name: "Python ${n}"
-versions:
-  unversioned:
-    display_name: "Python"
+description: "Python runtime ${n}"
 variables: { binary: "%s/python${n}" }
 preflight:
   binary: { type: binary, path: "${binary}" }
@@ -2031,9 +2029,7 @@ preflight:
 kind: app
 name: php%%v
 display_name: "PHP ${version}"
-versions:
-  unversioned:
-    display_name: "PHP"
+description: "PHP runtime ${version}"
 variables: { binary: "%s/php${version}" }
 preflight:
   binary: { type: binary, path: "${binary}" }
@@ -2060,11 +2056,12 @@ defaults: { policy: { cooldown: 5m } }
 		name        string
 		binary      string
 		displayName string
+		description string
 	}{
-		{"python", filepath.Join(bin, "python"), "Python"},
-		{"python3", filepath.Join(bin, "python3"), "Python 3"},
-		{"php", filepath.Join(bin, "php"), "PHP"},
-		{"php8.4", filepath.Join(bin, "php8.4"), "PHP 8.4"},
+		{"python", filepath.Join(bin, "python"), "Python", "Python runtime"},
+		{"python3", filepath.Join(bin, "python3"), "Python 3", "Python runtime 3"},
+		{"php", filepath.Join(bin, "php"), "PHP", "PHP runtime"},
+		{"php8.4", filepath.Join(bin, "php8.4"), "PHP 8.4", "PHP runtime 8.4"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2080,6 +2077,9 @@ defaults: { policy: { cooldown: 5m } }
 			}
 			if got := DisplayName(doc.Body, tt.name); got != tt.displayName {
 				t.Fatalf("%s display_name = %q, want %q", tt.name, got, tt.displayName)
+			}
+			if got := cfgval.String(doc.Body["description"]); got != tt.description {
+				t.Fatalf("%s description = %q, want %q", tt.name, got, tt.description)
 			}
 			resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name)
 			if len(errs) > 0 {
@@ -2109,8 +2109,6 @@ func TestVersionTemplateUnversionedRequiresBinary(t *testing.T) {
 kind: app
 name: python%%n
 display_name: "Python ${n}"
-versions:
-  unversioned: true
 variables: { binary: "%s/python${n}" }
 `, bin),
 	}))
@@ -2122,6 +2120,79 @@ variables: { binary: "%s/python${n}" }
 	}
 	if _, ok := cfg.Apps["python3"]; !ok {
 		t.Fatalf("python3 should materialize")
+	}
+}
+
+func TestVersionTemplateUnversionedCanBeDisabled(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"php", "php8.4"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/php%v.yml": fmt.Sprintf(`
+kind: app
+name: php%%v
+display_name: "PHP ${version}"
+versions:
+  unversioned: false
+variables: { binary: "%s/php${version}" }
+`, bin),
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Apps["php"]; ok {
+		t.Fatalf("php should not materialize when versions.unversioned is false")
+	}
+	if _, ok := cfg.Apps["php8.4"]; !ok {
+		t.Fatalf("php8.4 should materialize")
+	}
+}
+
+func TestVersionTemplateUnversionedCanOverrideMetadata(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "php"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/php%v.yml": fmt.Sprintf(`
+kind: app
+name: php%%v
+display_name: "PHP ${version}"
+description: "PHP runtime ${version}"
+versions:
+  unversioned:
+    display_name: "System PHP"
+    description: "Default PHP interpreter"
+variables: { binary: "%s/php${version}" }
+`, bin),
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	doc, ok := cfg.Apps["php"]
+	if !ok {
+		t.Fatalf("php should materialize")
+	}
+	if got := DisplayName(doc.Body, "php"); got != "System PHP" {
+		t.Fatalf("php display_name = %q, want System PHP", got)
+	}
+	if got := cfgval.String(doc.Body["description"]); got != "Default PHP interpreter" {
+		t.Fatalf("php description = %q, want Default PHP interpreter", got)
 	}
 }
 
