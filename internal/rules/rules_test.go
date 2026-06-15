@@ -67,6 +67,30 @@ func TestEvalUnknownCheckIsError(t *testing.T) {
 	}
 }
 
+func TestEvalResolvesLazyCheckReference(t *testing.T) {
+	runs := 0
+	ev := &Evaluator{
+		Cache: cache(nil),
+		ResolveRef: func(_ context.Context, name string) (checks.Result, bool, error) {
+			if name != "config" {
+				return checks.Result{}, false, nil
+			}
+			runs++
+			return checks.Result{Check: name, OK: false}, true, nil
+		},
+	}
+
+	if !evalNode(t, ev, map[string]any{"failed": map[string]any{"check": "config"}}) {
+		t.Fatal("failed config should resolve through ResolveRef")
+	}
+	if !evalNode(t, ev, map[string]any{"failed": map[string]any{"check": "config"}}) {
+		t.Fatal("resolved config result should be cached")
+	}
+	if runs != 1 {
+		t.Fatalf("ResolveRef called %d times, want 1", runs)
+	}
+}
+
 func TestEvalInlineTCP(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

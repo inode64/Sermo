@@ -16,8 +16,13 @@ import (
 // section 14).
 type Evaluator struct {
 	// Cache holds the results of the service's named checks for this cycle,
-	// keyed by check name (for failed/active references).
+	// keyed by check name (for failed/active references). ResolveRef may add
+	// lazy preflight results to this map.
 	Cache map[string]checks.Result
+	// ResolveRef resolves additional named checks (for example preflight entries)
+	// when a failed/active reference is not present in Cache. The bool reports
+	// whether the name exists; false preserves the usual unknown-check error.
+	ResolveRef RefResolver
 	// Deps builds inline probes (tcp/command/service/file).
 	Deps checks.Deps
 	// Changed reports whether the file at the given path differs from a baseline
@@ -26,6 +31,39 @@ type Evaluator struct {
 	Changed func(path string) (bool, error)
 
 	memo map[string]checks.Result
+}
+
+// RefResolver lazily resolves a named check reference outside the per-cycle
+// monitoring cache, such as a preflight entry referenced by a guard rule.
+type RefResolver func(context.Context, string) (checks.Result, bool, error)
+
+// NewCheckResolver returns a resolver over a static set of built checks. Results
+// are memoized inside the returned resolver, so a referenced preflight check runs
+// at most once for the caller's evaluation pass.
+func NewCheckResolver(built []checks.Built, maxParallel int) RefResolver {
+	if len(built) == 0 {
+		return nil
+	}
+	byName := make(map[string]checks.Built, len(built))
+	for _, b := range built {
+		byName[b.Check.Name()] = b
+	}
+	memo := make(map[string]checks.Result, len(built))
+	return func(ctx context.Context, name string) (checks.Result, bool, error) {
+		if res, ok := memo[name]; ok {
+			return res, true, nil
+		}
+		b, ok := byName[name]
+		if !ok {
+			return checks.Result{}, false, nil
+		}
+		results := checks.Run(ctx, []checks.Built{b}, maxParallel)
+		if len(results) == 0 {
+			return checks.Result{}, true, fmt.Errorf("check %q produced no result", name)
+		}
+		memo[name] = results[0]
+		return results[0], true, nil
+	}
 }
 
 // Eval evaluates a condition node, returning its boolean value. An unresolvable
@@ -123,6 +161,21 @@ func (e *Evaluator) probe(ctx context.Context, v any) (checks.Result, error) {
 	}
 	if ref := cfgval.AsString(m["check"]); ref != "" {
 		res, ok := e.Cache[ref]
+		if !ok {
+			if e.ResolveRef != nil {
+				var err error
+				res, ok, err = e.ResolveRef(ctx, ref)
+				if err != nil {
+					return checks.Result{}, err
+				}
+				if ok {
+					if e.Cache == nil {
+						e.Cache = map[string]checks.Result{}
+					}
+					e.Cache[ref] = res
+				}
+			}
+		}
 		if !ok {
 			return checks.Result{}, fmt.Errorf("unknown check %q", ref)
 		}
