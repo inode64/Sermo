@@ -305,20 +305,19 @@ Columns:
 | Reason | operator-supplied reason |
 | Action | release button when allowed |
 
-## Service detail view
+## Service row expansion
 
-Container id: `detail`
+Container: `tr.exp-row` under the selected service row.
 
-Opened from a service row/name. It is separate from the inline row expansion and
-shows deeper service-specific operations.
+Opened from a service row/name. This is the only service-detail surface; there
+is no separate lower detail panel.
 
 | Area | Current representation |
 | --- | --- |
-| Header | service name, state, close button |
-| Actions | safe operation buttons, preflight |
+| Header | service name, unit and state |
+| Actions | service row operation buttons and inline preflight |
 | Checks | resolved check state |
 | Metrics | selectable metric/check series |
-| SLA | selected time window |
 | Events | recent service events |
 | Rules | remediation and alert rules |
 

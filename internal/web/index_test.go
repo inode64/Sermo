@@ -36,6 +36,12 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"loadConfigRender(",
 		"loadConfigDiff(",
 		"/config/diff",
+		`id="detail"`,
+		"data-detail-service",
+		"data-close-detail",
+		"function detail(",
+		"function renderDetail(",
+		"function closeDetail(",
 	} {
 		if strings.Contains(html, forbidden) {
 			t.Fatalf("index.html still contains %q", forbidden)
@@ -51,5 +57,8 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 	}
 	if !strings.Contains(html, "function procLabel(p)") || !strings.Contains(html, "function procCmd(p)") {
 		t.Fatalf("index.html missing process command fallback renderer")
+	}
+	if !strings.Contains(html, "function renderServiceDetail(d)") || !strings.Contains(html, "data-service-expand") {
+		t.Fatalf("index.html missing inline service detail renderer")
 	}
 }
