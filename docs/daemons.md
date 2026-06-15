@@ -633,9 +633,9 @@ its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` is unaffected by
 When an app declares `health`, Sermo uses it as the preferred health probe for
 `sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit
 code is evaluated (`expect_exit`, default `0`); stdout/stderr matchers and the
-printed output are ignored for health. This is useful for tools such as
-`cupsd`, where `cupsd -h` proves the binary starts and parses its options but
-does not print a version.
+printed output are ignored for health. The `version` command is only used as a
+fallback health probe when no `health` command exists; when `health` exists,
+`version` reports display data and a version failure does not override health.
 
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
@@ -822,7 +822,7 @@ checks, but the **reserved names** are consumed by features:
   WebUI application list to decide whether an installed application is healthy.
   It uses the same `preflight.<name>` then `commands.<name>` lookup as
   `version`, but only checks the exit code. When present, it takes precedence
-  over `version` for app health.
+  over `version` for app health; `version` remains display-only.
 - **`version`** (and `version_short`) — run by the `sermoctl apps`/`libs`/
   `services` listings to report a daemon's version, and **each cycle** by the
   `version.on_change` monitor (see [Service health conditions](rules.md#service-health-conditions-version--state--config)).
