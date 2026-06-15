@@ -1547,7 +1547,7 @@ function renderExpansion(d, metrics) {
     ? `<div class="muted">No resident process expected.</div>`
     : procs.length
     ? `<table style="width:auto; font-size:.85rem;">
-        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>CPU</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th title="CPU used by this process, normalized to one core">CPU/core</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
         <tbody>${procs.map((p) => `<tr>
           <td>${p.pid}</td>
           <td class="muted">${p.ppid}</td>
@@ -1634,23 +1634,22 @@ function hostMemTotalBytes() {
 }
 
 // cpuBarMini renders a single-core-normalized CPU% as a compact bar (100% = one
-// full core, like the cpu_thread metric). A multithreaded process can exceed
-// 100%; the bar caps at full but the label keeps the true value.
+// full core). A multithreaded process can exceed 100%; the bar caps at full but
+// the label keeps the true value.
 function cpuBarMini(pct) {
   const v = Number(pct) || 0;
-  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${v.toFixed(1)}% of one core`);
+  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${v.toFixed(1)}% of one core used by this process`);
 }
 
-// cpuTotalsLine renders the whole-tree CPU summary (whole-machine % + busiest
-// single-core peak) for a process_totals object, or a "measuring" hint until the
-// first rate is available. "" when CPU was never sampled (no live registry).
+// cpuTotalsLine renders the whole-tree CPU summary (whole-machine %) for a
+// process_totals object, or a "measuring" hint until the first rate is
+// available. "" when CPU was never sampled (no live registry).
 function cpuTotalsLine(pt) {
   if (!pt) return "";
   if (!pt.has_cpu) return pt.num_cpu ? ' · cpu <span class="muted">measuring…</span>' : "";
   const machine = Number(pt.cpu) || 0;
-  const peak = Number(pt.cpu_thread) || 0;
   const machineBar = usageBarMini(pctClamp(machine), machine.toFixed(0) + "%", `${machine.toFixed(1)}% of ${pt.num_cpu || "?"} cores`);
-  return ` · cpu <b>${machine.toFixed(0)}%</b> ${machineBar} · 1-core peak <b>${peak.toFixed(0)}%</b> ${cpuBarMini(peak)}`;
+  return ` · cpu <b>${machine.toFixed(0)}%</b> ${machineBar}`;
 }
 
 function diskUsedPct(d) {
@@ -2916,7 +2915,7 @@ function renderDetail(d) {
     ? `<h2>Processes</h2>${procSummary}${procWarns}`
     : `<h2>Processes</h2>
     ${procSummary}${procTotals}${procWarns}
-    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th>CPU</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th title="CPU used by this process, normalized to one core">CPU/core</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
       <tbody>${procRows}</tbody></table>`;
 
   const wins = winButtons([["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
