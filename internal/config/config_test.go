@@ -375,6 +375,55 @@ uses: cups
 	}
 }
 
+func TestSingleAppExposesDefaultVariables(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/php-fpm.yml": `
+kind: app
+name: php-fpm
+variables: { binary: /usr/bin/php-fpm, config: /etc/php-fpm.conf }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/php-fpm.yml": `
+kind: daemon
+name: php-fpm
+apps: [php-fpm]
+preflight:
+  config: { type: command, command: ["${binary}", "--test", "--fpm-config", "${config}"] }
+processes:
+  main: { type: command_match, exe: "${binary}", user: root }
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/php-fpm.yml": `
+kind: service
+name: php-fpm
+uses: php-fpm
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("php-fpm")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	configCmd, _ := nested(t, preflight, "config")["command"].([]any)
+	if got := fmt.Sprint(configCmd...); got != "/usr/bin/php-fpm--test--fpm-config/etc/php-fpm.conf" {
+		t.Fatalf("config command = %v, want defaults from linked app", configCmd)
+	}
+	main := nested(t, resolved.Tree, "processes", "main")
+	if got := cfgval.String(main["exe"]); got != "/usr/bin/php-fpm" {
+		t.Fatalf("process exe = %q, want app binary", got)
+	}
+	if _, ok := preflight["php-fpm-binary"]; !ok {
+		t.Fatalf("app binary preflight should still be injected with namespace: %v", preflight)
+	}
+}
+
 func TestServiceVariablesOverrideAppVariables(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
@@ -412,6 +461,50 @@ uses: cups
 	configCmd, _ := nested(t, nested(t, resolved.Tree, "preflight"), "config")["command"].([]any)
 	if got := fmt.Sprint(configCmd...); got != "/opt/cups/sbin/cupsd-t" {
 		t.Fatalf("config command = %v, want service variable override", configCmd)
+	}
+}
+
+func TestServiceVariablesOverrideSingleAppDefaults(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/php-fpm.yml": `
+kind: app
+name: php-fpm
+variables: { binary: /usr/bin/php-fpm }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/php-fpm.yml": `
+kind: daemon
+name: php-fpm
+apps: [php-fpm]
+variables: { binary: /opt/php/sbin/php-fpm }
+preflight:
+  config: { type: command, command: ["${binary}", "--test"] }
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/php-fpm.yml": `
+kind: service
+name: php-fpm
+uses: php-fpm
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("php-fpm")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	configCmd, _ := nested(t, nested(t, resolved.Tree, "preflight"), "config")["command"].([]any)
+	if got := fmt.Sprint(configCmd...); got != "/opt/php/sbin/php-fpm--test" {
+		t.Fatalf("config command = %v, want local binary override", configCmd)
+	}
+	appBinary := nested(t, nested(t, resolved.Tree, "preflight"), "php-fpm-binary")
+	if got := cfgval.String(appBinary["path"]); got != "/usr/bin/php-fpm" {
+		t.Fatalf("app binary preflight path = %q, want app-owned binary", got)
 	}
 }
 
@@ -1815,6 +1908,88 @@ defaults: { policy: { cooldown: 5m } }
 		// Discovery metadata stripped from the concrete daemon.
 		if _, present := doc.Body["versions"]; present {
 			t.Errorf("php-fpm%s still carries versions block", v)
+		}
+	}
+}
+
+func TestVersionTemplateDiscoversFromLinkedAppTemplate(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"php-fpm8.2", "php-fpm8.4"} {
+		if err := os.WriteFile(filepath.Join(bin, f), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalogDir := filepath.Join(root, "catalog")
+	appsDir := filepath.Join(catalogDir, "apps")
+	enabledDir := filepath.Join(root, "enabled")
+	for _, dir := range []string{appsDir, enabledDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(appsDir, "php-fpm%v.yml"), []byte(fmt.Sprintf(`
+kind: app
+name: php-fpm%%v
+display_name: "PHP-FPM ${version}"
+variables: { binary: "%s/php-fpm${version}" }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"] }
+`, bin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "php-fpm%v.yml"), []byte(`
+kind: daemon
+name: php-fpm%v
+display_name: "PHP-FPM ${version}"
+apps: ["php-fpm${version}"]
+preflight:
+  config: { type: command, command: ["${binary}", "--test"] }
+processes:
+  main: { type: command_match, exe: "${binary}", user: root }
+checks:
+  service: { type: service, expect: active }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, version := range []string{"8.2", "8.4"} {
+		name := "php-fpm" + version
+		if _, ok := cfg.Daemons[name]; !ok {
+			t.Fatalf("expected materialized daemon %s", name)
+		}
+		if _, ok := cfg.Apps[name]; !ok {
+			t.Fatalf("expected materialized app %s", name)
+		}
+		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+		if len(errs) != 0 {
+			t.Fatalf("ResolveCatalog(%s) errors = %v", name, errs)
+		}
+		wantBinary := filepath.Join(bin, name)
+		configCmd, _ := nested(t, nested(t, resolved.Tree, "preflight"), "config")["command"].([]any)
+		if got := fmt.Sprint(configCmd...); got != wantBinary+"--test" {
+			t.Fatalf("%s config command = %v, want linked app binary", name, configCmd)
+		}
+		main := nested(t, resolved.Tree, "processes", "main")
+		if got := cfgval.String(main["exe"]); got != wantBinary {
+			t.Fatalf("%s process exe = %q, want %q", name, got, wantBinary)
 		}
 	}
 }
