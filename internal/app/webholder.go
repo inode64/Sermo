@@ -28,6 +28,9 @@ func (h *WebBackendHolder) Reload(cfg *config.Config, deps Deps) []string {
 	}
 	b, warnings := NewWebBackend(cfg, deps)
 	h.mu.Lock()
+	if h.b != nil && h.b.daemonMetrics != nil {
+		b.daemonMetrics = h.b.daemonMetrics
+	}
 	h.b = b
 	h.mu.Unlock()
 	return warnings
@@ -80,6 +83,14 @@ func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 		return b.DaemonInfo(ctx)
 	}
 	return web.DaemonInfo{}
+}
+
+// DaemonMetrics returns sermod process metrics from the active backend.
+func (h *WebBackendHolder) DaemonMetrics(ctx context.Context, since time.Duration) web.DaemonMetrics {
+	if b := h.backend(); b != nil {
+		return b.DaemonMetrics(ctx, since)
+	}
+	return web.DaemonMetrics{Since: since.String()}
 }
 
 // HostMetrics returns current host metrics from the active backend.
