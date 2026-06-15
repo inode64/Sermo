@@ -76,6 +76,9 @@ type Worker struct {
 	// up is true when no required check failed. Nil disables recording (tests, or
 	// when no store is wired). Only observed (non-paused) cycles are recorded.
 	RecordHealth func(up bool)
+	// RecordChecks persists per-check availability for checks that actually ran
+	// and were not converted to skipped by gates. Nil disables recording.
+	RecordChecks func(cache map[string]checks.Result, ran map[string]bool)
 	// Publish records this cycle's check cache for the web detail view. ran lists
 	// checks that actually executed (cycleRan). Nil disables publishing.
 	Publish func(cache map[string]checks.Result, ran map[string]bool)
@@ -127,6 +130,9 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	}
 	cache := w.Checks(ctx, deps)
 	w.applyGates(cache)
+	if w.RecordChecks != nil {
+		w.RecordChecks(cache, w.cycleRan)
+	}
 	if w.RecordHealth != nil {
 		w.RecordHealth(requiredChecksOK(cache))
 	}

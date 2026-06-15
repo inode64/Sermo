@@ -13,7 +13,8 @@ type fakeMeasureStore struct {
 	metrics  []string // "check.metric"
 }
 
-func (f *fakeMeasureStore) RecordSLA(string, bool, time.Time) error { return nil }
+func (f *fakeMeasureStore) RecordSLA(string, bool, time.Time) error              { return nil }
+func (f *fakeMeasureStore) RecordCheckSLA(string, string, bool, time.Time) error { return nil }
 func (f *fakeMeasureStore) RecordMeasurement(service, check string, valueMs float64, at time.Time) error {
 	f.recorded = append(f.recorded, check)
 	return nil

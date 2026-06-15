@@ -95,6 +95,17 @@ var migrations = []string{
 		max_v  REAL NOT NULL,
 		PRIMARY KEY (metric, bucket)
 	);`,
+	// check_sla_sample accumulates one row per service+check per UTC minute.
+	// It mirrors sla_sample but keeps the check dimension, so the dashboard can
+	// show which individual check degraded over each rolling SLA window.
+	`CREATE TABLE check_sla_sample (
+		service     TEXT NOT NULL,
+		check_name  TEXT NOT NULL,
+		bucket      INTEGER NOT NULL,
+		up_count    INTEGER NOT NULL,
+		total_count INTEGER NOT NULL,
+		PRIMARY KEY (service, check_name, bucket)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -296,6 +307,25 @@ func (s *Store) RecordSLA(service string, up bool, at time.Time) error {
 	return err
 }
 
+// RecordCheckSLA accumulates one observed check execution into its current
+// UTC-minute bucket. Interval-deferred checks are not recorded by callers, so
+// the per-check SLA reflects only real check runs.
+func (s *Store) RecordCheckSLA(service, check string, up bool, at time.Time) error {
+	u := 0
+	if up {
+		u = 1
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO check_sla_sample (service, check_name, bucket, up_count, total_count)
+		 VALUES (?, ?, ?, ?, 1)
+		 ON CONFLICT(service, check_name, bucket) DO UPDATE SET
+		   up_count    = up_count + excluded.up_count,
+		   total_count = total_count + excluded.total_count;`,
+		service, check, minuteBucket(at), u,
+	)
+	return err
+}
+
 // SLA sums a service's up and total observed cycles over the rolling window
 // ending at now (buckets with start >= now-span). total==0 means no data.
 func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, total int64, err error) {
@@ -304,6 +334,21 @@ func (s *Store) SLA(service string, span time.Duration, now time.Time) (up, tota
 		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
 		 FROM sla_sample WHERE service = ? AND bucket >= ?;`,
 		service, from,
+	).Scan(&up, &total)
+	if err != nil {
+		return 0, 0, err
+	}
+	return up, total, nil
+}
+
+// CheckSLA sums one check's up and total observed executions over the rolling
+// window ending at now. total==0 means no data.
+func (s *Store) CheckSLA(service, check string, span time.Duration, now time.Time) (up, total int64, err error) {
+	from := minuteBucket(now.Add(-span))
+	err = s.db.QueryRow(
+		`SELECT COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+		 FROM check_sla_sample WHERE service = ? AND check_name = ? AND bucket >= ?;`,
+		service, check, from,
 	).Scan(&up, &total)
 	if err != nil {
 		return 0, 0, err
@@ -349,12 +394,52 @@ func (s *Store) SLASeries(service string, from, to time.Time) ([]SLAPoint, error
 	return out, rows.Err()
 }
 
+// CheckSLASeries returns one check's per-minute availability points in [from,
+// to), oldest first. Unobserved minutes are absent.
+func (s *Store) CheckSLASeries(service, check string, from, to time.Time) ([]SLAPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT bucket, up_count, total_count
+		   FROM check_sla_sample
+		  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+		service, check, minuteBucket(from), minuteBucket(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SLAPoint
+	for rows.Next() {
+		var bucket, up, total int64
+		if err := rows.Scan(&bucket, &up, &total); err != nil {
+			return nil, err
+		}
+		out = append(out, SLAPoint{Start: time.Unix(bucket, 0).UTC(), Up: up, Total: total})
+	}
+	return out, rows.Err()
+}
+
 // SLAReport returns a service's availability across every SLAWindow, ordered as
 // SLAWindows (hour..year).
 func (s *Store) SLAReport(service string, now time.Time) ([]SLAValue, error) {
 	out := make([]SLAValue, 0, len(SLAWindows))
 	for _, w := range SLAWindows {
 		up, total, err := s.SLA(service, w.Span, now)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SLAValue{Window: w.Name, Up: up, Total: total})
+	}
+	return out, nil
+}
+
+// CheckSLAReport returns one check's availability across every SLAWindow,
+// ordered as SLAWindows (hour..year).
+func (s *Store) CheckSLAReport(service, check string, now time.Time) ([]SLAValue, error) {
+	out := make([]SLAValue, 0, len(SLAWindows))
+	for _, w := range SLAWindows {
+		up, total, err := s.CheckSLA(service, check, w.Span, now)
 		if err != nil {
 			return nil, err
 		}
@@ -616,6 +701,7 @@ func (s *Store) IntegrityCheck() error {
 func (s *Store) TrackedServices() ([]string, error) {
 	rows, err := s.db.Query(`SELECT service FROM monitor_state
 		UNION SELECT service FROM sla_sample
+		UNION SELECT service FROM check_sla_sample
 		UNION SELECT service FROM measurement
 		UNION SELECT service FROM measurement_metric ORDER BY service;`)
 	if err != nil {
@@ -673,7 +759,7 @@ func (s *Store) PruneUnconfiguredServices(configured []string) (PruneUnconfigure
 
 func pruneServiceData(tx *sql.Tx, service string) (int64, error) {
 	var total int64
-	for _, table := range []string{"monitor_state", "sla_sample", "measurement", "measurement_metric"} {
+	for _, table := range []string{"monitor_state", "sla_sample", "check_sla_sample", "measurement", "measurement_metric"} {
 		res, err := tx.Exec(`DELETE FROM `+table+` WHERE service = ?;`, service) //nolint:gosec // table is a package-internal literal
 		if err != nil {
 			return 0, err
@@ -690,5 +776,13 @@ func pruneServiceData(tx *sql.Tx, service string) (int64, error) {
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
 // one year of per-minute samples per service. Returns the rows removed.
 func (s *Store) PruneSLA(before time.Time) (int64, error) {
-	return s.pruneBuckets("sla_sample", before)
+	total, err := s.pruneBuckets("sla_sample", before)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := s.pruneBuckets("check_sla_sample", before)
+	if err != nil {
+		return 0, err
+	}
+	return total + rows, nil
 }
