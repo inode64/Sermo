@@ -1540,9 +1540,10 @@ function procLabel(p) {
 }
 
 function serviceUptimeCell(s) {
-  if (!s || !s.uptime) return '<span class="muted">—</span>';
+  const up = s ? fmtUptime(s.uptime_seconds) : "";
+  if (!up) return '<span class="muted">—</span>';
   const title = s.started_at ? ` title="started ${esc(fmtTime(s.started_at))}"` : "";
-  return `<span${title}>${esc(s.uptime)}</span>`;
+  return `<span${title}>${esc(up)}</span>`;
 }
 
 function cpuInline(cpu, ready, numCPU) {
@@ -1765,6 +1766,26 @@ function fmtNum(n, max = 2, fallback = "—") {
   n = Number(n);
   if (!Number.isFinite(n)) return fallback;
   return n.toFixed(max).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+// fmtUptime renders a duration given in whole seconds as "111d 22h 33m 44s",
+// dropping the leading units that are zero (95 -> "1m 35s", 44 -> "44s") while
+// always keeping every unit below the largest non-zero one down to seconds.
+// This is the single uptime format used everywhere in the UI. Returns "" for
+// missing/negative input so callers can fall back to "—".
+function fmtUptime(sec) {
+  sec = Math.floor(Number(sec));
+  if (!Number.isFinite(sec) || sec < 0) return "";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const parts = [];
+  if (d) parts.push(d + "d");
+  if (d || h) parts.push(h + "h");
+  if (d || h || m) parts.push(m + "m");
+  parts.push(s + "s");
+  return parts.join(" ");
 }
 
 function fmtBytes(n) {
@@ -2780,7 +2801,7 @@ function renderOverview(ctx) {
     tiles.push(tile({
       label: "Load 1m",
       value: esc(fmtNum(load.absolute, 2)),
-      sub: hasCap ? `${esc(load.total.toFixed(0))} CPUs · ${fmtPct(load.percent)}` : (live && live.uptime ? `up ${esc(live.uptime)}` : ""),
+      sub: hasCap ? `${esc(load.total.toFixed(0))} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${esc(fmtUptime(live.uptime_seconds))}` : ""),
       cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
       extra: hasCap ? usageBar(p) : "",
       target: "daemon-section",
@@ -2860,7 +2881,8 @@ async function renderStatus() {
       if (activeLocks > 0) lockStr += ` <span class="muted">(active)</span>`;
       parts.push(lockStr);
     }
-    if (daemon.host_uptime) parts.push(`uptime: <b>${esc(daemon.host_uptime)}</b>`);
+    const hostUp = fmtUptime(daemon.host_uptime_seconds);
+    if (hostUp) parts.push(`uptime: <b>${esc(hostUp)}</b>`);
     if (ready.status) {
       const cls = ready.ready ? "ok" : "inactive";
       parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
@@ -2871,7 +2893,7 @@ async function renderStatus() {
     // Also populate the runtime part of the Daemon info panel
     const set = (id, val) => { const el = $(id); if (el) el.textContent = val || "—"; };
     if (live.started_at) set("#daemon-started", live.started_at);
-    if (live.uptime) set("#daemon-uptime", live.uptime);
+    set("#daemon-uptime", fmtUptime(live.uptime_seconds));
     if (live.go) set("#daemon-go", live.go);
     if (ready.status) {
       const cls = ready.ready ? "ok" : "inactive";
