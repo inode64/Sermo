@@ -482,6 +482,23 @@
       <div>Ready: <span id="daemon-ready"></span></div>
     </div>
   </div>
+  <div style="display:flex; flex-wrap:wrap; gap:1.5rem; font-size:.9rem; margin-top:.75rem;">
+    <div>PID: <b id="daemon-pid"></b></div>
+    <div>CPU: <b id="daemon-cpu-live"></b></div>
+    <div>Memory: <b id="daemon-memory-live"></b></div>
+    <div>IO: <b id="daemon-io-live"></b></div>
+    <div>FDs: <b id="daemon-fds"></b></div>
+    <div>Threads: <b id="daemon-threads"></b></div>
+  </div>
+  <div style="margin-top:.75rem;">
+    <div style="font-weight:600; margin-bottom:.25rem;">Process metrics <span id="daemon-metric-windows" class="muted" style="font-weight:400"></span></div>
+    <div class="muted" id="daemon-metric-summary">loading…</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin-top:.5rem;">
+      <div><div class="muted">CPU</div><div id="daemon-cpu-chart" class="muted">loading…</div></div>
+      <div><div class="muted">Memory</div><div id="daemon-memory-chart" class="muted">loading…</div></div>
+      <div><div class="muted">IO</div><div id="daemon-io-chart" class="muted">loading…</div></div>
+    </div>
+  </div>
 </details>
 
 <details id="activity-section">
@@ -593,12 +610,13 @@ function showDisconnected() {
 // connection signal (failure dims the page), every other endpoint degrades
 // independently to "keep the last render" on a transient error.
 async function load() {
-  const [services, watches, apps, notifiers, daemon, locks, activity] = await Promise.all([
+  const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
     getJSON("api/watches", null),       // host watches (visible even when services=0)
     getJSON("api/applications", null),  // installed applications
     getJSON("api/notifiers", null),     // what watches can send to
     getJSON("api/daemon", null),        // daemon / engine settings panel
+    getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null),
     getJSON("api/locks", null),         // global runtime locks (active and stale)
     getJSON("api/activity", null),      // quick activity summary
   ]);
@@ -616,6 +634,7 @@ async function load() {
   if (apps) renderApps(apps);
   if (notifiers) renderNotifiers(notifiers);
   if (daemon) renderDaemon(daemon);
+  if (daemonMetrics) renderDaemonMetrics(daemonMetrics);
   if (locks) renderLocks(locks);
   if (activity) renderActivity(activity);
 
@@ -3141,11 +3160,13 @@ function setWin(win) {
 // Latency graph state: the selected measured check and its window.
 let metricCheck = "";
 let metricWindow = "24h";
+let daemonMetricWindow = "24h";
 const metricTypes = ["tcp", "http", "ports", "service"];
 const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
 
 function setMetricCheck(name) { metricCheck = name; if (current) detail(current); }
 function setMetricWin(win) { metricWindow = win; if (current) detail(current); }
+function setDaemonMetricWin(win) { daemonMetricWindow = win; loadDaemonMetrics(); }
 
 function winButtons(list, selected, fn) {
   return list.map(([label, val]) =>
@@ -3166,6 +3187,53 @@ async function loadMetrics(name) {
   } catch (e) {
     $("#lat-chart").textContent = "Failed to load latency: " + e.message;
   }
+}
+
+async function loadDaemonMetrics() {
+  try {
+    const body = await getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null);
+    if (body) renderDaemonMetrics(body);
+  } catch (_) { /* getJSON already degrades */ }
+}
+
+function renderDaemonMetrics(body) {
+  const c = (body && body.current) || {};
+  const setText = (id, val) => {
+    const el = $(id);
+    if (el) el.textContent = (val === 0 || val) ? String(val) : "—";
+  };
+  setText("#daemon-pid", c.pid);
+  setText("#daemon-fds", c.fds);
+  setText("#daemon-threads", c.threads);
+  setText("#daemon-cpu-live", c.cpu_ready ? `${Number(c.cpu || 0).toFixed(2)}%` : "measuring");
+  const mem = c.rss ? fmtBytes(c.rss) : "";
+  const memPct = (c.memory_percent === 0 || c.memory_percent) ? ` (${Number(c.memory_percent).toFixed(2)}%)` : "";
+  setText("#daemon-memory-live", mem ? mem + memPct : "");
+  setText("#daemon-io-live", c.io_ready ? `${fmtBytes(c.io || 0)}/s` : "measuring");
+
+  const win = $("#daemon-metric-windows");
+  if (win) win.innerHTML = winButtons(metricWins, daemonMetricWindow, "setDaemonMetricWin");
+  const summary = $("#daemon-metric-summary");
+  if (summary) {
+    summary.innerHTML = [
+      daemonMetricSummary(body.cpu, "CPU"),
+      daemonMetricSummary(body.memory, "memory"),
+      daemonMetricSummary(body.io, "IO"),
+    ].join(" &middot; ");
+  }
+  const cpu = $("#daemon-cpu-chart");
+  if (cpu) cpu.innerHTML = drawMetricChart((body.cpu || {}).points || [], (body.cpu || {}).unit || "%", daemonMetricWindow);
+  const memory = $("#daemon-memory-chart");
+  if (memory) memory.innerHTML = drawMetricChart((body.memory || {}).points || [], (body.memory || {}).unit || "bytes", daemonMetricWindow);
+  const io = $("#daemon-io-chart");
+  if (io) io.innerHTML = drawMetricChart((body.io || {}).points || [], (body.io || {}).unit || "B/s", daemonMetricWindow);
+}
+
+function daemonMetricSummary(series, label) {
+  const s = (series && series.summary) || {};
+  const unit = (series && series.unit) || "";
+  if (!s.count) return `${esc(label)} <span class="muted">no data</span>`;
+  return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b> <span class="muted">(${s.count} samples)</span>`;
 }
 
 // loadNamedMetrics fetches and draws each check's declared named metrics (e.g.
@@ -3191,10 +3259,10 @@ async function loadNamedMetrics(name, charts) {
   }
 }
 
-function drawMetricChart(points, unit) {
+function drawMetricChart(points, unit, win) {
   unit = unit || "ms";
   const W = 640, H = 160, pad = 34, cols = 120;
-  const span = windowMs[metricWindow] || 864e5;
+  const span = windowMs[win || metricWindow] || 864e5;
   const { buckets, startMs } = bucketize(points, span, cols,
     () => ({ n: 0, sum: 0, min: Infinity, max: -Infinity }),
     (b, p) => {
@@ -3214,7 +3282,7 @@ function drawMetricChart(points, unit) {
   const axis = `
     <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H - pad}" stroke="#8886"></line>
     <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#8886"></line>
-    <text x="2" y="${pad + 4}" font-size="10" fill="#888">${maxV.toFixed(0)}${unit}</text>
+    <text x="2" y="${pad + 4}" font-size="10" fill="#888">${esc(fmtMetricValue(maxV, unit))}</text>
     <text x="2" y="${H - pad}" font-size="10" fill="#888">0</text>
     <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${new Date(startMs).toLocaleString()}</text>
     <text x="${W - pad}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
@@ -3222,10 +3290,26 @@ function drawMetricChart(points, unit) {
   const bw = (W - 2 * pad) / cols;
   const hover = pts.map((o) => {
     const t = new Date(startMs + (o.i + 0.5) * (span / cols));
-    const tip = `${t.toLocaleString()}\navg ${(o.b.sum / o.b.n).toFixed(1)}${unit} · min ${o.b.min.toFixed(1)} · max ${o.b.max.toFixed(1)}`;
+    const tip = `${t.toLocaleString()}\navg ${fmtMetricValue(o.b.sum / o.b.n, unit)} · min ${fmtMetricValue(o.b.min, unit)} · max ${fmtMetricValue(o.b.max, unit)}`;
     return `<rect x="${(x(o.i) - bw / 2).toFixed(1)}" y="${pad}" width="${bw.toFixed(1)}" height="${(H - 2 * pad).toFixed(1)}" fill="transparent"><title>${esc(tip)}</title></rect>`;
   }).join("");
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${band}${line}${hover}</svg>`;
+}
+
+function fmtMetricValue(v, unit) {
+  const n = Number(v || 0);
+  switch (unit) {
+    case "bytes":
+      return fmtBytes(n);
+    case "B/s":
+      return fmtBytes(n) + "/s";
+    case "%":
+      return n.toFixed(2) + "%";
+    case "ms":
+      return n.toFixed(1) + "ms";
+    default:
+      return n.toFixed(1) + (unit || "");
+  }
 }
 
 async function loadSeries(name) {
@@ -3663,6 +3747,9 @@ function initDelegatedHandlers() {
           break;
         case "setMetricWin":
           setMetricWin(val);
+          break;
+        case "setDaemonMetricWin":
+          setDaemonMetricWin(val);
           break;
       }
       return;

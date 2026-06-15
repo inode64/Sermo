@@ -37,6 +37,7 @@ Keep changes concrete:
 | Applications | `GET /api/applications` | installed catalog apps |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
+| Daemon process metrics | `GET /api/daemon/metrics` | in-memory sermod CPU/memory/IO history |
 | Locks | `GET /api/locks` | named runtime locks |
 | Events | `GET /api/events` | service/watch activity |
 | Recent activity | `GET /api/activity` | summary of recent events |
@@ -260,6 +261,8 @@ Section id: `daemon-section`
 | Daemon | Backend, Config, Runtime, State |
 | Engine | Interval, Max parallel checks, Max parallel ops, Default timeout, Operation timeout, Startup delay |
 | Runtime | Started, Uptime, Go version, Ready |
+| Process counters | PID, live CPU, memory, IO, FDs, threads |
+| Process metrics | CPU, memory and IO charts with 1h/24h/7d/30d/1y windows |
 
 Editable notes:
 
