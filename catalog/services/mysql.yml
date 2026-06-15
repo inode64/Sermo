@@ -8,9 +8,9 @@ service:
   systemd: [mysql, mysqld]
   openrc: [mysql, mysqld]
 
-# Binary + version are owned by linked apps. mariabackup is optional: it only
+# Binary + version are owned by linked apps. mariadb-backup is optional: it only
 # feeds the backup guard and must not block MySQL on hosts without the tool.
-apps: [mysql, mariabackup]
+apps: [mysql, mariadb-backup]
 
 variables:
   user: mysql
@@ -63,10 +63,10 @@ checks:
   # Category-2 external lock check: a backup represented by a foreign process is
   # detected by its exe/user. Post-MVP, a backup wrapped in `sermoctl lock` is
   # blocked by the engine automatically and needs no check or guard here.
-  mariabackup:
+  mariadb-backup:
     type: process
     optional: true
-    exe: "${mariabackup_binary}"
+    exe: "${mariadb-backup_binary}"
     user: "${user}"
     state: running
 
@@ -99,7 +99,7 @@ rules:
     blocks: [restart, stop]
     if:
       active:
-        check: mariabackup
+        check: mariadb-backup
     then:
       action: block
       message: "${display_name} backup is running"
