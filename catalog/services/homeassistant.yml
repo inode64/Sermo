@@ -8,9 +8,9 @@ service:
   systemd: [homeassistant, "home-assistant@homeassistant"]
   openrc: [homeassistant]
 
-# Home Assistant runs on Python (here a venv interpreter); the runtime is owned
-# by the `python` app and linked for its preflight.
-apps: [python]
+# Home Assistant runs on Python 3; the runtime is owned by the versioned
+# `python3` app and linked for its preflight.
+apps: [python3]
 
 variables:
   host: 127.0.0.1
