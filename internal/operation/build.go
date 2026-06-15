@@ -323,11 +323,13 @@ func guardClosure(tree map[string]any, deps checks.Deps) func(context.Context, s
 		ruleSet, _ := rules.ParseRules(tree)
 		section, _ := tree["checks"].(map[string]any)
 		built, _ := checks.Build(section, deps)
+		preflightSection, _ := tree["preflight"].(map[string]any)
+		preflightBuilt, _ := checks.Build(preflightSection, deps)
 		cache := map[string]checks.Result{}
 		for _, r := range checks.Run(ctx, built, 0) {
 			cache[r.Check] = r
 		}
-		ev := &rules.Evaluator{Cache: cache, Deps: deps}
+		ev := &rules.Evaluator{Cache: cache, ResolveRef: rules.NewCheckResolver(preflightBuilt, 0), Deps: deps}
 		return rules.Guard(ctx, ruleSet, action, ev)
 	}
 }
