@@ -20,6 +20,27 @@ import (
 	web "sermo/internal/web"
 )
 
+type fakeSLAReader struct {
+	service map[string][]state.SLAValue
+	check   map[string][]state.SLAValue
+}
+
+func (f fakeSLAReader) SLAReport(service string, _ time.Time) ([]state.SLAValue, error) {
+	return f.service[service], nil
+}
+
+func (f fakeSLAReader) SLASeries(string, time.Time, time.Time) ([]state.SLAPoint, error) {
+	return nil, nil
+}
+
+func (f fakeSLAReader) CheckSLAReport(service, check string, _ time.Time) ([]state.SLAValue, error) {
+	return f.check[service+"\x00"+check], nil
+}
+
+func (f fakeSLAReader) CheckSLASeries(string, string, time.Time, time.Time) ([]state.SLAPoint, error) {
+	return nil, nil
+}
+
 func TestWebBackendEventsNilLog(t *testing.T) {
 	b := &WebBackend{
 		entries: map[string]*webEntry{"web": {}},
@@ -72,6 +93,59 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 	}
 	if byName["slow"] {
 		t.Fatal("interval-cached slow check should show ran=false in web detail")
+	}
+}
+
+func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {
+				displayName: "web",
+				checkNames:  []string{"http"},
+				checkTypes:  map[string]string{"http": "http"},
+				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
+		},
+		sla: fakeSLAReader{
+			service: map[string][]state.SLAValue{"web": {{Window: "hour", Up: 9, Total: 10}}},
+			check:   map[string][]state.SLAValue{"web\x00http": {{Window: "hour", Up: 3, Total: 4}}},
+		},
+	}
+
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	if len(detail.SLA) != 1 || detail.SLA[0].Ratio == nil || *detail.SLA[0].Ratio != 0.9 {
+		t.Fatalf("service SLA = %+v, want 90%%", detail.SLA)
+	}
+	if len(detail.Checks) != 1 || len(detail.Checks[0].SLA) != 1 ||
+		detail.Checks[0].SLA[0].Ratio == nil || *detail.Checks[0].SLA[0].Ratio != 0.75 {
+		t.Fatalf("check SLA = %+v, want 75%%", detail.Checks)
+	}
+}
+
+func TestWebBackendApplicationsIncludeServiceSLA(t *testing.T) {
+	b := &WebBackend{
+		entries: map[string]*webEntry{"nginx": {}},
+		sla: fakeSLAReader{
+			service: map[string][]state.SLAValue{"nginx": {{Window: "day", Up: 99, Total: 100}}},
+		},
+		applicationsList: func(context.Context) []web.Application {
+			return []web.Application{{Name: "nginx", Status: "ok"}, {Name: "orphan", Status: "ok"}}
+		},
+	}
+
+	apps := b.Applications(context.Background())
+	if len(apps) != 2 {
+		t.Fatalf("apps = %+v", apps)
+	}
+	if len(apps[0].SLA) != 1 || apps[0].SLA[0].Ratio == nil || *apps[0].SLA[0].Ratio != 0.99 {
+		t.Fatalf("nginx SLA = %+v, want 99%%", apps[0].SLA)
+	}
+	if len(apps[1].SLA) != 0 {
+		t.Fatalf("orphan SLA = %+v, want none", apps[1].SLA)
 	}
 }
 

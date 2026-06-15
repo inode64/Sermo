@@ -213,6 +213,20 @@
   .service-detail table { margin-bottom: .6rem; }
   .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
   .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
+  .sla-panel { max-width: 46rem; margin: .2rem 0 .85rem; }
+  .sla-windows { display: grid; gap: .26rem; max-width: 42rem; }
+  .sla-window { display: grid; grid-template-columns: 3.2rem minmax(8rem, 1fr) 4.2rem 4.6rem; gap: .45rem; align-items: center; font-size: .82rem; font-variant-numeric: tabular-nums; }
+  .sla-label, .sla-count { color: var(--text-2); }
+  .sla-pct { text-align: right; font-weight: 650; }
+  .sla-bar { height: .62rem; border-radius: 999px; overflow: hidden; background: var(--line); border: 1px solid var(--line-2); }
+  .sla-fill { display: block; height: 100%; width: var(--sla-pct); background: var(--sla-color); min-width: .12rem; }
+  .sla-fill.sla-empty { min-width: 0; }
+  .sla-cell { min-width: 15rem; }
+  .sla-compact { min-width: 14rem; max-width: 19rem; gap: .18rem; }
+  .sla-compact .sla-window { grid-template-columns: 2.8rem minmax(5.5rem, 1fr) 3.8rem; gap: .32rem; font-size: .76rem; }
+  .sla-compact .sla-bar { height: .48rem; }
+  .sla-compact .sla-count { display: none; }
+  .app-sla { grid-column: 1 / -1; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
   .metric-panel { min-width: 0; }
   .metric-title { font-weight: 650; margin-bottom: .25rem; }
@@ -1580,6 +1594,45 @@ function serviceIoCell(s) {
   return ioRWInline(s && s.io_read, s && s.io_write);
 }
 
+function slaWindowLabel(window) {
+  switch (window) {
+    case "hour": return "1h";
+    case "day": return "24h";
+    case "week": return "7d";
+    case "month": return "30d";
+    case "year": return "1y";
+    default: return window || "?";
+  }
+}
+
+function slaColor(pct) {
+  if (pct == null) return "#8886";
+  if (pct >= 99) return "#1a7f37";
+  if (pct >= 95) return "#9a6700";
+  return "#cf222e";
+}
+
+function renderSLAWindows(wins, compact) {
+  wins = wins || [];
+  if (!wins.length) return '<span class="muted">No SLA data yet.</span>';
+  const rows = wins.map((w) => {
+    const pct = w.ratio == null ? null : Number(w.ratio) * 100;
+    const width = pct == null ? 0 : pctClamp(pct);
+    const label = esc(slaWindowLabel(w.window));
+    const pctText = pct == null ? "n/a" : fmtNum(pct, 2) + "%";
+    const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
+    const title = `${label} · ${pctText} · ${count}`;
+    const empty = pct == null ? " sla-empty" : "";
+    return `<div class="sla-window" title="${esc(title)}">
+      <span class="sla-label">${label}</span>
+      <span class="sla-bar"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>
+      <span class="sla-pct">${esc(pctText)}</span>
+      <span class="sla-count">${esc(count)}</span>
+    </div>`;
+  }).join("");
+  return `<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
+}
+
 function totalsCpuCell(pt) {
   return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu);
 }
@@ -1613,8 +1666,9 @@ function renderServiceDetail(d) {
       : c.ok ? `<span class="ok">ok</span>${age}` : `<span class="bad">fail</span>${age}`;
     return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
       <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
+      <td class="sla-cell">${renderSLAWindows(c.sla, true)}</td>
       <td class="muted"><span class="truncate check-message" title="${esc(c.message || "")}">${esc(c.message || "")}</span></td></tr>`;
-  }).join("") || `<tr><td colspan="4" class="muted">No checks.</td></tr>`;
+  }).join("") || `<tr><td colspan="5" class="muted">No checks.</td></tr>`;
 
   const lockRows = (d.locks || []).map((l) => {
     return `<tr>
@@ -1728,16 +1782,19 @@ function renderServiceDetail(d) {
       <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
       <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : '<span class="muted">—</span>'}</div>
     </div>`;
+  const serviceSLA = `<h2>SLA</h2>
+    <div class="sla-panel">${renderSLAWindows(d.sla, false)}</div>`;
 
   return `<div class="service-detail" data-service-detail="${esc(d.name)}">
     <h2>${esc(displayName(d))} <span class="muted">${esc(d.unit || "")}</span></h2>
     ${disabledNote}
     ${general}
+    ${serviceSLA}
     ${graphs}
     <h2>Processes</h2>
     ${procSummary}${totals}${procWarns}${procTable}
     <h2>Checks</h2>
-    <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
+    <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>SLA</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
     <h2>Named locks</h2>
     <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
@@ -2460,6 +2517,7 @@ function renderAppExpansion(a) {
   const usr = a.user ? esc(a.user) : '<span class="muted">—</span>';
   const grp = a.group ? esc(a.group) : '<span class="muted">—</span>';
   const category = categoryOf(a, "app");
+  const sla = renderSLAWindows(a.sla, true);
   return `<div class="watch-grid">
     <div><span class="muted">Version</span><br>${esc(a.version || "—")}</div>
     <div><span class="muted">Category</span><br>${esc(category)}</div>
@@ -2468,6 +2526,7 @@ function renderAppExpansion(a) {
     <div><span class="muted">User</span><br>${usr}</div>
     <div><span class="muted">Group</span><br>${grp}</div>
     <div><span class="muted">Status</span><br>${esc(a.status || "—")}</div>
+    <div class="app-sla"><span class="muted">SLA</span><br>${sla}</div>
   </div>`;
 }
 

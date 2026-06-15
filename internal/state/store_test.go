@@ -99,6 +99,9 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 		if err := s.RecordSLA(service, true, now); err != nil {
 			t.Fatalf("RecordSLA(%s): %v", service, err)
 		}
+		if err := s.RecordCheckSLA(service, "http", true, now); err != nil {
+			t.Fatalf("RecordCheckSLA(%s): %v", service, err)
+		}
 		if err := s.RecordMeasurement(service, "http", 10, now); err != nil {
 			t.Fatalf("RecordMeasurement(%s): %v", service, err)
 		}
@@ -111,8 +114,8 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PruneUnconfiguredServices: %v", err)
 	}
-	if result.Rows != 4 || len(result.Services) != 1 || result.Services[0] != "ghost" {
-		t.Fatalf("result = %+v, want ghost with 4 rows", result)
+	if result.Rows != 5 || len(result.Services) != 1 || result.Services[0] != "ghost" {
+		t.Fatalf("result = %+v, want ghost with 5 rows", result)
 	}
 
 	if _, found, err := s.Active("ghost"); err != nil || found {
@@ -126,6 +129,12 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 	}
 	if _, total, err := s.SLA("web", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
 		t.Fatalf("web SLA total=%d err=%v, want 1", total, err)
+	}
+	if _, total, err := s.CheckSLA("ghost", "http", time.Hour, now.Add(time.Minute)); err != nil || total != 0 {
+		t.Fatalf("ghost check SLA total=%d err=%v, want 0", total, err)
+	}
+	if _, total, err := s.CheckSLA("web", "http", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
+		t.Fatalf("web check SLA total=%d err=%v, want 1", total, err)
 	}
 	if stat, err := s.MeasurementSummary("ghost", "http", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 0 {
 		t.Fatalf("ghost measurement = %+v err=%v, want empty", stat, err)
