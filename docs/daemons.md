@@ -204,6 +204,14 @@ preflight:
   java-version: { type: command, command: ["/usr/bin/java", "-version"] }
 ```
 
+App variables are also available to the service. They are always exposed with a
+normalized app-name prefix (`${java_binary}`, `${php_fpm_binary}`, ...). If the
+service links exactly one app, those variables are additionally available without
+the prefix as defaults, so service-specific checks can use `${binary}` while the
+app keeps ownership of the actual path. Local `variables:` entries on the daemon
+or service override either form; when several apps are linked, use the prefixed
+names.
+
 Because they run in **preflight**, a missing or wrong-version runtime fails the
 service's preflight, which **blocks start/restart** (a preflight-failed operation
 never executes the action) — you do not start a service whose runtime is absent.
@@ -585,6 +593,12 @@ variables:
 `versions.from` is discovery-only metadata; it never appears in the materialized
 daemon. When omitted, discovery falls back to the `binary` path.
 
+If a versioned service template has no `versions.from` and no own
+`variables.binary`, but links a matching versioned app such as
+`apps: ["php-fpm${version}"]`, discovery falls back to that app template's
+`versions.from` or `variables.binary`. This lets a service reuse the app-owned
+binary path instead of duplicating it only to materialize versions.
+
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
 for versions. Even so, a placeholder bounded on both sides (e.g.
@@ -607,6 +621,25 @@ variables: { binary: "/usr/bin/python${n}" }
 
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
 `python-config`.
+
+When a `%v` or `%n` template also has an unversioned active-slot binary, Sermo
+materializes it automatically. If `/usr/bin/python` exists, this registers
+`python` in addition to `python2`/`python3`; when it is absent, only the numbered
+binaries are registered. The empty token is substituted before `name`,
+`display_name` and `description` are trimmed, so `display_name: "Python ${n}"`
+becomes `Python` for the active slot. Set `versions.unversioned: false` to ignore
+the marker-less binary; a map form can still override fields for the unversioned
+instance when a template needs a custom label:
+
+```yaml
+kind: app
+name: python%n
+display_name: "Python ${n}"
+versions:
+  unversioned:
+    description: "Active Python interpreter"
+variables: { binary: "/usr/bin/python${n}" }
+```
 
 Use `%i`/`${instance}` for named init instances discovered from a bounded path,
 for example `versions: { from: "/etc/init.d/openvpn.${instance}" }`.
@@ -658,8 +691,8 @@ A daemon may instead declare a dedicated `version_short` command (under
 `preflight` or `commands`, alongside `version`) that prints the bare version
 itself, sidestepping the regex when a tool can report it directly. Its first
 non-empty output line is then used verbatim. The packaged interpreter apps do
-this — e.g. PHP runs `php -r 'echo PHP_VERSION;'`, Python
-`python3 -c 'import platform;print(platform.python_version())'`, Node
+this with their resolved binary — e.g. PHP runs `php -r 'echo PHP_VERSION;'`,
+Python runs `python -c 'import platform;print(platform.python_version())'`, Node
 `node -p process.versions.node` — so their short version never depends on
 parsing. When no such command is configured (or it errors or prints nothing),
 `version_short` falls back to parsing the `version` line as above.
