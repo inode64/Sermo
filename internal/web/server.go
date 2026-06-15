@@ -75,6 +75,7 @@ type Application struct {
 // runtime/config info for operators.
 type Watch struct {
 	Name             string           `json:"name"`
+	DisplayName      string           `json:"display_name,omitempty"`
 	CheckType        string           `json:"check_type,omitempty"`
 	Summary          string           `json:"summary,omitempty"`
 	Interval         string           `json:"interval,omitempty"`
