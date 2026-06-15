@@ -17,6 +17,7 @@ variables:
   host: 127.0.0.1
   port: 9000
   pidfile: /run/php-fpm-php${version}.pid
+  config: /etc/php/fpm-php${version}/php-fpm.conf
   status_path: /status
 
 pidfile: "${pidfile}"
@@ -28,7 +29,7 @@ preflight:
 
   config:
     type: command
-    command: ["${binary}", "--test"]
+    command: ["${binary}", "--test", "--fpm-config", "${config}", "--pid", "${pidfile}"]
     timeout: 10s
 
   libraries:
@@ -93,14 +94,3 @@ rules:
     then:
       action: block
       message: "${display_name} configuration is invalid"
-
-  restart-if-tcp-failed:
-    type: remediation
-    if:
-      failed:
-        check: tcp
-    for:
-      cycles: 3
-      mode: consecutive
-    then:
-      action: restart

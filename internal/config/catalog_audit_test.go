@@ -391,6 +391,37 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	}
 }
 
+func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
+	root := repoRoot(t)
+	path := filepath.Join(root, "catalog", "services", "php-fpm%v.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := yaml.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+	if got := cfgval.String(nested(t, body, "variables")["config"]); got != "/etc/php/fpm-php${version}/php-fpm.conf" {
+		t.Fatalf("php-fpm config variable = %q", got)
+	}
+	config := nested(t, body, "preflight", "config")
+	command, _ := config["command"].([]any)
+	want := []any{"${binary}", "--test", "--fpm-config", "${config}", "--pid", "${pidfile}"}
+	if len(command) != len(want) {
+		t.Fatalf("php-fpm config command = %v, want %v", command, want)
+	}
+	for i := range want {
+		if command[i] != want[i] {
+			t.Fatalf("php-fpm config command = %v, want %v", command, want)
+		}
+	}
+	rules := nested(t, body, "rules")
+	if _, ok := rules["restart-if-tcp-failed"]; ok {
+		t.Fatal("php-fpm must not remediate on the optional tcp check by default")
+	}
+}
+
 func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
