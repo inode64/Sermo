@@ -550,6 +550,63 @@ func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 	}
 }
 
+func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+
+	apps := map[string]map[string]any{}
+	appFiles, err := yamlFiles(filepath.Join(catalogDir, "apps"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range appFiles {
+		path := filepath.Join(catalogDir, "apps", file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		if name := cfgval.String(doc["name"]); name != "" {
+			apps[name] = doc
+		}
+	}
+
+	serviceFiles, err := yamlFiles(filepath.Join(catalogDir, "services"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range serviceFiles {
+		path := filepath.Join(catalogDir, "services", file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		tok := tokenFor(cfgval.String(doc["name"]))
+		if tok == nil {
+			continue
+		}
+		if _, hasVersions := doc["versions"]; !hasVersions {
+			continue
+		}
+		for _, appName := range cfgval.StringList(doc["apps"]) {
+			app, ok := apps[linkedAppTemplateName(appName, *tok)]
+			if !ok {
+				continue
+			}
+			if strings.Contains(directVersionDiscoverySource(app), tok.marker()) {
+				t.Errorf("%s declares versions even though linked app %q can discover %s; remove service-level versions", path, appName, tok.marker())
+			}
+		}
+	}
+}
+
 func catalogBinary(doc *Document) string {
 	if doc == nil {
 		return ""

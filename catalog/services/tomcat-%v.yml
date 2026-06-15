@@ -8,8 +8,6 @@ service: tomcat
 # catalina.sh/version are owned by the matching `tomcat-${version}` app. Both
 # run in this service's preflight, so a missing JVM or Tomcat install blocks start.
 apps: [java, "tomcat-${version}"]
-versions:
-  from: "/usr/share/tomcat-${version}/bin/catalina.sh"
 
 variables:
   port: 8080
