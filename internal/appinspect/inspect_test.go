@@ -3,6 +3,7 @@ package appinspect
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,5 +224,55 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 	}
 	if List(context.Background(), fakeRunner{}, nil, config.CategoryApp, true) != nil {
 		t.Fatal("nil config must yield nil")
+	}
+}
+
+func TestListIncludesUnversionedTemplateApp(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"php", "php8.4"} {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for dir, content := range map[string]string{
+		"catalog/apps/php%v.yml": fmt.Sprintf(`kind: app
+name: php%%v
+display_name: "PHP ${version}"
+variables: { binary: %q }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`, filepath.Join(binDir, "php${version}")),
+		"enabled/.keep": "",
+		"sermo.yml": "engine: { backend: systemd }\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"defaults:\n  policy: { cooldown: 5m }\n",
+	} {
+		path := filepath.Join(root, dir)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	reports := List(context.Background(), fakeRunner{}, cfg, config.CategoryApp, false)
+	var names []string
+	for _, report := range reports {
+		names = append(names, report.Name)
+		if !report.Installed || !report.OK {
+			t.Fatalf("report %+v should be installed and ok", report)
+		}
+	}
+	if strings.Join(names, ",") != "php,php8.4" {
+		t.Fatalf("listed apps = %v, want php,php8.4", names)
 	}
 }
