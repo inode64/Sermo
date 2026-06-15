@@ -1819,6 +1819,107 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestTomcatVersionTemplateLinksMaterializedApp(t *testing.T) {
+	root := t.TempDir()
+	tomcatRoot := filepath.Join(root, "usr", "share")
+	for _, v := range []string{"9", "10"} {
+		dir := filepath.Join(tomcatRoot, "tomcat-"+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "catalina.sh"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalogDir := filepath.Join(root, "catalog")
+	enabledDir := filepath.Join(root, "enabled")
+	write := func(dir, file, content string) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalina := filepath.Join(tomcatRoot, "tomcat-${version}", "bin", "catalina.sh")
+	write(filepath.Join(catalogDir, "apps"), "java.yml", `
+kind: app
+name: java
+variables: { binary: /usr/bin/java }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`)
+	write(filepath.Join(catalogDir, "apps"), "tomcat-%v.yml", fmt.Sprintf(`
+kind: app
+name: tomcat-%%v
+display_name: "Apache Tomcat ${version}"
+variables:
+  binary: %q
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "version"], timeout: 10s }
+`, catalina))
+	write(filepath.Join(catalogDir, "services"), "tomcat-%v.yml", fmt.Sprintf(`
+kind: daemon
+name: tomcat-%%v
+display_name: "Apache Tomcat ${version}"
+service: tomcat
+apps: [java, "tomcat-${version}"]
+versions: { from: %q }
+variables: { port: 8080 }
+checks: { service: { type: service, expect: active } }
+`, catalina))
+	write(enabledDir, "site.yml", "kind: service\nname: site\nuses: tomcat-10\n")
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths:
+  catalog: [ %s ]
+  includes: [ %s ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Apps["tomcat-%v"]; ok {
+		t.Fatalf("app template tomcat-%%v should not be registered")
+	}
+	for _, v := range []string{"9", "10"} {
+		if _, ok := cfg.Apps["tomcat-"+v]; !ok {
+			t.Fatalf("expected materialized app tomcat-%s", v)
+		}
+		if _, ok := cfg.Daemons["tomcat-"+v]; !ok {
+			t.Fatalf("expected materialized daemon tomcat-%s", v)
+		}
+	}
+
+	resolved, errs := cfg.Resolve("site")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(site) errors = %v", errs)
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	if got := cfgval.String(nested(t, preflight, "java-binary")["path"]); got != "/usr/bin/java" {
+		t.Fatalf("java-binary path = %q, want /usr/bin/java", got)
+	}
+	wantCatalina := filepath.Join(tomcatRoot, "tomcat-10", "bin", "catalina.sh")
+	if got := cfgval.String(nested(t, preflight, "tomcat-10-binary")["path"]); got != wantCatalina {
+		t.Fatalf("tomcat-10-binary path = %q, want %q", got, wantCatalina)
+	}
+	version := nested(t, preflight, "tomcat-10-version")
+	command, _ := version["command"].([]any)
+	if len(command) != 2 || command[0] != wantCatalina || command[1] != "version" {
+		t.Fatalf("tomcat-10-version command = %v, want [%s version]", command, wantCatalina)
+	}
+}
+
 func TestInstanceTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
 	initd := filepath.Join(root, "init.d")
