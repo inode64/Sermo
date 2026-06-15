@@ -335,7 +335,7 @@ category: web
 type: webserver
 
 # A daemon name may also be a template:
-#   demo-%v      -> ${version}, usually discovered from a linked app binary
+#   demo-%v      -> ${version}, discovered from a linked app
 #   demo%n       -> ${n}, numeric only
 #   demo-%i      -> ${instance}, named init instances
 service:                       # scalar, legacy {name: ...}, or per-backend map

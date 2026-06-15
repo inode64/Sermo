@@ -1,0 +1,11 @@
+kind: app
+name: nebula-%i
+display_name: "Nebula ${instance}"
+category: network
+versions:
+  from: "/etc/nebula/${instance}.yml"
+variables:
+  binary: /usr/bin/nebula
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-version"], timeout: 10s }
