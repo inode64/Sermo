@@ -168,6 +168,7 @@ type WebBackend struct {
 	host             diag.Host
 	measure          MeasurementReader
 	collector        *metrics.Collector
+	daemonMetrics    *daemonMetricSampler
 	live             *LiveMetrics
 	diskUsage        checks.DiskUsageFunc
 	mountSampler     checks.MountSamplerFunc
@@ -225,6 +226,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		cfg:              cfg,
 		host:             diag.OSHost{},
 		collector:        deps.Collector,
+		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now),
 		live:             deps.Live,
 		diskUsage:        deps.DiskUsage,
 		mountSampler:     deps.MountSampler,
@@ -1869,6 +1871,15 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	}
 
 	return info
+}
+
+// DaemonMetrics returns current and historical resource usage for the running
+// sermod process.
+func (b *WebBackend) DaemonMetrics(_ context.Context, since time.Duration) web.DaemonMetrics {
+	if b.daemonMetrics == nil {
+		return web.DaemonMetrics{Since: since.String()}
+	}
+	return b.daemonMetrics.Series(since)
 }
 
 // formatInterval renders a duration for display, dropping zero components so a
