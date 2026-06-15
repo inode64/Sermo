@@ -741,6 +741,7 @@ async function loadDiag() {
       return;
     }
     $("#diag").innerHTML = findings.map((f) => `<tr>
+      <td class="t">${esc(fmtTime(f.time))}</td>
       <td class="lvl-${esc(f.level)}">${esc(f.level)}</td>
       <td>${esc(f.scope)}</td>
       <td>${esc(f.message)}</td>
