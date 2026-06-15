@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sermo/internal/metrics"
+	"sermo/internal/state"
 	"sermo/internal/web"
 )
 
@@ -14,6 +15,7 @@ const daemonMetricRetention = 366 * 24 * time.Hour
 
 type daemonMetricSampler struct {
 	reader metrics.Reader
+	store  DaemonMetricStore
 	now    func() time.Time
 	pid    int
 
@@ -58,7 +60,7 @@ type daemonMetricAgg struct {
 	max float64
 }
 
-func newDaemonMetricSampler(collector *metrics.Collector, now func() time.Time) *daemonMetricSampler {
+func newDaemonMetricSampler(collector *metrics.Collector, now func() time.Time, store DaemonMetricStore) *daemonMetricSampler {
 	reader := metrics.Reader(metrics.OSReader{})
 	if collector != nil && collector.Reader != nil {
 		reader = collector.Reader
@@ -66,7 +68,7 @@ func newDaemonMetricSampler(collector *metrics.Collector, now func() time.Time) 
 	if now == nil {
 		now = time.Now
 	}
-	return &daemonMetricSampler{reader: reader, now: now, pid: os.Getpid()}
+	return &daemonMetricSampler{reader: reader, store: store, now: now, pid: os.Getpid()}
 }
 
 func (s *daemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
@@ -80,6 +82,12 @@ func (s *daemonMetricSampler) Series(since time.Duration) web.DaemonMetrics {
 	samples := samplesSince(s.samples, sample.at.Add(-since))
 	s.mu.Unlock()
 
+	if s.store != nil {
+		s.recordPersistent(sample)
+		if out, ok := s.persistentSeries(sample, since); ok {
+			return out
+		}
+	}
 	return web.DaemonMetrics{
 		Since:   since.String(),
 		Current: daemonRuntime(sample),
@@ -136,6 +144,65 @@ func (s *daemonMetricSampler) sampleLocked() daemonMetricSample {
 	}
 	s.prev = counters
 	return cur
+}
+
+func (s *daemonMetricSampler) recordPersistent(sample daemonMetricSample) {
+	if s.store == nil {
+		return
+	}
+	if sample.rssOK {
+		_ = s.store.RecordDaemonMetric("memory", float64(sample.rss), sample.at)
+	}
+	if sample.cpuReady {
+		_ = s.store.RecordDaemonMetric("cpu", sample.cpu, sample.at)
+	}
+	if sample.ioReady {
+		_ = s.store.RecordDaemonMetric("io", sample.io, sample.at)
+	}
+}
+
+func (s *daemonMetricSampler) persistentSeries(sample daemonMetricSample, since time.Duration) (web.DaemonMetrics, bool) {
+	if s.store == nil {
+		return web.DaemonMetrics{}, false
+	}
+	now := sample.at.Add(time.Minute)
+	series := func(metric, unit string) (web.MetricSeries, bool) {
+		stat, err := s.store.DaemonMetricSummary(metric, since+time.Minute, now)
+		if err != nil {
+			return web.MetricSeries{}, false
+		}
+		points, err := s.store.DaemonMetricSeries(metric, sample.at.Add(-since), now)
+		if err != nil {
+			return web.MetricSeries{}, false
+		}
+		return web.MetricSeries{
+			Check:   "sermod",
+			Metric:  metric,
+			Since:   since.String(),
+			Unit:    unit,
+			Summary: metricSummary(stat),
+			Points:  measurementPoints(points),
+		}, true
+	}
+	cpu, ok := series("cpu", "%")
+	if !ok {
+		return web.DaemonMetrics{}, false
+	}
+	memory, ok := series("memory", "bytes")
+	if !ok {
+		return web.DaemonMetrics{}, false
+	}
+	io, ok := series("io", "B/s")
+	if !ok {
+		return web.DaemonMetrics{}, false
+	}
+	return web.DaemonMetrics{
+		Since:   since.String(),
+		Current: daemonRuntime(sample),
+		CPU:     cpu,
+		Memory:  memory,
+		IO:      io,
+	}, true
 }
 
 func (s *daemonMetricSampler) trimLocked(cutoff time.Time) {
@@ -256,6 +323,10 @@ func daemonMetricSummary(agg daemonMetricAgg) web.MetricSummary {
 		Min:   agg.min,
 		Max:   agg.max,
 	}
+}
+
+func metricSummary(stat state.MeasurementStat) web.MetricSummary {
+	return web.MetricSummary{Count: stat.Count, Avg: stat.Avg, Min: stat.Min, Max: stat.Max}
 }
 
 func uintToInt64(v uint64) int64 {

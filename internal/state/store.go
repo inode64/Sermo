@@ -83,6 +83,18 @@ var migrations = []string{
 		max_v      REAL NOT NULL,
 		PRIMARY KEY (service, check_name, metric, bucket)
 	);`,
+	// daemon_metric stores sermod's own process metrics (the "Daemon / Engine
+	// settings" graphs) per UTC minute. It has no service/check dimensions:
+	// metric is one of cpu, memory or io.
+	`CREATE TABLE daemon_metric (
+		metric TEXT NOT NULL,
+		bucket INTEGER NOT NULL,
+		n      INTEGER NOT NULL,
+		sum_v  REAL NOT NULL,
+		min_v  REAL NOT NULL,
+		max_v  REAL NOT NULL,
+		PRIMARY KEY (metric, bucket)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -522,6 +534,67 @@ func (s *Store) MetricSeries(service, check, metric string, from, to time.Time) 
 // PruneMetrics deletes named-metric buckets older than before. Returns rows removed.
 func (s *Store) PruneMetrics(before time.Time) (int64, error) {
 	return s.pruneBuckets("measurement_metric", before)
+}
+
+// RecordDaemonMetric accumulates one sermod process metric observation into its
+// current UTC-minute bucket: n+1, sum+value and running min/max.
+func (s *Store) RecordDaemonMetric(metric string, value float64, at time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO daemon_metric (metric, bucket, n, sum_v, min_v, max_v)
+		 VALUES (?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(metric, bucket) DO UPDATE SET
+		   n     = n + 1,
+		   sum_v = sum_v + excluded.sum_v,
+		   min_v = min(min_v, excluded.min_v),
+		   max_v = max(max_v, excluded.max_v);`,
+		metric, minuteBucket(at), value, value, value,
+	)
+	return err
+}
+
+// DaemonMetricSummary returns a daemon metric's average/min/max and sample count
+// over the rolling window ending at now.
+func (s *Store) DaemonMetricSummary(metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	return summaryFromRow(s.db.QueryRow(
+		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
+		   FROM daemon_metric WHERE metric = ? AND bucket >= ?;`,
+		metric, minuteBucket(now.Add(-span))))
+}
+
+// DaemonMetricSeries returns a daemon metric's per-minute points in [from, to),
+// oldest first.
+func (s *Store) DaemonMetricSeries(metric string, from, to time.Time) ([]MeasurementPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT bucket, n, sum_v, min_v, max_v
+		   FROM daemon_metric
+		  WHERE metric = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+		metric, minuteBucket(from), minuteBucket(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MeasurementPoint
+	for rows.Next() {
+		var bucket, n int64
+		var sum, minV, maxV float64
+		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
+			return nil, err
+		}
+		avg := 0.0
+		if n > 0 {
+			avg = sum / float64(n)
+		}
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
+	}
+	return out, rows.Err()
+}
+
+// PruneDaemonMetrics deletes daemon metric buckets older than before. Returns rows removed.
+func (s *Store) PruneDaemonMetrics(before time.Time) (int64, error) {
+	return s.pruneBuckets("daemon_metric", before)
 }
 
 // IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when

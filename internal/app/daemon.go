@@ -62,6 +62,14 @@ type MeasurementReader interface {
 	MetricSeries(service, check, metric string, from, to time.Time) ([]state.MeasurementPoint, error)
 }
 
+// DaemonMetricStore persists sermod's own process metrics so the daemon graphs
+// survive process restarts. Implemented by internal/state.Store.
+type DaemonMetricStore interface {
+	RecordDaemonMetric(metric string, value float64, at time.Time) error
+	DaemonMetricSummary(metric string, span time.Duration, now time.Time) (state.MeasurementStat, error)
+	DaemonMetricSeries(metric string, from, to time.Time) ([]state.MeasurementPoint, error)
+}
+
 // measuredCheckTypes are the check types whose latency is recorded as a time
 // series (and graphed in the web), mirroring icmp's latency metric.
 var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": true, "service": true}
@@ -88,6 +96,9 @@ type Deps struct {
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder
+	// DaemonMetrics persists sermod's own process metric history for the web UI.
+	// Optional: nil keeps only in-memory history for this process lifetime.
+	DaemonMetrics DaemonMetricStore
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler

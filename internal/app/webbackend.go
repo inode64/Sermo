@@ -228,7 +228,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		cfg:              cfg,
 		host:             diag.OSHost{},
 		collector:        deps.Collector,
-		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now),
+		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
 		serviceMetrics:   newServiceMetricSampler(),
 		live:             deps.Live,
 		diskUsage:        deps.DiskUsage,
