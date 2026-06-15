@@ -198,6 +198,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 
 	want := map[string][]string{
 		"avahi":    {"avahi", "avahi-daemon"},
+		"cups":     {"cupsd"},
 		"dbus":     {"dbus", "dbus-daemon"},
 		"fail2ban": {"fail2ban", "fail2ban-server"},
 		"keydb":    {"keydb", "keydb-server"},
@@ -221,6 +222,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 
 	legacy := map[string]string{
 		"avahi-daemon":    "avahi",
+		"cups-config":     "cups",
 		"dbus-daemon":     "dbus",
 		"fail2ban-server": "fail2ban",
 		"keydb-server":    "keydb",
@@ -285,7 +287,7 @@ func TestCatalogAppsUseCanonicalNames(t *testing.T) {
 	}
 }
 
-func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
+func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
@@ -300,9 +302,12 @@ func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	resolved, errs := cfg.ResolveCatalog(CategoryService, "cups-config")
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "cups")
 	if len(errs) != 0 {
-		t.Fatalf("ResolveCatalog(cups-config): %v", errs)
+		t.Fatalf("ResolveCatalog(cups): %v", errs)
+	}
+	if _, errs := cfg.ResolveCatalog(CategoryService, "cups-config"); len(errs) != 0 {
+		t.Fatalf("ResolveCatalog(cups-config alias): %v", errs)
 	}
 	preflight := resolved.Tree["preflight"].(map[string]any)
 	config := preflight["config"].(map[string]any)
@@ -310,10 +315,19 @@ func TestCatalogCupsUsesCupsdAppBinary(t *testing.T) {
 	if got := command[0]; got != "/usr/bin/cupsd" {
 		t.Fatalf("cups config command = %v, want cupsd app binary", command)
 	}
+	tool := preflight["cupsd-cups-config"].(map[string]any)
+	if got := tool["path"]; got != "/usr/bin/cups-config" {
+		t.Fatalf("cupsd cups-config path = %v, want /usr/bin/cups-config", got)
+	}
 	health := preflight["cupsd-health"].(map[string]any)
 	healthCommand := health["command"].([]any)
-	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cupsd" || healthCommand[1] != "-h" {
-		t.Fatalf("cupsd health command = %v, want /usr/bin/cupsd -h", healthCommand)
+	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cups-config" || healthCommand[1] != "-h" {
+		t.Fatalf("cupsd health command = %v, want /usr/bin/cups-config -h", healthCommand)
+	}
+	version := preflight["cupsd-version"].(map[string]any)
+	versionCommand := version["command"].([]any)
+	if len(versionCommand) != 2 || versionCommand[0] != "/usr/bin/cups-config" || versionCommand[1] != "--version" {
+		t.Fatalf("cupsd version command = %v, want /usr/bin/cups-config --version", versionCommand)
 	}
 }
 
