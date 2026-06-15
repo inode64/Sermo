@@ -329,12 +329,14 @@ derive the instance from code, reusing existing machinery:
   `hostname` variable or `SERMO_HOSTNAME` overrides it. `${hostname}` is the short
   form, distinct from `${host}` (the bind-address fallback) — see `docs/daemons.md`.
 - **Numeric multi-instance** (e.g. one OSD per device, `ceph-osd@0..N`): make the
-  daemon a `%n` version template (`name: ceph-osd%n`) with `versions: { from:
-  "/var/lib/ceph/osd/ceph-${n}" }`. `internal/config/versions.go` globs that path
-  on the host and materializes one concrete daemon per discovered id, with `${n}`
-  baked into `service: "ceph-osd@${n}"`. Honest limitation: this auto-discovers
-  daemon *definitions*; the operator still enables one `kind: service` per
-  instance (Sermo monitors services, not catalog daemons).
+  app a `%n` template (`name: ceph-osd%n`) with `versions: { from:
+  "/var/lib/ceph/osd/ceph-${n}" }`, then make the daemon a matching `%n` template
+  that links `apps: ["ceph-osd${n}"]`. `internal/config/versions.go` globs the
+  app discovery path on the host and materializes one concrete daemon per
+  discovered id, with `${n}` baked into `service: "ceph-osd@${n}"`. Honest
+  limitation: this auto-discovers daemon *definitions*; the operator still
+  enables one `kind: service` per instance (Sermo monitors services, not catalog
+  daemons).
 
 Keep `docs/daemons.md` (built-in variable table) in step when adding a built-in.
 

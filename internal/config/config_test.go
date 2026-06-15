@@ -1839,11 +1839,10 @@ func TestDiscoverVersions(t *testing.T) {
 	}
 }
 
-// TestVersionTemplateDiscoverFrom covers a template whose monitored binary is
-// generic (no ${version}); versions come from an explicit `versions.from` path,
-// and ${version} is baked into aliases. The `versions` block must not leak into
-// the materialized daemon.
-func TestVersionTemplateDiscoverFrom(t *testing.T) {
+// TestDaemonVersionTemplateDiscoversFromLinkedApp covers a daemon template whose
+// monitored binary is generic (no ${version}); installed versions come from the
+// linked app template, and ${version} is baked into daemon aliases.
+func TestDaemonVersionTemplateDiscoversFromLinkedApp(t *testing.T) {
 	root := t.TempDir()
 	slots := filepath.Join(root, "lib")
 	for _, v := range []string{"7.4", "8.3"} {
@@ -1856,26 +1855,40 @@ func TestVersionTemplateDiscoverFrom(t *testing.T) {
 		}
 	}
 
-	daemonsDir := filepath.Join(root, "daemons")
+	catalogDir := filepath.Join(root, "catalog")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(daemonsDir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(catalogDir, "apps"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	tmpl := fmt.Sprintf(`
-kind: daemon
+	appTmpl := fmt.Sprintf(`
+kind: app
 name: php-fpm%%v
 display_name: "PHP-FPM ${version}"
-service:
-  systemd: ["php${version}-fpm"]
 versions:
   from: "%s/php${version}/bin/php-fpm"
 variables:
+  binary: "%s/php${version}/bin/php-fpm"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"] }
+`, slots, slots)
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "php-fpm%v.yml"), []byte(appTmpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tmpl := `
+kind: daemon
+name: php-fpm%v
+display_name: "PHP-FPM ${version}"
+service:
+  systemd: ["php${version}-fpm"]
+apps: ["php-fpm${version}"]
+variables:
   binary: /usr/sbin/php-fpm
-`, slots)
-	if err := os.WriteFile(filepath.Join(daemonsDir, "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
+`
+	if err := os.WriteFile(filepath.Join(catalogDir, "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
@@ -1883,7 +1896,7 @@ variables:
 engine: { backend: auto }
 paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir)), 0o644); err != nil {
+`, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1909,6 +1922,33 @@ defaults: { policy: { cooldown: 5m } }
 		if _, present := doc.Body["versions"]; present {
 			t.Errorf("php-fpm%s still carries versions block", v)
 		}
+	}
+}
+
+func TestDaemonVersionTemplateRequiresLinkedAppDiscovery(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "worker1.0"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/worker%v.yml": fmt.Sprintf(`
+kind: daemon
+name: worker%%v
+variables: { binary: "%s/worker${version}" }
+checks: { service: { type: service, expect: active } }
+`, bin),
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Daemons["worker1.0"]; ok {
+		t.Fatalf("daemon template materialized from service binary; expected linked app discovery only")
 	}
 }
 
@@ -2438,15 +2478,20 @@ func TestInstanceTemplateMaterialization(t *testing.T) {
 		}
 	}
 
-	daemonsDir := filepath.Join(root, "daemons")
+	catalogDir := filepath.Join(root, "catalog")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(daemonsDir, 0o755); err != nil {
-		t.Fatal(err)
+	write := func(dir, file, content string) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.WriteFile(filepath.Join(daemonsDir, "openvpn.yml"), []byte(`
+	write(catalogDir, "openvpn.yml", `
 kind: daemon
 name: openvpn
 display_name: OpenVPN
@@ -2454,29 +2499,34 @@ service: openvpn
 variables: { port: 1194 }
 checks:
   port: { type: openvpn, port: "${port}" }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	tmpl := fmt.Sprintf(`
-kind: daemon
+`)
+	write(filepath.Join(catalogDir, "apps"), "openvpn-%i.yml", fmt.Sprintf(`
+kind: app
 name: openvpn-%%i
+display_name: "OpenVPN ${instance}"
+versions:
+  from: "%s/openvpn.${instance}"
+variables: { binary: /usr/bin/openvpn }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`, initd))
+	tmpl := `
+kind: daemon
+name: openvpn-%i
 uses: openvpn
 display_name: "OpenVPN ${instance}"
 service: "openvpn.${instance}"
-versions:
-  from: "%s/openvpn.${instance}"
+apps: ["openvpn-${instance}"]
 variables:
   config: "/etc/openvpn/${instance}.conf"
-`, initd)
-	if err := os.WriteFile(filepath.Join(daemonsDir, "openvpn-%i.yml"), []byte(tmpl), 0o644); err != nil {
-		t.Fatal(err)
-	}
+`
+	write(catalogDir, "openvpn-%i.yml", tmpl)
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
-`, daemonsDir, enabledDir)), 0o644); err != nil {
+`, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2509,9 +2559,9 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
-// TestVersionTemplateMaterialization exercises a `name: foo-%v` template: it must
-// produce one daemon per installed version (with ${version} baked into binary
-// and display_name), inherit a `uses` base, and drop the template itself.
+// TestVersionTemplateMaterialization exercises a `name: foo-%v` daemon template:
+// it must produce one daemon per installed app version, inherit a `uses` base,
+// and drop the template itself.
 func TestVersionTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
 	binRoot := filepath.Join(root, "opt")
@@ -2559,15 +2609,24 @@ rules:
       action: block
       message: "${display_name} configuration is invalid"
 `)
-	// Version template inheriting the base, overriding only the binary.
-	write(daemonsDir, "php-fpm-%v.yml", fmt.Sprintf(`
-kind: daemon
+	write(filepath.Join(daemonsDir, "apps"), "php-fpm-%v.yml", fmt.Sprintf(`
+kind: app
 name: php-fpm-%%v
-uses: php-fpm
 display_name: "PHP-FPM ${version}"
 variables:
   binary: "%s/php${version}/bin/php-fpm"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-v"] }
 `, binRoot))
+	// Version template inheriting the base; installed versions come from the app.
+	write(daemonsDir, "php-fpm-%v.yml", `
+kind: daemon
+name: php-fpm-%v
+uses: php-fpm
+display_name: "PHP-FPM ${version}"
+apps: ["php-fpm-${version}"]
+`)
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
@@ -2601,10 +2660,17 @@ defaults:
 		if got := DisplayName(doc.Body, name); got != "PHP-FPM "+v {
 			t.Errorf("%s display_name = %q, want %q", name, got, "PHP-FPM "+v)
 		}
-		// Inherited the base rule, and ${version} is baked into the binary path.
+		// Inherited the base rule; the versioned binary belongs to the linked app.
 		wantBin := fmt.Sprintf("%s/php%s/bin/php-fpm", binRoot, v)
-		if got := daemonBinary(doc.Body); got != wantBin {
-			t.Errorf("%s binary = %q, want %q", name, got, wantBin)
+		if got := daemonBinary(doc.Body); got != "/usr/sbin/php-fpm" {
+			t.Errorf("%s binary = %q, want inherited /usr/sbin/php-fpm", name, got)
+		}
+		appDoc, ok := cfg.Apps[name]
+		if !ok {
+			t.Fatalf("expected materialized app %q", name)
+		}
+		if got := daemonBinary(appDoc.Body); got != wantBin {
+			t.Errorf("%s app binary = %q, want %q", name, got, wantBin)
 		}
 		if _, ok := nested(t, doc.Body, "rules")["block-bad-config"]; !ok {
 			t.Errorf("%s did not inherit base rule", name)
@@ -2630,6 +2696,11 @@ service: { name: php-fpm }
 	then := nested(t, resolved.Tree, "rules", "block-bad-config", "then")
 	if got := cfgval.String(then["message"]); got != "PHP-FPM 8.3 configuration is invalid" {
 		t.Errorf("message = %q, want %q", got, "PHP-FPM 8.3 configuration is invalid")
+	}
+	binaryCheck := nested(t, resolved.Tree, "preflight", "php-fpm-8.3-binary")
+	wantBinary := fmt.Sprintf("%s/php8.3/bin/php-fpm", binRoot)
+	if got := cfgval.String(binaryCheck["path"]); got != wantBinary {
+		t.Errorf("linked app binary path = %q, want %q", got, wantBinary)
 	}
 }
 
@@ -2724,23 +2795,24 @@ func TestVersionTemplateCephOSD(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(catalogDir, "apps"), "ceph-osd.yml", `
+	write(filepath.Join(catalogDir, "apps"), "ceph-osd%n.yml", fmt.Sprintf(`
 kind: app
-name: ceph-osd
-variables: { binary: /usr/bin/ceph-osd }
-preflight:
-  binary: { type: binary, path: "${binary}" }
-`)
-	write(filepath.Join(catalogDir, "services"), "ceph-osd-%n.yml", fmt.Sprintf(`
-kind: daemon
 name: ceph-osd%%n
 display_name: "Ceph OSD ${n}"
 versions: { from: "%s/ceph-${n}" }
-service: "ceph-osd@${n}"
-apps: [ceph-osd]
-variables: { user: ceph, binary: /usr/bin/ceph-osd }
-checks: { service: { type: service, expect: active } }
+variables: { binary: /usr/bin/ceph-osd }
+preflight:
+  binary: { type: binary, path: "${binary}" }
 `, osdRoot))
+	write(filepath.Join(catalogDir, "services"), "ceph-osd-%n.yml", `
+kind: daemon
+name: ceph-osd%n
+display_name: "Ceph OSD ${n}"
+service: "ceph-osd@${n}"
+apps: ["ceph-osd${n}"]
+variables: { user: ceph }
+checks: { service: { type: service, expect: active } }
+`)
 	// One enabled service per OSD that uses the materialized daemon.
 	write(enabledDir, "osd0.yml", "kind: service\nname: osd0\nuses: ceph-osd0\n")
 
@@ -2778,6 +2850,9 @@ defaults:
 		if got := ServiceUnit(doc.Body, name); got != "ceph-osd@"+id {
 			t.Errorf("%s service unit = %q, want ceph-osd@%s", name, got, id)
 		}
+		if _, ok := cfg.Apps[name]; !ok {
+			t.Fatalf("expected materialized app %q", name)
+		}
 	}
 	// The app link survives materialization: a service using ceph-osd0 resolves
 	// cleanly (the ceph-osd app's preflight binary check is wired in).
@@ -2803,14 +2878,28 @@ func TestVersionTemplateCephOSDNoMatch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(daemonsDir, "ceph-osd-%n.yml"), []byte(fmt.Sprintf(`
-kind: daemon
+	appsDir := filepath.Join(daemonsDir, "apps")
+	if err := os.MkdirAll(appsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appsDir, "ceph-osd%n.yml"), []byte(fmt.Sprintf(`
+kind: app
 name: ceph-osd%%n
 versions: { from: "%s/ceph-${n}" }
-service: "ceph-osd@${n}"
-variables: { user: ceph, binary: /usr/bin/ceph-osd }
-checks: { service: { type: service, expect: active } }
+variables: { binary: /usr/bin/ceph-osd }
+preflight:
+  binary: { type: binary, path: "${binary}" }
 `, emptyRoot)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(daemonsDir, "ceph-osd-%n.yml"), []byte(`
+kind: daemon
+name: ceph-osd%n
+service: "ceph-osd@${n}"
+apps: ["ceph-osd${n}"]
+variables: { user: ceph }
+checks: { service: { type: service, expect: active } }
+`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")

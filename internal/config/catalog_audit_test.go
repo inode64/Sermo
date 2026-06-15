@@ -588,21 +588,26 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 		if err := yaml.Unmarshal(data, &doc); err != nil {
 			t.Fatalf("parse %s: %v", path, err)
 		}
+		if _, hasVersions := doc["versions"]; hasVersions {
+			t.Errorf("%s declares versions; service templates must discover from linked apps", path)
+		}
 		tok := tokenFor(cfgval.String(doc["name"]))
 		if tok == nil {
 			continue
 		}
-		if _, hasVersions := doc["versions"]; !hasVersions {
-			continue
-		}
+		hasLinkedDiscovery := false
 		for _, appName := range cfgval.StringList(doc["apps"]) {
 			app, ok := apps[linkedAppTemplateName(appName, *tok)]
 			if !ok {
 				continue
 			}
 			if strings.Contains(directVersionDiscoverySource(app), tok.marker()) {
-				t.Errorf("%s declares versions even though linked app %q can discover %s; remove service-level versions", path, appName, tok.marker())
+				hasLinkedDiscovery = true
+				break
 			}
+		}
+		if !hasLinkedDiscovery {
+			t.Errorf("%s is a template but does not link an app template that can discover %s", path, tok.marker())
 		}
 	}
 }
