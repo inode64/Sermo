@@ -3,12 +3,9 @@ name: php%v
 display_name: "PHP ${version}"
 category: runtime
 description: "PHP interpreter"
-versions:
-  unversioned:
-    display_name: "PHP"
 variables:
   binary: "/usr/bin/php${version}"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
-  version_short: { type: command, command: ["${binary}","-r","echo PHP_VERSION;"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }
+  version_short: { type: command, command: ["${binary}", "-r", "echo PHP_VERSION;"], timeout: 10s }

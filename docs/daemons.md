@@ -612,11 +612,14 @@ variables: { binary: "/usr/bin/python${n}" }
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
 `python-config`.
 
-When a versioned tool also ships an unversioned active-slot binary, opt into that
-explicitly with `versions.unversioned`. If `/usr/bin/python` exists, this
-materializes `python` in addition to `python2`/`python3`; when it is absent,
-only the numbered binaries are registered. A map form can override fields for
-the unversioned instance, commonly the display name:
+When a `%v` or `%n` template also has an unversioned active-slot binary, Sermo
+materializes it automatically. If `/usr/bin/python` exists, this registers
+`python` in addition to `python2`/`python3`; when it is absent, only the numbered
+binaries are registered. The empty token is substituted before `name`,
+`display_name` and `description` are trimmed, so `display_name: "Python ${n}"`
+becomes `Python` for the active slot. Set `versions.unversioned: false` to ignore
+the marker-less binary; a map form can still override fields for the unversioned
+instance when a template needs a custom label:
 
 ```yaml
 kind: app
@@ -624,7 +627,7 @@ name: python%n
 display_name: "Python ${n}"
 versions:
   unversioned:
-    display_name: "Python"
+    description: "Active Python interpreter"
 variables: { binary: "/usr/bin/python${n}" }
 ```
 
