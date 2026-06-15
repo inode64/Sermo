@@ -76,6 +76,7 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 | Alerts | errors / critical signals |
 | Monitored | monitored vs unmonitored services |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
+| Volumes | one gauge per mounted disk/volume watch, crit when its watch is firing |
 
 Editable notes:
 

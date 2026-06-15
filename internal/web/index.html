@@ -2812,6 +2812,20 @@ function renderOverview(ctx) {
       target: "daemon-section",
     }));
   }
+  // One tile per mounted disk/volume watch, same gauge style as the host metrics
+  // above. The tile turns crit exactly when the volume's watch is firing.
+  watches.filter((w) => w && w.disk && Number(w.disk.total_bytes) > 0).forEach((w) => {
+    const d = w.disk;
+    const p = diskUsedPct(d);
+    tiles.push(tile({
+      label: `Vol ${d.mount_point || d.path || w.name || ""}`.trim(),
+      value: `${p.toFixed(0)}<small>%</small>`,
+      sub: `${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free`,
+      cls: watchStateText(w) === "failed" ? "t-crit" : "",
+      extra: usageBar(p, fmtPct(p)),
+      target: "watches-section",
+    }));
+  });
   band.innerHTML = tiles.join("");
 }
 
