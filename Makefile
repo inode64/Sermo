@@ -27,10 +27,11 @@ INSTALL ?= install
 
 # Go-installed developer tools live in ~/go/bin on local machines.
 LINT_PATH = PATH="$(HOME)/go/bin:$(PATH)"
-# staticcheck/golangci-lint write analyzer caches; the fallback keeps
-# non-interactive/restricted shells from trying to write under ~/.cache when it
-# is unavailable. An explicit XDG_CACHE_HOME still wins.
-LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-/tmp/sermo-lint-cache}"
+# staticcheck/golangci-lint write analyzer caches. Keep the default outside
+# ~/.cache for restricted shells, but scope it to the checkout path so agent
+# worktrees do not reuse stale absolute paths after a worktree is removed.
+LINT_CACHE_DIR ?= /tmp/sermo-lint-cache-$(shell pwd | sed 's#[^A-Za-z0-9_.-]#_#g')
+LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-$(LINT_CACHE_DIR)}"
 
 # Render the init/unit files for the chosen paths: rewrite the binary and config
 # locations baked into the packaging templates.
