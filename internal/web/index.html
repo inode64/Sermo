@@ -178,12 +178,12 @@
 
   /* ---- panels (cards) -------------------------------------------------------
      Every section is a <details> card: the summary is the card header, the
-     body gets the card padding. Locks + the service detail reuse the look. */
-  details, section#locks-section, #detail {
+     body gets the card padding. Locks reuse the same panel look. */
+  details, section#locks-section {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
     box-shadow: var(--shadow); margin-top: .9rem; padding: 0 1.05rem;
   }
-  details[open], section#locks-section, #detail { padding-bottom: .95rem; }
+  details[open], section#locks-section { padding-bottom: .95rem; }
   summary {
     cursor: pointer; font-size: .98rem; font-weight: 650; list-style: none; user-select: none;
     display: flex; align-items: center; gap: .35rem; flex-wrap: wrap;
@@ -200,9 +200,9 @@
   .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
-  #detail { margin-top: .9rem; padding-top: .9rem; display: none; }
-  #detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
-  #detail table { margin-bottom: .6rem; }
+  .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
+  .service-detail h2:first-child { margin-top: 0; }
+  .service-detail table { margin-bottom: .6rem; }
   #ready { margin: .6rem 0 0; }
 
   /* ---- events / diagnostics -------------------------------------------------- */
@@ -496,8 +496,6 @@
   <p class="muted" style="font-size:.8rem">Named runtime locks that can block start/stop/restart (manual or automatic). Stale/expired locks are shown for awareness.</p>
 </section>
 
-<div id="detail"></div>
-
 <dialog id="action-confirm">
   <div class="modal-head">
     <h2 id="confirm-title" style="font-size:1.05rem; margin:0"></h2>
@@ -736,7 +734,9 @@ function toggleEventMsg(key) {
   if (eventExpanded.has(key)) eventExpanded.delete(key);
   else eventExpanded.add(key);
   renderGlobalEvents();
-  if (current) loadServiceEvents(current);
+  expanded.forEach((expKey) => {
+    if (expKey.startsWith("svc:")) loadServiceEvents(expKey.slice(4));
+  });
 }
 
 function eventMessageHTML(e, key) {
@@ -1358,7 +1358,7 @@ function renderServices() {
     const key = "svc:" + s.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const name = `<a class="name" data-detail-service="${esc(s.name)}">${label}</a>`;
+    const name = `<a class="name" data-service-expand="${esc(s.name)}">${label}</a>`;
     const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${categoryBadge(category)}</td>
@@ -1388,7 +1388,7 @@ function renderServices() {
 }
 
 // toggleExpand / loadExpansionFor drive inline expansion, shared by services and
-// host watches. Keys are "svc:<name>" (process table + memory/IO + SLA) or
+// host watches. Keys are "svc:<name>" (full inline service detail) or
 // "wat:<name>" (watch config + recent activity).
 function toggleExpand(key) {
   if (expanded.has(key)) {
@@ -1401,6 +1401,29 @@ function toggleExpand(key) {
   renderServices();
   renderWatches();
   renderApps();
+}
+
+function openServiceExpansion(name, scroll) {
+  if (!name) return;
+  const key = "svc:" + name;
+  if (!expanded.has(key)) expanded.add(key);
+  history.replaceState(null, "", "#" + key);
+  renderServices();
+  if (scroll) {
+    const el = document.getElementById("svc-row-" + name);
+    if (el) el.scrollIntoView({ block: "center" });
+  }
+}
+
+function toggleServiceExpansion(name) {
+  if (!name) return;
+  toggleExpand("svc:" + name);
+}
+
+function refreshExpandedServiceDetails() {
+  expanded.forEach((key) => {
+    if (key.startsWith("svc:")) loadExpansionFor(key);
+  });
 }
 
 // applyHash opens/scrolls to the service named in a #svc:<name> URL fragment, so a
@@ -1421,7 +1444,7 @@ function applyHash() {
 window.addEventListener("hashchange", () => { hashScrolled = false; applyHash(); });
 
 // rowClick expands a row from a click anywhere on it, except on interactive
-// elements (action buttons, the detail link) which keep their own behaviour.
+// elements (action buttons and links) which keep their own behaviour.
 function rowClick(event, key) {
   if (closestFrom(event, "button, a, input, select")) return;
   toggleExpand(key);
@@ -1430,18 +1453,13 @@ function rowClick(event, key) {
 async function loadExpansionFor(key) {
   try {
     let html;
+    let detailData = null;
     if (key.startsWith("svc:")) {
       const name = key.slice(4);
       const res = await fetch(`api/services/${encodeURIComponent(name)}`);
       if (!res.ok) return;
-      const d = await res.json();
-      let metrics = null;
-      const measured = (d.checks || []).filter((c) => metricTypes.includes(c.type));
-      if (measured.length) {
-        const mr = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(measured[0].name)}&since=${metricWindow}`);
-        if (mr.ok) metrics = await mr.json();
-      }
-      html = renderExpansion(d, metrics);
+      detailData = await res.json();
+      html = renderServiceDetail(detailData);
     } else if (key.startsWith("wat:")) {
       const name = key.slice(4);
       const res = await fetch("api/events?limit=200");
@@ -1454,6 +1472,7 @@ async function loadExpansionFor(key) {
     expCache[key] = html;
     const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
     if (tr) tr.querySelector("td").innerHTML = html;
+    if (detailData) hydrateServiceDetail(detailData);
   } catch (_) { /* keep the last content on a transient error */ }
 }
 
@@ -1499,10 +1518,61 @@ function procLabel(p) {
   return '<span class="muted">unknown</span>';
 }
 
-function renderExpansion(d, metrics) {
+function detailDomKey(name) {
+  return Array.from(String(name || "")).map((ch) => ch.charCodeAt(0).toString(16).padStart(4, "0")).join("");
+}
+
+function detailDomId(name, suffix) {
+  return "svc-detail-" + detailDomKey(name) + "-" + suffix;
+}
+
+function serviceMeasuredChecks(d) {
+  return (d.checks || []).filter((c) => metricTypes.includes(c.type));
+}
+
+function selectedMetricCheck(measured) {
+  if (metricCheck && measured.some((c) => c.name === metricCheck)) return metricCheck;
+  return measured.length ? measured[0].name : "";
+}
+
+function serviceMetricCharts(d) {
+  const charts = [];
+  (d.checks || []).forEach((c) => (c.metrics || []).forEach((m) =>
+    charts.push({ check: c.name, metric: m.name, unit: m.unit })));
+  return charts;
+}
+
+function renderServiceDetail(d) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
   const noResidentProcess = !!d.no_resident_process;
+  const checks = (d.checks || []).map((c) => {
+    const age = c.at ? ` <span class="muted">· ${esc(fmtAge(c.at))}</span>` : "";
+    const state = !c.ran
+      ? (c.at ? `<span class="muted">cached</span>${age}` : '<span class="muted">not run yet</span>')
+      : c.skipped ? `<span class="muted">skipped</span>${age}`
+      : c.ok ? `<span class="ok">ok</span>${age}` : `<span class="bad">fail</span>${age}`;
+    return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
+      <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
+      <td class="muted">${esc(c.message || "")}</td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="muted">No checks.</td></tr>`;
+
+  const lockRows = (d.locks || []).map((l) => {
+    return `<tr>
+      <td>${esc(lockName(l))}</td>
+      <td>${lockStateHTML(l)}</td>
+      <td>${lockTTL(l)}</td>
+      <td>${lockOwner(l)}</td>
+      <td>${lockCreated(l)}</td>
+      <td>${lockBlocks(l)}</td>
+      <td class="muted">${esc(l.reason || l.stale_reason || "")}</td>
+      <td>${lockReleaseButton(l)}</td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="8" class="muted">No named runtime locks.</td></tr>`;
+  const lockWarns = (d.lock_warnings || []).map((w) =>
+    `<div class="inactive" style="margin-top:.25rem">warning: ${esc(w)}</div>`
+  ).join("");
+
   const pt = d.process_totals || (noResidentProcess ? null : {
     rss: procs.reduce((a, p) => a + (p.rss || 0), 0),
     io_read: procs.reduce((a, p) => a + (p.io_read || 0), 0),
@@ -1519,14 +1589,16 @@ function renderExpansion(d, metrics) {
     ? ` ${usageBarMini(memPct(pt.rss || 0), fmtPct(memPct(pt.rss || 0)))}`
     : "";
   const totals = pt
-    ? `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`
+    ? `<p class="muted" style="margin:-.1rem 0 .35rem">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
     : "";
-  const lat = renderLatency(metrics);
   const procWarns = [
-    ...procWarnings.map((w) => `<div class="bad" style="margin:.2rem 0">discovery warning: ${esc(w)}</div>`),
+    ...procWarnings.map((w) => `<div class="bad" style="margin-top:.25rem">discovery warning: ${esc(w)}</div>`),
   ].join("");
+  const procSummary = noResidentProcess
+    ? `<p class="muted" style="margin-top:-.25rem">No resident process expected.</p>`
+    : `<p class="muted" style="margin-top:-.25rem">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
   const procTable = noResidentProcess
-    ? `<div class="muted">No resident process expected.</div>`
+    ? ""
     : procs.length
     ? `<table style="width:auto; font-size:.85rem;">
         <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
@@ -1541,18 +1613,63 @@ function renderExpansion(d, metrics) {
           ${procIoFdThreadCells(p)}
         </tr>`).join("")}</tbody></table>`
     : `<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
-  return totals + procWarns + lat + procTable;
+
+  const measured = serviceMeasuredChecks(d);
+  const activeMetricCheck = selectedMetricCheck(measured);
+  let latency = "";
+  if (measured.length) {
+    const checkBtns = measured.map((c) =>
+      `<button data-metric-service="${esc(d.name)}" data-metric-check="${esc(c.name)}"${c.name === activeMetricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ");
+    latency = `
+    <h2>Latency <span class="muted">${checkBtns} &middot; ${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
+    <div id="${esc(detailDomId(d.name, "lat-summary"))}" class="muted">loading…</div>
+    <div id="${esc(detailDomId(d.name, "lat-chart"))}" class="muted"></div>`;
+  }
+
+  const metricCharts = serviceMetricCharts(d);
+  const metricGraphs = metricCharts.length
+    ? `<h2>Metrics <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>` +
+      metricCharts.map((mc, i) =>
+        `<div style="margin:.4rem 0"><div class="muted"><b>${esc(mc.check)}</b> &middot; ${esc(mc.metric)} <span class="muted">(${esc(mc.unit)})</span></div>` +
+        `<div id="${esc(detailDomId(d.name, "metric-" + i))}" class="muted">loading…</div></div>`).join("")
+    : "";
+
+  const st = serviceState(d);
+  const disabledNote = !d.enabled
+    ? `<p class="muted" style="color:#cf222e">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
+    : "";
+
+  return `<div class="service-detail" data-service-detail="${esc(d.name)}">
+    <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
+    <p class="muted" style="margin-top:-.25rem">State: ${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</p>
+    ${disabledNote}
+    <h2>Remediation</h2>
+    <p>${renderRemediation(d.remediation)}</p>
+    <h2>Rules</h2>
+    ${renderRules(d.rules)}
+    <h2>Preflight ${me.can_act ? `<button data-preflight-service="${esc(d.name)}">run</button>` : '<span class="muted">admin only</span>'}</h2>
+    <div id="${esc(detailDomId(d.name, "preflight"))}" class="muted">not run yet</div>
+    <h2>Named locks</h2>
+    <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
+      <tbody>${lockRows}</tbody></table>${lockWarns}
+    <h2>Processes</h2>
+    ${procSummary}${totals}${procWarns}${procTable}
+    <h2>Checks</h2>
+    <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
+      <tbody>${checks}</tbody></table>
+    ${latency}
+    ${metricGraphs}
+    <h2>Recent events</h2>
+    <table class="events"><tbody id="${esc(detailDomId(d.name, "events"))}"><tr><td class="muted">loading…</td></tr></tbody></table>
+  </div>`;
 }
 
-// renderLatency shows a measured check's latency over the default window: the
-// numeric avg/min/max summary plus the min–max band + average line chart
-// (reusing drawMetricChart from the detail panel).
-function renderLatency(m) {
-  if (!m || !(m.points || []).length) return "";
-  const s = m.summary || {};
-  const unit = esc(m.unit || "ms");
-  const head = `<div class="muted" style="margin:.25rem 0 .1rem">Latency <b>${esc(m.check || "")}</b> · avg <b>${(s.avg || 0).toFixed(1)} ${unit}</b> · min <b>${(s.min || 0).toFixed(1)}</b> · max <b>${(s.max || 0).toFixed(1)}</b>${s.count ? ` <span class="muted">(${s.count} samples)</span>` : ""}</div>`;
-  return head + `<div style="margin-bottom:.5rem">${drawMetricChart(m.points, m.unit || "ms")}</div>`;
+function hydrateServiceDetail(d) {
+  const measured = serviceMeasuredChecks(d);
+  if (measured.length) loadMetrics(d.name, measured);
+  const metricCharts = serviceMetricCharts(d);
+  if (metricCharts.length) loadNamedMetrics(d.name, metricCharts);
+  loadServiceEvents(d.name);
 }
 
 function fmtBytes(n) {
@@ -2357,7 +2474,7 @@ function lockReleaseButton(l) {
 function lockServiceLink(l) {
   const svc = l.service || "";
   if (!svc) return '<span class="muted">—</span>';
-  return `<a class="name" data-detail-service="${esc(svc)}">${esc(svc)}</a>`;
+  return `<a class="name" data-service-open="${esc(svc)}">${esc(svc)}</a>`;
 }
 
 async function releaseLock(service, name) {
@@ -2373,7 +2490,6 @@ async function releaseLock(service, name) {
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
     await load();
-    if (current === service) detail(service);
   } catch (e) {
     $("#err").textContent = `release ${label}: ${e.message}`;
   }
@@ -2663,7 +2779,6 @@ async function act(name, action) {
     $("#err").textContent = `${action} ${name}: ${e.message}`;
   }
   load();
-  if (current) detail(current);
 }
 
 async function actWatch(name, action) {
@@ -2812,134 +2927,6 @@ async function runConfirmPreflight() {
   }
 }
 
-let current = null;
-
-async function detail(name) {
-  current = name;
-  try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    renderDetail(await res.json());
-  } catch (e) {
-    $("#err").textContent = "Failed to load detail: " + e.message;
-  }
-}
-
-function renderDetail(d) {
-  const checks = (d.checks || []).map((c) => {
-    const age = c.at ? ` <span class="muted">· ${esc(fmtAge(c.at))}</span>` : "";
-    const state = !c.ran
-      ? (c.at ? `<span class="muted">cached</span>${age}` : '<span class="muted">not run yet</span>')
-      : c.skipped ? `<span class="muted">skipped</span>${age}`
-      : c.ok ? `<span class="ok">ok</span>${age}` : `<span class="bad">fail</span>${age}`;
-    return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
-      <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
-      <td class="muted">${esc(c.message || "")}</td></tr>`;
-  }).join("") || `<tr><td colspan="4" class="muted">No checks.</td></tr>`;
-
-  const lockRows = (d.locks || []).map((l) => {
-    return `<tr>
-      <td>${esc(lockName(l))}</td>
-      <td>${lockStateHTML(l)}</td>
-      <td>${lockTTL(l)}</td>
-      <td>${lockOwner(l)}</td>
-      <td>${lockCreated(l)}</td>
-      <td>${lockBlocks(l)}</td>
-      <td class="muted">${esc(l.reason || l.stale_reason || "")}</td>
-      <td>${lockReleaseButton(l)}</td>
-    </tr>`;
-  }).join("") || `<tr><td colspan="8" class="muted">No named runtime locks.</td></tr>`;
-  const lockWarns = (d.lock_warnings || []).map((w) =>
-    `<div class="inactive" style="margin-top:.25rem">warning: ${esc(w)}</div>`
-  ).join("");
-
-  const procWarnings = d.process_warnings || [];
-  const noResidentProcess = !!d.no_resident_process;
-  const procWarns = [
-    ...procWarnings.map((w) => `<div class="bad" style="margin-top:.25rem">discovery warning: ${esc(w)}</div>`),
-  ].join("");
-  const procSummary = noResidentProcess
-    ? `<p class="muted" style="margin-top:-.25rem">No resident process expected.</p>`
-    : `<p class="muted" style="margin-top:-.25rem">${(d.processes || []).length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
-  const pt = d.process_totals;
-  const procTotals = !noResidentProcess && pt
-    ? `<p class="muted" style="margin:-.1rem 0 .35rem">Service totals (including child processes): memory <b>${fmtBytes(pt.rss || 0)}</b>${cpuTotalsLine(pt)} · IO r/w <b>${fmtBytes(pt.io_read || 0)} / ${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? "" : "es"}</p>`
-    : "";
-  const procRows = noResidentProcess ? "" : (d.processes || []).map((p) => {
-    const user = p.user ? esc(p.user) : '<span class="muted">unknown</span>';
-    const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
-    return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
-      <td>${procLabel(p)}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
-      ${procCpuCells(p)}<td>${p.rss ? fmtBytes(p.rss) : '—'}</td>${procIoFdThreadCells(p)}</tr>`;
-  }).join("") || `<tr><td colspan="13" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
-  const processSection = noResidentProcess
-    ? `<h2>Processes</h2>${procSummary}${procWarns}`
-    : `<h2>Processes</h2>
-    ${procSummary}${procTotals}${procWarns}
-    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
-      <tbody>${procRows}</tbody></table>`;
-
-  // Latency graph: only checks whose type records a measurement (like icmp).
-  const measured = (d.checks || []).filter((c) => metricTypes.includes(c.type));
-  if (measured.length && !measured.some((c) => c.name === metricCheck)) {
-    metricCheck = measured[0].name;
-  }
-  let latency = "";
-  if (measured.length) {
-    const checkBtns = measured.map((c) =>
-      `<button data-metric-check="${esc(c.name)}"${c.name === metricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ");
-    latency = `
-    <h2>Latency <span class="muted">${checkBtns} &middot; ${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
-    <div id="lat-summary" class="muted">loading…</div>
-    <div id="lat-chart" class="muted"></div>`;
-  }
-
-  // Named-metric graphs (any check that declares graphable metrics, e.g. hdparm
-  // read/cached MB/s): one chart per metric, to spot gradual degradation.
-  const metricCharts = [];
-  (d.checks || []).forEach((c) => (c.metrics || []).forEach((m) =>
-    metricCharts.push({ check: c.name, metric: m.name, unit: m.unit })));
-  let metricGraphs = "";
-  if (metricCharts.length) {
-    metricGraphs = `<h2>Metrics <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>` +
-      metricCharts.map((mc, i) =>
-        `<div style="margin:.4rem 0"><div class="muted"><b>${esc(mc.check)}</b> &middot; ${esc(mc.metric)} <span class="muted">(${esc(mc.unit)})</span></div>` +
-        `<div id="m-${i}" class="muted">loading…</div></div>`).join("");
-  }
-
-  $("#detail").style.display = "block";
-  const st = serviceState(d);
-  let disabledNote = "";
-  if (!d.enabled) {
-    disabledNote = `<p class="muted" style="color:#cf222e">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`;
-  }
-
-  $("#detail").innerHTML = `
-    <button class="close" data-close-detail="1">close</button>
-    <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
-    <p class="muted" style="margin-top:-.25rem">State: ${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</p>
-    ${disabledNote}
-    <h2>Remediation</h2>
-    <p>${renderRemediation(d.remediation)}</p>
-    <h2>Rules</h2>
-    ${renderRules(d.rules)}
-    <h2>Preflight ${me.can_act ? `<button data-preflight-service="${esc(d.name)}">run</button>` : '<span class="muted">admin only</span>'}</h2>
-    <div id="preflight-result" class="muted">not run yet</div>
-    <h2>Named locks</h2>
-    <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
-      <tbody>${lockRows}</tbody></table>${lockWarns}
-    ${processSection}
-    <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
-      <tbody>${checks}</tbody></table>
-    ${latency}
-    ${metricGraphs}
-    <h2>Recent events</h2>
-    <table class="events"><tbody id="svc-events"><tr><td class="muted">loading…</td></tr></tbody></table>`;
-  if (measured.length) loadMetrics(d.name);
-  if (metricCharts.length) loadNamedMetrics(d.name, metricCharts);
-  loadServiceEvents(d.name);
-}
-
 function preflightRows(checks) {
   if (!checks || !checks.length) return '<span class="muted">No preflight checks configured.</span>';
   return `<table><thead><tr><th>Check</th><th>State</th><th>Message</th></tr></thead><tbody>${
@@ -2953,7 +2940,9 @@ function preflightRows(checks) {
 }
 
 async function runPreflight(name) {
-  $("#preflight-result").innerHTML = '<span class="muted">running…</span>';
+  const target = document.getElementById(detailDomId(name, "preflight"));
+  if (!target) return;
+  target.innerHTML = '<span class="muted">running…</span>';
   try {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/preflight`, {
       method: "POST",
@@ -2964,19 +2953,21 @@ async function runPreflight(name) {
     const head = body.ok
       ? '<span class="ok">OK</span>'
       : '<span class="bad">FAIL</span>';
-    $("#preflight-result").innerHTML = `${head} ${preflightRows(body.checks || [])}`;
+    target.innerHTML = `${head} ${preflightRows(body.checks || [])}`;
   } catch (e) {
-    $("#preflight-result").innerHTML = `<span class="bad">Failed: ${esc(e.message)}</span>`;
+    target.innerHTML = `<span class="bad">Failed: ${esc(e.message)}</span>`;
   }
 }
 
 async function loadServiceEvents(name) {
+  const target = document.getElementById(detailDomId(name, "events"));
+  if (!target) return;
   try {
     const res = await fetch(`api/services/${encodeURIComponent(name)}/events?limit=50`);
     if (!res.ok) throw new Error("HTTP " + res.status);
-    $("#svc-events").innerHTML = eventRows(await res.json(), false);
+    target.innerHTML = eventRows(await res.json(), false);
   } catch (e) {
-    $("#svc-events").innerHTML = `<tr><td class="muted">Failed to load events: ${esc(e.message)}</td></tr>`;
+    target.innerHTML = `<tr><td class="muted">Failed to load events: ${esc(e.message)}</td></tr>`;
   }
 }
 
@@ -2989,8 +2980,12 @@ let daemonMetricWindow = "24h";
 const metricTypes = ["tcp", "http", "ports", "service"];
 const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
 
-function setMetricCheck(name) { metricCheck = name; if (current) detail(current); }
-function setMetricWin(win) { metricWindow = win; if (current) detail(current); }
+function setMetricCheck(name, service) {
+  metricCheck = name;
+  if (service) loadExpansionFor("svc:" + service);
+  else refreshExpandedServiceDetails();
+}
+function setMetricWin(win) { metricWindow = win; refreshExpandedServiceDetails(); }
 function setDaemonMetricWin(win) { daemonMetricWindow = win; loadDaemonMetrics(); }
 
 function winButtons(list, selected, fn) {
@@ -2998,19 +2993,23 @@ function winButtons(list, selected, fn) {
     `<button data-window-kind="${esc(fn)}" data-window-value="${esc(val)}"${val === selected ? ' style="background:#8883"' : ''}>${label}</button>`).join(" ");
 }
 
-async function loadMetrics(name) {
-  if (!metricCheck) return;
+async function loadMetrics(name, measured) {
+  const check = selectedMetricCheck(measured || []);
+  if (!check) return;
+  const summary = document.getElementById(detailDomId(name, "lat-summary"));
+  const chart = document.getElementById(detailDomId(name, "lat-chart"));
+  if (!summary || !chart) return;
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(metricCheck)}&since=${metricWindow}`);
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(check)}&since=${metricWindow}`);
     if (!res.ok) throw new Error("HTTP " + res.status);
     const body = await res.json();
     const s = body.summary || {};
-    $("#lat-summary").innerHTML = s.count
+    summary.innerHTML = s.count
       ? `avg <b>${s.avg.toFixed(1)}</b> ms &middot; min ${s.min.toFixed(1)} &middot; max ${s.max.toFixed(1)} <span class="muted">(${s.count} samples)</span>`
       : '<span class="muted">No latency data yet for this window.</span>';
-    $("#lat-chart").innerHTML = drawMetricChart(body.points || [], body.unit || "ms");
+    chart.innerHTML = drawMetricChart(body.points || [], body.unit || "ms");
   } catch (e) {
-    $("#lat-chart").textContent = "Failed to load latency: " + e.message;
+    chart.textContent = "Failed to load latency: " + e.message;
   }
 }
 
@@ -3066,7 +3065,7 @@ function daemonMetricSummary(series, label) {
 async function loadNamedMetrics(name, charts) {
   for (let i = 0; i < charts.length; i++) {
     const mc = charts[i];
-    const el = document.getElementById(`m-${i}`);
+    const el = document.getElementById(detailDomId(name, "metric-" + i));
     if (!el) continue;
     try {
       const res = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(mc.check)}&metric=${encodeURIComponent(mc.metric)}&since=${metricWindow}`);
@@ -3136,8 +3135,6 @@ function fmtMetricValue(v, unit) {
       return n.toFixed(1) + (unit || "");
   }
 }
-
-function closeDetail() { current = null; $("#detail").style.display = "none"; }
 
 function fmtTime(t) {
   const d = new Date(t);
@@ -3473,21 +3470,21 @@ function initDelegatedHandlers() {
       return;
     }
 
-    const detailLink = closestFrom(e, "[data-detail-service]");
-    if (detailLink) {
-      detail(detailLink.dataset.detailService || "");
+    const serviceExpand = closestFrom(e, "[data-service-expand]");
+    if (serviceExpand) {
+      toggleServiceExpansion(serviceExpand.dataset.serviceExpand || "");
+      return;
+    }
+
+    const serviceOpen = closestFrom(e, "[data-service-open]");
+    if (serviceOpen) {
+      openServiceExpansion(serviceOpen.dataset.serviceOpen || "", true);
       return;
     }
 
     const release = closestFrom(e, "[data-lock-release]");
     if (release) {
       releaseLock(release.dataset.lockService || "", release.dataset.lockName || "");
-      return;
-    }
-
-    const close = closestFrom(e, "[data-close-detail]");
-    if (close) {
-      closeDetail();
       return;
     }
 
@@ -3499,7 +3496,7 @@ function initDelegatedHandlers() {
 
     const metricCheckBtn = closestFrom(e, "[data-metric-check]");
     if (metricCheckBtn) {
-      setMetricCheck(metricCheckBtn.dataset.metricCheck || "");
+      setMetricCheck(metricCheckBtn.dataset.metricCheck || "", metricCheckBtn.dataset.metricService || "");
       return;
     }
 
@@ -3536,7 +3533,7 @@ loadMe().then(() => { load(); loadDiag(); });
 // independent of the auto-refresh interval, so it keeps counting up even when
 // auto-refresh is set to a long interval or stopped.
 let lastRefresh = 0;
-function refreshNow() { load(); if (current) detail(current); }
+function refreshNow() { load(); }
 function fmtSince(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   if (s < 60) return s + "s";
@@ -3556,10 +3553,10 @@ function applyRefresh(ms) {
   if (refreshTimer) clearInterval(refreshTimer);
   // Skip polling while the tab is hidden (no one is looking); a visibilitychange
   // handler refreshes immediately when it becomes visible again.
-  refreshTimer = ms > 0 ? setInterval(() => { if (document.hidden) return; load(); if (current) detail(current); }, ms) : null;
+  refreshTimer = ms > 0 ? setInterval(() => { if (document.hidden) return; load(); }, ms) : null;
 }
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) { load(); if (current) detail(current); }
+  if (!document.hidden) load();
 });
 function setRefresh(v) {
   const ms = parseInt(v, 10) || 0;
