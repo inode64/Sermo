@@ -454,6 +454,7 @@ type CheckMetric struct {
 
 // Finding is one diagnostic result (level: error|warning|info).
 type Finding struct {
+	Time    string `json:"time,omitempty"` // RFC3339 when the diagnostic was generated
 	Level   string `json:"level"`
 	Scope   string `json:"scope"`
 	Message string `json:"message"`
@@ -1014,7 +1015,22 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []Finding{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.Backend.Diagnostics(r.Context()))
+	writeJSON(w, http.StatusOK, timestampFindings(s.Backend.Diagnostics(r.Context()), time.Now()))
+}
+
+func timestampFindings(findings []Finding, at time.Time) []Finding {
+	if len(findings) == 0 {
+		return findings
+	}
+	out := make([]Finding, len(findings))
+	copy(out, findings)
+	ts := at.Format(time.RFC3339)
+	for i := range out {
+		if out[i].Time == "" {
+			out[i].Time = ts
+		}
+	}
+	return out
 }
 
 func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
