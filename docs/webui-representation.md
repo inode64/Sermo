@@ -117,7 +117,7 @@ Columns:
 
 | Column | Meaning |
 | --- | --- |
-| Service | name plus optional display name |
+| Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
 | Unit | resolved systemd/OpenRC unit |
 | State | normalized state plus monitor hint |
@@ -132,12 +132,14 @@ Row expansion:
 
 | Area | Content |
 | --- | --- |
-| Checks | configured checks and current result |
-| Processes | detected process tree and warnings; hidden as CPU/memory totals when `no_resident_process` is true |
-| Metrics | process/service metrics where available |
-| SLA | heartbeat strip and availability summary |
+| Remediation | automatic remediation state |
 | Rules | remediation/alert rule state |
-| Config | render/diff/preflight links in detail view |
+| Preflight | inline preflight runner and results |
+| Named locks | runtime lock state |
+| Processes | detected process tree, process totals and warnings; omitted when `no_resident_process` is true |
+| Checks | configured checks and current result |
+| Metrics | process/service metrics where available |
+| Events | recent retained service events |
 
 Empty states:
 
@@ -153,7 +155,7 @@ Section id: `apps-section`
 | Title | `Installed applications` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, showing count |
-| Sorting | Application, Category, Version |
+| Sorting | Application, Category, Status, Version |
 | Visibility | hidden when no installed apps are returned |
 | Grouping | category group rows, collapsible |
 
@@ -161,8 +163,9 @@ Columns:
 
 | Column | Meaning |
 | --- | --- |
-| Application | name plus optional display name |
+| Application | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
+| Status | app inspection state (`Ok`, warning, failed) |
 | Version | short version, falling back to raw version |
 
 Row expansion:
@@ -197,7 +200,7 @@ Columns:
 
 | Column | Meaning |
 | --- | --- |
-| Name | watch name |
+| Name | display name, falling back to name, capitalized |
 | Type | check type |
 | Summary | watch-specific status summary |
 | Interval | resolved watch interval |

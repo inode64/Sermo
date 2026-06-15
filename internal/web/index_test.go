@@ -67,4 +67,15 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 	if !strings.Contains(html, ".truncate") || !strings.Contains(html, "check-message") {
 		t.Fatalf("index.html missing truncation styles for CMD/check messages")
 	}
+	for _, want := range []string{
+		`data-app-sort="state"`,
+		"function displayName(item)",
+		"function appStatusCell(a)",
+		"state-warning",
+		"status-warning",
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("index.html missing %q", want)
+		}
+	}
 }

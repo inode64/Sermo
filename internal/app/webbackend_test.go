@@ -248,8 +248,9 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
 			"disk-root": map[string]any{
-				"monitor": config.MonitorDisabled,
-				"check":   map[string]any{"type": "disk", "path": "/"},
+				"display_name": "Root disk",
+				"monitor":      config.MonitorDisabled,
+				"check":        map[string]any{"type": "disk", "path": "/"},
 			},
 		},
 	}}}
@@ -262,7 +263,7 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	if len(watches) != 1 {
 		t.Fatalf("got %d watches", len(watches))
 	}
-	if watches[0].Monitor != config.MonitorDisabled || watches[0].Monitored {
+	if watches[0].DisplayName != "Root disk" || watches[0].Monitor != config.MonitorDisabled || watches[0].Monitored {
 		t.Fatalf("watch monitor view = %+v", watches[0])
 	}
 }

@@ -124,6 +124,7 @@ type webEntry struct {
 // webWatch is a configured host watch for UI visibility (services may be 0).
 type webWatch struct {
 	name          string
+	displayName   string
 	checkType     string
 	interval      time.Duration
 	disabled      bool
@@ -345,6 +346,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			}
 			ww := &webWatch{
 				name:          name,
+				displayName:   config.DisplayName(entry, name),
 				checkType:     ctype,
 				interval:      iv,
 				disabled:      disabled,
@@ -672,6 +674,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 		}
 		ww := web.Watch{
 			Name:          w.name,
+			DisplayName:   w.displayName,
 			CheckType:     w.checkType,
 			Summary:       watchSummary(w, disk, liveSummary),
 			Interval:      iv,
