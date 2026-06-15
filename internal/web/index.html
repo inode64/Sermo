@@ -139,7 +139,9 @@
   #err { color: var(--crit); min-height: 1.2rem; }
   body.disconnected #services-section, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
-  .process-cmd { font-family: var(--mono); font-size: .82em; overflow-wrap: anywhere; }
+  .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .process-cmd { font-family: var(--mono); font-size: .82em; }
+  .check-message { max-width: min(42rem, 54vw); }
   a.name { cursor: pointer; text-decoration: none; border-bottom: 1px dotted var(--text-2); color: inherit; }
   a.name:hover { color: var(--accent); border-bottom-color: var(--accent); }
 
@@ -1509,12 +1511,13 @@ function procCmd(p) {
 function procLabel(p) {
   const cmd = procCmd(p);
   if (p.exe_resolved && p.exe) {
-    return cmd ? `${esc(p.exe)} <span class="muted" title="${esc(cmd)}">…</span>` : esc(p.exe);
+    const label = cmd ? `${p.exe} ...` : p.exe;
+    return `<span class="truncate process-cmd" title="${esc(cmd || p.exe)}">${esc(label)}</span>`;
   }
   if (cmd) {
-    return `<span class="process-cmd" title="${esc(cmd)}">${esc(cmd)}</span>`;
+    return `<span class="truncate process-cmd" title="${esc(cmd)}">${esc(cmd)}</span>`;
   }
-  if (p.exe) return `<span class="inactive">${esc(p.exe)}</span>`;
+  if (p.exe) return `<span class="truncate process-cmd inactive" title="${esc(p.exe)}">${esc(p.exe)}</span>`;
   return '<span class="muted">unknown</span>';
 }
 
@@ -1554,7 +1557,7 @@ function renderServiceDetail(d) {
       : c.ok ? `<span class="ok">ok</span>${age}` : `<span class="bad">fail</span>${age}`;
     return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
       <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
-      <td class="muted">${esc(c.message || "")}</td></tr>`;
+      <td class="muted"><span class="truncate check-message" title="${esc(c.message || "")}">${esc(c.message || "")}</span></td></tr>`;
   }).join("") || `<tr><td colspan="4" class="muted">No checks.</td></tr>`;
 
   const lockRows = (d.locks || []).map((l) => {
@@ -1600,8 +1603,8 @@ function renderServiceDetail(d) {
   const procTable = noResidentProcess
     ? ""
     : procs.length
-    ? `<table style="width:auto; font-size:.85rem;">
-        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+    ? `<table style="width:auto; max-width:100%; font-size:.85rem;">
+        <thead><tr><th>PID</th><th>PPID</th><th>CMD</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
         <tbody>${procs.map((p) => `<tr>
           <td>${p.pid}</td>
           <td class="muted">${p.ppid}</td>
