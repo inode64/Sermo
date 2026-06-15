@@ -416,16 +416,16 @@ func TestLibrariesCheckRealBinary(t *testing.T) {
 
 func TestProcessCheck(t *testing.T) {
 	observe := func(exe, user string) string {
-		if exe == "/usr/bin/mariabackup" {
+		if exe == "/usr/bin/mariadb-backup" {
 			return "running"
 		}
 		return "absent"
 	}
-	ok := processCheck{base: base{name: "p"}, exe: "/usr/bin/mariabackup", expect: "running", observe: observe}
+	ok := processCheck{base: base{name: "p"}, exe: "/usr/bin/mariadb-backup", expect: "running", observe: observe}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("running==running should pass: %s", res.Message)
 	}
-	absent := processCheck{base: base{name: "p"}, exe: "/usr/bin/mariabackup", expect: "absent", observe: observe}
+	absent := processCheck{base: base{name: "p"}, exe: "/usr/bin/mariadb-backup", expect: "absent", observe: observe}
 	if res := absent.Run(context.Background()); res.OK {
 		t.Errorf("running!=absent should fail")
 	}
