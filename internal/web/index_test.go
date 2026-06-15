@@ -27,6 +27,15 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"exe unresolved",
 		"unresolved exe",
 		"exe is unresolved",
+		"Config Review",
+		"config-render",
+		"config-diff",
+		"config-meta",
+		"data-config-render",
+		"data-config-diff",
+		"loadConfigRender(",
+		"loadConfigDiff(",
+		"/config/diff",
 	} {
 		if strings.Contains(html, forbidden) {
 			t.Fatalf("index.html still contains %q", forbidden)

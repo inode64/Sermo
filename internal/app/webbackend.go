@@ -2215,53 +2215,6 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 	return d, true
 }
 
-// ConfigRender returns a fully resolved service config for operator review.
-func (b *WebBackend) ConfigRender(ctx context.Context, name, format string) (web.ConfigRender, bool, error) {
-	if _, ok := b.entries[name]; !ok {
-		return web.ConfigRender{}, false, nil
-	}
-	resolved, errs := b.cfg.Resolve(name)
-	if len(errs) > 0 {
-		return web.ConfigRender{}, true, fmt.Errorf("resolve %s: %s", name, strings.Join(errs, "; "))
-	}
-	data, err := renderResolvedConfig(resolved, format)
-	if err != nil {
-		return web.ConfigRender{}, true, err
-	}
-	return web.ConfigRender{
-		Name:        name,
-		Format:      format,
-		Content:     string(data),
-		SourceFiles: b.configSources(name),
-	}, true, nil
-}
-
-// ConfigDiff compares two fully resolved service configs line-by-line.
-func (b *WebBackend) ConfigDiff(ctx context.Context, base, service string) (web.ConfigDiff, bool, error) {
-	if _, ok := b.entries[base]; !ok {
-		return web.ConfigDiff{}, false, nil
-	}
-	if _, ok := b.entries[service]; !ok {
-		return web.ConfigDiff{}, false, nil
-	}
-	baseRender, ok, err := b.ConfigRender(ctx, base, "yaml")
-	if !ok || err != nil {
-		return web.ConfigDiff{}, ok, err
-	}
-	serviceRender, ok, err := b.ConfigRender(ctx, service, "yaml")
-	if !ok || err != nil {
-		return web.ConfigDiff{}, ok, err
-	}
-	removed, added := config.LineDiff(baseRender.Content, serviceRender.Content)
-	return web.ConfigDiff{
-		Base:      base,
-		Service:   service,
-		Identical: len(removed) == 0 && len(added) == 0,
-		Removed:   removed,
-		Added:     added,
-	}, true, nil
-}
-
 func ruleWindowToWeb(rep rules.RuleWindowReport) web.RuleWindow {
 	return web.RuleWindow{
 		Name:          rep.Name,
@@ -2860,52 +2813,4 @@ func (b *WebBackend) emitWatchExpandEvent(watch, kind, status, message string) {
 		Status:  status,
 		Message: message,
 	})
-}
-
-func renderResolvedConfig(resolved config.Resolved, format string) ([]byte, error) {
-	switch format {
-	case "json":
-		data, err := config.RenderJSON(resolved)
-		if err != nil {
-			return nil, fmt.Errorf("render %s as json: %w", resolved.Name, err)
-		}
-		return data, nil
-	default:
-		data, err := config.RenderYAML(resolved)
-		if err != nil {
-			return nil, fmt.Errorf("render %s as yaml: %w", resolved.Name, err)
-		}
-		return data, nil
-	}
-}
-
-func (b *WebBackend) configSources(name string) []string {
-	var out []string
-	seen := map[string]bool{}
-	add := func(path string) {
-		if path == "" || seen[path] {
-			return
-		}
-		seen[path] = true
-		out = append(out, path)
-	}
-	add(b.cfg.Global.Path)
-	var addService func(string)
-	addService = func(service string) {
-		doc := b.cfg.Services[service]
-		if doc == nil {
-			return
-		}
-		if clone := cfgval.AsString(doc.Body["clone"]); clone != "" {
-			addService(clone)
-		}
-		if uses := cfgval.AsString(doc.Body["uses"]); uses != "" {
-			if daemon := b.cfg.Daemons[uses]; daemon != nil {
-				add(daemon.Path)
-			}
-		}
-		add(doc.Path)
-	}
-	addService(name)
-	return out
 }
