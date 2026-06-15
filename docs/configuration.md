@@ -375,8 +375,9 @@ retention),
 `GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
 history + summary, see below), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
-`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings, including
-malformed lock files under `<paths.runtime>/locks`),
+`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings with `time`
+(RFC3339), `level`, `scope` and `message`; includes malformed lock files under
+`<paths.runtime>/locks`),
 `GET /api/watches` (configured host watches, their single `state`
 (`disabled`, `unmonitorized`, `ok`, `failed`), `monitor` mode, conditions,
 notifications, live resource readings when available and recent activity),
@@ -1627,6 +1628,7 @@ It reports, as `error` / `warning` / `info` findings:
 
 `diagnose` exits `78` when any **error** finding is present; warnings alone exit
 `0`. The same report is available in the web UI's **Diagnostics** panel and at
-`GET /api/diagnostics`. When the web UI is enabled, that feed also includes
-**operation slot** usage from the running daemon (`info` when some slots are in
-use, `warning` when saturated); see also `GET /api/ops`.
+`GET /api/diagnostics`, where each finding is timestamped with the time the web
+endpoint generated the diagnostics response. When the web UI is enabled, that
+feed also includes **operation slot** usage from the running daemon (`info` when
+some slots are in use, `warning` when saturated); see also `GET /api/ops`.

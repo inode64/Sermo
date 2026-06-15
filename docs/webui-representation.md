@@ -343,7 +343,7 @@ Section id: `diag-section`
 | Title | `Diagnostics` |
 | Buttons | refresh, reload config when admin |
 | Help text | `SIGHUP or systemctl reload sermod` |
-| Table | diagnostic key/value rows |
+| Table | diagnostic time, level, scope and message rows |
 
 ## Change template
 
