@@ -327,31 +327,42 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 	var errs []string
 	out := map[string]string{}
 	source := map[string]string{}
+	exposeDefaults := len(names) == 1
 	for _, name := range names {
 		doc, ok := c.Apps[name]
 		if !ok {
 			continue // expandApps reports the missing app in the usual place.
 		}
+		appVars := collectVariables(stripMeta(doc.Body))
+		if exposeDefaults {
+			for varName, value := range appVars {
+				errs = append(errs, addAppVariable(out, source, varName, name, value)...)
+			}
+		}
 		prefixes := []string{appVariablePrefix(name)}
 		if doc.Name != name {
 			prefixes = append(prefixes, appVariablePrefix(doc.Name))
 		}
-		for varName, value := range collectVariables(stripMeta(doc.Body)) {
+		for varName, value := range appVars {
 			for _, prefix := range prefixes {
 				key := appVariableKey(prefix, varName)
-				if key == "" {
-					continue
-				}
-				if prev, exists := out[key]; exists && prev != value {
-					errs = append(errs, fmt.Sprintf("apps variable ${%s} from app %q conflicts with app %q", key, name, source[key]))
-					continue
-				}
-				out[key] = value
-				source[key] = name
+				errs = append(errs, addAppVariable(out, source, key, name, value)...)
 			}
 		}
 	}
 	return out, errs
+}
+
+func addAppVariable(out, source map[string]string, key, appName, value string) []string {
+	if key == "" {
+		return nil
+	}
+	if prev, exists := out[key]; exists && prev != value {
+		return []string{fmt.Sprintf("apps variable ${%s} from app %q conflicts with app %q", key, appName, source[key])}
+	}
+	out[key] = value
+	source[key] = appName
+	return nil
 }
 
 func appVariableKey(prefix, name string) string {

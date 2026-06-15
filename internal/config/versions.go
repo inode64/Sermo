@@ -74,7 +74,7 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 	for _, tmpl := range templates {
 		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl, kind)
-		values := materializedVersionValues(versionDiscoverySource(body), body, *tok)
+		values := materializedVersionValues(c.versionDiscoverySource(body, *tok), body, *tok)
 		for _, value := range values {
 			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind)
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
@@ -98,15 +98,39 @@ func materializedVersionValues(discoverPath string, body map[string]any, tok tmp
 
 // versionDiscoverySource returns the placeholder-bearing filesystem path Sermo
 // globs to find installed values. It is `versions.from` when set, otherwise the
-// `binary` variable. Decoupling them lets a template monitor a generic binary
-// (e.g. /usr/sbin/php-fpm) while discovering from a slot-specific path.
-func versionDiscoverySource(body map[string]any) string {
+// `binary` variable. A service template may omit both when it links exactly to a
+// versioned app (`apps: ["php-fpm${version}"]`); in that case the app template's
+// own discovery source is reused. Decoupling them lets a template monitor a
+// generic binary (e.g. /usr/sbin/php-fpm) while discovering from a slot-specific
+// path.
+func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken) string {
+	if source := directVersionDiscoverySource(body); source != "" {
+		return source
+	}
+	for _, name := range cfgval.StringList(body["apps"]) {
+		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
+		if !ok {
+			continue
+		}
+		source := directVersionDiscoverySource(stripMeta(doc.Body))
+		if strings.Contains(source, tok.marker()) {
+			return source
+		}
+	}
+	return ""
+}
+
+func directVersionDiscoverySource(body map[string]any) string {
 	if v, ok := body["versions"].(map[string]any); ok {
 		if from := cfgval.String(v["from"]); from != "" {
 			return from
 		}
 	}
 	return daemonBinary(body)
+}
+
+func linkedAppTemplateName(name string, tok tmplToken) string {
+	return strings.ReplaceAll(name, tok.marker(), tok.placeholder)
 }
 
 func versionUnversionedEnabled(body map[string]any) bool {
