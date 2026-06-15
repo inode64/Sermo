@@ -31,8 +31,9 @@ Keep changes concrete:
 | Readiness | `GET /readyz?verbose` | startup / shutdown banner |
 | Services | `GET /api/services` | main service list |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
-| Service metrics | `GET /api/services/{name}/metrics` | process/service charts |
-| Service SLA | `GET /api/services/{name}/sla` | 24h heartbeat strip |
+| Service latency metrics | `GET /api/services/{name}/metrics` | latency chart for measured checks |
+| Service runtime metrics | `GET /api/services/{name}/runtime` | in-memory service CPU/memory/IO history |
+| Service SLA | `GET /api/services/{name}/sla` | availability API retained for clients; not shown as a separate service panel graph |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
 | Notifiers | `GET /api/notifiers` | notifier targets |
@@ -110,7 +111,7 @@ Section id: `services-section`
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
 | Status filters | all, disabled, running, stopped, unmonitorized, monitorized, failed |
-| Sorting | Service, Category, State, Last event |
+| Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
 Columns:
@@ -119,26 +120,24 @@ Columns:
 | --- | --- |
 | Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| Unit | resolved systemd/OpenRC unit |
 | State | normalized state plus monitor hint |
-| Interval | resolved service interval |
-| Policy | remediation policy/cooldown summary |
-| Locks | active runtime locks |
-| Last event | newest retained service event |
-| Next remediation | next eligible automatic remediation time |
+| Uptime | age of the oldest discovered service process, when available |
+| CPU total | latest whole process-tree CPU usage |
+| Memory | latest process-tree resident memory |
+| IO R/W | cumulative process-tree disk read/write bytes |
 | Actions | start, stop, restart, reload, monitor/unmonitor |
 
 Row expansion:
 
 | Area | Content |
 | --- | --- |
-| Remediation | automatic remediation state |
-| Rules | remediation/alert rule state |
-| Preflight | inline preflight runner and results |
-| Named locks | runtime lock state |
+| General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals |
+| Graphs | latency, CPU, memory and IO charts in a two-column grid; each uses the shared `1h`, `24h`, `7d`, `30d`, `1y` window selector |
 | Processes | detected process tree, process totals and warnings; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
-| Metrics | process/service metrics where available |
+| Named locks | runtime lock state |
+| Rules | remediation/alert rule state |
+| Preflight | inline preflight runner and results |
 | Events | recent retained service events |
 
 Empty states:

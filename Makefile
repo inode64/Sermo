@@ -1,4 +1,6 @@
 BIN := bin
+GOAMD64 ?= v1
+GO_BUILD_ENV := GOAMD64=$(GOAMD64)
 
 # Standard GNU-style install variables. Override on the command line, e.g.
 #   make install DESTDIR=/tmp/stage PREFIX=/usr
@@ -48,8 +50,8 @@ tmpfiles_subst = sed -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 all: build
 
 build:
-	go build -o $(BIN)/sermoctl ./cmd/sermoctl
-	go build -o $(BIN)/sermod ./cmd/sermod
+	$(GO_BUILD_ENV) go build -o $(BIN)/sermoctl ./cmd/sermoctl
+	$(GO_BUILD_ENV) go build -o $(BIN)/sermod ./cmd/sermod
 
 test:
 	go test ./...
