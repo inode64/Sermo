@@ -648,7 +648,9 @@ a service.
 > which detects installed catalog daemons and writes `kind: service` files into
 > `services/` to enable them (see [daemons](daemons.md)). When several services
 > are selected, port overrides are skipped unless you explicitly review them;
-> catalog defaults are inherited. Existing `apps/`
+> catalog defaults are inherited. When a detected service has known configuration
+> files, the wizard asks whether to add a periodic `checks.config` entry for those
+> paths; that check uses `interval: 60m` by default. Existing `apps/`
 > include directories remain valid as a legacy alias; the wizard preserves them
 > and adds `services/` instead of moving or deleting old files. Run with no
 > argument to choose from the list. It prints the generated `watches:` block and offers to write one watch
