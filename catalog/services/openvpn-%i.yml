@@ -4,8 +4,7 @@ display_name: "OpenVPN ${instance}"
 category: network
 uses: openvpn
 service: "openvpn.${instance}"
-versions:
-  from: "/etc/init.d/openvpn.${instance}"
+apps: ["openvpn-${instance}"]
 variables:
   config: "/etc/openvpn/${instance}.conf"
   pidfile: "/run/openvpn.${instance}.pid"

@@ -268,7 +268,7 @@ variables:
 
 An explicit `variables` entry of the same name always takes precedence over a
 built-in. `${arch}`/`${os}` are baked **on load** (everywhere — variable values
-and `versions.from` discovery paths included); the rest resolve per service, and
+and app discovery paths included); the rest resolve per service, and
 the runtime ones (`${date}`/`${event}`/`${action}`) only in rule `message:`
 strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
 `SERMO_INIT` / `SERMO_USER` environment variables override the matching built-in
@@ -298,9 +298,10 @@ bind address like `127.0.0.1`); an explicit `host` always wins.
 (`radon` on `radon.srvdr.com`) — distinct from `${host}` (which keeps the full
 detected hostname / bind-address fallback). Use it for systemd instance units
 keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@radon`.
-For numeric multi-instance daemons (e.g. one OSD per device) use a `%n` version
-template instead, discovering ids from a path — `versions: { from:
-"/var/lib/ceph/osd/ceph-${n}" }` materializes `ceph-osd0…N` with `service:
+For numeric multi-instance daemons (e.g. one OSD per device) use a `%n` daemon
+template linked to a matching `%n` app template. The app owns discovery, for
+example `versions: { from: "/var/lib/ceph/osd/ceph-${n}" }`; the daemon links
+`apps: ["ceph-osd${n}"]` and materializes `ceph-osd0…N` with `service:
 "ceph-osd@${n}"`. An explicit `hostname` variable (or `SERMO_HOSTNAME`) wins.
 
 ⁴ `${user}` and `${pidfile}` are fallbacks: a daemon's own `user` (a service
@@ -542,8 +543,9 @@ shorthand path can reference variables (e.g. `pidfile: "${pidfile}"`).
 
 Some applications ship one binary per version and several can be installed at
 once (php-fpm, postgres, tomcat, erlang/beam, berkeley db). Instead of one file per
-version, write a single **version template**: a daemon or app whose name (and
-filename) contains `%v`, with `${version}` in the discovery path.
+version, write a single **app version template** whose name (and filename)
+contains `%v`, with `${version}` in the discovery path. A daemon template with
+the same token links that app.
 
 ```yaml
 kind: app
@@ -574,25 +576,31 @@ installed the template yields nothing. The filename mirrors the name
 name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
 the body always use `${version}` (e.g. in `service` or `apps`).
 
-Keep application discovery in `catalog/apps`. A versioned service that links a
-matching versioned app, such as `apps: ["postgres-${version}"]` or
-`apps: ["php-fpm${version}"]`, should not declare its own `versions:` block.
-Use service-level `versions.from` only for instance/service templates that do
-not have a versioned app binary to discover from.
+Keep application discovery in `catalog/apps`. A versioned or instanced daemon
+that links a matching app, such as `apps: ["postgres-${version}"]`,
+`apps: ["php-fpm${version}"]` or `apps: ["openvpn-${instance}"]`, must not
+declare its own `versions:` block. If discovery cannot come from a versioned
+binary path, put `versions.from` on the app template.
 
-For example, an init instance template discovers instances from init files rather
-than app binaries:
+For example, an init instance template discovers instances from init files in the
+app, then the daemon links the materialized app:
 
 ```yaml
-kind: daemon
+kind: app
 name: openvpn-%i
 versions:
   from: "/etc/init.d/openvpn.${instance}"
-apps: [openvpn]
+variables: { binary: /usr/bin/openvpn }
+
+---
+kind: daemon
+name: openvpn-%i
+apps: ["openvpn-${instance}"]
+service: "openvpn.${instance}"
 ```
 
-`versions.from` is discovery-only metadata; it never appears in the materialized
-daemon.
+`versions.from` is discovery-only app metadata; it never appears in materialized
+apps or daemons.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
@@ -607,10 +615,9 @@ precisely.
 numbers, otherwise working exactly like `%v`:
 
 ```yaml
-kind: daemon
+kind: app
 name: python%n
 display_name: "Python ${n}"
-service: python${n}
 variables: { binary: "/usr/bin/python${n}" }
 ```
 
@@ -636,8 +643,9 @@ versions:
 variables: { binary: "/usr/bin/python${n}" }
 ```
 
-Use `%i`/`${instance}` for named init instances discovered from a bounded path,
-for example `versions: { from: "/etc/init.d/openvpn.${instance}" }`.
+Use `%i`/`${instance}` for named init instances discovered from a bounded app
+path, for example `versions: { from: "/etc/init.d/openvpn.${instance}" }` on
+`kind: app`.
 
 ### Listing installed applications
 
@@ -699,17 +707,16 @@ preflight:
   version_short: { type: command, command: ["${binary}","-r","echo PHP_VERSION;"], timeout: 10s }
 ```
 
-A template may `uses` a base daemon to inherit its checks, processes and rules,
-overriding only the version-specific binary. The packaged `php-fpm-%v` builds on
-`php-fpm`:
+A daemon template may `uses` a base daemon to inherit its checks, processes and
+rules, while the linked app supplies the version-specific binary. The packaged
+`php-fpm%v` daemon builds on `php-fpm` and links `php-fpm${version}`:
 
 ```yaml
 kind: daemon
-name: php-fpm-%v
+name: php-fpm%v
 uses: php-fpm
 display_name: "PHP-FPM ${version}"
-variables:
-  binary: "/usr/lib64/php${version}/bin/php-fpm"
+apps: ["php-fpm${version}"]
 ```
 
 A service then targets a concrete version, e.g. `uses: php-fpm-8.3`.
