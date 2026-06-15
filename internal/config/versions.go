@@ -49,12 +49,13 @@ func tokenFor(name string) *tmplToken {
 // concrete daemon per installed value. Multiple versions of the same
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // daemon yields `foo1.2`, `foo3.4`, ... — each discovered by globbing the
-// template's discovery path (`versions.from`, else `binary`) with the token's
-// `${...}` wildcarded. `%v` and `%n` also register the same template with an
-// empty token value when the marker-less binary exists (e.g. `php%v` -> `php`).
-// The template itself is dropped; if nothing is installed it yields nothing. A
-// template may `uses` a base daemon (e.g. php-fpm%v uses php-fpm) to inherit its
-// checks, rules and processes; only the binary differs.
+// template's discovery path (`versions.from`, else `binary`, else a linked
+// versioned app's discovery path) with the token's `${...}` wildcarded. `%v` and
+// `%n` also register the same template with an empty token value when the
+// marker-less binary exists (e.g. `php%v` -> `php`). The template itself is
+// dropped; if nothing is installed it yields nothing. A template may `uses` a
+// base daemon (e.g. php-fpm%v uses php-fpm) to inherit its checks, rules and
+// processes; only the binary differs.
 func (c *Config) materializeVersionTemplates() {
 	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
 	c.materializeRegistry(c.AppNames, c.Apps, kindApp)

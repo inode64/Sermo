@@ -561,48 +561,43 @@ name: postgres-%v
 display_name: "PostgreSQL ${version}"
 service: postgres
 apps: ["postgres-${version}"]
-versions:
-  from: "/usr/lib64/postgresql-${version}/bin/postgres"
 ```
 
-On load, Sermo discovers installed versions by globbing the app `binary` path or
-the daemon's `versions.from` path with `${version}` wildcarded (here
+On load, Sermo discovers installed versions by globbing the linked app's
+`variables.binary` path with `${version}` wildcarded (here
 `/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Each match
-becomes a concrete daemon with `%v` and `${version}` substituted everywhere
-(name, display_name, service, app links, ...) — `postgres-14`, `postgres-16`, ...
-— and the template itself is dropped. If nothing is installed the template yields
-nothing. The filename mirrors the name (`postgres-%v.yml`); only that one file is
-needed. `%v` may sit anywhere in the name (`db%vsql` → `db4.8sql`). Note: `%v` is
-substituted only in the name; inside the body always use `${version}` (e.g. in
-`service` or `apps`).
+becomes a concrete app and concrete daemon with `%v` and `${version}` substituted
+everywhere (name, display_name, service, app links, ...) — `postgres-14`,
+`postgres-16`, ... — and the templates themselves are dropped. If nothing is
+installed the template yields nothing. The filename mirrors the name
+(`postgres-%v.yml`); only that one file is needed. `%v` may sit anywhere in the
+name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
+the body always use `${version}` (e.g. in `service` or `apps`).
 
-When the monitored `binary` is generic (no version in its path), point discovery
-at a version-specific path with `versions.from`:
+Keep application discovery in `catalog/apps`. A versioned service that links a
+matching versioned app, such as `apps: ["postgres-${version}"]` or
+`apps: ["php-fpm${version}"]`, should not declare its own `versions:` block.
+Use service-level `versions.from` only for instance/service templates that do
+not have a versioned app binary to discover from.
+
+For example, an init instance template discovers instances from init files rather
+than app binaries:
 
 ```yaml
 kind: daemon
-name: php-fpm%v
-service:
-  systemd: [ "php${version}-fpm" ]
+name: openvpn-%i
 versions:
-  from: "/usr/lib64/php${version}/bin/php-fpm"   # globbed to find versions
-variables:
-  binary: /usr/bin/php-fpm                        # the actual binary, version-agnostic
+  from: "/etc/init.d/openvpn.${instance}"
+apps: [openvpn]
 ```
 
 `versions.from` is discovery-only metadata; it never appears in the materialized
-daemon. When omitted, discovery falls back to the `binary` path.
-
-If a versioned service template has no `versions.from` and no own
-`variables.binary`, but links a matching versioned app such as
-`apps: ["php-fpm${version}"]`, discovery falls back to that app template's
-`versions.from` or `variables.binary`. This lets a service reuse the app-owned
-binary path instead of duplicating it only to materialize versions.
+daemon.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
 for versions. Even so, a placeholder bounded on both sides (e.g.
-`/usr/lib64/php${version}/bin/php-fpm`, via `versions.from`) discovers most
+`/usr/lib64/php${version}/bin/php-fpm`, in the app binary path) discovers most
 precisely.
 
 ### Integer and instance placeholders
