@@ -13,7 +13,7 @@ require (
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/lib/pq v1.12.3
 	github.com/quic-go/quic-go v0.60.0
-	go.mongodb.org/mongo-driver/v2 v2.6.0
+	go.mongodb.org/mongo-driver/v2 v2.6.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
 	golang.org/x/sys v0.46.0
