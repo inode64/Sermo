@@ -1,10 +1,10 @@
 kind: app
 name: python
-display_name: "Python 3"
+display_name: "Python"
 category: runtime
-description: "Python 3 interpreter"
+description: "Python interpreter (active slot)"
 variables:
-  binary: "/usr/bin/python3"
+  binary: "/usr/bin/python"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
