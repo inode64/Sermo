@@ -13,6 +13,8 @@ import (
 // `kind: service` file that `uses:` the catalog daemon.
 type serviceAssistant struct{}
 
+const serviceConfigCheckInterval = "60m"
+
 func (serviceAssistant) Name() string { return "service" }
 func (serviceAssistant) Title() string {
 	return "Monitor a system service (apache, nginx, mysql, …)"
@@ -196,6 +198,9 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (st
 			body["variables"] = map[string]any{"port": n}
 		}
 	}
+	if len(c.ConfigPaths) > 0 && p.Confirm(configCheckQuestion(c), true) {
+		addConfigCheck(body, c.ConfigPaths)
+	}
 	if c.Generic {
 		if pidfile := askServicePidfile(p, c); pidfile != "" {
 			body["pidfile"] = pidfile
@@ -204,6 +209,36 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (st
 		}
 	}
 	return c.Name, body
+}
+
+func configCheckQuestion(c DaemonCandidate) string {
+	label := "detected configuration file"
+	if len(c.ConfigPaths) != 1 {
+		label = fmt.Sprintf("%d detected configuration files", len(c.ConfigPaths))
+	}
+	return fmt.Sprintf("Add configuration check for %s (%s, every %s)?", c.Name, label, serviceConfigCheckInterval)
+}
+
+func addConfigCheck(body map[string]any, paths []string) {
+	checks, _ := body["checks"].(map[string]any)
+	if checks == nil {
+		checks = map[string]any{}
+		body["checks"] = checks
+	}
+	checks["config"] = map[string]any{
+		"type":      "config",
+		"path":      stringsToAny(paths),
+		"on_change": true,
+		"interval":  serviceConfigCheckInterval,
+	}
+}
+
+func stringsToAny(values []string) []any {
+	out := make([]any, len(values))
+	for i, value := range values {
+		out[i] = value
+	}
+	return out
 }
 
 func askServicePidfile(p *Prompt, c DaemonCandidate) string {

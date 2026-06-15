@@ -84,7 +84,15 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 				Body: map[string]any{
 					"enabled": true,
 					"service": map[string]any{"name": "customd"},
-					"checks":  map[string]any{"service": map[string]any{"type": "service", "expect": "active"}},
+					"checks": map[string]any{
+						"service": map[string]any{"type": "service", "expect": "active"},
+						"config": map[string]any{
+							"type":      "config",
+							"path":      []any{"/etc/customd.conf"},
+							"on_change": true,
+							"interval":  serviceConfigCheckInterval,
+						},
+					},
 					"pidfile": "/run/customd.pid",
 					"remediation": map[string]any{
 						"shadow": true,
