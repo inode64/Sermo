@@ -60,6 +60,10 @@ Editable notes:
 - Keep top bar compact and sticky.
 - Do not move operational controls into marketing-style hero blocks.
 - Refresh controls should stay visible on narrow screens.
+- The `uptime:` reading in the status line is the **host/server** uptime (from
+  `/proc/uptime`, surfaced as `host_uptime` on `GET /api/daemon`), not the sermod
+  process uptime. The sermod process uptime stays on the Daemon panel and
+  `GET /livez?verbose`.
 
 ## Overview tiles
 
