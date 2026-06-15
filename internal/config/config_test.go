@@ -1819,6 +1819,173 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestVersionTemplateUnversionedMaterialization(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"python", "python3", "php", "php8.4"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalogDir := filepath.Join(root, "catalog")
+	appsDir := filepath.Join(catalogDir, "apps")
+	enabledDir := filepath.Join(root, "enabled")
+	for _, dir := range []string{appsDir, enabledDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(appsDir, "python%n.yml"), []byte(fmt.Sprintf(`
+kind: app
+name: python%%n
+display_name: "Python ${n}"
+versions:
+  unversioned:
+    display_name: "Python"
+variables: { binary: "%s/python${n}" }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`, bin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appsDir, "php%v.yml"), []byte(fmt.Sprintf(`
+kind: app
+name: php%%v
+display_name: "PHP ${version}"
+versions:
+  unversioned:
+    display_name: "PHP"
+variables: { binary: "%s/php${version}" }
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`, bin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := strings.Join(cfg.DaemonsInCategory(CategoryApp), ","); got != "php,php8.4,python,python3" {
+		t.Fatalf("app names = %s, want php,php8.4,python,python3", got)
+	}
+	tests := []struct {
+		name        string
+		binary      string
+		displayName string
+	}{
+		{"python", filepath.Join(bin, "python"), "Python"},
+		{"python3", filepath.Join(bin, "python3"), "Python 3"},
+		{"php", filepath.Join(bin, "php"), "PHP"},
+		{"php8.4", filepath.Join(bin, "php8.4"), "PHP 8.4"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, ok := cfg.Apps[tt.name]
+			if !ok {
+				t.Fatalf("app %q was not materialized", tt.name)
+			}
+			if _, present := doc.Body["versions"]; present {
+				t.Fatalf("%s still carries versions block", tt.name)
+			}
+			if got := daemonBinary(doc.Body); got != tt.binary {
+				t.Fatalf("%s binary = %q, want %q", tt.name, got, tt.binary)
+			}
+			if got := DisplayName(doc.Body, tt.name); got != tt.displayName {
+				t.Fatalf("%s display_name = %q, want %q", tt.name, got, tt.displayName)
+			}
+			resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tt.name, errs)
+			}
+			preflight := nested(t, resolved.Tree, "preflight", "binary")
+			if got := cfgval.String(preflight["path"]); got != tt.binary {
+				t.Fatalf("%s resolved binary path = %q, want %q", tt.name, got, tt.binary)
+			}
+		})
+	}
+}
+
+func TestVersionTemplateUnversionedRequiresBinary(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "python3"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/python%n.yml": fmt.Sprintf(`
+kind: app
+name: python%%n
+display_name: "Python ${n}"
+versions:
+  unversioned: true
+variables: { binary: "%s/python${n}" }
+`, bin),
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Apps["python"]; ok {
+		t.Fatalf("python should not materialize without %s", filepath.Join(bin, "python"))
+	}
+	if _, ok := cfg.Apps["python3"]; !ok {
+		t.Fatalf("python3 should materialize")
+	}
+}
+
+func TestVersionTemplateSkipsExistingCanonicalName(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "python3"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/python%n.yml": fmt.Sprintf(`
+kind: app
+name: python%%n
+display_name: "Python ${n}"
+variables: { binary: "%s/python${n}" }
+`, bin),
+		"catalog/apps/python3.yml": fmt.Sprintf(`
+kind: app
+name: python3
+display_name: "Python Three"
+variables: { binary: "%s/python3" }
+`, bin),
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := strings.Join(cfg.DaemonsInCategory(CategoryApp), ","); got != "python3" {
+		t.Fatalf("app names = %s, want python3", got)
+	}
+	if got := DisplayName(cfg.Apps["python3"].Body, "python3"); got != "Python Three" {
+		t.Fatalf("python3 display_name = %q, want explicit canonical app", got)
+	}
+}
+
 func TestInstanceTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
 	initd := filepath.Join(root, "init.d")
