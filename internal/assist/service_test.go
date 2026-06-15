@@ -165,6 +165,30 @@ func TestServiceAssistantCatalogDetectedPidfileIsInherited(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantCatalogDetectedVariablesAreWritten(t *testing.T) {
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{{
+			Name:      "ceph-mon",
+			Title:     "Ceph Monitor",
+			Unit:      "ceph-mon@bk1.service",
+			Status:    "active",
+			Port:      3300,
+			Variables: map[string]any{"host": "172.31.27.102", "port": 3300},
+		}}, nil
+	}}
+	script := strings.Join([]string{"1", "", "1", "", "n"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	svc := res.Services["ceph-mon"].(map[string]any)
+	vars := svc["variables"].(map[string]any)
+	if vars["host"] != "172.31.27.102" || vars["port"] != 3300 {
+		t.Fatalf("variables = %v, want detected ceph endpoint", vars)
+	}
+}
+
 func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 	// Generic services have no catalog daemon profile, so accepting the detected
 	// pidfile writes it into the generated service entry.

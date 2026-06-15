@@ -132,6 +132,33 @@ func TestDedupeWizardCatalogCandidatesByUnit(t *testing.T) {
 	}
 }
 
+func TestParseCephMonAddrsPrefersV2(t *testing.T) {
+	host, port := parseCephMonAddrs("[v2:172.31.27.102:3300/0,v1:172.31.27.102:6789/0]")
+	if host != "172.31.27.102" || port != 3300 {
+		t.Fatalf("endpoint = %s:%d, want 172.31.27.102:3300", host, port)
+	}
+}
+
+func TestParseCephMonAddrsFallsBackToV1(t *testing.T) {
+	host, port := parseCephMonAddrs("[v1:172.31.27.102:6789/0]")
+	if host != "172.31.27.102" || port != 6789 {
+		t.Fatalf("endpoint = %s:%d, want 172.31.27.102:6789", host, port)
+	}
+}
+
+func TestParseCephMonAddrsIPv6(t *testing.T) {
+	host, port := parseCephMonAddrs("[v2:[fd00::102]:3300/0,v1:[fd00::102]:6789/0]")
+	if host != "fd00::102" || port != 3300 {
+		t.Fatalf("endpoint = %s:%d, want fd00::102:3300", host, port)
+	}
+}
+
+func TestCephMonIDFromSystemdUnit(t *testing.T) {
+	if got := cephMonID("ceph-mon@bk1.service"); got != "bk1" {
+		t.Fatalf("cephMonID = %q, want bk1", got)
+	}
+}
+
 func TestServiceCleanupDirsIncludesLegacyAppsOnlyWhenLoaded(t *testing.T) {
 	tmp := t.TempDir()
 	global := filepath.Join(tmp, "sermo.yml")
