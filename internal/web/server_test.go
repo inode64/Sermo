@@ -603,6 +603,24 @@ func TestDiagnostics(t *testing.T) {
 	if len(got) != 1 || got[0].Level != "warning" || got[0].Scope != "database" {
 		t.Fatalf("unexpected findings: %+v", got)
 	}
+	if _, err := time.Parse(time.RFC3339, got[0].Time); err != nil {
+		t.Fatalf("diagnostic time = %q, want RFC3339: %v", got[0].Time, err)
+	}
+}
+
+func TestTimestampFindings(t *testing.T) {
+	at := time.Date(2026, 6, 15, 10, 30, 0, 0, time.UTC)
+	got := timestampFindings([]Finding{
+		{Level: "warning", Scope: "database", Message: "missing time"},
+		{Time: "2026-06-14T09:00:00Z", Level: "info", Scope: "ops", Message: "has time"},
+	}, at)
+
+	if got[0].Time != "2026-06-15T10:30:00Z" {
+		t.Fatalf("first time = %q", got[0].Time)
+	}
+	if got[1].Time != "2026-06-14T09:00:00Z" {
+		t.Fatalf("second time = %q, want preserved existing timestamp", got[1].Time)
+	}
 }
 
 func TestOperateActions(t *testing.T) {
