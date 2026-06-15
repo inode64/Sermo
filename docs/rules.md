@@ -1677,7 +1677,7 @@ Guard rules block unsafe actions and use `action: block` with a `message`:
 block-during-backup:
   type: guard
   blocks: [restart, stop]
-  if: { active: { check: mariabackup } }
+  if: { active: { check: mariadb-backup } }
   then: { action: block, message: "Backup is running" }
 ```
 

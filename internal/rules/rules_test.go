@@ -184,14 +184,14 @@ func TestEvalMetricNotReadyOrAbsentIsFalse(t *testing.T) {
 
 func TestEvalProcessCondition(t *testing.T) {
 	observe := func(exe, user string) string {
-		if exe == "/usr/bin/mariabackup" && user == "mysql" {
+		if exe == "/usr/bin/mariadb-backup" && user == "mysql" {
 			return "running"
 		}
 		return "absent"
 	}
 	ev := &Evaluator{Deps: checks.Deps{Processes: observe}}
 
-	node := map[string]any{"process": map[string]any{"exe": "/usr/bin/mariabackup", "user": "mysql", "state": "running"}}
+	node := map[string]any{"process": map[string]any{"exe": "/usr/bin/mariadb-backup", "user": "mysql", "state": "running"}}
 	if !evalNode(t, ev, node) {
 		t.Error("matching running process should be true")
 	}

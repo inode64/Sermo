@@ -122,7 +122,7 @@ rules:
       - stop
     if:
       active:
-        check: mariabackup
+        check: mariadb-backup
     then:
       action: block
       message: "${display_name} backup is running"

@@ -108,7 +108,7 @@ If a config validation command differs by distribution, make it override-friendl
 Post-MVP, prefer Sermo named runtime locks when the protected job can be wrapped:
 
 ```bash
-sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mariabackup ...
+sermoctl lock mysql --name backup --reason "backup mysql" --ttl 4h -- mariadb-backup ...
 ```
 
 That needs no guard; the operation engine blocks the service automatically while
