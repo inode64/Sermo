@@ -1953,16 +1953,15 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
 `, catalina))
-	write(filepath.Join(catalogDir, "services"), "tomcat-%v.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "services"), "tomcat-%v.yml", `
 kind: daemon
-name: tomcat-%%v
+name: tomcat-%v
 display_name: "Apache Tomcat ${version}"
 service: tomcat
 apps: [java, "tomcat-${version}"]
-versions: { from: %q }
 variables: { port: 8080 }
 checks: { service: { type: service, expect: active } }
-`, catalina))
+`)
 	write(enabledDir, "site.yml", "kind: service\nname: site\nuses: tomcat-10\n")
 
 	global := filepath.Join(root, "sermo.yml")
@@ -2047,16 +2046,15 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 `, binary))
-	write(filepath.Join(catalogDir, "services"), "postgres-%v.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "services"), "postgres-%v.yml", `
 kind: daemon
-name: postgres-%%v
+name: postgres-%v
 display_name: "PostgreSQL ${version}"
 service: "postgresql-${version}"
 apps: ["postgres-${version}"]
-versions: { from: %q }
 variables: { port: 5432 }
 checks: { service: { type: service, expect: active } }
-`, binary))
+`)
 	write(enabledDir, "pg.yml", "kind: service\nname: pg\nuses: postgres-16\n")
 
 	global := filepath.Join(root, "sermo.yml")
