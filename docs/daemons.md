@@ -454,7 +454,7 @@ set; at least one of `exe`/`cmd` is required:
 ```yaml
 processes:
   unifi: { type: command_match, cmd: "java .*unifi", user: unifi, group: unifi }
-  mongo: { type: command_match, exe: /usr/bin/mongod, user: unifi }
+  mongo: { type: command_match, exe: "${mongod_binary}", user: unifi }
 ```
 
 - `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).

@@ -181,6 +181,66 @@ func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
 	}
 }
 
+func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "catalog", "services", "unifi.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		t.Fatalf("parse unifi catalog: %v", err)
+	}
+	if apps := strings.Join(cfgval.StringList(doc["apps"]), ","); apps != "java,mongod" {
+		t.Fatalf("unifi apps = %q, want java,mongod", apps)
+	}
+	processes, ok := doc["processes"].(map[string]any)
+	if !ok {
+		t.Fatalf("unifi processes missing or invalid: %v", doc["processes"])
+	}
+	mongo, ok := processes["mongo"].(map[string]any)
+	if !ok {
+		t.Fatalf("unifi mongo process selector missing or invalid: %v", processes["mongo"])
+	}
+	if got := cfgval.String(mongo["exe"]); got != "${mongod_binary}" {
+		t.Fatalf("unifi mongo exe = %q, want app variable ${mongod_binary}", got)
+	}
+
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "unifi")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(unifi): %v", errs)
+	}
+	resolvedProcesses, ok := resolved.Tree["processes"].(map[string]any)
+	if !ok {
+		t.Fatalf("resolved unifi processes missing or invalid: %v", resolved.Tree["processes"])
+	}
+	resolvedMongo, ok := resolvedProcesses["mongo"].(map[string]any)
+	if !ok {
+		t.Fatalf("resolved unifi mongo process selector missing or invalid: %v", resolvedProcesses["mongo"])
+	}
+	if got := cfgval.String(resolvedMongo["exe"]); got != "/usr/bin/mongod" {
+		t.Fatalf("resolved unifi mongo exe = %q, want /usr/bin/mongod", got)
+	}
+	preflight, ok := resolved.Tree["preflight"].(map[string]any)
+	if !ok {
+		t.Fatalf("resolved unifi preflight missing or invalid: %v", resolved.Tree["preflight"])
+	}
+	if _, ok := preflight["mongod-binary"]; !ok {
+		t.Fatalf("resolved unifi preflight lacks mongod-binary: %v", preflight)
+	}
+}
+
 func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
