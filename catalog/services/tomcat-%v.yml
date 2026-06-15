@@ -4,18 +4,15 @@ display_name: "Apache Tomcat ${version}"
 category: web
 service: tomcat
 
-# Tomcat is a Java application: the JVM runtime is owned by the `java` app and
-# linked here, so java's binary + version checks run in this service's preflight
-# (a missing/wrong Java blocks start). The runtime definition is shared with
-# every other service that lists it.
-apps: [java]
+# Tomcat is a Java application: the JVM runtime is owned by the `java` app, and
+# catalina.sh/version are owned by the matching `tomcat-${version}` app. Both
+# run in this service's preflight, so a missing JVM or Tomcat install blocks start.
+apps: [java, "tomcat-${version}"]
+versions:
+  from: "/usr/share/tomcat-${version}/bin/catalina.sh"
 
 variables:
   port: 8080
-  binary: "/usr/share/tomcat-${version}/bin/catalina.sh"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","version"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }
