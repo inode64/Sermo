@@ -42,6 +42,11 @@ type Deps struct {
 	// Processes reports the observed state (running/zombie/absent) of processes
 	// matching an exe/user selector, for `process` checks.
 	Processes func(exe, user string) string
+	// PidfileFallbackPIDs reports backend-native service PIDs when the active
+	// init system does not publish a PIDFile. It lets legacy catalog pidfile
+	// checks accept systemd's MainPID/cgroup process set instead of failing on an
+	// intentionally absent pidfile.
+	PidfileFallbackPIDs func() []int
 	// DiskUsage reports filesystem usage for `storage` checks. Nil uses statfs.
 	DiskUsage DiskUsageFunc
 	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
@@ -182,7 +187,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	case "binary":
 		return buildBinaryCheck(b, entry)
 	case "pidfile":
-		return buildPidfileCheck(b, entry)
+		return buildPidfileCheck(b, entry, deps)
 	case "libraries":
 		return buildLibrariesCheck(b, entry, runner)
 	case "metric":
@@ -470,12 +475,12 @@ func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
 // buildPidfileCheck builds a check that a pidfile exists and references a running
 // process. Gate it with `requires: [service]` so it only errors while the service
 // is active.
-func buildPidfileCheck(b base, entry map[string]any) (Check, string) {
+func buildPidfileCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "pidfile check requires a path"
 	}
-	return pidfileCheck{base: b, path: path}, ""
+	return pidfileCheck{base: b, path: path, fallbackPIDs: deps.PidfileFallbackPIDs}, ""
 }
 
 // buildBinaryCheck builds a check on a binary's fingerprint.

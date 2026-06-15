@@ -222,6 +222,25 @@ func TestDiscoverPidfileDeadPIDWarns(t *testing.T) {
 	}
 }
 
+func TestDiscoverSuppressesPidfileWarningWhenBackendFoundProcess(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent.pid")
+	reader := fakeReader{ids: map[int]Identity{
+		100: {PID: 100, PPID: 1, UID: 110, Exe: "/usr/bin/node_exporter", ExeOK: true},
+	}}
+	d := Discoverer{
+		Reader:      reader,
+		BackendPIDs: func() []int { return []int{100} },
+	}
+
+	procs, warns := d.Discover([]Selector{{Name: "pidfile", Type: SelectorPidfile, Paths: []string{missing}}})
+	if len(warns) != 0 {
+		t.Fatalf("warnings = %v, want none because backend found the process", warns)
+	}
+	if got := pidsOf(procs); len(got) != 1 || got[0] != 100 {
+		t.Fatalf("pids = %v, want [100]", got)
+	}
+}
+
 func TestDiscoverBackendMainPIDSeedsTree(t *testing.T) {
 	reader := fakeReader{ids: map[int]Identity{
 		100: {PID: 100, PPID: 1, UID: 110, Exe: "/usr/sbin/mysqld", ExeOK: true},

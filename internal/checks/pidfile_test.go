@@ -36,6 +36,23 @@ func TestPidfileCheckMissingFails(t *testing.T) {
 	}
 }
 
+func TestPidfileCheckMissingPassesWithBackendFallback(t *testing.T) {
+	c := pidfileCheck{
+		base:         base{name: "pid", timeout: time.Second},
+		path:         filepath.Join(t.TempDir(), "absent.pid"),
+		alive:        func(pid int) bool { return pid == 4321 },
+		fallbackPIDs: func() []int { return []int{0, 4321, 4321, 9999} },
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("a missing pidfile with live backend pid must pass: %s", res.Message)
+	}
+	pids, ok := res.Data["pids"].([]int)
+	if !ok || len(pids) != 1 || pids[0] != 4321 {
+		t.Fatalf("fallback pids = %#v, want [4321]", res.Data["pids"])
+	}
+}
+
 func TestPidfileCheckStaleFails(t *testing.T) {
 	c := pidfileCheck{base: base{name: "pid", timeout: time.Second}, path: writePid(t, "4321"), alive: func(int) bool { return false }}
 	res := c.Run(context.Background())
@@ -56,10 +73,10 @@ func TestPidfileCheckDefaultAliveSelf(t *testing.T) {
 }
 
 func TestBuildPidfileCheckNeedsPath(t *testing.T) {
-	if _, warn := buildPidfileCheck(base{}, map[string]any{}); warn == "" {
+	if _, warn := buildPidfileCheck(base{}, map[string]any{}, Deps{}); warn == "" {
 		t.Fatal("pidfile check without a path must warn")
 	}
-	if c, warn := buildPidfileCheck(base{}, map[string]any{"path": "/run/x.pid"}); warn != "" || c == nil {
+	if c, warn := buildPidfileCheck(base{}, map[string]any{"path": "/run/x.pid"}, Deps{}); warn != "" || c == nil {
 		t.Fatalf("valid pidfile check should build: warn=%q", warn)
 	}
 }
