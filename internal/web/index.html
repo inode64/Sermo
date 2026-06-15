@@ -213,7 +213,6 @@
   .service-detail table { margin-bottom: .6rem; }
   .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
   .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
-  .runtime-grid .metric-inline { display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
   .metric-panel { min-width: 0; }
   .metric-title { font-weight: 650; margin-bottom: .25rem; }
@@ -1549,7 +1548,9 @@ function serviceUptimeCell(s) {
 function cpuInline(cpu, ready, numCPU) {
   if (!ready) return numCPU ? '<span class="muted">measuring…</span>' : '<span class="muted">—</span>';
   const v = Number(cpu) || 0;
-  return `<span class="metric-inline"><b>${fmtNum(v, 2)}%</b>${usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`)}</span>`;
+  // Same shape as every other CPU bar (cpuBarMini): the percentage lives inside
+  // the bar and the precise value in the tooltip — no separate label prefix.
+  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`);
 }
 
 function serviceCpuCell(s) {
