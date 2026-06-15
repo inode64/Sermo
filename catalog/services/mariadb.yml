@@ -65,7 +65,7 @@ checks:
   mariadb-backup:
     type: process
     optional: true
-    exe: "${mariadb-backup_binary}"
+    exe: "${mariadb_backup_binary}"
     user: "${user}"
     state: running
 
