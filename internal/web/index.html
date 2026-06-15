@@ -1825,11 +1825,15 @@ function usageBarSpan(p, extraClass, label, title, aria) {
   return `<span class="usagebar${extraClass} ${usageLevel(p)}" style="--usage-pct:${p.toFixed(2)}%" title="${title}"${aria}><span class="usagebar-fill"></span><span class="usagebar-label">${label}</span></span>`;
 }
 
-function usageBar(pct) {
+// usageBar renders the full-width host gauge. The visible in-bar label defaults
+// to "X% used"; pass `label` to override it (the overview tiles show just the
+// percentage since the tile value already says "used"). The tooltip/aria keep
+// the full "used · free" breakdown regardless.
+function usageBar(pct, label) {
   const p = pctClamp(pct);
-  const label = fmtPct(p);
+  const used = fmtPct(p);
   const freeLabel = fmtPct(100 - p);
-  return usageBarSpan(p, "", `${label} used`, `${label} used · ${freeLabel} free`, ` aria-label="${label} used, ${freeLabel} free"`);
+  return usageBarSpan(p, "", label != null ? label : `${used} used`, `${used} used · ${freeLabel} free`, ` aria-label="${used} used, ${freeLabel} free"`);
 }
 
 // usageBarMini is the compact bar used inside dense tables (the process list).
@@ -2783,15 +2787,15 @@ function renderOverview(ctx) {
     : "";
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
-    tiles.push(tile({ label: "Host CPU", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host CPU", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
   }
   if (mem) {
     const p = pctClamp(mem.percent || 0);
-    tiles.push(tile({ label: "Host memory", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(mem), extra: usageBar(p), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host memory", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(mem), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
   }
   if (swap && swap.total) {
     const p = pctClamp(swap.percent || 0);
-    tiles.push(tile({ label: "Host swap", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host swap", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
   }
   if (load && load.absolute != null) {
     // load.total carries the logical CPU count and load.percent the saturation
@@ -2804,7 +2808,7 @@ function renderOverview(ctx) {
       value: esc(fmtNum(load.absolute, 2)),
       sub: hasCap ? `${esc(load.total.toFixed(0))} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${esc(fmtUptime(live.uptime_seconds))}` : ""),
       cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
-      extra: hasCap ? usageBar(p) : "",
+      extra: hasCap ? usageBar(p, fmtPct(p)) : "",
       target: "daemon-section",
     }));
   }
