@@ -149,6 +149,7 @@ func run(args []string) int {
 		Emit:            app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
 		Monitor:         store,
 		SLA:             store,
+		DaemonMetrics:   store,
 		Notifiers:       notifiers,
 		GlobalNotify:    config.NotifyDefault(cfg.Global.Raw),
 		Snapshots:       app.NewSnapshots(),
@@ -170,6 +171,7 @@ func run(args []string) int {
 		{"sla samples", store.PruneSLA},
 		{"measurements", store.PruneMeasurements},
 		{"metrics", store.PruneMetrics},
+		{"daemon metrics", store.PruneDaemonMetrics},
 	} {
 		if n, err := p.prune(cutoff); err != nil {
 			logger.Warn("prune "+p.what, "error", err)

@@ -1,8 +1,11 @@
 package app
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
+
+	"sermo/internal/state"
 )
 
 type fakeDaemonMetricReader struct {
@@ -90,5 +93,62 @@ func TestDaemonMetricSamplerSeries(t *testing.T) {
 	}
 	if second.Memory.Summary.Count != 2 || len(second.Memory.Points) != 1 || second.Memory.Points[0].N != 2 {
 		t.Fatalf("memory series = summary:%+v points:%+v", second.Memory.Summary, second.Memory.Points)
+	}
+}
+
+func TestDaemonMetricSamplerReadsPersistedHistory(t *testing.T) {
+	store, err := state.Open(filepath.Join(t.TempDir(), state.Filename))
+	if err != nil {
+		t.Fatalf("open state: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	reader := &fakeDaemonMetricReader{
+		cpu:       100,
+		rss:       1024,
+		ioRead:    1000,
+		ioWrite:   2000,
+		memTotal:  4096,
+		numCPU:    1,
+		clockTick: 100,
+	}
+	now := time.Date(2026, 6, 15, 10, 0, 0, 0, time.UTC)
+	first := &daemonMetricSampler{
+		reader: reader,
+		store:  store,
+		now:    func() time.Time { return now },
+		pid:    42,
+	}
+	first.Series(time.Hour)
+
+	now = now.Add(time.Minute)
+	reader.cpu = 200
+	reader.ioRead += 6000
+	reader.ioWrite += 3000
+	recorded := first.Series(time.Hour)
+	if recorded.CPU.Summary.Count != 1 || recorded.IO.Summary.Count != 1 || recorded.Memory.Summary.Count == 0 {
+		t.Fatalf("recorded summaries = cpu:%+v io:%+v memory:%+v", recorded.CPU.Summary, recorded.IO.Summary, recorded.Memory.Summary)
+	}
+
+	now = now.Add(time.Minute)
+	reader.cpu = 300
+	second := &daemonMetricSampler{
+		reader: reader,
+		store:  store,
+		now:    func() time.Time { return now },
+		pid:    42,
+	}
+	afterRestart := second.Series(time.Hour)
+	if afterRestart.Current.CPUReady {
+		t.Fatalf("fresh sampler current CPU should be measuring, got %+v", afterRestart.Current)
+	}
+	if afterRestart.CPU.Summary.Count != 1 || len(afterRestart.CPU.Points) != 1 {
+		t.Fatalf("persisted CPU series not restored: summary=%+v points=%+v", afterRestart.CPU.Summary, afterRestart.CPU.Points)
+	}
+	if afterRestart.IO.Summary.Count != 1 || len(afterRestart.IO.Points) != 1 {
+		t.Fatalf("persisted IO series not restored: summary=%+v points=%+v", afterRestart.IO.Summary, afterRestart.IO.Points)
+	}
+	if afterRestart.Memory.Summary.Count < 3 {
+		t.Fatalf("memory history = %+v, want prior samples plus current", afterRestart.Memory.Summary)
 	}
 }

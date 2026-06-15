@@ -13,6 +13,7 @@ command="/usr/bin/sermod"
 command_args="run --config /etc/sermo/sermo.yml"
 command_background="yes"
 pidfile="/run/sermod.pid"
+retry="${SERMOD_RETRY:-TERM/30/KILL/5}"
 
 # Capture daemon output to a log file.
 output_log="/var/log/sermod.log"
