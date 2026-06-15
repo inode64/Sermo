@@ -3,9 +3,11 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -57,6 +59,12 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 			UnitPresent: true,
 			Port:        daemonPort(resolved.Tree),
 			ConfigPaths: existingConfigFiles(resolved.Tree),
+		}
+		if name == "ceph-mon" {
+			if host, port := detectCephMonEndpoint(ctx, runner, timeout, unit); host != "" && port > 0 {
+				c.Variables = map[string]any{"host": host, "port": port}
+				c.Port = port
+			}
 		}
 		// Best-effort PID source for the wizard's pidfile/command_match question.
 		proc := servicemgr.DetectProcInfo(ctx, runner, nil, backend, unit)
@@ -298,6 +306,72 @@ func daemonPort(tree map[string]any) int {
 		}
 	}
 	return 0
+}
+
+type cephMonMetadata struct {
+	Addrs string `json:"addrs"`
+}
+
+func detectCephMonEndpoint(ctx context.Context, runner execx.Runner, timeout time.Duration, unit string) (string, int) {
+	id := cephMonID(unit)
+	if id == "" {
+		return "", 0
+	}
+	res, err := execx.Run(ctx, runner, timeout, "ceph", "mon", "metadata", id)
+	if err != nil || strings.TrimSpace(res.Stdout) == "" {
+		return "", 0
+	}
+	var meta cephMonMetadata
+	if err := json.Unmarshal([]byte(res.Stdout), &meta); err != nil {
+		return "", 0
+	}
+	return parseCephMonAddrs(meta.Addrs)
+}
+
+func cephMonID(unit string) string {
+	unit = strings.TrimSuffix(strings.TrimSpace(unit), ".service")
+	_, id, ok := strings.Cut(unit, "@")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(id)
+}
+
+func parseCephMonAddrs(addrs string) (string, int) {
+	if host, port, ok := parseCephAddrVersion(addrs, "v2"); ok {
+		return host, port
+	}
+	if host, port, ok := parseCephAddrVersion(addrs, "v1"); ok {
+		return host, port
+	}
+	return "", 0
+}
+
+func parseCephAddrVersion(addrs, version string) (string, int, bool) {
+	idx := strings.Index(addrs, version+":")
+	if idx < 0 {
+		return "", 0, false
+	}
+	rest := addrs[idx+len(version)+1:]
+	slash := strings.Index(rest, "/")
+	if slash < 0 {
+		return "", 0, false
+	}
+	endpoint := strings.TrimSpace(rest[:slash])
+	host, portText, err := net.SplitHostPort(endpoint)
+	if err != nil {
+		colon := strings.LastIndex(endpoint, ":")
+		if colon < 0 {
+			return "", 0, false
+		}
+		host, portText = endpoint[:colon], endpoint[colon+1:]
+	}
+	host = strings.Trim(host, "[]")
+	port, err := strconv.Atoi(portText)
+	if err != nil || host == "" || port <= 0 || port > 65535 {
+		return "", 0, false
+	}
+	return host, port, true
 }
 
 // existingConfigFiles returns the daemon's declared `config_files` that exist on

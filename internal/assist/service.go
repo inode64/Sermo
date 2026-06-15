@@ -193,9 +193,10 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (st
 	} else {
 		body["uses"] = c.Name
 	}
+	mergeServiceVariables(body, c.Variables)
 	if reviewPort && c.Port > 0 {
 		if n := p.AskInt(fmt.Sprintf("Port for %s?", c.Name), c.Port); n > 0 && n != c.Port {
-			body["variables"] = map[string]any{"port": n}
+			mergeServiceVariables(body, map[string]any{"port": n})
 		}
 	}
 	if len(c.ConfigPaths) > 0 && p.Confirm(configCheckQuestion(c), true) {
@@ -209,6 +210,20 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (st
 		}
 	}
 	return c.Name, body
+}
+
+func mergeServiceVariables(body map[string]any, vars map[string]any) {
+	if len(vars) == 0 {
+		return
+	}
+	dst, _ := body["variables"].(map[string]any)
+	if dst == nil {
+		dst = map[string]any{}
+		body["variables"] = dst
+	}
+	for key, value := range vars {
+		dst[key] = value
+	}
 }
 
 func configCheckQuestion(c DaemonCandidate) string {
