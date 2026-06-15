@@ -1,121 +1,62 @@
 # Sermo — project conventions
 
-## AI / agent workspaces — git worktrees mandatory for code modifications
+## AI / agent workflow — standard git commits
 
-All AI agents, sub-agents, assistant sessions and automated coding processes that will modify source files **must** operate inside a dedicated `git worktree`. Direct edits from the primary checkout are reserved exclusively for the human operator.
+AI agents, sub-agents, assistant sessions and automated coding processes use the
+same normal Git workflow as a human contributor in the current repository
+checkout. Keep the process simple: inspect status, make the requested edits,
+run the relevant checks, then commit or merge only when the user asked for that
+level of integration.
 
 **Goals**
-- Multiple agent instances can execute in parallel (separate directories → no file conflicts).
-- The human's primary tree on the local `main` branch remains permanently clean and is the single integration point.
-- Agent work is trivially inspectable, diffable, discardable or mergeable as an atomic unit.
-- Matches the isolation facilities provided by the environment (e.g. `spawn_subagent` with `isolation: "worktree"`).
-
-**Concurrency model**
-
-Use one worktree per agent and per task. The primary checkout is an integration
-queue, not a shared work area: agents never edit it directly, and parallel agents
-never share a worktree. This is the preferred coordination mechanism for Sermo
-because it prevents file-level write races while preserving normal Git review,
-test and merge workflows.
-
-Create agent worktrees as sibling directories of the primary checkout:
-
-```sh
-../sermo-agent-<task-slug>
-```
-
-Do not place normal agent worktrees under `/tmp`; temporary directories are easy
-to lose and make human review harder. Use `/tmp` only for disposable build
-artifacts, caches, packages or remote-transfer files.
-
-When several agent branches are active, integrate them **serially**:
-
-1. Review and merge one agent branch into local `main`.
-2. Update the remaining agent branches from the new `main` before they are
-   considered mergeable.
-3. Re-run the relevant tests/lint in each updated worktree.
-4. Merge the next branch only after it is current and clean.
-
-Do not merge a stale agent branch just because it passed tests before another
-agent branch landed.
+- Keep one visible source of truth in the repository checkout the user is using.
+- Avoid hidden integration queues and extra cleanup steps.
+- Make every change easy to inspect with normal `git status`, `git diff` and
+  `git log`.
+- Preserve user edits and unrelated local state.
 
 **Mandatory workflow**
 
-1. The primary (human-facing) session keeps its working tree on a clean local `main` at all times.
-2. When an agent needs to change code, it (or its spawner) first creates a dedicated worktree + branch from the primary checkout:
+1. Before editing, inspect the current branch and working directory state:
 
    ```sh
-   # Execute from the primary Sermo directory (must be on main, tree clean)
-   git worktree add -b agent/<task-slug> ../sermo-agent-<task-slug>
-   cd ../sermo-agent-<task-slug>
+   git status --short --branch
    ```
 
-   Choose a short descriptive slug (`disk-metrics-refactor`, `add-foo-check-20250613`, ...). Sibling directories keep navigation simple.
+2. Work directly in the current checkout unless the user explicitly asks for a
+   separate branch. If the current branch is not appropriate for the task, ask
+   or create a normal local branch with a clear name before changing files.
 
-3. **All** development work happens inside the worktree:
-   - File creation/edits (editors, `search_replace`, `write`, ...).
-   - Builds, tests, `make lint`, gofmt, etc.
-   - Any locally built `bin/sermoctl` / `bin/sermod` used for manual verification.
-   - The agent must still obey every rule in this document (reuse, safety invariants, documentation lockstep, full quality gates, etc.).
+3. Preserve unrelated changes. If files already have user edits, read and work
+   with them instead of reverting or overwriting them. Leave unrelated untracked
+   files alone.
 
-4. When the unit of work is finished and has passed the complete battery:
-   - Commit inside the worktree (the agent may stage but the human usually reviews before the final merge):
+4. Keep edits scoped to the request and the ownership boundaries in this
+   document. Run targeted tests while developing and the complete battery before
+   committing when the change is code-affecting.
 
-     ```sh
-     git add -A
-     git commit -m "agent: <concise description of the change>"
-     ```
-
-5. Integration is always performed **from the primary checkout** (still on local `main`).
-   The human operator is the merge gate: an agent merges only when the human has
-   explicitly asked for integration, or when the current task explicitly includes
-   "commit and merge" as part of the requested deliverable.
-
-   Before merging, inspect what will enter `main`:
+5. Commit when the user asks for a commit, asks to merge into the main branch,
+   or the task explicitly includes committing as part of the deliverable:
 
    ```sh
-   git log --oneline main..agent/<task-slug>
-   git diff --stat main..agent/<task-slug>
+   git add <changed-files>
+   git commit -m "agent: <concise description of the change>"
    ```
 
-   Then merge and clean up:
-
-   ```sh
-   # From primary Sermo checkout on main
-   git merge --no-ff ../sermo-agent-<task-slug> -m "Merge agent/<task-slug>: <summary>"
-
-   # Clean up
-   git worktree remove ../sermo-agent-<task-slug>
-   git branch -d agent/<task-slug>
-   ```
-
-   You can also use the fetch form if preferred:
-
-   ```sh
-   git fetch ../sermo-agent-<task-slug> agent/<task-slug>
-   git merge --no-ff FETCH_HEAD -m "..."
-   ```
-
-   The human reviews the diff and is the gate for the merge. Agent sessions must never push their branches to `origin`.
-
-6. Tool-spawned sub-agents that will write files **must** request worktree isolation when the launcher supports it:
-
-   When using `spawn_subagent` (or any equivalent sub-task primitive), pass `isolation: "worktree"`. The child receives its own isolated checkout; the framework returns the worktree path. The child agent follows the same "commit inside worktree → parent merges from primary" discipline. After the child finishes, the parent is responsible for the merge + `worktree remove`.
+6. Merge only when the user explicitly asks for integration. Before merging,
+   inspect the incoming commits and diff, resolve conflicts intentionally, and
+   re-run the relevant checks after the merge.
 
 **Prohibitions**
-- Never modify files while your current working directory is the primary checkout (except the human operator for trivial fixes).
-- Never reuse or nest worktrees for unrelated tasks.
-- Never leave a worktree behind after the corresponding branch has been merged or abandoned (`git worktree prune` helps).
-- Never `git push` agent branches unless the human explicitly asks for a PR.
+- Do not overwrite, revert, reset or discard user changes unless the user
+  explicitly asks for that exact destructive action.
+- Do not push to `origin` unless the user explicitly asks for a push or PR.
+- Do not leave the repository in a partially staged state without explaining it.
 
 **Relationship to the rest of AGENTS.md**
 This workflow is part of the "Small-change checklist". Every implementation
-plan, skill, or prompt that drives agents on Sermo must start by establishing
-(or declaring use of) a worktree and must end with a committed worktree ready
-for review, or with a merge back into local `main` when the human explicitly
-requests integration.
-
-Update this section when the coding environment changes its sub-agent isolation primitives.
+should start by inspecting repository state and finish with either a clean,
+tested commit or a clearly reported working-directory state.
 
 ## Reuse and shared behavior
 
@@ -233,7 +174,9 @@ they bound the test itself rather than production behavior.
 
 Before finishing any code change:
 
-- **Worktree discipline (AI agents):** If you are an agent that edits code, you must have performed the work inside a dedicated `git worktree` created from a clean primary `main`, and the result must finish as either a committed worktree ready for human review or, when explicitly requested, a merge back to local `main` plus `worktree remove`. See "AI / agent workspaces".
+- **Git discipline (AI agents):** Inspect `git status --short --branch` before
+  editing, preserve unrelated user changes, commit only when requested or when
+  the task includes committing, and never push unless explicitly asked.
 - Search for the existing owner with `rg` before adding a new helper or switch.
 - Keep the patch close to that owner; avoid unrelated refactors.
 - Preserve public YAML, JSON, CLI and web field names unless the change is
