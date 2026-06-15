@@ -1,13 +1,11 @@
-kind: daemon
+kind: app
 name: python%n
 display_name: "Python ${n}"
 category: runtime
-service: python${n}
+description: "Python interpreter"
 variables:
   binary: "/usr/bin/python${n}"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-
-checks:
-  service: { type: service, expect: active }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  version_short: { type: command, command: ["${binary}", "-c", "import platform;print(platform.python_version())"], timeout: 10s }
