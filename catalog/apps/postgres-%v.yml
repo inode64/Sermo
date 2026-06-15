@@ -1,0 +1,9 @@
+kind: app
+name: postgres-%v
+display_name: "PostgreSQL ${version}"
+category: database
+variables:
+  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
