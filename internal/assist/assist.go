@@ -20,12 +20,13 @@ type Iface struct {
 // candidates write `uses: Name`; Generic candidates are active backend units not
 // backed by a catalog daemon and write a self-contained service check.
 type DaemonCandidate struct {
-	Name          string   // service name to write; catalog daemon name unless Generic
-	Title         string   // display name
-	Unit          string   // resolved init unit for the active backend
-	Status        string   // backend status for Unit (active/inactive/failed/unknown)
-	Generic       bool     // active backend unit without a catalog daemon
-	Port          int      // catalog default port (0 = none)
+	Name          string // service name to write; catalog daemon name unless Generic
+	Title         string // display name
+	Unit          string // resolved init unit for the active backend
+	Status        string // backend status for Unit (active/inactive/failed/unknown)
+	Generic       bool   // active backend unit without a catalog daemon
+	Port          int    // catalog default port (0 = none)
+	Variables     map[string]any
 	ConfigPaths   []string // config file locations that exist on the host
 	UnitPresent   bool     // the init unit exists on the active backend
 	PortListening bool     // something is listening on Port
