@@ -1912,6 +1912,101 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestVersionTemplateServiceLinksMaterializedApp(t *testing.T) {
+	root := t.TempDir()
+	pgRoot := filepath.Join(root, "usr", "lib64")
+	for _, v := range []string{"15", "16"} {
+		dir := filepath.Join(pgRoot, "postgresql-"+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "postgres"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	catalogDir := filepath.Join(root, "catalog")
+	enabledDir := filepath.Join(root, "enabled")
+	write := func(dir, file, content string) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	binary := filepath.Join(pgRoot, "postgresql-${version}", "bin", "postgres")
+	write(filepath.Join(catalogDir, "apps"), "postgres-%v.yml", fmt.Sprintf(`
+kind: app
+name: postgres-%%v
+display_name: "PostgreSQL ${version}"
+variables:
+  binary: %q
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+`, binary))
+	write(filepath.Join(catalogDir, "services"), "postgres-%v.yml", fmt.Sprintf(`
+kind: daemon
+name: postgres-%%v
+display_name: "PostgreSQL ${version}"
+service: "postgresql-${version}"
+apps: ["postgres-${version}"]
+versions: { from: %q }
+variables: { port: 5432 }
+checks: { service: { type: service, expect: active } }
+`, binary))
+	write(enabledDir, "pg.yml", "kind: service\nname: pg\nuses: postgres-16\n")
+
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths:
+  catalog: [ %s ]
+  includes: [ %s ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Apps["postgres-%v"]; ok {
+		t.Fatalf("app template postgres-%%v should not be registered")
+	}
+	for _, v := range []string{"15", "16"} {
+		if _, ok := cfg.Apps["postgres-"+v]; !ok {
+			t.Fatalf("expected materialized app postgres-%s", v)
+		}
+		if _, ok := cfg.Daemons["postgres-"+v]; !ok {
+			t.Fatalf("expected materialized daemon postgres-%s", v)
+		}
+	}
+
+	resolved, errs := cfg.Resolve("pg")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(pg) errors = %v", errs)
+	}
+	if _, ok := resolved.Tree["apps"]; ok {
+		t.Fatalf("apps should be consumed during resolution: %v", resolved.Tree["apps"])
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	binaryCheck := nested(t, preflight, "postgres-16-binary")
+	wantBinary := filepath.Join(pgRoot, "postgresql-16", "bin", "postgres")
+	if got := cfgval.String(binaryCheck["path"]); got != wantBinary {
+		t.Fatalf("postgres-16-binary path = %q, want %q", got, wantBinary)
+	}
+	versionCheck := nested(t, preflight, "postgres-16-version")
+	command, _ := versionCheck["command"].([]any)
+	if len(command) != 2 || command[0] != wantBinary || command[1] != "--version" {
+		t.Fatalf("postgres-16-version command = %v, want [%s --version]", command, wantBinary)
+	}
+}
+
 func TestVersionTemplateDiscoversFromLinkedAppTemplate(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")

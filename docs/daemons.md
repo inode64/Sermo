@@ -542,29 +542,39 @@ shorthand path can reference variables (e.g. `pidfile: "${pidfile}"`).
 
 Some applications ship one binary per version and several can be installed at
 once (php-fpm, postgres, tomcat, erlang/beam, berkeley db). Instead of one file per
-version, write a single **version template**: a daemon whose name (and filename)
-contains `%v`, with `${version}` in the binary path.
+version, write a single **version template**: a daemon or app whose name (and
+filename) contains `%v`, with `${version}` in the discovery path.
 
 ```yaml
-kind: daemon
+kind: app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-service: postgres
 variables:
   binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 preflight:
   binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+
+---
+kind: daemon
+name: postgres-%v
+display_name: "PostgreSQL ${version}"
+service: postgres
+apps: ["postgres-${version}"]
+versions:
+  from: "/usr/lib64/postgresql-${version}/bin/postgres"
 ```
 
-On load, Sermo discovers installed versions by globbing the `binary` path with
-`${version}` wildcarded (here `/usr/lib64/postgresql-*/bin/postgres`) and
-extracting what filled it. Each match becomes a concrete daemon with `%v` and
-`${version}` substituted everywhere (name, binary, display_name, service, ...) —
-`postgres-14`, `postgres-16`, ... — and the template itself is dropped. If nothing
-is installed the template yields nothing. The filename mirrors the name
-(`postgres-%v.yml`); only that one file is needed. `%v` may sit anywhere in the
-name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
-the body always use `${version}` (e.g. in `service`).
+On load, Sermo discovers installed versions by globbing the app `binary` path or
+the daemon's `versions.from` path with `${version}` wildcarded (here
+`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Each match
+becomes a concrete daemon with `%v` and `${version}` substituted everywhere
+(name, display_name, service, app links, ...) — `postgres-14`, `postgres-16`, ...
+— and the template itself is dropped. If nothing is installed the template yields
+nothing. The filename mirrors the name (`postgres-%v.yml`); only that one file is
+needed. `%v` may sit anywhere in the name (`db%vsql` → `db4.8sql`). Note: `%v` is
+substituted only in the name; inside the body always use `${version}` (e.g. in
+`service` or `apps`).
 
 When the monitored `binary` is generic (no version in its path), point discovery
 at a version-specific path with `versions.from`:

@@ -5,12 +5,11 @@ category: database
 service:
   systemd: [postgres, postgresql, "postgresql-${version}", "postgres-${version}"]
   openrc: ["postgresql-${version}", "postgres-${version}", postgres]
+apps: ["postgres-${version}"]
+versions:
+  from: "/usr/lib64/postgresql-${version}/bin/postgres"
 variables:
   port: 5432
-  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
-preflight:
-  binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
 
 checks:
   service: { type: service, expect: active }
