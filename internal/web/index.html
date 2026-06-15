@@ -107,6 +107,7 @@
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
   .state-disabled, .state-stopped, .state-unmonitorized { color: var(--text-2); }
   .state-running { color: var(--info); }
+  .state-warning { color: var(--warn); }
   .state-ok, .state-monitorized { color: var(--ok); }
   .state-failed { color: var(--crit); }
   .state-failed::before { animation: beat 1.2s ease-in-out infinite; }
@@ -139,6 +140,11 @@
   #err { color: var(--crit); min-height: 1.2rem; }
   body.disconnected #services-section, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
+  td.status-cell { font-weight: 600; }
+  td.status-warning { background: color-mix(in srgb, var(--warn) 12%, transparent); }
+  td.status-failed { background: color-mix(in srgb, var(--crit) 12%, transparent); }
+  tr:hover td.status-warning { background: color-mix(in srgb, var(--warn) 18%, transparent); }
+  tr:hover td.status-failed { background: color-mix(in srgb, var(--crit) 18%, transparent); }
   .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .process-cmd { font-family: var(--mono); font-size: .82em; }
   .check-message { max-width: min(42rem, 54vw); }
@@ -360,6 +366,7 @@
     <thead><tr>
       <th class="sortable" data-app-sort="name">Application<span class="sort-ind" data-ai="name"></span></th>
       <th class="sortable" data-app-sort="category">Category<span class="sort-ind" data-ai="category"></span></th>
+      <th class="sortable" data-app-sort="state">Status<span class="sort-ind" data-ai="state"></span></th>
       <th class="sortable" data-app-sort="version">Version<span class="sort-ind" data-ai="version"></span></th>
     </tr></thead>
     <tbody id="app-rows"></tbody>
@@ -935,6 +942,7 @@ function targetStateClass(state) {
     case "disabled": return "state-disabled";
     case "running": return "state-running";
     case "stopped": return "state-stopped";
+    case "warning": return "state-warning";
     case "ok": return "state-ok";
     case "monitorized": return "state-monitorized";
     case "unmonitorized": return "state-unmonitorized";
@@ -944,8 +952,12 @@ function targetStateClass(state) {
 }
 
 function stateBadge(state) {
+  return stateBadgeLabel(state, state || "unknown");
+}
+
+function stateBadgeLabel(state, label) {
   const st = state || "unknown";
-  return `<span class="target-state ${targetStateClass(st)}">${esc(st)}</span>`;
+  return `<span class="target-state ${targetStateClass(st)}">${esc(label || st)}</span>`;
 }
 
 function stateRank(state) {
@@ -955,6 +967,7 @@ function stateRank(state) {
     case "running": return 2;
     case "stopped": return 3;
     case "ok": return 4;
+    case "warning": return 5;
     case "monitorized": return 5;
     case "failed": return 6;
     default: return 5;
@@ -1183,7 +1196,7 @@ function serviceMatches(s) {
   const category = categoryOf(s, "service");
   if (svcCategory !== "all" && category !== svcCategory) return false;
   if (svcQuery) {
-    const hay = `${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
+    const hay = `${displayName(s)} ${s.name || ""} ${s.display_name || ""} ${category} ${s.unit || ""} ${serviceState(s)} ${serviceUnmonitorized(s) ? "unmonitorized" : ""}`.toLowerCase();
     if (!hay.includes(svcQuery)) return false;
   }
   switch (svcStatus) {
@@ -1237,7 +1250,7 @@ function renderFilterButtonCounts(selector, counts) {
 // sorts by it (ascending), and clicking the same header again flips direction.
 let svcSort = { key: "", dir: 1 };
 const svcSortKeys = {
-  name: (s) => (s.name || "").toLowerCase(),
+  name: (s) => displayName(s).toLowerCase(),
   category: (s) => categoryOf(s, "service").toLowerCase(),
   state: (s) => stateRank(serviceState(s)),
   last: (s) => (s.last_event && s.last_event.time) || "",
@@ -1354,9 +1367,7 @@ function renderServices() {
             : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
         : '<span class="muted">read-only</span>';
     }
-    const label = s.display_name && s.display_name !== s.name
-      ? `${esc(s.name)} <span class="muted">${esc(s.display_name)}</span>`
-      : esc(s.name);
+    const label = esc(displayName(s));
     const key = "svc:" + s.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
@@ -1643,7 +1654,7 @@ function renderServiceDetail(d) {
     : "";
 
   return `<div class="service-detail" data-service-detail="${esc(d.name)}">
-    <h2>${esc(d.name)} <span class="muted">${esc(d.unit || "")}</span></h2>
+    <h2>${esc(displayName(d))} <span class="muted">${esc(d.unit || "")}</span></h2>
     <p class="muted" style="margin-top:-.25rem">State: ${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</p>
     ${disabledNote}
     <h2>Remediation</h2>
@@ -1929,6 +1940,7 @@ function watchSummaryText(w) {
 function watchSearchText(w) {
   const conditions = (w.conditions || []).map((c) => `${c.field || ""} ${c.op || ""} ${c.value || ""}`).join(" ");
   return [
+    displayName(w),
     w.name,
     w.check_type,
     watchSummaryText(w),
@@ -2009,7 +2021,7 @@ function parseDurationSeconds(raw) {
 
 let watchSort = { key: "", dir: 1 };
 const watchSortKeys = {
-  name: (w) => (w.name || "").toLowerCase(),
+  name: (w) => displayName(w).toLowerCase(),
   type: (w) => (w.check_type || "").toLowerCase(),
   summary: (w) => watchSummaryText(w).toLowerCase(),
   interval: (w) => parseDurationSeconds(w.interval),
@@ -2163,7 +2175,7 @@ function renderWatches(watches) {
       ? '<span class="muted">disabled in config</span>'
       : [expandBtn, monitorBtn].filter(Boolean).join(" ");
     const row = `<tr class="clickable" data-exp-key="${esc(key)}">
-      <td>${chev}${esc(w.name)}</td>
+      <td>${chev}${esc(displayName(w))}</td>
       <td>${esc(w.check_type || "")}</td>
       <td class="watch-summary">${summary}</td>
       <td>${esc(w.interval || "")}</td>
@@ -2193,22 +2205,53 @@ let appGrouped = false;
 let appCollapsedGroups = new Set();
 let appSort = { key: "", dir: 1 };
 const appSortKeys = {
-  name: (a) => (a.name || "").toLowerCase(),
+  name: (a) => displayName(a).toLowerCase(),
   category: (a) => categoryOf(a, "app").toLowerCase(),
+  state: appStateRank,
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
 };
 function setAppSort(key) { toggleSort(appSort, key, renderApps); }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); }
 function setAppCategory(v) { appCategory = v || "all"; renderApps(); }
 function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
+function appStateText(a) {
+  const status = String((a && a.status) || "").trim().toLowerCase();
+  if (!status || status === "ok") return "ok";
+  if (status.startsWith("error:") || status === "not installed" || status === "no binary configured") return "failed";
+  return "warning";
+}
+function appStateRank(a) {
+  switch (appStateText(a)) {
+    case "ok": return 0;
+    case "warning": return 1;
+    case "failed": return 2;
+    default: return 3;
+  }
+}
+function appStatusLabel(a) {
+  switch (appStateText(a)) {
+    case "ok": return "Ok";
+    case "warning": return "Warning";
+    case "failed": return "Failed";
+    default: return "Unknown";
+  }
+}
+function appStatusCell(a) {
+  const state = appStateText(a);
+  const detail = (a && a.status && a.status !== "ok") ? a.status : appStatusLabel(a);
+  return `<td class="status-cell status-${esc(state)}" title="${esc(detail)}">${stateBadgeLabel(state, appStatusLabel(a))}</td>`;
+}
 function appMatches(a) {
   const category = categoryOf(a, "app");
   if (appCategory !== "all" && category !== appCategory) return false;
   if (!appQuery) return true;
   const q = appQuery.toLowerCase();
-  return (a.name || "").toLowerCase().includes(q)
+  return displayName(a).toLowerCase().includes(q)
+    || (a.name || "").toLowerCase().includes(q)
     || (a.display_name || "").toLowerCase().includes(q)
     || category.toLowerCase().includes(q)
+    || appStateText(a).includes(q)
+    || (a.status || "").toLowerCase().includes(q)
     || (a.version || "").toLowerCase().includes(q)
     || (a.user || "").toLowerCase().includes(q)
     || (a.group || "").toLowerCase().includes(q);
@@ -2278,9 +2321,7 @@ function renderApps(apps) {
   if (filterCount) filterCount.textContent = (appQuery || appCategory !== "all") ? `showing ${list.length} of ${total}` : "";
   const appRow = (a) => {
     const category = categoryOf(a, "app");
-    const label = a.display_name && a.display_name !== a.name
-      ? `${esc(a.name)} <span class="muted">${esc(a.display_name)}</span>`
-      : esc(a.name);
+    const label = esc(displayName(a));
     const key = "app:" + a.name;
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
@@ -2288,17 +2329,18 @@ function renderApps(apps) {
     const row = `<tr class="clickable" data-exp-key="${esc(key)}">
       <td>${chev}${label}</td>
       <td>${categoryBadge(category)}</td>
+      ${appStatusCell(a)}
       <td>${esc(ver)}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="3">${renderAppExpansion(a)}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="4">${renderAppExpansion(a)}</td></tr>`
       : "";
     return row + expRow;
   };
   const rows = appGrouped
-    ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 3, appRow, appSort.key === "category" ? appSort.dir : 1)
+    ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 4, appRow, appSort.key === "category" ? appSort.dir : 1)
     : list.map(appRow).join("");
-  tbody.innerHTML = rows || `<tr><td colspan="3" class="muted">No applications match the filter.</td></tr>`;
+  tbody.innerHTML = rows || `<tr><td colspan="4" class="muted">No applications match the filter.</td></tr>`;
 }
 
 // renderAppExpansion shows one application's full version, binary location and
@@ -3220,6 +3262,17 @@ function fmtAge(t) {
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function capFirst(s) {
+  const chars = Array.from(String(s || "").trim());
+  if (!chars.length) return "";
+  chars[0] = chars[0].toLocaleUpperCase();
+  return chars.join("");
+}
+
+function displayName(item) {
+  return capFirst((item && (item.display_name || item.name)) || "");
 }
 
 function categoryOf(item, fallback) {
