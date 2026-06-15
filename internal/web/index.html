@@ -204,11 +204,6 @@
   #detail table { margin-bottom: .6rem; }
   #ready { margin: .6rem 0 0; }
 
-  /* ---- availability --------------------------------------------------------- */
-  .sla { display: flex; gap: 1.2rem; flex-wrap: wrap; }
-  .sla div { text-align: center; }
-  .sla .v { font-size: 1.3rem; font-weight: 600; }
-
   /* ---- events / diagnostics -------------------------------------------------- */
   .events { width: 100%; font-size: .88rem; }
   .events td { vertical-align: top; }
@@ -917,25 +912,6 @@ function nextRemediationCell(s) {
   return '<span class="muted">—</span>';
 }
 
-function summarizeSLA(points) {
-  const pts = (points || []).filter((p) => p && p.total > 0);
-  if (!pts.length) return { ratio: null, recent: null, previous: null, degraded: false };
-  const totals = (list) => list.reduce((a, p) => ({ up: a.up + (p.up || 0), total: a.total + (p.total || 0) }), { up: 0, total: 0 });
-  const all = totals(pts);
-  const part = Math.max(1, Math.ceil(pts.length / 4));
-  const recentTotals = totals(pts.slice(-part));
-  const prevTotals = totals(pts.slice(-part * 2, -part));
-  const ratio = all.total ? all.up / all.total : null;
-  const recent = recentTotals.total ? recentTotals.up / recentTotals.total : null;
-  const previous = prevTotals.total ? prevTotals.up / prevTotals.total : null;
-  return {
-    ratio,
-    recent,
-    previous,
-    degraded: recent != null && previous != null && previous - recent >= 0.02,
-  };
-}
-
 // Service list state: latest fetched data plus the active search/status filter,
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
@@ -1504,11 +1480,13 @@ function bucketize(points, span, cols, makeBucket, fold) {
   return { buckets, startMs };
 }
 
-// procCpuCell and procIoFdThreadCells render the per-process metric columns
+// procCpuCells and procIoFdThreadCells render the per-process metric columns
 // shared by the expansion and detail process tables, keeping the two identical
 // (only the memory column differs: the expansion shows a host-RAM bar).
-function procCpuCell(p) {
-  return p.has_cpu ? cpuBarMini(p.cpu) : '—';
+function procCpuCells(p) {
+  if (!p.has_cpu) return '<td>—</td><td>—</td>';
+  const cpu = Number(p.cpu) || 0;
+  return `<td>${cpu.toFixed(1)}%</td><td>${cpuBarMini(cpu)}</td>`;
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
@@ -1547,14 +1525,14 @@ function renderExpansion(d, metrics) {
     ? `<div class="muted">No resident process expected.</div>`
     : procs.length
     ? `<table style="width:auto; font-size:.85rem;">
-        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th title="CPU used by this process, normalized to one core">CPU/core</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+        <thead><tr><th>PID</th><th>PPID</th><th>Exe</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
         <tbody>${procs.map((p) => `<tr>
           <td>${p.pid}</td>
           <td class="muted">${p.ppid}</td>
           <td>${p.exe ? esc(p.exe) : '<span class="muted">unknown</span>'}</td>
           <td class="muted">${esc(p.user || "")}</td>
           <td class="muted">${esc(p.role || "")}</td>
-          <td>${procCpuCell(p)}</td>
+          ${procCpuCells(p)}
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           ${procIoFdThreadCells(p)}
         </tr>`).join("")}</tbody></table>`
@@ -2862,11 +2840,6 @@ function renderDetail(d) {
       <td class="muted">${esc(c.message || "")}</td></tr>`;
   }).join("") || `<tr><td colspan="4" class="muted">No checks.</td></tr>`;
 
-  const sla = (d.sla || []).map((w) => {
-    const v = w.ratio == null ? "n/a" : (w.ratio * 100).toFixed(2) + "%";
-    return `<div><div class="v">${v}</div><div class="muted">${esc(w.window)}</div></div>`;
-  }).join("") || '<span class="muted">No SLA data.</span>';
-
   const lockRows = (d.locks || []).map((l) => {
     return `<tr>
       <td>${esc(lockName(l))}</td>
@@ -2909,16 +2882,14 @@ function renderDetail(d) {
     const role = p.role ? esc(p.role) : '<span class="muted">—</span>';
     return `<tr><td>${p.pid}</td><td class="muted">${p.ppid}</td><td>${user}</td>
       <td>${exeCell}</td><td>${p.exe_resolved ? '<span class="ok">yes</span>' : '<span class="inactive">no</span>'}</td><td class="muted">${role}</td><td class="muted">${esc(p.source || "")}</td>
-      <td>${procCpuCell(p)}</td><td>${p.rss ? fmtBytes(p.rss) : '—'}</td>${procIoFdThreadCells(p)}</tr>`;
-  }).join("") || `<tr><td colspan="12" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
+      ${procCpuCells(p)}<td>${p.rss ? fmtBytes(p.rss) : '—'}</td>${procIoFdThreadCells(p)}</tr>`;
+  }).join("") || `<tr><td colspan="13" class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings above." : "No processes found."}</td></tr>`;
   const processSection = noResidentProcess
     ? `<h2>Processes</h2>${procSummary}${procWarns}`
     : `<h2>Processes</h2>
     ${procSummary}${procTotals}${procWarns}
-    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th title="CPU used by this process, normalized to one core">CPU/core</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+    <table><thead><tr><th>PID</th><th>PPID</th><th>User</th><th>Exe</th><th>Exe resolved</th><th>Role</th><th>Source</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
       <tbody>${procRows}</tbody></table>`;
-
-  const wins = winButtons([["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"]], seriesWindow, "setWin");
 
   // Latency graph: only checks whose type records a measurement (like icmp).
   const measured = (d.checks || []).filter((c) => metricTypes.includes(c.type));
@@ -2981,16 +2952,10 @@ function renderDetail(d) {
     ${processSection}
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
-    <h2>Availability</h2>
-    <div class="sla">${sla}</div>
-    <h2>History <span class="muted">${wins}</span></h2>
-    <div id="chart-summary" class="muted">loading…</div>
-    <div id="chart" class="muted">loading…</div>
     ${latency}
     ${metricGraphs}
     <h2>Recent events</h2>
     <table class="events"><tbody id="svc-events"><tr><td class="muted">loading…</td></tr></tbody></table>`;
-  loadSeries(d.name);
   if (measured.length) loadMetrics(d.name);
   if (metricCharts.length) loadNamedMetrics(d.name, metricCharts);
   loadServiceEvents(d.name);
@@ -3087,13 +3052,7 @@ async function loadServiceEvents(name) {
   }
 }
 
-let seriesWindow = "24h";
 const windowMs = { "1h": 36e5, "24h": 864e5, "168h": 6048e5, "720h": 2592e6, "8760h": 3.1536e10 };
-
-function setWin(win) {
-  seriesWindow = win;
-  if (current) detail(current);
-}
 
 // Latency graph state: the selected measured check and its window.
 let metricCheck = "";
@@ -3248,54 +3207,6 @@ function fmtMetricValue(v, unit) {
     default:
       return n.toFixed(1) + (unit || "");
   }
-}
-
-async function loadSeries(name) {
-  try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${seriesWindow}`);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const body = await res.json();
-    const points = body.points || [];
-    const s = summarizeSLA(points);
-    const total = s.ratio == null ? "n/a" : (s.ratio * 100).toFixed(2) + "%";
-    const recent = s.recent == null ? "n/a" : (s.recent * 100).toFixed(2) + "%";
-    const prior = s.previous == null ? "n/a" : (s.previous * 100).toFixed(2) + "%";
-    $("#chart-summary").innerHTML = s.degraded
-      ? `<span class="bad">recent degradation</span> · total <b>${esc(total)}</b> · recent ${esc(recent)} · prior ${esc(prior)}`
-      : `total <b>${esc(total)}</b> · recent ${esc(recent)} · prior ${esc(prior)}`;
-    $("#chart").innerHTML = drawChart(points);
-    $("#chart").classList.remove("muted");
-  } catch (e) {
-    $("#chart-summary").textContent = "";
-    $("#chart").textContent = "Failed to load history: " + e.message;
-  }
-}
-
-function drawChart(points) {
-  const W = 640, H = 140, pad = 26, cols = 120;
-  const span = windowMs[seriesWindow] || 864e5;
-  const { buckets, startMs } = bucketize(points, span, cols,
-    () => ({ up: 0, total: 0 }),
-    (b, p) => { b.up += p.up; b.total += p.total; });
-  const bw = (W - 2 * pad) / cols;
-  let bars = "", any = false;
-  buckets.forEach((b, i) => {
-    if (b.total === 0) return;
-    any = true;
-    const ratio = b.up / b.total;
-    const h = ratio * (H - 2 * pad);
-    const x = pad + i * bw, y = H - pad - h;
-    const color = ratio >= 0.99 ? "#1a7f37" : ratio >= 0.95 ? "#9a6700" : "#cf222e";
-    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw - 0.4, 0.6).toFixed(1)}" height="${h.toFixed(1)}" fill="${color}"></rect>`;
-  });
-  if (!any) return '<span class="muted">No availability data yet for this window.</span>';
-  const axis = `
-    <line x1="${pad}" y1="${pad}" x2="${W - pad}" y2="${pad}" stroke="#8884"></line>
-    <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#8886"></line>
-    <text x="2" y="${pad + 4}" font-size="10" fill="#888">100%</text>
-    <text x="${pad}" y="${H - 6}" font-size="10" fill="#888">${new Date(startMs).toLocaleString()}</text>
-    <text x="${W - pad}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${axis}${bars}</svg>`;
 }
 
 function closeDetail() { current = null; $("#detail").style.display = "none"; }
@@ -3680,9 +3591,6 @@ function initDelegatedHandlers() {
     if (windowBtn) {
       const val = windowBtn.dataset.windowValue || "";
       switch (windowBtn.dataset.windowKind) {
-        case "setWin":
-          setWin(val);
-          break;
         case "setMetricWin":
           setMetricWin(val);
           break;
