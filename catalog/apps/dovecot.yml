@@ -4,6 +4,8 @@ display_name: "Dovecot"
 category: messaging
 variables:
   binary: "/usr/bin/dovecot"
+  doveconf: "/usr/bin/doveconf"
 preflight:
   binary: { type: binary, path: "${binary}" }
+  doveconf: { type: binary, path: "${doveconf}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

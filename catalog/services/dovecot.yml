@@ -11,7 +11,7 @@ variables:
   port: 143
   tls_port: 993
 preflight:
-  config: { type: command, command: ["sh","-c","/usr/bin/doveconf >/dev/null"], timeout: 30s }
+  config: { type: command, command: ["${dovecot_doveconf}", "-n"], timeout: 30s }
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
