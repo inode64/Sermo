@@ -24,6 +24,7 @@ func TestServiceAssistant(t *testing.T) {
 	script := strings.Join([]string{
 		"1",    // MultiChoose -> nginx
 		"8080", // port override
+		"y",    // add detected configuration check
 		"1",    // monitor state: enabled
 		"",     // interval: inherit
 		"y",    // remediation shadow mode
@@ -51,6 +52,15 @@ func TestServiceAssistant(t *testing.T) {
 	vars, _ := svc["variables"].(map[string]any)
 	if vars == nil || vars["port"] != 8080 {
 		t.Fatalf("expected port override 8080, got %v", svc["variables"])
+	}
+	checks := svc["checks"].(map[string]any)
+	configCheck := checks["config"].(map[string]any)
+	if configCheck["type"] != "config" || configCheck["on_change"] != true || configCheck["interval"] != serviceConfigCheckInterval {
+		t.Fatalf("config check = %v, want config/on_change/%s", configCheck, serviceConfigCheckInterval)
+	}
+	paths := configCheck["path"].([]any)
+	if len(paths) != 1 || paths[0] != "/etc/nginx/nginx.conf" {
+		t.Fatalf("config check paths = %v, want nginx.conf", paths)
 	}
 }
 

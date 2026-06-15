@@ -25,10 +25,13 @@ and the invariants below, and update this file in the same change.
    ask only the properties that legitimately differ per service, such as a port
    override. PID/process ownership belongs in the catalog daemon under
    `catalog/services`, so generated catalog service entries should normally only
-   write `uses:` plus explicit overrides. For active units with no catalog
-   profile, ask the **PID source** because there is no daemon profile to inherit:
-   a pidfile path writes `pidfile:`; with no pidfile, an executable derived from
-   the unit offers a `command_match` process selector.
+   write `uses:` plus explicit overrides. When configuration files are detected,
+   ask whether to add a `checks.config` entry that watches those paths; it uses a
+   per-check `interval: 60m` so the service's normal cycle does not need to slow
+   down. For active units with no catalog profile, ask the **PID source** because
+   there is no daemon profile to inherit: a pidfile path writes `pidfile:`; with
+   no pidfile, an executable derived from the unit offers a `command_match`
+   process selector.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
 5. **Monitor state.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
