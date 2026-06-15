@@ -1517,7 +1517,7 @@ function bucketize(points, span, cols, makeBucket, fold) {
 function procCpuCells(p) {
   if (!p.has_cpu) return '<td>—</td><td>—</td>';
   const cpu = Number(p.cpu) || 0;
-  return `<td>${cpu.toFixed(1)}%</td><td>${cpuBarMini(cpu)}</td>`;
+  return `<td>${fmtNum(cpu, 2)}%</td><td>${cpuBarMini(cpu)}</td>`;
 }
 function procIoFdThreadCells(p) {
   const io = (p.io_read || p.io_write) ? `${fmtBytes(p.io_read || 0)} / ${fmtBytes(p.io_write || 0)}` : '—';
@@ -1548,7 +1548,7 @@ function serviceUptimeCell(s) {
 function cpuInline(cpu, ready, numCPU) {
   if (!ready) return numCPU ? '<span class="muted">measuring…</span>' : '<span class="muted">—</span>';
   const v = Number(cpu) || 0;
-  return `<span class="metric-inline"><b>${v.toFixed(1)}%</b>${usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${v.toFixed(1)}% of ${numCPU || "?"} host CPUs`)}</span>`;
+  return `<span class="metric-inline"><b>${fmtNum(v, 2)}%</b>${usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`)}</span>`;
 }
 
 function serviceCpuCell(s) {
@@ -1756,17 +1756,28 @@ function hydrateServiceDetail(d) {
   loadServiceEvents(d.name);
 }
 
+// fmtNum renders a number with at most `max` decimals (default 2), dropping any
+// trailing zeros so 5.00 -> "5", 5.10 -> "5.1" and 5.125 -> "5.13". Non-finite
+// values render as `fallback`. This is the single canonical numeric formatter;
+// route every user-facing reading through it instead of bare toFixed (geometry —
+// SVG coordinates, CSS bar widths — keeps its own fixed precision).
+function fmtNum(n, max = 2, fallback = "—") {
+  n = Number(n);
+  if (!Number.isFinite(n)) return fallback;
+  return n.toFixed(max).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
 function fmtBytes(n) {
   n = Number(n) || 0;
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-  return (i === 0 ? n : n.toFixed(1)) + " " + u[i];
+  return (i === 0 ? n : fmtNum(n, 2, "0")) + " " + u[i];
 }
 
 function fmtPct(n) {
   n = Number(n);
-  return Number.isFinite(n) ? n.toFixed(1) + "%" : "—";
+  return Number.isFinite(n) ? fmtNum(n, 2) + "%" : "—";
 }
 
 function pctClamp(n) {
@@ -1821,7 +1832,7 @@ function hostMemTotalBytes() {
 // the label keeps the true value.
 function cpuBarMini(pct) {
   const v = Number(pct) || 0;
-  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${v.toFixed(1)}% of one core used by this process`);
+  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${fmtNum(v, 2)}% of one core used by this process`);
 }
 
 // cpuTotalsLine renders the whole-tree CPU summary (whole-machine %) for a
@@ -1831,7 +1842,7 @@ function cpuTotalsLine(pt) {
   if (!pt) return "";
   if (!pt.has_cpu) return pt.num_cpu ? ' · cpu <span class="muted">measuring…</span>' : "";
   const machine = Number(pt.cpu) || 0;
-  const machineBar = usageBarMini(pctClamp(machine), machine.toFixed(0) + "%", `${machine.toFixed(1)}% of ${pt.num_cpu || "?"} cores`);
+  const machineBar = usageBarMini(pctClamp(machine), machine.toFixed(0) + "%", `${fmtNum(machine, 2)}% of ${pt.num_cpu || "?"} cores`);
   return ` · cpu <b>${machine.toFixed(0)}%</b> ${machineBar}`;
 }
 
@@ -1866,7 +1877,7 @@ function meterParts(m) {
         `${fmtBytes(m.used_bytes)} used · ${fmtBytes(m.free_bytes)} free`];
     case "load":
       return [`${m.num_cpu || 0} CPU${(m.num_cpu === 1) ? "" : "s"}`,
-        `load1 ${(m.load || 0).toFixed(2)} · ${fmtPct(m.used_pct)} of capacity`];
+        `load1 ${fmtNum(m.load || 0, 2)} · ${fmtPct(m.used_pct)} of capacity`];
     case "fds":
       return [`${(m.max || 0).toLocaleString()} file descriptors max`,
         `${(m.count || 0).toLocaleString()} allocated · ${((m.max || 0) - (m.count || 0)).toLocaleString()} free`];
@@ -2165,7 +2176,7 @@ function renderMeterWatch(m) {
       `<div><span class="muted">Free</span><br><b>${fmtBytes(m.free_bytes)}</b></div>`);
   } else if (m.kind === "load") {
     cells.push(
-      `<div><span class="muted">Load 1m</span><br><b>${(m.load || 0).toFixed(2)}</b></div>`,
+      `<div><span class="muted">Load 1m</span><br><b>${fmtNum(m.load || 0, 2)}</b></div>`,
       `<div><span class="muted">CPUs</span><br><b>${m.num_cpu || 0}</b></div>`,
       `<div><span class="muted">Capacity</span><br>${usageBar(usedPct)} <b>${fmtPct(m.used_pct)}</b></div>`);
   } else { // fds | pids | conntrack
@@ -2518,8 +2529,8 @@ function hostMetricVal(metrics, name) {
   const m = (metrics || []).find((x) => x.name === name);
   if (!m) return null;
   let val;
-  if (m.percent != null) val = m.percent.toFixed(1) + "%";
-  else if (m.absolute != null) { val = m.absolute.toFixed(2) + (m.unit ? " " + m.unit : ""); }
+  if (m.percent != null) val = fmtNum(m.percent, 2) + "%";
+  else if (m.absolute != null) { val = fmtNum(m.absolute, 2) + (m.unit ? " " + m.unit : ""); }
   else return null;
   if (!m.ready) val += " (stale)";
   return val;
@@ -2532,7 +2543,7 @@ function hostMetricVal(metrics, name) {
 function pctVal(metrics, name) {
   const m = (metrics || []).find((x) => x.name === name);
   if (!m) return null;
-  const v = (m.percent != null ? m.percent : 0).toFixed(1) + "%";
+  const v = fmtNum(m.percent != null ? m.percent : 0, 2) + "%";
   return m.ready === false ? v + " (stale)" : v;
 }
 
@@ -2768,7 +2779,7 @@ function renderOverview(ctx) {
     const p = hasCap ? pctClamp(load.percent || 0) : 0;
     tiles.push(tile({
       label: "Load 1m",
-      value: esc(load.absolute.toFixed(2)),
+      value: esc(fmtNum(load.absolute, 2)),
       sub: hasCap ? `${esc(load.total.toFixed(0))} CPUs · ${fmtPct(load.percent)}` : (live && live.uptime ? `up ${esc(live.uptime)}` : ""),
       cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
       extra: hasCap ? usageBar(p) : "",
@@ -3122,7 +3133,7 @@ async function loadMetrics(name, measured) {
     const body = await res.json();
     const s = body.summary || {};
     summary.innerHTML = s.count
-      ? `avg <b>${s.avg.toFixed(1)}</b> ms &middot; min ${s.min.toFixed(1)} &middot; max ${s.max.toFixed(1)} <span class="muted">(${s.count} samples)</span>`
+      ? `avg <b>${fmtNum(s.avg, 2)}</b> ms &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)} <span class="muted">(${s.count} samples)</span>`
       : '<span class="muted">No latency data yet for this window.</span>';
     chart.innerHTML = drawMetricChart(body.points || [], body.unit || "ms");
   } catch (e) {
@@ -3174,9 +3185,9 @@ function renderDaemonMetrics(body) {
   setText("#daemon-pid", c.pid);
   setText("#daemon-fds", c.fds);
   setText("#daemon-threads", c.threads);
-  setText("#daemon-cpu-live", c.cpu_ready ? `${Number(c.cpu || 0).toFixed(2)}%` : "measuring");
+  setText("#daemon-cpu-live", c.cpu_ready ? `${fmtNum(c.cpu || 0, 2)}%` : "measuring");
   const mem = c.rss ? fmtBytes(c.rss) : "";
-  const memPct = (c.memory_percent === 0 || c.memory_percent) ? ` (${Number(c.memory_percent).toFixed(2)}%)` : "";
+  const memPct = (c.memory_percent === 0 || c.memory_percent) ? ` (${fmtNum(c.memory_percent, 2)}%)` : "";
   setText("#daemon-memory-live", mem ? mem + memPct : "");
   setText("#daemon-io-live", c.io_ready ? `${fmtBytes(c.io || 0)}/s` : "measuring");
 
@@ -3250,11 +3261,11 @@ function fmtMetricValue(v, unit) {
     case "B/s":
       return fmtBytes(n) + "/s";
     case "%":
-      return n.toFixed(2) + "%";
+      return fmtNum(n, 2) + "%";
     case "ms":
-      return n.toFixed(1) + "ms";
+      return fmtNum(n, 2) + "ms";
     default:
-      return n.toFixed(1) + (unit || "");
+      return fmtNum(n, 2) + (unit || "");
   }
 }
 
