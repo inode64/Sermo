@@ -204,22 +204,10 @@
   #detail table { margin-bottom: .6rem; }
   #ready { margin: .6rem 0 0; }
 
-  /* ---- availability / heartbeat --------------------------------------------
-     .beats is the uptime-kuma-style strip: one segment per time bucket, green/
-     amber/red by availability, hollow when unobserved. Rendered in the service
-     expansion over the last 24h. */
-  .beats { display: flex; gap: 2px; height: 1.15rem; max-width: 46rem; margin: .25rem 0 .15rem; }
-  .beats span { flex: 1 1 0; min-width: 3px; border-radius: 2px; background: var(--line); transition: transform .08s; }
-  .beats span:hover { transform: scaleY(1.3); }
-  .beat-ok { background: var(--ok); }
-  .beat-warn { background: var(--warn); }
-  .beat-bad { background: var(--crit); }
-  .beats-meta { display: flex; justify-content: space-between; max-width: 46rem; font-size: .72rem; color: var(--text-2); margin-bottom: .55rem; }
+  /* ---- availability --------------------------------------------------------- */
   .sla { display: flex; gap: 1.2rem; flex-wrap: wrap; }
   .sla div { text-align: center; }
   .sla .v { font-size: 1.3rem; font-weight: 600; }
-  .slabar { display: inline-block; width: 9rem; height: .55rem; background: var(--line); border-radius: .3rem; overflow: hidden; vertical-align: middle; }
-  .slabar > span { display: block; height: 100%; }
 
   /* ---- events / diagnostics -------------------------------------------------- */
   .events { width: 100%; font-size: .88rem; }
@@ -1485,13 +1473,7 @@ async function loadExpansionFor(key) {
         const mr = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(measured[0].name)}&since=${metricWindow}`);
         if (mr.ok) metrics = await mr.json();
       }
-      // The per-minute series feeds the 24h heartbeat strip; non-fatal if absent.
-      let beats = "";
-      try {
-        const sr = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=24h`);
-        if (sr.ok) beats = beatStrip(((await sr.json()) || {}).points || []);
-      } catch (_) { /* strip is decorative */ }
-      html = renderExpansion(d, metrics, beats);
+      html = renderExpansion(d, metrics);
     } else if (key.startsWith("wat:")) {
       const name = key.slice(4);
       const res = await fetch("api/events?limit=200");
@@ -1509,7 +1491,7 @@ async function loadExpansionFor(key) {
 
 // bucketize folds time-series points into cols buckets covering the last span
 // ms of wall time: fold(bucket, point) accumulates each point into its bucket.
-// Shared by the SLA chart, the latency chart and the heartbeat strip.
+// Shared by the availability and latency charts.
 function bucketize(points, span, cols, makeBucket, fold) {
   const startMs = Date.now() - span;
   const buckets = Array.from({ length: cols }, makeBucket);
@@ -1520,27 +1502,6 @@ function bucketize(points, span, cols, makeBucket, fold) {
     if (i >= 0 && i < cols) fold(buckets[i], p);
   }
   return { buckets, startMs };
-}
-
-// beatStrip renders the uptime-kuma-style availability strip: 48 half-hour
-// segments over the last 24h, green/amber/red by per-bucket availability and
-// hollow where nothing was observed (Sermo down or service paused).
-function beatStrip(points) {
-  const cols = 48, span = 864e5;
-  const { buckets, startMs } = bucketize(points, span, cols,
-    () => ({ up: 0, total: 0 }),
-    (b, p) => { b.up += p.up || 0; b.total += p.total || 0; });
-  if (!buckets.some((b) => b.total > 0)) return "";
-  const segs = buckets.map((b, i) => {
-    const t = new Date(startMs + i * (span / cols));
-    if (!b.total) return `<span title="${esc(t.toLocaleTimeString())} · not observed"></span>`;
-    const r = b.up / b.total;
-    const cls = r >= 0.99 ? "beat-ok" : r >= 0.95 ? "beat-warn" : "beat-bad";
-    return `<span class="${cls}" title="${esc(t.toLocaleTimeString())} · ${(r * 100).toFixed(1)}% available"></span>`;
-  }).join("");
-  return `<div class="muted" style="margin-top:.1rem">Availability · last 24h</div>
-    <div class="beats">${segs}</div>
-    <div class="beats-meta"><span>24h ago</span><span>now</span></div>`;
 }
 
 // procCpuCell and procIoFdThreadCells render the per-process metric columns
@@ -1554,7 +1515,7 @@ function procIoFdThreadCells(p) {
   return `<td>${io}</td><td class="muted">${p.fds || '—'}</td><td class="muted">${p.threads || '—'}</td>`;
 }
 
-function renderExpansion(d, metrics, beats) {
+function renderExpansion(d, metrics) {
   const procs = d.processes || [];
   const procWarnings = d.process_warnings || [];
   const unresolvedProcs = procs.filter((p) => !p.exe_resolved);
@@ -1578,8 +1539,6 @@ function renderExpansion(d, metrics, beats) {
     ? `<div class="muted" style="margin:.15rem 0 .4rem">memory <b>${fmtBytes(pt.rss || 0)}</b>${totalBar}${cpuTotalsLine(pt)} · IO read <b>${fmtBytes(pt.io_read || 0)}</b> · IO write <b>${fmtBytes(pt.io_write || 0)}</b> · fds <b>${pt.fds || 0}</b> · threads <b>${pt.threads || 0}</b> · ${pt.count} process${pt.count === 1 ? '' : 'es'} <span class="inactive">(incl. children)</span></div>`
     : "";
   const lat = renderLatency(metrics);
-  const sla = renderSLA(d.sla);
-  const strip = beats || "";
   const procWarns = [
     ...procWarnings.map((w) => `<div class="bad" style="margin:.2rem 0">discovery warning: ${esc(w)}</div>`),
     ...unresolvedProcs.map((p) => `<div class="inactive" style="margin:.2rem 0">pid ${p.pid}: exe unresolved</div>`),
@@ -1600,7 +1559,7 @@ function renderExpansion(d, metrics, beats) {
           ${procIoFdThreadCells(p)}
         </tr>`).join("")}</tbody></table>`
     : `<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
-  return strip + totals + procWarns + lat + sla + procTable;
+  return totals + procWarns + lat + procTable;
 }
 
 // renderLatency shows a measured check's latency over the default window: the
@@ -1612,26 +1571,6 @@ function renderLatency(m) {
   const unit = esc(m.unit || "ms");
   const head = `<div class="muted" style="margin:.25rem 0 .1rem">Latency <b>${esc(m.check || "")}</b> · avg <b>${(s.avg || 0).toFixed(1)} ${unit}</b> · min <b>${(s.min || 0).toFixed(1)}</b> · max <b>${(s.max || 0).toFixed(1)}</b>${s.count ? ` <span class="muted">(${s.count} samples)</span>` : ""}</div>`;
   return head + `<div style="margin-bottom:.5rem">${drawMetricChart(m.points, m.unit || "ms")}</div>`;
-}
-
-// renderSLA shows availability over the predefined rolling windows
-// (hour/day/week/month/year): the percentage and a coloured bar.
-function renderSLA(sla) {
-  const wins = sla || [];
-  if (!wins.length) return "";
-  const rows = wins.map((w) => {
-    const pct = w.ratio == null ? null : w.ratio * 100;
-    const num = pct == null ? "n/a" : pct.toFixed(2) + "%";
-    const color = pct == null ? "#8886" : pct >= 99 ? "#1a7f37" : pct >= 95 ? "#9a6700" : "#cf222e";
-    return `<tr>
-      <td class="muted">${esc(w.window)}</td>
-      <td style="text-align:right; padding-right:.6rem; font-variant-numeric:tabular-nums;">${num}</td>
-      <td><span class="slabar"><span style="width:${(pct || 0).toFixed(2)}%; background:${color}"></span></span></td>
-      <td class="muted" style="font-size:.78rem; padding-left:.5rem;">${w.up}/${w.total}</td>
-    </tr>`;
-  }).join("");
-  return `<div class="muted" style="margin:.2rem 0 .1rem">Availability (SLA)</div>
-    <table style="width:auto; font-size:.85rem; margin-bottom:.55rem;"><tbody>${rows}</tbody></table>`;
 }
 
 function fmtBytes(n) {
