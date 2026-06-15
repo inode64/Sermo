@@ -61,4 +61,10 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 	if !strings.Contains(html, "function renderServiceDetail(d)") || !strings.Contains(html, "data-service-expand") {
 		t.Fatalf("index.html missing inline service detail renderer")
 	}
+	if !strings.Contains(html, "<th>CMD</th>") || strings.Contains(html, "<th>Exe</th>") {
+		t.Fatalf("index.html should label the process command column as CMD")
+	}
+	if !strings.Contains(html, ".truncate") || !strings.Contains(html, "check-message") {
+		t.Fatalf("index.html missing truncation styles for CMD/check messages")
+	}
 }
