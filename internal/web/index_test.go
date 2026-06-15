@@ -36,6 +36,7 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"loadConfigRender(",
 		"loadConfigDiff(",
 		"/config/diff",
+		`Last event<span class="sort-ind"`,
 		`id="detail"`,
 		"data-detail-service",
 		"data-close-detail",
@@ -73,9 +74,26 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"function appStatusCell(a)",
 		"state-warning",
 		"status-warning",
+		"<th>Uptime</th>",
+		"<th>CPU total</th>",
+		"<th>Memory</th>",
+		"<th>IO R/W</th>",
+		"function serviceCpuCell(s)",
+		"function loadServiceRuntimeMetrics(name)",
+		`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`,
+		`<h2>General data</h2>`,
+		`<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>`,
 	} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("index.html missing %q", want)
 		}
+	}
+
+	if strings.Contains(html, `<th>Unit</th>
+        <th class="sortable" data-sort="state"`) ||
+		strings.Contains(html, `<th>Interval</th><th>Policy</th><th>Locks</th>`) ||
+		strings.Contains(html, `<th>Next remediation</th>
+        <th class="actions">Actions</th>`) {
+		t.Fatalf("index.html still contains old services table columns")
 	}
 }

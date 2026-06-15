@@ -125,6 +125,26 @@ func (f *fakeBackend) Metrics(_ context.Context, name, check, _ string, since ti
 	}
 	return MetricSeries{}, false
 }
+func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.Duration) (ServiceRuntimeMetrics, bool) {
+	for _, s := range f.services {
+		if s.Name == name {
+			f.metricSince = since
+			return ServiceRuntimeMetrics{
+				Since: since.String(),
+				Current: ServiceRuntime{
+					At:            "2026-06-07T10:00:00Z",
+					ProcessTotals: ProcessTotals{Count: 2, RSS: 2048, IORead: 100, IOWrite: 200, CPU: 3.5, HasCPU: true},
+					Uptime:        "1h",
+					UptimeSeconds: 3600,
+				},
+				CPU:    MetricSeries{Check: "runtime", Metric: "cpu", Unit: "%", Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 3.5, Min: 3.5, Max: 3.5}}},
+				Memory: MetricSeries{Check: "runtime", Metric: "memory", Unit: "bytes", Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 2048, Min: 2048, Max: 2048}}},
+				IO:     MetricSeries{Check: "runtime", Metric: "io", Unit: "B/s", Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 25, Min: 25, Max: 25}}},
+			}, true
+		}
+	}
+	return ServiceRuntimeMetrics{}, false
+}
 func (f *fakeBackend) Diagnostics(context.Context) []Finding {
 	return []Finding{{Level: "warning", Scope: "database", Message: `stored data for service "ghost"`}}
 }
@@ -486,6 +506,31 @@ func TestMetrics(t *testing.T) {
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/metrics?check=http", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service = %d, want 404", rec.Code)
+	}
+}
+
+func TestServiceRuntimeMetrics(t *testing.T) {
+	b := &fakeBackend{services: []Service{{Name: "web"}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/web/runtime?since=168h", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("runtime status %d", rec.Code)
+	}
+	if b.metricSince != 168*time.Hour {
+		t.Fatalf("runtime since not parsed: %v", b.metricSince)
+	}
+	var got ServiceRuntimeMetrics
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Current.Count != 2 || got.Current.RSS != 2048 || got.CPU.Metric != "cpu" || len(got.CPU.Points) != 1 {
+		t.Fatalf("runtime metrics = %+v", got)
+	}
+
+	rec = httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/runtime", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown runtime service = %d, want 404", rec.Code)
 	}
 }
 

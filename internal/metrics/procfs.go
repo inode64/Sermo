@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // clockTicks is the conventional kernel USER_HZ on Linux. The Go runtime does
@@ -40,6 +41,56 @@ func (OSReader) ProcessCPU(pid int) (uint64, bool) {
 		return 0, false
 	}
 	return utime + stime, true
+}
+
+// ProcessStartTime reads field 22 of /proc/<pid>/stat and converts it to a wall
+// clock timestamp using the system boot time from /proc/stat.
+func (OSReader) ProcessStartTime(pid int) (time.Time, bool) {
+	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return time.Time{}, false
+	}
+	startTicks, ok := parseProcStartTicks(string(data))
+	if !ok {
+		return time.Time{}, false
+	}
+	boot, ok := procBootTime()
+	if !ok {
+		return time.Time{}, false
+	}
+	startSeconds := float64(startTicks) / clockTicks
+	whole := int64(startSeconds)
+	nsec := int64((startSeconds - float64(whole)) * float64(time.Second))
+	return time.Unix(boot+whole, nsec), true
+}
+
+func parseProcStartTicks(stat string) (uint64, bool) {
+	closeParen := strings.LastIndex(stat, ")")
+	if closeParen < 0 {
+		return 0, false
+	}
+	// After ')', tokens begin at field 3 (state); starttime is field 22, so
+	// index 19 in this slice.
+	fields := strings.Fields(stat[closeParen+1:])
+	if len(fields) <= 19 {
+		return 0, false
+	}
+	start, err := strconv.ParseUint(fields[19], 10, 64)
+	return start, err == nil
+}
+
+func procBootTime() (int64, bool) {
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if v, ok := strings.CutPrefix(line, "btime "); ok {
+			sec, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			return sec, err == nil
+		}
+	}
+	return 0, false
 }
 
 // ProcessRSS reads resident pages (field 2 of /proc/<pid>/statm) as bytes.

@@ -157,6 +157,14 @@ func (h *WebBackendHolder) Metrics(ctx context.Context, name, check, metric stri
 	return web.MetricSeries{}, false
 }
 
+// ServiceRuntime returns process-tree runtime series from the active backend.
+func (h *WebBackendHolder) ServiceRuntime(ctx context.Context, name string, since time.Duration) (web.ServiceRuntimeMetrics, bool) {
+	if b := h.backend(); b != nil {
+		return b.ServiceRuntime(ctx, name, since)
+	}
+	return web.ServiceRuntimeMetrics{Since: since.String()}, false
+}
+
 // Events returns recent events from the active backend.
 func (h *WebBackendHolder) Events(ctx context.Context, limit int) []web.Event {
 	if b := h.backend(); b != nil {
