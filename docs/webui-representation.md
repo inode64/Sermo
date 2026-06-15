@@ -315,13 +315,12 @@ shows deeper service-specific operations.
 | Area | Current representation |
 | --- | --- |
 | Header | service name, state, close button |
-| Actions | safe operation buttons, preflight, config render/diff |
+| Actions | safe operation buttons, preflight |
 | Checks | resolved check state |
 | Metrics | selectable metric/check series |
 | SLA | selected time window |
 | Events | recent service events |
 | Rules | remediation and alert rules |
-| Config | rendered config and diff against base |
 
 ## Action confirmation dialog
 

@@ -260,7 +260,7 @@
   .attn-title { font-weight: 600; }
   .attn-detail { margin-top: .1rem; font-size: .85rem; color: var(--text-2); overflow-wrap: anywhere; }
 
-  /* ---- dialogs / config views -------------------------------------------------- */
+  /* ---- dialogs ------------------------------------------------------------- */
   dialog { color: var(--text); background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--radius); padding: 0; max-width: min(44rem, calc(100vw - 2rem)); width: 44rem; box-shadow: 0 12px 40px rgb(0 0 0 / .25); }
   dialog::backdrop { background: rgba(8, 12, 18, .55); backdrop-filter: blur(2px); }
   .modal-head, .modal-foot { padding: .85rem 1rem; border-bottom: 1px solid var(--line); }
@@ -268,15 +268,6 @@
   .modal-body { padding: 1rem; }
   .modal-grid { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: .35rem .9rem; font-size: .92rem; }
   .modal-grid code, .modal-body code { font-size: .85rem; overflow-wrap: anywhere; }
-  .config-view { max-height: 24rem; overflow: auto; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel-2); white-space: pre; font: .82rem/1.45 var(--mono); }
-  .diff-lines { margin-top: .55rem; display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-  .diff-lines pre { margin: 0; max-height: 16rem; overflow: auto; padding: .55rem; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel-2); white-space: pre-wrap; font: .8rem/1.45 var(--mono); }
-  @media (max-width: 760px) { .diff-lines { grid-template-columns: 1fr; } }
-
-  /* thin scrollbars keep code/diff panels tidy (both engines) */
-  .config-view, .diff-lines pre { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
-  .config-view::-webkit-scrollbar { height: 8px; width: 8px; }
-  .config-view::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -2834,12 +2825,6 @@ async function detail(name) {
   }
 }
 
-function configBaseOptions(name) {
-  const names = (allServices || []).map((s) => s.name).filter((n) => n && n !== name).sort();
-  if (!names.length) return '<option value="">no other services</option>';
-  return names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
-}
-
 function renderDetail(d) {
   const checks = (d.checks || []).map((c) => {
     const age = c.at ? ` <span class="muted">· ${esc(fmtAge(c.at))}</span>` : "";
@@ -2938,15 +2923,6 @@ function renderDetail(d) {
     <p>${renderRemediation(d.remediation)}</p>
     <h2>Rules</h2>
     ${renderRules(d.rules)}
-    <h2>Config Review <span class="muted">
-      <button data-config-render="${esc(d.name)}" data-config-format="yaml">YAML</button>
-      <button data-config-render="${esc(d.name)}" data-config-format="json">JSON</button>
-      <select id="config-base" style="font:inherit; padding:.15rem .35rem; border-radius:.35rem; border:1px solid #8886; background:#8881;">${configBaseOptions(d.name)}</select>
-      <button data-config-diff="${esc(d.name)}">diff</button>
-    </span></h2>
-    <div id="config-meta" class="muted">loading resolved config…</div>
-    <pre id="config-render" class="config-view"></pre>
-    <div id="config-diff" class="muted" style="margin-top:.6rem"></div>
     <h2>Preflight ${me.can_act ? `<button data-preflight-service="${esc(d.name)}">run</button>` : '<span class="muted">admin only</span>'}</h2>
     <div id="preflight-result" class="muted">not run yet</div>
     <h2>Named locks</h2>
@@ -2962,57 +2938,6 @@ function renderDetail(d) {
   if (measured.length) loadMetrics(d.name);
   if (metricCharts.length) loadNamedMetrics(d.name, metricCharts);
   loadServiceEvents(d.name);
-  loadConfigRender(d.name, "yaml");
-}
-
-async function loadConfigRender(name, format) {
-  const meta = $("#config-meta");
-  const pre = $("#config-render");
-  if (meta) meta.textContent = `loading ${format}…`;
-  if (pre) pre.textContent = "";
-  try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/config?format=${encodeURIComponent(format)}`);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || ("HTTP " + res.status));
-    if (pre) pre.textContent = body.content || "";
-    if (meta) {
-      const sources = (body.source_files || []).map((p) => `<code>${esc(p)}</code>`).join(" ");
-      meta.innerHTML = `${esc((body.format || format).toUpperCase())} render${sources ? ` · sources ${sources}` : ""}`;
-    }
-  } catch (e) {
-    if (meta) meta.innerHTML = `<span class="bad">Failed to load config: ${esc(e.message)}</span>`;
-  }
-}
-
-async function loadConfigDiff(name) {
-  const target = $("#config-diff");
-  const sel = $("#config-base");
-  const base = sel ? sel.value : "";
-  if (!target) return;
-  if (!base) {
-    target.innerHTML = '<span class="inactive">Select another service to diff.</span>';
-    return;
-  }
-  target.innerHTML = '<span class="muted">loading diff…</span>';
-  try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/config/diff?base=${encodeURIComponent(base)}`);
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.message || ("HTTP " + res.status));
-    if (body.identical) {
-      target.innerHTML = `<span class="ok">${esc(base)} and ${esc(name)} resolve identically</span>`;
-      return;
-    }
-    const removed = (body.removed || []).map((l) => `- ${l}`).join("\n") || "(none)";
-    const added = (body.added || []).map((l) => `+ ${l}`).join("\n") || "(none)";
-    target.innerHTML = `
-      <div class="muted">Diff ${esc(base)} → ${esc(name)}</div>
-      <div class="diff-lines">
-        <div><div class="bad">Only in ${esc(base)}</div><pre>${esc(removed)}</pre></div>
-        <div><div class="ok">Only in ${esc(name)}</div><pre>${esc(added)}</pre></div>
-      </div>`;
-  } catch (e) {
-    target.innerHTML = `<span class="bad">Failed to load diff: ${esc(e.message)}</span>`;
-  }
 }
 
 function preflightRows(checks) {
@@ -3563,18 +3488,6 @@ function initDelegatedHandlers() {
     const close = closestFrom(e, "[data-close-detail]");
     if (close) {
       closeDetail();
-      return;
-    }
-
-    const render = closestFrom(e, "[data-config-render]");
-    if (render) {
-      loadConfigRender(render.dataset.configRender || "", render.dataset.configFormat || "yaml");
-      return;
-    }
-
-    const diff = closestFrom(e, "[data-config-diff]");
-    if (diff) {
-      loadConfigDiff(diff.dataset.configDiff || "");
       return;
     }
 
