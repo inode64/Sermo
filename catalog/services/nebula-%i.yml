@@ -6,7 +6,6 @@ uses: nebula
 service:
   systemd: ["nebula@${instance}", "nebula-${instance}", "nebula.${instance}"]
   openrc: ["nebula.${instance}"]
-versions:
-  from: "/etc/nebula/${instance}.yml"
+apps: ["nebula-${instance}"]
 
 pidfile: "/run/supervise-nebula.${instance}.pid"
