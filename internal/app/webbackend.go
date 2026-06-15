@@ -39,7 +39,8 @@ const applicationsCacheTTL = 30 * time.Second
 // lock serializes start/stop/restart across the worker and the web.
 func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	discoverer := process.NewDiscoverer()
-	discoverer.BackendPIDs = servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
+	backendPIDs := servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
+	discoverer.BackendPIDs = backendPIDs
 	checkDeps := checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
@@ -52,6 +53,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 			return st.Status, nil
 		},
 		Processes:            discoverer.ObserveState,
+		PidfileFallbackPIDs:  pidfileFallbackPIDs(context.Background(), deps, unit, backendPIDs),
 		DiskUsage:            deps.DiskUsage,
 		MountSampler:         deps.MountSampler,
 		NetSampler:           deps.NetSampler,
@@ -85,6 +87,17 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		Emit:             recordOperation,
 	})
 	return engine, checkDeps, discoverer
+}
+
+func pidfileFallbackPIDs(ctx context.Context, deps Deps, unit string, backendPIDs func() []int) func() []int {
+	if deps.Backend != servicemgr.BackendSystemd || backendPIDs == nil {
+		return nil
+	}
+	info := servicemgr.DetectProcInfo(ctx, deps.ExecxRunner, nil, deps.Backend, unit)
+	if info.Pidfile != "" {
+		return nil
+	}
+	return backendPIDs
 }
 
 // serviceProcessSelectors returns the process selectors a service should use

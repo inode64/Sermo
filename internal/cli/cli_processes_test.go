@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"sermo/internal/execx"
 	"sermo/internal/process"
+	"sermo/internal/servicemgr"
 )
 
 func writeProcessConfig(t *testing.T, pidfile string) string {
@@ -116,6 +118,30 @@ func TestProcessesNoneFound(t *testing.T) {
 	}
 }
 
+func TestProcessesUsesSystemdMainPIDWhenPidfileMissing(t *testing.T) {
+	global := writeProcessConfig(t, "/run/missing-node-exporter.pid")
+	var stdout, stderr bytes.Buffer
+	app := App{
+		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		Runner:   processSystemdRunner{pid: os.Getpid()},
+		Env:      func(string) string { return "" },
+		Stdout:   &stdout,
+		Stderr:   &stderr,
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "processes", "mysql-main"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "pid="+itoa(os.Getpid())+" ") || !strings.Contains(out, "source=backend") {
+		t.Fatalf("stdout = %q, want current pid from backend", out)
+	}
+	if strings.Contains(stderr.String(), "pidfile") {
+		t.Fatalf("stderr = %q, want no pidfile warning", stderr.String())
+	}
+}
+
 func TestProcessesUnknownService(t *testing.T) {
 	global := writeProcessConfig(t, "/run/x.pid")
 	var stderr bytes.Buffer
@@ -137,6 +163,27 @@ func TestProcessesRequiresService(t *testing.T) {
 	code := app.Run(context.Background(), []string{"processes"})
 	if code != exitUsage {
 		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
+	}
+}
+
+type processSystemdRunner struct {
+	pid int
+}
+
+func (r processSystemdRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	if name != "systemctl" {
+		return execx.Result{}, nil
+	}
+	joined := strings.Join(args, " ")
+	switch {
+	case strings.HasPrefix(joined, "cat "):
+		return execx.Result{Stdout: "[Service]\nExecStart=/bin/sleep infinity\n"}, nil
+	case strings.Contains(joined, "-p ControlGroup"):
+		return execx.Result{Stdout: "\n"}, nil
+	case strings.Contains(joined, "-p MainPID"):
+		return execx.Result{Stdout: itoa(r.pid) + "\n"}, nil
+	default:
+		return execx.Result{Stdout: "\n"}, nil
 	}
 }
 
