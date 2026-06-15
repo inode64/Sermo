@@ -196,6 +196,33 @@ type DaemonInfo struct {
 	StartupDelay          string `json:"startup_delay"`
 }
 
+// DaemonRuntime is the latest resource sample for the running sermod process.
+type DaemonRuntime struct {
+	At            string  `json:"at,omitempty"` // RFC3339
+	PID           int     `json:"pid"`
+	RSS           int64   `json:"rss,omitempty"` // resident memory, bytes
+	MemoryPercent float64 `json:"memory_percent,omitempty"`
+	CPU           float64 `json:"cpu,omitempty"` // % of all host CPUs
+	CPUReady      bool    `json:"cpu_ready"`
+	IORead        float64 `json:"io_read,omitempty"`  // bytes/s
+	IOWrite       float64 `json:"io_write,omitempty"` // bytes/s
+	IO            float64 `json:"io,omitempty"`       // bytes/s read+write
+	IOReady       bool    `json:"io_ready"`
+	FDs           int64   `json:"fds,omitempty"`
+	Threads       int64   `json:"threads,omitempty"`
+	NumCPU        int     `json:"num_cpu,omitempty"`
+}
+
+// DaemonMetrics contains current sermod process indicators and the historical
+// CPU, memory and IO series for the selected window.
+type DaemonMetrics struct {
+	Since   string        `json:"since"`
+	Current DaemonRuntime `json:"current"`
+	CPU     MetricSeries  `json:"cpu"`
+	Memory  MetricSeries  `json:"memory"`
+	IO      MetricSeries  `json:"io"`
+}
+
 // ActivitySummary is a lightweight rollup of recent events for the dashboard.
 // It helps operators get a quick sense of what's been happening (especially
 // useful when services=0 and you are mostly watching host resources).
@@ -527,6 +554,8 @@ type Backend interface {
 	ExpandWatch(ctx context.Context, name string) ActionResult
 	// DaemonInfo returns engine settings and basic daemon configuration.
 	DaemonInfo(ctx context.Context) DaemonInfo
+	// DaemonMetrics returns current and historical resource usage for sermod.
+	DaemonMetrics(ctx context.Context, since time.Duration) DaemonMetrics
 	// HostMetrics returns current system-level metrics (memory, cpu, load averages).
 	HostMetrics(ctx context.Context) []HostMetric
 	// Locks returns runtime locks (active, expired, stale) across all services.
@@ -604,6 +633,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/applications", s.handleApplications)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
+	mux.HandleFunc("GET /api/daemon/metrics", s.handleDaemonMetrics)
 	mux.HandleFunc("GET /api/host", s.handleHost)
 	mux.HandleFunc("GET /api/locks", s.handleLocks)
 	mux.HandleFunc("POST /api/locks/{service}/release", s.handleLockRelease)
@@ -846,6 +876,11 @@ func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.DaemonInfo(r.Context()))
+}
+
+func (s *Server) handleDaemonMetrics(w http.ResponseWriter, r *http.Request) {
+	since := seriesSince(r)
+	writeJSON(w, http.StatusOK, s.Backend.DaemonMetrics(r.Context(), since))
 }
 
 func (s *Server) handleHost(w http.ResponseWriter, r *http.Request) {

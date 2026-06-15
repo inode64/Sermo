@@ -37,7 +37,14 @@ func (f *fakeBackend) Applications(context.Context) []Application {
 }
 func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo    { return DaemonInfo{} }
 func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
-func (f *fakeBackend) Locks(context.Context) []Lock             { return nil }
+func (f *fakeBackend) DaemonMetrics(context.Context, time.Duration) DaemonMetrics {
+	return DaemonMetrics{
+		Since:   "24h0m0s",
+		Current: DaemonRuntime{At: "2026-06-07T10:00:00Z", PID: 123, RSS: 1024, FDs: 9, Threads: 4},
+		CPU:     MetricSeries{Check: "sermod", Metric: "cpu", Unit: "%", Points: []MetricPoint{{Start: "2026-06-07T10:00:00Z", N: 1, Avg: 1.5, Min: 1.5, Max: 1.5}}},
+	}
+}
+func (f *fakeBackend) Locks(context.Context) []Lock { return nil }
 func (f *fakeBackend) ReleaseLock(_ context.Context, service, name string) ActionResult {
 	f.releasedLocks = append(f.releasedLocks, service+"."+name)
 	if !f.releaseOK {
@@ -551,6 +558,21 @@ func TestMetrics(t *testing.T) {
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/services/ghost/metrics?check=http", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("unknown service = %d, want 404", rec.Code)
+	}
+}
+
+func TestDaemonMetrics(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/daemon/metrics?since=1h", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("daemon metrics status %d", rec.Code)
+	}
+	var got DaemonMetrics
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Current.PID != 123 || got.Current.FDs != 9 || got.CPU.Metric != "cpu" || len(got.CPU.Points) != 1 {
+		t.Fatalf("daemon metrics = %+v", got)
 	}
 }
 
