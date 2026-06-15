@@ -52,6 +52,23 @@ type Service struct {
 	RemediationState string   `json:"remediation_state,omitempty"`  // eligible | cooldown | rate limit | paused | pending | disabled
 	NextEligibleAt   string   `json:"next_eligible_at,omitempty"`   // RFC3339 when automatic remediation is next eligible
 	LastEvent        *Event   `json:"last_event,omitempty"`         // newest service event, when retained
+
+	// Current process-tree runtime summary. These fields intentionally mirror
+	// ProcessTotals so the service list and detail expansion use the same
+	// semantics: matched processes plus their child/descendant processes.
+	StartedAt     string  `json:"started_at,omitempty"` // oldest discovered process start time, RFC3339
+	Uptime        string  `json:"uptime,omitempty"`     // display-ready age of StartedAt
+	UptimeSeconds int64   `json:"uptime_seconds,omitempty"`
+	ProcessCount  int     `json:"process_count,omitempty"`
+	RSS           int64   `json:"rss,omitempty"`
+	IORead        int64   `json:"io_read,omitempty"`  // cumulative disk read bytes
+	IOWrite       int64   `json:"io_write,omitempty"` // cumulative disk write bytes
+	FDs           int64   `json:"fds,omitempty"`
+	Threads       int64   `json:"threads,omitempty"`
+	CPU           float64 `json:"cpu,omitempty"`        // live CPU %, all host CPUs
+	CPUThread     float64 `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
+	NumCPU        int     `json:"num_cpu,omitempty"`
+	CPUReady      bool    `json:"cpu_ready,omitempty"`
 }
 
 // Application is a view of one installed application (a catalog app daemon) for
@@ -222,6 +239,29 @@ type DaemonMetrics struct {
 	CPU     MetricSeries  `json:"cpu"`
 	Memory  MetricSeries  `json:"memory"`
 	IO      MetricSeries  `json:"io"`
+}
+
+// ServiceRuntime is the current process-tree runtime sample for one service.
+type ServiceRuntime struct {
+	At string `json:"at,omitempty"` // RFC3339
+	ProcessTotals
+	StartedAt     string  `json:"started_at,omitempty"` // oldest discovered process start time, RFC3339
+	Uptime        string  `json:"uptime,omitempty"`
+	UptimeSeconds int64   `json:"uptime_seconds,omitempty"`
+	IOReadRate    float64 `json:"io_read_rate,omitempty"`  // bytes/s
+	IOWriteRate   float64 `json:"io_write_rate,omitempty"` // bytes/s
+	IORate        float64 `json:"io_rate,omitempty"`       // bytes/s read+write
+	IOReady       bool    `json:"io_ready"`
+}
+
+// ServiceRuntimeMetrics contains current and historical CPU, memory and IO for
+// one service's process tree.
+type ServiceRuntimeMetrics struct {
+	Since   string         `json:"since"`
+	Current ServiceRuntime `json:"current"`
+	CPU     MetricSeries   `json:"cpu"`
+	Memory  MetricSeries   `json:"memory"`
+	IO      MetricSeries   `json:"io"`
 }
 
 // ActivitySummary is a lightweight rollup of recent events for the dashboard.
@@ -508,6 +548,9 @@ type Backend interface {
 	// Metrics returns a check's latency summary and per-minute history over since;
 	// ok is false for unknown service names.
 	Metrics(ctx context.Context, name, check, metric string, since time.Duration) (MetricSeries, bool)
+	// ServiceRuntime returns process-tree CPU, memory and IO history for one
+	// service over since; ok is false for unknown service names.
+	ServiceRuntime(ctx context.Context, name string, since time.Duration) (ServiceRuntimeMetrics, bool)
 	// Events returns up to limit recent events, newest first (the global feed).
 	Events(ctx context.Context, limit int) []Event
 	// Diagnostics runs config/host/database consistency checks and returns the
@@ -622,6 +665,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{name}", s.handleDetail)
 	mux.HandleFunc("GET /api/services/{name}/sla", s.handleSeries)
 	mux.HandleFunc("GET /api/services/{name}/metrics", s.handleMetrics)
+	mux.HandleFunc("GET /api/services/{name}/runtime", s.handleServiceRuntime)
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
@@ -928,6 +972,15 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	res, ok := s.Backend.Metrics(r.Context(), r.PathValue("name"), check, r.URL.Query().Get("metric"), seriesSince(r))
 	if !ok {
 		writeError(w, http.StatusNotFound, "unknown service or check")
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleServiceRuntime(w http.ResponseWriter, r *http.Request) {
+	res, ok := s.Backend.ServiceRuntime(r.Context(), r.PathValue("name"), seriesSince(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, "unknown service")
 		return
 	}
 	writeJSON(w, http.StatusOK, res)

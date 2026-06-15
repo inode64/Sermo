@@ -211,6 +211,14 @@
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
   .service-detail h2:first-child { margin-top: 0; }
   .service-detail table { margin-bottom: .6rem; }
+  .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
+  .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
+  .runtime-grid .metric-inline { display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
+  .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
+  .metric-panel { min-width: 0; }
+  .metric-title { font-weight: 650; margin-bottom: .25rem; }
+  .metric-title .muted { font-weight: 400; }
+  @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   #ready { margin: .6rem 0 0; }
 
   /* ---- events / diagnostics -------------------------------------------------- */
@@ -334,11 +342,11 @@
       <tr>
         <th class="sortable" data-sort="name">Service<span class="sort-ind" data-si="name"></span></th>
         <th class="sortable" data-sort="category">Category<span class="sort-ind" data-si="category"></span></th>
-        <th>Unit</th>
         <th class="sortable" data-sort="state">State<span class="sort-ind" data-si="state"></span></th>
-        <th>Interval</th><th>Policy</th><th>Locks</th>
-        <th class="sortable" data-sort="last">Last event<span class="sort-ind" data-si="last"></span></th>
-        <th>Next remediation</th>
+        <th>Uptime</th>
+        <th>CPU total</th>
+        <th>Memory</th>
+        <th>IO R/W</th>
         <th class="actions">Actions</th>
       </tr>
     </thead>
@@ -1375,26 +1383,24 @@ function renderServices() {
     const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${isFailing(s) ? 'row-failing' : ''}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${categoryBadge(category)}</td>
-      <td>${unitCell(s)}</td>
       <td>${stateBadge(state)}${state === "running" || state === "stopped" ? monitorHint(s) : ""}</td>
-      <td>${s.interval ? esc(s.interval) : '<span class="muted">—</span>'}</td>
-      <td>${policyCell(s)}</td>
-      <td>${locksCell(s)}</td>
-      <td>${lastEventCell(s)}</td>
-      <td>${nextRemediationCell(s)}</td>
+      <td>${serviceUptimeCell(s)}</td>
+      <td>${serviceCpuCell(s)}</td>
+      <td>${serviceMemCell(s)}</td>
+      <td>${serviceIoCell(s)}</td>
       <td class="actions">${actions}</td>
     </tr>`;
     const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
       : "";
     return row + expRow;
   };
   const rows = svcGrouped
-    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 10, serviceRow, svcSort.key === "category" ? svcSort.dir : 1)
+    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 8, serviceRow, svcSort.key === "category" ? svcSort.dir : 1)
     : list.map(serviceRow).join("");
   const empty = (allServices || []).length
-    ? `<tr><td colspan="10" class="muted">No services match the filter.</td></tr>`
-    : `<tr><td colspan="10" class="muted">No services.</td></tr>`;
+    ? `<tr><td colspan="8" class="muted">No services match the filter.</td></tr>`
+    : `<tr><td colspan="8" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows || empty;
   renderAttention();
   expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
@@ -1532,6 +1538,49 @@ function procLabel(p) {
   return '<span class="muted">unknown</span>';
 }
 
+function serviceUptimeCell(s) {
+  if (!s || !s.uptime) return '<span class="muted">—</span>';
+  const title = s.started_at ? ` title="started ${esc(fmtTime(s.started_at))}"` : "";
+  return `<span${title}>${esc(s.uptime)}</span>`;
+}
+
+function cpuInline(cpu, ready, numCPU) {
+  if (!ready) return numCPU ? '<span class="muted">measuring…</span>' : '<span class="muted">—</span>';
+  const v = Number(cpu) || 0;
+  return `<span class="metric-inline"><b>${v.toFixed(1)}%</b>${usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${v.toFixed(1)}% of ${numCPU || "?"} host CPUs`)}</span>`;
+}
+
+function serviceCpuCell(s) {
+  return cpuInline(s && s.cpu, !!(s && s.cpu_ready), s && s.num_cpu);
+}
+
+function memoryInline(rss) {
+  rss = Number(rss) || 0;
+  if (!rss) return '<span class="muted">—</span>';
+  const hostMem = hostMemTotalBytes();
+  if (hostMem > 0) return usageBarMini(pctClamp(rss / hostMem * 100), fmtBytes(rss), `${fmtBytes(rss)} resident memory`);
+  return `<b>${fmtBytes(rss)}</b>`;
+}
+
+function serviceMemCell(s) {
+  return memoryInline(s && s.rss);
+}
+
+function ioRWInline(read, write) {
+  read = Number(read) || 0;
+  write = Number(write) || 0;
+  if (!read && !write) return '<span class="muted">—</span>';
+  return `<span title="read / write">${fmtBytes(read)} / ${fmtBytes(write)}</span>`;
+}
+
+function serviceIoCell(s) {
+  return ioRWInline(s && s.io_read, s && s.io_write);
+}
+
+function totalsCpuCell(pt) {
+  return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu);
+}
+
 function detailDomKey(name) {
   return Array.from(String(name || "")).map((ch) => ch.charCodeAt(0).toString(16).padStart(4, "0")).join("");
 }
@@ -1547,13 +1596,6 @@ function serviceMeasuredChecks(d) {
 function selectedMetricCheck(measured) {
   if (metricCheck && measured.some((c) => c.name === metricCheck)) return metricCheck;
   return measured.length ? measured[0].name : "";
-}
-
-function serviceMetricCharts(d) {
-  const charts = [];
-  (d.checks || []).forEach((c) => (c.metrics || []).forEach((m) =>
-    charts.push({ check: c.name, metric: m.name, unit: m.unit })));
-  return charts;
 }
 
 function renderServiceDetail(d) {
@@ -1630,49 +1672,77 @@ function renderServiceDetail(d) {
 
   const measured = serviceMeasuredChecks(d);
   const activeMetricCheck = selectedMetricCheck(measured);
-  let latency = "";
-  if (measured.length) {
-    const checkBtns = measured.map((c) =>
-      `<button data-metric-service="${esc(d.name)}" data-metric-check="${esc(c.name)}"${c.name === activeMetricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ");
-    latency = `
-    <h2>Latency <span class="muted">${checkBtns} &middot; ${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
-    <div id="${esc(detailDomId(d.name, "lat-summary"))}" class="muted">loading…</div>
-    <div id="${esc(detailDomId(d.name, "lat-chart"))}" class="muted"></div>`;
-  }
-
-  const metricCharts = serviceMetricCharts(d);
-  const metricGraphs = metricCharts.length
-    ? `<h2>Metrics <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>` +
-      metricCharts.map((mc, i) =>
-        `<div style="margin:.4rem 0"><div class="muted"><b>${esc(mc.check)}</b> &middot; ${esc(mc.metric)} <span class="muted">(${esc(mc.unit)})</span></div>` +
-        `<div id="${esc(detailDomId(d.name, "metric-" + i))}" class="muted">loading…</div></div>`).join("")
-    : "";
+  const checkBtns = measured.length
+    ? measured.map((c) => `<button data-metric-service="${esc(d.name)}" data-metric-check="${esc(c.name)}"${c.name === activeMetricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ")
+    : '<span class="muted">No latency checks</span>';
+  const latencyPanel = measured.length
+    ? `<div id="${esc(detailDomId(d.name, "lat-summary"))}" class="muted">loading…</div>
+      <div id="${esc(detailDomId(d.name, "lat-chart"))}" class="muted"></div>`
+    : '<div class="muted">No latency checks configured for this service.</div>';
+  const graphs = `<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
+    <div class="metric-grid">
+      <div class="metric-panel">
+        <div class="metric-title">Latency <span class="muted">${checkBtns}</span></div>
+        ${latencyPanel}
+      </div>
+      <div class="metric-panel">
+        <div class="metric-title">CPU</div>
+        <div id="${esc(detailDomId(d.name, "runtime-cpu-summary"))}" class="muted">loading…</div>
+        <div id="${esc(detailDomId(d.name, "runtime-cpu-chart"))}" class="muted"></div>
+      </div>
+      <div class="metric-panel">
+        <div class="metric-title">Memory</div>
+        <div id="${esc(detailDomId(d.name, "runtime-memory-summary"))}" class="muted">loading…</div>
+        <div id="${esc(detailDomId(d.name, "runtime-memory-chart"))}" class="muted"></div>
+      </div>
+      <div class="metric-panel">
+        <div class="metric-title">IO</div>
+        <div id="${esc(detailDomId(d.name, "runtime-io-summary"))}" class="muted">loading…</div>
+        <div id="${esc(detailDomId(d.name, "runtime-io-chart"))}" class="muted"></div>
+      </div>
+    </div>`;
 
   const st = serviceState(d);
   const disabledNote = !d.enabled
     ? `<p class="muted" style="color:#cf222e">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
     : "";
+  const general = `<h2>General data</h2>
+    <div class="runtime-grid">
+      <div><span class="muted">State</span><br>${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</div>
+      <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, "service"))}</div>
+      <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
+      <div><span class="muted">Backend</span><br>${esc(d.backend || "—")}</div>
+      <div><span class="muted">Uptime</span><br>${serviceUptimeCell(d)}</div>
+      <div><span class="muted">Interval</span><br>${d.interval ? esc(d.interval) : '<span class="muted">—</span>'}</div>
+      <div><span class="muted">Policy</span><br>${policyCell(d)}</div>
+      <div><span class="muted">Locks</span><br>${locksCell(d)}</div>
+      <div><span class="muted">Last event</span><br>${lastEventCell(d)}</div>
+      <div><span class="muted">Next remediation</span><br>${nextRemediationCell(d)}</div>
+      <div><span class="muted">Remediation</span><br>${renderRemediation(d.remediation)}</div>
+      <div><span class="muted">Processes</span><br>${pt ? `${pt.count} process${pt.count === 1 ? "" : "es"}` : (noResidentProcess ? "not expected" : '<span class="muted">—</span>')}</div>
+      <div><span class="muted">CPU total</span><br>${totalsCpuCell(pt)}</div>
+      <div><span class="muted">Memory</span><br>${memoryInline(pt && pt.rss)}</div>
+      <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
+      <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : '<span class="muted">—</span>'}</div>
+    </div>`;
 
   return `<div class="service-detail" data-service-detail="${esc(d.name)}">
     <h2>${esc(displayName(d))} <span class="muted">${esc(d.unit || "")}</span></h2>
-    <p class="muted" style="margin-top:-.25rem">State: ${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</p>
     ${disabledNote}
-    <h2>Remediation</h2>
-    <p>${renderRemediation(d.remediation)}</p>
-    <h2>Rules</h2>
-    ${renderRules(d.rules)}
-    <h2>Preflight ${me.can_act ? `<button data-preflight-service="${esc(d.name)}">run</button>` : '<span class="muted">admin only</span>'}</h2>
-    <div id="${esc(detailDomId(d.name, "preflight"))}" class="muted">not run yet</div>
-    <h2>Named locks</h2>
-    <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
-      <tbody>${lockRows}</tbody></table>${lockWarns}
+    ${general}
+    ${graphs}
     <h2>Processes</h2>
     ${procSummary}${totals}${procWarns}${procTable}
     <h2>Checks</h2>
     <table><thead><tr><th>Check</th><th>Type</th><th>State</th><th>Message</th></tr></thead>
       <tbody>${checks}</tbody></table>
-    ${latency}
-    ${metricGraphs}
+    <h2>Named locks</h2>
+    <table><thead><tr><th>Name</th><th>State</th><th>TTL</th><th>Owner</th><th>Created</th><th>Blocks</th><th>Reason</th><th></th></tr></thead>
+      <tbody>${lockRows}</tbody></table>${lockWarns}
+    <h2>Rules</h2>
+    ${renderRules(d.rules)}
+    <h2>Preflight ${me.can_act ? `<button data-preflight-service="${esc(d.name)}">run</button>` : '<span class="muted">admin only</span>'}</h2>
+    <div id="${esc(detailDomId(d.name, "preflight"))}" class="muted">not run yet</div>
     <h2>Recent events</h2>
     <table class="events"><tbody id="${esc(detailDomId(d.name, "events"))}"><tr><td class="muted">loading…</td></tr></tbody></table>
   </div>`;
@@ -1681,8 +1751,7 @@ function renderServiceDetail(d) {
 function hydrateServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
   if (measured.length) loadMetrics(d.name, measured);
-  const metricCharts = serviceMetricCharts(d);
-  if (metricCharts.length) loadNamedMetrics(d.name, metricCharts);
+  loadServiceRuntimeMetrics(d.name);
   loadServiceEvents(d.name);
 }
 
@@ -3058,6 +3127,34 @@ async function loadMetrics(name, measured) {
   }
 }
 
+async function loadServiceRuntimeMetrics(name) {
+  const ids = ["cpu", "memory", "io"];
+  const setAll = (msg) => ids.forEach((id) => {
+    const summary = document.getElementById(detailDomId(name, `runtime-${id}-summary`));
+    const chart = document.getElementById(detailDomId(name, `runtime-${id}-chart`));
+    if (summary) summary.innerHTML = `<span class="muted">${esc(msg)}</span>`;
+    if (chart) chart.innerHTML = "";
+  });
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    renderServiceRuntimeMetric(name, "cpu", body.cpu, "CPU", "%");
+    renderServiceRuntimeMetric(name, "memory", body.memory, "memory", "bytes");
+    renderServiceRuntimeMetric(name, "io", body.io, "IO", "B/s");
+  } catch (e) {
+    setAll("Failed to load runtime metrics: " + e.message);
+  }
+}
+
+function renderServiceRuntimeMetric(name, suffix, series, label, fallbackUnit) {
+  const summary = document.getElementById(detailDomId(name, `runtime-${suffix}-summary`));
+  const chart = document.getElementById(detailDomId(name, `runtime-${suffix}-chart`));
+  const unit = (series && series.unit) || fallbackUnit || "";
+  if (summary) summary.innerHTML = daemonMetricSummary(series, label);
+  if (chart) chart.innerHTML = drawMetricChart((series || {}).points || [], unit, metricWindow);
+}
+
 async function loadDaemonMetrics() {
   try {
     const body = await getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null);
@@ -3103,29 +3200,6 @@ function daemonMetricSummary(series, label) {
   const unit = (series && series.unit) || "";
   if (!s.count) return `${esc(label)} <span class="muted">no data</span>`;
   return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b> <span class="muted">(${s.count} samples)</span>`;
-}
-
-// loadNamedMetrics fetches and draws each check's declared named metrics (e.g.
-// hdparm read/cached), one chart per metric, over the selected window.
-async function loadNamedMetrics(name, charts) {
-  for (let i = 0; i < charts.length; i++) {
-    const mc = charts[i];
-    const el = document.getElementById(detailDomId(name, "metric-" + i));
-    if (!el) continue;
-    try {
-      const res = await fetch(`api/services/${encodeURIComponent(name)}/metrics?check=${encodeURIComponent(mc.check)}&metric=${encodeURIComponent(mc.metric)}&since=${metricWindow}`);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const body = await res.json();
-      const s = body.summary || {};
-      const unit = esc(body.unit || mc.unit || "");
-      const head = s.count
-        ? `<div class="muted">avg <b>${s.avg.toFixed(1)}</b> ${unit} &middot; min ${s.min.toFixed(1)} &middot; max ${s.max.toFixed(1)} <span class="muted">(${s.count} samples)</span></div>`
-        : '<span class="muted">No data yet for this window.</span>';
-      el.innerHTML = head + drawMetricChart(body.points || [], body.unit || mc.unit || "");
-    } catch (e) {
-      el.textContent = "Failed to load: " + e.message;
-    }
-  }
 }
 
 function drawMetricChart(points, unit, win) {

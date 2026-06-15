@@ -170,6 +170,7 @@ type WebBackend struct {
 	measure          MeasurementReader
 	collector        *metrics.Collector
 	daemonMetrics    *daemonMetricSampler
+	serviceMetrics   *serviceMetricSampler
 	live             *LiveMetrics
 	diskUsage        checks.DiskUsageFunc
 	mountSampler     checks.MountSamplerFunc
@@ -228,6 +229,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		host:             diag.OSHost{},
 		collector:        deps.Collector,
 		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now),
+		serviceMetrics:   newServiceMetricSampler(),
 		live:             deps.Live,
 		diskUsage:        deps.DiskUsage,
 		mountSampler:     deps.MountSampler,
@@ -486,6 +488,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	b.decorateRemediation(name, &svc)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth)
+	b.decorateServiceRuntime(name, e, &svc)
 	return svc
 }
 
@@ -2340,13 +2343,22 @@ func attachLiveCPU(d *web.Detail, live *LiveMetrics, service string) {
 			}
 		}
 	}
-	if d.ProcessTotals != nil {
-		d.ProcessTotals.NumCPU = sl.NumCPU
-		if sl.CPUReady {
-			d.ProcessTotals.CPU = sl.CPU
-			d.ProcessTotals.CPUThread = sl.CPUThread
-			d.ProcessTotals.HasCPU = true
-		}
+	attachLiveTotals(d.ProcessTotals, live, service)
+}
+
+func attachLiveTotals(totals *web.ProcessTotals, live *LiveMetrics, service string) {
+	if totals == nil || live == nil {
+		return
+	}
+	sl, ok := live.Get(service)
+	if !ok {
+		return
+	}
+	totals.NumCPU = sl.NumCPU
+	if sl.CPUReady {
+		totals.CPU = sl.CPU
+		totals.CPUThread = sl.CPUThread
+		totals.HasCPU = true
 	}
 }
 
