@@ -2849,7 +2849,7 @@ async function renderStatus() {
       if (activeLocks > 0) lockStr += ` <span class="muted">(active)</span>`;
       parts.push(lockStr);
     }
-    if (live.uptime) parts.push(`uptime: <b>${esc(live.uptime)}</b>`);
+    if (daemon.host_uptime) parts.push(`uptime: <b>${esc(daemon.host_uptime)}</b>`);
     if (ready.status) {
       const cls = ready.ready ? "ok" : "inactive";
       parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);

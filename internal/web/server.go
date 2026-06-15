@@ -203,6 +203,8 @@ type DaemonInfo struct {
 	Backend               string `json:"backend,omitempty"`
 	Hostname              string `json:"hostname,omitempty"`
 	OS                    string `json:"os,omitempty"`
+	HostUptime            string `json:"host_uptime,omitempty"`         // display-ready uptime of the host/server since boot
+	HostUptimeSeconds     int64  `json:"host_uptime_seconds,omitempty"` // host/server uptime in whole seconds
 	ConfigPath            string `json:"config_path,omitempty"`
 	RuntimeDir            string `json:"runtime_dir,omitempty"`
 	StateDir              string `json:"state_dir,omitempty"`
