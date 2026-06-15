@@ -148,6 +148,44 @@ func TestCycleFiresRemediation(t *testing.T) {
 	}
 }
 
+func TestCycleGuardCanReferencePreflightCheck(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	tree := map[string]any{"rules": map[string]any{
+		"block-restart-if-config-invalid": map[string]any{
+			"type":   "guard",
+			"blocks": []any{"restart"},
+			"if":     map[string]any{"failed": map[string]any{"check": "config"}},
+			"then":   map[string]any{"action": "block", "message": "config invalid"},
+		},
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, nil)
+	w.ResolveRefs = func() rules.RefResolver {
+		return func(_ context.Context, name string) (checks.Result, bool, error) {
+			if name != "config" {
+				return checks.Result{}, false, nil
+			}
+			return checks.Result{Check: name, OK: false}, true, nil
+		}
+	}
+
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 0 {
+		t.Fatalf("guarded remediation must not operate, ops=%v", h.ops)
+	}
+	if e, ok := h.eventOf("suppressed"); !ok || !strings.Contains(e.Message, "guard: config invalid") {
+		t.Fatalf("guard suppression event = %+v, events=%+v", e, h.events)
+	}
+	if e, ok := h.eventOf("error"); ok {
+		t.Fatalf("preflight reference must not emit an error event: %+v", e)
+	}
+}
+
 func TestCycleRestartsOnLibraryChange(t *testing.T) {
 	lib := filepath.Join(t.TempDir(), "libc.so.6")
 	if err := os.WriteFile(lib, []byte("v1"), 0o644); err != nil {

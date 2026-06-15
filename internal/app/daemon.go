@@ -321,6 +321,9 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	section, _ := tree["checks"].(map[string]any)
 	built, checkWarnings, setCycleMetrics := buildWorkerCheckSet(section, checkDeps, sampleMetrics != nil)
 	warnings = append(warnings, checkWarnings...)
+	preflightSection, _ := tree["preflight"].(map[string]any)
+	preflightBuilt, preflightWarnings := checks.Build(preflightSection, checkDeps)
+	warnings = append(warnings, preflightWarnings...)
 
 	worker = &Worker{
 		Service:      name,
@@ -341,6 +344,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		},
 		IsPaused:     monitorPaused(deps.Monitor, name),
 		Shadow:       shadow,
+		ResolveRefs:  func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth: healthRecorder(deps, name),
 		Publish:      publishSnapshots(deps.Snapshots, name),
 		Now:          deps.Now,

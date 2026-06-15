@@ -44,6 +44,9 @@ type Worker struct {
 
 	// Checks produces this cycle's named-check cache (section 14).
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
+	// ResolveRefs returns a per-cycle resolver for named checks outside the main
+	// monitoring cache, currently preflight entries referenced from rules.
+	ResolveRefs func() rules.RefResolver
 	// Sample produces this cycle's metric reader (section 12). Nil when the
 	// service uses no metrics.
 	Sample func(ctx context.Context) checks.MetricReader
@@ -130,7 +133,11 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	if w.Publish != nil {
 		w.Publish(cache, w.cycleRan)
 	}
-	ev := &rules.Evaluator{Cache: cache, Deps: deps, Changed: w.changed}
+	var resolveRef rules.RefResolver
+	if w.ResolveRefs != nil {
+		resolveRef = w.ResolveRefs()
+	}
+	ev := &rules.Evaluator{Cache: cache, ResolveRef: resolveRef, Deps: deps, Changed: w.changed}
 	evals := w.ruleEvalCache()
 
 	w.runRemediation(ctx, ev, now, evals)
