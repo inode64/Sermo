@@ -359,54 +359,66 @@ Notes:
   native TLS). Restrict access there too (allow-lists, SSO) if needed.
 - Never publish port `9797` directly; only the proxy should connect to it.
 
-Endpoints: `GET /` (the dashboard), `GET /api/services` (JSON: name, `state`
-(`disabled`, `running`, `stopped`, `monitorized`, `failed`), backend status,
-`check_health` and `checks_failing` for required checks, `active_locks` when
-named runtime locks are blocking, monitored,
-`monitor_source`, `monitor_changed_at`, backend, unit, `policy_cooldown`,
-`remediation_state`, `next_eligible_at` and `last_event`),
-`GET /api/services/{name}` (a service's detail: its
-checks with the latest result, its SLA over the rolling windows, its named
-runtime locks (`sermoctl locks SERVICE`, including parse warnings for malformed
-lock files), its discovered processes
-(`sermoctl processes SERVICE`), its automatic remediation policy state
-(cooldown, backoff and rate-limit gating), and rule window progress for
-remediation/alert rules (`for`/`within` counters such as `2/3` consecutive
-cycles)),
-`GET /api/services/{name}/sla?since=24h` (the per-minute availability **history**
-for the window; `since` is a duration, default 24h, capped at the ~1-year
-retention),
-`GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
-history + summary, see below),
-`GET /api/services/{name}/runtime?since=24h` (the service process tree's
-persistent CPU, memory and IO history, sampled every monitored cycle),
-`GET /api/daemon/metrics?since=24h` (persistent sermod process CPU, memory and
-IO history for the current daemon process, plus current PID, file descriptors
-and threads), `GET /api/events?limit=N` (the **global event feed**, newest first),
-`GET /api/services/{name}/events?limit=N` (a service's events),
-`GET /api/diagnostics` (the [diagnostics](#diagnostics) findings with `time`
-(RFC3339), `level`, `scope` and `message`; includes malformed lock files under
-`<paths.runtime>/locks`),
-`POST /api/diagnostics/clean` (admin-only, CSRF-protected; removes stale
-monitoring state for services/watches no longer configured; metric and SLA
-history is kept),
-`GET /api/watches` (configured host watches, their single `state`
-(`disabled`, `unmonitorized`, `ok`, `failed`), `monitor` mode, conditions,
-notifications, live resource readings when available and recent activity),
-`POST /api/watches/{name}/{action}` where action is `monitor` or `unmonitor`,
-`GET /api/locks` (named runtime locks with TTL remaining, owner status,
-created age, blocked actions and release eligibility),
-`POST /api/locks/{service}/release?name=NAME` (admin-only, CSRF-protected,
-releases an inactive stale/expired named runtime lock; active locks are refused),
-`GET /api/ops` (global operation slot usage: `{in_use, total}` for
-`engine.max_parallel_operations`),
-`GET /livez` (liveness, see below), `GET /readyz` (readiness, see below), and
-`POST /api/services/{name}/preflight` (run preflight checks on demand — the same
-checks as `sermoctl preflight SERVICE`, without starting or stopping anything),
-`POST /api/services/{name}/{action}` where action is `monitor`, `unmonitor`,
-`start`, `stop` or `restart`. Clicking a service in the dashboard opens its
-detail. The dashboard auto-refreshes every 5s and polls `/readyz?verbose` to show
-a **Starting** or **Shutting down** banner while monitoring is not active yet.
+Read-only endpoints:
+
+- `GET /` — the dashboard.
+- `GET /livez` — liveness, see below.
+- `GET /readyz` — readiness, see below. The dashboard polls `/readyz?verbose` to
+  show a **Starting** or **Shutting down** banner while monitoring is not active
+  yet.
+- `GET /api/whoami` — caller role, permissions and feature visibility.
+- `GET /api/services` — service list: name, `state` (`disabled`, `running`,
+  `stopped`, `monitorized`, `failed`), backend status, `check_health`,
+  `checks_failing`, active locks, monitor state/source/timestamp, backend, unit,
+  cooldown, remediation state, next eligible action and last event.
+- `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
+  runtime locks, discovered processes, automatic remediation policy state and
+  rule window progress.
+- `GET /api/services/{name}/sla?since=24h` — per-minute availability history;
+  `since` is a duration, default 24h, capped at the ~1-year retention.
+- `GET /api/services/{name}/metrics?check=NAME&since=24h` — check latency
+  history + summary, see below.
+- `GET /api/services/{name}/runtime?since=24h` — service process tree CPU,
+  memory and IO history.
+- `GET /api/services/{name}/events?limit=N` — events for one service.
+- `GET /api/watches` — host watches, monitor state, conditions, notifications,
+  live readings when available and recent activity.
+- `GET /api/notifiers` — configured notifier targets.
+- `GET /api/applications` — installed catalog applications.
+- `GET /api/daemon` — daemon/backend/runtime settings and host uptime.
+- `GET /api/daemon/metrics?since=24h` — persistent sermod CPU, memory and IO
+  history for the current daemon process, plus current PID, file descriptors and
+  threads.
+- `GET /api/host` — current host-level CPU, memory and load metrics.
+- `GET /api/locks` — named runtime locks with TTL, owner status, age, blocked
+  actions and release eligibility.
+- `GET /api/activity` — recent activity summary used by the dashboard header.
+- `GET /api/monitoring` — monitored vs paused service counts.
+- `GET /api/events?limit=N` — global event feed, newest first.
+- `GET /api/diagnostics` — [diagnostics](#diagnostics) findings with `time`
+  (RFC3339), `level`, `scope` and `message`; includes malformed lock files under
+  `<paths.runtime>/locks`.
+- `GET /api/ops` — global operation slot usage: `{in_use, total}` for
+  `engine.max_parallel_operations`.
+
+State-changing endpoints are CSRF-protected and require admin permissions when
+auth is enabled:
+
+- `POST /api/services/{name}/preflight` — run the same preflight checks as
+  `sermoctl preflight SERVICE`, without starting or stopping anything.
+- `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
+  `unmonitor`, `start`, `stop`, `restart` or `reload`; start/stop/restart/reload
+  go through the safe operation engine.
+- `POST /api/watches/{name}/{action}` — host watch action. `action` is
+  `monitor`, `unmonitor` or `expand`.
+- `POST /api/locks/{service}/release?name=NAME` — release an inactive
+  stale/expired named runtime lock; active locks are refused.
+- `POST /api/events/clear?before=TIME` — clear the in-memory event/activity log;
+  `before` may be RFC3339 or a duration. Omit it to clear all events.
+- `POST /api/diagnostics/clean` — remove stale monitoring state for
+  services/watches no longer configured; metric and SLA history is kept.
+- `POST /api/reload` — request a `sermod` configuration reload, equivalent to
+  `sermoctl daemon reload`.
 
 ### Liveness (`/livez`)
 
