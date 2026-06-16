@@ -38,9 +38,11 @@ paths:
   state: /var/lib/sermo
 ```
 
-`paths.runtime` is the root for named runtime locks (`<runtime>/locks`) and
-internal operation locks (`<runtime>/ops`). It lives on tmpfs and is wiped on
-reboot. `paths.locks` is **not** supported.
+`paths.runtime` is the root for named runtime locks (`<runtime>/locks`, one file
+per lock named `<service>[.<name>].lock`) and internal operation locks
+(`<runtime>/ops/<service>.lock`). It lives on tmpfs and is wiped on reboot.
+`paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
+stale-reclaim semantics.
 
 If `paths.includes` is omitted, Sermo falls back to `/etc/sermo/services` and
 then `/etc/sermo/apps`. The second path is only a legacy alias for existing
