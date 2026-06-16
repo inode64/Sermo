@@ -122,7 +122,7 @@ install-catalog:
 # available/included service directories. `apps` is kept as a legacy include
 # alias for hosts that still store service files there.
 install-config:
-	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps
+	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/mounts
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \

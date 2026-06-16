@@ -27,6 +27,7 @@ const (
 	kindLibrary  = "lib"
 	kindService  = "service"
 	kindPatterns = "patterns"
+	kindMount    = "mount"
 )
 
 // Daemon categories mirror the catalog subdirectory a definition is loaded from
@@ -130,6 +131,7 @@ type Global struct {
 	Defaults map[string]any
 	Catalog  []string
 	Includes []string
+	Mounts   []string
 	Runtime  string
 	State    string
 }
@@ -305,11 +307,13 @@ type Config struct {
 	Libraries map[string]*Document // kind lib (shared libraries)
 	Patterns  map[string]*Document // kind patterns (output-analysis rule sets)
 	Services  map[string]*Document // kind service (enabled instances)
+	Mounts    map[string]*Document // kind mount (fstab-backed mount units)
 	// Load order per registry, for stable reporting.
 	DaemonNames  []string
 	AppNames     []string
 	LibraryNames []string
 	PatternNames []string
 	ServiceNames []string
+	MountNames   []string
 	docs         []*Document // every document in load order
 }

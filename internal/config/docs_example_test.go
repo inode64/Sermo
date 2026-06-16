@@ -14,7 +14,8 @@ import (
 // reference file cannot drift from the schema. Each `---` document is placed
 // where it would live in a deployment: the global part as sermo.yml, catalog
 // kinds (daemon/app/lib/patterns) in a catalog dir, services in an include
-// dir; the example's absolute paths are rewritten to the test sandbox.
+// dir, mounts in a mounts dir; the example's absolute paths are rewritten to
+// the test sandbox.
 func TestDocsSermoAllValidates(t *testing.T) {
 	root := repoRoot(t)
 	raw, err := os.ReadFile(filepath.Join(root, "docs", "sermo-all.yml"))
@@ -25,10 +26,11 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	dir := t.TempDir()
 	catalogExtra := filepath.Join(dir, "catalog-extra")
 	enabled := filepath.Join(dir, "enabled")
+	mountsDir := filepath.Join(dir, "mounts")
 	// The loader classifies catalog entries by subdirectory, mirroring the
 	// packaged layout (catalog/{services,apps,libs,patterns}).
 	subdir := map[string]string{"daemon": "services", "app": "apps", "lib": "libs", "patterns": "patterns"}
-	for _, d := range []string{enabled, catalogExtra} {
+	for _, d := range []string{enabled, catalogExtra, mountsDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -41,6 +43,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 
 	var globalDoc string
 	var services []string
+	var mounts []string
 	for i, doc := range strings.Split(string(raw), "\n---\n") {
 		var body map[string]any
 		if err := yaml.Unmarshal([]byte(doc), &body); err != nil {
@@ -63,6 +66,11 @@ func TestDocsSermoAllValidates(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
+		case "mount":
+			mounts = append(mounts, name)
+			if err := os.WriteFile(filepath.Join(mountsDir, name+".yml"), []byte(doc), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		default:
 			t.Fatalf("document %d: unknown kind %q", i+1, kind)
 		}
@@ -80,6 +88,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	global["paths"] = map[string]any{
 		"catalog":  []any{filepath.Join(root, "catalog"), catalogExtra},
 		"includes": []any{enabled},
+		"mounts":   []any{mountsDir},
 		"runtime":  filepath.Join(dir, "runtime"),
 		"state":    filepath.Join(dir, "state"),
 	}
@@ -107,6 +116,16 @@ func TestDocsSermoAllValidates(t *testing.T) {
 		}
 		if len(resolved.Tree) == 0 {
 			t.Errorf("service %s: empty resolved tree", name)
+		}
+	}
+	for _, name := range mounts {
+		resolved, errs := cfg.ResolveMount(name)
+		if len(errs) != 0 {
+			t.Errorf("mount %s: resolve errors = %v", name, errs)
+			continue
+		}
+		if len(resolved.Tree) == 0 {
+			t.Errorf("mount %s: empty resolved tree", name)
 		}
 	}
 }
