@@ -110,8 +110,10 @@ Editable notes:
 | Items | warning / critical buttons |
 | Click behavior | opens the related panel |
 
-Signals include failing services, failed watches, recent errors and readiness
-issues.
+Signals include failing services, firing host watches, recent errors and
+readiness issues. A failing-services item opens the Services panel with the
+`failed` filter; a firing-watches item opens Host watches with the `failed`
+filter (`failed-watches` target).
 
 ## Live operations
 
