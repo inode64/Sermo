@@ -13,8 +13,10 @@ func TestServiceState(t *testing.T) {
 	}{
 		{name: "disabled", enabled: false, monitored: false, backendStatus: "active", want: TargetStateDisabled},
 		{name: "running unmonitored", enabled: true, monitored: false, backendStatus: "active", want: TargetStateRunning},
+		{name: "paused unmonitored", enabled: true, monitored: false, backendStatus: "paused", want: TargetStatePaused},
 		{name: "stopped unmonitored", enabled: true, monitored: false, backendStatus: "inactive", want: TargetStateStopped},
 		{name: "monitorized active healthy", enabled: true, monitored: true, backendStatus: "active", checkHealth: "ok", want: TargetStateMonitorized},
+		{name: "paused monitored", enabled: true, monitored: true, backendStatus: "paused", checkHealth: "ok", want: TargetStatePaused},
 		{name: "monitorized active unknown checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "unknown", want: TargetStateMonitorized},
 		{name: "failed backend", enabled: true, monitored: true, backendStatus: "failed", want: TargetStateFailed},
 		{name: "failed checks", enabled: true, monitored: true, backendStatus: "active", checkHealth: "failing", want: TargetStateFailed},

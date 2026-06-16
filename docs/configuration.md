@@ -111,7 +111,7 @@ engine:
   backend: auto               # auto | systemd | openrc
   interval: 30s               # default cycle interval; per-service overridable
   max_parallel_checks: 8        # bound on concurrent checks across all services
-  max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload operations
+  max_parallel_operations: 2  # bound on concurrent start/stop/restart/reload/resume operations
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   startup_delay: 0            # grace period before the first cycle (0 disables)
@@ -132,7 +132,7 @@ For OpenRC oneshot services whose `status` command cannot report cleanly, Sermo
 falls back to `rc-status -a` and trusts the init state.
 
 `engine.max_parallel_operations` limits how many safe service actions
-(`start`, `stop`, `restart`, `reload`) may run at the same time across automatic
+(`start`, `stop`, `restart`, `reload`, `resume`) may run at the same time across automatic
 remediation, the web UI and `sermoctl`. It is separate from
 `max_parallel_checks`: many checks can run while only a few service operations proceed.
 Slots are shared across processes under `<paths.runtime>/op-slots` (default
@@ -140,7 +140,7 @@ Slots are shared across processes under `<paths.runtime>/op-slots` (default
 is free. The default is `2`.
 
 `engine.operation_timeout` is the outer deadline for a safe
-start/stop/restart/reload. The engine may raise it per service when the resolved
+start/stop/restart/reload/resume. The engine may raise it per service when the resolved
 `stop_policy` needs longer (graceful stop plus signal escalation). The same
 limit applies to automatic remediation, `sermoctl` actions and web-initiated
 operations. When the web UI is enabled, `sermod` also sets the HTTP server's
@@ -241,7 +241,7 @@ A per-check `interval` **cannot be shorter than the resolution** and should be a
 ## Web UI
 
 The daemon can serve a small web dashboard to view services and host watches.
-Admins can monitor/unmonitor both, and can start/stop/restart/reload services
+Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume services
 over the same safe operation engine the CLI uses.
 
 Below the services table the dashboard lists the **installed applications** (the
@@ -291,7 +291,7 @@ Set passwords on the `web` block for HTTP Basic auth with two roles:
 ```yaml
 web:
   port: 9797
-  password: "s3cret"           # admin: read + actions (start/stop/restart/reload, monitor)
+  password: "s3cret"           # admin: read + actions (start/stop/restart/reload/resume, monitor)
   guest_password: "lookonly"   # optional: a read-only login
   guest: true                  # optional: allow anonymous read-only access
 ```
@@ -375,7 +375,7 @@ Read-only endpoints:
   yet.
 - `GET /api/whoami` — caller role, permissions and feature visibility.
 - `GET /api/services` — service list: name, `state` (`disabled`, `running`,
-  `stopped`, `monitorized`, `failed`), backend status, `check_health`,
+  `paused`, `stopped`, `monitorized`, `failed`), backend status, `check_health`,
   `checks_failing`, active locks, monitor state/source/timestamp, backend, unit,
   cooldown, remediation state, next eligible action and last event.
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
@@ -416,8 +416,8 @@ auth is enabled:
 - `POST /api/services/{name}/preflight` — run the same preflight checks as
   `sermoctl preflight SERVICE`, without starting or stopping anything.
 - `POST /api/services/{name}/{action}` — service action. `action` is `monitor`,
-  `unmonitor`, `start`, `stop`, `restart` or `reload`; start/stop/restart/reload
-  go through the safe operation engine.
+  `unmonitor`, `start`, `stop`, `restart`, `reload` or `resume`;
+  start/stop/restart/reload/resume go through the safe operation engine.
 - `POST /api/watches/{name}/{action}` — host watch action. `action` is
   `monitor`, `unmonitor` or `expand`.
 - `POST /api/locks/{service}/release?name=NAME` — release an inactive
@@ -513,7 +513,7 @@ pruned to the same 366-day (~1 year) retention window.
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
 `GET /api/services` / `GET /api/watches` expose `state`, `monitor_source` and
-`monitor_changed_at` so a running/stopped unmonitored service or an
+`monitor_changed_at` so a running/paused/stopped unmonitored service or an
 unmonitorized watch shows who paused it and when. Host watches do not have
 service-manager `running` or `stopped` states; the dashboard filters them as
 `ok`, `failed`, `monitorized`, `unmonitorized` or `disabled`.

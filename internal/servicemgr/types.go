@@ -13,6 +13,7 @@ const (
 	BackendAuto    Backend = "auto"
 	BackendSystemd Backend = "systemd"
 	BackendOpenRC  Backend = "openrc"
+	BackendLibvirt Backend = "libvirt"
 )
 
 // ParseBackend parses a backend name used by CLI flags and environment values.
@@ -36,6 +37,7 @@ type Status string
 const (
 	StatusActive   Status = "active"
 	StatusInactive Status = "inactive"
+	StatusPaused   Status = "paused"
 	StatusFailed   Status = "failed"
 	StatusUnknown  Status = "unknown"
 )

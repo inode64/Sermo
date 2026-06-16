@@ -12,7 +12,7 @@ which reuse the same schema). Supported types:
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
 | `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; `on_change` alerts when its output changes (e.g. a version), array form only |
 | `config`      | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
-| `service`     | the backend status equals `expect` (active/inactive/failed/unknown)|
+| `service`     | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `binary`      | a path exists and is executable                                    |
 | `pidfile`     | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
@@ -167,7 +167,7 @@ rules:
   rule wins (an `ok` match whitelists that line); the check's severity is the
   maximum over all lines.
 - **Result:** `error` → the check fails (red, required); `warning` → the check
-  fails as *optional* (orange — a warning that does not block start/restart/reload
+  fails as *optional* (orange — a warning that does not block start/restart/reload/resume
   or drive remediation by itself); no match → the check passes. The matched `pattern_id`
   and line are in the result data.
 - **Precedence:** exit-code → `expect_*` → `analyze`. The analyzer only grades a
@@ -1646,7 +1646,7 @@ global `notify` default. It applies to the rule's alert messages; remediation
 operations are reported as events, not notifications.
 
 Actions and types are coupled: the operation actions (`restart`, `start`,
-`stop`, `reload`) belong to `type: remediation` rules — required there (a
+`stop`, `reload`, `resume`) belong to `type: remediation` rules — required there (a
 notify-only rule is `type: alert`) and rejected elsewhere. `alert` (with a
 `message`) may accompany any rule's actions; `block` is guard-only. A `then`
 may carry one `action` or an `actions` list (e.g. alert + restart together).
@@ -1736,7 +1736,7 @@ limits.
 
 Use `remediation.shadow: true` when you want these service remediation rules to
 evaluate windows, guards and policy without executing the resulting
-start/stop/restart/reload operation. It emits `shadow` events and does not
+start/stop/restart/reload/resume operation. It emits `shadow` events and does not
 advance live remediation cooldown state. This is separate from host watch
 `then.dry_run: true`, which skips watch `hook`, `notify` and `expand` actions;
 see [configuration](configuration.md#host-watches) for examples.

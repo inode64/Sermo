@@ -10,6 +10,7 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/process"
+	"sermo/internal/virt"
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -206,6 +207,56 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		dm, errMax := time.ParseDuration(cfgval.String(bo["max"]))
 		if errMax != nil || dm < di {
 			add("policy.backoff.max must be >= initial")
+		}
+	}
+}
+
+func validateControl(tree map[string]any, add addFunc) {
+	raw, present := tree["control"]
+	if !present {
+		return
+	}
+	control, ok := raw.(map[string]any)
+	if !ok {
+		add("control must be a mapping")
+		return
+	}
+	for _, key := range slices.Sorted(maps.Keys(control)) {
+		switch key {
+		case "type", "uri", "domain", "uuid", "socket", "host", "port":
+		default:
+			add("control key %q is not one of type, uri, domain, uuid, socket, host, port", key)
+		}
+	}
+	if typ := cfgval.String(control["type"]); typ != "libvirt" {
+		add("control.type %q is not one of libvirt", typ)
+		return
+	}
+	if domain := cfgval.String(control["domain"]); domain == "" {
+		add("control.domain is required for libvirt")
+	}
+	if uri := cfgval.String(control["uri"]); uri != "" && strings.TrimSpace(uri) == "" {
+		add("control.uri must not be blank")
+	}
+	if uuid := cfgval.String(control["uuid"]); uuid != "" {
+		if _, err := virt.ParseUUID(uuid); err != nil {
+			add("control.uuid %q must be a canonical UUID or 32 hex digits", uuid)
+		}
+	}
+	if socket := cfgval.String(control["socket"]); socket != "" && !virt.ValidSocketPath(socket) {
+		add("control.socket %q must be an absolute path", socket)
+	}
+	host := cfgval.String(control["host"])
+	if host != "" && strings.TrimSpace(host) == "" {
+		add("control.host must not be blank")
+	}
+	if host != "" && cfgval.String(control["socket"]) != "" {
+		add("control must not set both socket and host")
+	}
+	if _, present := control["port"]; present {
+		port, ok := cfgval.Int(control["port"])
+		if !ok || !virt.ValidHostPort(host, port) {
+			add("control.port must be an integer in 1..65535")
 		}
 	}
 }

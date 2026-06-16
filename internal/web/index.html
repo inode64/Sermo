@@ -111,6 +111,7 @@
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
   .state-disabled, .state-stopped, .state-unmonitorized { color: var(--text-2); }
   .state-running { color: var(--info); }
+  .state-paused { color: var(--warn); }
   .state-warning { color: var(--warn); }
   .state-ok, .state-monitorized { color: var(--ok); }
   .state-failed { color: var(--crit); }
@@ -415,6 +416,7 @@
       <button data-f="all" class="f-active">all</button>
       <button data-f="disabled">disabled</button>
       <button data-f="running">running</button>
+      <button data-f="paused">paused</button>
       <button data-f="stopped">stopped</button>
       <button data-f="unmonitorized">unmonitorized</button>
       <button data-f="monitorized">monitorized</button>
@@ -1055,7 +1057,7 @@ function nextRemediationCell(s) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | disabled | running | stopped | unmonitorized | monitorized | failed
+let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonitorized | monitorized | failed
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
@@ -1080,6 +1082,7 @@ function targetStateClass(state) {
   switch (state) {
     case "disabled": return "state-disabled";
     case "running": return "state-running";
+    case "paused": return "state-paused";
     case "stopped": return "state-stopped";
     case "warning": return "state-warning";
     case "ok": return "state-ok";
@@ -1104,11 +1107,12 @@ function stateRank(state) {
     case "disabled": return 0;
     case "unmonitorized": return 1;
     case "running": return 2;
-    case "stopped": return 3;
-    case "ok": return 4;
-    case "warning": return 5;
-    case "monitorized": return 5;
-    case "failed": return 6;
+    case "paused": return 3;
+    case "stopped": return 4;
+    case "ok": return 5;
+    case "warning": return 6;
+    case "monitorized": return 6;
+    case "failed": return 7;
     default: return 5;
   }
 }
@@ -1244,7 +1248,7 @@ function renderAttention() {
       </button>
     `).join("")}</div>`;
 }
-function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload"; }
+function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload" || action === "resume"; }
 function serviceBusy(name) {
   const op = liveOps.get(name);
   return !!op && !op.finished;
@@ -1342,6 +1346,7 @@ function serviceMatches(s) {
     case "unmonitorized": return serviceUnmonitorized(s);
     case "disabled":
     case "running":
+    case "paused":
     case "stopped":
     case "monitorized":
     case "failed":      return serviceState(s) === svcStatus;
@@ -1423,6 +1428,7 @@ function renderFilterCounts() {
     all: s.length,
     disabled: s.filter((x) => serviceState(x) === "disabled").length,
     running: s.filter((x) => serviceState(x) === "running").length,
+    paused: s.filter((x) => serviceState(x) === "paused").length,
     stopped: s.filter((x) => serviceState(x) === "stopped").length,
     unmonitorized: s.filter(serviceUnmonitorized).length,
     monitorized: s.filter((x) => serviceState(x) === "monitorized").length,
@@ -1496,10 +1502,12 @@ function renderServices() {
       actions = '<span class="muted">disabled in config</span>';
     } else {
       const stopped = st === "inactive" || st === "failed";
+      const paused = st === "paused";
       actions = me.can_act ? `
-          <button ${busy || st === "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
+          <button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
           <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
           <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
+          <button ${busy || !paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="resume">resume</button>
           <button ${busy || st !== "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="reload">reload</button>
           ${s.monitored
             ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
@@ -1515,7 +1523,7 @@ function renderServices() {
     const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
       <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
       <td>${categoryBadge(category)}</td>
-      <td>${stateBadge(state)}${state === "running" || state === "stopped" ? monitorHint(s) : ""}</td>
+      <td>${stateBadge(state)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : ""}</td>
       <td>${serviceUptimeCell(s)}</td>
       <td>${serviceCpuCell(s)}</td>
       <td>${serviceMemCell(s)}</td>

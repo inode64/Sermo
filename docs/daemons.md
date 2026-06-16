@@ -213,7 +213,7 @@ or service override either form; when several apps are linked, use the prefixed
 names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
-service's preflight, which **blocks start/restart/reload** (a preflight-failed
+service's preflight, which **blocks start/restart/reload/resume** (a preflight-failed
 operation never executes the action) — you do not start, restart or reload a
 service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
@@ -290,7 +290,7 @@ strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
 | `${os}`           | os-release id (`SERMO_OS`)                     | load (baked)    |
 | `${date}`         | event timestamp (RFC3339)                      | runtime²        |
 | `${event}`        | the firing rule's name                         | runtime²        |
-| `${action}`       | the action taken (restart/start/stop/reload)   | runtime²        |
+| `${action}`       | the action taken (restart/start/stop/reload/resume) | runtime²        |
 
 ¹ `${host}` only applies when the daemon does not define a `host` variable (a
 bind address like `127.0.0.1`); an explicit `host` always wins.
@@ -393,6 +393,64 @@ loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
 process selector from init metadata and keeps the WebUI from showing CPU/memory
 process totals for a service that cannot have them.
 
+### `control: libvirt` — QEMU/libvirt virtual machines
+
+A service can be controlled as a libvirt/QEMU virtual machine instead of a
+systemd/OpenRC unit:
+
+```yaml
+kind: service
+name: vm-web01
+control:
+  type: libvirt
+  uri: qemu:///system
+  domain: web01
+  socket: /run/libvirt/libvirt-sock
+
+checks:
+  vm:
+    type: libvirt
+    socket: /run/libvirt/libvirt-sock
+    query: qemu:///system
+    params: { domain: web01 }
+
+processes:
+  qemu:
+    type: command_match
+    exe: /usr/bin/qemu-system-x86_64
+    cmd: "web01|2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4"
+    user: qemu
+```
+
+`control.domain` is the libvirt domain Sermo operates. `uri` defaults to
+`qemu:///system`; `socket` defaults to `/run/libvirt/libvirt-sock` unless `host`
+is set for a remote libvirt TCP connection. `uuid` is optional and, when set,
+Sermo looks up the domain by UUID instead of name.
+
+The safe operation engine is unchanged: locks, guards, preflight, postflight,
+operation timeouts and remediation policy still apply. The primitive actions are
+libvirt operations:
+
+- `start` creates/boots the defined domain (`DomainCreate`).
+- `stop` requests a graceful guest shutdown (`DomainShutdown`); it does not
+  destroy the VM.
+- `restart` is still Sermo's safe stop+start flow.
+- `resume` resumes a paused domain (`DomainResume`).
+- `reload` is unsupported for VM domains unless a future service-specific
+  mechanism is added.
+
+Libvirt status maps to Sermo status as follows: running/blocked → `active`,
+paused/pmsuspended → `paused`, shutoff/shutdown/nostate → `inactive`, crashed →
+`failed`. The CLI and web UI show a VM paused by libvirt as `paused`, distinct
+from Sermo's monitor pause (`unmonitor`).
+
+Process discovery is intentionally explicit in this first VM integration. If you
+want process metrics or residual-process reporting for the QEMU process, add a
+restrictive `processes.command_match` selector as above: exact `exe` and `user`
+plus a `cmd` regex that narrows the shared QEMU binary to the intended domain or
+UUID. The cmdline selector narrows discovery; residual signaling is still
+authorized only by `stop_policy.kill_only_if`.
+
 ### `also_service` — auxiliary init units
 
 A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
@@ -439,10 +497,11 @@ also_apply: [nginx, varnish]
   are cut by a visited set.
 - Entries must be configured services and must not include the service itself.
 - `sermoctl start|stop|restart <svc> --no-cascade` acts on exactly one service.
-- `sermoctl reload <svc>` reloads a single service through the engine (no
-  cascade — `reload` touches the primary only). Use `sermoctl daemon reload` to
-  reload the running `sermod` configuration (`SIGHUP`). In the web UI the
-  per-service **reload** button is enabled only while the service is `active`.
+- `sermoctl reload <svc>` and `sermoctl resume <svc>` act on the primary only
+  (no cascade). Use `sermoctl daemon reload` to reload the running `sermod`
+  configuration (`SIGHUP`). In the web UI the per-service **reload** button is
+  enabled only while the service is `active`, and **resume** only while it is
+  `paused`.
 
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.
