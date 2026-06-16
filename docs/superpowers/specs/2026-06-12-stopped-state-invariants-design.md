@@ -54,22 +54,22 @@ stop_policy:
   # new — verified AFTER a successful stop:
   pidfile_absent: true                      # the declared pidfile must be gone
   files_absent: [/run/postgresql/.s.PGSQL*] # stale sockets/locks (globs)
-  remove_stale: false                       # opt-in: delete stale files, then re-verify
+  clean_after_stop: false                   # opt-in: delete stale files
 ```
 
 Semantics (after the stop's residual handling completes cleanly):
 - **PID snapshot**: the engine records the PIDs discovered **before** the stop, so
   after stopping it can report precisely which known PID survived (in addition to
   the reaper's discover-after check). A surviving known PID is the existing
-  orphan-process path (red) — unchanged.
+  `orphan_processes` path (red) — unchanged.
 - **pidfile_absent / files_absent** (the *new* invariants): after a clean stop,
   the engine checks the declared pidfile (resolved from `pidfile:` /
   `processes.pidfile`) and each `files_absent` glob. A still-present artifact:
-  - with `remove_stale: false` → **warns** — the stop Result stays `ResultOK` but
+  - with `clean_after_stop: false` → **warns** — the stop Result stays `ResultOK` but
     its Message notes the stale artifact (the same message-fold pattern as
     `also_service` best-effort stop errors), surfaced orange in CLI/web/notifier.
-  - with `remove_stale: true` → the engine deletes the artifact, then re-verifies;
-    a delete failure (or a still-present file) downgrades to the same warning.
+  - with `clean_after_stop: true` → the engine deletes the artifact; a delete
+    failure downgrades to the same warning.
 - Residual **processes** keep their current behavior (the reaper kills them; an
   unkillable residual is `ResultOrphanProcesses`, red) — the richer matching just
   feeds it more candidates. Only the new pidfile/files invariants warn.
@@ -110,7 +110,7 @@ stop **operation** path the user described.
 
 - `matches`: cmd-regex match, group match, AND-combination, exe-or-cmd required.
 - engine: a clean stop with a lingering pidfile/file warns (ResultOK + message);
-  `remove_stale` deletes then passes; a surviving known PID still reports orphan;
+  `clean_after_stop` deletes then passes; a surviving known PID still reports orphan;
   no `stop_policy` invariants → unchanged behavior.
 - config: StopArtifacts resolution; validation of new keys and relaxed
   command_match.

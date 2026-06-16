@@ -11,8 +11,8 @@ best-effort, with loop protection.
 
 Confirmed decisions: mirror-list YAML; full-operation mechanism (Level B);
 dependency-aware ordering; triggers on rules **and** manual CLI. Scope: `start`,
-`stop`, `restart` (not `reload` — the manual CLI has no reload command, and it
-was not requested).
+`stop`, `restart`. `reload` exists as a safe primary-service operation, but this
+cascade design intentionally keeps it primary-only.
 
 ## YAML
 
@@ -162,7 +162,7 @@ Two drivers supply `op`:
 
 ## Out of scope (v1)
 
-- `reload` cascade (no manual reload command; not requested).
+- `reload` cascade (`reload` remains primary-only).
 - Cross-host cascade (services on this node only).
 - Per-action target maps (`also: {restart: […], stop: […]}`) — sugar over the
   same orchestrator, addable later.
