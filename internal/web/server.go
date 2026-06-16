@@ -336,12 +336,15 @@ type Check struct {
 }
 
 // SLAWindow is a service's availability over one rolling window. Ratio is nil
-// when the window has no data.
+// when the window has no data. Segments is the window split into equal sub-spans
+// (oldest first) for the timeline strip; each entry is that sub-span's ratio in
+// [0,1], or nil for a gap (no cycle observed in it).
 type SLAWindow struct {
-	Window string   `json:"window"`
-	Ratio  *float64 `json:"ratio"`
-	Up     int64    `json:"up"`
-	Total  int64    `json:"total"`
+	Window   string     `json:"window"`
+	Ratio    *float64   `json:"ratio"`
+	Up       int64      `json:"up"`
+	Total    int64      `json:"total"`
+	Segments []*float64 `json:"segments,omitempty"`
 }
 
 // Process is a discovered process belonging to a service (parity with

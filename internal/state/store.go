@@ -263,19 +263,23 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 
 // SLAWindow names a rolling availability window and its length. The windows are
 // rolling (ending "now"), so week/month/year use fixed 7/30/365-day spans rather
-// than calendar boundaries.
+// than calendar boundaries. Segments is how many equal sub-spans the window is
+// split into for the web timeline strip (a status-page style availability band).
 type SLAWindow struct {
-	Name string
-	Span time.Duration
+	Name     string
+	Span     time.Duration
+	Segments int
 }
 
-// SLAWindows are the reported rolling windows, shortest first.
+// SLAWindows are the reported rolling windows, shortest first. Segment counts
+// pick a natural human sub-span per window (5-minute, hourly, 6-hourly, daily,
+// monthly) so each timeline cell reads as a meaningful slice of time.
 var SLAWindows = []SLAWindow{
-	{"hour", time.Hour},
-	{"day", 24 * time.Hour},
-	{"week", 7 * 24 * time.Hour},
-	{"month", 30 * 24 * time.Hour},
-	{"year", 365 * 24 * time.Hour},
+	{"hour", time.Hour, 12},
+	{"day", 24 * time.Hour, 24},
+	{"week", 7 * 24 * time.Hour, 28},
+	{"month", 30 * 24 * time.Hour, 30},
+	{"year", 365 * 24 * time.Hour, 12},
 }
 
 // SLAValue is the availability of one service over one window: the up and total
@@ -457,6 +461,102 @@ func (s *Store) CheckSLAReport(service, check string, now time.Time) ([]SLAValue
 			return nil, err
 		}
 		out = append(out, SLAValue{Window: w.Name, Up: up, Total: total})
+	}
+	return out, nil
+}
+
+// SLASegment is one equal sub-span of a windowed SLA timeline: the up and total
+// observed cycles within it. Total==0 marks a gap (an unmonitored sub-span),
+// which renders distinctly from downtime — the same gap convention as SLASeries.
+type SLASegment struct {
+	Up    int64 `json:"up"`
+	Total int64 `json:"total"`
+}
+
+// SLAWindowTimeline is a service's availability over one rolling window plus the
+// window divided into equal sub-spans (oldest first) for the web timeline strip.
+// Up/Total are the window totals (the sum of the segments), so a caller rendering
+// the strip needs no separate SLAReport query.
+type SLAWindowTimeline struct {
+	Window   string
+	Up       int64
+	Total    int64
+	Segments []SLASegment
+}
+
+// SLATimelines returns a service's availability for every SLAWindow split into
+// equal sub-spans for the web timeline strip, ordered as SLAWindows (hour..year).
+func (s *Store) SLATimelines(service string, now time.Time) ([]SLAWindowTimeline, error) {
+	return s.slaTimelines("sla_sample", "service = ?", []any{service}, now)
+}
+
+// CheckSLATimelines returns one check's windowed availability split into sub-spans
+// for the web timeline strip, ordered as SLAWindows (hour..year).
+func (s *Store) CheckSLATimelines(service, check string, now time.Time) ([]SLAWindowTimeline, error) {
+	return s.slaTimelines("check_sla_sample", "service = ? AND check_name = ?", []any{service, check}, now)
+}
+
+// slaTimelines divides each SLAWindow into Segments equal sub-spans ending at now
+// and aggregates the per-minute buckets of table into them with a single grouped
+// query per window — the same indexed range scan SLA() already does, returning the
+// per-segment breakdown as well. where/keyArgs select the service (and check) rows.
+func (s *Store) slaTimelines(table, where string, keyArgs []any, now time.Time) ([]SLAWindowTimeline, error) {
+	out := make([]SLAWindowTimeline, 0, len(SLAWindows))
+	for _, w := range SLAWindows {
+		segCount := w.Segments
+		if segCount <= 0 {
+			segCount = 1
+		}
+		spanSec := int64(w.Span / time.Second)
+		startBucket := minuteBucket(now.Add(-w.Span))
+		endBucket := startBucket + spanSec
+		segSpan := spanSec / int64(segCount)
+		if segSpan <= 0 {
+			segSpan = 1
+		}
+
+		// Placeholder order matches the SQL left-to-right: the SELECT segment
+		// expression (start, span) first, then the WHERE key args, then the range.
+		args := make([]any, 0, len(keyArgs)+4)
+		args = append(args, startBucket, segSpan)
+		args = append(args, keyArgs...)
+		args = append(args, startBucket, endBucket)
+		rows, err := s.db.Query(
+			`SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+			   FROM `+table+`
+			  WHERE `+where+` AND bucket >= ? AND bucket < ?
+			  GROUP BY seg ORDER BY seg;`,
+			args...,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		segs := make([]SLASegment, segCount)
+		var winUp, winTotal int64
+		for rows.Next() {
+			var seg, up, total int64
+			if err := rows.Scan(&seg, &up, &total); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if seg < 0 {
+				seg = 0
+			} else if seg >= int64(segCount) {
+				seg = int64(segCount) - 1
+			}
+			segs[seg].Up += up
+			segs[seg].Total += total
+			winUp += up
+			winTotal += total
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		rows.Close()
+
+		out = append(out, SLAWindowTimeline{Window: w.Name, Up: winUp, Total: winTotal, Segments: segs})
 	}
 	return out, nil
 }

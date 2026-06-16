@@ -2285,30 +2285,41 @@ func (b *WebBackend) serviceSLAWindows(name string, now time.Time) []web.SLAWind
 	if b.sla == nil {
 		return nil
 	}
-	vals, err := b.sla.SLAReport(name, now)
+	tls, err := b.sla.SLATimelines(name, now)
 	if err != nil {
 		return nil
 	}
-	return toWebSLAWindows(vals)
+	return toWebSLAWindows(tls)
 }
 
 func (b *WebBackend) checkSLAWindows(service, check string, now time.Time) []web.SLAWindow {
 	if b.sla == nil {
 		return nil
 	}
-	vals, err := b.sla.CheckSLAReport(service, check, now)
+	tls, err := b.sla.CheckSLATimelines(service, check, now)
 	if err != nil {
 		return nil
 	}
-	return toWebSLAWindows(vals)
+	return toWebSLAWindows(tls)
 }
 
-func toWebSLAWindows(vals []state.SLAValue) []web.SLAWindow {
-	out := make([]web.SLAWindow, 0, len(vals))
-	for _, v := range vals {
-		win := web.SLAWindow{Window: v.Window, Up: v.Up, Total: v.Total}
-		if ratio, ok := v.Ratio(); ok {
+func toWebSLAWindows(tls []state.SLAWindowTimeline) []web.SLAWindow {
+	out := make([]web.SLAWindow, 0, len(tls))
+	for _, t := range tls {
+		win := web.SLAWindow{Window: t.Window, Up: t.Up, Total: t.Total}
+		if t.Total > 0 {
+			ratio := float64(t.Up) / float64(t.Total)
 			win.Ratio = &ratio
+		}
+		if len(t.Segments) > 0 {
+			segs := make([]*float64, len(t.Segments))
+			for i, g := range t.Segments {
+				if g.Total > 0 {
+					ratio := float64(g.Up) / float64(g.Total)
+					segs[i] = &ratio
+				}
+			}
+			win.Segments = segs
 		}
 		out = append(out, win)
 	}

@@ -221,10 +221,12 @@ The visual layer is a token-driven design system (June 2026 redesign):
 - **Status pills.** `.target-state` renders states as tinted pills with a
   colored dot (`::before`, `currentColor`); `state-failed` pulses. New states
   only need a `state-<name>` color class.
-- **Heartbeat strip.** `beatStrip(points)` renders the 24h availability strip
-  (48 half-hour segments, `beat-ok`/`beat-warn`/`beat-bad`, hollow when
-  unobserved) used in the service expansion; reuse it anywhere a compact
-  availability history is needed.
+- **SLA timeline strip.** `renderSLATimeline(segments, window)` renders a
+  contiguous status-page availability band — one `.sla-seg` cell per equal
+  sub-span (oldest left), colored by `slaColor`, hatched `.sla-gap` where no
+  cycle was observed. `renderSLAWindows` uses it for every rolling SLA window;
+  the per-segment ratios come from the backend (`SLAWindow.Segments`). Reuse it
+  anywhere a compact availability history is needed.
 
 **CSP and inline styles:** `style-src` deliberately carries `'unsafe-inline'`
 **without** a nonce — per CSP2, a nonce in the list makes browsers ignore
