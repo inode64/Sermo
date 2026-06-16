@@ -152,10 +152,9 @@ func ConfiguredStoredNames(cfg *config.Config) []string {
 		return nil
 	}
 	names := cfg.SortedServiceNames()
-	if watches, _ := cfg.ResolveWatches(); len(watches) > 0 {
-		for _, name := range slices.Sorted(maps.Keys(watches)) {
-			names = append(names, "watch:"+name)
-		}
+	watches, _ := cfg.ResolveWatches()
+	for _, name := range slices.Sorted(maps.Keys(watches)) {
+		names = append(names, "watch:"+name)
 	}
 	return names
 }
