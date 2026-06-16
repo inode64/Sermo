@@ -9,6 +9,7 @@ import (
 	"sermo/internal/config"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 )
 
 // Monitor runs service workers and host watches in reloadable generations.
@@ -168,6 +169,13 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.SystemFreshness = m.deps.Interval / 2
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
 		m.collector.SystemFreshness = m.deps.SystemFreshness
+	}
+	// Preserve the shared /proc snapshot reader across reloads (just refresh its
+	// reuse window); create it if this is the first apply.
+	if cr, ok := m.deps.ProcReader.(*process.CachingReader); ok {
+		cr.SetFreshness(m.deps.SystemFreshness)
+	} else {
+		m.deps.ProcReader = process.NewCachingReader(process.OSReader{}, m.deps.SystemFreshness)
 	}
 	notifiers, warns := notify.Build(cfg.Notifiers())
 	m.deps.Notifiers = notifiers

@@ -277,7 +277,19 @@ func descendants(snapshot map[int]Identity, seeds []int) []int {
 	return out
 }
 
+// snapshotIdentities reads every visible process identity. When the reader can
+// supply a whole snapshot in one call (the shared CachingReader), that single
+// walk is reused across concurrent discoveries; otherwise it falls back to a
+// per-PID read.
 func snapshotIdentities(reader Reader) map[int]Identity {
+	if sr, ok := reader.(SnapshotReader); ok {
+		return sr.Snapshot()
+	}
+	return buildSnapshot(reader)
+}
+
+// buildSnapshot walks /proc once via the reader, reading each PID's identity.
+func buildSnapshot(reader Reader) map[int]Identity {
 	snapshot := map[int]Identity{}
 	pids, err := reader.PIDs()
 	if err != nil {
