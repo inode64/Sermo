@@ -41,6 +41,24 @@ func (f fakeSLAReader) CheckSLASeries(string, string, time.Time, time.Time) ([]s
 	return nil, nil
 }
 
+func (f fakeSLAReader) SLATimelines(service string, _ time.Time) ([]state.SLAWindowTimeline, error) {
+	return slaValuesToTimelines(f.service[service]), nil
+}
+
+func (f fakeSLAReader) CheckSLATimelines(service, check string, _ time.Time) ([]state.SLAWindowTimeline, error) {
+	return slaValuesToTimelines(f.check[service+"\x00"+check]), nil
+}
+
+// slaValuesToTimelines reuses the fake's window totals as timelines without
+// segments, so existing SLA ratio assertions hold against the timeline path.
+func slaValuesToTimelines(vals []state.SLAValue) []state.SLAWindowTimeline {
+	out := make([]state.SLAWindowTimeline, 0, len(vals))
+	for _, v := range vals {
+		out = append(out, state.SLAWindowTimeline{Window: v.Window, Up: v.Up, Total: v.Total})
+	}
+	return out
+}
+
 func TestWebBackendEventsNilLog(t *testing.T) {
 	b := &WebBackend{
 		entries: map[string]*webEntry{"web": {}},

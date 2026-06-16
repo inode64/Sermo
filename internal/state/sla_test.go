@@ -225,6 +225,82 @@ func TestSLASeriesReturnsOrderedBucketsWithGaps(t *testing.T) {
 	}
 }
 
+func TestSLATimelinesBucketsSegmentsIntoSubSpans(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+
+	// Two samples inside the hour window (12 five-minute segments): a down sample
+	// 2 minutes ago lands in the newest segment, an up sample 58 minutes ago lands
+	// in the oldest. The minutes between them are gaps (no samples recorded).
+	mustRecord(t, s, "web", false, now.Add(-2*time.Minute))
+	mustRecord(t, s, "web", true, now.Add(-58*time.Minute))
+
+	tls, err := s.SLATimelines("web", now)
+	if err != nil {
+		t.Fatalf("SLATimelines: %v", err)
+	}
+	if len(tls) != len(SLAWindows) {
+		t.Fatalf("got %d windows, want %d", len(tls), len(SLAWindows))
+	}
+
+	hour := tls[0]
+	if hour.Window != "hour" || len(hour.Segments) != 12 {
+		t.Fatalf("hour window = %q with %d segments, want \"hour\" with 12", hour.Window, len(hour.Segments))
+	}
+	// Window totals are the sum of the segments — no separate report query needed.
+	if hour.Up != 1 || hour.Total != 2 {
+		t.Fatalf("hour totals up=%d total=%d, want 1/2", hour.Up, hour.Total)
+	}
+	if oldest := hour.Segments[0]; oldest.Up != 1 || oldest.Total != 1 {
+		t.Fatalf("oldest segment = %+v, want the up sample (1/1)", oldest)
+	}
+	if newest := hour.Segments[11]; newest.Up != 0 || newest.Total != 1 {
+		t.Fatalf("newest segment = %+v, want the down sample (0/1)", newest)
+	}
+	if mid := hour.Segments[5]; mid.Total != 0 {
+		t.Fatalf("a segment with no samples = %+v, want a gap (total 0)", mid)
+	}
+
+	// Per-window segment counts come from SLAWindows.
+	for i, w := range SLAWindows {
+		if len(tls[i].Segments) != w.Segments {
+			t.Fatalf("window %s has %d segments, want %d", w.Name, len(tls[i].Segments), w.Segments)
+		}
+	}
+}
+
+func TestCheckSLATimelinesScopeToCheck(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+
+	if err := s.RecordCheckSLA("web", "http", true, now.Add(-3*time.Minute)); err != nil {
+		t.Fatalf("RecordCheckSLA up: %v", err)
+	}
+	if err := s.RecordCheckSLA("web", "http", false, now.Add(-2*time.Minute)); err != nil {
+		t.Fatalf("RecordCheckSLA down: %v", err)
+	}
+	if err := s.RecordCheckSLA("web", "tcp", true, now.Add(-2*time.Minute)); err != nil {
+		t.Fatalf("RecordCheckSLA other check: %v", err)
+	}
+
+	tls, err := s.CheckSLATimelines("web", "http", now)
+	if err != nil {
+		t.Fatalf("CheckSLATimelines: %v", err)
+	}
+	if tls[0].Up != 1 || tls[0].Total != 2 {
+		t.Fatalf("http hour totals up=%d total=%d, want 1/2 (tcp excluded)", tls[0].Up, tls[0].Total)
+	}
+
+	// A service/check with no samples reports zeroed segments, not an error.
+	ghost, err := s.CheckSLATimelines("web", "ghost", now)
+	if err != nil {
+		t.Fatalf("CheckSLATimelines ghost: %v", err)
+	}
+	if ghost[0].Total != 0 || len(ghost[0].Segments) != 12 {
+		t.Fatalf("ghost hour = %+v, want zero totals with 12 segments", ghost[0])
+	}
+}
+
 func mustRecord(t *testing.T, s *Store, service string, up bool, at time.Time) {
 	t.Helper()
 	if err := s.RecordSLA(service, up, at); err != nil {
