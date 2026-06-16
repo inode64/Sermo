@@ -12,10 +12,11 @@ import (
 )
 
 // ServiceMetricSampler stores per-service process-tree runtime samples for the
-// web detail graphs. Workers record into it every observed cycle; the web
-// backend reads the same in-memory history when a service detail is expanded.
+// web detail graphs. Workers record into it every observed cycle; when a store
+// is wired, the history survives daemon restarts.
 type ServiceMetricSampler struct {
 	mu      sync.Mutex
+	store   ServiceMetricStore
 	prev    map[string]serviceMetricCounters
 	samples map[string][]serviceMetricSample
 }
@@ -32,9 +33,15 @@ type serviceMetricSample struct {
 	current web.ServiceRuntime
 }
 
-// NewServiceMetricSampler returns an empty service runtime metric history.
-func NewServiceMetricSampler() *ServiceMetricSampler {
+// NewServiceMetricSampler returns an empty service runtime metric history. The
+// optional store persists CPU, memory and IO buckets across daemon restarts.
+func NewServiceMetricSampler(stores ...ServiceMetricStore) *ServiceMetricSampler {
+	var store ServiceMetricStore
+	if len(stores) > 0 {
+		store = stores[0]
+	}
 	return &ServiceMetricSampler{
+		store:   store,
 		prev:    map[string]serviceMetricCounters{},
 		samples: map[string][]serviceMetricSample{},
 	}
@@ -55,6 +62,7 @@ func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) web.S
 	s.mu.Lock()
 	cur = s.recordLocked(name, cur, at)
 	s.mu.Unlock()
+	s.recordPersistent(name, cur, at)
 	return cur
 }
 
@@ -91,6 +99,10 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	cur = s.recordLocked(name, cur, at)
 	samples := serviceSamplesSince(s.samples[name], at.Add(-since))
 	s.mu.Unlock()
+	s.recordPersistent(name, cur, at)
+	if out, ok := s.persistentSeries(name, cur, at, since); ok {
+		return out
+	}
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
@@ -98,6 +110,65 @@ func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 		Memory:  serviceMetricSeries("memory", "bytes", since, samples, func(p serviceMetricSample) (float64, bool) { return float64(p.current.RSS), p.current.Count > 0 }),
 		IO:      serviceMetricSeries("io", "B/s", since, samples, func(p serviceMetricSample) (float64, bool) { return p.current.IORate, p.current.IOReady }),
 	}
+}
+
+func (s *ServiceMetricSampler) recordPersistent(name string, cur web.ServiceRuntime, at time.Time) {
+	if s == nil || s.store == nil {
+		return
+	}
+	if cur.HasCPU {
+		_ = s.store.RecordServiceMetric(name, "cpu", cur.CPU, at)
+	}
+	if cur.Count > 0 {
+		_ = s.store.RecordServiceMetric(name, "memory", float64(cur.RSS), at)
+	}
+	if cur.IOReady {
+		_ = s.store.RecordServiceMetric(name, "io", cur.IORate, at)
+	}
+}
+
+func (s *ServiceMetricSampler) persistentSeries(name string, cur web.ServiceRuntime, at time.Time, since time.Duration) (web.ServiceRuntimeMetrics, bool) {
+	if s == nil || s.store == nil {
+		return web.ServiceRuntimeMetrics{}, false
+	}
+	now := at.Add(time.Minute)
+	series := func(metric, unit string) (web.MetricSeries, bool) {
+		stat, err := s.store.ServiceMetricSummary(name, metric, since+time.Minute, now)
+		if err != nil {
+			return web.MetricSeries{}, false
+		}
+		points, err := s.store.ServiceMetricSeries(name, metric, at.Add(-since), now)
+		if err != nil {
+			return web.MetricSeries{}, false
+		}
+		return web.MetricSeries{
+			Check:   "runtime",
+			Metric:  metric,
+			Since:   since.String(),
+			Unit:    unit,
+			Summary: metricSummary(stat),
+			Points:  measurementPoints(points),
+		}, true
+	}
+	cpu, ok := series("cpu", "%")
+	if !ok {
+		return web.ServiceRuntimeMetrics{}, false
+	}
+	memory, ok := series("memory", "bytes")
+	if !ok {
+		return web.ServiceRuntimeMetrics{}, false
+	}
+	io, ok := series("io", "B/s")
+	if !ok {
+		return web.ServiceRuntimeMetrics{}, false
+	}
+	return web.ServiceRuntimeMetrics{
+		Since:   since.String(),
+		Current: cur,
+		CPU:     cpu,
+		Memory:  memory,
+		IO:      io,
+	}, true
 }
 
 func (s *ServiceMetricSampler) trimLocked(name string, cutoff time.Time) {

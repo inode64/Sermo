@@ -32,7 +32,7 @@ Keep changes concrete:
 | Services | `GET /api/services` | main service list |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service latency metrics | `GET /api/services/{name}/metrics` | latency chart for measured checks |
-| Service runtime metrics | `GET /api/services/{name}/runtime` | in-memory service CPU/memory/IO history sampled by worker cycles |
+| Service runtime metrics | `GET /api/services/{name}/runtime` | persisted service CPU/memory/IO history sampled by worker cycles |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
@@ -351,7 +351,7 @@ Section id: `diag-section`
 | --- | --- |
 | Title | `Diagnostics` |
 | Buttons | refresh; clean stale data when admin and stale database findings exist; reload config when admin |
-| Help text | `SIGHUP or systemctl reload sermod`; cleanup warning for stale state/SLA/measurements |
+| Help text | `SIGHUP or systemctl reload sermod`; cleanup warning for stale state, SLA, measurements and runtime metrics |
 | Table | diagnostic time, level, scope and message rows |
 
 ## Change template
