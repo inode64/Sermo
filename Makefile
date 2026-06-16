@@ -33,7 +33,7 @@ LINT_PATH = PATH="$(HOME)/go/bin:$(PATH)"
 # ~/.cache for restricted shells, but scope it to the checkout path so agent
 # worktrees do not reuse stale absolute paths after a worktree is removed.
 LINT_CACHE_DIR ?= /tmp/sermo-lint-cache-$(shell pwd | sed 's#[^A-Za-z0-9_.-]#_#g')
-LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-$(LINT_CACHE_DIR)}"
+LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-$(LINT_CACHE_DIR)}" GOCACHE="$${GOCACHE:-$(LINT_CACHE_DIR)/go-build}"
 
 # Render the init/unit files for the chosen paths: rewrite the binary and config
 # locations baked into the packaging templates.
@@ -77,7 +77,7 @@ lint:
 	@echo "golangci-lint run"
 	@$(LINT_CACHE_ENV) golangci-lint run
 	@echo "govulncheck ./..."
-	@$(LINT_PATH) govulncheck ./...
+	@$(LINT_CACHE_ENV) govulncheck ./...
 
 # Everything CI enforces: formatting, vet, static analysis, and the test suite.
 check: fmt-check vet lint test
