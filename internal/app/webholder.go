@@ -181,7 +181,7 @@ func (h *WebBackendHolder) Diagnostics(ctx context.Context) []web.Finding {
 	return nil
 }
 
-// CleanDiagnostics removes stale diagnostic state through the active backend.
+// CleanDiagnostics removes stale monitoring state through the active backend.
 func (h *WebBackendHolder) CleanDiagnostics(ctx context.Context) web.DiagnosticCleanResult {
 	if b := h.backend(); b != nil {
 		return b.CleanDiagnostics(ctx)

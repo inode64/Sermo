@@ -13,6 +13,7 @@
 package state
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -129,11 +130,22 @@ type Store struct {
 	now func() time.Time
 }
 
-// PruneUnconfiguredServicesResult summarizes stale stored service data removed
-// from the persistent state database.
-type PruneUnconfiguredServicesResult struct {
+// PruneUnconfiguredMonitorStatesResult summarizes stale monitoring control
+// state removed from the persistent state database.
+type PruneUnconfiguredMonitorStatesResult struct {
 	Services []string
 	Rows     int64
+}
+
+// PruneHistoryResult summarizes old persisted history removed from bucketed
+// time-series tables.
+type PruneHistoryResult struct {
+	SLA            int64
+	Measurements   int64
+	Metrics        int64
+	DaemonMetrics  int64
+	ServiceMetrics int64
+	Rows           int64
 }
 
 // Open opens (creating if needed) the database at path, creating the parent
@@ -895,14 +907,34 @@ func (s *Store) TrackedServices() ([]string, error) {
 	return out, rows.Err()
 }
 
-// PruneUnconfiguredServices removes stored data for services absent from the
-// configured service list: monitoring state, SLA samples, measurements and
-// runtime metrics. It is used to clear the stale rows that diagnostics report
-// after a service is removed or renamed.
-func (s *Store) PruneUnconfiguredServices(configured []string) (PruneUnconfiguredServicesResult, error) {
-	tracked, err := s.TrackedServices()
+// TrackedMonitorStates returns the distinct service/watch names that have
+// persisted monitoring control state. Diagnostics use this narrower view so
+// historical metrics do not make a removed target look like a live problem.
+func (s *Store) TrackedMonitorStates() ([]string, error) {
+	rows, err := s.db.Query(`SELECT service FROM monitor_state ORDER BY service;`)
 	if err != nil {
-		return PruneUnconfiguredServicesResult{}, err
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+// PruneUnconfiguredMonitorStates removes persisted monitoring control state for
+// services or watches absent from the configured target list. It intentionally
+// leaves SLA, measurements and runtime metrics untouched; history maintenance is
+// handled by PruneHistory and Compact.
+func (s *Store) PruneUnconfiguredMonitorStates(configured []string) (PruneUnconfiguredMonitorStatesResult, error) {
+	tracked, err := s.TrackedMonitorStates()
+	if err != nil {
+		return PruneUnconfiguredMonitorStatesResult{}, err
 	}
 	known := make(map[string]struct{}, len(configured))
 	for _, name := range configured {
@@ -911,42 +943,30 @@ func (s *Store) PruneUnconfiguredServices(configured []string) (PruneUnconfigure
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return PruneUnconfiguredServicesResult{}, err
+		return PruneUnconfiguredMonitorStatesResult{}, err
 	}
 	defer tx.Rollback()
 
-	var result PruneUnconfiguredServicesResult
+	var result PruneUnconfiguredMonitorStatesResult
 	for _, service := range tracked {
 		if _, ok := known[service]; ok {
 			continue
 		}
-		rows, err := pruneServiceData(tx, service)
+		res, err := tx.Exec(`DELETE FROM monitor_state WHERE service = ?;`, service)
 		if err != nil {
-			return PruneUnconfiguredServicesResult{}, err
+			return PruneUnconfiguredMonitorStatesResult{}, err
+		}
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return PruneUnconfiguredMonitorStatesResult{}, err
 		}
 		result.Services = append(result.Services, service)
 		result.Rows += rows
 	}
 	if err := tx.Commit(); err != nil {
-		return PruneUnconfiguredServicesResult{}, err
+		return PruneUnconfiguredMonitorStatesResult{}, err
 	}
 	return result, nil
-}
-
-func pruneServiceData(tx *sql.Tx, service string) (int64, error) {
-	var total int64
-	for _, table := range []string{"monitor_state", "sla_sample", "check_sla_sample", "measurement", "measurement_metric", "service_metric"} {
-		res, err := tx.Exec(`DELETE FROM `+table+` WHERE service = ?;`, service) //nolint:gosec // table is a package-internal literal
-		if err != nil {
-			return 0, err
-		}
-		rows, err := res.RowsAffected()
-		if err != nil {
-			return 0, err
-		}
-		total += rows
-	}
-	return total, nil
 }
 
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
@@ -961,4 +981,40 @@ func (s *Store) PruneSLA(before time.Time) (int64, error) {
 		return 0, err
 	}
 	return total + rows, nil
+}
+
+// PruneHistory deletes bucketed history older than before from SLA,
+// measurement, daemon runtime and service runtime metric tables.
+func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
+	var out PruneHistoryResult
+	var err error
+	if out.SLA, err = s.PruneSLA(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
+	if out.Measurements, err = s.PruneMeasurements(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
+	if out.Metrics, err = s.PruneMetrics(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
+	if out.DaemonMetrics, err = s.PruneDaemonMetrics(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
+	if out.ServiceMetrics, err = s.PruneServiceMetrics(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
+	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics
+	return out, nil
+}
+
+// Compact checkpoints the WAL and vacuums the SQLite state database so space
+// freed by pruning can be returned to the filesystem.
+func (s *Store) Compact(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(ctx, `VACUUM;`); err != nil {
+		return err
+	}
+	return nil
 }

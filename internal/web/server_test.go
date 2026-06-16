@@ -147,13 +147,13 @@ func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.
 	return ServiceRuntimeMetrics{}, false
 }
 func (f *fakeBackend) Diagnostics(context.Context) []Finding {
-	return []Finding{{Level: "warning", Scope: "database", Message: `stored data for service "ghost"`}}
+	return []Finding{{Level: "warning", Scope: "database", Message: `stored monitoring state for target "ghost" which is no longer configured`}}
 }
 func (f *fakeBackend) CleanDiagnostics(context.Context) DiagnosticCleanResult {
 	if f.diagnosticClean.OK || f.diagnosticClean.Message != "" {
 		return f.diagnosticClean
 	}
-	return DiagnosticCleanResult{OK: true, Message: "no unconfigured service data found"}
+	return DiagnosticCleanResult{OK: true, Message: "no unconfigured monitoring state found"}
 }
 func (f *fakeBackend) Operations(context.Context) OperationSlots { return f.opsSlots }
 func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
@@ -613,7 +613,7 @@ func TestDiagnostics(t *testing.T) {
 func TestDiagnosticsClean(t *testing.T) {
 	b := &fakeBackend{diagnosticClean: DiagnosticCleanResult{
 		OK:       true,
-		Message:  "cleared stored data for 2 unconfigured service(s)",
+		Message:  "cleared monitoring state for 2 unconfigured target(s)",
 		Pruned:   7,
 		Services: []string{"ghost", "watch:old"},
 	}}

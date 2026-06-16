@@ -25,8 +25,8 @@ type fakeStore struct {
 	tracked   []string
 }
 
-func (s fakeStore) IntegrityCheck() error              { return s.integrity }
-func (s fakeStore) TrackedServices() ([]string, error) { return s.tracked, nil }
+func (s fakeStore) IntegrityCheck() error                   { return s.integrity }
+func (s fakeStore) TrackedMonitorStates() ([]string, error) { return s.tracked, nil }
 
 // loadCfg writes a base global + one service doc under a temp dir (substituting
 // @ROOT@) and loads it.
@@ -78,10 +78,10 @@ checks:
 `)
 	store := fakeStore{tracked: []string{"web", "ghost"}}
 	r := Diagnose(cfg, store, fakeHost{})
-	if !has(r, LevelWarning, `service "ghost"`) {
+	if !has(r, LevelWarning, `target "ghost"`) {
 		t.Fatalf("expected orphaned-data warning for ghost: %+v", r.Findings)
 	}
-	if has(r, LevelWarning, `service "web"`) {
+	if has(r, LevelWarning, `target "web"`) {
 		t.Fatal("configured service web must not be flagged as orphaned")
 	}
 }
