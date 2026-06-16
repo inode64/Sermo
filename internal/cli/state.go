@@ -64,6 +64,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 			"metrics":         result.Metrics,
 			"daemon_metrics":  result.DaemonMetrics,
 			"service_metrics": result.ServiceMetrics,
+			"events":          result.Events,
 			"vacuum":          true,
 		})
 		return exitSuccess
@@ -71,7 +72,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 
 	fmt.Fprintf(
 		a.Stdout,
-		"compacted state before %s: pruned %d row(s) (sla=%d measurements=%d metrics=%d daemon_metrics=%d service_metrics=%d)\n",
+		"compacted state before %s: pruned %d row(s) (sla=%d measurements=%d metrics=%d daemon_metrics=%d service_metrics=%d events=%d)\n",
 		before.UTC().Format(time.RFC3339),
 		result.Rows,
 		result.SLA,
@@ -79,6 +80,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		result.Metrics,
 		result.DaemonMetrics,
 		result.ServiceMetrics,
+		result.Events,
 	)
 	return exitSuccess
 }

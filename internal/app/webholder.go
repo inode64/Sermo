@@ -205,7 +205,7 @@ func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit
 	return nil, false
 }
 
-// PruneEvents removes old events from the live event log (if the backend is available).
+// PruneEvents removes old events from the active event feed (if the backend is available).
 func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) int {
 	if b := h.backend(); b != nil {
 		return b.PruneEvents(ctx, before)

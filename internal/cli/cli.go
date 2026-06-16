@@ -78,8 +78,9 @@ type App struct {
 	// address/port (and password for auth if present).
 	FetchEvents func(ctx context.Context, opts options, service string, limit int) ([]event, error)
 	// PruneEvents is injectable for `sermoctl events clear` and
-	// `sermoctl activity clear`. Defaults to pruning over HTTP using the config's
-	// web address/port (and password for auth if present).
+	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
+	// feed over HTTP using the config's web address/port (and password for auth if
+	// present).
 	PruneEvents func(ctx context.Context, opts options, before time.Time) (int, error)
 }
 
@@ -1207,7 +1208,7 @@ func parseBefore(value string, now func() time.Time) (time.Time, error) {
 }
 
 // pruneDaemonEvents performs the HTTP call to the running sermod's web API
-// to prune its in-memory event log. It reads the web: address/port and any
+// to prune its event log. It reads the web: address/port and any
 // admin password from the shared config so local sermoctl can authenticate
 // the same way the operator would via the UI.
 func (a App) pruneDaemonEvents(ctx context.Context, opts options, before time.Time) (int, error) {
@@ -1314,7 +1315,7 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 func webAPIBase(cfg *config.Config) (string, error) {
 	wraw, _ := cfg.Global.Raw["web"].(map[string]any)
 	if wraw == nil {
-		return "", fmt.Errorf("web UI is not enabled in config (no web: block or no port); the event log only exists inside the running daemon")
+		return "", fmt.Errorf("web UI is not enabled in config (no web: block or no port); the event API is exposed by the running daemon")
 	}
 	addr := cfgval.String(wraw["address"])
 	if addr == "" {
