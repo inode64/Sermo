@@ -1179,7 +1179,7 @@ func (s *Store) IntegrityCheck() error {
 // (control state, SLA samples, check measurements or runtime metrics), so
 // diagnostics can flag rows for services no longer in the configuration.
 func (s *Store) TrackedServices() ([]string, error) {
-	rows, err := s.db.Query(`SELECT service FROM monitor_state
+	return s.queryNames(`SELECT service FROM monitor_state
 		UNION SELECT service FROM remediation_state
 		UNION SELECT service FROM rule_window_state
 		UNION SELECT service FROM sla_sample
@@ -1187,28 +1187,19 @@ func (s *Store) TrackedServices() ([]string, error) {
 		UNION SELECT service FROM measurement
 		UNION SELECT service FROM measurement_metric
 		UNION SELECT service FROM service_metric ORDER BY service;`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out = append(out, name)
-	}
-	return out, rows.Err()
 }
 
 // TrackedControlStates returns the distinct service/watch names that have
 // persisted runtime control state. Diagnostics use this narrower view so
 // historical metrics do not make a removed target look like a live problem.
 func (s *Store) TrackedControlStates() ([]string, error) {
-	rows, err := s.db.Query(`SELECT service FROM monitor_state
+	return s.queryNames(`SELECT service FROM monitor_state
 		UNION SELECT service FROM remediation_state
 		UNION SELECT service FROM rule_window_state ORDER BY service;`)
+}
+
+func (s *Store) queryNames(query string) ([]string, error) {
+	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, err
 	}
