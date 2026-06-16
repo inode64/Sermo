@@ -109,15 +109,9 @@ func Int(v any) (int, bool) {
 	case int:
 		return t, true
 	case int64:
-		if t < int64(minInt) || t > int64(maxInt) {
-			return 0, false
-		}
-		return int(t), true
+		return int64Value(t)
 	case uint64:
-		if t > uint64(maxInt) {
-			return 0, false
-		}
-		return int(t), true
+		return uint64Value(t)
 	case float64:
 		n, err := strconv.ParseInt(strconv.FormatFloat(math.Trunc(t), 'f', 0, 64), 10, 0)
 		return int(n), err == nil
@@ -127,6 +121,20 @@ func Int(v any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func int64Value(n int64) (int, bool) {
+	if n < int64(minInt) || n > int64(maxInt) {
+		return 0, false
+	}
+	return int(n), true
+}
+
+func uint64Value(n uint64) (int, bool) {
+	if n > uint64(maxInt) {
+		return 0, false
+	}
+	return int(n), true
 }
 
 // ByteSize parses a scalar byte size. It requires an explicit suffix using
