@@ -244,6 +244,12 @@ The daemon can serve a small web dashboard to view services and host watches.
 Admins can monitor/unmonitor both, and can start/stop/restart/reload/resume services
 over the same safe operation engine the CLI uses.
 
+A service normally resolves to a systemd/OpenRC unit. It can instead declare a
+per-service `control:` target for non-init resources: `control.type: libvirt`
+for QEMU/libvirt VMs or `control.type: docker` for Docker containers. Those
+targets still use the same locks, guards, preflight checks and operation
+timeouts; see [daemons](daemons.md#control-docker--docker-containers).
+
 Below the services table the dashboard lists the **installed applications** (the
 catalog app daemons whose binary is present), showing each application's name and
 short version; an app `health` command, when configured, decides OK/error from

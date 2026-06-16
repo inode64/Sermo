@@ -93,9 +93,10 @@ lists.
 service do). It manages services owned by different users and touches privileged
 areas, so several features need it:
 
-- **Service control** — start/stop/restart/reload via systemd/OpenRC, and
+- **Service control** — start/stop/restart/reload via systemd/OpenRC,
   start/stop/restart/resume of VM domains via libvirt when a service declares
-  `control.type: libvirt`.
+  `control.type: libvirt`, and start/stop/restart/resume of Docker containers
+  when it declares `control.type: docker`.
 - **Signalling other users' processes** — the stop policy reaps residual
   processes that match the `kill_only_if` selector, across UIDs.
 - **Cross-user `/proc` inspection** — resolving a process's `/proc/<pid>/exe`,
