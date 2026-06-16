@@ -85,7 +85,7 @@ func (c *websocketCheck) handshake(ctx context.Context, iface string, start time
 		_ = nc.SetDeadline(dl)
 	}
 
-	if c.scheme == "wss" || c.scheme == "https" {
+	if websocketSecure(c.scheme) {
 		tc := &tls.Config{ServerName: c.host, MinVersion: tls.VersionTLS12}
 		if wsSkipVerify(c.tls) {
 			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
@@ -160,7 +160,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 	default:
 		return nil, "websocket check url scheme must be ws, wss, http or https"
 	}
-	secure := u.Scheme == "wss" || u.Scheme == "https"
+	secure := websocketSecure(u.Scheme)
 	port := u.Port()
 	if port == "" {
 		if secure {
@@ -191,6 +191,10 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		subprotocol: cfgval.AsString(entry["subprotocol"]),
 		headers:     cfgval.StringMap(entry["headers"]),
 	}, ""
+}
+
+func websocketSecure(scheme string) bool {
+	return scheme == "wss" || scheme == "https"
 }
 
 // wsKey returns a fresh base64 Sec-WebSocket-Key (16 random bytes).
