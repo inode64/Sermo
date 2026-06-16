@@ -35,10 +35,10 @@ func TestServicesCommand(t *testing.T) {
 name: nginx
 display_name: "Nginx"
 service: { name: nginx }
-variables: { binary: %q }
+binary: %q
 preflight: { binary: { type: binary, path: "${binary}" } }
 `, nginx))
-	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nvariables: { binary: /bin/git }\n")
+	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nbinary: /bin/git\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }

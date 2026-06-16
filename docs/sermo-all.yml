@@ -366,8 +366,9 @@ also_service:                  # auxiliary init units of this same service
 
 apps: [demo-app]               # injects app preflight and exposes ${demo_app_binary}
 
+binary: [/usr/bin/demo, /usr/local/bin/demo] # first executable path becomes ${binary}
+
 variables:                     # flat strings or first-existing path lists
-  binary: [/usr/bin/demo, /usr/local/bin/demo]
   user: demo
   group: demo
   host: 127.0.0.1
@@ -406,9 +407,6 @@ preflight:                     # gate start/restart/reload/resume
     timeout: 10s
     expect_exit: 0
     skip_when_changed: /etc/demo/demo.conf
-  binary:
-    type: binary
-    path: "${binary}"
   libraries:
     type: libraries
     binary: "${binary}"
@@ -798,10 +796,8 @@ catalog_aliases: [demo-app-legacy] # old app names still accepted by services' a
 display_name: "Demo Server"
 description: "Runtime/tool dependency injected into services that list apps: [demo-app]."
 category: app
-variables:
-  binary: /usr/bin/demo
+binary: /usr/bin/demo
 preflight:
-  binary: { type: binary, path: "${binary}" }
   health: { type: command, command: ["${binary}", "--help"], timeout: 10s, expect_exit: 0 }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 commands:
@@ -816,10 +812,8 @@ name: demo-lib
 display_name: "Demo Library"
 description: "Shared object whose file changes can restart linked services."
 category: library
-variables:
-  binary: /usr/lib/libdemo.so.1
+binary: /usr/lib/libdemo.so.1
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["/usr/bin/strings", "${binary}"], timeout: 10s, optional: true }
 
 ---

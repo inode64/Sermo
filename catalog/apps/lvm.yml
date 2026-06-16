@@ -2,8 +2,6 @@ kind: app
 name: lvm
 display_name: "LVM"
 category: storage
-variables:
-  binary: "/usr/bin/lvm"
+binary: "/usr/bin/lvm"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","version"], timeout: 10s }

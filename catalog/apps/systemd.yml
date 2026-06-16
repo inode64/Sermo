@@ -3,8 +3,6 @@ name: systemd
 display_name: "systemd"
 category: system
 description: "systemd system and service manager"
-variables:
-  binary: /usr/bin/systemctl
+binary: /usr/bin/systemctl
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["systemctl", "--version"], timeout: 10s }

@@ -2,8 +2,6 @@ kind: app
 name: libvirtd
 display_name: "libvirt"
 category: virtualization
-variables:
-  binary: "/usr/bin/libvirtd"
+binary: "/usr/bin/libvirtd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

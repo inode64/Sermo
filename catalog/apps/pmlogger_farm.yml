@@ -2,7 +2,4 @@ kind: app
 name: pmlogger_farm
 display_name: "PCP Archive Logger Farm"
 category: observability
-variables:
-  binary: /usr/libexec/pcp/bin/pmlogger_farm
-preflight:
-  binary: { type: binary, path: "${binary}" }
+binary: /usr/libexec/pcp/bin/pmlogger_farm

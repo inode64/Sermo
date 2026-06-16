@@ -1,8 +1,6 @@
 kind: app
 name: syslog-ng
 category: observability
-variables:
-  binary: "/usr/bin/syslog-ng"
+binary: "/usr/bin/syslog-ng"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -2,8 +2,6 @@ kind: app
 name: openvpn
 display_name: "OpenVPN"
 category: network
-variables:
-  binary: "/usr/bin/openvpn"
+binary: "/usr/bin/openvpn"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

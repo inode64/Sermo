@@ -2,8 +2,6 @@ kind: app
 name: cloudflared
 display_name: "Cloudflare Tunnel"
 category: network
-variables:
-  binary: /usr/bin/cloudflared
+binary: /usr/bin/cloudflared
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

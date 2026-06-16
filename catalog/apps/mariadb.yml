@@ -2,8 +2,6 @@ kind: app
 name: mariadb
 display_name: "MariaDB"
 category: database
-variables:
-  binary: /usr/bin/mariadbd
+binary: /usr/bin/mariadbd
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -53,8 +53,7 @@ kind: daemon
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc)"
-variables:
-  binary: "/lib64/libc.so.6"        # the file watched for changes (and its version)
+binary: "/lib64/libc.so.6"          # the file watched for changes (and its version)
 ```
 
 A service (or daemon definition) opts in with `restart_on_change`:
@@ -263,8 +262,7 @@ rules:
     then:
       action: block
       message: "${display_name} backup is running"   # → "MariaDB backup is running"
-variables:
-  binary: "/usr/bin/qemu-system-${arch}"             # → /usr/bin/qemu-system-x86_64
+binary: "/usr/bin/qemu-system-${arch}"               # → /usr/bin/qemu-system-x86_64
 ```
 
 An explicit `variables` entry of the same name always takes precedence over a
@@ -685,10 +683,8 @@ the same token links that app.
 kind: app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-variables:
-  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 
 ---
@@ -700,15 +696,16 @@ apps: ["postgres-${version}"]
 ```
 
 On load, Sermo discovers installed versions by globbing the linked app's
-`variables.binary` path with `${version}` wildcarded (here
-`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Each match
-becomes a concrete app and concrete daemon with `%v` and `${version}` substituted
-everywhere (name, display_name, service, app links, ...) — `postgres-14`,
-`postgres-16`, ... — and the templates themselves are dropped. If nothing is
-installed the template yields nothing. The filename mirrors the name
-(`postgres-%v.yml`); only that one file is needed. `%v` may sit anywhere in the
-name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
-the body always use `${version}` (e.g. in `service` or `apps`).
+`binary` path with `${version}` wildcarded (here
+`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. A
+candidate list is checked as a list, so distro-specific locations can stay in
+one app template. Each match becomes a concrete app and concrete daemon with
+`%v` and `${version}` substituted everywhere (name, display_name, service, app
+links, ...) — `postgres-14`, `postgres-16`, ... — and the templates themselves
+are dropped. If nothing is installed the template yields nothing. The filename
+mirrors the name (`postgres-%v.yml`); only that one file is needed. `%v` may sit
+anywhere in the name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in
+the name; inside the body always use `${version}` (e.g. in `service` or `apps`).
 
 Keep application discovery in `catalog/apps`. A versioned or instanced daemon
 that links a matching app, such as `apps: ["postgres-${version}"]`,
@@ -724,7 +721,7 @@ kind: app
 name: openvpn-%i
 versions:
   from: "/etc/init.d/openvpn.${instance}"
-variables: { binary: /usr/bin/openvpn }
+binary: /usr/bin/openvpn
 
 ---
 kind: daemon
@@ -752,7 +749,7 @@ numbers, otherwise working exactly like `%v`:
 kind: app
 name: python%n
 display_name: "Python ${n}"
-variables: { binary: "/usr/bin/python${n}" }
+binary: "/usr/bin/python${n}"
 ```
 
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
@@ -774,7 +771,7 @@ display_name: "Python ${n}"
 versions:
   unversioned:
     description: "Active Python interpreter"
-variables: { binary: "/usr/bin/python${n}" }
+binary: "/usr/bin/python${n}"
 ```
 
 Use `%i`/`${instance}` for named init instances discovered from a bounded app

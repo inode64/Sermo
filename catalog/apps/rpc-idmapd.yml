@@ -2,7 +2,4 @@ kind: app
 name: rpc-idmapd
 display_name: "NFS idmapd"
 category: storage
-variables:
-  binary: "/usr/bin/rpc.idmapd"
-preflight:
-  binary: { type: binary, path: "${binary}" }
+binary: "/usr/bin/rpc.idmapd"
