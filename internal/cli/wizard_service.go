@@ -505,7 +505,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 	if len(deletes) > 0 {
 		fmt.Fprintf(a.Stdout, "Deleted %d stale service file(s).\n", len(deletes))
 	}
-	fmt.Fprintf(a.Stdout, "Wrote %d service file(s) under %s. Run `sermoctl reload` to apply.\n", written, dir)
+	fmt.Fprintf(a.Stdout, "Wrote %d service file(s) under %s. Run `sermoctl daemon reload` to apply.\n", written, dir)
 	return exitSuccess
 }
 

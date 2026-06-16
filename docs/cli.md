@@ -23,6 +23,7 @@ sermoctl is-active SERVICE
 sermoctl start SERVICE
 sermoctl stop SERVICE
 sermoctl restart SERVICE
+sermoctl reload SERVICE
 
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
@@ -34,6 +35,7 @@ sermoctl config diff BASE SERVICE
 
 sermoctl daemon list
 sermoctl daemon show DAEMON
+sermoctl daemon reload                 # reload sermod config, not services
 
 sermoctl service list
 sermoctl service show SERVICE
@@ -55,7 +57,7 @@ sermoctl lock release SERVICE
 ```
 
 Plus `apps`, `libs`, `patterns`, `services`, `monitor`/`unmonitor`, `sla`,
-`diagnose`, `reload` and `wizard` — see the usage output and
+`diagnose` and `wizard` — see the usage output and
 [configuration](configuration.md).
 
 ## Exit codes

@@ -165,7 +165,7 @@ retention or an explicit `sermoctl state compact`.
 You can trigger a reload with any of:
 
 ```sh
-sermoctl reload
+sermoctl daemon reload
 # or (when the web UI is enabled)
 #   - click "reload config" in the dashboard (admin only)
 #   - POST /api/reload with X-Sermo-CSRF:1 (admin)
@@ -175,16 +175,16 @@ rc-service sermod reload
 ```
 
 The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
-at startup to make `sermoctl reload` reliable (it also checks the legacy
+at startup to make `sermoctl daemon reload` reliable (it also checks the legacy
 `/run/sermod.pid` used by the OpenRC packaging). If no pidfile is present,
-`sermoctl reload` falls back to locating the running `sermod` process by name —
-a native scan of `/proc`, no external `pidof`/`pgrep` needed.
+`sermoctl daemon reload` falls back to locating the running `sermod` process by
+name — a native scan of `/proc`, no external `pidof`/`pgrep` needed.
 
-`sermoctl reload` with **no** argument reloads `sermod`'s own configuration (as
-above). `sermoctl reload <service>` is a different operation — it reloads *that
-service* in place through the engine (preflight → reload → health). How a service
-reloads, including the `reload:` block that lets Sermo signal a daemon when its
-init unit has no reload, is documented in
+`sermoctl daemon reload` reloads `sermod`'s own configuration (as above).
+`sermoctl reload <service>` is a different operation — it reloads *that service*
+in place through the engine (preflight → reload → health). How a service reloads,
+including the `reload:` block that lets Sermo signal a daemon when its init unit
+has no reload, is documented in
 [daemons.md](daemons.md#reload-on-config-change-reload_on_change).
 
 ### Per-service interval
@@ -676,7 +676,8 @@ a service.
 > watch fragments, the wizard asks whether to review them and then asks before
 > deleting each file individually; during migration it also checks the older
 > assistant-named directories (`volume`, `net`). The wizard adds the type directory to
-> `paths.includes` in `sermo.yml` (writing a `.bak` first); then `sermoctl reload`.
+> `paths.includes` in `sermo.yml` (writing a `.bak` first); then
+> `sermoctl daemon reload`.
 > New assistant types can be added over time. At any multi-select prompt you can
 > type item numbers (`1,3`), the keyword `all`, or an option's name. When asked
 > for notification targets the numbered list shows only the notifiers defined in

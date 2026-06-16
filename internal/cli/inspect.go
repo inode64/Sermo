@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,11 +10,18 @@ import (
 	"sermo/internal/config"
 )
 
-// runDaemon dispatches `daemon list` and `daemon show DAEMON` (post-MVP).
-func (a App) runDaemon(opts options) int {
+// runDaemon dispatches daemon catalog inspection and sermod control subcommands.
+func (a App) runDaemon(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.usageError("daemon requires a subcommand (list|show)")
+		return a.usageError("daemon requires a subcommand (list|show|reload)")
 	}
+	if opts.args[0] == "reload" {
+		if len(opts.args) > 1 {
+			return a.usageError("daemon reload takes no arguments")
+		}
+		return a.runReload(ctx, opts)
+	}
+
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
 		return code

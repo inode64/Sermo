@@ -351,7 +351,7 @@ Section id: `diag-section`
 | --- | --- |
 | Title | `Diagnostics` |
 | Buttons | refresh; clean stale data when admin and stale database findings exist; reload config when admin |
-| Help text | `SIGHUP or systemctl reload sermod`; cleanup warning for stale monitoring state only |
+| Help text | `sermoctl daemon reload, SIGHUP or systemctl reload sermod`; cleanup warning for stale monitoring state only |
 | Table | diagnostic time, level, scope and message rows |
 
 ## Change template

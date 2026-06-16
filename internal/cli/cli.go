@@ -232,7 +232,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 	case "preflight":
 		return a.runPreflight(ctx, opts)
 	case "daemon":
-		return a.runDaemon(opts)
+		return a.runDaemon(ctx, opts)
 	case "events":
 		return a.runEvents(ctx, opts)
 	case "activity":
@@ -260,12 +260,10 @@ func (a App) Run(ctx context.Context, args []string) int {
 	case "diagnose":
 		return a.runDiagnose(opts)
 	case "reload":
-		// `reload SERVICE` reloads that service's config in place (engine reload);
-		// `reload` with no service reloads the sermod daemon's own config.
-		if opts.service() != "" {
-			return a.runAction(ctx, opts, "reload")
+		if opts.service() == "" {
+			return a.usageError("reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
 		}
-		return a.runReload(ctx, opts)
+		return a.runAction(ctx, opts, "reload")
 	case "wizard":
 		return a.runWizard(ctx, opts)
 	case "":
@@ -1526,13 +1524,13 @@ func flagValue(args []string, i int, flag string) (string, int, error) {
 
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE [--no-cascade] | reload [SERVICE]")
+	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start SERVICE | stop SERVICE | restart SERVICE [--no-cascade] | reload SERVICE")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
 	fmt.Fprintln(w, "          diagnose | diagnose clean | wizard [service|volume|net|uplink]")
 	fmt.Fprintln(w, "          state compact [--before TIME] # prune old history and vacuum; TIME=RFC3339 or duration")
-	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
+	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | daemon reload | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          events [SERVICE] [--limit N]   # list recent (global or per-service)")
 	fmt.Fprintln(w, "          events clear [--before TIME]   # TIME=RFC3339 or duration (e.g. 2h); omits TIME => all")
