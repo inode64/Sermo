@@ -60,7 +60,7 @@ enabled.
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears event/activity rows in memory; `before` accepts RFC3339 or duration |
-| Diagnostics clean | `POST /api/diagnostics/clean` | removes stale monitoring state for unconfigured targets; metric history is kept |
+| Diagnostics clean | `POST /api/diagnostics/clean` | removes stale monitoring state for unconfigured targets; metric history is kept; returns 404 when diagnostics are disabled |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
 ## Top bar

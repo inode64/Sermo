@@ -275,7 +275,8 @@ web:
   the UI binds to **loopback (`127.0.0.1`) by default** and is fully open.
 - **`disable_diagnostics`** (optional, default `false`) — when `true`, the
   dashboard hides the **Diagnostics** panel and `GET /api/diagnostics` returns an
-  empty result. The underlying `sermoctl diagnose` command is unaffected.
+  empty result; `POST /api/diagnostics/clean` returns `404` with `diagnostics are
+  disabled`. The underlying `sermoctl diagnose` command is unaffected.
 
 ### Authentication
 
@@ -415,8 +416,9 @@ auth is enabled:
   stale/expired named runtime lock; active locks are refused.
 - `POST /api/events/clear?before=TIME` — clear the in-memory event/activity log;
   `before` may be RFC3339 or a duration. Omit it to clear all events.
-- `POST /api/diagnostics/clean` — remove stale monitoring state for
-  services/watches no longer configured; metric and SLA history is kept.
+- `POST /api/diagnostics/clean` — when diagnostics are enabled, remove stale
+  monitoring state for services/watches no longer configured; metric and SLA
+  history is kept. Returns `404` while `web.disable_diagnostics` is `true`.
 - `POST /api/reload` — request a `sermod` configuration reload, equivalent to
   `sermoctl daemon reload`.
 
