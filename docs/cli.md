@@ -51,6 +51,7 @@ sermoctl activity clear [--before TIME] # clears the same log shown as Recent ac
 
 sermoctl diagnose
 sermoctl diagnose clean                 # clears stale monitoring state for removed services/watches
+sermoctl diagnose clear                 # alias for diagnose clean
 sermoctl state compact [--before TIME]  # prunes old history and vacuums the state database
                                         # omit TIME for normal 366-day retention; TIME may be RFC3339 or duration
 
