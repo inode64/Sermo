@@ -32,10 +32,7 @@ func loadRuleState(store RuleStateStore, service string, ruleSet []rules.Rule) (
 		if !plan.tracks(name) {
 			continue
 		}
-		windows[name] = rules.WindowStateFromSnapshot(rules.WindowStateSnapshot{
-			Consecutive: rec.Consecutive,
-			History:     rec.History,
-		})
+		windows[name] = windowStateFromRecord(rec)
 	}
 	if len(windows) == 0 {
 		windows = nil
@@ -62,11 +59,7 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 			if !plan.tracks(name) || window == nil {
 				continue
 			}
-			snapshot := window.Snapshot()
-			records[name] = state.RuleWindowRecord{
-				Consecutive: snapshot.Consecutive,
-				History:     snapshot.History,
-			}
+			records[name] = ruleWindowRecord(window)
 		}
 		if err := store.SetRuleWindowStates(service, records); err != nil {
 			emitRuleStateError(emit, service, "persist rule window state", err)
@@ -114,6 +107,14 @@ func remediationToRecord(remediation *rules.RemediationState) state.RemediationR
 		RecentActions:  append([]time.Time(nil), remediation.RecentActions...),
 		CurrentBackoff: remediation.CurrentBackoff,
 	}
+}
+
+func windowStateFromRecord(rec state.RuleWindowRecord) *rules.WindowState {
+	return rules.WindowStateFromSnapshot(rules.WindowStateSnapshot(rec))
+}
+
+func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
+	return state.RuleWindowRecord(window.Snapshot())
 }
 
 func emitRuleStateError(emit func(Event), service, action string, err error) {
