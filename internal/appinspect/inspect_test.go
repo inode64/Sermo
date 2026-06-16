@@ -154,6 +154,13 @@ func TestInspectVersionCommandOutcomes(t *testing.T) {
 	if failed.OK || !strings.Contains(failed.Status, "exec format error") {
 		t.Errorf("runner error: %+v", failed)
 	}
+
+	optionalFailure := inspect(t, fakeRunner{byPath: map[string]execx.Result{
+		bin: {Stderr: "wrapper requires a login shell\n", ExitCode: 126},
+	}}, tree(bin, version(map[string]any{"optional": true})))
+	if !optionalFailure.OK || optionalFailure.Status != "ok" || optionalFailure.Version != "" {
+		t.Errorf("optional version failure should not fail the app: %+v", optionalFailure)
+	}
 }
 
 func TestInspectHealthCommandTakesPriority(t *testing.T) {
