@@ -471,6 +471,9 @@
   <summary>Host watches <span id="watches-count" class="muted"></span></summary>
   <div id="watch-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
     <input id="watch-search" type="search" placeholder="filter watches…">
+    <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
+      <option value="all">all types</option>
+    </select>
     <span id="watch-filters">
       <button data-wf="all" class="f-active">all</button>
       <button data-wf="disabled">disabled</button>
@@ -1059,6 +1062,7 @@ let svcCollapsedGroups = new Set();
 let allWatches = [];
 let watchQuery = "";
 let watchStatus = "all"; // all | disabled | ok | monitorized | unmonitorized | failed
+let watchType = "all";   // "all" or a specific check_type (e.g. disk, swap, http)
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
@@ -2476,6 +2480,7 @@ function watchSearchText(w) {
 
 function watchMatches(w) {
   if (watchQuery && !watchSearchText(w).includes(watchQuery)) return false;
+  if (watchType !== "all" && (w.check_type || "") !== watchType) return false;
   switch (watchStatus) {
     case "disabled":      return watchStateText(w) === "disabled";
     case "ok":            return watchStateText(w) === "ok";
@@ -2496,6 +2501,32 @@ function setWatchStatus(v) {
   document.querySelectorAll("#watch-filters button").forEach((b) =>
     b.classList.toggle("f-active", b.dataset.wf === watchStatus));
   renderWatches();
+}
+
+function setWatchType(v) {
+  watchType = v || "all";
+  renderWatches();
+}
+
+// syncWatchTypeSelect repopulates the #watch-type dropdown from the distinct
+// check types currently present (with per-type counts), mirroring the apps
+// category select. Returns the reconciled selection ("all" if the chosen type no
+// longer exists).
+function syncWatchTypeSelect(watches) {
+  const select = $("#watch-type");
+  if (!select) return "all";
+  const counts = new Map();
+  (watches || []).forEach((w) => {
+    const t = w.check_type || "";
+    if (t) counts.set(t, (counts.get(t) || 0) + 1);
+  });
+  const types = [...counts.keys()].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
+  const next = watchType !== "all" && counts.has(watchType) ? watchType : "all";
+  select.innerHTML = `<option value="all">all types</option>` + types.map((t) =>
+    `<option value="${esc(t)}">${esc(t)} (${counts.get(t)})</option>`).join("");
+  select.value = next;
+  return next;
 }
 
 function renderWatchFilterCounts() {
@@ -2652,12 +2683,13 @@ function renderWatches(watches) {
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${total})`;
   renderWatchFilterCounts();
+  watchType = syncWatchTypeSelect(allWatches);
   const list = (allWatches || []).filter(watchMatches);
   if (watchSort.key && watchSortKeys[watchSort.key]) {
     sortedBy(list, watchSort, watchSortKeys, "name");
   }
   updateWatchSortIndicators();
-  if (filterCount) filterCount.textContent = (watchQuery || watchStatus !== "all") ? `showing ${list.length} of ${total}` : "";
+  if (filterCount) filterCount.textContent = (watchQuery || watchStatus !== "all" || watchType !== "all") ? `showing ${list.length} of ${total}` : "";
   const rows = list.map((w) => {
     const state = watchStateText(w);
     const polarity = w.fire_on_fail
@@ -2704,7 +2736,7 @@ function renderWatches(watches) {
       : "";
     return row + expRow;
   });
-  tbody.innerHTML = rows.join("") || (watchQuery || watchStatus !== "all"
+  tbody.innerHTML = rows.join("") || (watchQuery || watchStatus !== "all" || watchType !== "all"
     ? `<tr><td colspan="10" class="muted">No watches match the filter.</td></tr>`
     : `<tr><td colspan="10" class="muted">No watches.</td></tr>`);
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
@@ -3956,6 +3988,9 @@ function initStaticHandlers() {
       }
     });
   }
+
+  const watchTypeSelect = $("#watch-type");
+  if (watchTypeSelect) watchTypeSelect.addEventListener("change", () => setWatchType(watchTypeSelect.value));
 
   const watchFilters = $("#watch-filters");
   if (watchFilters) {
