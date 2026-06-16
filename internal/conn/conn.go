@@ -43,8 +43,8 @@ type Result struct {
 type Protocol interface {
 	Name() string     // canonical type token, e.g. "mysql"
 	DefaultPort() int // used when the config omits a port
-	// RequiresUser reports whether a user is mandatory. SQL servers need one;
-	// redis allows password-only (legacy requirepass) or no auth at all.
+	// RequiresUser reports whether a user is mandatory. Some protocols can
+	// prove liveness from an unauthenticated greeting; others need a user.
 	RequiresUser() bool
 	Probe(ctx context.Context, cfg Config) (Result, error)
 }
