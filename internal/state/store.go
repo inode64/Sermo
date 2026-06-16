@@ -106,6 +106,19 @@ var migrations = []string{
 		total_count INTEGER NOT NULL,
 		PRIMARY KEY (service, check_name, bucket)
 	);`,
+	// service_metric stores each service process tree's runtime metrics for the
+	// web detail graphs. The service dimension keeps CPU, memory and IO history
+	// across daemon restarts without mixing services.
+	`CREATE TABLE service_metric (
+		service TEXT NOT NULL,
+		metric  TEXT NOT NULL,
+		bucket  INTEGER NOT NULL,
+		n       INTEGER NOT NULL,
+		sum_v   REAL NOT NULL,
+		min_v   REAL NOT NULL,
+		max_v   REAL NOT NULL,
+		PRIMARY KEY (service, metric, bucket)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -682,6 +695,68 @@ func (s *Store) PruneDaemonMetrics(before time.Time) (int64, error) {
 	return s.pruneBuckets("daemon_metric", before)
 }
 
+// RecordServiceMetric accumulates one service process-tree metric observation
+// into its current UTC-minute bucket: n+1, sum+value and running min/max.
+func (s *Store) RecordServiceMetric(service, metric string, value float64, at time.Time) error {
+	_, err := s.db.Exec(
+		`INSERT INTO service_metric (service, metric, bucket, n, sum_v, min_v, max_v)
+		 VALUES (?, ?, ?, 1, ?, ?, ?)
+		 ON CONFLICT(service, metric, bucket) DO UPDATE SET
+		   n     = n + 1,
+		   sum_v = sum_v + excluded.sum_v,
+		   min_v = min(min_v, excluded.min_v),
+		   max_v = max(max_v, excluded.max_v);`,
+		service, metric, minuteBucket(at), value, value, value,
+	)
+	return err
+}
+
+// ServiceMetricSummary returns a service runtime metric's average/min/max and
+// sample count over the rolling window ending at now.
+func (s *Store) ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (MeasurementStat, error) {
+	return summaryFromRow(s.db.QueryRow(
+		`SELECT COALESCE(SUM(n),0), SUM(sum_v), MIN(min_v), MAX(max_v)
+		   FROM service_metric WHERE service = ? AND metric = ? AND bucket >= ?;`,
+		service, metric, minuteBucket(now.Add(-span))))
+}
+
+// ServiceMetricSeries returns a service runtime metric's per-minute points in
+// [from, to), oldest first.
+func (s *Store) ServiceMetricSeries(service, metric string, from, to time.Time) ([]MeasurementPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT bucket, n, sum_v, min_v, max_v
+		   FROM service_metric
+		  WHERE service = ? AND metric = ? AND bucket >= ? AND bucket < ?
+		  ORDER BY bucket;`,
+		service, metric, minuteBucket(from), minuteBucket(to),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []MeasurementPoint
+	for rows.Next() {
+		var bucket, n int64
+		var sum, minV, maxV float64
+		if err := rows.Scan(&bucket, &n, &sum, &minV, &maxV); err != nil {
+			return nil, err
+		}
+		avg := 0.0
+		if n > 0 {
+			avg = sum / float64(n)
+		}
+		out = append(out, MeasurementPoint{Start: time.Unix(bucket, 0).UTC(), N: n, Avg: avg, Min: minV, Max: maxV})
+	}
+	return out, rows.Err()
+}
+
+// PruneServiceMetrics deletes service runtime metric buckets older than before.
+// Returns rows removed.
+func (s *Store) PruneServiceMetrics(before time.Time) (int64, error) {
+	return s.pruneBuckets("service_metric", before)
+}
+
 // IntegrityCheck runs SQLite's PRAGMA integrity_check and returns an error when
 // the database is not "ok" (corruption), for diagnostics.
 func (s *Store) IntegrityCheck() error {
@@ -696,14 +771,15 @@ func (s *Store) IntegrityCheck() error {
 }
 
 // TrackedServices returns the distinct service names that have stored data
-// (monitoring state, SLA samples, or check measurements), so diagnostics can
-// flag rows for services no longer in the configuration.
+// (monitoring state, SLA samples, check measurements or runtime metrics), so
+// diagnostics can flag rows for services no longer in the configuration.
 func (s *Store) TrackedServices() ([]string, error) {
 	rows, err := s.db.Query(`SELECT service FROM monitor_state
 		UNION SELECT service FROM sla_sample
 		UNION SELECT service FROM check_sla_sample
 		UNION SELECT service FROM measurement
-		UNION SELECT service FROM measurement_metric ORDER BY service;`)
+		UNION SELECT service FROM measurement_metric
+		UNION SELECT service FROM service_metric ORDER BY service;`)
 	if err != nil {
 		return nil, err
 	}
@@ -720,9 +796,9 @@ func (s *Store) TrackedServices() ([]string, error) {
 }
 
 // PruneUnconfiguredServices removes stored data for services absent from the
-// configured service list: monitoring state, SLA samples and measurements. It is
-// used to clear the stale rows that diagnostics report after a service is removed
-// or renamed.
+// configured service list: monitoring state, SLA samples, measurements and
+// runtime metrics. It is used to clear the stale rows that diagnostics report
+// after a service is removed or renamed.
 func (s *Store) PruneUnconfiguredServices(configured []string) (PruneUnconfiguredServicesResult, error) {
 	tracked, err := s.TrackedServices()
 	if err != nil {
@@ -759,7 +835,7 @@ func (s *Store) PruneUnconfiguredServices(configured []string) (PruneUnconfigure
 
 func pruneServiceData(tx *sql.Tx, service string) (int64, error) {
 	var total int64
-	for _, table := range []string{"monitor_state", "sla_sample", "check_sla_sample", "measurement", "measurement_metric"} {
+	for _, table := range []string{"monitor_state", "sla_sample", "check_sla_sample", "measurement", "measurement_metric", "service_metric"} {
 		res, err := tx.Exec(`DELETE FROM `+table+` WHERE service = ?;`, service) //nolint:gosec // table is a package-internal literal
 		if err != nil {
 			return 0, err

@@ -74,6 +74,15 @@ type DaemonMetricStore interface {
 	DaemonMetricSeries(metric string, from, to time.Time) ([]state.MeasurementPoint, error)
 }
 
+// ServiceMetricStore persists per-service process-tree runtime metrics so the
+// service detail graphs survive daemon restarts. Implemented by
+// internal/state.Store.
+type ServiceMetricStore interface {
+	RecordServiceMetric(service, metric string, value float64, at time.Time) error
+	ServiceMetricSummary(service, metric string, span time.Duration, now time.Time) (state.MeasurementStat, error)
+	ServiceMetricSeries(service, metric string, from, to time.Time) ([]state.MeasurementPoint, error)
+}
+
 // measuredCheckTypes are the check types whose latency is recorded as a time
 // series (and graphed in the web), mirroring icmp's latency metric.
 var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": true, "service": true}

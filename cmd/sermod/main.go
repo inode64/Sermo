@@ -154,7 +154,7 @@ func run(args []string) int {
 		GlobalNotify:    config.NotifyDefault(cfg.Global.Raw),
 		Snapshots:       app.NewSnapshots(),
 		Live:            app.NewLiveMetrics(),
-		ServiceMetrics:  app.NewServiceMetricSampler(),
+		ServiceMetrics:  app.NewServiceMetricSampler(store),
 		Remediation:     app.NewRemediationRegistry(),
 		RuleWindows:     app.NewRuleWindowRegistry(),
 		Events:          eventLog,
@@ -173,6 +173,7 @@ func run(args []string) int {
 		{"measurements", store.PruneMeasurements},
 		{"metrics", store.PruneMetrics},
 		{"daemon metrics", store.PruneDaemonMetrics},
+		{"service metrics", store.PruneServiceMetrics},
 	} {
 		if n, err := p.prune(cutoff); err != nil {
 			logger.Warn("prune "+p.what, "error", err)
