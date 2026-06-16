@@ -9,7 +9,8 @@ service:
   openrc: [unifi]
 
 # The controller runs on the JVM and embeds MongoDB: both runtimes are owned by
-# apps, so missing Java or mongod blocks start and their preflight runs first.
+# apps, so missing Java or mongod blocks start/restart/reload and their preflight
+# runs first.
 apps: [java, mongod]
 
 variables:

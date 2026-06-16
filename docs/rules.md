@@ -167,8 +167,8 @@ rules:
   rule wins (an `ok` match whitelists that line); the check's severity is the
   maximum over all lines.
 - **Result:** `error` → the check fails (red, required); `warning` → the check
-  fails as *optional* (orange — a warning that does not block start or drive
-  remediation by itself); no match → the check passes. The matched `pattern_id`
+  fails as *optional* (orange — a warning that does not block start/restart/reload
+  or drive remediation by itself); no match → the check passes. The matched `pattern_id`
   and line are in the result data.
 - **Precedence:** exit-code → `expect_*` → `analyze`. The analyzer only grades a
   command that already passed its exit-code and `expect_*` checks.
