@@ -110,6 +110,23 @@ func TestDiskIOBuildErrors(t *testing.T) {
 	}
 }
 
+func TestParseDiskIOSample(t *testing.T) {
+	fields := []string{"8", "0", "sda", "11", "0", "22", "33", "44", "0", "55", "66", "0", "77"}
+	got, err := parseDiskIOSample(fields)
+	if err != nil {
+		t.Fatalf("parseDiskIOSample: %v", err)
+	}
+	if got.ReadsCompleted != 11 || got.SectorsRead != 22 || got.ReadTicksMs != 33 ||
+		got.WritesCompleted != 44 || got.SectorsWritten != 55 || got.WriteTicksMs != 66 || got.IOTicksMs != 77 {
+		t.Fatalf("sample = %+v", got)
+	}
+
+	fields[5] = "bad"
+	if _, err := parseDiskIOSample(fields); err == nil || !strings.Contains(err.Error(), "sectors_read") {
+		t.Fatalf("malformed sectors_read err = %v, want named parse error", err)
+	}
+}
+
 func TestDefaultDiskIOSampler(t *testing.T) {
 	if _, err := defaultDiskIOSampler("sermo-no-such-device"); err == nil {
 		t.Fatal("unknown device must error")

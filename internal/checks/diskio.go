@@ -140,19 +140,62 @@ func defaultDiskIOSampler(device string) (DiskIOSample, error) {
 		if len(fields) < 13 || fields[2] != device {
 			continue
 		}
-		u := func(i int) uint64 {
-			n, _ := strconv.ParseUint(fields[i], 10, 64)
-			return n
+		sample, err := parseDiskIOSample(fields)
+		if err != nil {
+			return DiskIOSample{}, fmt.Errorf("device %q: %w", device, err)
 		}
-		return DiskIOSample{
-			ReadsCompleted:  u(3),
-			SectorsRead:     u(5),
-			ReadTicksMs:     u(6),
-			WritesCompleted: u(7),
-			SectorsWritten:  u(9),
-			WriteTicksMs:    u(10),
-			IOTicksMs:       u(12),
-		}, nil
+		return sample, nil
 	}
 	return DiskIOSample{}, fmt.Errorf("device %q not in /proc/diskstats", device)
+}
+
+func parseDiskIOSample(fields []string) (DiskIOSample, error) {
+	if len(fields) < 13 {
+		return DiskIOSample{}, fmt.Errorf("diskstats line has %d fields, want at least 13", len(fields))
+	}
+	readsCompleted, err := diskIOUint(fields, 3, "reads_completed")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	sectorsRead, err := diskIOUint(fields, 5, "sectors_read")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	readTicksMs, err := diskIOUint(fields, 6, "read_ticks_ms")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	writesCompleted, err := diskIOUint(fields, 7, "writes_completed")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	sectorsWritten, err := diskIOUint(fields, 9, "sectors_written")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	writeTicksMs, err := diskIOUint(fields, 10, "write_ticks_ms")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	ioTicksMs, err := diskIOUint(fields, 12, "io_ticks_ms")
+	if err != nil {
+		return DiskIOSample{}, err
+	}
+	return DiskIOSample{
+		ReadsCompleted:  readsCompleted,
+		SectorsRead:     sectorsRead,
+		ReadTicksMs:     readTicksMs,
+		WritesCompleted: writesCompleted,
+		SectorsWritten:  sectorsWritten,
+		WriteTicksMs:    writeTicksMs,
+		IOTicksMs:       ioTicksMs,
+	}, nil
+}
+
+func diskIOUint(fields []string, index int, name string) (uint64, error) {
+	n, err := strconv.ParseUint(fields[index], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", name, err)
+	}
+	return n, nil
 }
