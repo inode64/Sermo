@@ -2615,7 +2615,7 @@ function renderDiskWatch(d) {
     ? (d.options || []).map((o) => `<code>${esc(o)}</code>`).join(" ")
     : '<span class="muted">none</span>';
   const inodes = d.inodes_total
-    ? `${(Number(d.inodes_total) - Number(d.inodes_free || 0)).toLocaleString()} used / ${Number(d.inodes_total).toLocaleString()} total (${fmtPct(d.inodes_used_pct)} used, ${fmtPct(d.inodes_free_pct)} free)`
+    ? `${(Number(d.inodes_total) - Number(d.inodes_free || 0)).toLocaleString()} used / ${Number(d.inodes_total).toLocaleString()} total (${fmtPct(d.inodes_used_pct)} used)`
     : '<span class="muted">not reported</span>';
   const errors = [
     d.sample_error ? `statfs: ${d.sample_error}` : "",
