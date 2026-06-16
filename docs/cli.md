@@ -19,6 +19,7 @@ on usage errors.
 
 ```bash
 sermoctl backend
+sermoctl init                       # alias for sermoctl backend
 sermoctl version
 sermoctl status SERVICE
 sermoctl is-active SERVICE
