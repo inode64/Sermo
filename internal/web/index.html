@@ -1076,6 +1076,9 @@ let watchType = "all";   // "all" or a specific check_type (e.g. disk, swap, htt
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
+let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
+let svcExpandRefreshTick = 0;
+const SVC_EXPAND_FULL_EVERY = 6; // rebuild expansion HTML every N refresh cycles
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
 let liveOpsTimer = null;
@@ -1635,7 +1638,7 @@ function patchVisibleServiceRows(list) {
 
 function finishSvcRender() {
   renderAttention();
-  expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
+  refreshExpandedServices();
 }
 
 // render receives fresh data on each refresh; cache it, then render through the
@@ -1686,7 +1689,9 @@ function renderServices() {
 // "wat:<name>" (watch config + recent activity).
 function toggleExpand(key) {
   if (expanded.has(key)) {
-    expanded.delete(key); delete expCache[key];
+    expanded.delete(key);
+    delete expCache[key];
+    delete expDetailCache[key];
     if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
   } else {
     expanded.add(key);
@@ -1715,9 +1720,52 @@ function toggleServiceExpansion(name) {
 }
 
 function refreshExpandedServiceDetails() {
-  expanded.forEach((key) => {
-    if (key.startsWith("svc:")) loadExpansionFor(key);
+  refreshExpandedServices({ metricsOnly: true });
+}
+
+// refreshExpandedServices reloads open expansions on each dashboard refresh.
+// Service expansions skip the full HTML rebuild on most cycles (charts and
+// events are refreshed via hydrateServiceDetail only); a full renderServiceDetail
+// pass runs every SVC_EXPAND_FULL_EVERY cycles or when the cache is empty.
+// Skipped while the tab is hidden unless opts.force is set.
+function refreshExpandedServices(opts = {}) {
+  if (document.hidden && !opts.force) return;
+  if (opts.metricsOnly) {
+    expanded.forEach((k) => {
+      if (!k.startsWith("svc:")) return;
+      const detail = expDetailCache[k];
+      if (detail) hydrateServiceDetail(detail);
+    });
+    return;
+  }
+  const forceFull = !!opts.forceFull;
+  svcExpandRefreshTick++;
+  const periodicFull = forceFull || (svcExpandRefreshTick % SVC_EXPAND_FULL_EVERY === 0);
+  expanded.forEach((k) => {
+    if (k.startsWith("wat:")) {
+      loadExpansionFor(k);
+      return;
+    }
+    if (!k.startsWith("svc:")) return;
+    if (!expCache[k] || periodicFull) {
+      loadExpansionFor(k);
+      return;
+    }
+    refreshServiceExpansionLight(k);
   });
+}
+
+async function refreshServiceExpansionLight(key) {
+  const name = key.slice(4);
+  const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
+  if (!tr) return;
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
+    if (!res.ok) return;
+    const detailData = await res.json();
+    expDetailCache[key] = detailData;
+    hydrateServiceDetail(detailData);
+  } catch (_) { /* keep charts/events on a transient error */ }
 }
 
 // applyHash opens/scrolls to the service named in a #svc:<name> URL fragment, so a
@@ -1753,6 +1801,7 @@ async function loadExpansionFor(key) {
       const res = await fetch(`api/services/${encodeURIComponent(name)}`);
       if (!res.ok) return;
       detailData = await res.json();
+      expDetailCache[key] = detailData;
       html = renderServiceDetail(detailData);
     } else if (key.startsWith("wat:")) {
       const name = key.slice(4);
@@ -3733,7 +3782,10 @@ const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"
 
 function setMetricCheck(name, service) {
   metricCheck = name;
-  if (service) loadExpansionFor("svc:" + service);
+  const key = service ? "svc:" + service : "";
+  const detail = key ? expDetailCache[key] : null;
+  if (detail) loadMetrics(service, serviceMeasuredChecks(detail));
+  else if (service) loadExpansionFor(key);
   else refreshExpandedServiceDetails();
 }
 function setMetricWin(win) { metricWindow = win; refreshExpandedServiceDetails(); }
