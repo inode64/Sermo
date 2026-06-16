@@ -26,10 +26,10 @@ func loadRuleState(store RuleStateStore, service string, ruleSet []rules.Rule) (
 		warnings = append(warnings, "load rule window state: "+err.Error())
 		return remediation, nil, warnings
 	}
-	ruleNames := currentRuleNames(ruleSet)
+	plan := newRuleStatePlan(ruleSet)
 	windows := make(map[string]*rules.WindowState, len(records))
 	for name, rec := range records {
-		if !ruleNames[name] {
+		if !plan.tracks(name) {
 			continue
 		}
 		windows[name] = rules.WindowStateFromSnapshot(rules.WindowStateSnapshot{
@@ -47,16 +47,9 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 	if store == nil {
 		return nil
 	}
-	ruleNames := currentRuleNames(ruleSet)
-	hasRemediation := false
-	for _, r := range ruleSet {
-		if r.Type == rules.RuleRemediation {
-			hasRemediation = true
-			break
-		}
-	}
+	plan := newRuleStatePlan(ruleSet)
 	return func(remediation *rules.RemediationState, windows map[string]*rules.WindowState) {
-		if hasRemediation {
+		if plan.hasRemediation {
 			if err := store.SetRemediationState(service, remediationToRecord(remediation)); err != nil {
 				emitRuleStateError(emit, service, "persist remediation state", err)
 			}
@@ -66,7 +59,7 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 
 		records := map[string]state.RuleWindowRecord{}
 		for name, window := range windows {
-			if !ruleNames[name] || window == nil {
+			if !plan.tracks(name) || window == nil {
 				continue
 			}
 			snapshot := window.Snapshot()
@@ -81,14 +74,27 @@ func ruleStatePersister(store RuleStateStore, emit func(Event), service string, 
 	}
 }
 
-func currentRuleNames(ruleSet []rules.Rule) map[string]bool {
-	out := make(map[string]bool, len(ruleSet))
+type ruleStatePlan struct {
+	names          map[string]bool
+	hasRemediation bool
+}
+
+func newRuleStatePlan(ruleSet []rules.Rule) ruleStatePlan {
+	plan := ruleStatePlan{names: make(map[string]bool, len(ruleSet))}
 	for _, r := range ruleSet {
-		if r.Type == rules.RuleRemediation || r.Type == rules.RuleAlert {
-			out[r.Name] = true
+		switch r.Type {
+		case rules.RuleRemediation:
+			plan.names[r.Name] = true
+			plan.hasRemediation = true
+		case rules.RuleAlert:
+			plan.names[r.Name] = true
 		}
 	}
-	return out
+	return plan
+}
+
+func (p ruleStatePlan) tracks(name string) bool {
+	return p.names[name]
 }
 
 func remediationFromRecord(rec state.RemediationRecord) *rules.RemediationState {
