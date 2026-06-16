@@ -7,7 +7,7 @@ and applies **guarded** remediation rules — never restarting blindly.
 
 It ships two binaries:
 
-- **`sermoctl`** — the operator CLI (status, safe start/stop/restart, config
+- **`sermoctl`** — the operator CLI (status, safe start/stop/restart/reload, config
   validate/render, locks, processes, preflight, per-service availability/SLA,
   `diagnose` for config/host/database consistency).
 - **`sermod`** — the daemon: one independent worker per service runs checks,

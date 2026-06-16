@@ -22,9 +22,9 @@ engine:
   backend: auto                # auto | systemd | openrc
   interval: 30s                # default check cycle for services and watches
   max_parallel_checks: 8       # global probe pool, all workers together
-  max_parallel_operations: 2   # global start/stop/restart slots
+  max_parallel_operations: 2   # global start/stop/restart/reload slots
   default_timeout: 10s         # per-check timeout when a check sets none
-  operation_timeout: 90s       # outer deadline for safe start/stop/restart
+  operation_timeout: 90s       # outer deadline for safe start/stop/restart/reload
   startup_delay: 0             # grace before the first cycle after boot
 
 paths:
