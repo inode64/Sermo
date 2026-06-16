@@ -40,9 +40,11 @@ const applicationsCacheTTL = 30 * time.Second
 // lock serializes start/stop/restart/reload/resume across the worker and the web.
 func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	discoverer := process.NewDiscoverer()
-	var backendPIDs func() []int
-	if deps.Backend != servicemgr.BackendLibvirt {
+	backendPIDs := deps.BackendPIDs
+	if backendPIDs == nil && deps.Backend != servicemgr.BackendLibvirt && deps.Backend != servicemgr.BackendDocker {
 		backendPIDs = servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
+	}
+	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
 	checkDeps := checks.Deps{
@@ -325,6 +327,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			serviceDeps := deps
 			serviceDeps.Backend = target.Backend
 			serviceDeps.Manager = target.Manager
+			serviceDeps.BackendPIDs = target.BackendPIDs
 			engine, checkDeps, discoverer := serviceRuntime(name, target.Unit, resolved.Tree, serviceDeps, operationEventEmitter(deps.Emit))
 			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, serviceDeps, target.Unit)
 			names, types := checkCatalog(resolved.Tree)

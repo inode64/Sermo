@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/dockerctl"
 	"sermo/internal/process"
 	"sermo/internal/virt"
 )
@@ -221,17 +222,28 @@ func validateControl(tree map[string]any, add addFunc) {
 		add("control must be a mapping")
 		return
 	}
+	typ := cfgval.String(control["type"])
+	switch typ {
+	case "libvirt":
+		validateControlKeys(control, set("type", "uri", "domain", "uuid", "socket", "host", "port"), "type, uri, domain, uuid, socket, host, port", add)
+		validateLibvirtControl(control, add)
+	case "docker":
+		validateControlKeys(control, set("type", "socket", "host", "port", "tls", "container"), "type, socket, host, port, tls, container", add)
+		validateDockerControl(control, add)
+	default:
+		add("control.type %q is not one of libvirt, docker", typ)
+	}
+}
+
+func validateControlKeys(control map[string]any, allowed map[string]struct{}, labels string, add addFunc) {
 	for _, key := range slices.Sorted(maps.Keys(control)) {
-		switch key {
-		case "type", "uri", "domain", "uuid", "socket", "host", "port":
-		default:
-			add("control key %q is not one of type, uri, domain, uuid, socket, host, port", key)
+		if _, ok := allowed[key]; !ok {
+			add("control key %q is not one of %s", key, labels)
 		}
 	}
-	if typ := cfgval.String(control["type"]); typ != "libvirt" {
-		add("control.type %q is not one of libvirt", typ)
-		return
-	}
+}
+
+func validateLibvirtControl(control map[string]any, add addFunc) {
 	if domain := cfgval.String(control["domain"]); domain == "" {
 		add("control.domain is required for libvirt")
 	}
@@ -258,6 +270,31 @@ func validateControl(tree map[string]any, add addFunc) {
 		if !ok || !virt.ValidHostPort(host, port) {
 			add("control.port must be an integer in 1..65535")
 		}
+	}
+}
+
+func validateDockerControl(control map[string]any, add addFunc) {
+	if container := cfgval.String(control["container"]); container == "" {
+		add("control.container is required for docker")
+	}
+	if socket := cfgval.String(control["socket"]); socket != "" && !filepath.IsAbs(socket) {
+		add("control.socket %q must be an absolute path", socket)
+	}
+	host := cfgval.String(control["host"])
+	if host != "" && strings.TrimSpace(host) == "" {
+		add("control.host must not be blank")
+	}
+	if host != "" && cfgval.String(control["socket"]) != "" {
+		add("control must not set both socket and host")
+	}
+	if _, present := control["port"]; present {
+		port, ok := cfgval.Int(control["port"])
+		if !ok || port < 1 || port > 65535 {
+			add("control.port must be an integer in 1..65535")
+		}
+	}
+	if !dockerctl.ValidTLSValue(control["tls"]) {
+		add("control.tls %q is not one of true, false, required, skip-verify", cfgval.String(control["tls"]))
 	}
 }
 

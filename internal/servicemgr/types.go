@@ -14,6 +14,7 @@ const (
 	BackendSystemd Backend = "systemd"
 	BackendOpenRC  Backend = "openrc"
 	BackendLibvirt Backend = "libvirt"
+	BackendDocker  Backend = "docker"
 )
 
 // ParseBackend parses a backend name used by CLI flags and environment values.

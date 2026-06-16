@@ -101,8 +101,12 @@ var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": tru
 
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
-	Backend          servicemgr.Backend
-	Manager          servicemgr.Manager
+	Backend servicemgr.Backend
+	Manager servicemgr.Manager
+	// BackendPIDs reports backend-owned process roots for the resolved service
+	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
+	// the runtime derive init-backend PIDs when that is supported.
+	BackendPIDs      func() []int
 	Runtime          string
 	DefaultTimeout   time.Duration
 	OperationTimeout time.Duration
@@ -266,6 +270,7 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 		serviceDeps := deps
 		serviceDeps.Backend = target.Backend
 		serviceDeps.Manager = target.Manager
+		serviceDeps.BackendPIDs = target.BackendPIDs
 		w, warns := buildWorker(name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
 			warnings = append(warnings, "service "+name+": "+x)

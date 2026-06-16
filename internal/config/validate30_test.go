@@ -114,6 +114,82 @@ control:
 `), "must not set both socket and host")
 }
 
+func TestValidateDockerControl(t *testing.T) {
+	valid := validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  socket: /run/docker.sock
+`)
+	if hasIssue(valid, "control") {
+		t.Fatalf("valid docker control got issues: %v", valid)
+	}
+
+	validTCP := validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  host: 127.0.0.1
+  port: 2376
+  tls: skip-verify
+`)
+	if hasIssue(validTCP, "control") {
+		t.Fatalf("valid docker TCP control got issues: %v", validTCP)
+	}
+
+	mustHave(t, validateService(t, `
+kind: service
+name: svc
+control: { type: docker }
+`), "control.container is required")
+	mustHave(t, validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  socket: docker.sock
+`), "control.socket")
+	mustHave(t, validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  socket: /run/docker.sock
+  host: 127.0.0.1
+`), "must not set both socket and host")
+	mustHave(t, validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  host: 127.0.0.1
+  port: 70000
+`), "control.port")
+	mustHave(t, validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  tls: maybe
+`), "control.tls")
+	mustHave(t, validateService(t, `
+kind: service
+name: svc
+control:
+  type: docker
+  container: web
+  interface: eth0
+`), "control key \"interface\"")
+}
+
 func TestValidateRuleStructure(t *testing.T) {
 	issues := validateService(t, `
 kind: service

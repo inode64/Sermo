@@ -451,6 +451,59 @@ plus a `cmd` regex that narrows the shared QEMU binary to the intended domain or
 UUID. The cmdline selector narrows discovery; residual signaling is still
 authorized only by `stop_policy.kill_only_if`.
 
+### `control: docker` — Docker containers
+
+A service can be controlled as one Docker container instead of a systemd/OpenRC
+unit:
+
+```yaml
+kind: service
+name: web-container
+control:
+  type: docker
+  container: web
+  socket: /run/docker.sock
+
+checks:
+  docker:
+    type: docker
+    socket: /run/docker.sock
+    container: web
+    on_change: true
+    expect:
+      container.status: { op: "==", value: running }
+      container.health: { op: "==", value: healthy }
+```
+
+`control.container` is the Docker container name or id Sermo operates. With no
+`socket` or `host`, control uses `/run/docker.sock`; set `socket` for another
+local socket, or set `host` and optional `port`/`tls` for a TCP Docker API
+endpoint. `control.interface` is not supported for control; interface-bound
+egress remains available on Docker checks.
+
+The safe operation engine is unchanged: locks, guards, preflight, postflight,
+operation timeouts and remediation policy still apply. The primitive actions are
+Docker Engine API operations:
+
+- `start` calls the container start endpoint.
+- `stop` calls the container stop endpoint with no Docker-side kill escalation;
+  Sermo's operation timeout is the outer bound, and residual handling remains in
+  Sermo's stop policy.
+- `restart` is still Sermo's safe stop+start flow.
+- `resume` unpauses a paused container.
+- `reload` is unsupported for Docker containers unless a future
+  service-specific mechanism is added.
+
+Docker status maps to Sermo status as follows: running -> `active`, paused ->
+`paused`, created/exited -> `inactive`, restarting/dead/removing -> `failed`.
+The CLI and web UI show a Docker-paused container as `paused`, distinct from
+Sermo's monitor pause (`unmonitor`).
+
+For process metrics and residual-process reporting, Sermo reads the container's
+`State.Pid` from Docker inspect and discovers that process tree. You normally do
+not need a `processes:` selector for a controlled container. Residual signaling
+is still authorized only by `stop_policy.kill_only_if`.
+
 ### `also_service` — auxiliary init units
 
 A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
