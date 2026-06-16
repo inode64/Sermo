@@ -1756,7 +1756,7 @@ function serviceIoCell(s) {
 function slaWindowLabel(window) {
   switch (window) {
     case "hour": return "1h";
-    case "day": return "24h";
+    case "day": return "1d";
     case "week": return "7d";
     case "month": return "30d";
     case "year": return "1y";
@@ -1777,7 +1777,7 @@ function renderSLAWindows(wins, compact) {
   const rows = wins.map((w) => {
     const pct = w.ratio == null ? null : Number(w.ratio) * 100;
     const label = esc(slaWindowLabel(w.window));
-    const pctText = pct == null ? "n/a" : fmtNum(pct, 2) + "%";
+    const pctText = pct == null ? "—" : fmtNum(pct, 2) + "%";
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
     const title = `${label} · ${pctText} · ${count}`;
     const track = Array.isArray(w.segments) && w.segments.length
@@ -2205,7 +2205,10 @@ function fmtUptime(sec) {
 }
 
 function fmtBytes(n) {
-  n = Number(n) || 0;
+  n = Number(n);
+  // Guard non-finite/negative inputs (e.g. an inconsistent backend counter):
+  // dividing a negative repeatedly would otherwise render nonsense like "-1 KB".
+  if (!Number.isFinite(n) || n < 0) return "0 B";
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
@@ -2290,14 +2293,17 @@ function cpuTotalsLine(pt) {
   return ` · cpu <b>${fmtPct(machine)}</b> ${machineBar}`;
 }
 
+// diskUsedPct returns the used percentage 0..100, or null when the volume
+// reports no usable figures — so callers render "—" instead of a misleading
+// 0% (empty/healthy-looking) bar for missing data.
 function diskUsedPct(d) {
-  if (!d) return 0;
+  if (!d) return null;
   const used = Number(d.used_bytes);
   const total = Number(d.total_bytes);
   if (Number.isFinite(used) && Number.isFinite(total) && total > 0) return pctClamp((used / total) * 100);
   const free = Number(d.free_bytes);
   if (Number.isFinite(free) && Number.isFinite(total) && total > 0) return pctClamp(((total - free) / total) * 100);
-  return pctClamp(d.used_pct);
+  return Number.isFinite(Number(d.used_pct)) ? pctClamp(d.used_pct) : null;
 }
 
 function notifierNames(w) {
@@ -2385,8 +2391,9 @@ function watchSummaryCell(w) {
     const fs = d.filesystem ? ` · ${esc(d.filesystem)}` : "";
     const mount = d.mount_point && d.mount_point !== d.path ? ` · ${esc(d.mount_point)}` : "";
     const usedPct = diskUsedPct(d);
+    const bar = usedPct == null ? '<span class="muted">—</span>' : usageBar(usedPct);
     return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
-      <div>${usageBar(usedPct)} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
+      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
   }
   return w.summary ? esc(w.summary) : "—";
 }
@@ -2452,7 +2459,7 @@ function watchSummaryText(w) {
       d.sample_error,
       d.mount_sample_error,
       d.free_bytes != null ? fmtBytes(d.free_bytes) + " free" : "",
-      fmtPct(diskUsedPct(d)) + " used",
+      diskUsedPct(d) == null ? "" : fmtPct(diskUsedPct(d)) + " used",
     ].filter(Boolean).join(" ");
   }
   const parts = meterParts(w.meter);
@@ -2627,7 +2634,7 @@ function renderDiskWatch(d) {
     <div><span class="muted">Filesystem</span><br><code>${esc(fs)}</code></div>
     <div><span class="muted">Device</span><br>${device}</div>
     <div><span class="muted">Total</span><br><b>${fmtBytes(d.total_bytes)}</b></div>
-    <div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
+    <div><span class="muted">Used</span><br>${usedPct == null ? '<span class="muted">—</span>' : usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
     <div><span class="muted">Free</span><br><b>${fmtBytes(d.free_bytes)}</b> (${fmtPct(d.free_pct)})</div>
     <div><span class="muted">Inodes</span><br>${inodes}</div>
     <div><span class="muted">Options</span><br>${options}</div>
