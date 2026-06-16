@@ -38,21 +38,24 @@ func buildTeams(name string, entry map[string]any) (Notifier, error) {
 // Card: the subject as the bold lead line and the detail (the SERMO_* fields)
 // in a monospace block — the same layout as the slack payload.
 func teamsPayload(msg Message) []byte {
-	card := map[string]any{
+	b, _ := json.Marshal(map[string]any{
+		"type": "message",
+		"attachments": []any{map[string]any{
+			"contentType": "application/vnd.microsoft.card.adaptive",
+			"content":     teamsCard(msg),
+		}},
+	})
+	return b
+}
+
+func teamsCard(msg Message) map[string]any {
+	return map[string]any{
 		"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
 		"type":    "AdaptiveCard",
 		"version": "1.4",
 		"msteams": map[string]any{"width": "Full"},
 		"body":    teamsCardBody(msg),
 	}
-	b, _ := json.Marshal(map[string]any{
-		"type": "message",
-		"attachments": []any{map[string]any{
-			"contentType": "application/vnd.microsoft.card.adaptive",
-			"content":     card,
-		}},
-	})
-	return b
 }
 
 func teamsCardBody(msg Message) []map[string]any {
