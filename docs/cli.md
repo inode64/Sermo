@@ -55,9 +55,9 @@ sermoctl diagnose clear                 # alias for diagnose clean
 sermoctl state compact [--before TIME]  # prunes old history and vacuums the state database
                                         # omit TIME for normal 366-day retention; TIME may be RFC3339 or duration
 
-sermoctl lock SERVICE --reason REASON --ttl DURATION -- COMMAND...
-sermoctl lock acquire SERVICE --reason REASON --ttl DURATION
-sermoctl lock release SERVICE
+sermoctl lock SERVICE [--name NAME] --reason REASON --ttl DURATION -- COMMAND...
+sermoctl lock acquire SERVICE [--name NAME] --reason REASON --ttl DURATION
+sermoctl lock release SERVICE [--name NAME]
 ```
 
 Plus `apps`, `libs`, `patterns`, `services`, `monitor`/`unmonitor`, `sla`,
