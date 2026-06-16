@@ -1140,11 +1140,21 @@ function isFailing(s) { return serviceState(s) === "failed"; }
 function isServiceAttention(s) {
   return serviceState(s) === "failed";
 }
+function isWatchAttention(w) {
+  return watchStateText(w) === "failed";
+}
 function openPanelTarget(target) {
   if (target === "failed-services") {
     const sec = $("#services-section");
     if (sec) sec.open = true;
     setSvcStatus("failed");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (target === "failed-watches") {
+    const sec = $("#watches-section");
+    if (sec) sec.open = true;
+    setWatchStatus("failed");
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1178,6 +1188,15 @@ function renderAttention() {
       title: failing.length === 1 ? "1 service needs attention" : `${failing.length} services need attention`,
       detail: failing.slice(0, 4).map((s) => s.name).join(", ") + (failing.length > 4 ? ` and ${failing.length - 4} more` : ""),
       target: "failed-services",
+    });
+  }
+  const failingWatches = (allWatches || []).filter(isWatchAttention);
+  if (failingWatches.length) {
+    items.push({
+      level: "critical",
+      title: failingWatches.length === 1 ? "1 watch firing" : `${failingWatches.length} watches firing`,
+      detail: failingWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (failingWatches.length > 4 ? ` and ${failingWatches.length - 4} more` : ""),
+      target: "failed-watches",
     });
   }
   const activeLocks = (latestLocks || []).filter((l) => l.state === "active");
