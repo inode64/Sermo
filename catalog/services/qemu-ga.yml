@@ -2,7 +2,9 @@ kind: daemon
 name: qemu-ga
 display_name: "QEMU Guest Agent"
 category: virtualization
-service: qemu-ga
+service:
+  systemd: [qemu-ga]
+  openrc: [qemu-guest-agent, qemu-ga]
 apps: [qemu-ga]
 
 checks:

@@ -315,8 +315,8 @@ func TestServiceAssistantBatchSkipsPortPromptsByDefault(t *testing.T) {
 }
 
 func TestServiceLabel(t *testing.T) {
-	got := serviceLabel(DaemonCandidate{Title: "Nginx", Unit: "nginx", Port: 80, PortListening: true, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}})
-	for _, want := range []string{"Nginx", "unit: nginx", "port 80 (listening)", "config: /etc/nginx/nginx.conf"} {
+	got := serviceLabel(DaemonCandidate{Title: "Nginx", Unit: "nginx", Port: 80, PortListening: true, Variables: map[string]any{"host": "172.31.27.22"}, UnitPresent: true, ConfigPaths: []string{"/etc/nginx/nginx.conf"}})
+	for _, want := range []string{"Nginx", "unit: nginx", "port 80 (listening)", "host: 172.31.27.22", "config: /etc/nginx/nginx.conf"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("label %q missing %q", got, want)
 		}
