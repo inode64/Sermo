@@ -15,6 +15,10 @@ func engineMap(cfg *config.Config) map[string]any {
 	return m
 }
 
+func engineValue(cfg *config.Config, key string) any {
+	return engineMap(cfg)[key]
+}
+
 // EngineInterval returns engine.interval, or fallback when unset/invalid.
 func EngineInterval(cfg *config.Config, fallback time.Duration) time.Duration {
 	return engineDuration(cfg, "interval", fallback)
@@ -32,18 +36,18 @@ func EngineInt(cfg *config.Config, key string, fallback int) int {
 
 // EngineString reads a string field from the engine block ("" when unset).
 func EngineString(cfg *config.Config, key string) string {
-	return cfgval.AsString(engineMap(cfg)[key])
+	return cfgval.AsString(engineValue(cfg, key))
 }
 
 func engineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
-	if d := cfgval.Duration(engineMap(cfg)[key]); d > 0 {
+	if d := cfgval.Duration(engineValue(cfg, key)); d > 0 {
 		return d
 	}
 	return fallback
 }
 
 func engineInt(cfg *config.Config, key string, fallback int) int {
-	if v, ok := cfgval.Int(engineMap(cfg)[key]); ok {
+	if v, ok := cfgval.Int(engineValue(cfg, key)); ok {
 		return v
 	}
 	return fallback
