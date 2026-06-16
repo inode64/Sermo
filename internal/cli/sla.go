@@ -166,8 +166,8 @@ func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
 	fmt.Fprintln(a.Stdout, "TIME\tUP\tTOTAL\tSLA")
 	for _, p := range points {
 		sla := "n/a"
-		if p.Total > 0 {
-			sla = fmt.Sprintf("%.2f%%", float64(p.Up)/float64(p.Total)*100)
+		if ratio, ok := slaPointRatio(p); ok {
+			sla = fmt.Sprintf("%.2f%%", ratio*100)
 		}
 		fmt.Fprintf(a.Stdout, "%s\t%d\t%d\t%s\n", p.Start.Format(time.RFC3339), p.Up, p.Total, sla)
 	}
@@ -187,8 +187,15 @@ func (a App) writeSLASeriesJSON(service string, window time.Duration, points []s
 
 func slaPointJSON(p state.SLAPoint) map[string]any {
 	entry := map[string]any{"start": p.Start.Format(time.RFC3339), "up": p.Up, "total": p.Total, "ratio": nil}
-	if p.Total > 0 {
-		entry["ratio"] = float64(p.Up) / float64(p.Total)
+	if ratio, ok := slaPointRatio(p); ok {
+		entry["ratio"] = ratio
 	}
 	return entry
+}
+
+func slaPointRatio(p state.SLAPoint) (float64, bool) {
+	if p.Total <= 0 {
+		return 0, false
+	}
+	return float64(p.Up) / float64(p.Total), true
 }
