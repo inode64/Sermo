@@ -210,10 +210,20 @@
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
   .service-detail h2:first-child { margin-top: 0; }
-  .service-detail table { margin-bottom: .6rem; }
+  .service-detail table { width: 100%; margin-bottom: .6rem; }
+  .proc-tree { display: inline-flex; align-items: center; gap: .28rem; min-width: 0; padding-left: calc(var(--proc-depth, 0) * .9rem); }
+  .proc-branch { flex: 0 0 auto; color: var(--text-2); font-family: var(--mono); font-size: .9em; letter-spacing: 0; }
+  .proc-branch::before { content: "└─"; }
+  .proc-tree-child .process-cmd { max-width: min(36rem, 44vw); }
   .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
   .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
-  .sla-panel { max-width: 46rem; margin: .2rem 0 .85rem; }
+  .sla-panel { max-width: 78rem; margin: .2rem 0 .85rem; }
+  .sla-layout { display: grid; grid-template-columns: minmax(14rem, 23rem) minmax(18rem, 1fr); gap: .65rem 1.15rem; align-items: start; }
+  .sla-chart-panel { min-width: 0; }
+  .sla-chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: .65rem; flex-wrap: wrap; margin: 0 0 .18rem; }
+  .sla-chart-title { font-weight: 650; }
+  .sla-incident-list { display: flex; flex-wrap: wrap; gap: .28rem .35rem; align-items: center; margin-top: .28rem; font-size: .82rem; font-variant-numeric: tabular-nums; }
+  .sla-incident { color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 35%, var(--line)); background: color-mix(in srgb, var(--crit) 8%, transparent); border-radius: 999px; padding: .05rem .42rem; }
   .sla-windows { display: grid; gap: .26rem; max-width: 42rem; }
   .sla-window { display: grid; grid-template-columns: 3.2rem minmax(8rem, 1fr) 4.2rem 4.6rem; gap: .45rem; align-items: center; font-size: .82rem; font-variant-numeric: tabular-nums; }
   .sla-label, .sla-count { color: var(--text-2); }
@@ -231,7 +241,7 @@
   .metric-panel { min-width: 0; }
   .metric-title { font-weight: 650; margin-bottom: .25rem; }
   .metric-title .muted { font-weight: 400; }
-  @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .metric-grid, .sla-layout { grid-template-columns: 1fr; } }
   #ready { margin: .6rem 0 0; }
 
   /* ---- events / diagnostics -------------------------------------------------- */
@@ -1633,6 +1643,135 @@ function renderSLAWindows(wins, compact) {
   return `<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
 }
 
+function slaPointPct(p) {
+  const total = Number(p && p.total || 0);
+  if (total <= 0) return null;
+  return pctClamp(Number(p.up || 0) / total * 100);
+}
+
+function slaPointTime(p) {
+  const t = Date.parse(p && p.start);
+  return isNaN(t) ? null : t;
+}
+
+function slaIncidentPoints(points, startMs, endMs) {
+  return (points || []).map((p) => ({ p, t: slaPointTime(p), pct: slaPointPct(p) }))
+    .filter((o) => o.t != null && o.t >= startMs && o.t <= endMs && o.pct != null && Number(o.p.up || 0) < Number(o.p.total || 0))
+    .sort((a, b) => a.t - b.t);
+}
+
+function slaIncidentTime(t) {
+  return new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function slaTimelineSummary(points) {
+  let up = 0, total = 0;
+  (points || []).forEach((p) => {
+    up += Number(p.up || 0);
+    total += Number(p.total || 0);
+  });
+  if (total <= 0) return '<span class="muted">No data in this window.</span>';
+  const pct = up / total * 100;
+  const incidentCount = (points || []).filter((p) => Number(p.total || 0) > Number(p.up || 0)).length;
+  const head = incidentCount
+    ? `<span class="bad">${incidentCount} incident${incidentCount === 1 ? "" : "s"}</span>`
+    : '<span class="ok">No incidents</span>';
+  return `${head} &middot; ${fmtNum(pct, 2)}% <span class="muted">(${up}/${total})</span>`;
+}
+
+function renderSLAIncidentList(incidents) {
+  if (!incidents.length) return '<div class="sla-incident-list"><span class="ok">No incidents in this window.</span></div>';
+  const shown = incidents.slice(-10);
+  const hidden = incidents.length - shown.length;
+  const chips = shown.map((o) => {
+    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
+    return `<span class="sla-incident" title="${esc(tip)}">${esc(slaIncidentTime(o.t))}</span>`;
+  }).join("");
+  const more = hidden > 0 ? `<span class="muted">+${hidden} earlier</span>` : "";
+  return `<div class="sla-incident-list"><span class="muted">Incidents</span>${chips}${more}</div>`;
+}
+
+async function loadServiceSLA(name) {
+  const summary = document.getElementById(detailDomId(name, "sla-summary"));
+  const chart = document.getElementById(detailDomId(name, "sla-chart"));
+  if (!summary || !chart) return;
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/sla?since=${metricWindow}`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const body = await res.json();
+    const points = body.points || [];
+    summary.innerHTML = slaTimelineSummary(points);
+    chart.innerHTML = drawSLAChart(points, metricWindow);
+  } catch (e) {
+    summary.innerHTML = `<span class="bad">Failed to load SLA: ${esc(e.message)}</span>`;
+    chart.innerHTML = "";
+  }
+}
+
+function drawSLAChart(points, win) {
+  const W = 640, H = 150, padL = 36, padR = 18, padT = 16, padB = 30, cols = 120;
+  const span = windowMs[win || metricWindow] || 864e5;
+  const endMs = Date.now();
+  const startMs = endMs - span;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const baseY = padT + plotH;
+  const x = (t) => padL + ((t - startMs) / span) * plotW;
+  const y = (pct) => padT + (100 - pctClamp(pct)) / 100 * plotH;
+  const observed = (points || []).map((p) => ({ p, t: slaPointTime(p), pct: slaPointPct(p) }))
+    .filter((o) => o.t != null && o.t >= startMs && o.t <= endMs && o.pct != null)
+    .sort((a, b) => a.t - b.t);
+  if (!observed.length) return '<span class="muted">No SLA data yet for this window.</span>';
+
+  const breakMs = Math.max(span / cols * 2.5, 6 * 60 * 1000);
+  const segments = [];
+  let seg = [];
+  observed.forEach((o) => {
+    if (seg.length && o.t - seg[seg.length - 1].t > breakMs) {
+      segments.push(seg);
+      seg = [];
+    }
+    seg.push(o);
+  });
+  if (seg.length) segments.push(seg);
+
+  const axis = `
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${baseY}" stroke="#8886"></line>
+    <line x1="${padL}" y1="${baseY}" x2="${W - padR}" y2="${baseY}" stroke="#8886"></line>
+    <line x1="${padL}" y1="${y(99).toFixed(1)}" x2="${W - padR}" y2="${y(99).toFixed(1)}" stroke="#8883" stroke-dasharray="3 4"></line>
+    <line x1="${padL}" y1="${y(95).toFixed(1)}" x2="${W - padR}" y2="${y(95).toFixed(1)}" stroke="#8883" stroke-dasharray="3 4"></line>
+    <text x="2" y="${padT + 4}" font-size="10" fill="#888">100%</text>
+    <text x="8" y="${y(95).toFixed(1)}" font-size="10" fill="#888">95%</text>
+    <text x="14" y="${baseY}" font-size="10" fill="#888">0</text>
+    <text x="${padL}" y="${H - 6}" font-size="10" fill="#888">${esc(new Date(startMs).toLocaleString())}</text>
+    <text x="${W - padR}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">now</text>`;
+  const lines = segments.map((s) => {
+    if (s.length === 1) {
+      const o = s[0];
+      return `<circle cx="${x(o.t).toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="2.2" fill="${slaColor(o.pct)}"><title>${esc(fmtTime(new Date(o.t).toISOString()) + " · " + fmtNum(o.pct, 2) + "%")}</title></circle>`;
+    }
+    const pts = s.map((o) => `${x(o.t).toFixed(1)},${y(o.pct).toFixed(1)}`).join(" ");
+    return `<polyline points="${pts}" fill="none" stroke="#1a7f37" stroke-width="1.6"></polyline>`;
+  }).join("");
+  const incidents = slaIncidentPoints(points, startMs, endMs);
+  const markers = incidents.map((o) => {
+    const tx = x(o.t);
+    const ty = y(o.pct);
+    const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
+    return `<g>
+      <title>${esc(tip)}</title>
+      <line x1="${tx.toFixed(1)}" y1="${padT}" x2="${tx.toFixed(1)}" y2="${baseY}" stroke="#cf222e" stroke-width="1" opacity=".45"></line>
+      <circle cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="3.4" fill="#cf222e"></circle>
+    </g>`;
+  }).join("");
+  const hover = observed.map((o) => {
+    const tx = x(o.t);
+    const tip = `${fmtTime(new Date(o.t).toISOString())} · SLA ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
+    return `<circle cx="${tx.toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="5" fill="transparent"><title>${esc(tip)}</title></circle>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img" aria-label="SLA timeline">${axis}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
+}
+
 function totalsCpuCell(pt) {
   return cpuInline(pt && pt.cpu, !!(pt && pt.has_cpu), pt && pt.num_cpu);
 }
@@ -1782,8 +1921,19 @@ function renderServiceDetail(d) {
       <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
       <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : '<span class="muted">—</span>'}</div>
     </div>`;
-  const serviceSLA = `<h2>SLA</h2>
-    <div class="sla-panel">${renderSLAWindows(d.sla, false)}</div>`;
+  const serviceSLA = `<h2>SLA <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
+    <div class="sla-panel">
+      <div class="sla-layout">
+        <div>${renderSLAWindows(d.sla, false)}</div>
+        <div class="sla-chart-panel">
+          <div class="sla-chart-head">
+            <span class="sla-chart-title">Timeline</span>
+            <span id="${esc(detailDomId(d.name, "sla-summary"))}" class="muted">loading...</span>
+          </div>
+          <div id="${esc(detailDomId(d.name, "sla-chart"))}" class="muted"></div>
+        </div>
+      </div>
+    </div>`;
 
   return `<div class="service-detail" data-service-detail="${esc(d.name)}">
     <h2>${esc(displayName(d))} <span class="muted">${esc(d.unit || "")}</span></h2>
@@ -1810,6 +1960,7 @@ function renderServiceDetail(d) {
 
 function hydrateServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
+  loadServiceSLA(d.name);
   if (measured.length) loadMetrics(d.name, measured);
   loadServiceRuntimeMetrics(d.name);
   loadServiceEvents(d.name);
@@ -3334,8 +3485,10 @@ function drawMetricChart(points, unit, win) {
   const pts = buckets.map((b, i) => ({ i, b })).filter((o) => o.b.n > 0);
   const upper = pts.map((o) => `${x(o.i).toFixed(1)},${y(o.b.max).toFixed(1)}`);
   const lower = pts.slice().reverse().map((o) => `${x(o.i).toFixed(1)},${y(o.b.min).toFixed(1)}`);
-  const band = `<polygon points="${upper.concat(lower).join(" ")}" fill="#1f6feb33"></polygon>`;
-  const line = `<polyline points="${pts.map((o) => `${x(o.i).toFixed(1)},${y(o.b.sum / o.b.n).toFixed(1)}`).join(" ")}" fill="none" stroke="#1f6feb" stroke-width="1.5"></polyline>`;
+  const band = pts.length > 1 ? `<polygon points="${upper.concat(lower).join(" ")}" fill="#1f6feb33"></polygon>` : "";
+  const line = pts.length > 1
+    ? `<polyline points="${pts.map((o) => `${x(o.i).toFixed(1)},${y(o.b.sum / o.b.n).toFixed(1)}`).join(" ")}" fill="none" stroke="#1f6feb" stroke-width="1.5"></polyline>`
+    : pts.map((o) => `<circle cx="${x(o.i).toFixed(1)}" cy="${y(o.b.sum / o.b.n).toFixed(1)}" r="3" fill="#1f6feb"></circle>`).join("");
   const axis = `
     <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H - pad}" stroke="#8886"></line>
     <line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#8886"></line>

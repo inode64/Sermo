@@ -32,8 +32,8 @@ Keep changes concrete:
 | Services | `GET /api/services` | main service list |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service latency metrics | `GET /api/services/{name}/metrics` | latency chart for measured checks |
-| Service runtime metrics | `GET /api/services/{name}/runtime` | in-memory service CPU/memory/IO history |
-| Service SLA | `GET /api/services/{name}/sla` | availability API retained for clients; not shown as a separate service panel graph |
+| Service runtime metrics | `GET /api/services/{name}/runtime` | in-memory service CPU/memory/IO history sampled by worker cycles |
+| Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
 | Notifiers | `GET /api/notifiers` | notifier targets |
