@@ -18,6 +18,11 @@ variables:
   port: 3306
   pidfile: /run/mysqld/mariadb.pid
 
+os:
+  gentoo:
+    variables:
+      pidfile: /run/mysqld/mysqld.pid
+
 pidfile: "${pidfile}"
 
 preflight:

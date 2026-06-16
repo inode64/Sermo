@@ -48,11 +48,14 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 		body map[string]any
 	}
 	services := map[string]any{}
-	addGroup := func(cands []DaemonCandidate, question string) {
+	addGroup := func(cands []DaemonCandidate, question string, allowNone bool) {
 		if len(cands) == 0 {
 			return
 		}
-		selected := chooseServices(p, question, cands)
+		selected := chooseServices(p, question, cands, allowNone)
+		if len(selected) == 0 {
+			return
+		}
 		reviewPorts := len(selected) == 1
 		if len(selected) > 1 && groupHasPortDefaults(selected) {
 			reviewPorts = p.Confirm("Review per-service port overrides?", false)
@@ -88,12 +91,12 @@ func (serviceAssistant) Run(p *Prompt, env Env) (res Result, err error) {
 	}
 
 	if len(activeCatalog) > 0 {
-		addGroup(activeCatalog, "Which active catalog services do you want to monitor?")
+		addGroup(activeCatalog, "Which active catalog services do you want to monitor?", false)
 	} else {
 		p.printf("No active catalog services were detected.\n\n")
 	}
 	if len(generic) > 0 && p.Confirm("Review active services without catalog profiles?", false) {
-		addGroup(generic, "Which uncataloged active services do you want to monitor?")
+		addGroup(generic, "Which uncataloged active services do you want to monitor?", true)
 	}
 	if len(services) == 0 {
 		return Result{}, nil
@@ -147,12 +150,21 @@ func serviceCandidateActive(c DaemonCandidate) bool {
 	return c.Status == "active"
 }
 
-func chooseServices(p *Prompt, question string, cands []DaemonCandidate) []DaemonCandidate {
+func chooseServices(p *Prompt, question string, cands []DaemonCandidate, allowNone bool) []DaemonCandidate {
 	labels := make([]string, len(cands))
 	for i, c := range cands {
 		labels[i] = serviceLabel(c)
 	}
-	sel := p.MultiChoose(question, labels)
+	var sel []int
+	if allowNone {
+		var keyword string
+		sel, keyword = p.MultiChooseKeyword(question, labels, "none")
+		if keyword == "none" {
+			return nil
+		}
+	} else {
+		sel = p.MultiChoose(question, labels)
+	}
 	out := make([]DaemonCandidate, 0, len(sel))
 	for _, idx := range sel {
 		out = append(out, cands[idx])

@@ -153,6 +153,60 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	}
 }
 
+func TestGentooCatalogPidfileOverrides(t *testing.T) {
+	old := detectedOS
+	detectedOS = "gentoo"
+	defer func() { detectedOS = old }()
+
+	root := repoRoot(t)
+	dir := t.TempDir()
+	enabled := filepath.Join(dir, "enabled")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(dir, "sermo.yml")
+	body := "engine: { backend: openrc }\n" +
+		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"clamd", "mariadb"} {
+		svc := "kind: service\nname: " + name + "\nuses: " + name + "\n"
+		if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	tests := []struct {
+		name string
+		want string
+	}{
+		{name: "clamd", want: "/run/clamd.pid"},
+		{name: "mariadb", want: "/run/mysqld/mysqld.pid"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, errs := cfg.Resolve(tc.name)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			proc := nested(t, resolved.Tree, "processes", "pidfile")
+			if got := cfgval.String(proc["path"]); got != tc.want {
+				t.Fatalf("process pidfile = %q, want %q", got, tc.want)
+			}
+			check := nested(t, resolved.Tree, "checks", "pidfile")
+			if got := cfgval.String(check["path"]); got != tc.want {
+				t.Fatalf("check pidfile = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
 	root := repoRoot(t)
 	dir := filepath.Join(root, "catalog", "apps")
@@ -257,11 +311,15 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	}
 
 	want := map[string][]string{
-		"avahi":    {"avahi", "avahi-daemon"},
-		"cups":     {"cupsd"},
-		"dbus":     {"dbus", "dbus-daemon"},
-		"fail2ban": {"fail2ban", "fail2ban-server"},
-		"keydb":    {"keydb", "keydb-server"},
+		"automount":    {"autofs", "automount"},
+		"avahi":        {"avahi", "avahi-daemon"},
+		"cups":         {"cupsd"},
+		"dbus":         {"dbus", "dbus-daemon"},
+		"fail2ban":     {"fail2ban", "fail2ban-server"},
+		"in.tftpd":     {"in.tftpd", "in-tftpd"},
+		"keydb":        {"keydb", "keydb-server"},
+		"rsync":        {"rsyncd", "rsync"},
+		"spamassassin": {"spamd", "spamassassin"},
 	}
 	for name, openrcCandidates := range want {
 		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
