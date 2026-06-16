@@ -243,6 +243,15 @@
   .metric-panel-wide { grid-column: 1 / -1; }
   .metric-title { font-weight: 650; margin-bottom: .25rem; }
   .metric-title .muted { font-weight: 400; }
+  /* Reserve each chart's box up-front (the SVGs are a fixed 640x160 = 4:1, scaled
+     to the container width). Without this the box is empty/short while the data is
+     re-fetched on every auto-refresh and then grows when the SVG lands, jolting the
+     scroll position. Reserving 4:1 keeps the height constant across the loading,
+     no-data and rendered states. .chart-box caps at the SVG's own 640px max width;
+     .chart-box-wide (the full-width SLA timeline) scales unbounded and may grow a
+     little more for its incident list below the graph. */
+  .chart-box { width: 100%; max-width: 640px; aspect-ratio: 640 / 160; }
+  .chart-box-wide { width: 100%; aspect-ratio: 640 / 160; }
   #ready { margin: .6rem 0 0; }
 
   /* ---- responsive: tablet & phone ------------------------------------------
@@ -562,9 +571,9 @@
     <div style="font-weight:600; margin-bottom:.25rem;">Process metrics <span id="daemon-metric-windows" class="muted" style="font-weight:400"></span></div>
     <div class="muted" id="daemon-metric-summary">loading…</div>
     <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; margin-top:.5rem;">
-      <div><div class="muted">CPU</div><div id="daemon-cpu-chart" class="muted">loading…</div></div>
-      <div><div class="muted">Memory</div><div id="daemon-memory-chart" class="muted">loading…</div></div>
-      <div><div class="muted">IO</div><div id="daemon-io-chart" class="muted">loading…</div></div>
+      <div><div class="muted">CPU</div><div id="daemon-cpu-chart" class="muted chart-box">loading…</div></div>
+      <div><div class="muted">Memory</div><div id="daemon-memory-chart" class="muted chart-box">loading…</div></div>
+      <div><div class="muted">IO</div><div id="daemon-io-chart" class="muted chart-box">loading…</div></div>
     </div>
   </div>
 </details>
@@ -2063,7 +2072,7 @@ function renderServiceDetail(d) {
     : '<span class="muted">No latency checks</span>';
   const latencyPanel = measured.length
     ? `<div id="${esc(detailDomId(d.name, "lat-summary"))}" class="muted">loading…</div>
-      <div id="${esc(detailDomId(d.name, "lat-chart"))}" class="muted"></div>`
+      <div id="${esc(detailDomId(d.name, "lat-chart"))}" class="muted chart-box"></div>`
     : '<div class="muted">No latency checks configured for this service.</div>';
   const graphs = `<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
     <div class="metric-grid">
@@ -2074,7 +2083,7 @@ function renderServiceDetail(d) {
         </div>
         <div class="sla-panel">
           <div class="sla-chart-panel">
-            <div id="${esc(detailDomId(d.name, "sla-chart"))}" class="muted"></div>
+            <div id="${esc(detailDomId(d.name, "sla-chart"))}" class="muted chart-box-wide"></div>
           </div>
         </div>
       </div>
@@ -2085,17 +2094,17 @@ function renderServiceDetail(d) {
       <div class="metric-panel">
         <div class="metric-title">CPU</div>
         <div id="${esc(detailDomId(d.name, "runtime-cpu-summary"))}" class="muted">loading…</div>
-        <div id="${esc(detailDomId(d.name, "runtime-cpu-chart"))}" class="muted"></div>
+        <div id="${esc(detailDomId(d.name, "runtime-cpu-chart"))}" class="muted chart-box"></div>
       </div>
       <div class="metric-panel">
         <div class="metric-title">Memory</div>
         <div id="${esc(detailDomId(d.name, "runtime-memory-summary"))}" class="muted">loading…</div>
-        <div id="${esc(detailDomId(d.name, "runtime-memory-chart"))}" class="muted"></div>
+        <div id="${esc(detailDomId(d.name, "runtime-memory-chart"))}" class="muted chart-box"></div>
       </div>
       <div class="metric-panel">
         <div class="metric-title">IO</div>
         <div id="${esc(detailDomId(d.name, "runtime-io-summary"))}" class="muted">loading…</div>
-        <div id="${esc(detailDomId(d.name, "runtime-io-chart"))}" class="muted"></div>
+        <div id="${esc(detailDomId(d.name, "runtime-io-chart"))}" class="muted chart-box"></div>
       </div>
     </div>`;
 
