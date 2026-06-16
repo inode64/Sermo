@@ -15,7 +15,6 @@ import (
 	"maps"
 	"sermo/internal/cfgval"
 	"slices"
-	"sort"
 )
 
 // Message is a notification to deliver. Subject/Body are the human-facing text;
@@ -87,10 +86,5 @@ func Build(raw map[string]any) (map[string]Notifier, []string) {
 
 // SupportedTypes lists the registered notifier types, for validation and docs.
 func SupportedTypes() []string {
-	types := make([]string, 0, len(builders))
-	for t := range builders {
-		types = append(types, t)
-	}
-	sort.Strings(types)
-	return types
+	return slices.Sorted(maps.Keys(builders))
 }
