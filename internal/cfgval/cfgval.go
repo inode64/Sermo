@@ -146,12 +146,14 @@ type byteSizeSuffix struct {
 	mult float64
 }
 
-var byteSizeSuffixes = [...]byteSizeSuffix{
-	{"TIB", 1 << 40}, {"TB", 1 << 40}, {"T", 1 << 40},
-	{"GIB", 1 << 30}, {"GB", 1 << 30}, {"G", 1 << 30},
-	{"MIB", 1 << 20}, {"MB", 1 << 20}, {"M", 1 << 20},
-	{"KIB", 1 << 10}, {"KB", 1 << 10}, {"K", 1 << 10},
-	{"B", 1},
+func byteSizeSuffixes() [13]byteSizeSuffix {
+	return [...]byteSizeSuffix{
+		{"TIB", 1 << 40}, {"TB", 1 << 40}, {"T", 1 << 40},
+		{"GIB", 1 << 30}, {"GB", 1 << 30}, {"G", 1 << 30},
+		{"MIB", 1 << 20}, {"MB", 1 << 20}, {"M", 1 << 20},
+		{"KIB", 1 << 10}, {"KB", 1 << 10}, {"K", 1 << 10},
+		{"B", 1},
+	}
 }
 
 // ByteSize parses a scalar byte size. It requires an explicit suffix using
@@ -166,7 +168,7 @@ func ByteSize(v any) (uint64, bool) {
 	upper := strings.ToUpper(s)
 	unit := float64(1)
 	hasUnit := false
-	for _, suffix := range byteSizeSuffixes {
+	for _, suffix := range byteSizeSuffixes() {
 		if strings.HasSuffix(upper, suffix.text) {
 			unit = suffix.mult
 			hasUnit = true
