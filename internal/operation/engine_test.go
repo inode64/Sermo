@@ -355,7 +355,7 @@ func TestRestartOrphanProcessesDoesNotStart(t *testing.T) {
 
 func TestRestartDiscoveryErrorDoesNotStart(t *testing.T) {
 	h := defaultHarness()
-	h.discoverErrs = []error{errors.New("selector config: command_match selector requires both exe and user")}
+	h.discoverErrs = []error{errors.New("selector config: command_match selector has invalid cmd regex")}
 	res := h.restart(t)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
