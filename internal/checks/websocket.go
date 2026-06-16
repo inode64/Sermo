@@ -165,10 +165,6 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 	if port == "" {
 		port = websocketDefaultPort(secure)
 	}
-	path := u.RequestURI()
-	if path == "" {
-		path = "/"
-	}
 	wsAll, iwarn := parseInterfaceMatch(entry)
 	if iwarn != "" {
 		return nil, "websocket check: " + iwarn
@@ -181,7 +177,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 		ifaces:      parseInterfaces(entry["interface"]),
 		ifaceAll:    wsAll,
 		port:        port,
-		path:        path,
+		path:        websocketPath(u),
 		tls:         tlsString(entry["tls"]),
 		origin:      cfgval.AsString(entry["origin"]),
 		subprotocol: cfgval.AsString(entry["subprotocol"]),
@@ -198,6 +194,14 @@ func websocketDefaultPort(secure bool) string {
 		return "443"
 	}
 	return "80"
+}
+
+func websocketPath(u *url.URL) string {
+	path := u.RequestURI()
+	if path == "" {
+		return "/"
+	}
+	return path
 }
 
 // wsKey returns a fresh base64 Sec-WebSocket-Key (16 random bytes).
