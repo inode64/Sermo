@@ -180,11 +180,12 @@ func (d Discoverer) ObserveState(exe, user string) string {
 	}
 }
 
-// matches reports whether a process satisfies a command_match selector. Sermo
-// requires both exact resolved exe and real UID, so a partial selector never
-// matches.
+// matches reports whether a process satisfies a command_match selector. Every
+// configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
+// cmd is an explicit regex over argv used only to narrow discovery for shared
+// binaries, not to authorize signaling.
 func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) bool {
-	// At least one strong matcher is required; a selector is never user/group-only
+	// At least one process-shape matcher is required; a selector is never user/group-only
 	// (so a bare owner can never select unrelated processes).
 	if sel.Exe == "" && sel.Cmd == "" {
 		return false

@@ -14,7 +14,8 @@ any `security:` toggle that tries to disable them.
 4. **Never SIGKILL by default.** `force_kill` is false unless explicitly enabled.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector. `argv[0]`/cmdline are never trusted, and a process
+   `kill_only_if` selector. A `command_match.cmd` regex may narrow process
+   discovery for shared binaries, but cmdline never authorizes a kill; a process
    whose exe cannot be resolved (permission, or a `(deleted)` binary) is never
    killed — it is reported as a residual instead.
 6. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
@@ -184,14 +185,17 @@ Lifecycle:
 Kill decisions depend on how process facts are read, so this is fixed:
 
 - **Exe** is the resolved target of `/proc/<pid>/exe` — the absolute real path
-  of the running binary. Never `argv[0]`/cmdline, which a process can set to
-  anything. Selectors match it by **exact equality** after canonicalizing both
-  sides; no basename, prefix or substring matching.
+  of the running binary. It is matched by **exact equality** after canonicalizing
+  both sides; no basename, prefix or substring matching.
 - **UID** is the real UID from `/proc/<pid>/status`; user selectors match it
   exactly.
-- **Cmdline** is read for display and logging only — never for matching.
-- A selector with several fields (`exe` and `user`) requires **all** of them
-  to match.
+- **Cmdline** is normally display/logging data, but a `command_match.cmd` field
+  is an explicit RE2 regex over the joined argv. Use it only to make discovery
+  more specific when the same executable runs several roles, e.g. Java or QEMU
+  wrappers. Cmdline is spoofable, so it does not satisfy `kill_only_if` and does
+  not make a process killable by itself.
+- A selector with several fields (`exe`, `cmd`, `user`, `group`) requires **all**
+  of them to match.
 - **Unresolvable exe fails safe**: if `/proc/<pid>/exe` cannot be read or
   resolves to a `(deleted)` path (binary replaced by an upgrade), the process
   matches no exe selector — it is reported as a residual with exe unknown and
