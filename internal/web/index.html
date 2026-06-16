@@ -513,7 +513,6 @@
     <input id="event-status" type="text" placeholder="status">
     <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
     <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
-    <button id="event-apply">apply</button>
     <button id="event-clear">clear</button>
     <span id="event-count" class="muted"></span>
   </div>
@@ -781,6 +780,9 @@ function renderOpsPanel(o) {
   el.innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
 }
 
+const EVENT_FILTER_DEBOUNCE_MS = 300;
+let eventFilterTimer = null;
+
 async function loadEvents() {
   try {
     const params = new URLSearchParams({ limit: "500" });
@@ -801,8 +803,24 @@ async function loadEvents() {
   } catch (e) { /* keep the last feed on a transient error */ }
 }
 
+function scheduleLoadEvents() {
+  if (eventFilterTimer) clearTimeout(eventFilterTimer);
+  eventFilterTimer = setTimeout(() => {
+    eventFilterTimer = null;
+    loadEvents();
+  }, EVENT_FILTER_DEBOUNCE_MS);
+}
+
+function flushLoadEvents() {
+  if (eventFilterTimer) {
+    clearTimeout(eventFilterTimer);
+    eventFilterTimer = null;
+  }
+  loadEvents();
+}
+
 function eventFilterKey(e) {
-  if (e.key === "Enter") loadEvents();
+  if (e.key === "Enter") flushLoadEvents();
   if (e.key === "Escape") clearEventFilters();
 }
 
@@ -4235,14 +4253,14 @@ function initStaticHandlers() {
 
   ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
     const el = $("#" + id);
-    if (el) el.addEventListener("keydown", eventFilterKey);
+    if (!el) return;
+    el.addEventListener("input", scheduleLoadEvents);
+    el.addEventListener("keydown", eventFilterKey);
   });
   const onlyErrors = $("#event-errors");
-  if (onlyErrors) onlyErrors.addEventListener("change", loadEvents);
+  if (onlyErrors) onlyErrors.addEventListener("change", flushLoadEvents);
   const groupEvents = $("#event-group");
   if (groupEvents) groupEvents.addEventListener("change", renderGlobalEvents);
-  const eventApply = $("#event-apply");
-  if (eventApply) eventApply.addEventListener("click", loadEvents);
   const eventClear = $("#event-clear");
   if (eventClear) eventClear.addEventListener("click", clearEventFilters);
 
