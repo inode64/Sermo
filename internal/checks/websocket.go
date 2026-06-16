@@ -163,11 +163,7 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 	secure := websocketSecure(u.Scheme)
 	port := u.Port()
 	if port == "" {
-		if secure {
-			port = "443"
-		} else {
-			port = "80"
-		}
+		port = websocketDefaultPort(secure)
 	}
 	path := u.RequestURI()
 	if path == "" {
@@ -195,6 +191,13 @@ func buildWebsocketCheck(b base, entry map[string]any) (Check, string) {
 
 func websocketSecure(scheme string) bool {
 	return scheme == "wss" || scheme == "https"
+}
+
+func websocketDefaultPort(secure bool) string {
+	if secure {
+		return "443"
+	}
+	return "80"
 }
 
 // wsKey returns a fresh base64 Sec-WebSocket-Key (16 random bytes).
