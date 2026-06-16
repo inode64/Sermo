@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -38,6 +39,44 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, expandPidfile(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
+}
+
+// ResolveMount expands one configured mount document. Mounts do not merge
+// catalog defaults or service profiles: each file under paths.mounts is the
+// complete declaration for one fstab-backed mount unit.
+func (c *Config) ResolveMount(name string) (Resolved, []string) {
+	doc, ok := c.Mounts[name]
+	if !ok {
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown mount %q", name)}
+	}
+	body := stripMeta(doc.Body)
+	vars, errs := c.expansionVariables(body, name)
+	expanded, expErrs := expandTree(body, vars)
+	errs = append(errs, expErrs...)
+	return Resolved{Name: name, Tree: expanded}, errs
+}
+
+// MountNameByPath returns the configured mount name whose resolved path matches
+// path. Empty means no configured mount currently owns that path.
+func (c *Config) MountNameByPath(path string) string {
+	cleanPath := cleanMountPath(path)
+	for _, name := range c.MountNames {
+		resolved, errs := c.ResolveMount(name)
+		if len(errs) > 0 {
+			continue
+		}
+		if cleanMountPath(cfgval.String(resolved.Tree["path"])) == cleanPath {
+			return name
+		}
+	}
+	return ""
+}
+
+func cleanMountPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(path)
 }
 
 // expandPidfile desugars a top-level `pidfile: <path>` or candidate list into

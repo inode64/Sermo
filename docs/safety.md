@@ -184,6 +184,31 @@ Lifecycle:
   safely above the protected work's real duration — one that expires
   mid-backup would wrongly unblock restarts.
 
+## Mount operations
+
+Mount units (`kind: mount`, loaded from `paths.mounts`, default
+`/etc/sermo/mounts`) are manual operator actions exposed by
+`sermoctl mount|umount`; they are not daemon-cycle remediation. They still use
+the same safety posture:
+
+- Mount source, type and options come only from `/etc/fstab`. Sermo runs
+  `mount <path>` / `umount <path>` with argv directly and a timeout; it never
+  builds a shell command from YAML.
+- Each target has an operation lock under `<paths.runtime>/mounts/ops`, so two
+  callers cannot race the same mount.
+- With `refcount: true` (the default), `mount` increments a runtime counter and
+  `umount` decrements it; the real unmount is attempted only when the counter
+  reaches zero.
+- Busy unmounts are reported with the processes using the mount. Sermo does not
+  signal them unless `umount.allow_sigkill: true` or `stop_policy.force_kill:
+  true` is explicitly configured.
+- Any mount policy that can send SIGKILL must define
+  `stop_policy.kill_only_if` with restrictive `users` and `exe_any` selectors.
+  Cmdline narrowing may help discovery, but it never authorizes a kill by
+  itself.
+- Lazy unmount (`umount -l`) is disabled unless `umount.allow_lazy: true` is set
+  on that mount.
+
 ## Process identity and matching
 
 Kill decisions depend on how process facts are read, so this is fixed:

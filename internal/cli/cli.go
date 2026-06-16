@@ -23,6 +23,7 @@ import (
 	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
+	"sermo/internal/mountctl"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -83,6 +84,9 @@ type App struct {
 	// feed over HTTP using the config's web address/port (and password for auth if
 	// present).
 	PruneEvents func(ctx context.Context, opts options, before time.Time) (int, error)
+	// MountController builds the host mount controller for `sermoctl mount|umount`.
+	// nil uses the real host commands and /proc readers.
+	MountController func(*config.Config) mountctl.Controller
 }
 
 type options struct {
@@ -225,6 +229,10 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runIsActive(ctx, opts)
 	case "start", "stop", "restart", "resume":
 		return a.runAction(ctx, opts, opts.command)
+	case "mount":
+		return a.runMount(ctx, opts)
+	case "umount":
+		return a.runUmount(ctx, opts)
 	case "config":
 		return a.runConfig(opts)
 	case "locks":
@@ -1133,7 +1141,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case "start", "stop", "restart", "reload", "resume", "state":
+	case "start", "stop", "restart", "reload", "resume", "mount", "umount", "state":
 		return 90 * time.Second
 	default:
 		return 2 * time.Second
@@ -1593,6 +1601,7 @@ func flagValue(args []string, i int, flag string) (string, int, error) {
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] [--version|-V] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: version | backend|init | status SERVICE | is-active SERVICE | start|stop|restart|resume SERVICE [--no-cascade] | reload SERVICE")
+	fmt.Fprintln(w, "          mount TARGET | umount TARGET | mount status TARGET | mount list")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")

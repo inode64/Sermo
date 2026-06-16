@@ -33,6 +33,9 @@ paths:
     # - storage
     # - network
   # If omitted, Sermo falls back to /etc/sermo/services and then /etc/sermo/apps.
+  # First-class mount units live separately from services and watch fragments.
+  mounts:
+    - /etc/sermo/mounts
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
   # Persistent state database (monitoring/remediation/rule-window control state,
