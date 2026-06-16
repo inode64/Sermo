@@ -229,10 +229,13 @@
   .sla-bar { height: .62rem; border-radius: 999px; overflow: hidden; background: var(--line); border: 1px solid var(--line-2); }
   .sla-fill { display: block; height: 100%; width: var(--sla-pct); background: var(--sla-color); min-width: .12rem; }
   .sla-fill.sla-empty { min-width: 0; }
+  .sla-timeline { display: flex; height: .62rem; border-radius: 999px; overflow: hidden; background: var(--line); border: 1px solid var(--line-2); }
+  .sla-seg { flex: 1 1 0; min-width: 0; background: var(--sla-color, var(--line-2)); }
+  .sla-seg.sla-gap { background: repeating-linear-gradient(45deg, var(--line-2) 0 2px, transparent 2px 4px); }
   .sla-cell { min-width: 15rem; }
   .sla-compact { min-width: 14rem; max-width: 19rem; gap: .18rem; }
   .sla-compact .sla-window { grid-template-columns: 2.8rem minmax(5.5rem, 1fr) 3.8rem; gap: .32rem; font-size: .76rem; }
-  .sla-compact .sla-bar { height: .48rem; }
+  .sla-compact .sla-bar, .sla-compact .sla-timeline { height: .48rem; }
   .sla-compact .sla-count { display: none; }
   .app-sla { grid-column: 1 / -1; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
@@ -1701,20 +1704,56 @@ function renderSLAWindows(wins, compact) {
   if (!wins.length) return '<span class="muted">No SLA data yet.</span>';
   const rows = wins.map((w) => {
     const pct = w.ratio == null ? null : Number(w.ratio) * 100;
-    const width = pct == null ? 0 : pctClamp(pct);
     const label = esc(slaWindowLabel(w.window));
     const pctText = pct == null ? "n/a" : fmtNum(pct, 2) + "%";
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
     const title = `${label} · ${pctText} · ${count}`;
-    const empty = pct == null ? " sla-empty" : "";
+    const track = Array.isArray(w.segments) && w.segments.length
+      ? renderSLATimeline(w.segments, w.window)
+      : renderSLAFill(pct);
     return `<div class="sla-window" title="${esc(title)}">
       <span class="sla-label">${label}</span>
-      <span class="sla-bar"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>
+      ${track}
       <span class="sla-pct">${esc(pctText)}</span>
       <span class="sla-count">${esc(count)}</span>
     </div>`;
   }).join("");
   return `<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
+}
+
+// renderSLAFill is the legacy single-fill bar, kept for windows without segments.
+function renderSLAFill(pct) {
+  const width = pct == null ? 0 : pctClamp(pct);
+  const empty = pct == null ? " sla-empty" : "";
+  return `<span class="sla-bar"><span class="sla-fill${empty}" style="--sla-pct:${width.toFixed(2)}%; --sla-color:${slaColor(pct)}"></span></span>`;
+}
+
+// renderSLATimeline draws a contiguous status-page style availability band: one
+// colored cell per sub-span (oldest left), hatched where no data was observed.
+function renderSLATimeline(segments, window) {
+  const n = segments.length;
+  const spanMs = slaWindowSpanMs(window);
+  const endMs = Date.now();
+  const cells = segments.map((ratio, i) => {
+    const pct = ratio == null ? null : Number(ratio) * 100;
+    const segStart = endMs - spanMs + (i / n) * spanMs;
+    const segEnd = endMs - spanMs + ((i + 1) / n) * spanMs;
+    const when = `${fmtTime(new Date(segStart).toISOString())} – ${fmtTime(new Date(segEnd).toISOString())}`;
+    if (pct == null) return `<span class="sla-seg sla-gap" title="${esc(when + " · no data")}"></span>`;
+    return `<span class="sla-seg" style="--sla-color:${slaColor(pct)}" title="${esc(when + " · " + fmtNum(pct, 2) + "%")}"></span>`;
+  }).join("");
+  return `<span class="sla-timeline">${cells}</span>`;
+}
+
+function slaWindowSpanMs(window) {
+  switch (window) {
+    case "hour": return 36e5;
+    case "day": return 864e5;
+    case "week": return 6048e5;
+    case "month": return 2592e6;
+    case "year": return 3.1536e10;
+    default: return 864e5;
+  }
 }
 
 function slaPointPct(p) {
