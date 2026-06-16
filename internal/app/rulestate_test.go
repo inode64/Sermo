@@ -22,11 +22,7 @@ func TestLoadedRemediationStateSuppressesAfterRestart(t *testing.T) {
 	}
 
 	tree := remediationTree("restart-if-down", "http", "restart")
-	ruleSet, _ := rules.ParseRules(tree)
-	remediation, windows, warnings := loadRuleState(store, "web", ruleSet)
-	if len(warnings) != 0 {
-		t.Fatalf("load warnings: %v", warnings)
-	}
+	remediation, windows := loadRuleStateForTest(t, store, tree)
 
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(tree, rules.Policy{Cooldown: time.Minute}, remediation)
@@ -57,11 +53,7 @@ func TestLoadedRuleWindowStateFiresAfterRestart(t *testing.T) {
 			"then": map[string]any{"action": "restart"},
 		},
 	}}
-	ruleSet, _ := rules.ParseRules(tree)
-	remediation, windows, warnings := loadRuleState(store, "web", ruleSet)
-	if len(warnings) != 0 {
-		t.Fatalf("load warnings: %v", warnings)
-	}
+	remediation, windows := loadRuleStateForTest(t, store, tree)
 
 	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
 	w := h.worker(tree, rules.Policy{}, remediation)
@@ -99,6 +91,16 @@ func TestWorkerPersistsRuleState(t *testing.T) {
 	if _, found, err := store.RemediationState("web"); err != nil || found {
 		t.Fatalf("remediation state found=%v err=%v, want no cooldown row before action", found, err)
 	}
+}
+
+func loadRuleStateForTest(t *testing.T, store *state.Store, tree map[string]any) (*rules.RemediationState, map[string]*rules.WindowState) {
+	t.Helper()
+	ruleSet, _ := rules.ParseRules(tree)
+	remediation, windows, warnings := loadRuleState(store, "web", ruleSet)
+	if len(warnings) != 0 {
+		t.Fatalf("load warnings: %v", warnings)
+	}
+	return remediation, windows
 }
 
 func openRuleStateStore(t *testing.T) *state.Store {
