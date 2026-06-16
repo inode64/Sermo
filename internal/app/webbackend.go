@@ -161,6 +161,10 @@ type webNotifier struct {
 	enabled bool
 }
 
+type diagnosticCleaner interface {
+	PruneUnconfiguredServices(configured []string) (state.PruneUnconfiguredServicesResult, error)
+}
+
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
 // the shared snapshots, and start/stop/restart through the same safe operation
@@ -180,6 +184,7 @@ type WebBackend struct {
 	ruleWindows      *RuleWindowRegistry
 	cfg              *config.Config
 	diagStore        diag.Store
+	diagCleaner      diagnosticCleaner
 	host             diag.Host
 	measure          MeasurementReader
 	collector        *metrics.Collector
@@ -274,6 +279,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
 	wb.diagStore, _ = deps.Monitor.(diag.Store)
+	wb.diagCleaner, _ = deps.Monitor.(diagnosticCleaner)
 	var warnings []string
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = deps.Manager
@@ -2538,6 +2544,27 @@ func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 	}
 	out = append(out, lockScanFindings(b.cfg)...)
 	return out
+}
+
+// CleanDiagnostics removes stale stored data for services and watches that are
+// no longer configured.
+func (b *WebBackend) CleanDiagnostics(_ context.Context) web.DiagnosticCleanResult {
+	if b.diagCleaner == nil {
+		return web.DiagnosticCleanResult{OK: false, Message: "state database is unavailable"}
+	}
+	result, err := b.diagCleaner.PruneUnconfiguredServices(diag.ConfiguredStoredNames(b.cfg))
+	if err != nil {
+		return web.DiagnosticCleanResult{OK: false, Message: err.Error()}
+	}
+	if len(result.Services) == 0 {
+		return web.DiagnosticCleanResult{OK: true, Message: "no unconfigured service data found"}
+	}
+	return web.DiagnosticCleanResult{
+		OK:       true,
+		Message:  fmt.Sprintf("cleared stored data for %d unconfigured service(s)", len(result.Services)),
+		Pruned:   result.Rows,
+		Services: result.Services,
+	}
 }
 
 func lockScanFindings(cfg *config.Config) []web.Finding {
