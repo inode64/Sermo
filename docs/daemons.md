@@ -467,7 +467,7 @@ processes:
 
 These feed monitoring **and** the residual reaper, so a richer selector lets a
 stop catch and kill more leftovers (an unkillable residual stays
-`orphan-processes`). The `process` *check* still matches by `exe`/`user` only.
+`orphan_processes`). The `process` *check* still matches by `exe`/`user` only.
 
 ### Stopped-state invariants (`stop_policy`)
 
@@ -484,7 +484,7 @@ stop_policy:
 - A lingering pidfile or `files_absent` match is a **warning** (the stop still
   succeeds, `ResultOK`) folded into the result message and surfaced in CLI/web —
   it means the daemon crashed or left junk. Residual *processes* keep their
-  stronger `orphan-processes` (red) handling via the reaper.
+  stronger `orphan_processes` (red) handling via the reaper.
 - **`clean_after_stop`** is the single master switch for *all* active deletion
   after a clean stop. It is **opt-in (default `false`)**: with it off the engine
   only **verifies and warns** — it never deletes. Set it to `true` to enable
