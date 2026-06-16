@@ -1,0 +1,27 @@
+kind: daemon
+name: freshclam
+display_name: "FreshClam"
+category: security
+description: "ClamAV virus database updater daemon"
+service:
+  systemd: [clamav-freshclam, freshclam]
+  openrc: [freshclam]
+apps: [freshclam]
+
+variables:
+  pidfile: /run/freshclam.pid
+
+os:
+  debian:
+    variables:
+      pidfile: /run/clamav/freshclam.pid
+  ubuntu:
+    variables:
+      pidfile: /run/clamav/freshclam.pid
+
+# Defining pidfile auto-wires process-tree monitoring and a
+# requires:[service] pidfile health check (error if missing while active).
+pidfile: "${pidfile}"
+
+checks:
+  service: { type: service, expect: active }
