@@ -41,6 +41,8 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"function detail(",
 		"function renderDetail(",
 		"function closeDetail(",
+		"<th>PPID</th>",
+		`style="width:auto; max-width:100%; font-size:.85rem;"`,
 	} {
 		if strings.Contains(html, forbidden) {
 			t.Fatalf("index.html still contains %q", forbidden)
@@ -56,6 +58,12 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 	}
 	if !strings.Contains(html, "function procLabel(p)") || !strings.Contains(html, "function procCmd(p)") {
 		t.Fatalf("index.html missing process command fallback renderer")
+	}
+	if !strings.Contains(html, "function processRows(procs)") || !strings.Contains(html, "function procTreeLabel(row)") {
+		t.Fatalf("index.html missing process tree renderer")
+	}
+	if !strings.Contains(html, ".proc-tree") || !strings.Contains(html, "proc-branch") {
+		t.Fatalf("index.html missing process tree styles")
 	}
 	if !strings.Contains(html, "function renderServiceDetail(d)") || !strings.Contains(html, "data-service-expand") {
 		t.Fatalf("index.html missing inline service detail renderer")
@@ -77,6 +85,7 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"<th>CPU total</th>",
 		"<th>Memory</th>",
 		"<th>IO R/W</th>",
+		".service-detail table { width: 100%;",
 		"function serviceCpuCell(s)",
 		"function loadServiceRuntimeMetrics(name)",
 		"function loadServiceSLA(name)",
