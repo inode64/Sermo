@@ -7,8 +7,8 @@ import (
 	"sermo/internal/process"
 )
 
-// DefaultOperationTimeout is the outer deadline for start/stop/restart when no
-// shorter parent context applies. Matches sermoctl's default for service actions.
+// DefaultOperationTimeout is the outer deadline for start/stop/restart/reload
+// when no shorter parent context applies. Matches sermoctl's default for service actions.
 const DefaultOperationTimeout = 90 * time.Second
 
 // backendMargin budgets servicemgr stop/start and check phases beyond the

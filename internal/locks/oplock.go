@@ -71,7 +71,7 @@ func (h *Handle) Release() error {
 }
 
 // OperationLocker acquires the internal operation lock that serializes
-// start/stop/restart for one service (section 18). It lives under
+// start/stop/restart/reload for one service (section 18). It lives under
 // <paths.runtime>/ops, separate from named runtime locks.
 type OperationLocker struct {
 	Dir  string

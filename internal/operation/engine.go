@@ -193,7 +193,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		}
 	}
 
-	// Step 6: required preflight (start/restart only).
+	// Step 6: required preflight (start/restart/reload).
 	if p.preflight && e.Preflight != nil {
 		out := e.Preflight(ctx)
 		result.Checks = append(result.Checks, out.Results...)

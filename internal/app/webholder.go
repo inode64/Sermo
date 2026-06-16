@@ -213,7 +213,7 @@ func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) in
 	return 0
 }
 
-// Operate runs a start/stop/restart action through the active backend.
+// Operate runs a start/stop/restart/reload action through the active backend.
 func (h *WebBackendHolder) Operate(ctx context.Context, name, action string) web.ActionResult {
 	if b := h.backend(); b != nil {
 		return b.Operate(ctx, name, action)

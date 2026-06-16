@@ -36,7 +36,7 @@ const applicationsCacheTTL = 30 * time.Second
 // serviceRuntime builds the per-service runtime pieces shared by a worker and the
 // web backend: a process discoverer, the check deps (with a backend-status
 // closure), and the safe operation engine. The engine's per-service operation
-// lock serializes start/stop/restart across the worker and the web.
+// lock serializes start/stop/restart/reload across the worker and the web.
 func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	discoverer := process.NewDiscoverer()
 	backendPIDs := servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
@@ -167,7 +167,7 @@ type diagnosticCleaner interface {
 
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
-// the shared snapshots, and start/stop/restart through the same safe operation
+// the shared snapshots, and start/stop/restart/reload through the same safe operation
 // engine the workers use.
 type WebBackend struct {
 	order            []string
@@ -2738,7 +2738,7 @@ func (b *WebBackend) lastServiceEvent(name string) *web.Event {
 	return &ev
 }
 
-// Operate runs a start/stop/restart/monitor action on a service.
+// Operate runs a start/stop/restart/reload action on a service.
 func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {

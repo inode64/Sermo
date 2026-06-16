@@ -1,4 +1,4 @@
-// Package operation is the safe start/stop/restart engine (section 18). It is the
+// Package operation is the safe start/stop/restart/reload engine (section 18). It is the
 // single path both sermoctl and sermod use, so a manual action and an automatic
 // remediation are protected identically: internal operation lock, active named
 // runtime locks, required preflight, guards, residual-process handling with
