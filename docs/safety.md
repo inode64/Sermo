@@ -5,9 +5,9 @@ any `security:` toggle that tries to disable them.
 
 ## Hard invariants
 
-1. **Never start or restart if a required preflight fails.** A required
+1. **Never start, restart or reload if a required preflight fails.** A required
    preflight failure blocks the action with `preflight_failed`.
-2. **Never start, stop or restart if a guard blocks the action.** Guards are
+2. **Never start, stop, restart or reload if a guard blocks the action.** Guards are
    evaluated before remediation; a remediation action a guard blocks never runs.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
@@ -22,23 +22,24 @@ any `security:` toggle that tries to disable them.
 
 ## The operation engine
 
-Every start/stop/restart — manual (`sermoctl`) or automatic (`sermod`) — runs
-through the same engine (section 18):
+Every start/stop/restart/reload — manual (`sermoctl`) or automatic (`sermod`) —
+runs through the same engine (section 18):
 
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").
 2. Block on any active named runtime lock.
-3. Run required preflight (start/restart).
+3. Run required preflight (start/restart/reload).
 4. Block if any guard blocks the action.
-5. Stop, wait `graceful_timeout`, discover residual processes.
-6. If residuals remain and `force_kill` is false → `orphan_processes` (do **not**
-   start). If true, SIGTERM then SIGKILL only the processes that exactly match
-   `kill_only_if`, rediscovering between steps.
+5. For stop/restart, stop, wait `graceful_timeout`, discover residual processes.
+6. If residuals remain and `force_kill` is false → `orphan_processes`; a failed
+   restart does **not** start. If true, SIGTERM then SIGKILL only the processes
+   that exactly match `kill_only_if`, rediscovering between steps.
 7. After a clean stop (no residuals), reconcile the init's recorded state with
    reality — `systemctl reset-failed` (systemd) or `rc-service … zap` (OpenRC) —
    so a lingering failed/stuck marker can't disagree with the actual processes.
    Best effort: it never fails a stop that already succeeded.
-8. Start, verify status, run required postflight.
+8. For start/restart, start and verify status; for reload, reload in place.
+   Run required postflight for start/restart/reload.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
@@ -135,7 +136,7 @@ Two complementary blocking mechanisms guard operations:
    that duplicates mechanism 1.
 
 The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
-serializes start/stop/restart for one service. It is deliberately outside the
+serializes start/stop/restart/reload for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never
 listed as a named lock, and cannot be released by `sermoctl lock release`. A
 live holder makes a second operation fail fast with exit `75` ("operation in
@@ -237,4 +238,3 @@ then at most one operation.
 - **SIGHUP** reloads the config: validate first, swap workers/watches while
   preserving per-service runtime state; an invalid config is rejected and the
   running generation stays.
-

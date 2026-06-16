@@ -213,8 +213,9 @@ or service override either form; when several apps are linked, use the prefixed
 names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
-service's preflight, which **blocks start/restart** (a preflight-failed operation
-never executes the action) — you do not start a service whose runtime is absent.
+service's preflight, which **blocks start/restart/reload** (a preflight-failed
+operation never executes the action) — you do not start or reload a service whose
+runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
 every service that lists it. The service keeps its own `binary`, `version` and
 `config` checks (the **config** test is always service-specific, never moved to
@@ -274,22 +275,22 @@ strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
 `SERMO_INIT` / `SERMO_USER` environment variables override the matching built-in
 (handy for testing or building config off-host).
 
-| Variable          | Value                                   | Resolved        |
-|-------------------|-----------------------------------------|-----------------|
-| `${name}`         | the resolved service/daemon name       | resolution      |
-| `${display_name}` | the display name (falls back to name)   | resolution      |
-| `${service}`      | the service's primary unit name         | resolution      |
-| `${host}`         | hostname (`SERMO_HOST` override)        | resolution¹     |
-| `${hostname}`     | short hostname (`SERMO_HOSTNAME`)       | resolution⁵     |
-| `${init}`         | detected init system (`SERMO_INIT`)     | resolution      |
-| `${user}`         | Sermo's user (`SERMO_USER` override)    | resolution⁴     |
-| `${pidfile}`      | conventional `/run/<unit>.pid`          | resolution⁴     |
-| `${port}`         | the top-level `port:` field (when set)  | resolution³     |
-| `${arch}`         | machine architecture (`SERMO_ARCH`)     | load (baked)    |
-| `${os}`           | os-release id (`SERMO_OS`)              | load (baked)    |
-| `${date}`         | event timestamp (RFC3339)               | runtime²        |
-| `${event}`        | the firing rule's name                  | runtime²        |
-| `${action}`       | the action taken (restart/start/stop)   | runtime²        |
+| Variable          | Value                                          | Resolved        |
+|-------------------|------------------------------------------------|-----------------|
+| `${name}`         | the resolved service/daemon name              | resolution      |
+| `${display_name}` | the display name (falls back to name)          | resolution      |
+| `${service}`      | the service's primary unit name                | resolution      |
+| `${host}`         | hostname (`SERMO_HOST` override)               | resolution¹     |
+| `${hostname}`     | short hostname (`SERMO_HOSTNAME`)              | resolution⁵     |
+| `${init}`         | detected init system (`SERMO_INIT`)            | resolution      |
+| `${user}`         | Sermo's user (`SERMO_USER` override)           | resolution⁴     |
+| `${pidfile}`      | conventional `/run/<unit>.pid`                 | resolution⁴     |
+| `${port}`         | the top-level `port:` field (when set)         | resolution³     |
+| `${arch}`         | machine architecture (`SERMO_ARCH`)            | load (baked)    |
+| `${os}`           | os-release id (`SERMO_OS`)                     | load (baked)    |
+| `${date}`         | event timestamp (RFC3339)                      | runtime²        |
+| `${event}`        | the firing rule's name                         | runtime²        |
+| `${action}`       | the action taken (restart/start/stop/reload)   | runtime²        |
 
 ¹ `${host}` only applies when the daemon does not define a `host` variable (a
 bind address like `127.0.0.1`); an explicit `host` always wins.
