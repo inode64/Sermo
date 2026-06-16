@@ -1573,6 +1573,13 @@ scope: service   memory, swap, cpu, cpu_thread, process_count, io, io_read, io_w
 scope: system    total_memory, total_cpu, load1, load5, load15
 ```
 
+**A `scope: system` metric may only drive `alert` rules, never remediation.** It
+describes the whole machine, not one service, so a `restart`/`start`/`stop` rule
+that reads a system metric — directly, or through a `failed`/`active` reference
+to a `type: metric, scope: system` check — is dropped at config load with a
+warning. This is a safety invariant: a system-wide signal must never act on an
+individual service (see [docs/safety.md](safety.md)).
+
 **Service metrics sum across the whole discovered process tree** — the matched
 processes *and* their child/descendant processes — so a service's `cpu`,
 `memory`, `io`, `fds`, etc. account for its workers and helpers, not just the
