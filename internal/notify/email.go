@@ -100,17 +100,20 @@ func parseEmailDSN(s string) (emailDSN, error) {
 	}
 	d.port = u.Port()
 	if d.port == "" {
-		if d.implicitTLS {
-			d.port = "465"
-		} else {
-			d.port = "587"
-		}
+		d.port = d.defaultPort()
 	}
 	if u.User != nil {
 		d.user = u.User.Username()
 		d.pass, _ = u.User.Password()
 	}
 	return d, nil
+}
+
+func (d emailDSN) defaultPort() string {
+	if d.implicitTLS {
+		return "465"
+	}
+	return "587"
 }
 
 // smtpSend connects per the DSN (implicit TLS or opportunistic STARTTLS),
