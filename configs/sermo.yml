@@ -35,9 +35,10 @@ paths:
   # If omitted, Sermo falls back to /etc/sermo/services and then /etc/sermo/apps.
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
-  # Persistent state database (monitoring state, SLA history, measurements,
-  # runtime metrics). Lives under /var/lib so it survives reboots — required for
-  # `monitor: previous`.
+  # Persistent state database (monitoring/remediation/rule-window control state,
+  # SLA history, measurements, runtime metrics). Lives under /var/lib so it
+  # survives reboots — required for `monitor: previous` and for automatic
+  # remediation not to reset its cooldown/windows after a sermod restart.
   state: /var/lib/sermo
 
 defaults:

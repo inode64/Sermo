@@ -85,6 +85,15 @@ type ServiceMetricStore interface {
 	ServiceMetricSeries(service, metric string, from, to time.Time) ([]state.MeasurementPoint, error)
 }
 
+// RuleStateStore persists automatic remediation and rule-window control state so
+// daemon restarts do not reset cooldown/backoff or for/within progress.
+type RuleStateStore interface {
+	RemediationState(service string) (state.RemediationRecord, bool, error)
+	SetRemediationState(service string, record state.RemediationRecord) error
+	RuleWindowStates(service string) (map[string]state.RuleWindowRecord, error)
+	SetRuleWindowStates(service string, records map[string]state.RuleWindowRecord) error
+}
+
 // measuredCheckTypes are the check types whose latency is recorded as a time
 // series (and graphed in the web), mirroring icmp's latency metric.
 var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": true, "service": true}
@@ -108,6 +117,9 @@ type Deps struct {
 	// restarts and reboots. Optional: nil means every service/watch is always
 	// monitored.
 	Monitor MonitorStore
+	// RuleState persists automatic remediation cooldown/backoff and rule-window
+	// progress. Optional: nil keeps those states in memory for this process only.
+	RuleState RuleStateStore
 	// SLA persists per-cycle availability samples for SLA reporting. Optional: nil
 	// disables SLA tracking.
 	SLA SLARecorder
@@ -353,12 +365,14 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	preflightSection, _ := tree["preflight"].(map[string]any)
 	preflightBuilt, preflightWarnings := checks.Build(preflightSection, checkDeps)
 	warnings = append(warnings, preflightWarnings...)
+	remediationState, windowStates, stateWarnings := loadRuleState(deps.RuleState, name, ruleSet)
+	warnings = append(warnings, stateWarnings...)
 
 	worker = &Worker{
 		Service:      name,
 		Rules:        ruleSet,
 		Policy:       rules.ParsePolicy(tree),
-		State:        &rules.RemediationState{},
+		State:        remediationState,
 		Notifiers:    deps.Notifiers,
 		GlobalNotify: deps.GlobalNotify,
 		Remediation:  deps.Remediation,
@@ -377,8 +391,10 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		RecordHealth: healthRecorder(deps, name),
 		RecordChecks: checkSLARecorder(deps, name),
 		Publish:      publishSnapshots(deps.Snapshots, name),
+		PersistState: ruleStatePersister(deps.RuleState, deps.Emit, name, ruleSet),
 		Now:          deps.Now,
 		Emit:         deps.Emit,
+		windows:      windowStates,
 	}
 	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 		setCycleMetrics(d.Metrics)

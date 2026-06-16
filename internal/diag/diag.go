@@ -1,6 +1,6 @@
 // Package diag runs configuration- and host-consistency diagnostics on a loaded
 // Sermo config: it validates the config, checks the state database, flags stored
-// monitoring state for services/watches that no longer exist, warns about
+// control state for services/watches that no longer exist, warns about
 // per-check intervals that are not aligned with the global resolution, and
 // reports referenced network interfaces, files/directories and mount points that
 // do not exist on the host.
@@ -60,7 +60,7 @@ func (r Result) count(l Level) int {
 // Store is the database access diagnostics need (implemented by state.Store).
 type Store interface {
 	IntegrityCheck() error
-	TrackedMonitorStates() ([]string, error)
+	TrackedControlStates() ([]string, error)
 }
 
 // Host is the host access diagnostics need (implemented by OSHost).
@@ -118,9 +118,9 @@ func diagDatabase(b *builder, cfg *config.Config, store Store) {
 	if err := store.IntegrityCheck(); err != nil {
 		b.add(LevelError, "database", "state database is unhealthy: %v", err)
 	}
-	tracked, err := store.TrackedMonitorStates()
+	tracked, err := store.TrackedControlStates()
 	if err != nil {
-		b.add(LevelWarning, "database", "could not list stored monitoring state: %v", err)
+		b.add(LevelWarning, "database", "could not list stored control state: %v", err)
 		return
 	}
 	known := map[string]struct{}{}
@@ -129,7 +129,7 @@ func diagDatabase(b *builder, cfg *config.Config, store Store) {
 	}
 	for _, name := range tracked {
 		if _, ok := known[name]; !ok {
-			b.add(LevelWarning, "database", "stored monitoring state for target %q which is no longer configured", name)
+			b.add(LevelWarning, "database", "stored control state for target %q which is no longer configured", name)
 		}
 	}
 }

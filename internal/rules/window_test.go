@@ -108,6 +108,31 @@ func TestWindowStateClone(t *testing.T) {
 	// "min matches" logic (behavior sensitive for rule evaluation across reloads).
 }
 
+func TestWindowStateSnapshotRoundTrip(t *testing.T) {
+	forRule := Rule{For: &ForWindow{Cycles: 3}}
+	s := &WindowState{}
+	s.Fires(forRule, true)
+	s.Fires(forRule, true)
+	restored := WindowStateFromSnapshot(s.Snapshot())
+	if restored.Progress(forRule) != "2/3" {
+		t.Fatalf("restored for progress = %q, want 2/3", restored.Progress(forRule))
+	}
+
+	withinRule := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
+	w := &WindowState{}
+	w.Fires(withinRule, true)
+	w.Fires(withinRule, false)
+	snapshot := w.Snapshot()
+	restored = WindowStateFromSnapshot(snapshot)
+	w.Fires(withinRule, true)
+	if restored.Progress(withinRule) != "1/2 in 4 cycles" {
+		t.Fatalf("restored within progress = %q, want 1/2 in 4 cycles", restored.Progress(withinRule))
+	}
+	if restored.Progress(withinRule) == w.Progress(withinRule) {
+		t.Fatal("snapshot restore should not alias live history")
+	}
+}
+
 func TestWindowDescription(t *testing.T) {
 	if got := WindowDescription(Rule{}); got != "immediate" {
 		t.Fatalf("default = %q", got)

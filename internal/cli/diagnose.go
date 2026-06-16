@@ -10,7 +10,7 @@ import (
 )
 
 // runDiagnose runs configuration- and host-consistency diagnostics: it validates
-// the config, checks the state database, flags stored monitoring state for
+// the config, checks the state database, flags stored control state for
 // services/watches that no longer exist, warns about per-check intervals not
 // aligned with the global resolution, and reports referenced interfaces,
 // files/directories and mount
@@ -61,7 +61,7 @@ func (a App) runDiagnoseClean(opts options) int {
 	}
 	defer store.Close()
 
-	result, err := store.PruneUnconfiguredMonitorStates(diag.ConfiguredStoredNames(cfg))
+	result, err := store.PruneUnconfiguredControlStates(diag.ConfiguredStoredNames(cfg))
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("clean diagnostic state: %v", err))
 	}
@@ -73,12 +73,12 @@ func (a App) runDiagnoseClean(opts options) int {
 		return exitSuccess
 	}
 	if len(result.Services) == 0 {
-		fmt.Fprintln(a.Stdout, "no unconfigured monitoring state found")
+		fmt.Fprintln(a.Stdout, "no unconfigured control state found")
 		return exitSuccess
 	}
 	fmt.Fprintf(
 		a.Stdout,
-		"cleared monitoring state for %d unconfigured target(s): %s (%d row(s))\n",
+		"cleared control state for %d unconfigured target(s): %s (%d row(s))\n",
 		len(result.Services),
 		strings.Join(result.Services, ", "),
 		result.Rows,

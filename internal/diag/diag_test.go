@@ -26,7 +26,7 @@ type fakeStore struct {
 }
 
 func (s fakeStore) IntegrityCheck() error                   { return s.integrity }
-func (s fakeStore) TrackedMonitorStates() ([]string, error) { return s.tracked, nil }
+func (s fakeStore) TrackedControlStates() ([]string, error) { return s.tracked, nil }
 
 // loadCfg writes a base global + one service doc under a temp dir (substituting
 // @ROOT@) and loads it.
