@@ -32,7 +32,13 @@ import (
 	"sermo/internal/web"
 )
 
-const applicationsCacheTTL = 30 * time.Second
+const (
+	applicationsCacheTTL = 30 * time.Second
+	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
+	serviceStatusCacheTTL = 10 * time.Second
+	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
+	slaTimelineCacheTTL = 45 * time.Second
+)
 
 // serviceRuntime builds the per-service runtime pieces shared by a worker and the
 // web backend: a process discoverer, the check deps (with a backend-status
@@ -142,6 +148,10 @@ type webEntry struct {
 	processWarnings   []string
 	noResidentProcess bool
 	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
+
+	statusMu     sync.Mutex
+	cachedStatus string
+	statusAt     time.Time
 }
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
@@ -230,6 +240,19 @@ type WebBackend struct {
 	applicationsAt    time.Time
 	applicationsCache []web.Application
 	applicationsList  func(context.Context) []web.Application
+
+	slaCacheMu sync.Mutex
+	slaCache   map[slaCacheKey]cachedSLATimelines
+}
+
+type slaCacheKey struct {
+	service string
+	check   string // empty for service-level SLA
+}
+
+type cachedSLATimelines struct {
+	windows []web.SLAWindow
+	at      time.Time
 }
 
 type webDiskIOState struct {
@@ -281,6 +304,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		defaultTimeout:   deps.DefaultTimeout,
 		operationTimeout: deps.OperationTimeout,
 		now:              deps.Now,
+		slaCache:         map[slaCacheKey]cachedSLATimelines{},
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -500,15 +524,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.RemediationState = "disabled"
 		return svc
 	}
-	status := "unknown"
-	if e.status != nil {
-		if st, err := e.status(ctx); err != nil {
-			status = "error"
-		} else {
-			status = string(st)
-		}
-	}
-	svc.Status = status
+	svc.Status = e.backendStatus(ctx, b.webNow())
 	if active, source, changed, ok := b.monitorView(name); ok {
 		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
@@ -769,15 +785,13 @@ func (b *WebBackend) lastServiceEvents() map[string]*web.Event {
 		return nil
 	}
 	out := map[string]*web.Event{}
-	for _, e := range b.events.Recent("", 0) {
-		if e.Service == "" {
+	for _, name := range b.order {
+		ev, ok := b.events.LastService(name)
+		if !ok {
 			continue
 		}
-		if _, seen := out[e.Service]; seen {
-			continue
-		}
-		ev := loggedEventToWeb(e)
-		out[e.Service] = &ev
+		webEv := loggedEventToWeb(ev)
+		out[name] = &webEv
 	}
 	return out
 }
@@ -787,19 +801,47 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 		return nil
 	}
 	out := map[string]watchActivity{}
-	for _, e := range b.events.Recent("", 200) {
-		if e.Watch == "" || !isWatchActivityKind(e.Kind) {
+	for _, name := range b.watchOrder {
+		ev, ok := b.events.LastWatchActivity(name)
+		if !ok {
 			continue
 		}
-		if _, seen := out[e.Watch]; seen {
-			continue
-		}
-		out[e.Watch] = watchActivity{
-			At:   e.Time.Format(time.RFC3339),
-			Kind: e.Kind,
+		out[name] = watchActivity{
+			At:   ev.Time.Format(time.RFC3339),
+			Kind: ev.Kind,
 		}
 	}
 	return out
+}
+
+// backendStatus returns the init-system status for a service, reusing a short TTL
+// cache so the service list does not invoke systemctl/rc-status on every poll.
+func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
+	if e == nil || e.status == nil {
+		return "unknown"
+	}
+	e.statusMu.Lock()
+	defer e.statusMu.Unlock()
+	if !e.statusAt.IsZero() && now.Sub(e.statusAt) < serviceStatusCacheTTL {
+		return e.cachedStatus
+	}
+	st, err := e.status(ctx)
+	if err != nil {
+		e.cachedStatus = "error"
+	} else {
+		e.cachedStatus = string(st)
+	}
+	e.statusAt = now
+	return e.cachedStatus
+}
+
+func (e *webEntry) invalidateStatusCache() {
+	if e == nil {
+		return
+	}
+	e.statusMu.Lock()
+	e.statusAt = time.Time{}
+	e.statusMu.Unlock()
 }
 
 func watchViewFailed(w web.Watch) bool {
@@ -2275,7 +2317,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		if len(procWarnings) > 0 {
 			d.ProcessWarnings = procWarnings
 		}
-		d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
+		d.Processes, d.ProcessTotals = aggregateProcesses(procs, b.runtimeMetricReader())
 		attachLiveCPU(&d, b.live, name)
 	}
 
@@ -2296,25 +2338,45 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 }
 
 func (b *WebBackend) serviceSLAWindows(name string, now time.Time) []web.SLAWindow {
-	if b.sla == nil {
-		return nil
-	}
-	tls, err := b.sla.SLATimelines(name, now)
-	if err != nil {
-		return nil
-	}
-	return toWebSLAWindows(tls)
+	return b.cachedSLAWindows(name, "", now)
 }
 
 func (b *WebBackend) checkSLAWindows(service, check string, now time.Time) []web.SLAWindow {
+	return b.cachedSLAWindows(service, check, now)
+}
+
+func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []web.SLAWindow {
 	if b.sla == nil {
 		return nil
 	}
-	tls, err := b.sla.CheckSLATimelines(service, check, now)
+	key := slaCacheKey{service: service, check: check}
+	b.slaCacheMu.Lock()
+	if b.slaCache == nil {
+		b.slaCache = map[slaCacheKey]cachedSLATimelines{}
+	}
+	if cached, ok := b.slaCache[key]; ok && now.Sub(cached.at) < slaTimelineCacheTTL {
+		out := cached.windows
+		b.slaCacheMu.Unlock()
+		return slices.Clone(out)
+	}
+	b.slaCacheMu.Unlock()
+
+	var tls []state.SLAWindowTimeline
+	var err error
+	if check == "" {
+		tls, err = b.sla.SLATimelines(service, now)
+	} else {
+		tls, err = b.sla.CheckSLATimelines(service, check, now)
+	}
 	if err != nil {
 		return nil
 	}
-	return toWebSLAWindows(tls)
+	windows := toWebSLAWindows(tls)
+
+	b.slaCacheMu.Lock()
+	b.slaCache[key] = cachedSLATimelines{windows: slices.Clone(windows), at: now}
+	b.slaCacheMu.Unlock()
+	return windows
 }
 
 func toWebSLAWindows(tls []state.SLAWindowTimeline) []web.SLAWindow {
@@ -2744,12 +2806,12 @@ func (b *WebBackend) lastServiceEvent(name string) *web.Event {
 	if b.events == nil {
 		return nil
 	}
-	events := b.events.Recent(name, 1)
-	if len(events) == 0 {
+	ev, ok := b.events.LastService(name)
+	if !ok {
 		return nil
 	}
-	ev := loggedEventToWeb(events[0])
-	return &ev
+	webEv := loggedEventToWeb(ev)
+	return &webEv
 }
 
 // Operate runs a start/stop/restart/reload/resume action on a service.
@@ -2784,6 +2846,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 	if r.Service == "" {
 		r.Service = name
 	}
+	e.invalidateStatusCache()
 	msg := r.Message
 	if msg == "" {
 		msg = string(r.Status)

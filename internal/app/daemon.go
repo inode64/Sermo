@@ -848,6 +848,9 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 			cur.CPUThread = sc.CPUThread.Percent
 			cur.HasCPU = true
 		}
+		if started, ok := oldestPIDStart(pidList, lc.Reader, at); ok {
+			cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
+		}
 		serviceMetrics.Record(service, cur)
 	}
 }
