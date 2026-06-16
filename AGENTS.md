@@ -154,6 +154,12 @@ observable behavior, update the corresponding documentation, catalog examples
 daemon docs in the same change. Keep `configs/sermo.yml` comments current. Code
 and docs must evolve together.
 
+When a user request, implementation finding or runtime behavior contradicts the
+current documentation, call out the mismatch explicitly before treating either
+side as authoritative. If the user accepts the requested behavior or the change
+is implemented, update the conflicting documentation in the same patch; do not
+leave docs describing the old behavior.
+
 ## Central builders
 
 New check types, watch kinds, notifiers and rule actions start in the central
