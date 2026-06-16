@@ -449,8 +449,8 @@ feed; a service's detail shows its own events.
 The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
 (see [per-check interval](#per-check-interval)); a check not run yet shows "not
-run yet". The SLA windows and the history chart come from the same data as
-`sermoctl sla`: the side column keeps the rolling percentages, while the timeline
+run yet". The Graphs section uses one window selector for SLA and runtime
+measurements. Its SLA timeline comes from the same data as `sermoctl sla`: it
 plots the per-minute samples over the selected window (1h/24h/7d/30d/1y), marks
 each degraded minute as an incident at its local time, and leaves gaps where the
 service was unmonitored.

@@ -138,7 +138,7 @@ Row expansion:
 | Area | Content |
 | --- | --- |
 | General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals |
-| Graphs | latency, CPU, memory and IO charts in a two-column grid; each uses the shared `1h`, `24h`, `7d`, `30d`, `1y` window selector |
+| Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; all use the shared `1h`, `24h`, `7d`, `30d`, `1y` window selector |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
 | Named locks | runtime lock state |
