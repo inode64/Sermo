@@ -702,8 +702,9 @@ Protocols, in the order of the table above:
 - `libvirt` (alias `libvirtd`) — opens an RPC connection to a libvirt daemon and
   reads its version; both succeeding prove libvirtd is up. It runs no write
   operation. **Transport:** with no `socket` and no `host` it dials the local Unix
-  socket `/run/libvirt/libvirt-sock`; set `socket` for a different path, or set
-  `host` to use plain **TCP** (default port 16509). TLS/SASL is not supported.
+  socket `/run/libvirt/libvirt-sock`; set `socket` for a different path such as
+  `/run/libvirt/virtqemud-sock` on modular libvirt hosts, or set `host` to use
+  plain **TCP** (default port 16509). TLS/SASL is not supported.
   **Connect URI:** `query` selects the driver, default `qemu:///system` (e.g.
   `lxc:///`, `xen://`). No auth — local socket access is governed by the socket's
   permissions/polkit. Uses `github.com/digitalocean/go-libvirt`.
@@ -722,6 +723,10 @@ Protocols, in the order of the table above:
       type: libvirt              # dials /run/libvirt/libvirt-sock
       expect:
         domains.active: { op: ">=", value: 3 }   # alert if fewer than 3 VMs are running
+    libvirt-modular:
+      type: libvirt
+      socket: /run/libvirt/virtqemud-sock
+      query: "qemu:///system"
     libvirt-tcp:
       type: libvirt
       host: 10.0.0.4             # plain TCP on 16509
