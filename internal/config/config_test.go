@@ -756,6 +756,7 @@ paths:
   includes: [ @ROOT@/enabled ]
   locks: /run/sermo/locks
   runtime: relative/path
+  templates: relative/templates
 defaults:
   policy:
     cooldown: 0s
@@ -772,6 +773,7 @@ security:
 		"engine.backend",
 		"paths.locks",
 		"paths.runtime",
+		"paths.templates",
 		"security.allow_sigkill_by_default",
 		"defaults.policy.cooldown",
 	}

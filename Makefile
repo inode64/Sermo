@@ -44,7 +44,7 @@ config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/sha
 tmpfiles_subst = sed -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
-        install install-bin install-catalog install-config install-tmpfiles install-systemd install-openrc \
+        install install-bin install-catalog install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
 all: build
@@ -99,7 +99,7 @@ clean:
 # Full install: binaries, the catalog, sample config, tmpfiles.d, and both init
 # systems. The persistent state directory is intentionally not created here;
 # tmpfiles.d creates it with the same policy as the runtime directory.
-install: install-bin install-catalog install-config install-tmpfiles install-systemd install-openrc
+install: install-bin install-catalog install-config install-templates install-tmpfiles install-systemd install-openrc
 
 install-bin: build
 	$(INSTALL) -Dm755 $(BIN)/sermoctl $(DESTDIR)$(bindir)/sermoctl
@@ -123,6 +123,14 @@ install-config:
 		echo "  install $(SERMO_CONFDIR)/sermo.yml"; \
 		$(config_subst) configs/sermo.yml > $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
 		chmod 644 $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
+	fi
+
+install-templates:
+	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/templates/default-alert.yml" ]; then \
+		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/templates/default-alert.yml"; \
+	else \
+		echo "  install $(SERMO_CONFDIR)/templates/default-alert.yml"; \
+		$(INSTALL) -Dm644 templates/default-alert.yml "$(DESTDIR)$(SERMO_CONFDIR)/templates/default-alert.yml"; \
 	fi
 
 # systemd-tmpfiles config that creates /run/sermo and the state dir at 0700.

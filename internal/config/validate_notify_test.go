@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -31,7 +33,7 @@ func TestValidateNotifiersRejectsReservedName(t *testing.T) {
 	issues := collect(func(add func(string, ...any)) {
 		validateNotifiers(map[string]any{
 			"none": map[string]any{"type": "slack", "webhook": "https://hooks.example/x"},
-		}, add)
+		}, t.TempDir(), add)
 	})
 	if !strings.Contains(strings.Join(issues, "\n"), "reserved keyword") {
 		t.Errorf("expected reserved-keyword issue, got: %v", issues)
@@ -88,7 +90,7 @@ func TestValidateTeamsNotifier(t *testing.T) {
 		validateNotifiers(map[string]any{
 			"ops-teams": map[string]any{"type": "teams", "webhook": "https://prod-01.westeurope.logic.azure.com/workflows/x"},
 			"no-hook":   map[string]any{"type": "teams"},
-		}, add)
+		}, t.TempDir(), add)
 	})
 	joined := strings.Join(issues, "\n")
 	if strings.Contains(joined, "ops-teams") {
@@ -96,5 +98,33 @@ func TestValidateTeamsNotifier(t *testing.T) {
 	}
 	if !strings.Contains(joined, "no-hook.webhook is required for a teams notifier") {
 		t.Errorf("expected missing-webhook issue, got: %v", issues)
+	}
+}
+
+func TestValidateNotifierTemplate(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "default-alert.yml"), []byte("subject: '{{ .Subject }}'\nbody: '{{ .Body }}'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	issues := collect(func(add func(string, ...any)) {
+		validateNotifiers(map[string]any{
+			"templated": map[string]any{
+				"type":     "slack",
+				"webhook":  "https://hooks.example/x",
+				"template": "default-alert",
+			},
+			"missing": map[string]any{
+				"type":     "slack",
+				"webhook":  "https://hooks.example/x",
+				"template": "ghost",
+			},
+		}, dir, add)
+	})
+	joined := strings.Join(issues, "\n")
+	if strings.Contains(joined, "templated") {
+		t.Errorf("valid template flagged: %v", issues)
+	}
+	if !strings.Contains(joined, `missing.template "ghost" is invalid`) {
+		t.Errorf("expected missing-template issue, got: %v", issues)
 	}
 }

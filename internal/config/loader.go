@@ -115,6 +115,7 @@ func loadGlobal(path string) (Global, error) {
 		}
 		g.Runtime = cfgval.String(paths["runtime"])
 		g.State = cfgval.String(paths["state"])
+		g.Templates = cfgval.String(paths["templates"])
 	}
 	resolveConfigPaths(path, &g)
 	return g, nil
@@ -137,10 +138,11 @@ func absCatalogDirs(dirs []string) []string {
 	return out
 }
 
-// resolveConfigPaths makes catalog/includes/runtime/state paths absolute. Relative
-// entries are resolved against the global config file's directory so a tree like
-// configs/sermo.yml with `includes: [services]` loads configs/services when run
-// from the repository. `apps` remains supported as a legacy include alias.
+// resolveConfigPaths makes catalog/includes/runtime/state/templates paths
+// absolute. Relative entries are resolved against the global config file's
+// directory so a tree like configs/sermo.yml with `includes: [services]` loads
+// configs/services when run from the repository. `apps` remains supported as a
+// legacy include alias.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Catalog = resolvePathList(base, g.Catalog)
@@ -150,6 +152,9 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	}
 	if g.State != "" {
 		g.State = resolveConfigPath(base, g.State)
+	}
+	if g.Templates != "" {
+		g.Templates = resolveConfigPath(base, g.Templates)
 	}
 }
 

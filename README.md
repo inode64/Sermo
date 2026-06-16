@@ -43,9 +43,9 @@ Read-only `sermoctl` commands (status, config, etc.) do not need root.
 
 `make install` honors the standard GNU directory variables and `DESTDIR`
 staging, and installs the binaries, every daemon (keeping the
-`services/apps/libs` layout), a sample `sermo.yml`, the tmpfiles.d config, and
-both the systemd unit and the OpenRC init script (with their binary/config paths
-rewritten to match):
+`services/apps/libs` layout), a sample `sermo.yml`, the default notification
+template, the tmpfiles.d config, and both the systemd unit and the OpenRC init
+script (with their binary/config paths rewritten to match):
 
 ```sh
 sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin, /etc/sermo, ...
@@ -55,7 +55,7 @@ make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
 `bindir`, `sbindir`, `datadir`, `sysconfdir`, `TMPFILESDIR`,
 `SYSTEMD_UNITDIR`, `OPENRC_INITDIR`. Granular targets are available too:
-`install-bin`, `install-config`, `install-tmpfiles`,
+`install-bin`, `install-config`, `install-templates`, `install-tmpfiles`,
 `install-systemd`, `install-openrc` (and `uninstall`). An existing `sermo.yml`
 is never overwritten. `make install` does not create `/var/lib/sermo`; the
 installed tmpfiles.d config owns that directory creation.
