@@ -95,13 +95,24 @@ func (b *builder) add(level Level, scope, format string, args ...any) {
 }
 
 func (b *builder) sort() {
-	rank := map[Level]int{LevelError: 0, LevelWarning: 1, LevelInfo: 2}
 	sort.SliceStable(b.findings, func(i, j int) bool {
-		if rank[b.findings[i].Level] != rank[b.findings[j].Level] {
-			return rank[b.findings[i].Level] < rank[b.findings[j].Level]
+		left, right := levelRank(b.findings[i].Level), levelRank(b.findings[j].Level)
+		if left != right {
+			return left < right
 		}
 		return b.findings[i].Scope < b.findings[j].Scope
 	})
+}
+
+func levelRank(level Level) int {
+	switch level {
+	case LevelError:
+		return 0
+	case LevelWarning:
+		return 1
+	default:
+		return 2
+	}
 }
 
 func diagConfig(b *builder, cfg *config.Config) {
