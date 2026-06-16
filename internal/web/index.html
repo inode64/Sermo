@@ -1840,7 +1840,7 @@ function slaTimelineSummary(points) {
   const head = incidentCount
     ? `<span class="bad">${incidentCount} incident${incidentCount === 1 ? "" : "s"}</span>`
     : '<span class="ok">No incidents</span>';
-  return `${head} &middot; ${fmtNum(pct, 2)}% <span class="muted">(${up}/${total})</span>`;
+  return `${head} &middot; ${fmtNum(pct, 2)}%`;
 }
 
 function renderSLAIncidentList(incidents) {
@@ -3573,7 +3573,7 @@ async function loadMetrics(name, measured) {
     const body = await res.json();
     const s = body.summary || {};
     summary.innerHTML = s.count
-      ? `avg <b>${fmtNum(s.avg, 2)}</b> ms &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)} <span class="muted">(${s.count} samples)</span>`
+      ? `avg <b>${fmtNum(s.avg, 2)}</b> ms &middot; min ${fmtNum(s.min, 2)} &middot; max ${fmtNum(s.max, 2)}`
       : '<span class="muted">No latency data yet for this window.</span>';
     chart.innerHTML = drawMetricChart(body.points || [], body.unit || "ms");
   } catch (e) {
@@ -3653,7 +3653,7 @@ function daemonMetricSummary(series, label) {
   const s = (series && series.summary) || {};
   const unit = (series && series.unit) || "";
   if (!s.count) return `${esc(label)} <span class="muted">no data</span>`;
-  return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b> <span class="muted">(${s.count} samples)</span>`;
+  return `${esc(label)} avg <b>${esc(fmtMetricValue(s.avg, unit))}</b>`;
 }
 
 function drawMetricChart(points, unit, win) {
