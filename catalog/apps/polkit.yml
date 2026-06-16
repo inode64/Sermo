@@ -1,0 +1,8 @@
+kind: app
+name: polkit
+display_name: "Polkit"
+category: system
+variables:
+  binary: /usr/lib/polkit-1/polkitd
+preflight:
+  binary: { type: binary, path: "${binary}" }

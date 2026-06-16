@@ -1,0 +1,8 @@
+kind: app
+name: pmie
+display_name: "PCP Inference Engine"
+category: observability
+variables:
+  binary: /usr/bin/pmie
+preflight:
+  binary: { type: binary, path: "${binary}" }
