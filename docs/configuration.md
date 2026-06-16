@@ -376,7 +376,7 @@ Read-only endpoints:
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.
 - `GET /api/services/{name}/sla?since=24h` — per-minute availability history;
-  `since` is a duration, default 24h, capped at the ~1-year retention.
+  `since` is a duration, default 24h, capped at the 366-day (~1 year) retention.
 - `GET /api/services/{name}/metrics?check=NAME&since=24h` — check latency
   history + summary. Add `metric=KEY` for a named numeric metric published by
   that check, see below.
@@ -494,7 +494,7 @@ the average is not skewed.
 
 The `Daemon / Engine settings` process charts use the same persistent state
 database for sermod's own CPU, memory and IO history, so those graphs survive a
-daemon restart or host reboot. They are pruned to roughly the same one-year
+daemon restart or host reboot. They are pruned to the same 366-day (~1 year)
 retention window.
 
 The service detail's CPU, memory and IO charts use the same persistent state
@@ -502,7 +502,7 @@ database for each service process tree, so those graphs also survive a daemon
 restart or host reboot. They start filling as soon as the service is monitored;
 CPU and IO rates need two cycles before the first rate point exists, while
 memory can render from the first process sample. Runtime metric buckets are
-pruned to roughly the same one-year retention window.
+pruned to the same 366-day (~1 year) retention window.
 
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
@@ -1700,4 +1700,4 @@ sermoctl state compact --before 2026-01-01T00:00:00Z
 `state compact` deletes old bucketed SLA, measurement, daemon metric and service
 runtime metric rows, then checkpoints and vacuums the SQLite state database so
 freed pages can return to the filesystem. Without `--before`, it applies the
-same roughly one-year retention window that `sermod` applies at startup.
+same 366-day (~1 year) retention window that `sermod` applies at startup.
