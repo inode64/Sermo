@@ -788,7 +788,7 @@ remediation:
 rules:
   restart-http:
     type: remediation
-    when: { check: http }
+    if: { failed: { check: http } }
     then: { action: restart }
 ```
 
