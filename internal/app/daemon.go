@@ -134,6 +134,12 @@ type Deps struct {
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler
+	// ProcReader is the shared /proc identity source for service discovery. A
+	// *process.CachingReader lets concurrent workers (and web runtime queries)
+	// within one cycle share a single /proc walk instead of each scanning every
+	// PID, cutting discovery from O(services × processes) to O(processes).
+	// Optional: nil makes each discoverer read /proc directly.
+	ProcReader process.Reader
 	// DiskUsage reports filesystem usage for storage checks and web watch summaries.
 	// Optional: nil uses statfs.
 	DiskUsage checks.DiskUsageFunc
