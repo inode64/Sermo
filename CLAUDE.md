@@ -2,9 +2,9 @@
 
 Project conventions for all agents live in [AGENTS.md](AGENTS.md) — **read and follow them from the first step**.
 
-In particular: any agent that will modify code **must** create a dedicated `git worktree`
-(see "AI / agent workspaces" section) so that multiple agents can run in parallel and every
-completed change is merged back into the local `main` branch from the primary checkout.
-Never edit directly in the human's primary tree.
+In particular: follow the **AI / agent workflow — standard git commits** section —
+inspect `git status` first, work directly in the current checkout (create a separate
+branch only if the user explicitly asks), preserve unrelated local changes, and commit
+only when the user requests it.
 
 User documentation: `docs/`.
