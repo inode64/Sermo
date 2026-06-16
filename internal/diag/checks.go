@@ -67,9 +67,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 		}
 		switch cfgval.AsString(check["type"]) {
 		case "net":
-			if iface := cfgval.AsString(check["interface"]); iface != "" && !host.InterfaceExists(iface) {
-				b.add(LevelWarning, scope, "network interface %q does not exist", iface)
-			}
+			warnMissingInterface(b, scope, check, host)
 		case "file":
 			if p := cfgval.AsString(check["path"]); p != "" && !host.PathExists(p) {
 				b.add(LevelWarning, scope, "path %q does not exist", p)
@@ -101,13 +99,17 @@ func diagCheckResources(b *builder, scope string, entry map[string]any, host Hos
 			b.add(LevelWarning, scope, "device %q does not exist", dev)
 		}
 	case "route":
-		if iface := cfgval.AsString(entry["interface"]); iface != "" && !host.InterfaceExists(iface) {
-			b.add(LevelWarning, scope, "network interface %q does not exist", iface)
-		}
+		warnMissingInterface(b, scope, entry, host)
 	case "pressure":
 		if res := cfgval.AsString(entry["resource"]); res != "" && !host.PathExists("/proc/pressure/"+res) {
 			b.add(LevelWarning, scope, "kernel exposes no /proc/pressure/%s (CONFIG_PSI off?); this check will never fire", res)
 		}
+	}
+}
+
+func warnMissingInterface(b *builder, scope string, entry map[string]any, host Host) {
+	if iface := cfgval.AsString(entry["interface"]); iface != "" && !host.InterfaceExists(iface) {
+		b.add(LevelWarning, scope, "network interface %q does not exist", iface)
 	}
 }
 
