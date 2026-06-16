@@ -563,7 +563,7 @@ func checkSLARecorder(deps Deps, name string) func(map[string]checks.Result, map
 			if !ran[check] || r.Skipped {
 				continue
 			}
-			if err := deps.SLA.RecordCheckSLA(name, check, r.OK, now()); err != nil && deps.Emit != nil {
+			if err := deps.SLA.RecordCheckSLA(name, check, r.Healthy(), now()); err != nil && deps.Emit != nil {
 				deps.Emit(Event{Service: name, Kind: "error", Message: "record check sla: " + err.Error()})
 			}
 		}

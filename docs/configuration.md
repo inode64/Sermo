@@ -541,9 +541,12 @@ is needed — it is on for every monitored service.
 
 A service is **available** in a cycle when none of its **required** checks
 failed. Optional checks (warnings) do not affect it, and a service with no
-required checks is always available. Samples are accumulated into per-minute
-buckets in the state DB (`/var/lib/sermo/sermo.db`); the daemon prunes buckets
-older than a year on startup.
+required checks is always available. Health-style checks (`tcp`, `http`,
+`service`, `process`, etc.) fail when `OK=false`; condition-style checks
+(`cert`, `fds`, `oom`, resource thresholds, etc.) fail only when the alerting
+condition fires. Samples are accumulated into per-minute buckets in the state DB
+(`/var/lib/sermo/sermo.db`); the daemon prunes buckets older than a year on
+startup.
 
 Only **observed** cycles count, so these periods are **excluded** from the SLA
 rather than counted as downtime:

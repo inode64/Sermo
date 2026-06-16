@@ -31,6 +31,8 @@ func TestRecordHealthReflectsRequiredChecks(t *testing.T) {
 	}{
 		{"all required ok", map[string]checks.Result{"http": {OK: true}}, true},
 		{"required failed", map[string]checks.Result{"http": {OK: false}}, false},
+		{"healthy condition check is up", map[string]checks.Result{"cert": {OK: false, Condition: true}}, true},
+		{"firing condition check is down", map[string]checks.Result{"cert": {OK: true, Condition: true}}, false},
 		{"optional failed still up", map[string]checks.Result{"http": {OK: true}, "warn": {OK: false, Optional: true}}, true},
 		{"no checks vacuously up", map[string]checks.Result{}, true},
 	}
@@ -81,11 +83,16 @@ func TestCheckSLARecorderOnlyRecordsRanNonSkippedChecks(t *testing.T) {
 	}
 	record(map[string]checks.Result{
 		"http":   {Check: "http", OK: false},
+		"cert":   {Check: "cert", OK: false, Condition: true},
 		"cached": {Check: "cached", OK: true},
 		"gated":  {Check: "gated", OK: true, Skipped: true},
-	}, map[string]bool{"http": true, "gated": true})
+	}, map[string]bool{"http": true, "cert": true, "gated": true})
 
-	if len(store.records) != 1 || store.records[0] != (checkSLARecord{check: "http", up: false}) {
-		t.Fatalf("records = %+v, want only http=false", store.records)
+	got := map[string]bool{}
+	for _, r := range store.records {
+		got[r.check] = r.up
+	}
+	if len(got) != 2 || got["http"] || !got["cert"] {
+		t.Fatalf("records = %+v, want http=false and cert=true", store.records)
 	}
 }

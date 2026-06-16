@@ -136,12 +136,13 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 			continue
 		}
 
-		b := base{
-			name:    name,
-			service: deps.Service,
-			timeout: cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
-		}
 		typ := cfgval.AsString(entry["type"])
+		b := base{
+			name:      name,
+			service:   deps.Service,
+			timeout:   cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
+			condition: !IsHealthType(typ),
+		}
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
 		if warn != "" {
@@ -1094,12 +1095,14 @@ func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	if client == nil {
 		client = &http.Client{}
 	}
+	typ := cfgval.AsString(entry["type"])
 	b := base{
-		name:    name,
-		service: deps.Service,
-		timeout: cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
+		name:      name,
+		service:   deps.Service,
+		timeout:   cfgval.DurationOr(entry["timeout"], deps.DefaultTimeout),
+		condition: !IsHealthType(typ),
 	}
-	check, warn := buildCheck(cfgval.AsString(entry["type"]), b, entry, runner, client, deps)
+	check, warn := buildCheck(typ, b, entry, runner, client, deps)
 	if warn != "" {
 		return nil, errors.New(warn)
 	}

@@ -26,6 +26,19 @@ func TestCheckHealthSummary(t *testing.T) {
 		t.Fatalf("without tcp: failing=%d health=%q, want ok", failing, health)
 	}
 
+	snap = map[string]CheckSnapshot{
+		"cert": {OK: false, Condition: true},
+	}
+	failing, health = checkHealthSummary(snap, []string{"cert"}, true)
+	if failing != 0 || health != "ok" {
+		t.Fatalf("healthy condition: failing=%d health=%q, want ok", failing, health)
+	}
+	snap["cert"] = CheckSnapshot{OK: true, Condition: true}
+	failing, health = checkHealthSummary(snap, []string{"cert"}, true)
+	if failing != 1 || health != "failing" {
+		t.Fatalf("firing condition: failing=%d health=%q, want failing", failing, health)
+	}
+
 	failing, health = checkHealthSummary(nil, []string{"http"}, true)
 	if failing != 0 || health != "unknown" {
 		t.Fatalf("no snapshot: failing=%d health=%q, want unknown", failing, health)

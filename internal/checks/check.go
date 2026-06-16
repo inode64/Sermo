@@ -22,14 +22,25 @@ import (
 
 // Result is the observable outcome of one check (section 12).
 type Result struct {
-	Service  string         `json:"service,omitempty"`
-	Check    string         `json:"check"`
-	OK       bool           `json:"ok"`
-	Optional bool           `json:"optional,omitempty"`
-	Skipped  bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
-	Message  string         `json:"message,omitempty"`
-	Latency  time.Duration  `json:"latency_ns,omitempty"`
-	Data     map[string]any `json:"data,omitempty"`
+	Service   string         `json:"service,omitempty"`
+	Check     string         `json:"check"`
+	OK        bool           `json:"ok"`
+	Condition bool           `json:"-"`
+	Optional  bool           `json:"optional,omitempty"`
+	Skipped   bool           `json:"skipped,omitempty"` // gated off this cycle (requires/skip_when_changed)
+	Message   string         `json:"message,omitempty"`
+	Latency   time.Duration  `json:"latency_ns,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
+}
+
+// Healthy reports whether this result means the target is available. Most
+// checks are health-style (OK means healthy); condition checks are alert-style
+// (OK means the condition fired), so their availability is inverted.
+func (r Result) Healthy() bool {
+	if r.Condition {
+		return !r.OK
+	}
+	return r.OK
 }
 
 // Check is a single-shot probe.
@@ -42,7 +53,7 @@ type Check interface {
 // invert these checks and fire on failure; condition-style checks fire on OK.
 func IsHealthType(typ string) bool {
 	switch typ {
-	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws", "route", "firewall_rules":
+	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "process", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws", "route", "firewall_rules":
 		return true
 	default:
 		_, ok := conn.Lookup(typ)
@@ -90,9 +101,10 @@ func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 
 // base carries the fields every check shares and applies the per-check timeout.
 type base struct {
-	name    string
-	service string
-	timeout time.Duration
+	name      string
+	service   string
+	timeout   time.Duration
+	condition bool
 }
 
 func (b base) Name() string { return b.name }
@@ -107,11 +119,12 @@ func (b base) withTimeout(ctx context.Context) (context.Context, context.CancelF
 
 func (b base) result(ok bool, message string, start time.Time) Result {
 	return Result{
-		Service: b.service,
-		Check:   b.name,
-		OK:      ok,
-		Message: message,
-		Latency: time.Since(start),
+		Service:   b.service,
+		Check:     b.name,
+		OK:        ok,
+		Condition: b.condition,
+		Message:   message,
+		Latency:   time.Since(start),
 	}
 }
 
