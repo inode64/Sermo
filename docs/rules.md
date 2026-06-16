@@ -71,7 +71,7 @@ which reuse the same schema). MVP types:
 | `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `docker`      | the Docker Engine answers `/info`, exposing container counts (running/paused/stopped), images and a container's state/health for `expect`/`on_change` (see Database) |
-| `unifi` / `unifi-controller` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
+| `unifi` / `unifi-controller` / `unifi-network` | a UniFi Network controller answers `GET /status` with `meta.rc == "ok"` on 8443 (see Database) |
 | `influxdb` / `influx` | an InfluxDB server answers `/health` (or `/ping`) and reports its version on 8086 (see Database) |
 | `prometheus` / `prom` | a Prometheus server answers `/api/v1/status/buildinfo` (or `/-/healthy`) on 9090 (see Database) |
 | `cloudflared` / `cloudflare-tunnel` | a Cloudflare Tunnel daemon answers `/metrics` on 60123 with `cloudflared_` metrics (see Database) |
@@ -85,7 +85,7 @@ which reuse the same schema). MVP types:
 | `rpcbind` / `portmap` / `portmapper` | the RPC portmapper answers an RPC NULL call (see Database) |
 | `nfs` / `nfs-server` / `nfsd` | an NFS server answers an RPC NULL call on 2049 (see Database) |
 | `mountd` / `rpc.mountd` / `nfs-mountd` | the NFS mount daemon answers an RPC NULL call to MOUNT (100005) (see Database) |
-| `statd` / `rpc.statd` / `nsm` | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
+| `statd` / `rpc.statd` / `nsm` / `nfs-statd` | the NFS status monitor answers an RPC NULL call to NSM (100024) (see Database) |
 | `nebula` / `nebula-vpn` | a Nebula mesh-VPN node answers an unknown-tunnel packet with a `recv_error` on 4242/udp (see Database) |
 | `openvpn` / `ovpn` | an OpenVPN server answers a hard-reset-client with a hard-reset-server on 1194 (see Database) |
 | `rdp` / `ms-wbt-server` | a Remote Desktop server answers the X.224 connection negotiation (see Database) |
