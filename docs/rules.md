@@ -3,7 +3,7 @@
 ## Checks
 
 Checks are single-shot probes under `checks` (and `preflight`/`postflight`,
-which reuse the same schema). MVP types:
+which reuse the same schema). Supported types:
 
 | type          | passes when                                                        |
 |---------------|--------------------------------------------------------------------|
@@ -1255,7 +1255,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, memcached/memcache, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, amqp/rabbitmq, kafka, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
+    type: mysql                 # any protocol from the supported-types table above
     # Auth depends on protocol: postgres requires user; mysql/mongodb can probe without it;
     # redis/imap/pop/smtp may be anonymous; fpm/dns/amqp use no auth.
     host: 127.0.0.1             # default 127.0.0.1
