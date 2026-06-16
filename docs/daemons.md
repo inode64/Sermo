@@ -461,8 +461,9 @@ processes:
 - `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
 - `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).
   Use it for shared binaries (`java .*unifi`, `openvpn .*tun1\.conf`) the way the
-  legacy per-service kill lists did. (The cmdline is spoofable, so a `cmd`-only
-  match still passes `stop_policy.kill_only_if` before any kill.)
+  legacy per-service kill lists did. The cmdline is spoofable, so `cmd` only
+  narrows discovery; residual signaling is still authorized only by
+  `stop_policy.kill_only_if` (`exe_any` plus `users`).
 - `user` / `group` — the process real UID / GID owner.
 
 These feed monitoring **and** the residual reaper, so a richer selector lets a
