@@ -85,7 +85,8 @@ type Deps struct {
 	// EdacSampler reads EDAC memory-error counters for `edac` checks. Nil reads
 	// sysfs.
 	EdacSampler EdacSamplerFunc
-	// MountSampler reads the mount table for `mount` checks. Nil reads /proc/mounts.
+	// MountSampler reads the mount table for `storage` mount predicates and
+	// `autofs` checks. Nil reads /proc/mounts.
 	MountSampler MountSamplerFunc
 	// ConntrackSampler reads the netfilter conntrack table for `conntrack` checks.
 	// Nil reads /proc/sys/net/netfilter.

@@ -34,7 +34,7 @@ const (
 	ActionBlock   ActionType = "block"
 )
 
-// Action is the resolved then: block of a rule (single action in the MVP).
+// Action is one resolved entry from a rule's then block.
 type Action struct {
 	Type    ActionType
 	Message string
@@ -60,7 +60,7 @@ type Rule struct {
 	If      map[string]any
 	For     *ForWindow
 	Within  *WithinWindow
-	Actions []Action // all actions in order (post-MVP multi-action then)
+	Actions []Action // all actions in order
 	Blocks  []string
 	// Notify selects which notifiers receive this rule's alert messages: explicit
 	// names, the `none` sentinel to suppress, or empty to inherit the global
