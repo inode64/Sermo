@@ -23,13 +23,13 @@ any `security:` toggle that tries to disable them.
 
 ## The operation engine
 
-Every start/stop/restart/reload — manual (`sermoctl`) or automatic (`sermod`) —
+Every start/stop/restart/reload/resume — manual (`sermoctl`) or automatic (`sermod`) —
 runs through the same engine (section 18):
 
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").
 2. Block on any active named runtime lock.
-3. Run required preflight (start/restart/reload).
+3. Run required preflight (start/restart/reload/resume).
 4. Block if any guard blocks the action.
 5. For stop/restart, stop, wait `graceful_timeout`, discover residual processes.
 6. If residuals remain and `force_kill` is false → `orphan_processes`; a failed
@@ -39,8 +39,9 @@ runs through the same engine (section 18):
    reality — `systemctl reset-failed` (systemd) or `rc-service … zap` (OpenRC) —
    so a lingering failed/stuck marker can't disagree with the actual processes.
    Best effort: it never fails a stop that already succeeded.
-8. For start/restart, start and verify status; for reload, reload in place.
-   Run required postflight for start/restart/reload.
+8. For start/restart, start and verify status; for reload, reload in place; for
+   resume, resume the target and verify status. Run required postflight for
+   start/restart/reload/resume.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
@@ -92,7 +93,9 @@ lists.
 service do). It manages services owned by different users and touches privileged
 areas, so several features need it:
 
-- **Service control** — start/stop/restart/reload via systemd/OpenRC.
+- **Service control** — start/stop/restart/reload via systemd/OpenRC, and
+  start/stop/restart/resume of VM domains via libvirt when a service declares
+  `control.type: libvirt`.
 - **Signalling other users' processes** — the stop policy reaps residual
   processes that match the `kill_only_if` selector, across UIDs.
 - **Cross-user `/proc` inspection** — resolving a process's `/proc/<pid>/exe`,
@@ -142,7 +145,7 @@ Two complementary blocking mechanisms guard operations:
    that duplicates mechanism 1.
 
 The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
-serializes start/stop/restart/reload for one service. It is deliberately outside the
+serializes start/stop/restart/reload/resume for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never
 listed as a named lock, and cannot be released by `sermoctl lock release`. A
 live holder makes a second operation fail fast with exit `75` ("operation in

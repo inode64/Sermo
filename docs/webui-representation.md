@@ -148,7 +148,7 @@ Columns:
 | CPU total | latest whole process-tree CPU usage |
 | Memory | latest process-tree resident memory |
 | IO R/W | cumulative process-tree disk read/write bytes |
-| Actions | start, stop, restart, reload, monitor/unmonitor |
+| Actions | start, stop, restart, reload, resume, monitor/unmonitor |
 
 Row expansion:
 

@@ -341,17 +341,17 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		// take additionals down first); it returns this service's own Result, which
 		// drives the bookkeeping below exactly as a bare Operate would.
 		operate := w.Operate
-		if w.Cascade != nil {
+		if w.Cascade != nil && (action == "start" || action == "stop" || action == "restart") {
 			operate = w.Cascade
 		}
 		result := operate(ctx, action)
 		if result.RecordsRemediation() {
 			w.State.Record(now(), w.Policy)
 		}
-		// A successful (re)launch or reload now runs against the current files,
+		// A successful (re)launch, reload or resume now runs against the current files,
 		// so refresh the watched baselines — otherwise a `changed:`-driven
 		// restart/reload would fire again every cycle.
-		if result.OK() && (action == "restart" || action == "start" || action == "reload") {
+		if result.OK() && (action == "restart" || action == "start" || action == "reload" || action == "resume") {
 			w.acknowledgeChanges()
 		}
 		w.emit(Event{Kind: eventKindForResult(result), Rule: r.Name, Action: action, Status: string(result.Status), Message: result.Message})

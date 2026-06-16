@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -255,14 +256,17 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 			warnings = append(warnings, w)
 		}
 
-		base := config.ServiceUnit(resolved.Tree, name)
-		candidates, trust := config.ServiceCandidates(resolved.Tree, string(deps.Backend), name)
-		unit, err := resolver.Resolve(context.Background(), deps.Backend, candidates, trust)
-		if err != nil {
-			warnings = append(warnings, "service "+name+": "+err.Error()+" (using "+base+")")
-			unit = base
+		target, warn := control.ResolveWithFallback(context.Background(), name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+		if warn != "" {
+			warnings = append(warnings, "service "+name+": "+warn)
 		}
-		w, warns := buildWorker(name, unit, resolved.Tree, deps, collector)
+		if target.Unit == "" {
+			continue
+		}
+		serviceDeps := deps
+		serviceDeps.Backend = target.Backend
+		serviceDeps.Manager = target.Manager
+		w, warns := buildWorker(name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
 			warnings = append(warnings, "service "+name+": "+x)
 		}

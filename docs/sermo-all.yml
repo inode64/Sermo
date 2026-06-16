@@ -22,9 +22,9 @@ engine:
   backend: auto                # auto | systemd | openrc
   interval: 30s                # default check cycle for services and watches
   max_parallel_checks: 8       # global probe pool, all workers together
-  max_parallel_operations: 2   # global start/stop/restart/reload slots
+  max_parallel_operations: 2   # global start/stop/restart/reload/resume slots
   default_timeout: 10s         # per-check timeout when a check sets none
-  operation_timeout: 90s       # outer deadline for safe start/stop/restart/reload
+  operation_timeout: 90s       # outer deadline for safe start/stop/restart/reload/resume
   startup_delay: 0             # grace before the first cycle after boot
 
 paths:
@@ -342,6 +342,15 @@ service:                       # scalar, legacy {name: ...}, or per-backend map
   systemd: [demo, demo-server]
   openrc: [demo]
 
+# Optional non-init control target. For libvirt/QEMU VMs, `domain` is the
+# libvirt domain Sermo starts/stops/restarts/resumes through the safe engine.
+# control:
+#   type: libvirt
+#   uri: qemu:///system
+#   domain: demo-vm
+#   socket: /run/libvirt/libvirt-sock
+#   # uuid: 2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4
+
 also_service:                  # auxiliary init units of this same service
   systemd: [demo.socket]
   openrc: [demo-socket]
@@ -380,7 +389,7 @@ pidfile: /run/demo.pid
 
 config_files: [/etc/demo/demo.conf, /etc/demo/conf.d]
 
-preflight:                     # gate start/restart/reload
+preflight:                     # gate start/restart/reload/resume
   config:
     type: command
     command: ["${binary}", "--test-config"]
@@ -395,7 +404,7 @@ preflight:                     # gate start/restart/reload
     binary: "${binary}"
     optional: true             # best-effort: warns, never blocks
 
-postflight:                    # assert health after start/restart/reload
+postflight:                    # assert health after start/restart/reload/resume
   http:
     type: http
     url: "http://${host}:${port}${health_path}"
