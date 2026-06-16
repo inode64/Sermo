@@ -96,7 +96,7 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		`id="diag-clean"`,
 		"function cleanDiagnostics()",
 		`api/diagnostics/clean`,
-		"removes stale state, SLA, measurements and runtime metrics for unconfigured targets",
+		"removes stale monitoring state for unconfigured targets; metric history is kept",
 		`r="3" fill="#1f6feb"`,
 		`api/services/${encodeURIComponent(name)}/sla?since=${metricWindow}`,
 		`aria-label="SLA timeline"`,

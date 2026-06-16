@@ -247,6 +247,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runServices(ctx, opts)
 	case "service":
 		return a.runService(opts)
+	case "state":
+		return a.runState(ctx, opts)
 	case "lock":
 		return a.runLock(ctx, opts)
 	case "unmonitor":
@@ -1065,7 +1067,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case "start", "stop", "restart", "reload":
+	case "start", "stop", "restart", "reload", "state":
 		return 90 * time.Second
 	default:
 		return 2 * time.Second
@@ -1171,15 +1173,9 @@ func (a App) runActivity(ctx context.Context, opts options) int {
 }
 
 func (a App) runEventsClear(ctx context.Context, opts options, noun string) int {
-	var before time.Time
-	if opts.before != "" {
-		if d, err := time.ParseDuration(opts.before); err == nil {
-			before = time.Now().Add(-d)
-		} else if t, err := time.Parse(time.RFC3339, opts.before); err == nil {
-			before = t
-		} else {
-			return a.fail(opts, "invalid --before: use RFC3339 (e.g. 2026-06-13T12:00:00Z) or duration (e.g. 1h, 30m)")
-		}
+	before, err := parseBefore(opts.before, time.Now)
+	if err != nil {
+		return a.fail(opts, err.Error())
 	}
 	pruneEvents := a.PruneEvents
 	if pruneEvents == nil {
@@ -1197,6 +1193,19 @@ func (a App) runEventsClear(ctx context.Context, opts options, noun string) int 
 		fmt.Fprintf(a.Stdout, "cleared %d %s before %s\n", n, noun, before.Format(time.RFC3339))
 	}
 	return exitSuccess
+}
+
+func parseBefore(value string, now func() time.Time) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	if d, err := time.ParseDuration(value); err == nil {
+		return now().Add(-d), nil
+	}
+	if t, err := time.Parse(time.RFC3339, value); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("invalid --before: use RFC3339 (e.g. 2026-06-13T12:00:00Z) or duration (e.g. 1h, 30m)")
 }
 
 // pruneDaemonEvents performs the HTTP call to the running sermod's web API
@@ -1522,6 +1531,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
 	fmt.Fprintln(w, "          diagnose | diagnose clean | wizard [service|volume|net|uplink]")
+	fmt.Fprintln(w, "          state compact [--before TIME] # prune old history and vacuum; TIME=RFC3339 or duration")
 	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
 	fmt.Fprintln(w, "          events [SERVICE] [--limit N]   # list recent (global or per-service)")
