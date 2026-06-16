@@ -20,9 +20,9 @@ on usage errors.
 sermoctl backend
 sermoctl status SERVICE
 sermoctl is-active SERVICE
-sermoctl start SERVICE
-sermoctl stop SERVICE
-sermoctl restart SERVICE
+sermoctl start SERVICE [--no-cascade]
+sermoctl stop SERVICE [--no-cascade]
+sermoctl restart SERVICE [--no-cascade]
 sermoctl reload SERVICE
 
 sermoctl preflight SERVICE
