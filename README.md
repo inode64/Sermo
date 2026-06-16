@@ -55,7 +55,7 @@ make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
 `bindir`, `sbindir`, `datadir`, `sysconfdir`, `TMPFILESDIR`,
 `SYSTEMD_UNITDIR`, `OPENRC_INITDIR`. Granular targets are available too:
-`install-bin`, `install-daemons`, `install-config`, `install-tmpfiles`,
+`install-bin`, `install-config`, `install-tmpfiles`,
 `install-systemd`, `install-openrc` (and `uninstall`). An existing `sermo.yml`
 is never overwritten. `make install` does not create `/var/lib/sermo`; the
 installed tmpfiles.d config owns that directory creation.
