@@ -19,6 +19,13 @@ const webhookTimeout = 15 * time.Second
 // hit the network. Shared by every webhook transport (slack, teams).
 type webhookPoster func(ctx context.Context, webhook string, payload []byte) error
 
+func webhookPost(post, fallback webhookPoster) webhookPoster {
+	if post != nil {
+		return post
+	}
+	return fallback
+}
+
 // postWebhook POSTs a JSON payload and fails on a non-2xx answer; label names
 // the transport in error messages.
 func postWebhook(ctx context.Context, label, webhook string, payload []byte) error {
