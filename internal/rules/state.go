@@ -149,18 +149,21 @@ func (s *RemediationState) Record(now time.Time, p Policy) {
 	s.LastActionAt = now
 	s.RecentActions = append(s.RecentActions, now)
 	if p.MaxActionsWindow > 0 {
-		cutoff := now.Add(-p.MaxActionsWindow)
-		kept := s.RecentActions[:0]
-		for _, t := range s.RecentActions {
-			if t.After(cutoff) {
-				kept = append(kept, t)
-			}
-		}
-		s.RecentActions = kept
+		s.trimRecentActions(now.Add(-p.MaxActionsWindow))
 	}
 	if p.Backoff != nil {
 		s.growBackoff(p.Backoff)
 	}
+}
+
+func (s *RemediationState) trimRecentActions(cutoff time.Time) {
+	kept := s.RecentActions[:0]
+	for _, t := range s.RecentActions {
+		if t.After(cutoff) {
+			kept = append(kept, t)
+		}
+	}
+	s.RecentActions = kept
 }
 
 // growBackoff advances the effective cooldown: initial, then ×factor each
