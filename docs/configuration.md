@@ -375,6 +375,8 @@ for the window; `since` is a duration, default 24h, capped at the ~1-year
 retention),
 `GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
 history + summary, see below),
+`GET /api/services/{name}/runtime?since=24h` (the service process tree's
+in-memory CPU, memory and IO history, sampled every monitored cycle),
 `GET /api/daemon/metrics?since=24h` (in-memory sermod process CPU, memory and IO
 history for the current daemon process, plus current PID, file descriptors and
 threads), `GET /api/events?limit=N` (the **global event feed**, newest first),
@@ -445,8 +447,9 @@ The detail's check results are the **latest observed** by the worker (published
 each cycle), so they cost nothing to view and reflect each check's own cadence
 (see [per-check interval](#per-check-interval)); a check not run yet shows "not
 run yet". The SLA windows and the history chart come from the same data as
-`sermoctl sla` — the chart bins the per-minute samples into columns (green ≥99%,
-amber ≥95%, red below) with a selectable window (24h/7d/30d) and gaps where the
+`sermoctl sla`: the side column keeps the rolling percentages, while the timeline
+plots the per-minute samples over the selected window (1h/24h/7d/30d/1y), marks
+each degraded minute as an incident at its local time, and leaves gaps where the
 service was unmonitored.
 
 ### Latency graph
@@ -467,6 +470,11 @@ The `Daemon / Engine settings` process charts use the same persistent state
 database for sermod's own CPU, memory and IO history, so those graphs survive a
 daemon restart or host reboot. They are pruned to roughly the same one-year
 retention window.
+
+The service detail's CPU, memory and IO charts are in-memory process-tree
+history sampled by each service worker cycle. They start filling as soon as the
+service is monitored; CPU and IO rates need two cycles before the first rate
+point exists, while memory can render from the first process sample.
 
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
@@ -533,7 +541,8 @@ sermoctl --json sla --series apache-main           # points: start, up, total, r
 
 Each point is one monitored minute; **unmonitored minutes are simply absent**
 (gaps), so a graph can render an excluded period (Sermo down, or the service
-paused/disabled) distinctly from real downtime.
+paused/disabled) distinctly from real downtime. The web dashboard uses the same
+points to place incident markers at the minute the problem was observed.
 
 ## Notifications
 

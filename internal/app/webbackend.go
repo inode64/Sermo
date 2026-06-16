@@ -184,7 +184,7 @@ type WebBackend struct {
 	measure          MeasurementReader
 	collector        *metrics.Collector
 	daemonMetrics    *daemonMetricSampler
-	serviceMetrics   *serviceMetricSampler
+	serviceMetrics   *ServiceMetricSampler
 	live             *LiveMetrics
 	diskUsage        checks.DiskUsageFunc
 	mountSampler     checks.MountSamplerFunc
@@ -243,7 +243,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		host:             diag.OSHost{},
 		collector:        deps.Collector,
 		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
-		serviceMetrics:   newServiceMetricSampler(),
+		serviceMetrics:   deps.ServiceMetrics,
 		live:             deps.Live,
 		diskUsage:        deps.DiskUsage,
 		mountSampler:     deps.MountSampler,
@@ -267,6 +267,9 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		defaultTimeout:   deps.DefaultTimeout,
 		operationTimeout: deps.OperationTimeout,
 		now:              deps.Now,
+	}
+	if wb.serviceMetrics == nil {
+		wb.serviceMetrics = NewServiceMetricSampler()
 	}
 	wb.sla, _ = deps.SLA.(SLAReader)
 	wb.measure, _ = deps.SLA.(MeasurementReader)
