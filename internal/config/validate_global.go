@@ -180,6 +180,9 @@ func validateDefaultsVariables(defaults map[string]any, add addFunc) {
 		return
 	}
 	for _, name := range slices.Sorted(maps.Keys(m)) {
+		if name == "binary" {
+			add("defaults.variables: %q is reserved for top-level binary declarations", name)
+		}
 		if _, reserved := reservedVarNames[name]; reserved {
 			add("defaults.variables: %q is a reserved name and cannot be a custom variable", name)
 		}

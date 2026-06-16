@@ -632,7 +632,7 @@ func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 			if serviceBinary != catalogBinary(appDoc) {
 				continue
 			}
-			t.Errorf("%s defines variables.binary %q already owned by app %s; use ${%s_binary} instead", name, serviceBinary, appName, appVariablePrefix(appName))
+			t.Errorf("%s defines binary %q already owned by app %s; use ${%s_binary} instead", name, serviceBinary, appName, appVariablePrefix(appName))
 			if hasVersionProbe(doc.Body) {
 				t.Errorf("%s defines a service-level version probe already owned by app %s", name, appName)
 			}
@@ -691,7 +691,7 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 			if !ok {
 				continue
 			}
-			if strings.Contains(directVersionDiscoverySource(app), tok.marker()) {
+			if anyContains(directVersionDiscoverySources(app), tok.marker()) {
 				hasLinkedDiscovery = true
 				break
 			}
@@ -757,8 +757,7 @@ func catalogBinary(doc *Document) string {
 	if doc == nil {
 		return ""
 	}
-	vars, _ := doc.Body["variables"].(map[string]any)
-	return cfgval.String(vars["binary"])
+	return DocumentBinary(doc.Body)
 }
 
 func hasVersionProbe(body map[string]any) bool {

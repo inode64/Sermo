@@ -2,9 +2,7 @@ kind: app
 name: backrest
 display_name: "Backrest"
 category: storage
-variables:
-  binary: /usr/bin/backrest
+binary: /usr/bin/backrest
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
   health: { type: command, command: ["${binary}", "-help"], timeout: 10s, expect_exit: 0 }

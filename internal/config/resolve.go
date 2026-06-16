@@ -29,6 +29,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	}
 
 	vars, errs := c.expansionVariables(merged, name)
+	errs = append(errs, expandBinary(merged, cfgval.String(merged["kind"]))...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
@@ -79,6 +80,50 @@ func cleanMountPath(path string) string {
 	return filepath.Clean(path)
 }
 
+// expandBinary desugars a top-level `binary` declaration into the legacy
+// ${binary} variable plus a required binary preflight check for executable
+// service/app binaries. Library profiles only use ${binary} as the watched file
+// path, so they do not get an executable preflight.
+func expandBinary(tree map[string]any, kind string) []string {
+	raw, present := tree["binary"]
+	if !present {
+		return nil
+	}
+	candidates := cfgval.StringList(raw)
+	if len(candidates) == 0 {
+		delete(tree, "binary")
+		return []string{"binary must be a non-empty path string or list"}
+	}
+	binary := topLevelBinaryForKind(tree, kind)
+	delete(tree, "binary")
+	if binary == "" {
+		return []string{"binary must contain at least one non-empty path"}
+	}
+
+	vars, _ := tree["variables"].(map[string]any)
+	if vars == nil {
+		vars = map[string]any{}
+	}
+	vars["binary"] = binary
+	tree["variables"] = vars
+
+	if kind == kindLibrary {
+		return nil
+	}
+
+	preflight, _ := tree["preflight"].(map[string]any)
+	if preflight == nil {
+		preflight = map[string]any{}
+	}
+	if _, exists := preflight["binary"]; !exists {
+		preflight["binary"] = map[string]any{"type": "binary", "path": "${binary}"}
+	}
+	if len(preflight) > 0 {
+		tree["preflight"] = preflight
+	}
+	return nil
+}
+
 // expandPidfile desugars a top-level `pidfile: <path>` or candidate list into
 // two things that share the one declaration: (a) a `processes` pidfile selector,
 // so the parent process and its descendants are discovered and monitored, and
@@ -96,6 +141,12 @@ func expandPidfile(tree map[string]any) []string {
 	paths := cfgval.StringList(raw)
 	if len(paths) == 0 {
 		return []string{"pidfile must be a non-empty path string or list"}
+	}
+	var errs []string
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			errs = append(errs, fmt.Sprintf("pidfile path %q must be absolute", path))
+		}
 	}
 	pathValue := pidfilePathValue(paths)
 
@@ -126,7 +177,7 @@ func expandPidfile(tree map[string]any) []string {
 		}
 	}
 	tree["checks"] = checksMap
-	return nil
+	return errs
 }
 
 func pidfilePathValue(paths []string) any {
@@ -360,10 +411,14 @@ func (c *Config) globalVars() map[string]string {
 }
 
 func (c *Config) expansionVariables(tree map[string]any, name string) (map[string]string, []string) {
+	return c.expansionVariablesForKind(tree, name, cfgval.String(tree["kind"]))
+}
+
+func (c *Config) expansionVariablesForKind(tree map[string]any, name string, kind string) (map[string]string, []string) {
 	vars := c.globalVars()
 	appVars, errs := c.appVariables(tree)
 	maps.Copy(vars, appVars)
-	maps.Copy(vars, collectVariables(tree)) // service/doc variables override app and global custom ones
+	maps.Copy(vars, collectVariablesForKind(tree, kind)) // service/doc variables override app and global custom ones
 	errs = append(errs, validateVariableValues(vars)...)
 	injectBuiltinVariables(vars, name, tree)
 	return vars, errs
@@ -384,7 +439,7 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 		if !ok {
 			continue // expandApps reports the missing app in the usual place.
 		}
-		appVars := collectVariables(stripMeta(doc.Body))
+		appVars := collectVariablesForKind(stripMeta(doc.Body), doc.Kind)
 		if exposeDefaults {
 			for varName, value := range appVars {
 				errs = append(errs, addAppVariable(out, source, varName, name, value)...)
@@ -662,7 +717,8 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 // shared by ResolveDaemon and the `apps` linkage (which resolves app documents).
 func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
-	vars, errs := c.expansionVariables(body, name)
+	vars, errs := c.expansionVariablesForKind(body, name, doc.Kind)
+	errs = append(errs, expandBinary(body, doc.Kind)...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandApps(expanded)...)

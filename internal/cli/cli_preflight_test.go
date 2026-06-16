@@ -29,8 +29,7 @@ defaults:
 kind: service
 name: apache-main
 service: { name: apache2 }
-variables:
-  binary: `+binPath+`
+binary: `+binPath+`
 preflight:
   binary:
     type: binary

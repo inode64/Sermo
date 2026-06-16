@@ -2,8 +2,6 @@ kind: app
 name: tuned
 display_name: "TuneD"
 category: system
-variables:
-  binary: /usr/bin/tuned
+binary: /usr/bin/tuned
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -2,8 +2,6 @@ kind: app
 name: bacula-sd
 display_name: "Bacula Storage Daemon"
 category: storage
-variables:
-  binary: "/usr/bin/bacula-sd"
+binary: "/usr/bin/bacula-sd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

@@ -7,8 +7,7 @@ name: php-fpm-www
 # matching php-fpm path.
 service: php-fpm
 
-variables:
-  binary: /usr/bin/php-fpm
+binary: /usr/bin/php-fpm
 
 checks:
   service:

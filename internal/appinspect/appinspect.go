@@ -226,9 +226,11 @@ func binaryPath(tree map[string]any) string {
 		}
 	}
 	if vars, ok := tree["variables"].(map[string]any); ok {
-		return cfgval.AsString(vars["binary"])
+		if p := cfgval.AsString(vars["binary"]); p != "" {
+			return p
+		}
 	}
-	return ""
+	return config.DocumentBinary(tree)
 }
 
 // probeCommand is a daemon's resolved app probe command and the expectations

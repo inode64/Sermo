@@ -2,7 +2,4 @@ kind: lib
 name: udev
 display_name: "libudev"
 description: "udev device-management library (libudev); a change triggers a restart of dependent services"
-variables:
-  binary: "/usr/lib64/libudev.so.1"
-preflight:
-  binary: { type: binary, path: "${binary}" }
+binary: "/usr/lib64/libudev.so.1"

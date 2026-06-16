@@ -2,8 +2,6 @@ kind: app
 name: dhclient
 display_name: "DHCP Client"
 category: network
-variables:
-  binary: "/usr/bin/dhclient"
+binary: "/usr/bin/dhclient"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
