@@ -63,15 +63,16 @@ func dockerWizardContainerName(container dockerctl.ContainerSummary) string {
 }
 
 func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandidate, error) {
-	if _, err := os.Stat(virt.DefaultSocket); err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
+	socket, ok, err := virt.FirstExistingLocalSocket(localSocketExists)
+	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, wizardDetectionTimeout(timeout))
 	defer cancel()
-	domains, err := virt.ListDomains(ctx, virt.Spec{URI: virt.DefaultURI, Socket: virt.DefaultSocket})
+	domains, err := virt.ListDomains(ctx, virt.Spec{URI: virt.DefaultURI, Socket: socket})
 	if err != nil {
 		return nil, err
 	}
@@ -87,11 +88,21 @@ func listWizardVMs(ctx context.Context, timeout time.Duration) ([]assist.VMCandi
 			Domain: name,
 			Status: string(domain.Status),
 			URI:    virt.DefaultURI,
-			Socket: virt.DefaultSocket,
+			Socket: socket,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+func localSocketExists(path string) (bool, error) {
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func wizardManagedServiceName(prefix, target string) string {
