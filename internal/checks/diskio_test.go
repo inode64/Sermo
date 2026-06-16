@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -113,12 +114,37 @@ func TestDefaultDiskIOSampler(t *testing.T) {
 	if _, err := defaultDiskIOSampler("sermo-no-such-device"); err == nil {
 		t.Fatal("unknown device must error")
 	}
-	// Parse a real device when the host has one (skip otherwise).
-	data, err := defaultDiskIOSampler("sda")
+	device := firstNonZeroDiskstatDevice(t)
+	if device == "" {
+		t.Skip("no non-zero diskstats device on this host")
+	}
+	data, err := defaultDiskIOSampler(device)
 	if err != nil {
-		t.Skipf("no sda on this host: %v", err)
+		t.Fatalf("defaultDiskIOSampler(%q): %v", device, err)
 	}
 	if data.ReadsCompleted == 0 && data.SectorsRead == 0 && data.IOTicksMs == 0 {
 		t.Fatalf("implausible all-zero sample: %+v", data)
 	}
+}
+
+func firstNonZeroDiskstatDevice(t *testing.T) string {
+	t.Helper()
+	content, err := os.ReadFile("/proc/diskstats")
+	if err != nil {
+		t.Skipf("read /proc/diskstats: %v", err)
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 13 {
+			continue
+		}
+		data, err := defaultDiskIOSampler(fields[2])
+		if err != nil {
+			continue
+		}
+		if data.ReadsCompleted != 0 || data.SectorsRead != 0 || data.IOTicksMs != 0 {
+			return fields[2]
+		}
+	}
+	return ""
 }
