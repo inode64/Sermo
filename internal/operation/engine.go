@@ -232,7 +232,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		}
 		// Auxiliary units (also_service) go down AFTER the primary, in reverse
 		// declaration order (LIFO nesting). Placed here — right after the primary
-		// stop, before residual handling — so the orphan-process early-return below
+		// stop, before residual handling — so the orphan_processes early-return below
 		// cannot skip them. Best-effort: a failure is recorded and folded into the
 		// final message, it does not fail an already-successful stop.
 		for i := len(e.AlsoUnits) - 1; i >= 0; i-- {
