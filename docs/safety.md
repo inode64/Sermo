@@ -78,7 +78,9 @@ affects Sermo's monitoring; it does not stop the service itself, and manual
 
 A `scope: system` metric ("is the machine under pressure?") is **not** a sound
 trigger to restart one service, so it is allowed only in `alert` rules — never in
-remediation rules, directly or via a check reference.
+remediation rules, directly or via a check reference. See
+[Metrics](rules.md#metrics) for the `scope: service` and `scope: system` metric
+lists.
 
 ## Privileges: the daemon runs as root
 
