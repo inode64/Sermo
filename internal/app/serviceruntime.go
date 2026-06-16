@@ -11,6 +11,23 @@ import (
 	"sermo/internal/web"
 )
 
+// minRuntimePublishMaxAge is the minimum age after which a worker-published
+// runtime sample is treated as stale for the service list (fallback to probe).
+const minRuntimePublishMaxAge = 30 * time.Second
+
+// runtimePublishMaxAge returns how long the web list reuses a worker-published
+// runtime sample before probing again. It tracks twice the service cycle interval.
+func runtimePublishMaxAge(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		interval = minRuntimePublishMaxAge
+	}
+	age := interval * 2
+	if age < minRuntimePublishMaxAge {
+		return minRuntimePublishMaxAge
+	}
+	return age
+}
+
 // ServiceMetricSampler stores per-service process-tree runtime samples for the
 // web detail graphs. Workers record into it every observed cycle; when a store
 // is wired, the history survives daemon restarts.
@@ -81,6 +98,27 @@ func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime,
 	s.samples[name] = append(s.samples[name], serviceMetricSample{at: at, current: cur})
 	s.trimLocked(name, at.Add(-daemonMetricRetention))
 	return cur
+}
+
+// Latest returns the most recent worker-published runtime sample.
+func (s *ServiceMetricSampler) Latest(name string) (web.ServiceRuntime, bool) {
+	cur, _, ok := s.LatestWithAt(name)
+	return cur, ok
+}
+
+// LatestWithAt returns the latest worker-published sample and its observation time.
+func (s *ServiceMetricSampler) LatestWithAt(name string) (web.ServiceRuntime, time.Time, bool) {
+	if s == nil {
+		return web.ServiceRuntime{}, time.Time{}, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	samples := s.samples[name]
+	if len(samples) == 0 {
+		return web.ServiceRuntime{}, time.Time{}, false
+	}
+	last := samples[len(samples)-1]
+	return last.current, last.at, true
 }
 
 // Series records the current runtime sample and returns the selected historical
@@ -244,7 +282,7 @@ func (b *WebBackend) ServiceRuntime(_ context.Context, name string, since time.D
 	if e == nil {
 		return web.ServiceRuntimeMetrics{}, false
 	}
-	cur := b.currentServiceRuntime(name, e)
+	cur := b.probeServiceRuntime(name, e)
 	if b.serviceMetrics == nil {
 		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}, true
 	}
@@ -255,7 +293,10 @@ func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.S
 	if svc == nil || e == nil || e.disabled {
 		return
 	}
-	cur := b.currentServiceRuntime(name, e)
+	applyServiceRuntimeFields(svc, b.listServiceRuntime(name, e))
+}
+
+func applyServiceRuntimeFields(svc *web.Service, cur web.ServiceRuntime) {
 	svc.StartedAt = cur.StartedAt
 	svc.Uptime = cur.Uptime
 	svc.UptimeSeconds = cur.UptimeSeconds
@@ -271,7 +312,40 @@ func (b *WebBackend) decorateServiceRuntime(name string, e *webEntry, svc *web.S
 	svc.CPUReady = cur.HasCPU
 }
 
-func (b *WebBackend) currentServiceRuntime(name string, e *webEntry) web.ServiceRuntime {
+// listServiceRuntime returns runtime fields for the service list. It reuses the
+// worker-published sample when fresh; otherwise it probes the process tree.
+func (b *WebBackend) listServiceRuntime(name string, e *webEntry) web.ServiceRuntime {
+	if cur, ok := b.publishedServiceRuntime(name, e); ok {
+		return cur
+	}
+	return b.probeServiceRuntime(name, e)
+}
+
+func (b *WebBackend) publishedServiceRuntime(name string, e *webEntry) (web.ServiceRuntime, bool) {
+	if e == nil || e.disabled || e.noResidentProcess {
+		return web.ServiceRuntime{}, false
+	}
+	now := b.webNow()
+	maxAge := runtimePublishMaxAge(e.interval)
+	if b.serviceMetrics == nil {
+		return web.ServiceRuntime{}, false
+	}
+	cur, at, ok := b.serviceMetrics.LatestWithAt(name)
+	if !ok || now.Sub(at) > maxAge {
+		return web.ServiceRuntime{}, false
+	}
+	attachLiveTotals(&cur.ProcessTotals, b.live, name)
+	return cur, true
+}
+
+func (b *WebBackend) webNow() time.Time {
+	if b != nil && b.now != nil {
+		return b.now()
+	}
+	return time.Now()
+}
+
+func (b *WebBackend) probeServiceRuntime(name string, e *webEntry) web.ServiceRuntime {
 	now := time.Now()
 	if b.now != nil {
 		now = b.now()
@@ -287,13 +361,7 @@ func (b *WebBackend) currentServiceRuntime(name string, e *webEntry) web.Service
 		cur.ProcessTotals = *totals
 	}
 	if started, ok := oldestProcessStart(procs, b.runtimeMetricReader(), now); ok {
-		cur.StartedAt = started.UTC().Format(time.RFC3339)
-		secs := int64(now.Sub(started).Seconds())
-		if secs < 0 {
-			secs = 0
-		}
-		cur.UptimeSeconds = secs
-		cur.Uptime = formatInterval(time.Duration(secs) * time.Second)
+		cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, now)
 	}
 	return cur
 }
@@ -307,6 +375,28 @@ func (b *WebBackend) runtimeMetricReader() metrics.Reader {
 
 type processStartReader interface {
 	ProcessStartTime(pid int) (time.Time, bool)
+}
+
+func oldestPIDStart(pids []int, r metrics.Reader, now time.Time) (time.Time, bool) {
+	if len(pids) == 0 {
+		return time.Time{}, false
+	}
+	procs := make([]process.Process, len(pids))
+	for i, pid := range pids {
+		procs[i] = process.Process{PID: pid}
+	}
+	return oldestProcessStart(procs, r, now)
+}
+
+func serviceRuntimeUptime(started, now time.Time) (startedAt string, uptime string, uptimeSeconds int64) {
+	if started.IsZero() || started.After(now) {
+		return "", "", 0
+	}
+	secs := int64(now.Sub(started).Seconds())
+	if secs < 0 {
+		secs = 0
+	}
+	return started.UTC().Format(time.RFC3339), formatInterval(time.Duration(secs) * time.Second), secs
 }
 
 func oldestProcessStart(procs []process.Process, r metrics.Reader, now time.Time) (time.Time, bool) {
