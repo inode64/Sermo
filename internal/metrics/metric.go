@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"sermo/internal/cfgval"
 )
 
 // Reading is one metric's sampled value. A metric may expose an absolute form,
@@ -74,20 +76,8 @@ func parseThreshold(s string) (value float64, isPercent bool, err error) {
 }
 
 func applyOp(actual float64, op string, threshold float64) (bool, error) {
-	switch op {
-	case ">":
-		return actual > threshold, nil
-	case ">=":
-		return actual >= threshold, nil
-	case "<":
-		return actual < threshold, nil
-	case "<=":
-		return actual <= threshold, nil
-	case "==":
-		return actual == threshold, nil
-	case "!=":
-		return actual != threshold, nil
-	default:
+	if !cfgval.IsCompareOp(op) {
 		return false, fmt.Errorf("unsupported metric operator %q", op)
 	}
+	return cfgval.CompareFloat(actual, op, threshold), nil
 }
