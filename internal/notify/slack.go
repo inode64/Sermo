@@ -21,11 +21,7 @@ func (s *Slack) Type() string { return "slack" }
 
 // Send posts the message to the configured Slack webhook.
 func (s *Slack) Send(ctx context.Context, msg Message) error {
-	post := s.post
-	if post == nil {
-		post = slackPost
-	}
-	return post(ctx, s.webhook, slackPayload(msg))
+	return webhookPost(s.post, slackPost)(ctx, s.webhook, slackPayload(msg))
 }
 
 // buildSlack constructs a Slack notifier from a config entry.
