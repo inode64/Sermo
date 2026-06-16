@@ -7,7 +7,7 @@ service: spamassassin
 
 # SpamAssassin is a Perl application: the Perl runtime is owned by the `perl`
 # app and linked here, so its binary + version checks run in this service's
-# preflight (a missing Perl blocks start).
+# preflight (a missing Perl blocks start/restart/reload).
 apps: [perl, spamassassin]
 
 variables:

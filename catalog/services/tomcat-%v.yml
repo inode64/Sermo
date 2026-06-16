@@ -6,7 +6,8 @@ service: tomcat
 
 # Tomcat is a Java application: the JVM runtime is owned by the `java` app, and
 # catalina.sh/version are owned by the matching `tomcat-${version}` app. Both
-# run in this service's preflight, so a missing JVM or Tomcat install blocks start.
+# run in this service's preflight, so a missing JVM or Tomcat install blocks
+# start/restart/reload.
 apps: [java, "tomcat-${version}"]
 
 variables:

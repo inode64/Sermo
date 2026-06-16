@@ -9,7 +9,7 @@ service:
 
 # fail2ban runs on the Python 3 runtime, owned by the `python3` app and
 # linked here so its binary + version checks run in this service's preflight
-# (a missing Python blocks start).
+# (a missing Python blocks start/restart/reload).
 apps: [python3, fail2ban]
 preflight:
   config: { type: command, command: ["${fail2ban_binary}","-t"], timeout: 30s }

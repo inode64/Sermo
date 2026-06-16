@@ -214,8 +214,8 @@ names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
 service's preflight, which **blocks start/restart/reload** (a preflight-failed
-operation never executes the action) — you do not start or reload a service whose
-runtime is absent.
+operation never executes the action) — you do not start, restart or reload a
+service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
 every service that lists it. The service keeps its own `binary`, `version` and
 `config` checks (the **config** test is always service-specific, never moved to

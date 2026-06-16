@@ -14,7 +14,8 @@ service:
 
 # Kafka runs on the JVM: the runtime is owned by the `java` app and the launcher
 # scripts + version by the `kafka` app. Both are linked here so a missing Java
-# or Kafka install blocks start, and their preflight runs before this service.
+# or Kafka install blocks start/restart/reload, and their preflight runs before
+# this service.
 apps: [java, kafka]
 
 variables:
