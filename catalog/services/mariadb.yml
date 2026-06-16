@@ -16,14 +16,10 @@ variables:
   user: mysql
   host: 127.0.0.1
   port: 3306
-  pidfile: /run/mysqld/mariadb.pid
 
-os:
-  gentoo:
-    variables:
-      pidfile: /run/mysqld/mysqld.pid
-
-pidfile: "${pidfile}"
+pidfile:
+  - /run/mysqld/mariadb.pid
+  - /run/mysqld/mysqld.pid
 
 preflight:
   config:
@@ -36,10 +32,6 @@ preflight:
     binary: "${mariadb_binary}"
 
 processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
-
   mariadbd:
     type: command_match
     exe: "${mariadb_binary}"
