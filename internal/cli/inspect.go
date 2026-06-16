@@ -47,7 +47,7 @@ func (a App) runDaemon(ctx context.Context, opts options) int {
 }
 
 // runService dispatches `service list`, `service show SERVICE` and
-// `service clone SOURCE TARGET` (post-MVP).
+// `service clone SOURCE TARGET`.
 func (a App) runService(opts options) int {
 	if len(opts.args) == 0 {
 		return a.usageError("service requires a subcommand (list|show|clone)")
