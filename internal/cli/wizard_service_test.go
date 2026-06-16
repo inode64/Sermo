@@ -45,6 +45,75 @@ func TestParseProcSocketTableUDP(t *testing.T) {
 	}
 }
 
+func TestParseProcSocketTableHostsIPv4(t *testing.T) {
+	const table = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 161B1FAC:2390 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+   1: 0100007F:2390 00000000:0000 01 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
+`
+	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"172.31.27.22"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("parseProcSocketTableHosts() = %v, want %v", got, want)
+	}
+}
+
+func TestParseProcSocketTableHostsIPv6(t *testing.T) {
+	const table = `  sl  local_address                         rem_address                         st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+   0: 00000000000000000000000001000000:2390 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+`
+	got, err := parseProcSocketTableHosts(strings.NewReader(table), 9104, map[string]bool{"0A": true}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"::1"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("parseProcSocketTableHosts() = %v, want %v", got, want)
+	}
+}
+
+func TestSpecificListenerHostRequiresOneNonLoopbackAddress(t *testing.T) {
+	tests := []struct {
+		name  string
+		hosts []string
+		want  string
+		ok    bool
+	}{
+		{name: "specific", hosts: []string{"172.31.27.22"}, want: "172.31.27.22", ok: true},
+		{name: "loopback", hosts: []string{"127.0.0.1", "::1"}},
+		{name: "wildcard", hosts: []string{"0.0.0.0", "::"}},
+		{name: "ambiguous", hosts: []string{"172.31.27.22", "172.31.28.22"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := specificListenerHost(tc.hosts)
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("specificListenerHost() = %q, %v; want %q, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func TestMergeCandidateVariablesPreservesDetectedValues(t *testing.T) {
+	c := assist.DaemonCandidate{Variables: map[string]any{"port": 3300}}
+	mergeCandidateVariables(&c, map[string]any{"host": "172.31.27.22"})
+	if c.Variables["port"] != 3300 || c.Variables["host"] != "172.31.27.22" {
+		t.Fatalf("variables = %#v, want existing port and detected host", c.Variables)
+	}
+}
+
+func TestDaemonHasVariable(t *testing.T) {
+	tree := map[string]any{"variables": map[string]any{"host": "127.0.0.1"}}
+	if !daemonHasVariable(tree, "host") {
+		t.Fatal("daemonHasVariable(host) = false, want true")
+	}
+	if daemonHasVariable(tree, "port") {
+		t.Fatal("daemonHasVariable(port) = true, want false")
+	}
+}
+
 func TestResolveWizardDaemonUnitPrefersActiveCandidate(t *testing.T) {
 	resolver := servicemgr.UnitResolver{Probe: wizardProbe{paths: map[string]bool{
 		"/etc/init.d/php-fpm": true,

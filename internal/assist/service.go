@@ -304,6 +304,9 @@ func serviceLabel(c DaemonCandidate) string {
 		}
 		parts = append(parts, port)
 	}
+	if host, _ := c.Variables["host"].(string); host != "" {
+		parts = append(parts, "host: "+host)
+	}
 	if len(c.ConfigPaths) > 0 {
 		parts = append(parts, "config: "+c.ConfigPaths[0])
 	}
