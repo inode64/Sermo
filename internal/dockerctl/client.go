@@ -173,6 +173,15 @@ type Container struct {
 	State        ContainerState `json:"State"`
 }
 
+// ContainerSummary is the subset of Docker's container list Sermo needs for the
+// wizard.
+type ContainerSummary struct {
+	ID     string   `json:"Id"`
+	Names  []string `json:"Names"`
+	State  string   `json:"State"`
+	Status string   `json:"Status"`
+}
+
 // HealthStatus returns the stable health label for a container.
 func (c Container) HealthStatus() string {
 	if c.State.Health == nil || c.State.Health.Status == "" {
@@ -200,6 +209,20 @@ func (c *Client) Inspect(ctx context.Context, container string) (Container, erro
 	var out Container
 	if err := c.get(ctx, containerPath(container, "/json"), &out); err != nil {
 		return Container{}, err
+	}
+	return out, nil
+}
+
+// ListContainers lists Docker containers. With all=true it includes stopped
+// containers so the wizard can create a service that may be started later.
+func (c *Client) ListContainers(ctx context.Context, all bool) ([]ContainerSummary, error) {
+	path := "/containers/json"
+	if all {
+		path += "?all=1"
+	}
+	var out []ContainerSummary
+	if err := c.get(ctx, path, &out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

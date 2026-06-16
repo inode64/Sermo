@@ -1,8 +1,9 @@
 # Wizards (`sermoctl wizard`)
 
 The interactive wizard generates Sermo configuration — a host **watch**
-(`volume`, `net`, `uplink`) or a monitored **service**. Every assistant lives in
-`internal/assist/` and is driven from `internal/cli/wizard.go`.
+(`volume`, `net`, `uplink`) or a monitored **service** (`service`, `docker`,
+`vm`). Every assistant lives in `internal/assist/` and is driven from
+`internal/cli/wizard.go`.
 
 This document defines the **one question flow all wizards follow** — present and
 future. It exists so the same mistakes are not repeated: divergent orders,
@@ -16,22 +17,25 @@ and the invariants below, and update this file in the same change.
    the wizard lists them and asks (`selectAssistant`). Never require the type.
 2. **Select detected targets.** Each assistant detects what is monitorable
    (services → active installed catalog daemons first, then optional active
-   units with no catalog profile; `volume` → mounts; `net`/`uplink` →
+   units with no catalog profile; `docker` → containers from the local Docker
+   API; `vm` → libvirt/QEMU domains; `volume` → mounts; `net`/`uplink` →
    interfaces) and offers them with `Prompt.MultiChoose`. **Never ask the
    operator to type a name** — the target's identity comes from detection. The
    service assistant completes the catalog group before asking about uncataloged
    units.
-3. **Per-service properties (services only).** For each selected catalog service,
-   ask only the properties that legitimately differ per service, such as a port
-   override. PID/process ownership belongs in the catalog daemon under
-   `catalog/services`, so generated catalog service entries should normally only
-   write `uses:` plus explicit overrides. When configuration files are detected,
-   ask whether to add a `checks.config` entry that watches those paths; it uses a
-   per-check `interval: 60m` so the service's normal cycle does not need to slow
-   down. For active units with no catalog profile, ask the **PID source** because
-   there is no daemon profile to inherit: a pidfile path writes `pidfile:`; with
-   no pidfile, an executable derived from the unit offers a `command_match`
-   process selector.
+3. **Per-service properties (service-generating assistants only).** For each
+   selected catalog service, ask only the properties that legitimately differ per
+   service, such as a port override. PID/process ownership belongs in the catalog
+   daemon under `catalog/services`, so generated catalog service entries should
+   normally only write `uses:` plus explicit overrides. When configuration files
+   are detected, ask whether to add a `checks.config` entry that watches those
+   paths; it uses a per-check `interval: 60m` so the service's normal cycle does
+   not need to slow down. For active units with no catalog profile, ask the
+   **PID source** because there is no daemon profile to inherit: a pidfile path
+   writes `pidfile:`; with no pidfile, an executable derived from the unit offers
+   a `command_match` process selector. Docker and VM service assistants write a
+   per-service `control:` block plus a read-only Docker/libvirt check; they do not
+   ask for process selectors because control backends provide the identity.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
 5. **Monitor state.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
@@ -128,11 +132,11 @@ Uncataloged active units write `service.name` plus a basic `checks.service`, and
 their PID question is prefilled from detection and only accepts absolute pidfile
 paths.
 
-The service wizard writes new generated `kind: service` files under a
-`services/` include directory. Older installs may already load `apps/` as an
-include directory for concrete service files; keep that path configured while
-those files exist. The wizard preserves any loaded `apps/` include and appends
-`services/` instead of moving or deleting legacy files.
+The service, Docker and VM wizards write new generated `kind: service` files
+under a `services/` include directory. Older installs may already load `apps/`
+as an include directory for concrete service files; keep that path configured
+while those files exist. The wizard preserves any loaded `apps/` include and
+appends `services/` instead of moving or deleting legacy files.
 
 ## Adding a new wizard
 
