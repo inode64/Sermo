@@ -1,6 +1,7 @@
 package cfgval
 
 import (
+	"slices"
 	"testing"
 	"time"
 )
@@ -50,18 +51,6 @@ func TestString(t *testing.T) {
 	}
 }
 
-func eqStrs(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestStringList(t *testing.T) {
 	cases := []struct {
 		name string
@@ -78,7 +67,7 @@ func TestStringList(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := StringList(c.in); !eqStrs(got, c.want) {
+			if got := StringList(c.in); !slices.Equal(got, c.want) {
 				t.Errorf("StringList(%#v) = %#v, want %#v", c.in, got, c.want)
 			}
 		})
@@ -99,7 +88,7 @@ func TestStringArray(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := StringArray(c.in); !eqStrs(got, c.want) {
+			if got := StringArray(c.in); !slices.Equal(got, c.want) {
 				t.Errorf("StringArray(%#v) = %#v, want %#v", c.in, got, c.want)
 			}
 		})
