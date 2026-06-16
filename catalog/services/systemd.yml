@@ -9,8 +9,8 @@ service: systemd
 apps: [systemd]
 
 preflight:
-  # Verify ALL unit files / systemd configuration is correct. Gates restart/start
-  # and (via the guard) reload, so a broken unit is never applied.
+  # Verify ALL unit files / systemd configuration is correct. Gates
+  # start/restart/reload, so a broken unit is never applied.
   config: { type: command, command: ["systemd-analyze", "verify"], timeout: 60s }
 
 commands:
