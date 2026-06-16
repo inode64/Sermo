@@ -322,14 +322,26 @@ func readProcIO(pid int) (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
+	return parseProcIO(string(data))
+}
+
+func parseProcIO(data string) (uint64, bool) {
 	var read, write uint64
 	var haveRead, haveWrite bool
-	for _, line := range strings.Split(string(data), "\n") {
+	for _, line := range strings.Split(data, "\n") {
 		if v, ok := strings.CutPrefix(line, "read_bytes:"); ok {
-			read, _ = strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			parsed, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return 0, false
+			}
+			read = parsed
 			haveRead = true
 		} else if v, ok := strings.CutPrefix(line, "write_bytes:"); ok {
-			write, _ = strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			parsed, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+			if err != nil {
+				return 0, false
+			}
+			write = parsed
 			haveWrite = true
 		}
 	}
