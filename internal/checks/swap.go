@@ -115,15 +115,38 @@ func defaultSwapSampler() (SwapSample, error) {
 		}
 	}
 	if vm, err := os.ReadFile("/proc/vmstat"); err == nil {
-		for _, line := range strings.Split(string(vm), "\n") {
-			if v, ok := strings.CutPrefix(line, "pswpin "); ok {
-				s.PagesIn, _ = strconv.ParseUint(strings.TrimSpace(v), 10, 64)
-			} else if v, ok := strings.CutPrefix(line, "pswpout "); ok {
-				s.PagesOut, _ = strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+		pagesIn, pagesOut, err := parseSwapVMStat(string(vm))
+		if err != nil {
+			return s, err
+		}
+		s.PagesIn, s.PagesOut = pagesIn, pagesOut
+	}
+	return s, nil
+}
+
+func parseSwapVMStat(vm string) (pagesIn, pagesOut uint64, err error) {
+	for _, line := range strings.Split(vm, "\n") {
+		if v, ok := strings.CutPrefix(line, "pswpin "); ok {
+			pagesIn, err = parseSwapPageCounter("pswpin", v)
+			if err != nil {
+				return 0, 0, err
+			}
+		} else if v, ok := strings.CutPrefix(line, "pswpout "); ok {
+			pagesOut, err = parseSwapPageCounter("pswpout", v)
+			if err != nil {
+				return 0, 0, err
 			}
 		}
 	}
-	return s, nil
+	return pagesIn, pagesOut, nil
+}
+
+func parseSwapPageCounter(name, value string) (uint64, error) {
+	n, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s: %w", name, err)
+	}
+	return n, nil
 }
 
 // parseMeminfoKB parses the leading kB value of a "Field:   N kB" line to bytes.
