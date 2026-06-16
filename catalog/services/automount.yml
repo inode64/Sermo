@@ -2,7 +2,9 @@ kind: daemon
 name: automount
 display_name: "Automount"
 category: system
-service: automount
+service:
+  systemd: [autofs, automount]
+  openrc: [autofs, automount]
 apps: [automount]
 
 checks:

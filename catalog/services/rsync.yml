@@ -1,7 +1,9 @@
 kind: daemon
 name: rsync
 category: storage
-service: rsync
+service:
+  systemd: [rsync, rsyncd]
+  openrc: [rsyncd, rsync]
 apps: [rsync]
 
 variables:
