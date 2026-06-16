@@ -48,7 +48,7 @@ both the systemd unit and the OpenRC init script (with their binary/config paths
 rewritten to match):
 
 ```sh
-sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin, /etc/sermo, ...
+sudo make install PREFIX=/usr                 # /usr/bin, /usr/sbin or merged-/usr /usr/bin, /etc/sermo, ...
 make install DESTDIR=/tmp/stage PREFIX=/usr    # stage for packaging
 ```
 
@@ -59,6 +59,11 @@ Key variables (override on the command line): `DESTDIR`, `PREFIX`/`prefix`,
 `install-systemd`, `install-openrc` (and `uninstall`). An existing `sermo.yml`
 is never overwritten. `make install` does not create `/var/lib/sermo`; the
 installed tmpfiles.d config owns that directory creation.
+
+On merged-/usr hosts where `/usr/sbin` is a symlink to `/usr/bin`, the default
+`sbindir` collapses to `$(bindir)` so `DESTDIR` packages do not materialize a
+real `usr/sbin` directory and replace the host symlink when extracted. Pass an
+explicit `sbindir=...` only when the target really has a distinct sbin directory.
 
 ## Quick start
 

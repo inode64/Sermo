@@ -11,7 +11,13 @@ PREFIX ?= /usr
 prefix ?= $(PREFIX)
 exec_prefix ?= $(prefix)
 bindir ?= $(exec_prefix)/bin
-sbindir ?= $(exec_prefix)/sbin
+# On merged-/usr systems (for example Gentoo hosts with /usr/sbin -> /usr/bin),
+# staging a package with a real usr/sbin directory can replace that symlink when
+# the archive is extracted. If the live sbin path is a symlink to bindir, collapse
+# the default install path for sermod to bindir. Packagers can still override
+# sbindir explicitly when they need a distinct sbin directory.
+default_sbindir = $(shell sbin='$(exec_prefix)/sbin'; bin='$(bindir)'; if [ -L "$$sbin" ] && [ "$$(readlink -f "$$sbin" 2>/dev/null)" = "$$(readlink -f "$$bin" 2>/dev/null)" ]; then printf '%s' "$$bin"; else printf '%s' "$$sbin"; fi)
+sbindir ?= $(default_sbindir)
 datarootdir ?= $(prefix)/share
 datadir ?= $(datarootdir)
 sysconfdir ?= /etc
