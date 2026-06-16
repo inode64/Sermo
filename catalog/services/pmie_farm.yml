@@ -1,0 +1,11 @@
+kind: daemon
+name: pmie_farm
+display_name: "PCP Inference Engine Farm"
+category: observability
+description: "Performance Co-Pilot pmie farm service."
+service:
+  systemd: [pmie_farm]
+apps: [pmie_farm]
+
+checks:
+  service: { type: service, expect: active }

@@ -1,0 +1,8 @@
+kind: app
+name: firewalld
+display_name: "firewalld"
+category: security
+variables:
+  binary: /usr/bin/firewalld
+preflight:
+  binary: { type: binary, path: "${binary}" }

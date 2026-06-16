@@ -1,0 +1,11 @@
+kind: daemon
+name: polkit
+display_name: "Polkit"
+category: system
+description: "PolicyKit authorization service."
+service:
+  systemd: [polkit]
+apps: [polkit]
+
+checks:
+  service: { type: service, expect: active }

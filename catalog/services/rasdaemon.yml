@@ -1,0 +1,11 @@
+kind: daemon
+name: rasdaemon
+display_name: "RAS daemon"
+category: hardware
+description: "Logs hardware RAS events such as memory and PCIe errors."
+service:
+  systemd: [rasdaemon]
+apps: [rasdaemon]
+
+checks:
+  service: { type: service, expect: active }

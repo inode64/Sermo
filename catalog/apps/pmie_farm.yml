@@ -1,0 +1,8 @@
+kind: app
+name: pmie_farm
+display_name: "PCP Inference Engine Farm"
+category: observability
+variables:
+  binary: /usr/libexec/pcp/bin/pmie_farm
+preflight:
+  binary: { type: binary, path: "${binary}" }

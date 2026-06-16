@@ -1,0 +1,11 @@
+kind: daemon
+name: pmlogger_farm
+display_name: "PCP Archive Logger Farm"
+category: observability
+description: "Performance Co-Pilot pmlogger farm service."
+service:
+  systemd: [pmlogger_farm]
+apps: [pmlogger_farm]
+
+checks:
+  service: { type: service, expect: active }
