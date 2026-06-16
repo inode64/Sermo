@@ -1523,8 +1523,8 @@ func flagValue(args []string, i int, flag string) (string, int, error) {
 }
 
 func writeUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: backend | status SERVICE | is-active SERVICE | start|stop|restart SERVICE [--no-cascade] | reload SERVICE")
+	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] [--version|-V] COMMAND [ARGS]")
+	fmt.Fprintln(w, "commands: version | backend | status SERVICE | is-active SERVICE | start|stop|restart SERVICE [--no-cascade] | reload SERVICE")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
