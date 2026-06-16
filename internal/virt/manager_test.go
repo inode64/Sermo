@@ -13,10 +13,12 @@ import (
 )
 
 type fakeClient struct {
-	state libvirt.DomainState
-	dom   libvirt.Domain
-	calls []string
-	uri   libvirt.ConnectURI
+	state   libvirt.DomainState
+	states  map[string]libvirt.DomainState
+	domains []libvirt.Domain
+	dom     libvirt.Domain
+	calls   []string
+	uri     libvirt.ConnectURI
 }
 
 func (c *fakeClient) ConnectToURI(uri libvirt.ConnectURI) error {
@@ -38,14 +40,22 @@ func (c *fakeClient) DomainLookupByName(name string) (libvirt.Domain, error) {
 	return libvirt.Domain{Name: name}, nil
 }
 
+func (c *fakeClient) Domains() ([]libvirt.Domain, error) {
+	c.calls = append(c.calls, "domains")
+	return c.domains, nil
+}
+
 func (c *fakeClient) DomainLookupByUUID(uuid libvirt.UUID) (libvirt.Domain, error) {
 	c.calls = append(c.calls, "lookup-uuid")
 	c.dom.UUID = uuid
 	return c.dom, nil
 }
 
-func (c *fakeClient) DomainGetState(libvirt.Domain, uint32) (int32, int32, error) {
+func (c *fakeClient) DomainGetState(dom libvirt.Domain, _ uint32) (int32, int32, error) {
 	c.calls = append(c.calls, "state")
+	if c.states != nil {
+		return int32(c.states[dom.Name]), 0, nil
+	}
 	return int32(c.state), 0, nil
 }
 
@@ -128,6 +138,24 @@ func TestManagerActions(t *testing.T) {
 	}
 }
 
+func TestListDomains(t *testing.T) {
+	client := &fakeClient{
+		domains: []libvirt.Domain{{Name: "web01"}, {Name: "db01"}},
+		states: map[string]libvirt.DomainState{
+			"web01": libvirt.DomainRunning,
+			"db01":  libvirt.DomainShutoff,
+		},
+	}
+	got, err := listDomains(context.Background(), managerFor(client, Spec{URI: DefaultURI, Socket: DefaultSocket}))
+	if err != nil {
+		t.Fatalf("listDomains() error = %v", err)
+	}
+	want := []DomainSummary{{Name: "web01", Status: servicemgr.StatusActive}, {Name: "db01", Status: servicemgr.StatusInactive}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("listDomains() = %+v, want %+v", got, want)
+	}
+}
+
 func TestManagerUsesUUIDLookup(t *testing.T) {
 	uuid := "2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4"
 	client := &fakeClient{}
@@ -154,7 +182,7 @@ func TestSpecFromTree(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("SpecFromTree() ok=%v err=%v", ok, err)
 	}
-	if spec.URI != defaultURI || spec.Socket != defaultSocket || spec.Domain != "vm01" {
+	if spec.URI != DefaultURI || spec.Socket != DefaultSocket || spec.Domain != "vm01" {
 		t.Fatalf("spec = %+v", spec)
 	}
 }
