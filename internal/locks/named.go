@@ -11,8 +11,8 @@ import (
 
 // NamedLocker creates and releases named runtime locks under
 // <paths.runtime>/locks (section 20). These guard against external work (e.g. a
-// backup) and are checked automatically by the operation engine. Creating them
-// (`sermoctl lock ...`) is post-MVP.
+// backup) and are checked automatically by the operation engine. The CLI uses it
+// for `sermoctl lock` acquire/release/wrap operations.
 type NamedLocker struct {
 	Dir  string
 	Proc ProcessProber

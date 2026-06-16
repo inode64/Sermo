@@ -1,5 +1,5 @@
-// Package conn provides connection-protocol probes (MySQL/MariaDB, and future
-// protocols) behind a small registry. Each protocol implements Protocol and
+// Package conn provides connection-protocol probes behind a small registry.
+// Each protocol implements Protocol and
 // registers itself; the checks package looks a protocol up by name to build a
 // generic connection check. It is a leaf package: it depends on neither checks
 // nor config, so both can import it without a cycle.

@@ -1,7 +1,6 @@
 // Package locks reads and classifies Sermo named runtime locks under
-// <paths.runtime>/locks (section 20). The MVP only reports locks for
-// `sermoctl locks SERVICE`; creating and releasing them (`sermoctl lock ...`)
-// is post-MVP.
+// <paths.runtime>/locks (section 20). It reports locks for `sermoctl locks
+// SERVICE` and backs `sermoctl lock` acquire/release/wrap operations.
 //
 // The internal operation lock under <paths.runtime>/ops is a separate namespace
 // and is never reported here.
