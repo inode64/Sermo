@@ -108,14 +108,17 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 		if err := s.RecordMetric(service, "http", "latency", 10, now); err != nil {
 			t.Fatalf("RecordMetric(%s): %v", service, err)
 		}
+		if err := s.RecordServiceMetric(service, "cpu", 10, now); err != nil {
+			t.Fatalf("RecordServiceMetric(%s): %v", service, err)
+		}
 	}
 
 	result, err := s.PruneUnconfiguredServices([]string{"web"})
 	if err != nil {
 		t.Fatalf("PruneUnconfiguredServices: %v", err)
 	}
-	if result.Rows != 5 || len(result.Services) != 1 || result.Services[0] != "ghost" {
-		t.Fatalf("result = %+v, want ghost with 5 rows", result)
+	if result.Rows != 6 || len(result.Services) != 1 || result.Services[0] != "ghost" {
+		t.Fatalf("result = %+v, want ghost with 6 rows", result)
 	}
 
 	if _, found, err := s.Active("ghost"); err != nil || found {
@@ -141,6 +144,9 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 	}
 	if stat, err := s.MetricSummary("ghost", "http", "latency", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 0 {
 		t.Fatalf("ghost metric = %+v err=%v, want empty", stat, err)
+	}
+	if stat, err := s.ServiceMetricSummary("ghost", "cpu", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 0 {
+		t.Fatalf("ghost service metric = %+v err=%v, want empty", stat, err)
 	}
 }
 

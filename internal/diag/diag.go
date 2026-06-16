@@ -128,7 +128,7 @@ func diagDatabase(b *builder, cfg *config.Config, store Store) {
 	}
 	for _, name := range tracked {
 		if _, ok := known[name]; !ok {
-			b.add(LevelWarning, "database", "stored data (monitoring state, SLA, or measurements) for service %q which is no longer configured", name)
+			b.add(LevelWarning, "database", "stored data (monitoring state, SLA, measurements, or runtime metrics) for service %q which is no longer configured", name)
 		}
 	}
 }

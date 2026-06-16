@@ -84,8 +84,9 @@ to avoid ambiguity.
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
-monitoring state. It also stores SLA/check measurements and the daemon process
-metric history shown in the web UI. The schema is versioned and migrated forward
+monitoring state. It also stores SLA and check measurements plus service and
+daemon process metric history shown in the web UI. The schema is versioned and
+migrated forward
 automatically, so future features can add tables without a manual upgrade.
 
 Both directories are created **0700, owner root**. On systemd they come from the
@@ -376,10 +377,10 @@ retention),
 `GET /api/services/{name}/metrics?check=NAME&since=24h` (a check's **latency**
 history + summary, see below),
 `GET /api/services/{name}/runtime?since=24h` (the service process tree's
-in-memory CPU, memory and IO history, sampled every monitored cycle),
-`GET /api/daemon/metrics?since=24h` (in-memory sermod process CPU, memory and IO
-history for the current daemon process, plus current PID, file descriptors and
-threads), `GET /api/events?limit=N` (the **global event feed**, newest first),
+persistent CPU, memory and IO history, sampled every monitored cycle),
+`GET /api/daemon/metrics?since=24h` (persistent sermod process CPU, memory and
+IO history for the current daemon process, plus current PID, file descriptors
+and threads), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/services/{name}/events?limit=N` (a service's events),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings with `time`
 (RFC3339), `level`, `scope` and `message`; includes malformed lock files under
@@ -474,10 +475,12 @@ database for sermod's own CPU, memory and IO history, so those graphs survive a
 daemon restart or host reboot. They are pruned to roughly the same one-year
 retention window.
 
-The service detail's CPU, memory and IO charts are in-memory process-tree
-history sampled by each service worker cycle. They start filling as soon as the
-service is monitored; CPU and IO rates need two cycles before the first rate
-point exists, while memory can render from the first process sample.
+The service detail's CPU, memory and IO charts use the same persistent state
+database for each service process tree, so those graphs also survive a daemon
+restart or host reboot. They start filling as soon as the service is monitored;
+CPU and IO rates need two cycles before the first rate point exists, while
+memory can render from the first process sample. Runtime metric buckets are
+pruned to roughly the same one-year retention window.
 
 Web-triggered monitor changes are recorded with source `web` in the state store
 (`cli`, `config` and `daemon` are the other values). The dashboard and
