@@ -1,6 +1,9 @@
 package rules
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // feed runs a sequence of condition values through a fresh window and returns the
 // cycle indexes (1-based) where the rule fired.
@@ -15,22 +18,10 @@ func feed(r Rule, values []bool) []int {
 	return fired
 }
 
-func eqInts(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func TestDefaultWindowFiresImmediately(t *testing.T) {
 	// No for/within -> fire every cycle the condition is true.
 	got := feed(Rule{}, []bool{true, false, true, true})
-	if !eqInts(got, []int{1, 3, 4}) {
+	if !slices.Equal(got, []int{1, 3, 4}) {
 		t.Fatalf("default window fired at %v, want [1 3 4]", got)
 	}
 }
@@ -40,7 +31,7 @@ func TestForConsecutive(t *testing.T) {
 	// Fires once 3 consecutive trues are seen, and keeps firing while they hold;
 	// a false resets the streak.
 	got := feed(r, []bool{true, true, false, true, true, true, true})
-	if !eqInts(got, []int{6, 7}) {
+	if !slices.Equal(got, []int{6, 7}) {
 		t.Fatalf("for-3 fired at %v, want [6 7]", got)
 	}
 }
@@ -57,7 +48,7 @@ func TestWithinSlidingWindow(t *testing.T) {
 
 	got = feed(r, []bool{true, true, false, false, false})
 	// c1=1; c2[T,T]=2 fire; c3[T,T,F]=2 fire; c4[T,T,F,F]=2 fire; c5[T,F,F,F]=1.
-	if !eqInts(got, []int{2, 3, 4}) {
+	if !slices.Equal(got, []int{2, 3, 4}) {
 		t.Fatalf("within fired at %v, want [2 3 4]", got)
 	}
 }
