@@ -61,8 +61,8 @@ func Compare(r Reading, op, threshold string) (bool, error) {
 
 func parseThreshold(s string) (value float64, isPercent bool, err error) {
 	s = strings.TrimSpace(s)
-	if strings.HasSuffix(s, "%") {
-		v, perr := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(s, "%")), 64)
+	if raw, ok := strings.CutSuffix(s, "%"); ok {
+		v, perr := strconv.ParseFloat(strings.TrimSpace(raw), 64)
 		if perr != nil {
 			return 0, false, fmt.Errorf("invalid percentage %q", s)
 		}
