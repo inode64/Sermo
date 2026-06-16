@@ -7,7 +7,7 @@
 // across a daemon restart or a full reboot.
 //
 // The schema is versioned through PRAGMA user_version and migrated forward on
-// Open, so future features (action history, metric retention, audit trails) add
+// Open, so future history and retention changes add
 // a migration to the list below without any manual upgrade step. The driver is
 // modernc.org/sqlite — pure Go, no CGO — to keep cross-compilation simple.
 package state
@@ -120,6 +120,22 @@ var migrations = []string{
 		max_v   REAL NOT NULL,
 		PRIMARY KEY (service, metric, bucket)
 	);`,
+	// event_log stores the operator-visible event/activity feed. Unlike the
+	// runtime ring in sermod, this table survives daemon restarts so the web UI
+	// and per-service detail panes can repopulate their recent history.
+	`CREATE TABLE event_log (
+			id      INTEGER PRIMARY KEY AUTOINCREMENT,
+			at      INTEGER NOT NULL,
+			service TEXT NOT NULL DEFAULT '',
+			watch   TEXT NOT NULL DEFAULT '',
+			kind    TEXT NOT NULL DEFAULT '',
+			rule    TEXT NOT NULL DEFAULT '',
+			action  TEXT NOT NULL DEFAULT '',
+			status  TEXT NOT NULL DEFAULT '',
+			message TEXT NOT NULL DEFAULT ''
+		);`,
+	`CREATE INDEX event_log_at_idx ON event_log (at DESC, id DESC);`,
+	`CREATE INDEX event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -137,14 +153,15 @@ type PruneUnconfiguredMonitorStatesResult struct {
 	Rows     int64
 }
 
-// PruneHistoryResult summarizes old persisted history removed from bucketed
-// time-series tables.
+// PruneHistoryResult summarizes old persisted history removed from time-series
+// and event tables.
 type PruneHistoryResult struct {
 	SLA            int64
 	Measurements   int64
 	Metrics        int64
 	DaemonMetrics  int64
 	ServiceMetrics int64
+	Events         int64
 	Rows           int64
 }
 
@@ -271,6 +288,81 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 		service, v, source, s.now().UTC().Format(time.RFC3339),
 	)
 	return err
+}
+
+// EventRecord is one persisted operator-visible event. Service is set for
+// service events, Watch for host-watch events; both are empty only for daemon-wide
+// events such as config reload failures.
+type EventRecord struct {
+	At      time.Time
+	Service string
+	Watch   string
+	Kind    string
+	Rule    string
+	Action  string
+	Status  string
+	Message string
+}
+
+// RecordEvent appends one event to the persistent event/activity feed.
+func (s *Store) RecordEvent(e EventRecord) error {
+	at := e.At
+	if at.IsZero() {
+		at = s.now()
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO event_log (at, service, watch, kind, rule, action, status, message)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+		at.UTC().UnixNano(), e.Service, e.Watch, e.Kind, e.Rule, e.Action, e.Status, e.Message,
+	)
+	return err
+}
+
+// RecentEvents returns the newest persisted events first. limit <= 0 returns all
+// persisted events.
+func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
+	if limit <= 0 {
+		limit = -1
+	}
+	rows, err := s.db.Query(
+		`SELECT at, service, watch, kind, rule, action, status, message
+		   FROM event_log ORDER BY at DESC, id DESC LIMIT ?;`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []EventRecord
+	for rows.Next() {
+		var rec EventRecord
+		var at int64
+		if err := rows.Scan(&at, &rec.Service, &rec.Watch, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message); err != nil {
+			return nil, err
+		}
+		rec.At = time.Unix(0, at).UTC()
+		out = append(out, rec)
+	}
+	return out, rows.Err()
+}
+
+// PruneEvents deletes event rows older than before. If before is zero, every
+// persisted event is deleted.
+func (s *Store) PruneEvents(before time.Time) (int64, error) {
+	var (
+		res sql.Result
+		err error
+	)
+	if before.IsZero() {
+		res, err = s.db.Exec(`DELETE FROM event_log;`)
+	} else {
+		res, err = s.db.Exec(`DELETE FROM event_log WHERE at < ?;`, before.UTC().UnixNano())
+	}
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 // SLAWindow names a rolling availability window and its length. The windows are
@@ -983,8 +1075,8 @@ func (s *Store) PruneSLA(before time.Time) (int64, error) {
 	return total + rows, nil
 }
 
-// PruneHistory deletes bucketed history older than before from SLA,
-// measurement, daemon runtime and service runtime metric tables.
+// PruneHistory deletes old history from SLA, measurement, daemon runtime,
+// service runtime metric and event tables.
 func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 	var out PruneHistoryResult
 	var err error
@@ -1003,7 +1095,10 @@ func (s *Store) PruneHistory(before time.Time) (PruneHistoryResult, error) {
 	if out.ServiceMetrics, err = s.PruneServiceMetrics(before); err != nil {
 		return PruneHistoryResult{}, err
 	}
-	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics
+	if out.Events, err = s.PruneEvents(before); err != nil {
+		return PruneHistoryResult{}, err
+	}
+	out.Rows = out.SLA + out.Measurements + out.Metrics + out.DaemonMetrics + out.ServiceMetrics + out.Events
 	return out, nil
 }
 

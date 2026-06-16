@@ -131,7 +131,33 @@ func run(args []string) int {
 		logger.Warn("build notifiers", "warning", w)
 	}
 
-	eventLog := app.NewEventLog(1000)
+	// Bound persisted history to roughly a year of data before hydrating the
+	// recent-event ring.
+	cutoff := time.Now().Add(-366 * 24 * time.Hour)
+	for _, p := range []struct {
+		what  string
+		prune func(time.Time) (int64, error)
+	}{
+		{"sla samples", store.PruneSLA},
+		{"measurements", store.PruneMeasurements},
+		{"metrics", store.PruneMetrics},
+		{"daemon metrics", store.PruneDaemonMetrics},
+		{"service metrics", store.PruneServiceMetrics},
+		{"events", store.PruneEvents},
+	} {
+		if n, err := p.prune(cutoff); err != nil {
+			logger.Warn("prune "+p.what, "error", err)
+		} else if n > 0 {
+			logger.Info("pruned old "+p.what, "rows", n)
+		}
+	}
+
+	eventLog, err := app.NewPersistentEventLog(1000, store, func(err error) {
+		logger.Warn("persist event failed", "error", err)
+	})
+	if err != nil {
+		logger.Warn("load persisted events failed", "error", err)
+	}
 
 	interval := app.EngineInterval(cfg, 30*time.Second)
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
@@ -145,7 +171,7 @@ func run(args []string) int {
 		MaxParallel:      app.EngineInt(cfg, "max_parallel_checks", 8),
 		Sleep:            time.Sleep,
 		Now:              time.Now,
-		// Events go to slog and to the in-memory log the web UI reads.
+		// Events go to slog and to the persisted ring the web UI reads.
 		Emit:            app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
 		Monitor:         store,
 		SLA:             store,
@@ -161,25 +187,6 @@ func run(args []string) int {
 		SystemFreshness: interval / 2,
 		OpGate:          opGate,
 		ExecxRunner:     execx.CommandRunner{},
-	}
-
-	// Bound the SLA and measurement tables to roughly a year of per-minute data.
-	cutoff := time.Now().Add(-366 * 24 * time.Hour)
-	for _, p := range []struct {
-		what  string
-		prune func(time.Time) (int64, error)
-	}{
-		{"sla samples", store.PruneSLA},
-		{"measurements", store.PruneMeasurements},
-		{"metrics", store.PruneMetrics},
-		{"daemon metrics", store.PruneDaemonMetrics},
-		{"service metrics", store.PruneServiceMetrics},
-	} {
-		if n, err := p.prune(cutoff); err != nil {
-			logger.Warn("prune "+p.what, "error", err)
-		} else if n > 0 {
-			logger.Info("pruned old "+p.what, "rows", n)
-		}
 	}
 
 	collector := metrics.New(metrics.OSReader{})

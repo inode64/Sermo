@@ -174,13 +174,16 @@ func TestPruneHistory(t *testing.T) {
 		if err := s.RecordServiceMetric("web", "cpu", 10, at); err != nil {
 			t.Fatalf("RecordServiceMetric(%s): %v", at, err)
 		}
+		if err := s.RecordEvent(EventRecord{At: at, Service: "web", Kind: "action", Message: "restart"}); err != nil {
+			t.Fatalf("RecordEvent(%s): %v", at, err)
+		}
 	}
 
 	result, err := s.PruneHistory(recent)
 	if err != nil {
 		t.Fatalf("PruneHistory: %v", err)
 	}
-	if result.SLA != 2 || result.Measurements != 1 || result.Metrics != 1 || result.DaemonMetrics != 1 || result.ServiceMetrics != 1 || result.Rows != 6 {
+	if result.SLA != 2 || result.Measurements != 1 || result.Metrics != 1 || result.DaemonMetrics != 1 || result.ServiceMetrics != 1 || result.Events != 1 || result.Rows != 7 {
 		t.Fatalf("PruneHistory = %+v, want one old bucket per history table", result)
 	}
 
