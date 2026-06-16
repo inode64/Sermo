@@ -35,6 +35,21 @@ type Notifier interface {
 	Send(ctx context.Context, msg Message) error
 }
 
+// Option customizes notifier construction.
+type Option func(*buildOptions)
+
+type buildOptions struct {
+	templateDir string
+}
+
+// WithTemplateDir configures where named notification templates are loaded
+// from.
+func WithTemplateDir(dir string) Option {
+	return func(o *buildOptions) {
+		o.templateDir = dir
+	}
+}
+
 // Enabled reports whether a notifier config entry should be active — the
 // inverse of the shared cfgval.Disabled opt-out reading (omitted `enabled`
 // defaults to true; schema validation reports non-boolean values).
@@ -51,9 +66,13 @@ var builders = map[string]func(name string, entry map[string]any) (Notifier, err
 }
 
 // Build constructs the named notifiers from the global `notifiers` section
-// (raw == cfg.Notifiers()). Malformed or unknown-type entries are
-// skipped with a warning, mirroring BuildWorkers/BuildWatches.
-func Build(raw map[string]any) (map[string]Notifier, []string) {
+// (raw == cfg.Notifiers()). Malformed or unknown-type entries are skipped with
+// a warning, mirroring BuildWorkers/BuildWatches.
+func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
+	var options buildOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
 	out := map[string]Notifier{}
 	if len(raw) == 0 {
 		return out, nil
@@ -78,6 +97,14 @@ func Build(raw map[string]any) (map[string]Notifier, []string) {
 		if err != nil {
 			warnings = append(warnings, "notifier "+name+": "+err.Error())
 			continue
+		}
+		if templateName := cfgval.AsString(entry["template"]); templateName != "" {
+			tmpl, err := LoadTemplate(options.templateDir, templateName)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("notifier %s: template %q: %v", name, templateName, err))
+				continue
+			}
+			n = WithTemplate(n, tmpl)
 		}
 		out[name] = n
 	}
