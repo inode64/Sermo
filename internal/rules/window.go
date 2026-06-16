@@ -164,11 +164,7 @@ func ParseWithinWindow(v any) *WithinWindow {
 		return nil
 	}
 	cycles, _ := cfgval.Int(m["cycles"])
-	matches, _ := cfgval.Int(m["min_matches"])
-	if matches <= 0 {
-		matches = 1
-	}
-	return &WithinWindow{Cycles: cycles, MinMatches: matches}
+	return &WithinWindow{Cycles: cycles, MinMatches: minMatches(m)}
 }
 
 // ParseWindow parses an entry's `for`/`within` sub-blocks into their windows.
@@ -204,15 +200,19 @@ func ParseRuleWindow(v any) (*ForWindow, *WithinWindow) {
 	}
 	switch cfgval.AsString(m["mode"]) {
 	case "within":
-		matches, _ := cfgval.Int(m["min_matches"])
-		if matches <= 0 {
-			matches = 1
-		}
-		return nil, &WithinWindow{Cycles: cycles, MinMatches: matches}
+		return nil, &WithinWindow{Cycles: cycles, MinMatches: minMatches(m)}
 	default: // "" or "consecutive"
 		if cycles <= 1 {
 			return nil, nil
 		}
 		return &ForWindow{Cycles: cycles}, nil
 	}
+}
+
+func minMatches(m map[string]any) int {
+	matches, _ := cfgval.Int(m["min_matches"])
+	if matches <= 0 {
+		return 1
+	}
+	return matches
 }
