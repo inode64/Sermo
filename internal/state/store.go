@@ -792,20 +792,32 @@ type SLAWindowTimeline struct {
 // SLATimelines returns a service's availability for every SLAWindow split into
 // equal sub-spans for the web timeline strip, ordered as SLAWindows (hour..year).
 func (s *Store) SLATimelines(service string, now time.Time) ([]SLAWindowTimeline, error) {
-	return s.slaTimelines("sla_sample", "service = ?", []any{service}, now)
+	return s.slaTimelines(slaTimelineQuery, []any{service}, now)
 }
 
 // CheckSLATimelines returns one check's windowed availability split into sub-spans
 // for the web timeline strip, ordered as SLAWindows (hour..year).
 func (s *Store) CheckSLATimelines(service, check string, now time.Time) ([]SLAWindowTimeline, error) {
-	return s.slaTimelines("check_sla_sample", "service = ? AND check_name = ?", []any{service, check}, now)
+	return s.slaTimelines(checkSLATimelineQuery, []any{service, check}, now)
 }
 
-// slaTimelines divides each SLAWindow into Segments equal sub-spans ending at now
-// and aggregates the per-minute buckets of table into them with a single grouped
-// query per window — the same indexed range scan SLA() already does, returning the
-// per-segment breakdown as well. where/keyArgs select the service (and check) rows.
-func (s *Store) slaTimelines(table, where string, keyArgs []any, now time.Time) ([]SLAWindowTimeline, error) {
+const (
+	slaTimelineQuery = `SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+			   FROM sla_sample
+			  WHERE service = ? AND bucket >= ? AND bucket < ?
+			  GROUP BY seg ORDER BY seg;`
+	checkSLATimelineQuery = `SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
+			   FROM check_sla_sample
+			  WHERE service = ? AND check_name = ? AND bucket >= ? AND bucket < ?
+			  GROUP BY seg ORDER BY seg;`
+)
+
+// slaTimelines divides each SLAWindow into Segments equal sub-spans ending at
+// now and aggregates the per-minute buckets with a single grouped query per
+// window — the same indexed range scan SLA() already does, returning the
+// per-segment breakdown as well. query is one of the package constants above;
+// keyArgs select the service (and check) rows.
+func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAWindowTimeline, error) {
 	out := make([]SLAWindowTimeline, 0, len(SLAWindows))
 	for _, w := range SLAWindows {
 		segCount := w.Segments
@@ -826,13 +838,7 @@ func (s *Store) slaTimelines(table, where string, keyArgs []any, now time.Time) 
 		args = append(args, startBucket, segSpan)
 		args = append(args, keyArgs...)
 		args = append(args, startBucket, endBucket)
-		rows, err := s.db.Query(
-			`SELECT (bucket - ?)/? AS seg, COALESCE(SUM(up_count), 0), COALESCE(SUM(total_count), 0)
-			   FROM `+table+`
-			  WHERE `+where+` AND bucket >= ? AND bucket < ?
-			  GROUP BY seg ORDER BY seg;`,
-			args...,
-		)
+		rows, err := s.db.Query(query, args...)
 		if err != nil {
 			return nil, err
 		}
