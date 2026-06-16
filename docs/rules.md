@@ -93,6 +93,7 @@ which reuse the same schema). MVP types:
 | `asterisk` / `ami` | an Asterisk PBX sends its AMI `Asterisk Call Manager/<version>` greeting (see Database) |
 | `sieve` / `managesieve` | a ManageSieve server sends its capability greeting ending in `OK` (see Database) |
 | `mqtt`        | an MQTT broker accepts a CONNECT (CONNACK return code 0) (see Database) |
+| `amqp` / `rabbitmq` | an AMQP 0-9-1 broker sends a valid Connection.Start greeting (see Database) |
 | `kafka`       | a Kafka broker/controller answers an unauthenticated `ApiVersions` request; exposes the listener `role` (broker/controller) and `produce_api`/`vote_api` flags for `expect` (see Database) |
 | `varnish` / `varnishadm` | the Varnish management CLI answers with its banner/auth challenge (see Database) |
 | `ceph` / `ceph-mon` | a Ceph monitor sends its messenger `ceph v…` banner (see Database) |
@@ -975,6 +976,10 @@ Protocols, in the order of the table above:
   connect; `user`/`password` authenticate. A refused CONNACK (e.g. `not-authorized`,
   `bad-username-or-password`) fails the check with the reason; result data: the
   `connack` status.
+- `amqp` (alias `rabbitmq`) — default port 5672 (TCP); no auth. Sends the AMQP
+  0-9-1 protocol header and verifies the broker's unprompted Connection.Start
+  method. Reports the broker `version` plus best-effort `product`, `platform`
+  and `cluster_name` fields for `expect`/`on_version_change`.
 - `kafka` — default port 9092 (TCP); `tls` supported. No auth. Sends an
   `ApiVersions` request (API key 18, v0), which a broker or a KRaft controller
   answers before authentication, and verifies the reply's correlation id matches —
@@ -1250,7 +1255,7 @@ natively (no external library).
 ```yaml
 checks:
   db:
-    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, memcached/memcache, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, kafka, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
+    type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, memcached/memcache, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, amqp/rabbitmq, kafka, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
     # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
