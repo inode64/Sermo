@@ -38,20 +38,12 @@ func buildTeams(name string, entry map[string]any) (Notifier, error) {
 // Card: the subject as the bold lead line and the detail (the SERMO_* fields)
 // in a monospace block — the same layout as the slack payload.
 func teamsPayload(msg Message) []byte {
-	body := []map[string]any{{
-		"type": "TextBlock", "text": msg.Subject, "weight": "Bolder", "wrap": true,
-	}}
-	if msg.Body != "" {
-		body = append(body, map[string]any{
-			"type": "TextBlock", "text": msg.Body, "wrap": true, "fontType": "Monospace",
-		})
-	}
 	card := map[string]any{
 		"$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
 		"type":    "AdaptiveCard",
 		"version": "1.4",
 		"msteams": map[string]any{"width": "Full"},
-		"body":    body,
+		"body":    teamsCardBody(msg),
 	}
 	b, _ := json.Marshal(map[string]any{
 		"type": "message",
@@ -61,6 +53,18 @@ func teamsPayload(msg Message) []byte {
 		}},
 	})
 	return b
+}
+
+func teamsCardBody(msg Message) []map[string]any {
+	body := []map[string]any{{
+		"type": "TextBlock", "text": msg.Subject, "weight": "Bolder", "wrap": true,
+	}}
+	if msg.Body != "" {
+		body = append(body, map[string]any{
+			"type": "TextBlock", "text": msg.Body, "wrap": true, "fontType": "Monospace",
+		})
+	}
+	return body
 }
 
 func teamsPost(ctx context.Context, webhook string, payload []byte) error {
