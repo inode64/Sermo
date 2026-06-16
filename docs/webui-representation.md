@@ -213,8 +213,9 @@ Section id: `watches-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Host watches` plus total count |
-| Controls | search, state filters, showing count |
-| Filters | all, disabled, ok, monitorized, unmonitorized, failed |
+| Controls | search, type filter, state filters, showing count |
+| Type filter | `all types` plus the distinct watch check types currently present |
+| State filters | all, disabled, ok, monitorized, unmonitorized, failed |
 | Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
 | Visibility | hidden when no watches are configured |
 
