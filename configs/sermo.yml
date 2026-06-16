@@ -7,11 +7,11 @@ engine:
   backend: auto
   interval: 30s
   max_parallel_checks: 8
-  # How many start/stop/restart operations may run at once across workers, the
+  # How many start/stop/restart/reload operations may run at once across workers, the
   # web UI and sermoctl. Extra attempts wait for a slot under <runtime>/op-slots.
   max_parallel_operations: 2
   default_timeout: 10s
-  # Outer deadline for safe start/stop/restart (raised per service when stop_policy
+  # Outer deadline for safe start/stop/restart/reload (raised per service when stop_policy
   # needs longer). sermoctl and the web UI use the same limit; the web server's
   # HTTP write timeout is derived from the longest resolved service deadline.
   operation_timeout: 90s
@@ -65,8 +65,8 @@ logging:
   level: info
   format: text
 
-# Web dashboard (view services; monitor/unmonitor and start/stop/restart; per-
-# service detail with checks, SLA history and events). Binds to loopback by
+# Web dashboard (view services; monitor/unmonitor and start/stop/restart/reload;
+# per-service detail with checks, SLA history and events). Binds to loopback by
 # default.
 #
 # IMPORTANT: the web UI is NOT activated unless `port` is defined.
