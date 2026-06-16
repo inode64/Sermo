@@ -1240,21 +1240,9 @@ func (s *Store) PruneUnconfiguredControlStates(configured []string) (PruneUnconf
 		if _, ok := known[service]; ok {
 			continue
 		}
-		var rows int64
-		for _, stmt := range []string{
-			`DELETE FROM monitor_state WHERE service = ?;`,
-			`DELETE FROM remediation_state WHERE service = ?;`,
-			`DELETE FROM rule_window_state WHERE service = ?;`,
-		} {
-			res, err := tx.Exec(stmt, service)
-			if err != nil {
-				return PruneUnconfiguredControlStatesResult{}, err
-			}
-			n, err := res.RowsAffected()
-			if err != nil {
-				return PruneUnconfiguredControlStatesResult{}, err
-			}
-			rows += n
+		rows, err := deleteControlState(tx, service)
+		if err != nil {
+			return PruneUnconfiguredControlStatesResult{}, err
 		}
 		result.Services = append(result.Services, service)
 		result.Rows += rows
@@ -1263,6 +1251,26 @@ func (s *Store) PruneUnconfiguredControlStates(configured []string) (PruneUnconf
 		return PruneUnconfiguredControlStatesResult{}, err
 	}
 	return result, nil
+}
+
+func deleteControlState(tx *sql.Tx, service string) (int64, error) {
+	var rows int64
+	for _, stmt := range [...]string{
+		`DELETE FROM monitor_state WHERE service = ?;`,
+		`DELETE FROM remediation_state WHERE service = ?;`,
+		`DELETE FROM rule_window_state WHERE service = ?;`,
+	} {
+		res, err := tx.Exec(stmt, service)
+		if err != nil {
+			return 0, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, err
+		}
+		rows += n
+	}
+	return rows, nil
 }
 
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
