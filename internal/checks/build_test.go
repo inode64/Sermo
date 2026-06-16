@@ -76,6 +76,7 @@ func TestIsHealthType(t *testing.T) {
 		{"websocket", true},
 		{"ws", true},
 		{"firewall_rules", true},
+		{"process", true},
 		{"mysql", true},
 		{"mariadb", true},
 		{"storage", false},
@@ -90,6 +91,23 @@ func TestIsHealthType(t *testing.T) {
 		if got := IsHealthType(tt.typ); got != tt.want {
 			t.Fatalf("IsHealthType(%q) = %v, want %v", tt.typ, got, tt.want)
 		}
+	}
+}
+
+func TestBuildMarksConditionChecks(t *testing.T) {
+	built, warnings := Build(map[string]any{
+		"cert": map[string]any{"type": "cert", "path": "/definitely/missing.pem"},
+		"tcp":  map[string]any{"type": "tcp", "host": "127.0.0.1", "port": 1},
+	}, Deps{})
+	if len(warnings) != 0 || len(built) != 2 {
+		t.Fatalf("built=%d warnings=%v, want two checks", len(built), warnings)
+	}
+	got := map[string]bool{}
+	for _, b := range built {
+		got[b.Check.Name()] = b.Check.Run(context.Background()).Condition
+	}
+	if !got["cert"] || got["tcp"] {
+		t.Fatalf("condition flags = %+v, want cert=true tcp=false", got)
 	}
 }
 

@@ -635,7 +635,7 @@ func checkHealthSummary(snap map[string]CheckSnapshot, checkNames []string, moni
 			continue
 		}
 		observed = true
-		if cs.Skipped || cs.Optional || cs.OK {
+		if cs.Skipped || cs.Optional || cs.healthy() {
 			continue
 		}
 		failing++

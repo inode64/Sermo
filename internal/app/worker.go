@@ -247,7 +247,7 @@ func (w *Worker) gateReason(gate CheckGate, cache map[string]checks.Result) stri
 // affect SLA. A service with no required checks is vacuously available.
 func requiredChecksOK(cache map[string]checks.Result) bool {
 	for _, r := range cache {
-		if !r.Optional && !r.OK {
+		if !r.Optional && !r.Healthy() {
 			return false
 		}
 	}
