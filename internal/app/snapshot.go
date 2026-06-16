@@ -9,12 +9,20 @@ import (
 
 // CheckSnapshot is the last observed result of one check, for the web detail view.
 type CheckSnapshot struct {
-	OK       bool
-	Optional bool
-	Skipped  bool
-	Message  string
-	Ran      bool // true when the check actually executed this cycle (not interval cache)
-	At       time.Time
+	OK        bool
+	Condition bool
+	Optional  bool
+	Skipped   bool
+	Message   string
+	Ran       bool // true when the check actually executed this cycle (not interval cache)
+	At        time.Time
+}
+
+func (c CheckSnapshot) healthy() bool {
+	if c.Condition {
+		return !c.OK
+	}
+	return c.OK
 }
 
 // Snapshots holds each service's most recent check results so the web UI can show
@@ -48,7 +56,7 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 	m := make(map[string]CheckSnapshot, len(cache))
 	for name, r := range cache {
 		cs := CheckSnapshot{
-			OK: r.OK, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
+			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
 			Ran: ran[name],
 		}
 		if ran[name] {
