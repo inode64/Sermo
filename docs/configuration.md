@@ -1650,6 +1650,7 @@ further and checks it against the **live host and state database**:
 sermoctl diagnose          # text report
 sermoctl diagnose --json   # machine-readable
 sermoctl diagnose clean    # remove stale monitoring state for unconfigured services/watches
+sermoctl diagnose clear    # alias for diagnose clean
 sermoctl state compact     # prune old history and vacuum the state database
 ```
 
@@ -1678,9 +1679,9 @@ feed also includes **operation slot** usage from the running daemon (`info` when
 some slots are in use, `warning` when saturated); see also `GET /api/ops`. When
 the panel finds stale monitoring-state rows, admins can use **clean stale data**, which
 calls `POST /api/diagnostics/clean` and performs the same bounded cleanup as
-`sermoctl diagnose clean`: it removes only persisted monitoring state for
-targets that are no longer configured. SLA, check measurements and runtime CPU,
-memory and IO history are kept.
+`sermoctl diagnose clean` (`diagnose clear` is an alias): it removes only
+persisted monitoring state for targets that are no longer configured. SLA, check
+measurements and runtime CPU, memory and IO history are kept.
 
 To reclaim old history intentionally, use:
 

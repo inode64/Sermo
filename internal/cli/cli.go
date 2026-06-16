@@ -1528,7 +1528,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
-	fmt.Fprintln(w, "          diagnose | diagnose clean | wizard [service|volume|net|uplink]")
+	fmt.Fprintln(w, "          diagnose | diagnose clean|clear | wizard [service|volume|net|uplink]")
 	fmt.Fprintln(w, "          state compact [--before TIME] # prune old history and vacuum; TIME=RFC3339 or duration")
 	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | daemon reload | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")
