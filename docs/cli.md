@@ -26,6 +26,7 @@ sermoctl is-active SERVICE
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
+sermoctl resume SERVICE [--no-cascade]
 sermoctl reload SERVICE
 
 sermoctl preflight SERVICE
@@ -82,4 +83,5 @@ is not a clean false (`1`), a usage error (`64`) or a temporary block (`75`):
 I/O errors, backend not detected, an exec that could not be launched, an
 unexpected panic recovered at the top level.
 
-`is-active` maps directly: `0` active, `1` not active, `2` error.
+`is-active` maps directly: `0` active, `1` not active (including `paused`),
+`2` error.

@@ -1,0 +1,312 @@
+// Package virt provides service-manager primitives for virtual machines.
+package virt
+
+import (
+	"context"
+	"encoding/hex"
+	"fmt"
+	"net"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/digitalocean/go-libvirt"
+	"github.com/digitalocean/go-libvirt/socket/dialers"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/servicemgr"
+)
+
+const (
+	defaultURI    = string(libvirt.QEMUSystem)
+	defaultSocket = "/run/libvirt/libvirt-sock"
+	defaultPort   = 16509
+)
+
+// Spec describes one libvirt-controlled VM target.
+type Spec struct {
+	URI    string
+	Domain string
+	UUID   string
+	Socket string
+	Host   string
+	Port   int
+}
+
+// SpecFromTree reads a service's optional `control: {type: libvirt, ...}` block.
+func SpecFromTree(tree map[string]any) (Spec, bool, error) {
+	raw, present := tree["control"]
+	if !present {
+		return Spec{}, false, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return Spec{}, true, fmt.Errorf("control must be a mapping")
+	}
+	if typ := cfgval.String(m["type"]); typ != "libvirt" {
+		return Spec{}, true, fmt.Errorf("control.type %q is not supported", typ)
+	}
+	spec := Spec{
+		URI:    cfgval.String(m["uri"]),
+		Domain: cfgval.String(m["domain"]),
+		UUID:   cfgval.String(m["uuid"]),
+		Socket: cfgval.String(m["socket"]),
+		Host:   cfgval.String(m["host"]),
+	}
+	if spec.URI == "" {
+		spec.URI = defaultURI
+	}
+	if spec.Host == "" && spec.Socket == "" {
+		spec.Socket = defaultSocket
+	}
+	if p, ok := cfgval.Int(m["port"]); ok {
+		spec.Port = p
+	}
+	if spec.Port == 0 {
+		spec.Port = defaultPort
+	}
+	if spec.Domain == "" {
+		return Spec{}, true, fmt.Errorf("control.domain is required for libvirt")
+	}
+	if spec.UUID != "" {
+		if _, err := ParseUUID(spec.UUID); err != nil {
+			return Spec{}, true, fmt.Errorf("control.uuid: %w", err)
+		}
+	}
+	return spec, true, nil
+}
+
+// Manager implements service management over libvirt domains.
+type Manager struct {
+	Spec      Spec
+	NewClient func(Spec, time.Duration) (Client, error)
+}
+
+var _ servicemgr.Manager = Manager{}
+
+// NewManager returns a libvirt Manager for spec.
+func NewManager(spec Spec) Manager {
+	return Manager{Spec: spec}
+}
+
+// Client is the small libvirt surface Manager needs. Tests inject a fake.
+type Client interface {
+	ConnectToURI(libvirt.ConnectURI) error
+	Disconnect() error
+	DomainLookupByName(name string) (libvirt.Domain, error)
+	DomainLookupByUUID(uuid libvirt.UUID) (libvirt.Domain, error)
+	DomainGetState(dom libvirt.Domain, flags uint32) (int32, int32, error)
+	DomainCreate(dom libvirt.Domain) error
+	DomainShutdown(dom libvirt.Domain) error
+	DomainResume(dom libvirt.Domain) error
+}
+
+// Status returns the normalized state of the managed domain.
+func (m Manager) Status(ctx context.Context, service string) (servicemgr.ServiceStatus, error) {
+	status, err := m.withDomainStatus(ctx)
+	if err != nil {
+		return servicemgr.ServiceStatus{}, err
+	}
+	return servicemgr.ServiceStatus{
+		Service: service,
+		Backend: servicemgr.BackendLibvirt,
+		Unit:    m.Spec.Domain,
+		Status:  status,
+	}, nil
+}
+
+// Start boots a defined, inactive libvirt domain.
+func (m Manager) Start(ctx context.Context, _ string) error {
+	return m.withDomainAction(ctx, "start", func(c Client, dom libvirt.Domain) error {
+		return c.DomainCreate(dom)
+	})
+}
+
+// Stop requests a graceful ACPI shutdown for the libvirt domain.
+func (m Manager) Stop(ctx context.Context, _ string) error {
+	return m.withDomainAction(ctx, "stop", func(c Client, dom libvirt.Domain) error {
+		return c.DomainShutdown(dom)
+	})
+}
+
+// Restart is not used by the safe operation engine; it composes restart as
+// Stop+Start so residual-process handling stays between the phases.
+func (m Manager) Restart(context.Context, string) error {
+	return fmt.Errorf("restart is composed by the operation engine")
+}
+
+// Reload is not meaningful for a VM domain.
+func (m Manager) Reload(context.Context, string) error {
+	return fmt.Errorf("reload is not supported for libvirt domains")
+}
+
+// SupportsReload reports false for VM domains.
+func (m Manager) SupportsReload(context.Context, string) (bool, error) {
+	return false, nil
+}
+
+// ResetState has no libvirt equivalent; the domain state is live.
+func (m Manager) ResetState(context.Context, string) error {
+	return nil
+}
+
+// Resume unpauses a paused libvirt domain.
+func (m Manager) Resume(ctx context.Context, _ string) error {
+	return m.withDomainAction(ctx, "resume", func(c Client, dom libvirt.Domain) error {
+		return c.DomainResume(dom)
+	})
+}
+
+func (m Manager) withDomainStatus(ctx context.Context) (servicemgr.Status, error) {
+	return runWithClient(ctx, m, func(c Client) (servicemgr.Status, error) {
+		dom, err := lookupDomain(c, m.Spec)
+		if err != nil {
+			return "", err
+		}
+		state, _, err := c.DomainGetState(dom, 0)
+		if err != nil {
+			return "", fmt.Errorf("domain %q state: %w", m.Spec.Domain, err)
+		}
+		return statusFromDomainState(libvirt.DomainState(state)), nil
+	})
+}
+
+func (m Manager) withDomainAction(ctx context.Context, action string, fn func(Client, libvirt.Domain) error) error {
+	_, err := runWithClient(ctx, m, func(c Client) (struct{}, error) {
+		dom, err := lookupDomain(c, m.Spec)
+		if err != nil {
+			return struct{}{}, err
+		}
+		if err := fn(c, dom); err != nil {
+			return struct{}{}, fmt.Errorf("%s domain %q: %w", action, m.Spec.Domain, err)
+		}
+		return struct{}{}, nil
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func lookupDomain(c Client, spec Spec) (libvirt.Domain, error) {
+	if spec.UUID != "" {
+		u, err := ParseUUID(spec.UUID)
+		if err != nil {
+			return libvirt.Domain{}, err
+		}
+		dom, err := c.DomainLookupByUUID(u)
+		if err != nil {
+			return libvirt.Domain{}, fmt.Errorf("domain uuid %q: %w", spec.UUID, err)
+		}
+		return dom, nil
+	}
+	dom, err := c.DomainLookupByName(spec.Domain)
+	if err != nil {
+		return libvirt.Domain{}, fmt.Errorf("domain %q: %w", spec.Domain, err)
+	}
+	return dom, nil
+}
+
+func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, error)) (T, error) {
+	type out struct {
+		value T
+		err   error
+	}
+	ch := make(chan out, 1)
+	timeout := timeoutFromContext(ctx)
+	go func() {
+		client, err := m.client(timeout)
+		if err != nil {
+			ch <- out{err: err}
+			return
+		}
+		if err := client.ConnectToURI(libvirt.ConnectURI(m.Spec.URI)); err != nil {
+			ch <- out{err: err}
+			return
+		}
+		defer func() { _ = client.Disconnect() }()
+		value, err := fn(client)
+		ch <- out{value: value, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		var zero T
+		return zero, ctx.Err()
+	case result := <-ch:
+		return result.value, result.err
+	}
+}
+
+func (m Manager) client(timeout time.Duration) (Client, error) {
+	if m.NewClient != nil {
+		return m.NewClient(m.Spec, timeout)
+	}
+	if m.Spec.Host != "" {
+		return libvirt.NewWithDialer(dialers.NewRemote(m.Spec.Host,
+			dialers.UsePort(strconv.Itoa(m.Spec.Port)),
+			dialers.WithRemoteTimeout(timeout),
+		)), nil
+	}
+	socket := m.Spec.Socket
+	if socket == "" {
+		socket = defaultSocket
+	}
+	return libvirt.NewWithDialer(dialers.NewLocal(
+		dialers.WithSocket(filepath.Clean(socket)),
+		dialers.WithLocalTimeout(timeout),
+	)), nil
+}
+
+func timeoutFromContext(ctx context.Context) time.Duration {
+	dl, ok := ctx.Deadline()
+	if !ok {
+		return 10 * time.Second
+	}
+	if d := time.Until(dl); d > 0 {
+		return d
+	}
+	return time.Nanosecond
+}
+
+func statusFromDomainState(state libvirt.DomainState) servicemgr.Status {
+	switch state {
+	case libvirt.DomainRunning, libvirt.DomainBlocked:
+		return servicemgr.StatusActive
+	case libvirt.DomainPaused, libvirt.DomainPmsuspended:
+		return servicemgr.StatusPaused
+	case libvirt.DomainShutdown, libvirt.DomainShutoff, libvirt.DomainNostate:
+		return servicemgr.StatusInactive
+	case libvirt.DomainCrashed:
+		return servicemgr.StatusFailed
+	default:
+		return servicemgr.StatusUnknown
+	}
+}
+
+// ParseUUID accepts canonical UUIDs with hyphens or compact 32-hex strings.
+func ParseUUID(value string) (libvirt.UUID, error) {
+	var out libvirt.UUID
+	compact := strings.ReplaceAll(strings.TrimSpace(value), "-", "")
+	if len(compact) != len(out)*2 {
+		return out, fmt.Errorf("expected 32 hexadecimal digits")
+	}
+	if _, err := hex.Decode(out[:], []byte(compact)); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// ValidSocketPath reports whether path is a usable absolute local socket path.
+func ValidSocketPath(path string) bool {
+	return path == "" || filepath.IsAbs(path)
+}
+
+// ValidHostPort reports whether the remote host and port pair is structurally valid.
+func ValidHostPort(host string, port int) bool {
+	if host == "" {
+		return true
+	}
+	_, _, err := net.SplitHostPort(net.JoinHostPort(host, strconv.Itoa(port)))
+	return err == nil && port > 0 && port <= 65535
+}

@@ -53,9 +53,9 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 	}
 }
 
-var serviceStates = set("active", "inactive", "failed", "unknown")
+var serviceStates = set("active", "inactive", "paused", "failed", "unknown")
 var processStates = set("running", "zombie", "absent")
-var validActions = set("restart", "start", "stop", "reload", "alert", "block")
+var validActions = set("restart", "start", "stop", "reload", "resume", "alert", "block")
 var metricCatalog = map[string]map[string]struct{}{
 	"service": set("memory", "swap", "cpu", "cpu_thread", "process_count", "io", "io_read", "io_write", "fds", "threads"),
 	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
@@ -160,7 +160,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		for _, act := range actions {
 			if act.typ != "" {
 				if _, ok := validActions[act.typ]; !ok {
-					add("%s then.action %q is not one of restart, start, stop, reload, alert, block", path, act.typ)
+					add("%s then.action %q is not one of restart, start, stop, reload, resume, alert, block", path, act.typ)
 				}
 			}
 			if act.typ == "block" {
@@ -190,7 +190,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 		hasOperation := false
 		for _, act := range actions {
 			switch act.typ {
-			case "restart", "start", "stop", "reload":
+			case "restart", "start", "stop", "reload", "resume":
 				hasOperation = true
 				if rtype != "remediation" {
 					add("%s only remediation rules may use action %s", path, act.typ)
@@ -198,7 +198,7 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			}
 		}
 		if rtype == "remediation" && hasThen && !hasOperation {
-			add("%s remediation requires an operation action (restart, start, stop, reload); use type: alert for notify-only rules", path)
+			add("%s remediation requires an operation action (restart, start, stop, reload, resume); use type: alert for notify-only rules", path)
 		}
 
 		validateWindow(path, entry, add)
@@ -247,7 +247,7 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 	case "failed", "active":
 		validateProbe(node[key], path+"."+key, checkNames, systemMetricChecks, allowSystemMetric, add)
 	case "service":
-		validateState(node["service"], "state", serviceStates, "active, inactive, failed, unknown", path+".service", add)
+		validateState(node["service"], "state", serviceStates, "active, inactive, paused, failed, unknown", path+".service", add)
 	case "process":
 		validateState(node["process"], "state", processStates, "running, zombie, absent", path+".process", add)
 	case "file":

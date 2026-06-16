@@ -297,6 +297,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
+	validateControl(tree, add)
 	validateServiceField(tree, add)
 	validateAlsoService(tree, add)
 	validateCascade(name, tree, services, add)

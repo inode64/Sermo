@@ -61,6 +61,7 @@ type Engine struct {
 	// either overrides the backend reload (`when: always`) or stands in for it when
 	// the init has no reload of its own (`when: auto`).
 	ReloadFunc       func(ctx context.Context) error
+	ResumeFunc       func(ctx context.Context) error
 	Discover         func() ([]process.Process, error)
 	Reaper           process.Reaper
 	KillPolicy       process.KillPolicy
@@ -94,6 +95,7 @@ type plan struct {
 	preflight  bool
 	stop       bool
 	start      bool
+	resume     bool
 	reload     bool
 	postflight bool
 }
@@ -122,6 +124,11 @@ func (e Engine) Reload(ctx context.Context) Result {
 	return e.run(ctx, plan{action: "reload", preflight: true, reload: true, postflight: true})
 }
 
+// Resume runs preflight, resumes a paused service and verifies health.
+func (e Engine) Resume(ctx context.Context) Result {
+	return e.run(ctx, plan{action: "resume", preflight: true, resume: true, postflight: true})
+}
+
 // Do dispatches one action name to the matching operation, returning its Result.
 // It is the single action-dispatch point shared by the CLI, the daemon worker and
 // the web UI; an unrecognized action yields a failed Result without running
@@ -136,6 +143,8 @@ func (e Engine) Do(ctx context.Context, action string) Result {
 		return e.Restart(ctx)
 	case "reload":
 		return e.Reload(ctx)
+	case "resume":
+		return e.Resume(ctx)
 	default:
 		return Result{Service: e.Service, Action: action, Status: ResultFailed, Message: "unknown action " + action}
 	}
@@ -193,7 +202,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		}
 	}
 
-	// Step 6: required preflight (start/restart/reload).
+	// Step 6: required preflight (start/restart/reload/resume).
 	if p.preflight && e.Preflight != nil {
 		out := e.Preflight(ctx)
 		result.Checks = append(result.Checks, out.Results...)
@@ -306,6 +315,30 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		}
 	}
 
+	// Resume a paused target in place. This is intentionally a separate optional
+	// primitive because init backends do not expose it, while libvirt does.
+	if p.resume {
+		if e.ResumeFunc == nil {
+			result.Status = ResultFailed
+			result.Message = "resume: operation unsupported by backend"
+			return result
+		}
+		if err := e.ResumeFunc(ctx); err != nil {
+			result.Status = ResultFailed
+			if timedOut(ctx) {
+				result.Message = "operation timed out during resume"
+			} else {
+				result.Message = "resume: " + err.Error()
+			}
+			return result
+		}
+		if st, err := e.Manager.Status(ctx, e.Unit); err == nil && st.Status == servicemgr.StatusFailed {
+			result.Status = ResultFailed
+			result.Message = "service failed after resume"
+			return result
+		}
+	}
+
 	// Reload config in place (no stop/start). Used by the reload action for
 	// daemons that re-read their configuration without a disruptive restart.
 	if p.reload {
@@ -329,7 +362,7 @@ func (e Engine) run(ctx context.Context, p plan) (result Result) {
 		}
 	}
 
-	// Step 14: required postflight (start/restart/reload).
+	// Step 14: required postflight (start/restart/reload/resume).
 	if p.postflight && e.Postflight != nil {
 		out := e.Postflight(ctx)
 		result.Checks = append(result.Checks, out.Results...)
