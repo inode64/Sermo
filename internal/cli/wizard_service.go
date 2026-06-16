@@ -71,6 +71,9 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 		c.Pidfile, c.Exe, c.Cmd, c.User = proc.Pidfile, proc.Exe, proc.Cmd, proc.User
 		if c.Port > 0 {
 			c.PortListening = portListening(c.Port)
+			if host, ok := portListenerHost(c.Port); ok && daemonHasVariable(resolved.Tree, "host") {
+				mergeCandidateVariables(&c, map[string]any{"host": host})
+			}
 		}
 		out = append(out, c)
 	}
@@ -308,6 +311,27 @@ func daemonPort(tree map[string]any) int {
 	return 0
 }
 
+func daemonHasVariable(tree map[string]any, name string) bool {
+	vars, ok := tree["variables"].(map[string]any)
+	if !ok {
+		return false
+	}
+	_, ok = vars[name]
+	return ok
+}
+
+func mergeCandidateVariables(c *assist.DaemonCandidate, vars map[string]any) {
+	if len(vars) == 0 {
+		return
+	}
+	if c.Variables == nil {
+		c.Variables = map[string]any{}
+	}
+	for key, value := range vars {
+		c.Variables[key] = value
+	}
+}
+
 type cephMonMetadata struct {
 	Addrs string `json:"addrs"`
 }
@@ -390,20 +414,27 @@ func existingConfigFiles(tree map[string]any) []string {
 // port. Reading /proc catches UDP daemons and services bound away from loopback,
 // which a TCP dial to 127.0.0.1 cannot see.
 func portListening(port int) bool {
-	for _, table := range []struct {
-		path   string
-		states map[string]bool
-	}{
-		{path: "/proc/net/tcp", states: map[string]bool{"0A": true}},
-		{path: "/proc/net/tcp6", states: map[string]bool{"0A": true}},
-		{path: "/proc/net/udp", states: map[string]bool{"07": true}},
-		{path: "/proc/net/udp6", states: map[string]bool{"07": true}},
-	} {
+	for _, table := range procSocketTables() {
 		if procPortListening(table.path, port, table.states) {
 			return true
 		}
 	}
 	return false
+}
+
+type procSocketTable struct {
+	path   string
+	states map[string]bool
+	ipv6   bool
+}
+
+func procSocketTables() []procSocketTable {
+	return []procSocketTable{
+		{path: "/proc/net/tcp", states: map[string]bool{"0A": true}},
+		{path: "/proc/net/tcp6", states: map[string]bool{"0A": true}, ipv6: true},
+		{path: "/proc/net/udp", states: map[string]bool{"07": true}},
+		{path: "/proc/net/udp6", states: map[string]bool{"07": true}, ipv6: true},
+	}
 }
 
 func procPortListening(path string, port int, states map[string]bool) bool {
@@ -414,6 +445,24 @@ func procPortListening(path string, port int, states map[string]bool) bool {
 	defer func() { _ = f.Close() }()
 	ok, _ := parseProcSocketTable(f, port, states)
 	return ok
+}
+
+func portListenerHost(port int) (string, bool) {
+	var hosts []string
+	for _, table := range procSocketTables() {
+		hosts = append(hosts, procPortListenerHosts(table.path, port, table.states, table.ipv6)...)
+	}
+	return specificListenerHost(hosts)
+}
+
+func procPortListenerHosts(path string, port int, states map[string]bool, ipv6 bool) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	hosts, _ := parseProcSocketTableHosts(f, port, states, ipv6)
+	return hosts
 }
 
 func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, error) {
@@ -439,6 +488,85 @@ func parseProcSocketTable(r io.Reader, port int, states map[string]bool) (bool, 
 		}
 	}
 	return false, sc.Err()
+}
+
+func parseProcSocketTableHosts(r io.Reader, port int, states map[string]bool, ipv6 bool) ([]string, error) {
+	var hosts []string
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) < 4 || fields[0] == "sl" {
+			continue
+		}
+		if !states[strings.ToUpper(fields[3])] {
+			continue
+		}
+		hostHex, portHex, ok := strings.Cut(fields[1], ":")
+		if !ok {
+			continue
+		}
+		got, err := strconv.ParseUint(portHex, 16, 16)
+		if err != nil || int(got) != port {
+			continue
+		}
+		host, ok := procSocketHost(hostHex, ipv6)
+		if ok {
+			hosts = append(hosts, host)
+		}
+	}
+	return appendUniqueStrings(nil, hosts...), sc.Err()
+}
+
+func procSocketHost(hexAddr string, ipv6 bool) (string, bool) {
+	if ipv6 {
+		return procIPv6Host(hexAddr)
+	}
+	return procIPv4Host(hexAddr)
+}
+
+func procIPv4Host(hexAddr string) (string, bool) {
+	if len(hexAddr) != 8 {
+		return "", false
+	}
+	raw, err := strconv.ParseUint(hexAddr, 16, 32)
+	if err != nil {
+		return "", false
+	}
+	ip := net.IPv4(byte(raw), byte(raw>>8), byte(raw>>16), byte(raw>>24))
+	return ip.String(), true
+}
+
+func procIPv6Host(hexAddr string) (string, bool) {
+	if len(hexAddr) != 32 {
+		return "", false
+	}
+	var b [16]byte
+	for i := 0; i < 4; i++ {
+		raw, err := strconv.ParseUint(hexAddr[i*8:(i+1)*8], 16, 32)
+		if err != nil {
+			return "", false
+		}
+		b[i*4] = byte(raw)
+		b[i*4+1] = byte(raw >> 8)
+		b[i*4+2] = byte(raw >> 16)
+		b[i*4+3] = byte(raw >> 24)
+	}
+	return net.IP(b[:]).String(), true
+}
+
+func specificListenerHost(hosts []string) (string, bool) {
+	var specific []string
+	for _, host := range appendUniqueStrings(nil, hosts...) {
+		ip := net.ParseIP(host)
+		if ip == nil || ip.IsUnspecified() || ip.IsLoopback() {
+			continue
+		}
+		specific = append(specific, host)
+	}
+	if len(specific) != 1 {
+		return "", false
+	}
+	return specific[0], true
 }
 
 func pathExists(p string) bool {

@@ -262,6 +262,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		"dbus":     {"dbus", "dbus-daemon"},
 		"fail2ban": {"fail2ban", "fail2ban-server"},
 		"keydb":    {"keydb", "keydb-server"},
+		"qemu-ga":  {"qemu-guest-agent", "qemu-ga"},
 	}
 	for name, openrcCandidates := range want {
 		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
@@ -419,6 +420,26 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	rules := nested(t, body, "rules")
 	if _, ok := rules["restart-if-tcp-failed"]; ok {
 		t.Fatal("php-fpm must not remediate on the optional tcp check by default")
+	}
+}
+
+func TestCatalogVarnishAdminChecksAreOptional(t *testing.T) {
+	root := repoRoot(t)
+	path := filepath.Join(root, "catalog", "services", "varnishd.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := yaml.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+	checks := nested(t, body, "checks")
+	for _, name := range []string{"port", "varnish"} {
+		check, _ := checks[name].(map[string]any)
+		if !cfgval.Bool(check["optional"]) {
+			t.Fatalf("varnishd check %q optional = %v, want true", name, check["optional"])
+		}
 	}
 }
 

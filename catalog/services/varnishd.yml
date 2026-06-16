@@ -13,8 +13,11 @@ preflight:
 
 checks:
   service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  varnish: { type: varnish, port: "${port}", timeout: 3s }
+  # The Varnish CLI TCP listener is optional in common OpenRC setups. Keep it as
+  # a warning so profiles still report whether varnishadm is reachable without
+  # marking an otherwise active HTTP cache as failed.
+  port: { type: tcp, port: "${port}", optional: true }
+  varnish: { type: varnish, port: "${port}", timeout: 3s, optional: true }
 rules:
   block-restart-if-config-invalid:
     type: guard
