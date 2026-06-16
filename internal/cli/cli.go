@@ -48,7 +48,7 @@ type App struct {
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
 	LoadConfig func(globalPath string, opts ...config.Option) (*config.Config, error)
 	Discover   func(selectors []process.Selector) ([]process.Process, []string)
-	// Operate runs a start/stop/restart through the operation engine for a
+	// Operate runs a start/stop/restart/reload through the operation engine for a
 	// resolved service. Injectable for testing; the error covers backend/wiring
 	// failures (the Result carries operational outcomes).
 	Operate func(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error)
@@ -422,7 +422,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
-// runAction performs a start/stop/restart through the safe operation engine
+// runAction performs a start/stop/restart/reload through the safe operation engine
 // (section 18): the resolved service is run under the internal operation lock,
 // active named runtime locks, required preflight, guards, residual-process
 // handling and postflight. Manual sermoctl actions are not rate limited, but are

@@ -1,6 +1,6 @@
 // Package web serves a small read-and-act dashboard for the daemon: it lists the
 // monitored services with their status and lets an operator monitor/unmonitor and
-// start/stop/restart them. It is deliberately minimal and depends on the daemon
+// start/stop/restart/reload them. It is deliberately minimal and depends on the daemon
 // only through the Backend interface, so it stays decoupled and testable.
 //
 // Access is optional HTTP Basic auth with admin (read+act) and guest (read-only)
@@ -272,7 +272,7 @@ type ServiceRuntimeMetrics struct {
 // useful when services=0 and you are mostly watching host resources).
 type ActivitySummary struct {
 	TotalEvents      int    `json:"total_events"`
-	ServiceActions   int    `json:"service_actions"` // start/stop/restart
+	ServiceActions   int    `json:"service_actions"` // start/stop/restart/reload
 	WatchHooks       int    `json:"watch_hooks"`
 	WatchNotifies    int    `json:"watch_notifies"`
 	Errors           int    `json:"errors"`
@@ -500,7 +500,7 @@ type Finding struct {
 	Message string `json:"message"`
 }
 
-// OperationSlots is the global start/stop/restart concurrency pool (section 24).
+// OperationSlots is the global start/stop/restart/reload concurrency pool (section 24).
 type OperationSlots struct {
 	InUse int `json:"in_use"`
 	Total int `json:"total"`
@@ -582,7 +582,7 @@ type Backend interface {
 	// PruneEvents removes events older than 'before' (or all if zero time).
 	// Intended for the `sermoctl events clear` command.
 	PruneEvents(ctx context.Context, before time.Time) int
-	// Operate runs start|stop|restart on a service through the safe engine.
+	// Operate runs start|stop|restart|reload on a service through the safe engine.
 	Operate(ctx context.Context, name, action string) ActionResult
 	// Preflight runs a service's preflight checks on demand; ok is false for
 	// unknown names.
@@ -628,7 +628,7 @@ const writeTimeoutMargin = 5 * time.Second
 const minWriteTimeout = 30 * time.Second
 
 // Server is the HTTP dashboard. Addr is a host:port; Backend is required. Auth is
-// optional (zero value = open). OperationTimeout bounds how long start/stop/restart
+// optional (zero value = open). OperationTimeout bounds how long start/stop/restart/reload
 // may run and sizes the HTTP write deadline; it should be the maximum per-service
 // deadline (app.MaxOperationTimeout).
 type Server struct {
@@ -844,7 +844,7 @@ func serverWriteTimeout(maxOp time.Duration) time.Duration {
 	return wt
 }
 
-// operateContext returns a context for start/stop/restart that is not tied to the
+// operateContext returns a context for start/stop/restart/reload that is not tied to the
 // HTTP request. Client disconnect and the generic write deadline must not abort
 // an in-flight safe operation; the operation engine applies its own timeout.
 func (s *Server) operateContext() context.Context {

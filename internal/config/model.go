@@ -269,8 +269,9 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 }
 
 // CascadeTargets returns the additional Sermo services declared in `also_apply`,
-// which receive the same action (start/stop/restart) as this service via their
-// own guarded operation. Empty when absent.
+// which receive the same cascading action (start/stop/restart) as this service
+// via their own guarded operation. Reload is deliberately not cascaded. Empty
+// when absent.
 func CascadeTargets(tree map[string]any) []string {
 	return cfgval.StringList(tree["also_apply"])
 }
