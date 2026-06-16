@@ -390,7 +390,8 @@ commands:                      # informational or reserved names such as version
     timeout: 5s
 
 # pidfile auto-wires process-tree monitoring and a requires:[service] health check
-# unless the service already declares an equivalent process selector/check.
+# unless the service already declares an equivalent process selector/check. Use
+# a list when a daemon has several distro-specific pidfile candidates.
 pidfile: /run/demo.pid
 
 config_files: [/etc/demo/demo.conf, /etc/demo/conf.d]

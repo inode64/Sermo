@@ -40,24 +40,25 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 
-// expandPidfile desugars a top-level `pidfile: <path>` into two things that share
-// the one declaration: (a) a `processes` pidfile selector, so the parent process
-// and its descendants are discovered and monitored, and (b) a `pidfile` health
-// check gated by `requires: [service]`, so a missing or stale pidfile is an error
-// only while the service is active (which means the daemon died or lost its
-// pidfile without the service manager noticing). The key is removed. An existing
-// pidfile selector or a check already named `pidfile` is respected, not
-// overwritten.
+// expandPidfile desugars a top-level `pidfile: <path>` or candidate list into
+// two things that share the one declaration: (a) a `processes` pidfile selector,
+// so the parent process and its descendants are discovered and monitored, and
+// (b) a `pidfile` health check gated by `requires: [service]`, so a missing or
+// stale pidfile is an error only while the service is active (which means the
+// daemon died or lost its pidfile without the service manager noticing). The key
+// is removed. An existing pidfile selector or a check already named `pidfile` is
+// respected, not overwritten.
 func expandPidfile(tree map[string]any) []string {
 	raw, present := tree["pidfile"]
 	if !present {
 		return nil
 	}
 	delete(tree, "pidfile")
-	path := cfgval.AsString(raw)
-	if path == "" {
-		return []string{"pidfile must be a non-empty path string"}
+	paths := cfgval.StringList(raw)
+	if len(paths) == 0 {
+		return []string{"pidfile must be a non-empty path string or list"}
 	}
+	pathValue := pidfilePathValue(paths)
 
 	// (a) process-tree selector, unless the service already declares one.
 	procs, _ := tree["processes"].(map[string]any)
@@ -66,7 +67,7 @@ func expandPidfile(tree map[string]any) []string {
 	}
 	if !hasPidfileSelector(procs) {
 		if _, exists := procs["pidfile"]; !exists {
-			procs["pidfile"] = map[string]any{"type": "pidfile", "path": path}
+			procs["pidfile"] = map[string]any{"type": "pidfile", "path": pathValue}
 		}
 	}
 	if len(procs) > 0 {
@@ -81,12 +82,23 @@ func expandPidfile(tree map[string]any) []string {
 	if _, exists := checksMap["pidfile"]; !exists {
 		checksMap["pidfile"] = map[string]any{
 			"type":     "pidfile",
-			"path":     path,
+			"path":     pathValue,
 			"requires": []any{"service"},
 		}
 	}
 	tree["checks"] = checksMap
 	return nil
+}
+
+func pidfilePathValue(paths []string) any {
+	if len(paths) == 1 {
+		return paths[0]
+	}
+	out := make([]any, 0, len(paths))
+	for _, path := range paths {
+		out = append(out, path)
+	}
+	return out
 }
 
 // hasPidfileSelector reports whether a processes map already declares a pidfile
