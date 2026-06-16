@@ -1067,6 +1067,8 @@ let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonito
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
+let svcRenderedKey = ""; // last full-render structure; enables in-place row patches
+const SVC_PATCH_MIN = 50; // patch instead of rebuilding the whole tbody from this size up
 let allWatches = [];
 let watchQuery = "";
 let watchStatus = "all"; // all | disabled | ok | monitorized | unmonitorized | failed
@@ -1467,6 +1469,156 @@ function toggleAllSvcGroups() {
   renderServices();
 }
 
+// serviceRowParts builds one service's main and optional expansion <tr> HTML.
+// Shared by the full tbody rebuild and the large-fleet in-place patch path.
+function serviceRowParts(s) {
+  const st = (s.status || "unknown").toLowerCase();
+  const state = serviceState(s);
+  const category = categoryOf(s, "service");
+  const op = liveOps.get(s.name);
+  const busy = serviceBusy(s.name);
+  const busyText = op
+    ? `<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${esc(op.action)} ${esc(opStateText(op))} · ${opElapsed(op)}s${op.message ? ` <span class="muted">${esc(op.message)}</span>` : ""}</div>`
+    : "";
+  let actions;
+  if (!s.enabled) {
+    actions = '<span class="muted">disabled in config</span>';
+  } else {
+    const stopped = st === "inactive" || st === "failed";
+    const paused = st === "paused";
+    actions = me.can_act ? `
+        <button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
+        <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
+        <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
+        <button ${busy || !paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="resume">resume</button>
+        <button ${busy || st !== "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="reload">reload</button>
+        ${s.monitored
+          ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
+          : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
+      : '<span class="muted">read-only</span>';
+  }
+  const label = esc(displayName(s));
+  const key = "svc:" + s.name;
+  const open = expanded.has(key);
+  const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
+  const name = `<a class="name" data-service-expand="${esc(s.name)}">${label}</a>`;
+  const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+  const main = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
+    <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
+    <td>${categoryBadge(category)}</td>
+    <td>${stateBadge(state)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : ""}</td>
+    <td>${serviceUptimeCell(s)}</td>
+    <td>${serviceCpuCell(s)}</td>
+    <td>${serviceMemCell(s)}</td>
+    <td>${serviceIoCell(s)}</td>
+    <td class="actions">${actions}</td>
+  </tr>`;
+  const exp = open
+    ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+    : "";
+  return { main, exp };
+}
+
+function serviceRowHTML(s) {
+  const parts = serviceRowParts(s);
+  return parts.main + parts.exp;
+}
+
+// svcRenderedStructure fingerprints the tbody layout (filters, order, groups,
+// expansions). When it is unchanged, large fleets can patch row cells in place
+// instead of replacing every <tr> on each auto-refresh.
+function svcRenderedStructure(list) {
+  const parts = [
+    svcGrouped ? "1" : "0",
+    svcQuery,
+    svcStatus,
+    svcCategory,
+    svcSort.key,
+    String(svcSort.dir),
+    [...svcCollapsedGroups].sort().join("\0"),
+  ];
+  const entries = [];
+  if (!list.length) {
+    entries.push((allServices || []).length ? "nomatch" : "none");
+  } else if (svcGrouped) {
+    const dir = svcSort.key === "category" && svcSort.dir === -1 ? -1 : 1;
+    const groups = new Map();
+    list.forEach((item) => {
+      const category = categoryOf(item, "service");
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(item);
+    });
+    Array.from(groups.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
+    ).forEach(([category, items]) => {
+      entries.push("G:" + category + (svcCollapsedGroups.has(category) ? ":c" : ":o"));
+      if (!svcCollapsedGroups.has(category)) {
+        items.forEach((s) => {
+          entries.push("S:" + s.name);
+          if (expanded.has("svc:" + s.name)) entries.push("E:" + s.name);
+        });
+      }
+    });
+  } else {
+    list.forEach((s) => {
+      entries.push("S:" + s.name);
+      if (expanded.has("svc:" + s.name)) entries.push("E:" + s.name);
+    });
+  }
+  parts.push(entries.join(","));
+  return parts.join("|");
+}
+
+function visibleSvcItems(list) {
+  if (!svcGrouped) return list;
+  const dir = svcSort.key === "category" && svcSort.dir === -1 ? -1 : 1;
+  const groups = new Map();
+  list.forEach((item) => {
+    const category = categoryOf(item, "service");
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(item);
+  });
+  const out = [];
+  Array.from(groups.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
+  ).forEach(([category, items]) => {
+    if (!svcCollapsedGroups.has(category)) out.push(...items);
+  });
+  return out;
+}
+
+function patchServiceRow(s) {
+  const tr = document.getElementById("svc-row-" + s.name);
+  if (!tr) return false;
+  const parts = serviceRowParts(s);
+  const tmp = document.createElement("tbody");
+  tmp.innerHTML = parts.main;
+  const next = tmp.firstElementChild;
+  if (!next) return false;
+  tr.className = next.className;
+  tr.dataset.expKey = next.dataset.expKey || "";
+  const cells = tr.children;
+  const nextCells = next.children;
+  for (let i = 0; i < nextCells.length; i++) {
+    if (cells[i]) cells[i].innerHTML = nextCells[i].innerHTML;
+  }
+  return true;
+}
+
+function patchVisibleServiceRows(list) {
+  const tbody = $("#rows");
+  if (!tbody) return false;
+  for (const s of visibleSvcItems(list)) {
+    if (!patchServiceRow(s)) return false;
+  }
+  return true;
+}
+
+function finishSvcRender() {
+  renderAttention();
+  expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
+}
+
 // render receives fresh data on each refresh; cache it, then render through the
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
@@ -1494,62 +1646,20 @@ function renderServices() {
   updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
   const cnt = $("#svc-count");
   if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all" || svcCategory !== "all") ? `showing ${list.length} of ${total}` : "";
-  const serviceRow = (s) => {
-    const st = (s.status || "unknown").toLowerCase();
-    const state = serviceState(s);
-    const category = categoryOf(s, "service");
-    const op = liveOps.get(s.name);
-    const busy = serviceBusy(s.name);
-    const busyText = op
-      ? `<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${esc(op.action)} ${esc(opStateText(op))} · ${opElapsed(op)}s${op.message ? ` <span class="muted">${esc(op.message)}</span>` : ""}</div>`
-      : "";
-    let actions;
-    if (!s.enabled) {
-      actions = '<span class="muted">disabled in config</span>';
-    } else {
-      const stopped = st === "inactive" || st === "failed";
-      const paused = st === "paused";
-      actions = me.can_act ? `
-          <button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
-          <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
-          <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
-          <button ${busy || !paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="resume">resume</button>
-          <button ${busy || st !== "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="reload">reload</button>
-          ${s.monitored
-            ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
-            : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
-        : '<span class="muted">read-only</span>';
-    }
-    const label = esc(displayName(s));
-    const key = "svc:" + s.name;
-    const open = expanded.has(key);
-    const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const name = `<a class="name" data-service-expand="${esc(s.name)}">${label}</a>`;
-    const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
-    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
-      <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
-      <td>${categoryBadge(category)}</td>
-      <td>${stateBadge(state)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : ""}</td>
-      <td>${serviceUptimeCell(s)}</td>
-      <td>${serviceCpuCell(s)}</td>
-      <td>${serviceMemCell(s)}</td>
-      <td>${serviceIoCell(s)}</td>
-      <td class="actions">${actions}</td>
-    </tr>`;
-    const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
-      : "";
-    return row + expRow;
-  };
+  const structKey = svcRenderedStructure(list);
+  if (list.length >= SVC_PATCH_MIN && structKey === svcRenderedKey && patchVisibleServiceRows(list)) {
+    finishSvcRender();
+    return;
+  }
   const rows = svcGrouped
-    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 8, serviceRow, svcSort.key === "category" ? svcSort.dir : 1)
-    : list.map(serviceRow).join("");
+    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 8, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
+    : list.map(serviceRowHTML).join("");
   const empty = (allServices || []).length
     ? `<tr><td colspan="8" class="muted">No services match the filter.</td></tr>`
     : `<tr><td colspan="8" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows || empty;
-  renderAttention();
-  expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
+  svcRenderedKey = structKey;
+  finishSvcRender();
 }
 
 // toggleExpand / loadExpansionFor drive inline expansion, shared by services and
