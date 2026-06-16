@@ -176,15 +176,19 @@ func (a App) writeSLASeriesTable(service string, points []state.SLAPoint) {
 func (a App) writeSLASeriesJSON(service string, window time.Duration, points []state.SLAPoint) {
 	series := make([]map[string]any, 0, len(points))
 	for _, p := range points {
-		entry := map[string]any{"start": p.Start.Format(time.RFC3339), "up": p.Up, "total": p.Total, "ratio": nil}
-		if p.Total > 0 {
-			entry["ratio"] = float64(p.Up) / float64(p.Total)
-		}
-		series = append(series, entry)
+		series = append(series, slaPointJSON(p))
 	}
 	writeJSON(a.Stdout, map[string]any{
 		"service": service,
 		"since":   window.String(),
 		"series":  series,
 	})
+}
+
+func slaPointJSON(p state.SLAPoint) map[string]any {
+	entry := map[string]any{"start": p.Start.Format(time.RFC3339), "up": p.Up, "total": p.Total, "ratio": nil}
+	if p.Total > 0 {
+		entry["ratio"] = float64(p.Up) / float64(p.Total)
+	}
+	return entry
 }
