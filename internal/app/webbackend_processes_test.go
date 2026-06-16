@@ -287,6 +287,75 @@ func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	}
 }
 
+func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
+	pid := os.Getpid()
+	pidfile := filepath.Join(t.TempDir(), "web.pid")
+	if err := os.WriteFile(pidfile, []byte(itoa(pid)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := writeWebProcessConfig(t, pidfile)
+
+	clock := time.Unix(0, 0)
+	reader := &liveCPUReader{
+		cpu:     map[int]uint64{pid: 0},
+		rss:     map[int]uint64{pid: 4096},
+		ioRead:  map[int]uint64{pid: 1000},
+		ioWrite: map[int]uint64{pid: 2000},
+		hz:      100,
+		ncpu:    2,
+	}
+	collector := metrics.New(reader)
+	collector.Now = func() time.Time { return clock }
+	serviceMetrics := NewServiceMetricSampler()
+	deps := Deps{
+		Backend:          servicemgr.BackendSystemd,
+		Manager:          fakeManager{},
+		Runtime:          t.TempDir(),
+		DefaultTimeout:   time.Second,
+		OperationTimeout: time.Second,
+		Live:             NewLiveMetrics(),
+		LiveCollector:    collector,
+		ServiceMetrics:   serviceMetrics,
+		Collector:        collector,
+		ExecxRunner:      procInfoRunner{pidfile: pidfile},
+		Now:              func() time.Time { return clock },
+		Emit:             func(Event) {},
+	}
+	workers, warnings := BuildWorkers(cfg, deps, collector)
+	if len(warnings) != 0 {
+		t.Fatalf("BuildWorkers warnings = %v, want none", warnings)
+	}
+	if len(workers) != 1 {
+		t.Fatalf("workers = %d, want 1", len(workers))
+	}
+
+	workers[0].RunCycle(context.Background())
+	clock = clock.Add(time.Minute)
+	reader.cpu[pid] = 100
+	reader.rss[pid] = 8192
+	reader.ioRead[pid] = 7000
+	reader.ioWrite[pid] = 5000
+	workers[0].RunCycle(context.Background())
+
+	wb, warnings := NewWebBackend(cfg, deps)
+	if len(warnings) != 0 {
+		t.Fatalf("NewWebBackend warnings = %v, want none", warnings)
+	}
+	got, ok := wb.ServiceRuntime(context.Background(), "mysql-main", time.Hour)
+	if !ok {
+		t.Fatal("ServiceRuntime not found")
+	}
+	if got.Memory.Summary.Count == 0 || len(got.Memory.Points) == 0 {
+		t.Fatalf("memory history empty: %+v", got.Memory)
+	}
+	if got.CPU.Summary.Count == 0 || len(got.CPU.Points) == 0 {
+		t.Fatalf("CPU history empty: %+v", got.CPU)
+	}
+	if got.IO.Summary.Count == 0 || len(got.IO.Points) == 0 {
+		t.Fatalf("IO history empty: %+v", got.IO)
+	}
+}
+
 func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t *testing.T) {
 	_, checkDeps, _ := serviceRuntime("node_exporter", "node_exporter.service", map[string]any{}, Deps{
 		Backend:          servicemgr.BackendSystemd,
@@ -405,9 +474,14 @@ func (r systemdPIDRunner) Run(_ context.Context, name string, args ...string) (e
 }
 
 type liveCPUReader struct {
-	cpu  map[int]uint64
-	hz   float64
-	ncpu int
+	cpu     map[int]uint64
+	rss     map[int]uint64
+	ioRead  map[int]uint64
+	ioWrite map[int]uint64
+	fds     map[int]uint64
+	threads map[int]uint64
+	hz      float64
+	ncpu    int
 }
 
 func (r *liveCPUReader) ProcessCPU(pid int) (uint64, bool) {
@@ -415,12 +489,25 @@ func (r *liveCPUReader) ProcessCPU(pid int) (uint64, bool) {
 	return v, ok
 }
 
-func (*liveCPUReader) ProcessRSS(int) (uint64, bool)        { return 0, false }
-func (*liveCPUReader) ProcessIO(int) (uint64, uint64, bool) { return 0, 0, false }
-func (*liveCPUReader) ProcessFDs(int) (uint64, bool)        { return 0, false }
-func (*liveCPUReader) ProcessThreads(int) (uint64, bool)    { return 0, false }
-func (*liveCPUReader) TotalMemory() (uint64, uint64, bool)  { return 0, 0, false }
-func (*liveCPUReader) SystemCPU() (uint64, uint64, bool)    { return 0, 0, false }
+func (r *liveCPUReader) ProcessRSS(pid int) (uint64, bool) {
+	v, ok := r.rss[pid]
+	return v, ok
+}
+func (r *liveCPUReader) ProcessIO(pid int) (uint64, uint64, bool) {
+	rd, rok := r.ioRead[pid]
+	wr, wok := r.ioWrite[pid]
+	return rd, wr, rok || wok
+}
+func (r *liveCPUReader) ProcessFDs(pid int) (uint64, bool) {
+	v, ok := r.fds[pid]
+	return v, ok
+}
+func (r *liveCPUReader) ProcessThreads(pid int) (uint64, bool) {
+	v, ok := r.threads[pid]
+	return v, ok
+}
+func (*liveCPUReader) TotalMemory() (uint64, uint64, bool) { return 0, 0, false }
+func (*liveCPUReader) SystemCPU() (uint64, uint64, bool)   { return 0, 0, false }
 func (*liveCPUReader) LoadAverages() (float64, float64, float64, bool) {
 	return 0, 0, 0, false
 }

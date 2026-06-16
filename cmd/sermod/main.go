@@ -154,6 +154,7 @@ func run(args []string) int {
 		GlobalNotify:    config.NotifyDefault(cfg.Global.Raw),
 		Snapshots:       app.NewSnapshots(),
 		Live:            app.NewLiveMetrics(),
+		ServiceMetrics:  app.NewServiceMetricSampler(),
 		Remediation:     app.NewRemediationRegistry(),
 		RuleWindows:     app.NewRuleWindowRegistry(),
 		Events:          eventLog,

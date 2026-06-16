@@ -19,6 +19,7 @@ import (
 	"sermo/internal/rules"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
+	"sermo/internal/web"
 )
 
 // MonitorStore is the persistent monitoring-state store the daemon consults to
@@ -188,6 +189,9 @@ type Deps struct {
 	// sampling, kept separate from Collector so the two never corrupt each
 	// other's rate deltas. Optional: nil disables live CPU sampling.
 	LiveCollector *metrics.Collector
+	// ServiceMetrics stores per-cycle service CPU, memory and IO samples for the
+	// web detail graphs. Optional: nil means the web backend samples on demand.
+	ServiceMetrics *ServiceMetricSampler
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
@@ -299,7 +303,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		return worker.cycle
 	})
 	sampleMetrics := metricSampler(name, tree, collector, pidsForCycle)
-	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, pidsForCycle)
+	liveSample := liveSampler(name, deps.LiveCollector, deps.Live, deps.ServiceMetrics, pidsForCycle, deps.Now)
 	if noResident {
 		liveSample = nil
 	}
@@ -761,28 +765,72 @@ func discoverPIDs(discoverer process.Discoverer, selectors []process.Selector) [
 }
 
 // liveSampler returns a per-cycle closure that discovers the service's process
-// tree and samples its live CPU (per-process + aggregate) into the LiveMetrics
-// registry for the web UI. It uses a dedicated collector (deps.LiveCollector)
-// so its rate deltas never collide with the engine's metric sampling. Returns
-// nil when live metrics are not wired.
-func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, pids func() []int) func(context.Context) {
-	if lc == nil || live == nil {
+// tree, samples live CPU for the service tables, and records CPU/memory/IO into
+// the service runtime history for the detail graphs. It uses a dedicated
+// collector (deps.LiveCollector) so CPU rate deltas never collide with the
+// engine's metric sampling. Returns nil when no live/runtime destination is
+// wired.
+func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, serviceMetrics *ServiceMetricSampler, pids func() []int, now func() time.Time) func(context.Context) {
+	if lc == nil || (live == nil && serviceMetrics == nil) {
 		return nil
 	}
 	if pids == nil {
 		pids = func() []int { return nil }
 	}
+	if now == nil {
+		now = time.Now
+	}
 	return func(_ context.Context) {
-		sc := lc.SampleServiceCPU(service, pids())
-		live.Publish(service, ServiceLive{
+		at := now()
+		pidList := pids()
+		sc := lc.SampleServiceCPU(service, pidList)
+		sl := ServiceLive{
 			CPU:            sc.CPU.Percent,
 			CPUReady:       sc.CPU.Ready,
 			CPUThread:      sc.CPUThread.Percent,
 			CPUThreadReady: sc.CPUThread.Ready,
 			NumCPU:         sc.NumCPU,
 			PerProcCPU:     sc.PerProc,
-		})
+		}
+		live.Publish(service, sl)
+		if serviceMetrics == nil {
+			return
+		}
+		cur := web.ServiceRuntime{At: at.UTC().Format(time.RFC3339)}
+		if totals := processTotalsFromPIDs(pidList, lc.Reader); totals != nil {
+			cur.ProcessTotals = *totals
+		}
+		cur.NumCPU = sc.NumCPU
+		if sc.CPU.Ready {
+			cur.CPU = sc.CPU.Percent
+			cur.CPUThread = sc.CPUThread.Percent
+			cur.HasCPU = true
+		}
+		serviceMetrics.Record(service, cur)
 	}
+}
+
+func processTotalsFromPIDs(pids []int, r procMetricReader) *web.ProcessTotals {
+	if len(pids) == 0 || r == nil {
+		return nil
+	}
+	totals := web.ProcessTotals{Count: len(pids)}
+	for _, pid := range pids {
+		if rss, ok := r.ProcessRSS(pid); ok {
+			totals.RSS += uintToInt64(rss)
+		}
+		if rd, wr, ok := r.ProcessIO(pid); ok {
+			totals.IORead += uintToInt64(rd)
+			totals.IOWrite += uintToInt64(wr)
+		}
+		if n, ok := r.ProcessFDs(pid); ok {
+			totals.FDs += uintToInt64(n)
+		}
+		if n, ok := r.ProcessThreads(pid); ok {
+			totals.Threads += uintToInt64(n)
+		}
+	}
+	return &totals
 }
 
 // usesMetrics scans a resolved service for metric checks and metric conditions,

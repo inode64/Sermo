@@ -11,7 +11,10 @@ import (
 	"sermo/internal/web"
 )
 
-type serviceMetricSampler struct {
+// ServiceMetricSampler stores per-service process-tree runtime samples for the
+// web detail graphs. Workers record into it every observed cycle; the web
+// backend reads the same in-memory history when a service detail is expanded.
+type ServiceMetricSampler struct {
 	mu      sync.Mutex
 	prev    map[string]serviceMetricCounters
 	samples map[string][]serviceMetricSample
@@ -29,16 +32,19 @@ type serviceMetricSample struct {
 	current web.ServiceRuntime
 }
 
-func newServiceMetricSampler() *serviceMetricSampler {
-	return &serviceMetricSampler{
+// NewServiceMetricSampler returns an empty service runtime metric history.
+func NewServiceMetricSampler() *ServiceMetricSampler {
+	return &ServiceMetricSampler{
 		prev:    map[string]serviceMetricCounters{},
 		samples: map[string][]serviceMetricSample{},
 	}
 }
 
-func (s *serviceMetricSampler) Series(name string, cur web.ServiceRuntime, since time.Duration) web.ServiceRuntimeMetrics {
+// Record appends one process-tree runtime sample for a service and returns the
+// same sample after rate fields (currently IO) have been computed.
+func (s *ServiceMetricSampler) Record(name string, cur web.ServiceRuntime) web.ServiceRuntime {
 	if s == nil {
-		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}
+		return cur
 	}
 	at, err := time.Parse(time.RFC3339, cur.At)
 	if err != nil {
@@ -47,6 +53,12 @@ func (s *serviceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	}
 
 	s.mu.Lock()
+	cur = s.recordLocked(name, cur, at)
+	s.mu.Unlock()
+	return cur
+}
+
+func (s *ServiceMetricSampler) recordLocked(name string, cur web.ServiceRuntime, at time.Time) web.ServiceRuntime {
 	prev := s.prev[name]
 	if prev.ok && cur.Count > 0 && cur.IORead >= prev.ioRead && cur.IOWrite >= prev.ioWrite {
 		wall := at.Sub(prev.at).Seconds()
@@ -60,9 +72,25 @@ func (s *serviceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	s.prev[name] = serviceMetricCounters{at: at, ioRead: cur.IORead, ioWrite: cur.IOWrite, ok: cur.Count > 0}
 	s.samples[name] = append(s.samples[name], serviceMetricSample{at: at, current: cur})
 	s.trimLocked(name, at.Add(-daemonMetricRetention))
+	return cur
+}
+
+// Series records the current runtime sample and returns the selected historical
+// window as web metric series for CPU, memory and IO.
+func (s *ServiceMetricSampler) Series(name string, cur web.ServiceRuntime, since time.Duration) web.ServiceRuntimeMetrics {
+	if s == nil {
+		return web.ServiceRuntimeMetrics{Since: since.String(), Current: cur}
+	}
+	at, err := time.Parse(time.RFC3339, cur.At)
+	if err != nil {
+		at = time.Now()
+		cur.At = at.UTC().Format(time.RFC3339)
+	}
+
+	s.mu.Lock()
+	cur = s.recordLocked(name, cur, at)
 	samples := serviceSamplesSince(s.samples[name], at.Add(-since))
 	s.mu.Unlock()
-
 	return web.ServiceRuntimeMetrics{
 		Since:   since.String(),
 		Current: cur,
@@ -72,7 +100,7 @@ func (s *serviceMetricSampler) Series(name string, cur web.ServiceRuntime, since
 	}
 }
 
-func (s *serviceMetricSampler) trimLocked(name string, cutoff time.Time) {
+func (s *ServiceMetricSampler) trimLocked(name string, cutoff time.Time) {
 	samples := s.samples[name]
 	i := 0
 	for i < len(samples) && samples[i].at.Before(cutoff) {
