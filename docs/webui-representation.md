@@ -257,14 +257,16 @@ Section id: `events-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Events` plus shadow-event note |
-| Controls | service, watch, kind, status, only errors, group actions, apply, clear |
+| Controls | service, watch, kind, status, only errors, group actions, clear |
 | Table | event rows grouped by action when enabled |
 | Limit | latest matching events |
 
 Editable notes:
 
-- Keep service/watch/kind/status as quick text filters.
-- Grouping should stay optional; raw chronology is still useful.
+- Service/watch/kind/status filter live as the operator types (300ms debounce),
+  matching the services and watches panels; Enter applies immediately, Escape
+  clears. The `only errors` checkbox refetches on change. Grouping stays
+  client-side and optional; raw chronology is still useful.
 
 ## Notifiers panel
 

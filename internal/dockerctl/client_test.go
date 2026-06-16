@@ -66,6 +66,29 @@ func TestClientHTTPStatusError(t *testing.T) {
 	}
 }
 
+func TestClientListContainers(t *testing.T) {
+	var sawAll bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/containers/json", func(w http.ResponseWriter, r *http.Request) {
+		sawAll = r.URL.Query().Get("all") == "1"
+		_, _ = w.Write([]byte(`[{"Id":"abc","Names":["/web"],"State":"running","Status":"Up 2 minutes"}]`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	client := &Client{HTTP: srv.Client(), Base: srv.URL}
+	containers, err := client.ListContainers(context.Background(), true)
+	if err != nil {
+		t.Fatalf("ListContainers() error = %v", err)
+	}
+	if !sawAll {
+		t.Fatal("ListContainers(true) did not request all containers")
+	}
+	if len(containers) != 1 || containers[0].ID != "abc" || containers[0].Names[0] != "/web" || containers[0].State != "running" {
+		t.Fatalf("ListContainers() = %+v", containers)
+	}
+}
+
 func TestSpecFromTreeDockerDefaults(t *testing.T) {
 	spec, ok, err := SpecFromTree(map[string]any{"control": map[string]any{
 		"type":      "docker",

@@ -451,6 +451,9 @@ plus a `cmd` regex that narrows the shared QEMU binary to the intended domain or
 UUID. The cmdline selector narrows discovery; residual signaling is still
 authorized only by `stop_policy.kill_only_if`.
 
+`sermoctl wizard vm` can generate this `kind: service` shape from domains
+detected through the local libvirt socket.
+
 ### `control: docker` — Docker containers
 
 A service can be controlled as one Docker container instead of a systemd/OpenRC
@@ -503,6 +506,9 @@ For process metrics and residual-process reporting, Sermo reads the container's
 `State.Pid` from Docker inspect and discovers that process tree. You normally do
 not need a `processes:` selector for a controlled container. Residual signaling
 is still authorized only by `stop_policy.kill_only_if`.
+
+`sermoctl wizard docker` can generate this `kind: service` shape from containers
+detected through the local Docker socket.
 
 ### `also_service` — auxiliary init units
 

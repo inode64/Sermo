@@ -695,13 +695,17 @@ a service.
 > daemon uses, as host watches; type `default` to use the detected default-route
 > interface. There is also `sermoctl wizard service`,
 > which detects installed catalog daemons and writes `kind: service` files into
-> `services/` to enable them (see [daemons](daemons.md)). When several services
-> are selected, port overrides are skipped unless you explicitly review them;
-> catalog defaults are inherited. When a detected service has known configuration
-> files, the wizard asks whether to add a periodic `checks.config` entry for those
-> paths; that check uses `interval: 60m` by default. Existing `apps/`
-> include directories remain valid as a legacy alias; the wizard preserves them
-> and adds `services/` instead of moving or deleting old files. Run with no
+> `services/` to enable them (see [daemons](daemons.md)). Use
+> `sermoctl wizard docker` for detected Docker containers and `sermoctl wizard vm`
+> for detected libvirt/QEMU domains; those assistants write service files with
+> `control.type: docker` or `control.type: libvirt` plus matching read-only
+> checks. When several services are selected, port overrides are skipped unless
+> you explicitly review them; catalog defaults are inherited. When a detected
+> service has known configuration files, the wizard asks whether to add a
+> periodic `checks.config` entry for those paths; that check uses `interval: 60m`
+> by default. Existing `apps/` include directories remain valid as a legacy
+> alias; the wizard preserves them and adds `services/` instead of moving or
+> deleting old files. Run with no
 > argument to choose from the list. It prints the generated `watches:` block and offers to write one watch
 > per file under a directory named after the watch type (for example
 > `/etc/sermo/storage` or `/etc/sermo/network`). If that directory already has

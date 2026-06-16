@@ -23,6 +23,21 @@ func fakeWizardEnv(*config.Config) assist.Env {
 	}
 }
 
+func dockerWizardEnv(*config.Config) assist.Env {
+	return assist.Env{
+		ServiceNames: map[string]struct{}{},
+		DockerContainers: func() ([]assist.DockerCandidate, error) {
+			return []assist.DockerCandidate{{
+				Name:      "docker-web",
+				Title:     "web",
+				Container: "web",
+				Status:    "running",
+				Socket:    "/run/docker.sock",
+			}}, nil
+		},
+	}
+}
+
 func TestIfaceHasUsableAddress(t *testing.T) {
 	addr := func(cidr string) net.Addr {
 		ip, n, err := net.ParseCIDR(cidr)
@@ -106,6 +121,60 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	}
 	if strings.Contains(string(bak), "paths:") || strings.Contains(string(bak), "watches:") {
 		t.Fatalf("backup should be the original (pre-merge): %s", bak)
+	}
+}
+
+func TestRunWizardDockerWritesService(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := strings.Join([]string{
+		"1", // select docker-web
+		"1", // monitor enabled
+		"",  // interval inherit
+		"n", // no shadow
+		"y", // write service file
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	app := App{
+		Stdin:         strings.NewReader(script),
+		Stdout:        &out,
+		Stderr:        &bytes.Buffer{},
+		LoadConfig:    config.Load,
+		wizardEnvFunc: dockerWizardEnv,
+	}
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "docker"})
+	if code != exitSuccess {
+		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
+	}
+	servicePath := filepath.Join(tmp, servicesIncludeDir, "docker-web.yml")
+	data, err := os.ReadFile(servicePath)
+	if err != nil {
+		t.Fatalf("service file not written: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"kind: service",
+		"name: docker-web",
+		"type: docker",
+		"container: web",
+		"socket: /run/docker.sock",
+		"container.status",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("service file missing %q:\n%s", want, text)
+		}
+	}
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load merged config: %v", err)
+	}
+	if _, ok := loaded.Services["docker-web"]; !ok {
+		t.Fatalf("loaded config did not include docker-web: %v", loaded.ServiceNames)
 	}
 }
 

@@ -19,9 +19,12 @@ import (
 )
 
 const (
-	defaultURI    = string(libvirt.QEMUSystem)
-	defaultSocket = "/run/libvirt/libvirt-sock"
-	defaultPort   = 16509
+	// DefaultURI is the libvirt connect URI used for local QEMU/KVM domains.
+	DefaultURI = string(libvirt.QEMUSystem)
+	// DefaultSocket is libvirt's local control socket on modern Linux systems.
+	DefaultSocket = "/run/libvirt/libvirt-sock"
+	// DefaultPort is libvirt's plaintext TCP port.
+	DefaultPort = 16509
 )
 
 // Spec describes one libvirt-controlled VM target.
@@ -55,16 +58,16 @@ func SpecFromTree(tree map[string]any) (Spec, bool, error) {
 		Host:   cfgval.String(m["host"]),
 	}
 	if spec.URI == "" {
-		spec.URI = defaultURI
+		spec.URI = DefaultURI
 	}
 	if spec.Host == "" && spec.Socket == "" {
-		spec.Socket = defaultSocket
+		spec.Socket = DefaultSocket
 	}
 	if p, ok := cfgval.Int(m["port"]); ok {
 		spec.Port = p
 	}
 	if spec.Port == 0 {
-		spec.Port = defaultPort
+		spec.Port = DefaultPort
 	}
 	if spec.Domain == "" {
 		return Spec{}, true, fmt.Errorf("control.domain is required for libvirt")
@@ -94,6 +97,7 @@ func NewManager(spec Spec) Manager {
 type Client interface {
 	ConnectToURI(libvirt.ConnectURI) error
 	Disconnect() error
+	Domains() ([]libvirt.Domain, error)
 	DomainLookupByName(name string) (libvirt.Domain, error)
 	DomainLookupByUUID(uuid libvirt.UUID) (libvirt.Domain, error)
 	DomainGetState(dom libvirt.Domain, flags uint32) (int32, int32, error)
@@ -114,6 +118,41 @@ func (m Manager) Status(ctx context.Context, service string) (servicemgr.Service
 		Unit:    m.Spec.Domain,
 		Status:  status,
 	}, nil
+}
+
+// DomainSummary is one libvirt domain discovered for the wizard.
+type DomainSummary struct {
+	Name   string
+	Status servicemgr.Status
+}
+
+// ListDomains lists active and inactive libvirt domains with normalized status.
+func ListDomains(ctx context.Context, spec Spec) ([]DomainSummary, error) {
+	return listDomains(ctx, Manager{Spec: spec})
+}
+
+func listDomains(ctx context.Context, m Manager) ([]DomainSummary, error) {
+	return runWithClient(ctx, m, func(c Client) ([]DomainSummary, error) {
+		domains, err := c.Domains()
+		if err != nil {
+			return nil, fmt.Errorf("list domains: %w", err)
+		}
+		out := make([]DomainSummary, 0, len(domains))
+		for _, dom := range domains {
+			if strings.TrimSpace(dom.Name) == "" {
+				continue
+			}
+			state, _, err := c.DomainGetState(dom, 0)
+			if err != nil {
+				return nil, fmt.Errorf("domain %q state: %w", dom.Name, err)
+			}
+			out = append(out, DomainSummary{
+				Name:   dom.Name,
+				Status: statusFromDomainState(libvirt.DomainState(state)),
+			})
+		}
+		return out, nil
+	})
 }
 
 // Start boots a defined, inactive libvirt domain.
@@ -250,7 +289,7 @@ func (m Manager) client(timeout time.Duration) (Client, error) {
 	}
 	socket := m.Spec.Socket
 	if socket == "" {
-		socket = defaultSocket
+		socket = DefaultSocket
 	}
 	return libvirt.NewWithDialer(dialers.NewLocal(
 		dialers.WithSocket(filepath.Clean(socket)),
