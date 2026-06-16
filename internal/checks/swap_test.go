@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -89,6 +90,26 @@ func TestBuildSwapChecks(t *testing.T) {
 	}
 	if _, warn := buildCheckForTest(t, map[string]any{"type": "swap", "metric": "bogus"}); warn == "" {
 		t.Fatal("unknown swap metric should warn")
+	}
+}
+
+func TestParseSwapVMStat(t *testing.T) {
+	pagesIn, pagesOut, err := parseSwapVMStat("nr_free_pages 10\npswpin 12\npswpout 34\n")
+	if err != nil {
+		t.Fatalf("parseSwapVMStat: %v", err)
+	}
+	if pagesIn != 12 || pagesOut != 34 {
+		t.Fatalf("pagesIn=%d pagesOut=%d, want 12/34", pagesIn, pagesOut)
+	}
+
+	pagesIn, pagesOut, err = parseSwapVMStat("nr_free_pages 10\n")
+	if err != nil || pagesIn != 0 || pagesOut != 0 {
+		t.Fatalf("missing counters = %d/%d err=%v, want zeroes without error", pagesIn, pagesOut, err)
+	}
+
+	_, _, err = parseSwapVMStat("pswpin nope\n")
+	if err == nil || !strings.Contains(err.Error(), "pswpin") {
+		t.Fatalf("malformed pswpin err = %v, want named parse error", err)
 	}
 }
 
