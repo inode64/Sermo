@@ -29,6 +29,11 @@ sermoctl restart SERVICE [--no-cascade]
 sermoctl resume SERVICE [--no-cascade]
 sermoctl reload SERVICE
 
+sermoctl mount TARGET                 # TARGET is a configured mount name or absolute path
+sermoctl umount TARGET
+sermoctl mount status TARGET
+sermoctl mount list
+
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
 sermoctl locks SERVICE
@@ -85,3 +90,10 @@ unexpected panic recovered at the top level.
 
 `is-active` maps directly: `0` active, `1` not active (including `paused`),
 `2` error.
+
+## Mounts
+
+Mount actions are fstab-backed and use `kind: mount` files from
+`/etc/sermo/mounts` by default. A path target that is not configured is still
+accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
+[mount units](configuration.md#mount-units).

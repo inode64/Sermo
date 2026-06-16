@@ -138,6 +138,11 @@ as an include directory for concrete service files; keep that path configured
 while those files exist. The wizard preserves any loaded `apps/` include and
 appends `services/` instead of moving or deleting legacy files.
 
+The volume wizard generates storage **watch fragments** under the `storage/`
+include directory. First-class mount units are different: hand-written
+`kind: mount` files live under `paths.mounts` (default `/etc/sermo/mounts`) and
+are operated with `sermoctl mount|umount`.
+
 ## Adding a new wizard
 
 1. Implement `assist.Assistant` (`Name`, `Title`, `Run`) in `internal/assist/`.

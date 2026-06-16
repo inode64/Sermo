@@ -15,6 +15,7 @@ import (
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
 var defaultIncludeDirs = []string{"/etc/sermo/services", "/etc/sermo/apps"}
+var defaultMountDirs = []string{"/etc/sermo/mounts"}
 
 // Option customizes Load.
 type Option func(*loadOptions)
@@ -59,6 +60,11 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		includeDirs = append([]string(nil), defaultIncludeDirs...)
 		global.Includes = append([]string(nil), includeDirs...)
 	}
+	mountDirs := global.Mounts
+	if len(mountDirs) == 0 {
+		mountDirs = append([]string(nil), defaultMountDirs...)
+		global.Mounts = append([]string(nil), mountDirs...)
+	}
 
 	cfg := &Config{
 		Global:    global,
@@ -67,6 +73,7 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Libraries: map[string]*Document{},
 		Patterns:  map[string]*Document{},
 		Services:  map[string]*Document{},
+		Mounts:    map[string]*Document{},
 	}
 
 	for _, dir := range catalogDirs {
@@ -76,6 +83,11 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	for _, dir := range includeDirs {
 		if err := cfg.loadIncludeDir(dir); err != nil {
+			return nil, err
+		}
+	}
+	for _, dir := range mountDirs {
+		if err := cfg.loadMountDir(dir); err != nil {
 			return nil, err
 		}
 	}
@@ -110,6 +122,7 @@ func loadGlobal(path string) (Global, error) {
 	if paths, ok := raw["paths"].(map[string]any); ok {
 		g.Catalog = cfgval.StringList(paths["catalog"])
 		g.Includes = cfgval.StringList(paths["includes"])
+		g.Mounts = cfgval.StringList(paths["mounts"])
 		if len(g.Includes) == 0 {
 			g.Includes = cfgval.StringList(paths["enabled"])
 		}
@@ -145,6 +158,7 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Catalog = resolvePathList(base, g.Catalog)
 	g.Includes = resolvePathList(base, g.Includes)
+	g.Mounts = resolvePathList(base, g.Mounts)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
 	}
@@ -182,6 +196,51 @@ func (c *Config) loadDir(dir string) error {
 
 func (c *Config) loadIncludeDir(dir string) error {
 	return c.loadCategoryDir(dir, "", true)
+}
+
+func (c *Config) loadMountDir(dir string) error {
+	return c.loadMountDirEntries(dir)
+}
+
+func (c *Config) loadMountDirEntries(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read mount config dir %s: %w", dir, err)
+	}
+
+	var names []string
+	var subdirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			subdirs = append(subdirs, e.Name())
+			continue
+		}
+		if isYAML(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(subdirs)
+
+	for _, name := range names {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if doc.Kind != kindMount {
+			return fmt.Errorf("%s: mount config directories only support kind: mount", doc.Path)
+		}
+		c.add(doc)
+	}
+	for _, name := range subdirs {
+		if err := c.loadMountDirEntries(filepath.Join(dir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool) error {
@@ -318,6 +377,8 @@ func (c *Config) add(doc *Document) {
 		indexDocument(c.Patterns, &c.PatternNames, doc)
 	case kindService:
 		indexDocument(c.Services, &c.ServiceNames, doc)
+	case kindMount:
+		indexDocument(c.Mounts, &c.MountNames, doc)
 	}
 	c.docs = append(c.docs, doc)
 }
