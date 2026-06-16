@@ -89,6 +89,8 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"<th>Memory</th>",
 		"<th>IO R/W</th>",
 		".service-detail table { width: 100%;",
+		"function isWatchAttention(w)",
+		`target === "failed-watches"`,
 		"function serviceRowParts(s)",
 		"function svcRenderedStructure(list)",
 		"function patchVisibleServiceRows(list)",
