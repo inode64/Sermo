@@ -112,15 +112,19 @@ func (a App) writeSLAJSON(reports []serviceSLA) {
 	for _, r := range reports {
 		windows := make(map[string]any, len(r.Windows))
 		for _, v := range r.Windows {
-			entry := map[string]any{"up": v.Up, "total": v.Total, "ratio": nil}
-			if ratio, ok := v.Ratio(); ok {
-				entry["ratio"] = ratio
-			}
-			windows[v.Window] = entry
+			windows[v.Window] = slaValueJSON(v)
 		}
 		out = append(out, map[string]any{"service": r.Service, "windows": windows})
 	}
 	writeJSON(a.Stdout, map[string]any{"sla": out})
+}
+
+func slaValueJSON(v state.SLAValue) map[string]any {
+	entry := map[string]any{"up": v.Up, "total": v.Total, "ratio": nil}
+	if ratio, ok := v.Ratio(); ok {
+		entry["ratio"] = ratio
+	}
+	return entry
 }
 
 func (a App) writeSLATable(reports []serviceSLA) {
