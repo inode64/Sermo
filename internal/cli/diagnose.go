@@ -90,8 +90,9 @@ func (a App) writeDiagnoseText(r diag.Result) {
 	for _, f := range r.Findings {
 		fmt.Fprintf(a.Stdout, "%-7s %s: %s\n", f.Level, f.Scope, f.Message)
 	}
-	fmt.Fprintf(a.Stdout, "%d error(s), %d warning(s)\n", r.Errors(), r.Warnings())
-	if len(r.Findings) == 0 || (r.Errors() == 0 && r.Warnings() == 0) {
+	errors, warnings := r.Errors(), r.Warnings()
+	fmt.Fprintf(a.Stdout, "%d error(s), %d warning(s)\n", errors, warnings)
+	if len(r.Findings) == 0 || (errors == 0 && warnings == 0) {
 		fmt.Fprintln(a.Stdout, "ok: no problems found")
 	}
 }
@@ -101,9 +102,10 @@ func (a App) writeDiagnoseJSON(r diag.Result) {
 	for _, f := range r.Findings {
 		findings = append(findings, map[string]any{"level": f.Level, "scope": f.Scope, "message": f.Message})
 	}
+	errors, warnings := r.Errors(), r.Warnings()
 	writeJSON(a.Stdout, map[string]any{
 		"findings": findings,
-		"errors":   r.Errors(),
-		"warnings": r.Warnings(),
+		"errors":   errors,
+		"warnings": warnings,
 	})
 }
