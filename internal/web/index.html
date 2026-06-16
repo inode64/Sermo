@@ -2383,7 +2383,7 @@ function watchSummaryCell(w) {
       return `<span class="bad">${esc(d.path || "")}: ${esc(d.sample_error)}</span>`;
     }
     const fs = d.filesystem ? ` · ${esc(d.filesystem)}` : "";
-    const mount = d.mount_point ? ` · ${esc(d.mount_point)}` : "";
+    const mount = d.mount_point && d.mount_point !== d.path ? ` · ${esc(d.mount_point)}` : "";
     const usedPct = diskUsedPct(d);
     return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
       <div>${usageBar(usedPct)} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
