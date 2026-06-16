@@ -32,6 +32,19 @@ func TestReadEDAC(t *testing.T) {
 	}
 }
 
+func TestReadEDACRejectsMalformedCounter(t *testing.T) {
+	root := t.TempDir()
+	mc := filepath.Join(root, "mc", "mc0")
+	if err := os.MkdirAll(mc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(mc, "ce_count"), "not-a-number\n")
+	writeFile(t, filepath.Join(mc, "ue_count"), "0\n")
+	if _, err := readEDAC(root); err == nil {
+		t.Fatal("readEDAC must reject malformed counters instead of treating them as zero")
+	}
+}
+
 func edacWith(st EdacCounts, preds ...levelPred) edacCheck {
 	return edacCheck{base: base{name: "e", timeout: time.Second}, sampler: func() (EdacCounts, error) { return st, nil }, preds: preds}
 }
