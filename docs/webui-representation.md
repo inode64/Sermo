@@ -31,7 +31,7 @@ Keep changes concrete:
 | Readiness | `GET /readyz?verbose` | startup / shutdown banner |
 | Services | `GET /api/services` | main service list |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
-| Service latency metrics | `GET /api/services/{name}/metrics` | latency chart for measured checks |
+| Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | latency chart when `metric` is omitted; named numeric metric series when present |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | persisted service CPU/memory/IO history sampled by worker cycles |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients |
 | Service events | `GET /api/services/{name}/events` | per-service event feed |
@@ -42,7 +42,7 @@ Keep changes concrete:
 | Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |
 | Host metrics | `GET /api/host` | current host CPU, memory and load values |
 | Locks | `GET /api/locks` | named runtime locks |
-| Events | `GET /api/events` | service/watch activity |
+| Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Recent activity | `GET /api/activity` | summary of recent events |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
 | Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics |

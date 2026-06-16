@@ -378,7 +378,8 @@ Read-only endpoints:
 - `GET /api/services/{name}/sla?since=24h` — per-minute availability history;
   `since` is a duration, default 24h, capped at the ~1-year retention.
 - `GET /api/services/{name}/metrics?check=NAME&since=24h` — check latency
-  history + summary, see below.
+  history + summary. Add `metric=KEY` for a named numeric metric published by
+  that check, see below.
 - `GET /api/services/{name}/runtime?since=24h` — service process tree CPU,
   memory and IO history.
 - `GET /api/services/{name}/events?limit=N` — events for one service.
@@ -395,7 +396,8 @@ Read-only endpoints:
   actions and release eligibility.
 - `GET /api/activity` — recent activity summary used by the dashboard header.
 - `GET /api/monitoring` — monitored vs paused service counts.
-- `GET /api/events?limit=N` — global event feed, newest first.
+- `GET /api/events?limit=N` — global event feed, newest first. Optional filters:
+  `service`, `watch`, `kind`, `status` and `only_errors=1`.
 - `GET /api/diagnostics` — [diagnostics](#diagnostics) findings with `time`
   (RFC3339), `level`, `scope` and `message`; includes malformed lock files under
   `<paths.runtime>/locks`.
@@ -481,10 +483,14 @@ selected check. A window selector covers the **last hour, day, week, month and
 year**, and for the chosen period the panel shows the **average, minimum and
 maximum** plus a line (average over time) with a min–max band. The data is at
 `GET /api/services/{name}/metrics?check=NAME&since=DURATION` as `{summary:{count,
-avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Measurements are kept
-per minute for roughly a year (pruned like the SLA samples); a check that only
-runs every N cycles ([per-check interval](#per-check-interval)) records a sample
-only when it actually runs, so the average is not skewed.
+avg,min,max}, points:[{start,n,avg,min,max}], unit:"ms"}`. Add `metric=KEY` to
+read a named numeric metric for checks that publish one, such as `hdparm`
+`read`/`cached`, `sensors` `temp`/`fan`, `smart` `temperature`/`wear` or `edac`
+`ce`/`ue`; in that case `unit` is the metric's unit instead of `ms`.
+Measurements are kept per minute for roughly a year (pruned like the SLA
+samples); a check that only runs every N cycles ([per-check
+interval](#per-check-interval)) records a sample only when it actually runs, so
+the average is not skewed.
 
 The `Daemon / Engine settings` process charts use the same persistent state
 database for sermod's own CPU, memory and IO history, so those graphs survive a
