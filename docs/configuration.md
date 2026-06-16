@@ -384,6 +384,9 @@ threads), `GET /api/events?limit=N` (the **global event feed**, newest first),
 `GET /api/diagnostics` (the [diagnostics](#diagnostics) findings with `time`
 (RFC3339), `level`, `scope` and `message`; includes malformed lock files under
 `<paths.runtime>/locks`),
+`POST /api/diagnostics/clean` (admin-only, CSRF-protected; removes stale
+monitoring state, SLA and measurement rows for services/watches no longer
+configured),
 `GET /api/watches` (configured host watches, their single `state`
 (`disabled`, `unmonitorized`, `ok`, `failed`), `monitor` mode, conditions,
 notifications, live resource readings when available and recent activity),
@@ -1651,4 +1654,8 @@ It reports, as `error` / `warning` / `info` findings:
 `GET /api/diagnostics`, where each finding is timestamped with the time the web
 endpoint generated the diagnostics response. When the web UI is enabled, that
 feed also includes **operation slot** usage from the running daemon (`info` when
-some slots are in use, `warning` when saturated); see also `GET /api/ops`.
+some slots are in use, `warning` when saturated); see also `GET /api/ops`. When
+the panel finds stale database rows, admins can use **clean stale data**, which
+calls `POST /api/diagnostics/clean` and performs the same bounded cleanup as
+`sermoctl diagnose clean`: it removes only stored state/SLA/measurement rows for
+targets that are no longer configured.

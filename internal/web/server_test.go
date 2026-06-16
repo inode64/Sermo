@@ -27,6 +27,7 @@ type fakeBackend struct {
 	events          []Event
 	releasedLocks   []string
 	releaseOK       bool
+	diagnosticClean DiagnosticCleanResult
 }
 
 func (f *fakeBackend) Services(context.Context) []Service   { return f.services }
@@ -147,6 +148,12 @@ func (f *fakeBackend) ServiceRuntime(_ context.Context, name string, since time.
 }
 func (f *fakeBackend) Diagnostics(context.Context) []Finding {
 	return []Finding{{Level: "warning", Scope: "database", Message: `stored data for service "ghost"`}}
+}
+func (f *fakeBackend) CleanDiagnostics(context.Context) DiagnosticCleanResult {
+	if f.diagnosticClean.OK || f.diagnosticClean.Message != "" {
+		return f.diagnosticClean
+	}
+	return DiagnosticCleanResult{OK: true, Message: "no unconfigured service data found"}
 }
 func (f *fakeBackend) Operations(context.Context) OperationSlots { return f.opsSlots }
 func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
@@ -600,6 +607,36 @@ func TestDiagnostics(t *testing.T) {
 	}
 	if _, err := time.Parse(time.RFC3339, got[0].Time); err != nil {
 		t.Fatalf("diagnostic time = %q, want RFC3339: %v", got[0].Time, err)
+	}
+}
+
+func TestDiagnosticsClean(t *testing.T) {
+	b := &fakeBackend{diagnosticClean: DiagnosticCleanResult{
+		OK:       true,
+		Message:  "cleared stored data for 2 unconfigured service(s)",
+		Pruned:   7,
+		Services: []string{"ghost", "watch:old"},
+	}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/diagnostics/clean"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("diagnostics clean status %d", rec.Code)
+	}
+	var got DiagnosticCleanResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !got.OK || got.Pruned != 7 || strings.Join(got.Services, ",") != "ghost,watch:old" {
+		t.Fatalf("diagnostics clean = %+v", got)
+	}
+}
+
+func TestDiagnosticsCleanDisabled(t *testing.T) {
+	rec := httptest.NewRecorder()
+	srv := &Server{Backend: &fakeBackend{}, DiagnosticsDisabled: true}
+	srv.Handler().ServeHTTP(rec, postReq("/api/diagnostics/clean"))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("disabled diagnostics clean status %d, want 404", rec.Code)
 	}
 }
 

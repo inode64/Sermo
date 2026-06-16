@@ -552,8 +552,10 @@
 <details id="diag-section">
   <summary>Diagnostics
     <button id="diag-refresh">refresh</button>
+    <button id="diag-clean" class="danger-btn" style="display:none">clean stale data</button>
     <button id="reload-btn" style="display:none">reload config</button>
     <span class="muted" style="font-weight:400; font-size:.8rem; margin-left:.5rem">SIGHUP or systemctl reload sermod</span>
+    <span id="diag-clean-note" class="muted" style="display:none; font-weight:400; font-size:.8rem; margin-left:.5rem">removes stale state/SLA/measurements for unconfigured targets</span>
   </summary>
   <table class="events"><tbody id="diag"></tbody></table>
 </details>
@@ -576,6 +578,7 @@ async function loadMe() {
   if (reloadBtn) {
     reloadBtn.style.display = (me.can_act ? "inline-block" : "none");
   }
+  updateDiagnosticCleanControls(latestDiagnostics || []);
   // Hide the Diagnostics panel entirely when disabled via web.disable_diagnostics.
   const diagSection = $("#diag-section");
   if (diagSection) {
@@ -743,11 +746,13 @@ function clearEventFilters() {
 async function loadDiag() {
   if (me.diagnostics === false) { latestDiagnostics = []; renderAttention(); return; }
   $("#diag").innerHTML = `<tr><td class="muted">checking…</td></tr>`;
+  updateDiagnosticCleanControls([]);
   try {
     const res = await fetch("api/diagnostics");
     if (!res.ok) throw new Error("HTTP " + res.status);
     const findings = await res.json();
     latestDiagnostics = findings || [];
+    updateDiagnosticCleanControls(latestDiagnostics);
     renderAttention();
     if (!findings || !findings.length) {
       $("#diag").innerHTML = `<tr><td style="color:#1a7f37">ok — no problems found</td></tr>`;
@@ -761,8 +766,45 @@ async function loadDiag() {
     </tr>`).join("");
   } catch (e) {
     latestDiagnostics = [];
+    updateDiagnosticCleanControls([]);
     renderAttention();
     $("#diag").innerHTML = `<tr><td class="muted">Failed to run diagnostics: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+function staleDiagnostic(f) {
+  return f && f.scope === "database" && String(f.message || "").includes("which is no longer configured");
+}
+
+function updateDiagnosticCleanControls(findings) {
+  const show = !!(me.can_act && me.diagnostics !== false && (findings || []).some(staleDiagnostic));
+  const btn = $("#diag-clean");
+  const note = $("#diag-clean-note");
+  if (btn) btn.style.display = show ? "inline-block" : "none";
+  if (note) note.style.display = show ? "inline" : "none";
+}
+
+async function cleanDiagnostics() {
+  if (!confirm("Clean stale monitoring state, SLA and measurement rows for services/watches that are no longer configured?")) return;
+  $("#err").textContent = "";
+  const btn = $("#diag-clean");
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch("api/diagnostics/clean", {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const services = (body.services || []).join(", ");
+    $("#err").textContent = body.pruned
+      ? `cleaned stale diagnostic data: ${body.pruned} row${body.pruned === 1 ? "" : "s"}${services ? " (" + services + ")" : ""}`
+      : (body.message || "no stale diagnostic data found");
+    await loadDiag();
+  } catch (e) {
+    $("#err").textContent = `diagnostics clean: ${e.message}`;
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -3863,6 +3905,13 @@ function initStaticHandlers() {
     diagRefresh.addEventListener("click", (e) => {
       e.stopPropagation();
       loadDiag();
+    });
+  }
+  const diagClean = $("#diag-clean");
+  if (diagClean) {
+    diagClean.addEventListener("click", (e) => {
+      e.stopPropagation();
+      cleanDiagnostics();
     });
   }
   const reloadBtn = $("#reload-btn");

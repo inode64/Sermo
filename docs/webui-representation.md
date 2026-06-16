@@ -43,6 +43,7 @@ Keep changes concrete:
 | Events | `GET /api/events` | service/watch activity |
 | Recent activity | `GET /api/activity` | summary of recent events |
 | Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics |
+| Diagnostics clean | `POST /api/diagnostics/clean` | admin cleanup of stale stored state/SLA/measurement rows for unconfigured targets |
 | Live operations | `GET /api/ops` | active operation slots |
 
 ## Top bar
@@ -349,8 +350,8 @@ Section id: `diag-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Diagnostics` |
-| Buttons | refresh, reload config when admin |
-| Help text | `SIGHUP or systemctl reload sermod` |
+| Buttons | refresh; clean stale data when admin and stale database findings exist; reload config when admin |
+| Help text | `SIGHUP or systemctl reload sermod`; cleanup warning for stale state/SLA/measurements |
 | Table | diagnostic time, level, scope and message rows |
 
 ## Change template

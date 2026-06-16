@@ -306,6 +306,14 @@ type ActionResult struct {
 	Message string `json:"message,omitempty"`
 }
 
+// DiagnosticCleanResult is the outcome of pruning stale diagnostic state.
+type DiagnosticCleanResult struct {
+	OK       bool     `json:"ok"`
+	Message  string   `json:"message,omitempty"`
+	Pruned   int64    `json:"pruned"`
+	Services []string `json:"services,omitempty"`
+}
+
 // PreflightResult is the outcome of an on-demand preflight run.
 type PreflightResult struct {
 	OK     bool    `json:"ok"`
@@ -560,6 +568,8 @@ type Backend interface {
 	// Diagnostics runs config/host/database consistency checks and returns the
 	// findings (ordered by severity).
 	Diagnostics(ctx context.Context) []Finding
+	// CleanDiagnostics removes stale stored data for unconfigured services.
+	CleanDiagnostics(ctx context.Context) DiagnosticCleanResult
 	// Operations reports how many global operation slots are in use.
 	Operations(ctx context.Context) OperationSlots
 	// ServiceEvents returns up to limit recent events for one service, newest
@@ -674,6 +684,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
+	mux.HandleFunc("POST /api/diagnostics/clean", s.handleDiagnosticsClean)
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
 	mux.HandleFunc("POST /api/services/{name}/preflight", s.handlePreflight)
 	mux.HandleFunc("POST /api/services/{name}/{action}", s.handleAction)
@@ -1028,6 +1039,19 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, timestampFindings(s.Backend.Diagnostics(r.Context()), time.Now()))
+}
+
+func (s *Server) handleDiagnosticsClean(w http.ResponseWriter, r *http.Request) {
+	if s.DiagnosticsDisabled {
+		writeError(w, http.StatusNotFound, "diagnostics are disabled")
+		return
+	}
+	res := s.Backend.CleanDiagnostics(r.Context())
+	status := http.StatusOK
+	if !res.OK {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, res)
 }
 
 func timestampFindings(findings []Finding, at time.Time) []Finding {
