@@ -161,8 +161,8 @@ a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down.
 Per-service CPU rate baselines are reset only when a service is removed from the
-running config; persisted metric history remains in `paths.state` until normal
-retention or an explicit `sermoctl state compact`.
+running config; persisted metric and event history remains in `paths.state`
+until normal retention or an explicit `sermoctl state compact`.
 
 You can trigger a reload with any of:
 
@@ -418,7 +418,7 @@ auth is enabled:
   `monitor`, `unmonitor` or `expand`.
 - `POST /api/locks/{service}/release?name=NAME` — release an inactive
   stale/expired named runtime lock; active locks are refused.
-- `POST /api/events/clear?before=TIME` — clear the in-memory event/activity log;
+- `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
   `before` may be RFC3339 or a duration. Omit it to clear all events.
 - `POST /api/diagnostics/clean` — when diagnostics are enabled, remove stale
   monitoring state for services/watches no longer configured; metric and SLA
@@ -1699,7 +1699,8 @@ sermoctl state compact --before 720h    # prune history older than 30 days
 sermoctl state compact --before 2026-01-01T00:00:00Z
 ```
 
-`state compact` deletes old bucketed SLA, measurement, daemon metric and service
-runtime metric rows, then checkpoints and vacuums the SQLite state database so
-freed pages can return to the filesystem. Without `--before`, it applies the
-same 366-day (~1 year) retention window that `sermod` applies at startup.
+`state compact` deletes old bucketed SLA, measurement, daemon metric, service
+runtime metric and event rows, then checkpoints and vacuums the SQLite state
+database so freed pages can return to the filesystem. Without `--before`, it
+applies the same 366-day (~1 year) retention window that `sermod` applies at
+startup.

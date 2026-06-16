@@ -3,6 +3,8 @@ package app
 import (
 	"sync"
 	"time"
+
+	"sermo/internal/state"
 )
 
 // LoggedEvent is an Event with the time it was recorded.
@@ -11,16 +13,28 @@ type LoggedEvent struct {
 	Event
 }
 
+// EventStore persists the operator-visible event/activity feed so sermod can
+// repopulate the web UI after a daemon restart.
+type EventStore interface {
+	RecordEvent(state.EventRecord) error
+	RecentEvents(limit int) ([]state.EventRecord, error)
+	PruneEvents(before time.Time) (int64, error)
+}
+
 // EventLog keeps the most recent events in a bounded ring buffer so the web UI
-// can show a global feed and a per-service feed without a database. It is safe
-// for concurrent use; workers and watches add, the web reads.
+// can show a global feed and a per-service feed quickly. When an EventStore is
+// attached, the ring is hydrated from persistent state at startup and every new
+// event is appended to the store. It is safe for concurrent use; workers and
+// watches add, the web reads.
 type EventLog struct {
-	mu    sync.Mutex
-	now   func() time.Time
-	buf   []LoggedEvent
-	size  int
-	next  int // write index
-	count int
+	mu           sync.Mutex
+	now          func() time.Time
+	store        EventStore
+	onStoreError func(error)
+	buf          []LoggedEvent
+	size         int
+	next         int // write index
+	count        int
 }
 
 // NewEventLog returns a log retaining the last size events (min 1).
@@ -29,6 +43,22 @@ func NewEventLog(size int) *EventLog {
 		size = 1
 	}
 	return &EventLog{now: time.Now, size: size, buf: make([]LoggedEvent, size)}
+}
+
+// NewPersistentEventLog returns an EventLog backed by store. It loads the last
+// retained events into the in-memory ring; if that hydration fails, the returned
+// log is still usable and remains attached for future writes.
+func NewPersistentEventLog(size int, store EventStore, onStoreError func(error)) (*EventLog, error) {
+	l := NewEventLog(size)
+	l.store = store
+	l.onStoreError = onStoreError
+	if store == nil {
+		return l, nil
+	}
+	if err := l.loadRecentFromStore(); err != nil {
+		return l, err
+	}
+	return l, nil
 }
 
 // Add records an event with the current time, evicting the oldest when full.
@@ -40,13 +70,16 @@ func (l *EventLog) Add(e Event) {
 	if now == nil {
 		now = time.Now
 	}
+	logged := LoggedEvent{Time: now(), Event: e}
 	l.mu.Lock()
-	l.buf[l.next] = LoggedEvent{Time: now(), Event: e}
-	l.next = (l.next + 1) % l.size
-	if l.count < l.size {
-		l.count++
-	}
+	l.addLocked(logged)
 	l.mu.Unlock()
+
+	if l.store != nil {
+		if err := l.store.RecordEvent(eventRecordFromLogged(logged)); err != nil {
+			l.reportStoreError(err)
+		}
+	}
 }
 
 // Recent returns up to limit events, newest first. A non-empty service filters to
@@ -86,6 +119,30 @@ func (l *EventLog) orderedLocked() []LoggedEvent {
 	return out
 }
 
+func (l *EventLog) addLocked(e LoggedEvent) {
+	l.buf[l.next] = e
+	l.next = (l.next + 1) % l.size
+	if l.count < l.size {
+		l.count++
+	}
+}
+
+func (l *EventLog) loadRecentFromStore() error {
+	records, err := l.store.RecentEvents(l.size)
+	if err != nil {
+		return err
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.buf = make([]LoggedEvent, l.size)
+	l.next = 0
+	l.count = 0
+	for i := len(records) - 1; i >= 0; i-- {
+		l.addLocked(loggedEventFromRecord(records[i]))
+	}
+	return nil
+}
+
 // Prune removes events strictly older than 'before'. If before.IsZero(), all
 // events are cleared. Returns the number of events removed. Safe for concurrent use.
 func (l *EventLog) Prune(before time.Time) int {
@@ -93,17 +150,19 @@ func (l *EventLog) Prune(before time.Time) int {
 		return 0
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	if l.count == 0 {
-		return 0
+		l.mu.Unlock()
+		return l.pruneStore(before, 0)
 	}
+	var cleared int
 	if before.IsZero() {
-		cleared := l.count
+		cleared = l.count
 		l.buf = make([]LoggedEvent, l.size)
 		l.next = 0
 		l.count = 0
-		return cleared
+		l.mu.Unlock()
+		return l.pruneStore(before, cleared)
 	}
 
 	ordered := l.orderedLocked() // oldest first
@@ -116,7 +175,7 @@ func (l *EventLog) Prune(before time.Time) int {
 		keepIdx = i + 1
 	}
 	kept := ordered[keepIdx:]
-	cleared := len(ordered) - len(kept)
+	cleared = len(ordered) - len(kept)
 
 	// Rebuild the ring with kept events (oldest at [0]).
 	newBuf := make([]LoggedEvent, l.size)
@@ -132,7 +191,30 @@ func (l *EventLog) Prune(before time.Time) int {
 	} else {
 		l.next = 0
 	}
-	return cleared
+	l.mu.Unlock()
+	return l.pruneStore(before, cleared)
+}
+
+func (l *EventLog) pruneStore(before time.Time, memoryCleared int) int {
+	if l.store == nil {
+		return memoryCleared
+	}
+	cleared, err := l.store.PruneEvents(before)
+	if err != nil {
+		l.reportStoreError(err)
+		return memoryCleared
+	}
+	maxInt := int64(int(^uint(0) >> 1))
+	if cleared > maxInt {
+		return int(maxInt)
+	}
+	return int(cleared)
+}
+
+func (l *EventLog) reportStoreError(err error) {
+	if err != nil && l.onStoreError != nil {
+		l.onStoreError(err)
+	}
 }
 
 // MultiEmit fans an event out to several emitters (e.g. slog plus the event log),
@@ -144,5 +226,33 @@ func MultiEmit(emitters ...func(Event)) func(Event) {
 				emit(e)
 			}
 		}
+	}
+}
+
+func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
+	return state.EventRecord{
+		At:      e.Time,
+		Service: e.Service,
+		Watch:   e.Watch,
+		Kind:    e.Kind,
+		Rule:    e.Rule,
+		Action:  e.Action,
+		Status:  e.Status,
+		Message: e.Message,
+	}
+}
+
+func loggedEventFromRecord(e state.EventRecord) LoggedEvent {
+	return LoggedEvent{
+		Time: e.At,
+		Event: Event{
+			Service: e.Service,
+			Watch:   e.Watch,
+			Kind:    e.Kind,
+			Rule:    e.Rule,
+			Action:  e.Action,
+			Status:  e.Status,
+			Message: e.Message,
+		},
 	}
 }

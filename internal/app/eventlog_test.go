@@ -1,8 +1,12 @@
 package app
 
 import (
+	"context"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"sermo/internal/state"
 )
 
 func TestEventLogRecentNewestFirst(t *testing.T) {
@@ -104,5 +108,50 @@ func TestEventLogConcurrentAddRecent(t *testing.T) {
 		default:
 			_ = l.Recent("", 10)
 		}
+	}
+}
+
+func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), state.Filename)
+	first, err := state.Open(path)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+	t0 := time.Date(2026, 6, 16, 9, 0, 0, 0, time.UTC)
+	log, err := NewPersistentEventLog(10, first, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog(first): %v", err)
+	}
+	log.now = func() time.Time { return t0 }
+	log.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restart completed"})
+	log.now = func() time.Time { return t0.Add(time.Minute) }
+	log.Add(Event{Watch: "disk-root", Kind: "hook", Message: "hook completed"})
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	second, err := state.Open(path)
+	if err != nil {
+		t.Fatalf("open second store: %v", err)
+	}
+	defer second.Close()
+	hydrated, err := NewPersistentEventLog(10, second, nil)
+	if err != nil {
+		t.Fatalf("NewPersistentEventLog(second): %v", err)
+	}
+
+	global := hydrated.Recent("", 10)
+	if len(global) != 2 || global[0].Watch != "disk-root" || global[1].Service != "web" {
+		t.Fatalf("hydrated global events = %+v", global)
+	}
+	service := hydrated.Recent("web", 10)
+	if len(service) != 1 || service[0].Service != "web" || service[0].Action != "restart" {
+		t.Fatalf("hydrated service events = %+v", service)
+	}
+
+	b := &WebBackend{entries: map[string]*webEntry{"web": {}}, events: hydrated}
+	webEvents, ok := b.ServiceEvents(context.Background(), "web", 10)
+	if !ok || len(webEvents) != 1 || webEvents[0].Service != "web" || webEvents[0].Action != "restart" {
+		t.Fatalf("web service events = %+v ok=%v", webEvents, ok)
 	}
 }
