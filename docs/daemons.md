@@ -438,7 +438,7 @@ also_apply: [nginx, varnish]
   event; a blocked target is retried once) but does not fail the primary; cycles
   are cut by a visited set.
 - Entries must be configured services and must not include the service itself.
-- `sermoctl restart <svc> --no-cascade` acts on exactly one service.
+- `sermoctl start|stop|restart <svc> --no-cascade` acts on exactly one service.
 - `sermoctl reload <svc>` reloads a single service through the engine (no
   cascade — `reload` touches the primary only). Use `sermoctl daemon reload` to
   reload the running `sermod` configuration (`SIGHUP`). In the web UI the
