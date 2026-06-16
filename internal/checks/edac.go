@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"time"
 )
 
@@ -75,16 +74,31 @@ func readEDAC(root string) (EdacCounts, error) {
 	var st EdacCounts
 	st.Present = true
 	for _, mc := range mcs {
-		st.CE += readInt(filepath.Join(mc, "ce_count"))
-		st.UE += readInt(filepath.Join(mc, "ue_count"))
+		ce, err := readEdacCounter(filepath.Join(mc, "ce_count"))
+		if err != nil {
+			return EdacCounts{}, err
+		}
+		ue, err := readEdacCounter(filepath.Join(mc, "ue_count"))
+		if err != nil {
+			return EdacCounts{}, err
+		}
+		st.CE += ce
+		st.UE += ue
 	}
 	return st, nil
 }
 
-// readInt reads a sysfs counter file as an int64, returning 0 on error.
-func readInt(path string) int64 {
-	n, _ := strconv.ParseInt(readTrim(path), 10, 64)
-	return n
+const maxEdacCounter = uint64(1<<63 - 1)
+
+func readEdacCounter(path string) (int64, error) {
+	n, err := readProcUint(path)
+	if err != nil {
+		return 0, err
+	}
+	if n > maxEdacCounter {
+		return 0, fmt.Errorf("counter %s overflows int64", path)
+	}
+	return int64(n), nil
 }
 
 // parseEdacPreds reads the optional ce/ue predicates.
