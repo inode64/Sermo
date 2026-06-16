@@ -12,12 +12,14 @@ on usage errors.
 --json
 --quiet
 --timeout duration
+--version / -V
 ```
 
 ## Command surface
 
 ```bash
 sermoctl backend
+sermoctl version
 sermoctl status SERVICE
 sermoctl is-active SERVICE
 sermoctl start SERVICE [--no-cascade]
