@@ -439,10 +439,9 @@ also_apply: [nginx, varnish]
 - Entries must be configured services and must not include the service itself.
 - `sermoctl restart <svc> --no-cascade` acts on exactly one service.
 - `sermoctl reload <svc>` reloads a single service through the engine (no
-  cascade — `reload` touches the primary only); `sermoctl reload` with no
-  service still reloads the running `sermod`'s own configuration (`SIGHUP`). In
-  the web UI the per-service **reload** button is enabled only while the service
-  is `active`.
+  cascade — `reload` touches the primary only). Use `sermoctl daemon reload` to
+  reload the running `sermod` configuration (`SIGHUP`). In the web UI the
+  per-service **reload** button is enabled only while the service is `active`.
 
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.

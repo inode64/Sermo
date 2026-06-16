@@ -267,10 +267,22 @@ func (m fakeManager) record(action, service string) error {
 	return m.actionErr
 }
 
-// TestReloadNoPid exercises the error path for sermoctl reload when no
+func TestReloadRequiresService(t *testing.T) {
+	var stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+	code := app.Run(context.Background(), []string{"reload"})
+	if code != exitUsage {
+		t.Fatalf("reload without service exit = %d, want %d", code, exitUsage)
+	}
+	if got := stderr.String(); !strings.Contains(got, "reload requires a service name") || !strings.Contains(got, "daemon reload") {
+		t.Fatalf("reload usage error = %q", got)
+	}
+}
+
+// TestDaemonReloadNoPid exercises the error path for sermoctl daemon reload when no
 // sermod pidfile or live process can be found. It proves the command is
 // wired and uses the loaded config's runtime dir for pidfile discovery.
-func TestReloadNoPid(t *testing.T) {
+func TestDaemonReloadNoPid(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	// Minimal valid global config with a runtime under the temp dir (no pidfile will exist).
@@ -291,9 +303,9 @@ func TestReloadNoPid(t *testing.T) {
 		pidfileFallbacks: []string{},
 	}
 
-	code := app.Run(context.Background(), []string{"--config", cfgPath, "reload"})
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "daemon", "reload"})
 	if code != exitRuntimeError {
-		t.Fatalf("reload exit = %d, want %d", code, exitRuntimeError)
+		t.Fatalf("daemon reload exit = %d, want %d", code, exitRuntimeError)
 	}
 	out := stderr.String()
 	if !strings.Contains(out, "could not find") {
@@ -424,12 +436,12 @@ func TestActivityRequiresClear(t *testing.T) {
 	}
 }
 
-// TestReloadPidProbeFallback exercises the by-name discovery fallback inside
+// TestDaemonReloadPidProbeFallback exercises the by-name discovery fallback inside
 // runReload using an injected FindPID. It verifies that when no pidfile exists,
 // the code resolves the daemon pid natively (no pidof/pgrep shell-out) and
 // attempts to signal it (the synthetic pid causes a signal error, which is the
 // expected outcome in the test environment).
-func TestReloadPidProbeFallback(t *testing.T) {
+func TestDaemonReloadPidProbeFallback(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	minCfg := []byte("paths:\n  runtime: " + tmp + "\ndefaults:\n  policy:\n    cooldown: 5m\n")
@@ -455,9 +467,9 @@ func TestReloadPidProbeFallback(t *testing.T) {
 		pidfileFallbacks: []string{},
 	}
 
-	code := app.Run(context.Background(), []string{"--config", cfgPath, "reload"})
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "daemon", "reload"})
 	if code != exitRuntimeError {
-		t.Fatalf("reload exit = %d, want %d (signal on fake pid from probe should fail)", code, exitRuntimeError)
+		t.Fatalf("daemon reload exit = %d, want %d (signal on fake pid from probe should fail)", code, exitRuntimeError)
 	}
 
 	// The native probe must be consulted for the daemon's program name.

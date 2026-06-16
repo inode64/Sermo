@@ -643,8 +643,8 @@ type Server struct {
 
 	// Reload, if set, is called for admin POST /api/reload requests. It should
 	// trigger a configuration reload (equivalent to SIGHUP on the daemon).
-	// Used by both the web UI button and (indirectly) sermoctl reload when the
-	// web UI is reachable.
+	// Used by both the web UI button and (indirectly) sermoctl daemon reload
+	// when the web UI is reachable.
 	Reload func() error
 
 	// DiagnosticsDisabled hides the Diagnostics panel in the dashboard and makes

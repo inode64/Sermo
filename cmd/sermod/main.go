@@ -217,7 +217,7 @@ func run(args []string) int {
 	}
 	readiness := app.NewReadiness(string(detection.Backend), len(workers), len(watches))
 
-	// Write a pidfile under the runtime directory so sermoctl reload (and
+	// Write a pidfile under the runtime directory so sermoctl daemon reload (and
 	// operators) can reliably signal the running daemon for config reload.
 	// This augments the pidfile managed by OpenRC (/run/sermod.pid) and
 	// systemd's $MAINPID. Best-effort; failure is only logged.
@@ -228,7 +228,7 @@ func run(args []string) int {
 		}
 		pidPath := filepath.Join(pidDir, "sermod.pid")
 		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { //nolint:gosec // G306: pidfile is intentionally world-readable (0644)
-			logger.Warn("write pidfile failed (reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
+			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
 		} else {
 			// Best effort cleanup on normal exit (init systems may manage their own).
 			defer func(p string) { _ = os.Remove(p) }(pidPath)
