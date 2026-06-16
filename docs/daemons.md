@@ -405,7 +405,7 @@ control:
   type: libvirt
   uri: qemu:///system
   domain: web01
-  socket: /run/libvirt/libvirt-sock
+  socket: /run/libvirt/libvirt-sock     # or /run/libvirt/virtqemud-sock on modular libvirt
 
 checks:
   vm:
@@ -424,7 +424,9 @@ processes:
 
 `control.domain` is the libvirt domain Sermo operates. `uri` defaults to
 `qemu:///system`; `socket` defaults to `/run/libvirt/libvirt-sock` unless `host`
-is set for a remote libvirt TCP connection. `uuid` is optional and, when set,
+is set for a remote libvirt TCP connection. Modular libvirt deployments often
+expose QEMU domains through `/run/libvirt/virtqemud-sock`; set `socket` to that
+path when the monolithic socket is absent. `uuid` is optional and, when set,
 Sermo looks up the domain by UUID instead of name.
 
 The safe operation engine is unchanged: locks, guards, preflight, postflight,
@@ -452,7 +454,9 @@ UUID. The cmdline selector narrows discovery; residual signaling is still
 authorized only by `stop_policy.kill_only_if`.
 
 `sermoctl wizard vm` can generate this `kind: service` shape from domains
-detected through the local libvirt socket.
+detected through the local libvirt socket. It probes both
+`/run/libvirt/libvirt-sock` and `/run/libvirt/virtqemud-sock` and writes the
+socket it actually used into the generated service and check.
 
 ### `control: docker` — Docker containers
 

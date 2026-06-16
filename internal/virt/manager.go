@@ -21,8 +21,10 @@ import (
 const (
 	// DefaultURI is the libvirt connect URI used for local QEMU/KVM domains.
 	DefaultURI = string(libvirt.QEMUSystem)
-	// DefaultSocket is libvirt's local control socket on modern Linux systems.
+	// DefaultSocket is libvirt's traditional local control socket.
 	DefaultSocket = "/run/libvirt/libvirt-sock"
+	// DefaultQEMUSocket is the modular libvirt QEMU daemon's local socket.
+	DefaultQEMUSocket = "/run/libvirt/virtqemud-sock"
 	// DefaultPort is libvirt's plaintext TCP port.
 	DefaultPort = 16509
 )
@@ -348,4 +350,25 @@ func ValidHostPort(host string, port int) bool {
 	}
 	_, _, err := net.SplitHostPort(net.JoinHostPort(host, strconv.Itoa(port)))
 	return err == nil && port > 0 && port <= 65535
+}
+
+// LocalSocketCandidates returns local libvirt sockets in preferred order.
+func LocalSocketCandidates() []string {
+	return []string{DefaultSocket, DefaultQEMUSocket}
+}
+
+// FirstExistingLocalSocket returns the first known local libvirt socket present
+// on the host. It lets callers support both monolithic libvirtd and modular
+// virtqemud deployments without probing libvirt itself when no socket exists.
+func FirstExistingLocalSocket(exists func(string) (bool, error)) (string, bool, error) {
+	for _, socket := range LocalSocketCandidates() {
+		ok, err := exists(socket)
+		if err != nil {
+			return "", false, err
+		}
+		if ok {
+			return socket, true, nil
+		}
+	}
+	return "", false, nil
 }

@@ -193,3 +193,59 @@ func TestSpecFromTreeRequiresDomain(t *testing.T) {
 		t.Fatalf("SpecFromTree() ok=%v err=%v, want domain error", ok, err)
 	}
 }
+
+func TestFirstExistingLocalSocket(t *testing.T) {
+	probeErr := errors.New("probe failed")
+	tests := []struct {
+		name    string
+		exists  map[string]bool
+		errPath string
+		want    string
+		wantOK  bool
+		wantErr bool
+	}{
+		{
+			name:   "traditional socket wins",
+			exists: map[string]bool{DefaultSocket: true, DefaultQEMUSocket: true},
+			want:   DefaultSocket,
+			wantOK: true,
+		},
+		{
+			name:   "modular qemu socket fallback",
+			exists: map[string]bool{DefaultQEMUSocket: true},
+			want:   DefaultQEMUSocket,
+			wantOK: true,
+		},
+		{
+			name:   "no socket",
+			exists: map[string]bool{},
+		},
+		{
+			name:    "probe error",
+			errPath: DefaultSocket,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok, err := FirstExistingLocalSocket(func(path string) (bool, error) {
+				if path == tt.errPath {
+					return false, probeErr
+				}
+				return tt.exists[path], nil
+			})
+			if tt.wantErr {
+				if !errors.Is(err, probeErr) {
+					t.Fatalf("err = %v, want %v", err, probeErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("err = %v", err)
+			}
+			if got != tt.want || ok != tt.wantOK {
+				t.Fatalf("FirstExistingLocalSocket() = %q, %v; want %q, %v", got, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
