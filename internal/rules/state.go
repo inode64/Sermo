@@ -93,7 +93,7 @@ func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time
 		return time.Time{}
 	}
 	cutoff := now.Add(-p.MaxActionsWindow)
-	var relevant []time.Time
+	relevant := make([]time.Time, 0, len(state.RecentActions))
 	for _, t := range state.RecentActions {
 		if t.After(cutoff) {
 			relevant = append(relevant, t)
