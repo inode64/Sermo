@@ -1,0 +1,9 @@
+kind: app
+name: virtqemud
+display_name: "libvirt QEMU Daemon"
+category: virtualization
+variables:
+  binary: /usr/bin/virtqemud
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

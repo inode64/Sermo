@@ -1,0 +1,11 @@
+kind: daemon
+name: firewalld
+display_name: "firewalld"
+category: security
+description: "Dynamic firewall management daemon."
+service:
+  systemd: [firewalld]
+apps: [firewalld]
+
+checks:
+  service: { type: service, expect: active }

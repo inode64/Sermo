@@ -1,0 +1,10 @@
+kind: app
+name: networkmanager
+catalog_aliases: [NetworkManager]
+display_name: "NetworkManager"
+category: network
+variables:
+  binary: /usr/bin/NetworkManager
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
