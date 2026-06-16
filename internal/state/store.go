@@ -1274,18 +1274,6 @@ func (s *Store) PruneUnconfiguredControlStates(configured []string) (PruneUnconf
 	return result, nil
 }
 
-// TrackedMonitorStates is kept for callers compiled against the old internal
-// name. New code should use TrackedControlStates.
-func (s *Store) TrackedMonitorStates() ([]string, error) {
-	return s.TrackedControlStates()
-}
-
-// PruneUnconfiguredMonitorStates is kept for callers compiled against the old
-// internal name. New code should use PruneUnconfiguredControlStates.
-func (s *Store) PruneUnconfiguredMonitorStates(configured []string) (PruneUnconfiguredControlStatesResult, error) {
-	return s.PruneUnconfiguredControlStates(configured)
-}
-
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly
 // one year of per-minute samples per service. Returns the rows removed.
 func (s *Store) PruneSLA(before time.Time) (int64, error) {
