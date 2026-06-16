@@ -1652,14 +1652,19 @@ if:
     - failed: { check: http }      # a named check failed
     - active: { check: backup-flag } # a named check passed
     - file: { path: /run/x, exists: true }
+    - command: { command: ["/usr/local/bin/can-restart", "${service}"], timeout: 5s, expect_exit: 0 }
     - service: { state: active }
     - process: { exe: /usr/bin/mysqld, user: mysql, state: running }
     - metric: { scope: service, name: cpu, op: ">", value: 30% }
     - changed: { path: /lib64/libc.so.6 }  # the file changed since the last cycle
 ```
 
-`failed`/`active` may also take an inline probe (`tcp`, `command`, ...) instead
-of a `check:` reference.
+`command` is a direct condition leaf whose truth is the same as a command check:
+exit status/output expectations pass. It must use array argv form and declare a
+`timeout`; it is run without a shell, cached for the cycle like other inline
+probes, and must be side-effect-free. `failed`/`active` may also take an inline
+probe (`tcp`, `command`, ...) instead of a `check:` reference when you need the
+named success/failure polarity.
 
 `changed` is true when the file at `path` differs (size/mtime) from the baseline
 tracked across cycles. The first cycle adopts the current value (a daemon start
