@@ -1651,7 +1651,7 @@ function cpuInline(cpu, ready, numCPU) {
   const v = Number(cpu) || 0;
   // Same shape as every other CPU bar (cpuBarMini): the percentage lives inside
   // the bar and the precise value in the tooltip — no separate label prefix.
-  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`);
+  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtNum(v, 2)}% of ${numCPU || "?"} host CPUs`);
 }
 
 function serviceCpuCell(s) {
@@ -2111,7 +2111,10 @@ function fmtBytes(n) {
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
-  return (i === 0 ? n : fmtNum(n, 2, "0")) + " " + u[i];
+  // Route every unit through fmtNum (including raw bytes): integer byte counts
+  // still render clean (512 -> "512 B") while fractional rates lose the long tail
+  // (234.5678 B/s -> "234.57 B/s") instead of leaking full float precision.
+  return fmtNum(n, 2, "0") + " " + u[i];
 }
 
 function fmtPct(n) {
@@ -2175,7 +2178,7 @@ function hostMemTotalBytes() {
 // the label keeps the true value.
 function cpuBarMini(pct) {
   const v = Number(pct) || 0;
-  return usageBarMini(pctClamp(v), v.toFixed(0) + "%", `${fmtNum(v, 2)}% of one core used by this process`);
+  return usageBarMini(pctClamp(v), fmtPct(v), `${fmtNum(v, 2)}% of one core used by this process`);
 }
 
 // cpuTotalsLine renders the whole-tree CPU summary (whole-machine %) for a
@@ -2185,8 +2188,8 @@ function cpuTotalsLine(pt) {
   if (!pt) return "";
   if (!pt.has_cpu) return pt.num_cpu ? ' · cpu <span class="muted">measuring…</span>' : "";
   const machine = Number(pt.cpu) || 0;
-  const machineBar = usageBarMini(pctClamp(machine), machine.toFixed(0) + "%", `${fmtNum(machine, 2)}% of ${pt.num_cpu || "?"} cores`);
-  return ` · cpu <b>${machine.toFixed(0)}%</b> ${machineBar}`;
+  const machineBar = usageBarMini(pctClamp(machine), fmtPct(machine), `${fmtNum(machine, 2)}% of ${pt.num_cpu || "?"} cores`);
+  return ` · cpu <b>${fmtPct(machine)}</b> ${machineBar}`;
 }
 
 function diskUsedPct(d) {
@@ -3106,15 +3109,15 @@ function renderOverview(ctx) {
     : "";
   if (cpu) {
     const p = pctClamp(cpu.percent || 0);
-    tiles.push(tile({ label: "Host CPU", value: `${p.toFixed(0)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host CPU", value: `${fmtNum(p, 2)}<small>%</small>`, sub: "", extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
   }
   if (mem) {
     const p = pctClamp(mem.percent || 0);
-    tiles.push(tile({ label: "Host memory", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(mem), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host memory", value: `${fmtNum(p, 2)}<small>%</small>`, sub: usedFreeSub(mem), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
   }
   if (swap && swap.total) {
     const p = pctClamp(swap.percent || 0);
-    tiles.push(tile({ label: "Host swap", value: `${p.toFixed(0)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
+    tiles.push(tile({ label: "Host swap", value: `${fmtNum(p, 2)}<small>%</small>`, sub: usedFreeSub(swap), cls: p >= 90 ? "t-crit" : (p >= 70 ? "t-warn" : ""), extra: usageBar(p, fmtPct(p)), target: "daemon-section" }));
   }
   if (load && load.absolute != null) {
     // load.total carries the logical CPU count and load.percent the saturation
@@ -3125,7 +3128,7 @@ function renderOverview(ctx) {
     tiles.push(tile({
       label: "Load 1m",
       value: esc(fmtNum(load.absolute, 2)),
-      sub: hasCap ? `${esc(load.total.toFixed(0))} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${esc(fmtUptime(live.uptime_seconds))}` : ""),
+      sub: hasCap ? `${esc(fmtNum(load.total, 0))} CPUs · ${fmtPct(load.percent)}` : (live && fmtUptime(live.uptime_seconds) ? `up ${esc(fmtUptime(live.uptime_seconds))}` : ""),
       cls: hasCap ? (p >= 100 ? "t-crit" : (p >= 80 ? "t-warn" : "")) : "",
       extra: hasCap ? usageBar(p, fmtPct(p)) : "",
       target: "daemon-section",
@@ -3138,7 +3141,7 @@ function renderOverview(ctx) {
     const p = diskUsedPct(d);
     tiles.push(tile({
       label: `Vol ${d.mount_point || d.path || w.name || ""}`.trim(),
-      value: `${p.toFixed(0)}<small>%</small>`,
+      value: `${fmtNum(p, 2)}<small>%</small>`,
       sub: `${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free`,
       cls: watchStateText(w) === "failed" ? "t-crit" : "",
       extra: usageBar(p, fmtPct(p)),
