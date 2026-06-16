@@ -202,7 +202,7 @@ func TestStopWithResidualsSkipsReset(t *testing.T) {
 	h.discoverSteps = [][]process.Process{{{PID: 4242}}}
 	res := h.engine().Stop(context.Background())
 	if res.Status != ResultOrphanProcesses {
-		t.Fatalf("status = %q, want orphan-processes", res.Status)
+		t.Fatalf("status = %q, want orphan_processes", res.Status)
 	}
 	if h.mgr.did("reset mysqld") {
 		t.Fatalf("must not reconcile init state while residuals remain, calls=%v", h.mgr.calls)
