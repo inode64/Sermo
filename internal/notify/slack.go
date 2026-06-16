@@ -36,12 +36,15 @@ func buildSlack(name string, entry map[string]any) (Notifier, error) {
 // slackPayload renders the Slack incoming-webhook body: the subject as the lead
 // line and the detail in a monospace block so the SERMO_* fields stay readable.
 func slackPayload(msg Message) []byte {
-	text := msg.Subject
-	if msg.Body != "" {
-		text += "\n```\n" + msg.Body + "\n```"
-	}
-	b, _ := json.Marshal(map[string]string{"text": text})
+	b, _ := json.Marshal(map[string]string{"text": slackText(msg)})
 	return b
+}
+
+func slackText(msg Message) string {
+	if msg.Body != "" {
+		return msg.Subject + "\n```\n" + msg.Body + "\n```"
+	}
+	return msg.Subject
 }
 
 func slackPost(ctx context.Context, webhook string, payload []byte) error {
