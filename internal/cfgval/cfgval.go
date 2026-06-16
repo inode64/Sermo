@@ -113,8 +113,7 @@ func Int(v any) (int, bool) {
 	case uint64:
 		return uint64Value(t)
 	case float64:
-		n, err := strconv.ParseInt(strconv.FormatFloat(math.Trunc(t), 'f', 0, 64), 10, 0)
-		return int(n), err == nil
+		return float64Int(t)
 	case string:
 		n, err := strconv.Atoi(strings.TrimSpace(t))
 		return n, err == nil
@@ -135,6 +134,11 @@ func uint64Value(n uint64) (int, bool) {
 		return 0, false
 	}
 	return int(n), true
+}
+
+func float64Int(n float64) (int, bool) {
+	i, err := strconv.ParseInt(strconv.FormatFloat(math.Trunc(n), 'f', 0, 64), 10, 0)
+	return int(i), err == nil
 }
 
 type byteSizeSuffix struct {
