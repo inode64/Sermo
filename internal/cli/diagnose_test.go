@@ -76,7 +76,7 @@ checks:
 	}
 }
 
-func TestDiagnoseCleanPrunesUnconfiguredServiceData(t *testing.T) {
+func TestDiagnoseCleanPrunesOnlyUnconfiguredMonitorState(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 engine: { backend: auto, interval: 30s }
@@ -121,6 +121,9 @@ checks:
 	if err := store.RecordMetric("ghost", "http", "latency", 42, now); err != nil {
 		t.Fatalf("RecordMetric(ghost): %v", err)
 	}
+	if err := store.RecordServiceMetric("ghost", "cpu", 42, now); err != nil {
+		t.Fatalf("RecordServiceMetric(ghost): %v", err)
+	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("close state: %v", err)
 	}
@@ -130,7 +133,7 @@ checks:
 	if code := app.Run(context.Background(), []string{"--config", global, "diagnose"}); code != exitSuccess {
 		t.Fatalf("diagnose before clean exit=%d output:\n%s", code, stdout.String())
 	}
-	if !strings.Contains(stdout.String(), `service "ghost" which is no longer configured`) {
+	if !strings.Contains(stdout.String(), `target "ghost" which is no longer configured`) {
 		t.Fatalf("diagnose before clean missing stale warning:\n%s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), `service "watch:load" which is no longer configured`) {
@@ -141,8 +144,19 @@ checks:
 	if code := app.Run(context.Background(), []string{"--config", global, "diagnose", "clean"}); code != exitSuccess {
 		t.Fatalf("diagnose clean exit=%d output:\n%s", code, stdout.String())
 	}
-	if got := stdout.String(); !strings.Contains(got, "ghost") || !strings.Contains(got, "4 row(s)") {
-		t.Fatalf("diagnose clean output = %q, want ghost and 4 rows", got)
+	if got := stdout.String(); !strings.Contains(got, "ghost") || !strings.Contains(got, "1 row(s)") {
+		t.Fatalf("diagnose clean output = %q, want ghost and 1 row", got)
+	}
+
+	store, err = state.Open(filepath.Join(root, "state", state.Filename))
+	if err != nil {
+		t.Fatalf("reopen state: %v", err)
+	}
+	if stat, err := store.ServiceMetricSummary("ghost", "cpu", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 1 {
+		t.Fatalf("diagnose clean must keep runtime metrics, got %+v err=%v", stat, err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close state: %v", err)
 	}
 
 	stdout.Reset()

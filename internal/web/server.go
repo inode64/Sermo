@@ -306,7 +306,8 @@ type ActionResult struct {
 	Message string `json:"message,omitempty"`
 }
 
-// DiagnosticCleanResult is the outcome of pruning stale diagnostic state.
+// DiagnosticCleanResult is the outcome of pruning stale monitoring state found
+// by diagnostics.
 type DiagnosticCleanResult struct {
 	OK       bool     `json:"ok"`
 	Message  string   `json:"message,omitempty"`
@@ -571,7 +572,7 @@ type Backend interface {
 	// Diagnostics runs config/host/database consistency checks and returns the
 	// findings (ordered by severity).
 	Diagnostics(ctx context.Context) []Finding
-	// CleanDiagnostics removes stale stored data for unconfigured services.
+	// CleanDiagnostics removes stale monitoring state for unconfigured targets.
 	CleanDiagnostics(ctx context.Context) DiagnosticCleanResult
 	// Operations reports how many global operation slots are in use.
 	Operations(ctx context.Context) OperationSlots

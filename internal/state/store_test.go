@@ -88,7 +88,7 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	}
 }
 
-func TestPruneUnconfiguredServices(t *testing.T) {
+func TestPruneUnconfiguredMonitorStates(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 
@@ -113,12 +113,12 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 		}
 	}
 
-	result, err := s.PruneUnconfiguredServices([]string{"web"})
+	result, err := s.PruneUnconfiguredMonitorStates([]string{"web"})
 	if err != nil {
-		t.Fatalf("PruneUnconfiguredServices: %v", err)
+		t.Fatalf("PruneUnconfiguredMonitorStates: %v", err)
 	}
-	if result.Rows != 6 || len(result.Services) != 1 || result.Services[0] != "ghost" {
-		t.Fatalf("result = %+v, want ghost with 6 rows", result)
+	if result.Rows != 1 || len(result.Services) != 1 || result.Services[0] != "ghost" {
+		t.Fatalf("result = %+v, want ghost with 1 row", result)
 	}
 
 	if _, found, err := s.Active("ghost"); err != nil || found {
@@ -127,26 +127,72 @@ func TestPruneUnconfiguredServices(t *testing.T) {
 	if _, found, err := s.Active("web"); err != nil || !found {
 		t.Fatalf("web active: found=%v err=%v, want kept", found, err)
 	}
-	if _, total, err := s.SLA("ghost", time.Hour, now.Add(time.Minute)); err != nil || total != 0 {
-		t.Fatalf("ghost SLA total=%d err=%v, want 0", total, err)
+	if _, total, err := s.SLA("ghost", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
+		t.Fatalf("ghost SLA total=%d err=%v, want preserved history", total, err)
 	}
 	if _, total, err := s.SLA("web", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
 		t.Fatalf("web SLA total=%d err=%v, want 1", total, err)
 	}
-	if _, total, err := s.CheckSLA("ghost", "http", time.Hour, now.Add(time.Minute)); err != nil || total != 0 {
-		t.Fatalf("ghost check SLA total=%d err=%v, want 0", total, err)
+	if _, total, err := s.CheckSLA("ghost", "http", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
+		t.Fatalf("ghost check SLA total=%d err=%v, want preserved history", total, err)
 	}
 	if _, total, err := s.CheckSLA("web", "http", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
 		t.Fatalf("web check SLA total=%d err=%v, want 1", total, err)
 	}
-	if stat, err := s.MeasurementSummary("ghost", "http", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 0 {
-		t.Fatalf("ghost measurement = %+v err=%v, want empty", stat, err)
+	if stat, err := s.MeasurementSummary("ghost", "http", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 1 {
+		t.Fatalf("ghost measurement = %+v err=%v, want preserved history", stat, err)
 	}
-	if stat, err := s.MetricSummary("ghost", "http", "latency", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 0 {
-		t.Fatalf("ghost metric = %+v err=%v, want empty", stat, err)
+	if stat, err := s.MetricSummary("ghost", "http", "latency", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 1 {
+		t.Fatalf("ghost metric = %+v err=%v, want preserved history", stat, err)
 	}
-	if stat, err := s.ServiceMetricSummary("ghost", "cpu", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 0 {
-		t.Fatalf("ghost service metric = %+v err=%v, want empty", stat, err)
+	if stat, err := s.ServiceMetricSummary("ghost", "cpu", time.Hour, now.Add(time.Minute)); err != nil || stat.Count != 1 {
+		t.Fatalf("ghost service metric = %+v err=%v, want preserved history", stat, err)
+	}
+}
+
+func TestPruneHistory(t *testing.T) {
+	s := openTemp(t)
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	recent := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
+
+	for _, at := range []time.Time{old, recent} {
+		if err := s.RecordSLA("web", true, at); err != nil {
+			t.Fatalf("RecordSLA(%s): %v", at, err)
+		}
+		if err := s.RecordCheckSLA("web", "http", true, at); err != nil {
+			t.Fatalf("RecordCheckSLA(%s): %v", at, err)
+		}
+		if err := s.RecordMeasurement("web", "http", 10, at); err != nil {
+			t.Fatalf("RecordMeasurement(%s): %v", at, err)
+		}
+		if err := s.RecordMetric("web", "http", "latency", 10, at); err != nil {
+			t.Fatalf("RecordMetric(%s): %v", at, err)
+		}
+		if err := s.RecordDaemonMetric("cpu", 10, at); err != nil {
+			t.Fatalf("RecordDaemonMetric(%s): %v", at, err)
+		}
+		if err := s.RecordServiceMetric("web", "cpu", 10, at); err != nil {
+			t.Fatalf("RecordServiceMetric(%s): %v", at, err)
+		}
+	}
+
+	result, err := s.PruneHistory(recent)
+	if err != nil {
+		t.Fatalf("PruneHistory: %v", err)
+	}
+	if result.SLA != 2 || result.Measurements != 1 || result.Metrics != 1 || result.DaemonMetrics != 1 || result.ServiceMetrics != 1 || result.Rows != 6 {
+		t.Fatalf("PruneHistory = %+v, want one old bucket per history table", result)
+	}
+
+	now := recent.Add(time.Minute)
+	if _, total, err := s.SLA("web", 2*time.Minute, now); err != nil || total != 1 {
+		t.Fatalf("recent SLA total=%d err=%v, want 1", total, err)
+	}
+	if stat, err := s.MeasurementSummary("web", "http", 2*time.Minute, now); err != nil || stat.Count != 1 {
+		t.Fatalf("recent measurement = %+v err=%v, want 1", stat, err)
+	}
+	if stat, err := s.ServiceMetricSummary("web", "cpu", 2*time.Minute, now); err != nil || stat.Count != 1 {
+		t.Fatalf("recent service metric = %+v err=%v, want 1", stat, err)
 	}
 }
 

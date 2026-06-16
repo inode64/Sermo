@@ -157,8 +157,10 @@ monitoring cycle counters, remediation cooldown/backoff, rule `for`/`within`
 windows and watched-file baselines for `changed:` conditions. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
-not repeat `startup_delay` and does not mark `/readyz` as shutting down. Service
-CPU metric history is reset only for services removed from the config.
+not repeat `startup_delay` and does not mark `/readyz` as shutting down.
+Per-service CPU rate baselines are reset only when a service is removed from the
+running config; persisted metric history remains in `paths.state` until normal
+retention or an explicit `sermoctl state compact`.
 
 You can trigger a reload with any of:
 
@@ -386,8 +388,8 @@ and threads), `GET /api/events?limit=N` (the **global event feed**, newest first
 (RFC3339), `level`, `scope` and `message`; includes malformed lock files under
 `<paths.runtime>/locks`),
 `POST /api/diagnostics/clean` (admin-only, CSRF-protected; removes stale
-monitoring state, SLA and measurement rows for services/watches no longer
-configured),
+monitoring state for services/watches no longer configured; metric and SLA
+history is kept),
 `GET /api/watches` (configured host watches, their single `state`
 (`disabled`, `unmonitorized`, `ok`, `failed`), `monitor` mode, conditions,
 notifications, live resource readings when available and recent activity),
@@ -1632,15 +1634,16 @@ further and checks it against the **live host and state database**:
 ```sh
 sermoctl diagnose          # text report
 sermoctl diagnose --json   # machine-readable
-sermoctl diagnose clean    # remove stale stored data for unconfigured services
+sermoctl diagnose clean    # remove stale monitoring state for unconfigured services/watches
+sermoctl state compact     # prune old history and vacuum the state database
 ```
 
 It reports, as `error` / `warning` / `info` findings:
 
 - **Configuration** — every `config validate` issue (errors).
 - **State database** — that the SQLite store passes `PRAGMA integrity_check`, and
-  flags **stored data (monitoring state / SLA) for services no longer in the
-  config**. Use `sermoctl diagnose clean` to prune those orphaned rows.
+  flags **stored monitoring state for services/watches no longer in the
+  config**. Use `sermoctl diagnose clean` to prune those orphaned control rows.
 - **Interval alignment** — per-check `interval`s that are **not a multiple of the
   global resolution** (`engine.interval`) or below it, so they will be rounded
   (see [per-check interval](#per-check-interval)).
@@ -1658,7 +1661,21 @@ It reports, as `error` / `warning` / `info` findings:
 endpoint generated the diagnostics response. When the web UI is enabled, that
 feed also includes **operation slot** usage from the running daemon (`info` when
 some slots are in use, `warning` when saturated); see also `GET /api/ops`. When
-the panel finds stale database rows, admins can use **clean stale data**, which
+the panel finds stale monitoring-state rows, admins can use **clean stale data**, which
 calls `POST /api/diagnostics/clean` and performs the same bounded cleanup as
-`sermoctl diagnose clean`: it removes only stored state/SLA/measurement rows for
-targets that are no longer configured.
+`sermoctl diagnose clean`: it removes only persisted monitoring state for
+targets that are no longer configured. SLA, check measurements and runtime CPU,
+memory and IO history are kept.
+
+To reclaim old history intentionally, use:
+
+```sh
+sermoctl state compact                  # normal 366-day retention, then VACUUM
+sermoctl state compact --before 720h    # prune history older than 30 days
+sermoctl state compact --before 2026-01-01T00:00:00Z
+```
+
+`state compact` deletes old bucketed SLA, measurement, daemon metric and service
+runtime metric rows, then checkpoints and vacuums the SQLite state database so
+freed pages can return to the filesystem. Without `--before`, it applies the
+same roughly one-year retention window that `sermod` applies at startup.
