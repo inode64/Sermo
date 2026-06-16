@@ -1722,6 +1722,10 @@ after consecutive remediations) or once `max_actions` is reached in the window.
 `for`/`within` decide *when* a rule fires; policy decides whether it may act
 *now*.
 
+`backoff` grows the effective cooldown after each consecutive remediation:
+`initial` the first time, then multiplied by `factor` each subsequent time,
+capped at `max`. `factor` **defaults to `2`** when omitted (or set to ≤0).
+
 Use `remediation.shadow: true` when you want these service remediation rules to
 evaluate windows, guards and policy without executing the resulting
 start/stop/restart/reload operation. It emits `shadow` events and does not
