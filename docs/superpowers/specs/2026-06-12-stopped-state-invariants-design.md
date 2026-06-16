@@ -78,22 +78,22 @@ Semantics (after the stop's residual handling completes cleanly):
 
 `internal/operation/engine.go`, in the stop block after `clearResiduals` +
 `ResetState` (the clean-stop point): run a `verifyStopped` step that consults
-`Engine.StopArtifacts` (pidfile path, files globs, remove flag) and folds any
-warning into the final message (stash in a local slice like the also_service stop
-errors, applied where the success message is built). The PID snapshot is taken at
-the start of the stop block.
+`Engine.StopArtifacts` (pidfile paths, files globs, `CleanEnabled` and
+`Clean`) and folds any warning into the final message (stash in a local slice
+like the also_service stop errors, applied where the success message is built).
+The PID snapshot is taken at the start of the stop block.
 
 `internal/operation/build.go` + callers (cli, webbackend): resolve
-`config.StopArtifacts(tree)` (pidfile path + files + remove + pidfile_absent
-flags) for the active backend and set `Engine.StopArtifacts` — mirroring how
-`AlsoUnits` is passed (caller resolves, engine receives), so daemon + CLI + web
-all get it.
+`config.StopInvariants(tree)` (pidfile paths + files + `clean_after_stop` +
+`clean_on_stop`) for the active backend and set `Engine.StopArtifacts` —
+mirroring how `AlsoUnits` is passed (caller resolves, engine receives), so
+daemon + CLI + web all get it.
 
 ## Config accessor & validation
 
-- `internal/config/model.go`: `StopArtifacts(tree)` → `{ PidfileAbsent bool,
-  PidfilePath string, Files []string, Remove bool }`, reading `stop_policy` and
-  the declared pidfile (`processes.pidfile.path` or the `pidfile:` shorthand).
+- `internal/config/model.go`: `StopInvariants(tree)` → `pidfilePaths`,
+  `files`, `clean`, `cleanPaths`, reading `stop_policy` and the declared
+  pidfile (`processes.pidfile.path` or the `pidfile:` shorthand).
 - `internal/config/validate_service.go`: validate the new `stop_policy` keys
   (booleans, `files_absent` a string list); a `pidfile_absent: true` with no
   declared pidfile is a warning (nothing to check).
@@ -103,8 +103,8 @@ all get it.
 A monitoring-time check that, when the service is detected **inactive**, asserts
 the same invariants (no residual matching process, no pidfile, no stale files) —
 catching a service that crashed leaving junk while the init reports it down. This
-reuses the selectors + StopArtifacts and is a natural follow-up; v1 focuses on the
-stop **operation** path the user described.
+reuses the selectors plus stopped-state invariants and is a natural follow-up;
+v1 focuses on the stop **operation** path the user described.
 
 ## Testing
 
@@ -112,7 +112,7 @@ stop **operation** path the user described.
 - engine: a clean stop with a lingering pidfile/file warns (ResultOK + message);
   `clean_after_stop` deletes then passes; a surviving known PID still reports orphan;
   no `stop_policy` invariants → unchanged behavior.
-- config: StopArtifacts resolution; validation of new keys and relaxed
+- config: StopInvariants resolution; validation of new keys and relaxed
   command_match.
 - A catalog example (postgres-style `files_absent` socket, or unifi `cmd` match).
 
