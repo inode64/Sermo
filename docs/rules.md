@@ -1256,10 +1256,11 @@ natively (no external library).
 checks:
   db:
     type: mysql                 # mariadb, postgres, mongodb/mongo, influxdb/influx, prometheus/prom, cloudflared/cloudflare-tunnel, redis, valkey, memcached/memcache, imap, pop, smtp, nntp/nntps, ftp, ssh, ldap, ajp, ipp/cups, rspamd, rsync, libvirt, dbus, avahi, syncthing, unifi, clamd, spamd, smb/samba, acpid, fail2ban, rpcbind, nfs, mountd/rpc.mountd, statd/rpc.statd, nebula, openvpn, rdp, guacd, asterisk, sieve, mqtt, amqp/rabbitmq, kafka, varnish, ceph, glusterfs, openvswitch/ovs, lvmpolld, fpm, dns, dhcp, dhclient/dhcp-client, ntp, snmp, tftp, nut/ups/upsd, docker
-    # user is required for SQL protocols; optional for redis/imap/pop/smtp (anonymous); fpm/dns use no auth
+    # Auth depends on protocol: postgres requires user; mysql/mongodb can probe without it;
+    # redis/imap/pop/smtp may be anonymous; fpm/dns/amqp use no auth.
     host: 127.0.0.1             # default 127.0.0.1
     port: 3306                  # default: the protocol's port (mysql 3306, postgres 5432)
-    user: monitor               # required
+    user: monitor               # optional/required by protocol
     password: "${env:DB_PASS}"  # resolved from the environment at load (never store secrets in plaintext)
     database: ""                # optional
     tls: false                  # optional (see per-protocol values above)
