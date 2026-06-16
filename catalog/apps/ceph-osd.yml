@@ -3,8 +3,6 @@ name: ceph-osd
 display_name: "Ceph OSD"
 category: storage
 description: "Ceph object storage daemon"
-variables:
-  binary: "/usr/bin/ceph-osd"
+binary: "/usr/bin/ceph-osd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

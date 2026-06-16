@@ -178,6 +178,7 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
 			}
 		}
+		issues = append(issues, validateTopLevelBinary(doc, scope)...)
 		issues = append(issues, validateCatalogAliases(doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
@@ -203,6 +204,29 @@ func validateDocuments(cfg *Config) []Issue {
 			if counts[kind][name] > 1 {
 				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})
 			}
+		}
+	}
+	return issues
+}
+
+func validateTopLevelBinary(doc *Document, scope string) []Issue {
+	var issues []Issue
+	if vars, ok := doc.Body["variables"].(map[string]any); ok {
+		if _, exists := vars["binary"]; exists {
+			issues = append(issues, Issue{Scope: scope, Msg: "variables.binary is not supported; use top-level binary"})
+		}
+	}
+	raw, present := doc.Body["binary"]
+	if !present {
+		return issues
+	}
+	candidates := cfgval.StringList(raw)
+	if len(candidates) == 0 {
+		issues = append(issues, Issue{Scope: scope, Msg: "binary must be a non-empty path string or list"})
+	}
+	for _, path := range candidates {
+		if !filepath.IsAbs(path) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("binary path %q must be absolute", path)})
 		}
 	}
 	return issues

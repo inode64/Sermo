@@ -2,8 +2,7 @@ kind: app
 name: mariadb-backup
 display_name: "MariaDB Backup"
 category: database
-variables:
-  binary:
+binary:
   - "/usr/bin/mariadb-backup"
   - "/usr/bin/mariadbbackup"
 preflight:

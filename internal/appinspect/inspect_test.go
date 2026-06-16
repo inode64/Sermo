@@ -249,7 +249,7 @@ func TestListIncludesUnversionedTemplateApp(t *testing.T) {
 		"catalog/apps/php%v.yml": fmt.Sprintf(`kind: app
 name: php%%v
 display_name: "PHP ${version}"
-variables: { binary: %q }
+binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, filepath.Join(binDir, "php${version}")),

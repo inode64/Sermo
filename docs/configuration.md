@@ -79,16 +79,17 @@ canonical name. `catalog_aliases` must be a non-empty list of simple names,
 without path separators.
 
 When a daemon or service lists apps, every app variable is also available to that
-daemon/service with a normalized app-name prefix: an app `cupsd` with
-`variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
-exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Dashes and other
-non-alphanumeric characters become underscores. This lets a service reuse binary
-paths owned by one or more apps without naming collisions. When exactly one app
-is linked, its variables are also exposed without the prefix as defaults, so a
-service can use `${binary}` while the app remains the owner of the binary path.
-A local `variables:` entry with the same prefixed or unprefixed name still wins
-for host-specific overrides. When several apps are linked, use the prefixed names
-to avoid ambiguity.
+daemon/service with a normalized app-name prefix: an app with
+`binary: /usr/bin/cupsd` and
+`variables: { cups_config: /usr/bin/cups-config }` exposes `${cupsd_binary}` and
+`${cupsd_cups_config}`. Dashes and other non-alphanumeric characters become
+underscores. This lets a service reuse binary paths owned by one or more apps
+without naming collisions. When exactly one app is linked, its variables are
+also exposed without the prefix as defaults, so a service can use `${binary}`
+while the app remains the owner of the binary path. A local `variables:` entry
+with the same prefixed or unprefixed name still wins for host-specific
+overrides. When several apps are linked, use the prefixed names to avoid
+ambiguity.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
@@ -1611,6 +1612,29 @@ such as `php` next to `php8.4` or `python` next to `python3`, Sermo materializes
 that unversioned entry automatically. Set `versions.unversioned: false` on the
 app template only when the marker-less binary should be ignored.
 
+## Binary shorthand
+
+Declare an executable path with top-level `binary:`:
+
+```yaml
+binary:
+  - /usr/bin/php-fpm${version}
+  - /usr/sbin/php-fpm${version}
+```
+
+The first regular executable candidate becomes `${binary}`. If none is
+executable yet, Sermo keeps the first existing candidate, or finally the first
+non-empty candidate, so the generated binary preflight reports the bad path
+explicitly instead of expanding to an empty string. Paths must be absolute after
+templating. Do not declare `variables.binary`; validation rejects it. `${binary}`
+is generated from the top-level `binary:` declaration.
+
+For `kind: app`, `kind: daemon` and service profiles, `binary:` also creates a
+required `preflight.binary` check when the profile did not define one. For
+`kind: lib`, `binary:` is the watched library file used by
+`restart_on_change.libraries`; it feeds `${binary}` but does not create an
+executable preflight.
+
 ## Variables
 
 ```yaml
@@ -1664,7 +1688,8 @@ defaults:
   its own.
 - **Names:** must be unique (a duplicated YAML key is a load error) and must not
   be a **reserved name** — the selection keywords `all`/`none`/`default` and the
-  runtime tokens `date`/`event`/`action` are rejected. Builtin names (`host`,
+  runtime tokens `date`/`event`/`action` are rejected. `binary` is also reserved:
+  use top-level `binary:` on each profile/service instead. Builtin names (`host`,
   `port`, …) are allowed and override the builtin (see precedence).
 - Values support `${env:...}` and list-first-existing exactly like per-service
   variables. They cannot contain another `${var}` (no nesting), like any variable.

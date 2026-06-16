@@ -2,7 +2,4 @@ kind: app
 name: pmlogger
 display_name: "PCP Archive Logger"
 category: observability
-variables:
-  binary: /usr/bin/pmlogger
-preflight:
-  binary: { type: binary, path: "${binary}" }
+binary: /usr/bin/pmlogger

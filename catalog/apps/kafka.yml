@@ -10,12 +10,11 @@ description: "Apache Kafka distribution (broker/controller, KRaft mode)"
 # Variables are flat (a value cannot reference another variable), so the
 # install dir is repeated in both paths — override both to relocate the
 # distribution.
+binary: /opt/kafka/bin/kafka-server-start.sh
 variables:
-  binary: /opt/kafka/bin/kafka-server-start.sh
   topics: /opt/kafka/bin/kafka-topics.sh
 
 preflight:
-  binary: { type: binary, path: "${binary}" }
   # kafka-topics.sh --version prints e.g. "3.9.0 (Commit:...)" — the canonical
   # way to read the installed Kafka version without a running broker.
   version: { type: command, command: ["${topics}", "--version"], timeout: 10s }

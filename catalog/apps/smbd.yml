@@ -2,10 +2,9 @@ kind: app
 name: smbd
 display_name: "Samba SMB"
 category: storage
+binary: "/usr/bin/smbd"
 variables:
-  binary: "/usr/bin/smbd"
   testparm: "/usr/bin/testparm"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   testparm: { type: binary, path: "${testparm}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

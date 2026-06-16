@@ -2,8 +2,6 @@ kind: app
 name: tomcat-%v
 display_name: "Apache Tomcat ${version}"
 category: web
-variables:
-  binary: "/usr/share/tomcat-${version}/bin/catalina.sh"
+binary: "/usr/share/tomcat-${version}/bin/catalina.sh"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
