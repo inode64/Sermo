@@ -516,6 +516,14 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 			preflight:    "rpc-mountd-binary",
 		},
 		{
+			name:         "alloy config validation uses app binary",
+			service:      "alloy",
+			path:         []any{"preflight", "config", "command", 0},
+			wantRaw:      "${alloy_binary}",
+			wantResolved: "/usr/bin/alloy",
+			preflight:    "alloy-binary",
+		},
+		{
 			name:              "mariadb backup guard uses optional app binary",
 			service:           "mariadb",
 			path:              []any{"checks", "mariadb-backup", "exe"},
