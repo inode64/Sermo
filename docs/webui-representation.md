@@ -34,17 +34,34 @@ Keep changes concrete:
 | Service latency metrics | `GET /api/services/{name}/metrics` | latency chart for measured checks |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | persisted service CPU/memory/IO history sampled by worker cycles |
 | Service SLA | `GET /api/services/{name}/sla` | per-minute availability history for the service detail SLA timeline and API clients |
+| Service events | `GET /api/services/{name}/events` | per-service event feed |
 | Host watches | `GET /api/watches` | host-level watches |
 | Applications | `GET /api/applications` | installed catalog apps |
 | Notifiers | `GET /api/notifiers` | notifier targets |
 | Daemon settings | `GET /api/daemon` | engine/runtime config |
 | Daemon process metrics | `GET /api/daemon/metrics` | persisted sermod CPU/memory/IO history |
+| Host metrics | `GET /api/host` | current host CPU, memory and load values |
 | Locks | `GET /api/locks` | named runtime locks |
 | Events | `GET /api/events` | service/watch activity |
 | Recent activity | `GET /api/activity` | summary of recent events |
+| Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
 | Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics |
-| Diagnostics clean | `POST /api/diagnostics/clean` | admin cleanup of stale monitoring state for unconfigured targets; metric history is kept |
 | Live operations | `GET /api/ops` | active operation slots |
+
+## Action Endpoints
+
+State-changing endpoints are CSRF-protected and admin-only when web auth is
+enabled.
+
+| Area | Endpoint | Notes |
+| --- | --- | --- |
+| Service action | `POST /api/services/{name}/{action}` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`; service operations use the safe engine |
+| Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
+| Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
+| Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
+| Events clear | `POST /api/events/clear?before=TIME` | clears event/activity rows in memory; `before` accepts RFC3339 or duration |
+| Diagnostics clean | `POST /api/diagnostics/clean` | removes stale monitoring state for unconfigured targets; metric history is kept |
+| Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
 ## Top bar
 
