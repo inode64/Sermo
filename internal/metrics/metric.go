@@ -44,19 +44,24 @@ func Compare(r Reading, op, threshold string) (bool, error) {
 		return false, err
 	}
 
-	var actual float64
-	if isPercent {
-		if !r.HasPercent {
-			return false, fmt.Errorf("percentage threshold %q on a metric with no percentage form", threshold)
-		}
-		actual = r.Percent
-	} else {
-		if !r.HasAbsolute {
-			return false, fmt.Errorf("absolute threshold %q on a metric with no absolute form", threshold)
-		}
-		actual = r.Absolute
+	actual, err := metricValue(r, isPercent, threshold)
+	if err != nil {
+		return false, err
 	}
 	return applyOp(actual, op, value)
+}
+
+func metricValue(r Reading, isPercent bool, threshold string) (float64, error) {
+	if isPercent {
+		if !r.HasPercent {
+			return 0, fmt.Errorf("percentage threshold %q on a metric with no percentage form", threshold)
+		}
+		return r.Percent, nil
+	}
+	if !r.HasAbsolute {
+		return 0, fmt.Errorf("absolute threshold %q on a metric with no absolute form", threshold)
+	}
+	return r.Absolute, nil
 }
 
 func parseThreshold(s string) (value float64, isPercent bool, err error) {
