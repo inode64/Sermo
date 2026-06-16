@@ -653,29 +653,24 @@ async function loadMe() {
   }
 }
 
-async function loadReady() {
+// renderReadyBanner shows or hides the startup/shutdown banner from an already-
+// fetched /readyz payload (load() fetches it once with the rest of the dashboard).
+function renderReadyBanner(ready) {
   const el = $("#ready");
-  try {
-    const res = await fetch("readyz?verbose");
-    const body = await res.json();
-    latestReady = body;
-    if (body.ready) {
-      el.style.display = "none";
-      el.textContent = "";
-      renderAttention();
-      return;
-    }
-    const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
-    const msg = body.message ? " — " + esc(body.message) : "";
-    const counts = (body.services != null)
-      ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
-      : "";
-    el.style.display = "block";
-    el.innerHTML = `<span class="inactive">${esc(label)}</span>${msg}${counts}`;
-    renderAttention();
-  } catch (e) {
+  if (!el) return;
+  const body = ready || {};
+  if (body.ready) {
     el.style.display = "none";
+    el.textContent = "";
+    return;
   }
+  const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
+  const msg = body.message ? " — " + esc(body.message) : "";
+  const counts = (body.services != null)
+    ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
+    : "";
+  el.style.display = "block";
+  el.innerHTML = `<span class="inactive">${esc(label)}</span>${msg}${counts}`;
 }
 
 // Connection state: when a fetch fails the table is dimmed and a "disconnected,
@@ -691,9 +686,11 @@ function showDisconnected() {
 
 // load refreshes every panel in one parallel burst: the services fetch is the
 // connection signal (failure dims the page), every other endpoint degrades
-// independently to "keep the last render" on a transient error.
+// independently to "keep the last render" on a transient error. Status-line and
+// overview inputs (readyz, livez, monitoring, ops, host) share the same burst so
+// renderStatus does not re-fetch locks, daemon or ops that load() already has.
 async function load() {
-  const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity] = await Promise.all([
+  const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
     getJSON("api/watches", null),       // host watches (visible even when services=0)
     getJSON("api/applications", null),  // installed applications
@@ -702,6 +699,11 @@ async function load() {
     getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null),
     getJSON("api/locks", null),         // global runtime locks (active and stale)
     getJSON("api/activity", null),      // quick activity summary
+    getJSON("readyz?verbose", {}),
+    getJSON("livez?verbose", {}),
+    getJSON("api/monitoring", {}),
+    getJSON("api/ops", {}),
+    getJSON("api/host", []),
   ]);
   if (services) {
     render(services);
@@ -721,12 +723,19 @@ async function load() {
   if (locks) renderLocks(locks);
   if (activity) renderActivity(activity);
 
-  // Always-visible status (counts, uptime, backend, ready state).
-  renderStatus();
+  renderStatus({
+    ready,
+    live,
+    mon,
+    ops,
+    locks: locks || latestLocks,
+    daemon: daemon || {},
+    hostMetrics: hostMetrics || [],
+  });
+  renderReadyBanner(ready);
+  renderOpsPanel(ops);
 
-  loadReady();
   loadEvents();
-  loadOps();
 
   lastRefresh = Date.now();
   tickRefreshAge();
@@ -755,24 +764,21 @@ async function reloadConfig() {
   }
 }
 
-async function loadOps() {
-  try {
-    const res = await fetch("api/ops");
-    if (!res.ok) return;
-    const o = await res.json();
-    liveOpsSlots = o;
-    if (liveOps.size) renderOperationLive();
-    renderAttention();
-    if (!o.total) {
-      $("#ops").textContent = "";
-      return;
-    }
-    const saturated = o.in_use >= o.total;
-    const cls = saturated ? "failed" : "";
-    $("#ops").innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
-  } catch (e) {
-    $("#ops").textContent = "";
+// renderOpsPanel updates the services-panel slot summary from data load() already
+// fetched; updateLiveOps still polls /api/ops while browser-local ops are active.
+function renderOpsPanel(o) {
+  if (!o) return;
+  liveOpsSlots = o;
+  if (liveOps.size) renderOperationLive();
+  const el = $("#ops");
+  if (!el) return;
+  if (!o.total) {
+    el.textContent = "";
+    return;
   }
+  const saturated = o.in_use >= o.total;
+  const cls = saturated ? "failed" : "";
+  el.innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
 }
 
 async function loadEvents() {
@@ -3160,8 +3166,8 @@ function renderActivity(sum) {
 }
 
 // renderOverview fills the at-a-glance tile band under the topbar: one tile per
-// vital sign, colored by health, each clickable to jump to its panel. It runs
-// from renderStatus, which already holds every input — no extra requests.
+// vital sign, colored by health, each clickable to jump to its panel. load()
+// passes the same burst snapshot into renderStatus — no extra requests here.
 function renderOverview(ctx) {
   const band = $("#overview");
   if (!band) return;
@@ -3296,21 +3302,13 @@ async function getJSON(url, dflt) {
   }
 }
 
-async function renderStatus() {
+function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const [ready, live, mon, ops, locks, daemon, hostMetrics] = await Promise.all([
-      getJSON("readyz?verbose", {}),
-      getJSON("livez?verbose", {}),
-      getJSON("api/monitoring", {}),
-      getJSON("api/ops", {}),
-      getJSON("api/locks", []),
-      getJSON("api/daemon", {}),
-      getJSON("api/host", [])
-    ]);
-    latestReady = ready;
-    liveOpsSlots = ops;
+    const { ready, live, mon, ops, locks, daemon, hostMetrics } = ctx || {};
+    latestReady = ready || {};
+    liveOpsSlots = ops || liveOpsSlots;
     latestLocks = locks || [];
     latestHostMetrics = hostMetrics || [];
 
