@@ -344,12 +344,17 @@ service:                       # scalar, legacy {name: ...}, or per-backend map
 
 # Optional non-init control target. For libvirt/QEMU VMs, `domain` is the
 # libvirt domain Sermo starts/stops/restarts/resumes through the safe engine.
+# For Docker containers, `container` is the name or id Sermo controls.
 # control:
 #   type: libvirt
 #   uri: qemu:///system
 #   domain: demo-vm
 #   socket: /run/libvirt/libvirt-sock
 #   # uuid: 2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4
+# control:
+#   type: docker
+#   container: demo
+#   socket: /run/docker.sock
 
 also_service:                  # auxiliary init units of this same service
   systemd: [demo.socket]

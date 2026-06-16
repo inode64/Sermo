@@ -532,8 +532,8 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
 	}
 	discoverer := process.NewDiscoverer()
-	if target.Backend != servicemgr.BackendLibvirt {
-		discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(target.Backend, target.Unit)
+	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
+		discoverer.BackendPIDs = backendPIDs
 	}
 	engine := operation.New(operation.Config{
 		Service:          service,
@@ -975,10 +975,22 @@ func (a App) discoverProcesses(ctx context.Context, opts options, resolved confi
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	if target.Backend != servicemgr.BackendLibvirt {
-		discoverer.BackendPIDs = servicemgr.BackendPIDsFuncWithRunner(target.Backend, target.Unit, a.Runner, nil)
+	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
+		discoverer.BackendPIDs = backendPIDs
 	}
 	return discoverer.Discover(selectors)
+}
+
+func backendPIDsForTarget(target control.Target, runner execx.Runner) func() []int {
+	if target.BackendPIDs != nil {
+		return target.BackendPIDs
+	}
+	switch target.Backend {
+	case servicemgr.BackendSystemd, servicemgr.BackendOpenRC:
+		return servicemgr.BackendPIDsFuncWithRunner(target.Backend, target.Unit, runner, nil)
+	default:
+		return nil
+	}
 }
 
 func formatProcess(p process.Process) string {

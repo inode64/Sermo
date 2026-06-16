@@ -873,6 +873,9 @@ Protocols, in the order of the table above:
 
   Most interesting conditions: `containers.running` (expected services up),
   `containers.stopped` (crashed/exited containers), per-`container` `status`/`health`
+  and `restartcount`. The Docker check is read-only. To let Sermo start, stop,
+  restart or resume that same container through the safe operation engine, add a
+  service-level `control: { type: docker, container: ... }` block.
   and `restartcount` (restart loops), `warnings`, and `on_version_change` for engine
   upgrades.
 - `smb` (aliases `samba`, `cifs`) — default port 445 (TCP). `user` is **optional**.
