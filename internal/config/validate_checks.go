@@ -641,7 +641,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s.path is required for a binary check", path)
 		}
 	case "pidfile":
-		if cfgval.String(entry["path"]) == "" {
+		if len(cfgval.StringList(entry["path"])) == 0 {
 			add("%s.path is required for a pidfile check", path)
 		}
 	case "libraries":

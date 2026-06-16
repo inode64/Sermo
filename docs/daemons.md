@@ -646,6 +646,15 @@ pidfile from one line:
 pidfile: /run/named/named.pid
 ```
 
+When a daemon legitimately uses different pidfile names across distributions,
+declare candidates in preference order:
+
+```yaml
+pidfile:
+  - /run/mysqld/mariadb.pid
+  - /run/mysqld/mysqld.pid
+```
+
 Use `/run` here, not `/var/run`. If a distro init script or service manager
 reports the legacy `/var/run/...` spelling, write the equivalent `/run/...` path
 in the daemon profile. Before committing a new pidfile or socket path, resolve
@@ -659,8 +668,10 @@ missing or stale pidfile is reported as an **error only while the service is
 active** (it means the daemon died or lost its pidfile without the service
 manager noticing); a legitimately stopped service is skipped, not alarmed. An
 existing pidfile selector or a check already named `pidfile` is respected, so a
-daemon that needs a candidate list or custom check can still spell it out. The
-shorthand path can reference variables (e.g. `pidfile: "${pidfile}"`).
+daemon that needs a custom check can still spell it out. The shorthand path can
+reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
+order and pass on the first live pidfile; if none exists, the backend PID
+fallback can still satisfy the gated health check.
 
 ## Versioned daemons
 

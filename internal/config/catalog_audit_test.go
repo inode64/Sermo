@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -184,10 +185,10 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		want string
+		want []string
 	}{
-		{name: "clamd", want: "/run/clamd.pid"},
-		{name: "mariadb", want: "/run/mysqld/mysqld.pid"},
+		{name: "clamd", want: []string{"/run/clamd.pid"}},
+		{name: "mariadb", want: []string{"/run/mysqld/mariadb.pid", "/run/mysqld/mysqld.pid"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -196,11 +197,11 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 				t.Fatalf("Resolve() errors = %v", errs)
 			}
 			proc := nested(t, resolved.Tree, "processes", "pidfile")
-			if got := cfgval.String(proc["path"]); got != tc.want {
+			if got := cfgval.StringList(proc["path"]); !slices.Equal(got, tc.want) {
 				t.Fatalf("process pidfile = %q, want %q", got, tc.want)
 			}
 			check := nested(t, resolved.Tree, "checks", "pidfile")
-			if got := cfgval.String(check["path"]); got != tc.want {
+			if got := cfgval.StringList(check["path"]); !slices.Equal(got, tc.want) {
 				t.Fatalf("check pidfile = %q, want %q", got, tc.want)
 			}
 		})

@@ -80,7 +80,7 @@ func TestIsHealthType(t *testing.T) {
 		{"mariadb", true},
 		{"storage", false},
 		{"disk", false},
-		{"cert", false},
+		{"cert", true},
 		{"count", false},
 		{"sql", false},
 		{"mongodb-query", false},
