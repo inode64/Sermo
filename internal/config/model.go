@@ -102,6 +102,9 @@ const DefaultRuntime = "/run/sermo"
 // lives under /var/lib so it survives reboots, unlike the runtime root on tmpfs.
 const DefaultState = "/var/lib/sermo"
 
+// DefaultTemplates is the directory holding notification templates.
+const DefaultTemplates = "/etc/sermo/templates"
+
 // Monitor modes for a service/watch `monitor` flag. They set the daemon's
 // startup behavior:
 //   - MonitorEnabled : always monitor on startup (the default)
@@ -125,13 +128,14 @@ func MonitorMode(tree map[string]any) string {
 // Global is the effective global configuration (sermo.yml plus conf.d), kept
 // mostly generic so its `defaults` block merges into services unchanged.
 type Global struct {
-	Path     string
-	Raw      map[string]any
-	Defaults map[string]any
-	Catalog  []string
-	Includes []string
-	Runtime  string
-	State    string
+	Path      string
+	Raw       map[string]any
+	Defaults  map[string]any
+	Catalog   []string
+	Includes  []string
+	Runtime   string
+	State     string
+	Templates string
 }
 
 // RuntimeDir returns the runtime root, falling back to the default when unset.
@@ -149,6 +153,15 @@ func (g Global) StateDir() string {
 		return DefaultState
 	}
 	return g.State
+}
+
+// TemplateDir returns the notification template directory, falling back to the
+// installed default when unset.
+func (g Global) TemplateDir() string {
+	if g.Templates == "" {
+		return DefaultTemplates
+	}
+	return g.Templates
 }
 
 // ServiceUnit returns a service's primary (display/seed) unit name: the scalar

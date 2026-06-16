@@ -40,6 +40,8 @@ paths:
   # survives reboots — required for `monitor: previous` and for automatic
   # remediation not to reset its cooldown/windows after a sermod restart.
   state: /var/lib/sermo
+  # Notification templates. `make install` installs default-alert.yml here.
+  templates: /etc/sermo/templates
 
 defaults:
   stop_policy:
@@ -93,12 +95,14 @@ web:
 notifiers:
   ops-email:
     type: email
+    # template: default-alert
     dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com, oncall@example.com]
   team-slack:
     # enabled: false  # keep configured but skip delivery attempts
     type: slack
+    # template: default-alert
     webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
 
 # Default notification targets for watches/rules that omit notify. Uncomment to

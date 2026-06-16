@@ -169,7 +169,7 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
 		m.collector.SystemFreshness = m.deps.SystemFreshness
 	}
-	notifiers, warns := notify.Build(cfg.Notifiers())
+	notifiers, warns := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)
 	for _, w := range warns {

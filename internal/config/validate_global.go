@@ -47,7 +47,7 @@ const NotifyNone = "none"
 
 // validateNotifiers checks the global `notifiers` section: each entry is a known
 // type with the fields that type needs. New transports validate here too.
-func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
+func validateNotifiers(notifiers map[string]any, templateDir string, add func(string, ...any)) {
 	for _, name := range slices.Sorted(maps.Keys(notifiers)) {
 		if name == NotifyNone {
 			add("notifiers.%s: %q is a reserved keyword and cannot name a notifier", name, NotifyNone)
@@ -66,6 +66,7 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 		if enabled, ok := entry["enabled"].(bool); ok && !enabled {
 			continue
 		}
+		validateNotifierTemplate(name, entry, templateDir, add)
 		switch typ := cfgval.String(entry["type"]); typ {
 		case "email":
 			dsn := cfgval.String(entry["dsn"])
@@ -96,6 +97,21 @@ func validateNotifiers(notifiers map[string]any, add func(string, ...any)) {
 				add("notifiers.%s.type %q is not supported (%s)", name, typ, strings.Join(notify.SupportedTypes(), ", "))
 			}
 		}
+	}
+}
+
+func validateNotifierTemplate(name string, entry map[string]any, templateDir string, add func(string, ...any)) {
+	raw, present := entry["template"]
+	if !present {
+		return
+	}
+	templateName, ok := raw.(string)
+	if !ok || strings.TrimSpace(templateName) == "" {
+		add("notifiers.%s.template must be a template name", name)
+		return
+	}
+	if _, err := notify.LoadTemplate(templateDir, templateName); err != nil {
+		add("notifiers.%s.template %q is invalid: %v", name, templateName, err)
 	}
 }
 

@@ -99,6 +99,9 @@ func validateGlobal(cfg *Config) []Issue {
 		if stateDir := cfgval.String(paths["state"]); stateDir != "" && !filepath.IsAbs(stateDir) {
 			add("paths.state %q must be an absolute directory", stateDir)
 		}
+		if templateDir := cfgval.String(paths["templates"]); templateDir != "" && !filepath.IsAbs(templateDir) {
+			add("paths.templates %q must be an absolute directory", templateDir)
+		}
 	}
 
 	if security, ok := raw["security"].(map[string]any); ok {
@@ -114,7 +117,7 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	notifiers, _ := raw["notifiers"].(map[string]any)
-	validateNotifiers(notifiers, add)
+	validateNotifiers(notifiers, cfg.Global.TemplateDir(), add)
 
 	if _, present := raw["notify"]; present {
 		validateNotifySelection("notify", cfgval.StringList(raw["notify"]), notifierNames(notifiers), add)
