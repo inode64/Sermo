@@ -43,6 +43,9 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		"function closeDetail(",
 		"<th>PPID</th>",
 		`style="width:auto; max-width:100%; font-size:.85rem;"`,
+		`<h2>SLA <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>`,
+		"sla-layout",
+		"sla-chart-title",
 	} {
 		if strings.Contains(html, forbidden) {
 			t.Fatalf("index.html still contains %q", forbidden)
@@ -97,9 +100,11 @@ func TestIndexHTMLServiceProcessMetricsLayout(t *testing.T) {
 		`r="3" fill="#1f6feb"`,
 		`api/services/${encodeURIComponent(name)}/sla?since=${metricWindow}`,
 		`aria-label="SLA timeline"`,
+		`width="100%" role="img" aria-label="SLA timeline"`,
 		`api/services/${encodeURIComponent(name)}/runtime?since=${metricWindow}`,
 		"function renderSLAWindows(wins, compact)",
-		`<h2>SLA <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>`,
+		`<div class="metric-panel metric-panel-wide">`,
+		`<span class="metric-title">SLA timeline</span>`,
 		`<th>SLA</th>`,
 		`class="app-sla"`,
 		`<h2>General data</h2>`,

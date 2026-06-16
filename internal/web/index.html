@@ -217,11 +217,9 @@
   .proc-tree-child .process-cmd { max-width: min(36rem, 44vw); }
   .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .45rem 1rem; margin: .25rem 0 .75rem; font-size: .9rem; }
   .runtime-grid > div { min-width: 0; overflow-wrap: anywhere; }
-  .sla-panel { max-width: 78rem; margin: .2rem 0 .85rem; }
-  .sla-layout { display: grid; grid-template-columns: minmax(14rem, 23rem) minmax(18rem, 1fr); gap: .65rem 1.15rem; align-items: start; }
-  .sla-chart-panel { min-width: 0; }
+  .sla-panel { width: 100%; margin: .2rem 0 .85rem; }
+  .sla-chart-panel { min-width: 0; width: 100%; }
   .sla-chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: .65rem; flex-wrap: wrap; margin: 0 0 .18rem; }
-  .sla-chart-title { font-weight: 650; }
   .sla-incident-list { display: flex; flex-wrap: wrap; gap: .28rem .35rem; align-items: center; margin-top: .28rem; font-size: .82rem; font-variant-numeric: tabular-nums; }
   .sla-incident { color: var(--crit); border: 1px solid color-mix(in srgb, var(--crit) 35%, var(--line)); background: color-mix(in srgb, var(--crit) 8%, transparent); border-radius: 999px; padding: .05rem .42rem; }
   .sla-windows { display: grid; gap: .26rem; max-width: 42rem; }
@@ -239,9 +237,10 @@
   .app-sla { grid-column: 1 / -1; }
   .metric-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem 1.15rem; margin: .25rem 0 .8rem; }
   .metric-panel { min-width: 0; }
+  .metric-panel-wide { grid-column: 1 / -1; }
   .metric-title { font-weight: 650; margin-bottom: .25rem; }
   .metric-title .muted { font-weight: 400; }
-  @media (max-width: 760px) { .metric-grid, .sla-layout { grid-template-columns: 1fr; } }
+  @media (max-width: 760px) { .metric-grid { grid-template-columns: 1fr; } }
   #ready { margin: .6rem 0 0; }
 
   /* ---- events / diagnostics -------------------------------------------------- */
@@ -1844,7 +1843,7 @@ function drawSLAChart(points, win) {
     const tip = `${fmtTime(new Date(o.t).toISOString())} · SLA ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
     return `<circle cx="${tx.toFixed(1)}" cy="${y(o.pct).toFixed(1)}" r="5" fill="transparent"><title>${esc(tip)}</title></circle>`;
   }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img" aria-label="SLA timeline">${axis}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="SLA timeline">${axis}${lines}${hover}${markers}</svg>${renderSLAIncidentList(incidents)}`;
 }
 
 function totalsCpuCell(pt) {
@@ -1952,6 +1951,17 @@ function renderServiceDetail(d) {
     : '<div class="muted">No latency checks configured for this service.</div>';
   const graphs = `<h2>Graphs <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
     <div class="metric-grid">
+      <div class="metric-panel metric-panel-wide">
+        <div class="sla-chart-head">
+          <span class="metric-title">SLA timeline</span>
+          <span id="${esc(detailDomId(d.name, "sla-summary"))}" class="muted">loading...</span>
+        </div>
+        <div class="sla-panel">
+          <div class="sla-chart-panel">
+            <div id="${esc(detailDomId(d.name, "sla-chart"))}" class="muted"></div>
+          </div>
+        </div>
+      </div>
       <div class="metric-panel">
         <div class="metric-title">Latency <span class="muted">${checkBtns}</span></div>
         ${latencyPanel}
@@ -1996,25 +2006,10 @@ function renderServiceDetail(d) {
       <div><span class="muted">IO R/W</span><br>${ioRWInline(pt && pt.io_read, pt && pt.io_write)}</div>
       <div><span class="muted">FDs / Threads</span><br>${pt ? `${pt.fds || 0} / ${pt.threads || 0}` : '<span class="muted">—</span>'}</div>
     </div>`;
-  const serviceSLA = `<h2>SLA <span class="muted">${winButtons(metricWins, metricWindow, "setMetricWin")}</span></h2>
-    <div class="sla-panel">
-      <div class="sla-layout">
-        <div>${renderSLAWindows(d.sla, false)}</div>
-        <div class="sla-chart-panel">
-          <div class="sla-chart-head">
-            <span class="sla-chart-title">Timeline</span>
-            <span id="${esc(detailDomId(d.name, "sla-summary"))}" class="muted">loading...</span>
-          </div>
-          <div id="${esc(detailDomId(d.name, "sla-chart"))}" class="muted"></div>
-        </div>
-      </div>
-    </div>`;
-
   return `<div class="service-detail" data-service-detail="${esc(d.name)}">
     <h2>${esc(displayName(d))} <span class="muted">${esc(d.unit || "")}</span></h2>
     ${disabledNote}
     ${general}
-    ${serviceSLA}
     ${graphs}
     <h2>Processes</h2>
     ${procSummary}${totals}${procWarns}${procTable}
