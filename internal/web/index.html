@@ -1562,6 +1562,39 @@ function procLabel(p) {
   return '<span class="muted">unknown</span>';
 }
 
+function processRows(procs) {
+  const byPID = new Map();
+  (procs || []).forEach((p) => byPID.set(Number(p.pid), { p, children: [] }));
+  const roots = [];
+  byPID.forEach((row, pid) => {
+    const parent = byPID.get(Number(row.p.ppid));
+    if (parent && Number(row.p.ppid) !== pid) parent.children.push(row);
+    else roots.push(row);
+  });
+  roots.sort((a, b) => Number(a.p.pid || 0) - Number(b.p.pid || 0));
+  const out = [];
+  const seen = new Set();
+  function visit(row, depth) {
+    const pid = Number(row.p.pid);
+    if (seen.has(pid)) return;
+    seen.add(pid);
+    out.push({ p: row.p, depth });
+    row.children.forEach((child) => visit(child, depth + 1));
+  }
+  roots.forEach((row) => visit(row, 0));
+  byPID.forEach((row) => visit(row, 0));
+  return out;
+}
+
+function procTreeLabel(row) {
+  const depth = Number(row.depth || 0);
+  const p = row.p || {};
+  const branch = depth > 0
+    ? `<span class="proc-branch" title="child process of PID ${esc(p.ppid || "")}" aria-label="child process of PID ${esc(p.ppid || "")}"></span>`
+    : "";
+  return `<span class="proc-tree${depth > 0 ? " proc-tree-child" : ""}" style="--proc-depth:${depth}">${branch}${procLabel(p)}</span>`;
+}
+
 function serviceUptimeCell(s) {
   const up = s ? fmtUptime(s.uptime_seconds) : "";
   if (!up) return '<span class="muted">—</span>';
@@ -1849,21 +1882,21 @@ function renderServiceDetail(d) {
   const procSummary = noResidentProcess
     ? `<p class="muted" style="margin-top:-.25rem">No resident process expected.</p>`
     : `<p class="muted" style="margin-top:-.25rem">${procs.length} discovered${procWarnings.length ? ` · ${procWarnings.length} discovery warning${procWarnings.length === 1 ? "" : "s"}` : ""}</p>`;
+  const procRows = processRows(procs);
   const procTable = noResidentProcess
     ? ""
     : procs.length
-    ? `<table style="width:auto; max-width:100%; font-size:.85rem;">
-        <thead><tr><th>PID</th><th>PPID</th><th>CMD</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
-        <tbody>${procs.map((p) => `<tr>
+    ? `<table style="font-size:.85rem;">
+        <thead><tr><th>PID</th><th>CMD</th><th>User</th><th>Role</th><th>CPU</th><th title="CPU used by this process, normalized to one core">Core peak</th><th>Mem</th><th>IO r/w</th><th>FDs</th><th>Threads</th></tr></thead>
+        <tbody>${procRows.map((row) => { const p = row.p; return `<tr>
           <td>${p.pid}</td>
-          <td class="muted">${p.ppid}</td>
-          <td>${procLabel(p)}</td>
+          <td>${procTreeLabel(row)}</td>
           <td class="muted">${esc(p.user || "")}</td>
           <td class="muted">${esc(p.role || "")}</td>
           ${procCpuCells(p)}
           <td>${p.rss ? (hostMem > 0 ? usageBarMini(memPct(p.rss), fmtBytes(p.rss)) : fmtBytes(p.rss)) : '—'}</td>
           ${procIoFdThreadCells(p)}
-        </tr>`).join("")}</tbody></table>`
+        </tr>`; }).join("")}</tbody></table>`
     : `<div class="${procWarnings.length ? "bad" : "muted"}">${procWarnings.length ? "No processes discovered; check discovery warnings." : "No processes found."}</div>`;
 
   const measured = serviceMeasuredChecks(d);
