@@ -47,14 +47,13 @@ func (r Result) Errors() int { return r.count(LevelError) }
 
 // Warnings returns the number of warning-level findings.
 func (r Result) Warnings() int { return r.count(LevelWarning) }
-func (r Result) count(l Level) int {
-	n := 0
-	for _, f := range r.Findings {
-		if f.Level == l {
-			n++
+func (r Result) count(level Level) (count int) {
+	for _, finding := range r.Findings {
+		if finding.Level == level {
+			count++
 		}
 	}
-	return n
+	return count
 }
 
 // Store is the database access diagnostics need (implemented by state.Store).
