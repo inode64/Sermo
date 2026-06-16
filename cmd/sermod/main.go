@@ -174,6 +174,7 @@ func run(args []string) int {
 		// Events go to slog and to the persisted ring the web UI reads.
 		Emit:            app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
 		Monitor:         store,
+		RuleState:       store,
 		SLA:             store,
 		DaemonMetrics:   store,
 		Notifiers:       notifiers,

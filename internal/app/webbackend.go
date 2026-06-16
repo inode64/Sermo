@@ -162,7 +162,7 @@ type webNotifier struct {
 }
 
 type diagnosticCleaner interface {
-	PruneUnconfiguredMonitorStates(configured []string) (state.PruneUnconfiguredMonitorStatesResult, error)
+	PruneUnconfiguredControlStates(configured []string) (state.PruneUnconfiguredControlStatesResult, error)
 }
 
 // WebBackend implements web.Backend over the daemon's services: status from the
@@ -2557,22 +2557,22 @@ func (b *WebBackend) Diagnostics(_ context.Context) []web.Finding {
 	return out
 }
 
-// CleanDiagnostics removes stale monitoring control state for services and
+// CleanDiagnostics removes stale runtime control state for services and
 // watches that are no longer configured.
 func (b *WebBackend) CleanDiagnostics(_ context.Context) web.DiagnosticCleanResult {
 	if b.diagCleaner == nil {
 		return web.DiagnosticCleanResult{OK: false, Message: "state database is unavailable"}
 	}
-	result, err := b.diagCleaner.PruneUnconfiguredMonitorStates(diag.ConfiguredStoredNames(b.cfg))
+	result, err := b.diagCleaner.PruneUnconfiguredControlStates(diag.ConfiguredStoredNames(b.cfg))
 	if err != nil {
 		return web.DiagnosticCleanResult{OK: false, Message: err.Error()}
 	}
 	if len(result.Services) == 0 {
-		return web.DiagnosticCleanResult{OK: true, Message: "no unconfigured monitoring state found"}
+		return web.DiagnosticCleanResult{OK: true, Message: "no unconfigured control state found"}
 	}
 	return web.DiagnosticCleanResult{
 		OK:       true,
-		Message:  fmt.Sprintf("cleared monitoring state for %d unconfigured target(s)", len(result.Services)),
+		Message:  fmt.Sprintf("cleared control state for %d unconfigured target(s)", len(result.Services)),
 		Pruned:   result.Rows,
 		Services: result.Services,
 	}

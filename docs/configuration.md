@@ -86,10 +86,12 @@ to avoid ambiguity.
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
 is what lets a service's or watch's `monitor: previous` flag restore its last
-monitoring state. It also stores SLA and check measurements plus service and
-daemon process metric history shown in the web UI. The schema is versioned and
-migrated forward
-automatically, so future features can add tables without a manual upgrade.
+monitoring state. It also stores automatic-remediation cooldown/backoff and rule
+`for`/`within` window progress, so restarting `sermod` does not reset when a rule
+may act again. SLA and check measurements plus service and daemon process metric
+history shown in the web UI live there too. The schema is versioned and migrated
+forward automatically, so future features can add tables without a manual
+upgrade.
 
 Both directories are created **0700, owner root**. On systemd they come from the
 shipped `tmpfiles.d/sermo.conf` (installed at `/usr/lib/tmpfiles.d/sermo.conf`),
@@ -155,8 +157,10 @@ the wait aborts cleanly without starting any worker. The default `0` disables it
 --config` (the same file `sermoctl` uses). `sermod` validates the new config,
 rebuilds its service workers and host watches, and swaps them in without
 restarting the process. Per-service runtime state is preserved across reload:
-monitoring cycle counters, remediation cooldown/backoff, rule `for`/`within`
-windows and watched-file baselines for `changed:` conditions. Invalid config, or
+monitoring cycle counters and watched-file baselines for `changed:` conditions
+stay in memory, while remediation cooldown/backoff and rule `for`/`within`
+windows are also persisted in `paths.state` and survive a full `sermod` process
+restart. Invalid config, or
 a config with no included services or watches, is rejected and the current
 generation keeps running; a `reload` or `error` event is recorded. Reload does
 not repeat `startup_delay` and does not mark `/readyz` as shutting down.
@@ -421,7 +425,7 @@ auth is enabled:
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
   `before` may be RFC3339 or a duration. Omit it to clear all events.
 - `POST /api/diagnostics/clean` — when diagnostics are enabled, remove stale
-  monitoring state for services/watches no longer configured; metric and SLA
+  control state for services/watches no longer configured; metric, SLA and event
   history is kept. Returns `404` while `web.disable_diagnostics` is `true`.
 - `POST /api/reload` — request a `sermod` configuration reload, equivalent to
   `sermoctl daemon reload`.
@@ -1657,7 +1661,7 @@ further and checks it against the **live host and state database**:
 ```sh
 sermoctl diagnose          # text report
 sermoctl diagnose --json   # machine-readable
-sermoctl diagnose clean    # remove stale monitoring state for unconfigured services/watches
+sermoctl diagnose clean    # remove stale control state for unconfigured services/watches
 sermoctl diagnose clear    # alias for diagnose clean
 sermoctl state compact     # prune old history and vacuum the state database
 ```
@@ -1666,8 +1670,10 @@ It reports, as `error` / `warning` / `info` findings:
 
 - **Configuration** — every `config validate` issue (errors).
 - **State database** — that the SQLite store passes `PRAGMA integrity_check`, and
-  flags **stored monitoring state for services/watches no longer in the
-  config**. Use `sermoctl diagnose clean` to prune those orphaned control rows.
+  flags **stored control state for services/watches no longer in the config**:
+  monitor/unmonitor state, automatic-remediation cooldown/backoff and rule
+  window progress. Use `sermoctl diagnose clean` to prune those orphaned control
+  rows.
 - **Interval alignment** — per-check `interval`s that are **not a multiple of the
   global resolution** (`engine.interval`) or below it, so they will be rounded
   (see [per-check interval](#per-check-interval)).
@@ -1685,11 +1691,11 @@ It reports, as `error` / `warning` / `info` findings:
 endpoint generated the diagnostics response. When the web UI is enabled, that
 feed also includes **operation slot** usage from the running daemon (`info` when
 some slots are in use, `warning` when saturated); see also `GET /api/ops`. When
-the panel finds stale monitoring-state rows, admins can use **clean stale data**, which
+the panel finds stale control-state rows, admins can use **clean stale data**, which
 calls `POST /api/diagnostics/clean` and performs the same bounded cleanup as
 `sermoctl diagnose clean` (`diagnose clear` is an alias): it removes only
-persisted monitoring state for targets that are no longer configured. SLA, check
-measurements and runtime CPU, memory and IO history are kept.
+persisted control state for targets that are no longer configured. SLA, check
+measurements, events and runtime CPU, memory and IO history are kept.
 
 To reclaim old history intentionally, use:
 

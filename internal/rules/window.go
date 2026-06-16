@@ -15,6 +15,12 @@ type WindowState struct {
 	history     []bool // sliding window for `within`
 }
 
+// WindowStateSnapshot is the serializable form of a WindowState.
+type WindowStateSnapshot struct {
+	Consecutive int
+	History     []bool
+}
+
 // withinWindow returns a within-window's cycle count and effective minimum
 // matches (defaulting to 1), and whether a within window is configured. It is the
 // single source of the within defaults shared by Fires/IsFiring/Progress.
@@ -91,11 +97,29 @@ func (s *WindowState) Clone() *WindowState {
 	if s == nil {
 		return nil
 	}
-	cp := &WindowState{consecutive: s.consecutive}
-	if len(s.history) > 0 {
-		cp.history = slices.Clone(s.history)
+	return WindowStateFromSnapshot(s.Snapshot())
+}
+
+// Snapshot returns a deep-copyable representation of the current window state.
+func (s *WindowState) Snapshot() WindowStateSnapshot {
+	if s == nil {
+		return WindowStateSnapshot{}
 	}
-	return cp
+	return WindowStateSnapshot{
+		Consecutive: s.consecutive,
+		History:     slices.Clone(s.history),
+	}
+}
+
+// WindowStateFromSnapshot restores a window state snapshot.
+func WindowStateFromSnapshot(snapshot WindowStateSnapshot) *WindowState {
+	if snapshot.Consecutive < 0 {
+		snapshot.Consecutive = 0
+	}
+	return &WindowState{
+		consecutive: snapshot.Consecutive,
+		history:     slices.Clone(snapshot.History),
+	}
 }
 
 // WindowDescription summarizes the configured for/within window.

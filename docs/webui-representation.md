@@ -60,7 +60,7 @@ enabled.
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts RFC3339 or duration |
-| Diagnostics clean | `POST /api/diagnostics/clean` | removes stale monitoring state for unconfigured targets; metric history is kept; returns 404 when diagnostics are disabled |
+| Diagnostics clean | `POST /api/diagnostics/clean` | removes stale control state for unconfigured targets; metric/SLA/event history is kept; returns 404 when diagnostics are disabled |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
 ## Top bar
@@ -369,7 +369,7 @@ Section id: `diag-section`
 | --- | --- |
 | Title | `Diagnostics` |
 | Buttons | refresh; clean stale data when admin and stale database findings exist; reload config when admin |
-| Help text | `sermoctl daemon reload, SIGHUP or systemctl reload sermod`; cleanup warning for stale monitoring state only |
+| Help text | `sermoctl daemon reload, SIGHUP or systemctl reload sermod`; cleanup warning for stale control state only |
 | Table | diagnostic time, level, scope and message rows |
 
 ## Change template

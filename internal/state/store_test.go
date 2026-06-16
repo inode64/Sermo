@@ -61,6 +61,7 @@ func TestStoreSetActiveRoundTrip(t *testing.T) {
 // relies on. Reopening the same file must preserve the recorded state.
 func TestStorePersistsAcrossReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), Filename)
+	t0 := time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC)
 
 	first, err := Open(path)
 	if err != nil {
@@ -68,6 +69,18 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	}
 	if err := first.SetActive("db", false, SourceCLI); err != nil {
 		t.Fatalf("SetActive: %v", err)
+	}
+	if err := first.SetRemediationState("db", RemediationRecord{
+		LastActionAt:   t0,
+		RecentActions:  []time.Time{t0.Add(-time.Minute), t0},
+		CurrentBackoff: 2 * time.Minute,
+	}); err != nil {
+		t.Fatalf("SetRemediationState: %v", err)
+	}
+	if err := first.SetRuleWindowStates("db", map[string]RuleWindowRecord{
+		"restart-if-down": {Consecutive: 2, History: []bool{true, false, true}},
+	}); err != nil {
+		t.Fatalf("SetRuleWindowStates: %v", err)
 	}
 	if err := first.Close(); err != nil {
 		t.Fatalf("close: %v", err)
@@ -86,9 +99,48 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	if !found || active {
 		t.Errorf("state did not persist across reopen: found=%v active=%v", found, active)
 	}
+	rem, found, err := second.RemediationState("db")
+	if err != nil || !found {
+		t.Fatalf("RemediationState after reopen: found=%v err=%v", found, err)
+	}
+	if !rem.LastActionAt.Equal(t0) || rem.CurrentBackoff != 2*time.Minute || len(rem.RecentActions) != 2 {
+		t.Fatalf("remediation state = %+v", rem)
+	}
+	windows, err := second.RuleWindowStates("db")
+	if err != nil {
+		t.Fatalf("RuleWindowStates after reopen: %v", err)
+	}
+	if rec, ok := windows["restart-if-down"]; !ok || rec.Consecutive != 2 || len(rec.History) != 3 || !rec.History[2] {
+		t.Fatalf("rule window state = %+v", windows)
+	}
 }
 
-func TestPruneUnconfiguredMonitorStates(t *testing.T) {
+func TestStoreRuleWindowReplaceRemovesStaleRules(t *testing.T) {
+	s := openTemp(t)
+	if err := s.SetRuleWindowStates("web", map[string]RuleWindowRecord{
+		"old": {Consecutive: 2},
+		"new": {History: []bool{true}},
+	}); err != nil {
+		t.Fatalf("SetRuleWindowStates initial: %v", err)
+	}
+	if err := s.SetRuleWindowStates("web", map[string]RuleWindowRecord{
+		"new": {Consecutive: 1},
+	}); err != nil {
+		t.Fatalf("SetRuleWindowStates replace: %v", err)
+	}
+	windows, err := s.RuleWindowStates("web")
+	if err != nil {
+		t.Fatalf("RuleWindowStates: %v", err)
+	}
+	if _, ok := windows["old"]; ok {
+		t.Fatalf("stale rule window was not removed: %+v", windows)
+	}
+	if windows["new"].Consecutive != 1 {
+		t.Fatalf("new rule window = %+v", windows["new"])
+	}
+}
+
+func TestPruneUnconfiguredControlStates(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
 
@@ -111,14 +163,20 @@ func TestPruneUnconfiguredMonitorStates(t *testing.T) {
 		if err := s.RecordServiceMetric(service, "cpu", 10, now); err != nil {
 			t.Fatalf("RecordServiceMetric(%s): %v", service, err)
 		}
+		if err := s.SetRemediationState(service, RemediationRecord{LastActionAt: now, RecentActions: []time.Time{now}, CurrentBackoff: time.Minute}); err != nil {
+			t.Fatalf("SetRemediationState(%s): %v", service, err)
+		}
+		if err := s.SetRuleWindowStates(service, map[string]RuleWindowRecord{"restart-if-down": {Consecutive: 1}}); err != nil {
+			t.Fatalf("SetRuleWindowStates(%s): %v", service, err)
+		}
 	}
 
-	result, err := s.PruneUnconfiguredMonitorStates([]string{"web"})
+	result, err := s.PruneUnconfiguredControlStates([]string{"web"})
 	if err != nil {
-		t.Fatalf("PruneUnconfiguredMonitorStates: %v", err)
+		t.Fatalf("PruneUnconfiguredControlStates: %v", err)
 	}
-	if result.Rows != 1 || len(result.Services) != 1 || result.Services[0] != "ghost" {
-		t.Fatalf("result = %+v, want ghost with 1 row", result)
+	if result.Rows != 3 || len(result.Services) != 1 || result.Services[0] != "ghost" {
+		t.Fatalf("result = %+v, want ghost with 3 rows", result)
 	}
 
 	if _, found, err := s.Active("ghost"); err != nil || found {
@@ -126,6 +184,18 @@ func TestPruneUnconfiguredMonitorStates(t *testing.T) {
 	}
 	if _, found, err := s.Active("web"); err != nil || !found {
 		t.Fatalf("web active: found=%v err=%v, want kept", found, err)
+	}
+	if _, found, err := s.RemediationState("ghost"); err != nil || found {
+		t.Fatalf("ghost remediation: found=%v err=%v, want removed", found, err)
+	}
+	if _, found, err := s.RemediationState("web"); err != nil || !found {
+		t.Fatalf("web remediation: found=%v err=%v, want kept", found, err)
+	}
+	if windows, err := s.RuleWindowStates("ghost"); err != nil || len(windows) != 0 {
+		t.Fatalf("ghost rule windows = %+v err=%v, want removed", windows, err)
+	}
+	if windows, err := s.RuleWindowStates("web"); err != nil || len(windows) != 1 {
+		t.Fatalf("web rule windows = %+v err=%v, want kept", windows, err)
 	}
 	if _, total, err := s.SLA("ghost", time.Hour, now.Add(time.Minute)); err != nil || total != 1 {
 		t.Fatalf("ghost SLA total=%d err=%v, want preserved history", total, err)
