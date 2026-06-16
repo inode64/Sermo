@@ -120,7 +120,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	if len(deletes) > 0 {
 		fmt.Fprintf(a.Stdout, "Deleted %d existing watch file(s).\n", len(deletes))
 	}
-	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl reload` to apply.\n", len(merged.Files), merged.Dir)
+	fmt.Fprintf(a.Stdout, "Wrote %d watch file(s) under %s. Run `sermoctl daemon reload` to apply.\n", len(merged.Files), merged.Dir)
 	return exitSuccess, nil
 }
 

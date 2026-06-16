@@ -85,7 +85,7 @@ sermoctl restart apache-main
 # Pause / resume monitoring of a service (e.g. for maintenance)
 sermoctl unmonitor apache-main   # daemon stops checking it
 sermoctl monitor apache-main     # resume
-sermoctl reload                  # ask daemon to re-read its config (SIGHUP)
+sermoctl daemon reload           # ask sermod to re-read its config (SIGHUP)
 
 # Availability (SLA) per service over rolling windows (hour..year)
 sermoctl sla                     # all services
