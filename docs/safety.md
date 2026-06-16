@@ -61,6 +61,9 @@ limited.
 Only *automatic* remediation is rate limited (`cooldown`, `max_actions`,
 `backoff`). Manual `sermoctl` actions are deliberate and not subject to cooldown,
 but remain subject to locks, guards and preflight.
+The automatic-remediation rate-limit state is stored in `paths.state`, so a
+`sermod` restart or host reboot does not clear cooldown/backoff or the
+`max_actions` window.
 
 ## Pausing monitoring
 

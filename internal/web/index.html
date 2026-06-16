@@ -620,7 +620,7 @@
     <button id="diag-clean" class="danger-btn" style="display:none">clean stale data</button>
     <button id="reload-btn" style="display:none">reload config</button>
     <span class="muted" style="font-weight:400; font-size:.8rem; margin-left:.5rem">sermoctl daemon reload, SIGHUP or systemctl reload sermod</span>
-    <span id="diag-clean-note" class="muted" style="display:none; font-weight:400; font-size:.8rem; margin-left:.5rem">removes stale monitoring state for unconfigured targets; metric history is kept</span>
+    <span id="diag-clean-note" class="muted" style="display:none; font-weight:400; font-size:.8rem; margin-left:.5rem">removes stale control state for unconfigured targets; metric/SLA/event history is kept</span>
   </summary>
   <table class="events"><tbody id="diag"></tbody></table>
 </details>
@@ -850,7 +850,7 @@ function updateDiagnosticCleanControls(findings) {
 }
 
 async function cleanDiagnostics() {
-  if (!confirm("Clean stale monitoring state for services/watches that are no longer configured? Metric history is kept.")) return;
+  if (!confirm("Clean stale control state for services/watches that are no longer configured? Metric, SLA and event history is kept.")) return;
   $("#err").textContent = "";
   const btn = $("#diag-clean");
   if (btn) btn.disabled = true;
@@ -863,8 +863,8 @@ async function cleanDiagnostics() {
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
     const services = (body.services || []).join(", ");
     $("#err").textContent = body.pruned
-      ? `cleaned stale monitoring state: ${body.pruned} row${body.pruned === 1 ? "" : "s"}${services ? " (" + services + ")" : ""}`
-      : (body.message || "no stale monitoring state found");
+      ? `cleaned stale control state: ${body.pruned} row${body.pruned === 1 ? "" : "s"}${services ? " (" + services + ")" : ""}`
+      : (body.message || "no stale control state found");
     await loadDiag();
   } catch (e) {
     $("#err").textContent = `diagnostics clean: ${e.message}`;

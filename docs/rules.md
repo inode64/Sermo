@@ -1687,6 +1687,10 @@ min_matches}` requires
 and defaults to `1` (true at least once within the window). A rule cannot use
 both.
 
+Service rule-window progress is persisted in `paths.state`. If `sermod`
+restarts while a `for` window is at 2/3 consecutive matches, the next observed
+matching cycle continues from 2/3 instead of starting from zero.
+
 ### Guards
 
 Guard rules block unsafe actions and use `action: block` with a `message`:
@@ -1725,6 +1729,10 @@ after consecutive remediations) or once `max_actions` is reached in the window.
 `backoff` grows the effective cooldown after each consecutive remediation:
 `initial` the first time, then multiplied by `factor` each subsequent time,
 capped at `max`. `factor` **defaults to `2`** when omitted (or set to ≤0).
+Automatic-remediation state is also persisted in `paths.state`: `LastActionAt`,
+recent action timestamps used by `max_actions`, and the current backoff survive a
+`sermod` restart, so restarting the daemon does not bypass cooldown or rate
+limits.
 
 Use `remediation.shadow: true` when you want these service remediation rules to
 evaluate windows, guards and policy without executing the resulting

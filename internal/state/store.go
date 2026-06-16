@@ -4,7 +4,9 @@
 // Unlike the runtime locks and pause markers under /run (tmpfs, wiped on
 // reboot), this store survives reboots. That durability is what lets the
 // `monitor: previous` flag restore a service's or watch's last monitoring state
-// across a daemon restart or a full reboot.
+// across a daemon restart or a full reboot, and what keeps automatic
+// remediation cooldown/backoff and rule-window progress from resetting when
+// sermod restarts.
 //
 // The schema is versioned through PRAGMA user_version and migrated forward on
 // Open, so future history and retention changes add
@@ -15,9 +17,11 @@ package state
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	_ "modernc.org/sqlite" // registers the "sqlite" database/sql driver
@@ -136,6 +140,24 @@ var migrations = []string{
 		);`,
 	`CREATE INDEX event_log_at_idx ON event_log (at DESC, id DESC);`,
 	`CREATE INDEX event_log_service_at_idx ON event_log (service, at DESC, id DESC);`,
+	// remediation_state stores automatic remediation cooldown, rate-limit and
+	// backoff state per service. It is control state, not historical metrics, so
+	// daemon restarts must not reset when a rule may act again.
+	`CREATE TABLE remediation_state (
+		service            TEXT PRIMARY KEY,
+		last_action_at     INTEGER NOT NULL DEFAULT 0,
+		recent_actions     TEXT NOT NULL DEFAULT '[]',
+		current_backoff_ns INTEGER NOT NULL DEFAULT 0
+	);`,
+	// rule_window_state stores each service rule's for/within progress so
+	// restarting sermod does not make a pending rule start counting from zero.
+	`CREATE TABLE rule_window_state (
+		service     TEXT NOT NULL,
+		rule_name   TEXT NOT NULL,
+		consecutive INTEGER NOT NULL DEFAULT 0,
+		history     TEXT NOT NULL DEFAULT '[]',
+		PRIMARY KEY (service, rule_name)
+	);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -146,9 +168,9 @@ type Store struct {
 	now func() time.Time
 }
 
-// PruneUnconfiguredMonitorStatesResult summarizes stale monitoring control
-// state removed from the persistent state database.
-type PruneUnconfiguredMonitorStatesResult struct {
+// PruneUnconfiguredControlStatesResult summarizes stale control state removed
+// from the persistent state database.
+type PruneUnconfiguredControlStatesResult struct {
 	Services []string
 	Rows     int64
 }
@@ -171,8 +193,8 @@ type PruneHistoryResult struct {
 // coexist across processes.
 func Open(path string) (*Store, error) {
 	if dir := filepath.Dir(path); dir != "" {
-		// Owner-only (root): the state DB holds monitoring state, not secrets, but
-		// there is no reason for it to be world-traversable. Matches the
+		// Owner-only (root): the state DB holds control state and history, not
+		// secrets, but there is no reason for it to be world-traversable. Matches the
 		// packaging (tmpfiles.d / OpenRC) mode. MkdirAll leaves an existing dir's
 		// mode untouched, so a pre-created 0700 dir is preserved.
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -288,6 +310,185 @@ func (s *Store) SetActive(service string, active bool, source string) error {
 		service, v, source, s.now().UTC().Format(time.RFC3339),
 	)
 	return err
+}
+
+// RemediationRecord is the persisted automatic-remediation control state for one
+// service.
+type RemediationRecord struct {
+	LastActionAt   time.Time
+	RecentActions  []time.Time
+	CurrentBackoff time.Duration
+}
+
+// RuleWindowRecord is the persisted for/within progress for one rule.
+type RuleWindowRecord struct {
+	Consecutive int
+	History     []bool
+}
+
+// RemediationState returns a service's persisted automatic-remediation state.
+// found is false when no action state has been recorded yet.
+func (s *Store) RemediationState(service string) (RemediationRecord, bool, error) {
+	var (
+		lastActionAt     int64
+		recentActions    string
+		currentBackoffNS int64
+	)
+	err := s.db.QueryRow(
+		`SELECT last_action_at, recent_actions, current_backoff_ns
+		   FROM remediation_state WHERE service = ?;`,
+		service,
+	).Scan(&lastActionAt, &recentActions, &currentBackoffNS)
+	switch {
+	case err == sql.ErrNoRows:
+		return RemediationRecord{}, false, nil
+	case err != nil:
+		return RemediationRecord{}, false, err
+	default:
+		recent, err := decodeUnixNanos(recentActions)
+		if err != nil {
+			return RemediationRecord{}, false, err
+		}
+		return RemediationRecord{
+			LastActionAt:   unixNanoTime(lastActionAt),
+			RecentActions:  recent,
+			CurrentBackoff: time.Duration(currentBackoffNS),
+		}, true, nil
+	}
+}
+
+// SetRemediationState upserts a service's automatic-remediation state. An empty
+// record deletes any existing row.
+func (s *Store) SetRemediationState(service string, rec RemediationRecord) error {
+	if rec.LastActionAt.IsZero() && len(rec.RecentActions) == 0 && rec.CurrentBackoff == 0 {
+		_, err := s.db.Exec(`DELETE FROM remediation_state WHERE service = ?;`, service)
+		return err
+	}
+	recent, err := encodeUnixNanos(rec.RecentActions)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO remediation_state (service, last_action_at, recent_actions, current_backoff_ns)
+		 VALUES (?, ?, ?, ?)
+		 ON CONFLICT(service) DO UPDATE SET
+		   last_action_at     = excluded.last_action_at,
+		   recent_actions     = excluded.recent_actions,
+		   current_backoff_ns = excluded.current_backoff_ns;`,
+		service, timeUnixNano(rec.LastActionAt), recent, int64(rec.CurrentBackoff),
+	)
+	return err
+}
+
+// RuleWindowStates returns the persisted for/within progress for a service's
+// rules, keyed by rule name.
+func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT rule_name, consecutive, history
+		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
+		service,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := map[string]RuleWindowRecord{}
+	for rows.Next() {
+		var (
+			name        string
+			consecutive int
+			rawHistory  string
+		)
+		if err := rows.Scan(&name, &consecutive, &rawHistory); err != nil {
+			return nil, err
+		}
+		var history []bool
+		if err := json.Unmarshal([]byte(rawHistory), &history); err != nil {
+			return nil, err
+		}
+		out[name] = RuleWindowRecord{Consecutive: consecutive, History: history}
+	}
+	return out, rows.Err()
+}
+
+// SetRuleWindowStates replaces the persisted rule-window state for a service.
+// Passing an empty map removes stale rows for rules that no longer exist.
+func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindowRecord) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM rule_window_state WHERE service = ?;`, service); err != nil {
+		return err
+	}
+	names := make([]string, 0, len(records))
+	for name := range records {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		rec := records[name]
+		history, err := json.Marshal(rec.History)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO rule_window_state (service, rule_name, consecutive, history)
+			 VALUES (?, ?, ?, ?);`,
+			service, name, rec.Consecutive, string(history),
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func encodeUnixNanos(times []time.Time) (string, error) {
+	nanos := make([]int64, 0, len(times))
+	for _, t := range times {
+		if !t.IsZero() {
+			nanos = append(nanos, t.UTC().UnixNano())
+		}
+	}
+	b, err := json.Marshal(nanos)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func decodeUnixNanos(raw string) ([]time.Time, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var nanos []int64
+	if err := json.Unmarshal([]byte(raw), &nanos); err != nil {
+		return nil, err
+	}
+	out := make([]time.Time, 0, len(nanos))
+	for _, n := range nanos {
+		if n != 0 {
+			out = append(out, time.Unix(0, n).UTC())
+		}
+	}
+	return out, nil
+}
+
+func timeUnixNano(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UTC().UnixNano()
+}
+
+func unixNanoTime(n int64) time.Time {
+	if n == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n).UTC()
 }
 
 // EventRecord is one persisted operator-visible event. Service is set for
@@ -975,10 +1176,12 @@ func (s *Store) IntegrityCheck() error {
 }
 
 // TrackedServices returns the distinct service names that have stored data
-// (monitoring state, SLA samples, check measurements or runtime metrics), so
+// (control state, SLA samples, check measurements or runtime metrics), so
 // diagnostics can flag rows for services no longer in the configuration.
 func (s *Store) TrackedServices() ([]string, error) {
 	rows, err := s.db.Query(`SELECT service FROM monitor_state
+		UNION SELECT service FROM remediation_state
+		UNION SELECT service FROM rule_window_state
 		UNION SELECT service FROM sla_sample
 		UNION SELECT service FROM check_sla_sample
 		UNION SELECT service FROM measurement
@@ -999,11 +1202,13 @@ func (s *Store) TrackedServices() ([]string, error) {
 	return out, rows.Err()
 }
 
-// TrackedMonitorStates returns the distinct service/watch names that have
-// persisted monitoring control state. Diagnostics use this narrower view so
+// TrackedControlStates returns the distinct service/watch names that have
+// persisted runtime control state. Diagnostics use this narrower view so
 // historical metrics do not make a removed target look like a live problem.
-func (s *Store) TrackedMonitorStates() ([]string, error) {
-	rows, err := s.db.Query(`SELECT service FROM monitor_state ORDER BY service;`)
+func (s *Store) TrackedControlStates() ([]string, error) {
+	rows, err := s.db.Query(`SELECT service FROM monitor_state
+		UNION SELECT service FROM remediation_state
+		UNION SELECT service FROM rule_window_state ORDER BY service;`)
 	if err != nil {
 		return nil, err
 	}
@@ -1019,14 +1224,14 @@ func (s *Store) TrackedMonitorStates() ([]string, error) {
 	return out, rows.Err()
 }
 
-// PruneUnconfiguredMonitorStates removes persisted monitoring control state for
+// PruneUnconfiguredControlStates removes persisted runtime control state for
 // services or watches absent from the configured target list. It intentionally
-// leaves SLA, measurements and runtime metrics untouched; history maintenance is
-// handled by PruneHistory and Compact.
-func (s *Store) PruneUnconfiguredMonitorStates(configured []string) (PruneUnconfiguredMonitorStatesResult, error) {
-	tracked, err := s.TrackedMonitorStates()
+// leaves SLA, measurements, events and runtime metrics untouched; history
+// maintenance is handled by PruneHistory and Compact.
+func (s *Store) PruneUnconfiguredControlStates(configured []string) (PruneUnconfiguredControlStatesResult, error) {
+	tracked, err := s.TrackedControlStates()
 	if err != nil {
-		return PruneUnconfiguredMonitorStatesResult{}, err
+		return PruneUnconfiguredControlStatesResult{}, err
 	}
 	known := make(map[string]struct{}, len(configured))
 	for _, name := range configured {
@@ -1035,30 +1240,50 @@ func (s *Store) PruneUnconfiguredMonitorStates(configured []string) (PruneUnconf
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return PruneUnconfiguredMonitorStatesResult{}, err
+		return PruneUnconfiguredControlStatesResult{}, err
 	}
 	defer tx.Rollback()
 
-	var result PruneUnconfiguredMonitorStatesResult
+	var result PruneUnconfiguredControlStatesResult
 	for _, service := range tracked {
 		if _, ok := known[service]; ok {
 			continue
 		}
-		res, err := tx.Exec(`DELETE FROM monitor_state WHERE service = ?;`, service)
-		if err != nil {
-			return PruneUnconfiguredMonitorStatesResult{}, err
-		}
-		rows, err := res.RowsAffected()
-		if err != nil {
-			return PruneUnconfiguredMonitorStatesResult{}, err
+		var rows int64
+		for _, stmt := range []string{
+			`DELETE FROM monitor_state WHERE service = ?;`,
+			`DELETE FROM remediation_state WHERE service = ?;`,
+			`DELETE FROM rule_window_state WHERE service = ?;`,
+		} {
+			res, err := tx.Exec(stmt, service)
+			if err != nil {
+				return PruneUnconfiguredControlStatesResult{}, err
+			}
+			n, err := res.RowsAffected()
+			if err != nil {
+				return PruneUnconfiguredControlStatesResult{}, err
+			}
+			rows += n
 		}
 		result.Services = append(result.Services, service)
 		result.Rows += rows
 	}
 	if err := tx.Commit(); err != nil {
-		return PruneUnconfiguredMonitorStatesResult{}, err
+		return PruneUnconfiguredControlStatesResult{}, err
 	}
 	return result, nil
+}
+
+// TrackedMonitorStates is kept for callers compiled against the old internal
+// name. New code should use TrackedControlStates.
+func (s *Store) TrackedMonitorStates() ([]string, error) {
+	return s.TrackedControlStates()
+}
+
+// PruneUnconfiguredMonitorStates is kept for callers compiled against the old
+// internal name. New code should use PruneUnconfiguredControlStates.
+func (s *Store) PruneUnconfiguredMonitorStates(configured []string) (PruneUnconfiguredControlStatesResult, error) {
+	return s.PruneUnconfiguredControlStates(configured)
 }
 
 // PruneSLA deletes SLA buckets older than before, bounding the table to roughly

@@ -82,8 +82,11 @@ type Worker struct {
 	// Publish records this cycle's check cache for the web detail view. ran lists
 	// checks that actually executed (cycleRan). Nil disables publishing.
 	Publish func(cache map[string]checks.Result, ran map[string]bool)
-	Now     func() time.Time
-	Emit    func(Event)
+	// PersistState stores remediation policy state and rule-window progress after
+	// an observed cycle. Nil keeps state in memory for this process only.
+	PersistState func(*rules.RemediationState, map[string]*rules.WindowState)
+	Now          func() time.Time
+	Emit         func(Event)
 
 	// Notifiers are the configured delivery targets, addressable by name from a
 	// rule's `notify`. Optional: nil means a rule alert only emits an event.
@@ -149,6 +152,7 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	w.runRemediation(ctx, ev, now, evals)
 	w.runAlerts(ctx, ev, evals)
 	w.publishRuleWindows(ctx, ev, evals)
+	w.persistRuleState()
 }
 
 // CheckGate is one check's interdependencies: it is skipped this cycle when any
@@ -491,6 +495,12 @@ func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator, ev
 		return w.evalRule(ctx, ev, r, evals)
 	})
 	w.RuleWindows.Publish(w.Service, reports)
+}
+
+func (w *Worker) persistRuleState() {
+	if w.PersistState != nil {
+		w.PersistState(w.State, w.windows)
+	}
 }
 
 func (w *Worker) emit(e Event) {
