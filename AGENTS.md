@@ -233,6 +233,28 @@ The visual layer is a token-driven design system (June 2026 redesign):
   cycle was observed. `renderSLAWindows` uses it for every rolling SLA window;
   the per-segment ratios come from the backend (`SLAWindow.Segments`). Reuse it
   anywhere a compact availability history is needed.
+- **Value formatting (one type → one formatter).** A given kind of value must
+  render identically everywhere; never hand-format with bare `toFixed`, string
+  concatenation or a raw `${value}`. Each type has a single canonical helper —
+  route every user-facing reading through it (this is what keeps "2.1%" from
+  appearing elsewhere as "2.14%" or "234.5678 B/s"):
+  - **Numbers** → `fmtNum(n, max=2)` (the base formatter; ≤`max` decimals,
+    trailing zeros stripped, `—` when non-finite). Every other helper builds on it.
+  - **Percentages** → `fmtPct(n)` (`fmtNum(n,2)+"%"`). Includes CPU%, memory %,
+    saturation, SLA % — tiles, bars and detail readings all use it.
+  - **Bytes / byte-rates** → `fmtBytes(n)` (and `fmtBytes(n)+"/s"`); via
+    `fmtMetricValue(v, unit)` for unit-tagged time series (`bytes`, `B/s`, `%`,
+    `ms`, default).
+  - **Durations** → `fmtUptime`/`fmtSeconds`/`shortDur`; **relative time** →
+    `fmtRemain`/`fmtUntilShort`/`fmtAge`/`fmtSince`; **absolute timestamps** →
+    `fmtTime`.
+  - **Gauges** → `usageBar` (full-width host gauge), `usageBarMini` (dense table
+    cells), `cpuBarMini` (single-core-normalized CPU). Clamp with `pctClamp`.
+  Bare `toFixed` is reserved for **geometry only** — SVG path coordinates and CSS
+  bar widths (`--usage-pct`, `--sla-pct`) keep their own fixed precision. When a
+  value needs a representation no helper covers, add or extend a helper next to
+  the others rather than formatting inline at the call site. See the `fmtNum`
+  banner comment in `internal/web/index.html`.
 
 **CSP and inline styles:** `style-src` deliberately carries `'unsafe-inline'`
 **without** a nonce — per CSP2, a nonce in the list makes browsers ignore
