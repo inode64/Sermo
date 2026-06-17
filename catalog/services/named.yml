@@ -6,7 +6,10 @@ service: named
 apps: [named]
 
 variables:
+  host: 127.0.0.1
   port: 53
+  # Name resolved to prove the resolver answers; override per deployment.
+  query: localhost
 preflight:
   config: { type: command, command: ["sh","-c","/etc/init.d/named checkconfig && /etc/init.d/named checkzones"], timeout: 30s, analyze: { use: [common] } }
 
@@ -18,7 +21,7 @@ config_files: [/etc/bind/named.conf, /etc/named.conf]
 
 checks:
   service: { type: service, expect: active }
-  port: { type: dns, port: "${port}" }
+  port: { type: dns, host: "${host}", port: "${port}", query: "${query}" }
 rules:
   block-restart-if-config-invalid:
     type: guard
