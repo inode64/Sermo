@@ -256,12 +256,12 @@ human-facing strings (and paths) instead of hardcoding them:
 
 ```yaml
 rules:
-  block-restart-during-backup:
+  block-restart-during-maintenance:
     type: guard
     blocks: [restart, stop]
     then:
       action: block
-      message: "${display_name} backup is running"   # → "MariaDB backup is running"
+      message: "${display_name} maintenance is active" # → "MariaDB maintenance is active"
 binary: "/usr/bin/qemu-system-${arch}"               # → /usr/bin/qemu-system-x86_64
 ```
 
