@@ -1,0 +1,9 @@
+kind: app
+name: containerd
+display_name: "containerd"
+category: virtualization
+binary:
+  - /usr/bin/containerd
+  - /usr/sbin/containerd
+preflight:
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

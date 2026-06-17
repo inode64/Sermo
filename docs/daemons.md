@@ -14,8 +14,9 @@ checks:
     url: "http://${host}:${port}${health_path}"
 ```
 
-The packaged catalog (`catalog/`) covers apache, mysql, mariadb, redis and
-php-fpm. They define variables, preflight, processes, checks, stop_policy and
+The packaged catalog (`catalog/`) covers common service families such as web
+servers, databases, container runtimes, NFS/libvirt helpers and hardware/system
+daemons. They define variables, preflight, processes, checks, stop_policy and
 rules so a service usually only sets a few overrides.
 
 ## Categories
