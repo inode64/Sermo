@@ -85,6 +85,7 @@ sermoctl is-active nginx
 
 # List installed services, applications and libraries
 sermoctl services      # service software (nginx, mariadb, ...)
+sermoctl services --notify ops-email  # email a services inventory report
 sermoctl apps          # tools/runtimes (only installed)
 sermoctl apps all      # include not-installed
 sermoctl libs          # shared libraries (restart triggers)

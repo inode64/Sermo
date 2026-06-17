@@ -18,11 +18,13 @@ import (
 )
 
 // Message is a notification to deliver. Subject/Body are the human-facing text;
-// Fields carries the structured context (the SERMO_* key/values a hook would get)
-// for future templating.
+// HTML optionally carries a rich email body. Non-email transports ignore HTML and
+// use Body. Fields carries the structured context (the SERMO_* key/values a hook
+// would get) for future templating.
 type Message struct {
 	Subject string
 	Body    string
+	HTML    string
 	Fields  map[string]string
 }
 
@@ -39,7 +41,8 @@ type Notifier interface {
 type Option func(*buildOptions)
 
 type buildOptions struct {
-	templateDir string
+	templateDir       string
+	templatesDisabled bool
 }
 
 // WithTemplateDir configures where named notification templates are loaded
@@ -47,6 +50,14 @@ type buildOptions struct {
 func WithTemplateDir(dir string) Option {
 	return func(o *buildOptions) {
 		o.templateDir = dir
+	}
+}
+
+// WithoutTemplates disables notifier-level templates during construction. This
+// is useful for ad-hoc CLI reports that render their own complete body.
+func WithoutTemplates() Option {
+	return func(o *buildOptions) {
+		o.templatesDisabled = true
 	}
 }
 
@@ -98,7 +109,7 @@ func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 			warnings = append(warnings, "notifier "+name+": "+err.Error())
 			continue
 		}
-		if templateName := cfgval.AsString(entry["template"]); templateName != "" {
+		if templateName := cfgval.AsString(entry["template"]); templateName != "" && !options.templatesDisabled {
 			tmpl, err := LoadTemplate(options.templateDir, templateName)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("notifier %s: template %q: %v", name, templateName, err))

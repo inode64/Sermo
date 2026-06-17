@@ -61,6 +61,7 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "unmonitor extra service", args: []string{"unmonitor", "web", "extra"}, want: "unmonitor takes exactly one service name"},
 		{name: "apps bad selector", args: []string{"apps", "installed"}, want: "apps accepts only optional `all`"},
 		{name: "apps extra selector", args: []string{"apps", "all", "extra"}, want: "apps accepts only optional `all`"},
+		{name: "apps notify unsupported", args: []string{"apps", "--notify", "ops"}, want: "--notify is only supported by services"},
 		{name: "libs bad selector", args: []string{"libs", "installed"}, want: "libs accepts only optional `all`"},
 		{name: "services bad selector", args: []string{"services", "ghost"}, want: "services accepts only optional `all`"},
 		{name: "patterns extra arg", args: []string{"patterns", "all"}, want: "patterns takes no arguments"},

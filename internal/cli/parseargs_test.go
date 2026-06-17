@@ -41,6 +41,17 @@ func TestParseArgsSuccess(t *testing.T) {
 				t.Fatalf("since = %v", o.since)
 			}
 		}},
+		{"--notify list", []string{"services", "--notify", "ops,pager", "--notify=team"}, func(t *testing.T, o options) {
+			want := []string{"ops", "pager", "team"}
+			if len(o.notifyNames) != len(want) {
+				t.Fatalf("notifyNames = %v", o.notifyNames)
+			}
+			for i := range want {
+				if o.notifyNames[i] != want[i] {
+					t.Fatalf("notifyNames = %v, want %v", o.notifyNames, want)
+				}
+			}
+		}},
 		{"-- captures literal command", []string{"lock", "build", "--", "echo", "hi"}, func(t *testing.T, o options) {
 			if o.command != "lock" || o.service() != "build" {
 				t.Fatalf("command/service = %q/%q", o.command, o.service())

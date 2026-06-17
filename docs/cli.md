@@ -48,7 +48,7 @@ sermoctl config validate
 
 sermoctl daemon reload                 # reload sermod config, not services
 
-sermoctl services [all] [--long]
+sermoctl services [all] [--long] [--notify NAME[,NAME]|all]
 sermoctl apps [all] [--long]
 sermoctl libs [all] [--long]
 sermoctl patterns
@@ -77,6 +77,7 @@ Examples:
 ```bash
 sermoctl help restart
 sermoctl restart mysql-main
+sermoctl services --notify ops-email
 sermoctl daemon reload
 sermoctl state compact --before 720h
 ```

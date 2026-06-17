@@ -737,6 +737,13 @@ watch or rule generates a notification. This is useful for temporarily muting a
 target or staging credentials. Disabled notifiers may still be referenced by
 `notify` selections; they simply do not receive delivery attempts.
 
+`sermoctl services --notify NAME[,NAME]` reuses the same configured notifiers to
+send an ad-hoc services inventory report. Email notifiers receive a
+multipart plain-text/HTML message with summary cards and a service table; Slack
+and Teams receive the text fallback. Use `--notify all` to send the report to
+every enabled notifier. This report is rendered by the CLI itself and does not
+use notifier templates.
+
 `none` is a **reserved keyword** and cannot be used as a notifier name.
 
 ### Notification templates

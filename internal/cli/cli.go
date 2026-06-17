@@ -24,6 +24,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/locks"
 	"sermo/internal/mountctl"
+	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -87,6 +88,9 @@ type App struct {
 	// MountController builds the host mount controller for `sermoctl mount|umount`.
 	// nil uses the real host commands and /proc readers.
 	MountController func(*config.Config) mountctl.Controller
+	// BuildNotifiers constructs delivery targets for ad-hoc CLI reports. nil
+	// uses the configured notifiers without applying alert templates.
+	BuildNotifiers func(*config.Config) (map[string]notify.Notifier, []string)
 }
 
 type options struct {
@@ -107,8 +111,9 @@ type options struct {
 	// sla command flags
 	series bool          // emit the per-minute availability series instead of a summary
 	since  time.Duration // series lookback window (0 means the command's default)
-	// apps/libs/services flag
-	long bool // show the full raw version string instead of the short one
+	// apps/libs/services flags
+	long        bool     // show the full raw version string instead of the short one
+	notifyNames []string // --notify selection for `services` reports
 	// events clear flag
 	before string // --before for events clear (RFC3339 or duration)
 	// events list flags
@@ -189,6 +194,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.Runner == nil {
 		a.Runner = execx.CommandRunner{}
+	}
+	if a.BuildNotifiers == nil {
+		a.BuildNotifiers = buildReportNotifiers
 	}
 
 	for _, arg := range args {
@@ -1120,6 +1128,8 @@ func defaultTimeout(command string) time.Duration {
 	switch command {
 	case "start", "stop", "restart", "reload", "resume", "mount", "umount", "state":
 		return 90 * time.Second
+	case "services":
+		return 30 * time.Second
 	default:
 		return 2 * time.Second
 	}
@@ -1479,6 +1489,13 @@ func parseArgs(args []string) (options, error) {
 			opts.series = true
 		case arg == "--long":
 			opts.long = true
+		case isFlag(arg, "--notify"):
+			v, ni, err := flagValue(args, i, "--notify")
+			if err != nil {
+				return opts, err
+			}
+			i = ni
+			opts.notifyNames = append(opts.notifyNames, splitFlagList(v)...)
 		case isFlag(arg, "--since"):
 			v, ni, err := flagValue(args, i, "--since")
 			if err != nil {
