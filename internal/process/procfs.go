@@ -2,7 +2,6 @@ package process
 
 import (
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,7 +20,11 @@ type Reader interface {
 type UserResolver func(name string) (uint32, bool)
 
 // OSReader reads the host /proc filesystem.
-type OSReader struct{}
+type OSReader struct {
+	// LookupUserName maps a UID to a display name. Optional: nil uses native
+	// os/user lookups.
+	LookupUserName func(uint32) string
+}
 
 // PIDs lists numeric entries under /proc.
 func (OSReader) PIDs() ([]int, error) {
@@ -42,7 +45,7 @@ func (OSReader) PIDs() ([]int, error) {
 }
 
 // Identity reads PPID, real UID, resolved exe and cmdline for a process.
-func (OSReader) Identity(pid int) (Identity, bool) {
+func (r OSReader) Identity(pid int) (Identity, bool) {
 	ppid, uid, gid, state, ok := readStatus(pid)
 	if !ok {
 		return Identity{}, false
@@ -52,12 +55,22 @@ func (OSReader) Identity(pid int) (Identity, bool) {
 		PPID:    ppid,
 		UID:     uid,
 		GID:     gid,
-		User:    lookupUser(uid),
+		User:    r.userName(uid),
 		State:   state,
 		Cmdline: readCmdline(pid),
 	}
 	id.Exe, id.ExeOK = readExe(pid)
 	return id, true
+}
+
+func (r OSReader) userName(uid uint32) string {
+	if r.LookupUserName != nil {
+		return r.LookupUserName(uid)
+	}
+	if name, ok := nativeUserName(uid); ok {
+		return name
+	}
+	return ""
 }
 
 func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
@@ -120,8 +133,8 @@ func readCmdline(pid int) []string {
 }
 
 func lookupUser(uid uint32) string {
-	if u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10)); err == nil {
-		return u.Username
+	if name, ok := nativeUserName(uid); ok {
+		return name
 	}
 	return ""
 }
@@ -132,15 +145,7 @@ func OSUserResolver(name string) (uint32, bool) {
 	if uid, err := strconv.ParseUint(name, 10, 32); err == nil {
 		return uint32(uid), true
 	}
-	u, err := user.Lookup(name)
-	if err != nil {
-		return 0, false
-	}
-	uid, err := strconv.ParseUint(u.Uid, 10, 32)
-	if err != nil {
-		return 0, false
-	}
-	return uint32(uid), true
+	return nativeUserID(name)
 }
 
 // OSGroupResolver resolves a group name (or numeric gid string) to its GID via
@@ -149,15 +154,7 @@ func OSGroupResolver(name string) (uint32, bool) {
 	if gid, err := strconv.ParseUint(name, 10, 32); err == nil {
 		return uint32(gid), true
 	}
-	g, err := user.LookupGroup(name)
-	if err != nil {
-		return 0, false
-	}
-	gid, err := strconv.ParseUint(g.Gid, 10, 32)
-	if err != nil {
-		return 0, false
-	}
-	return uint32(gid), true
+	return nativeGroupID(name)
 }
 
 // canonicalizePath resolves symlinks where possible, falling back to a lexical

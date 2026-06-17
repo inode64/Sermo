@@ -24,21 +24,42 @@ type Discoverer struct {
 
 // NewDiscoverer returns a Discoverer backed by the host /proc and passwd db.
 func NewDiscoverer() Discoverer {
-	return Discoverer{Reader: OSReader{}, ResolveUser: OSUserResolver, ResolveGroup: OSGroupResolver}
+	return NewDiscovererWithUserLookup(DefaultUserLookup())
+}
+
+// NewDiscovererWithUserLookup returns a Discoverer backed by the host /proc and
+// the provided user/group lookup policy.
+func NewDiscovererWithUserLookup(lookup *UserLookup) Discoverer {
+	if lookup == nil {
+		lookup = DefaultUserLookup()
+	}
+	return Discoverer{
+		Reader:       OSReader{LookupUserName: lookup.Username},
+		ResolveUser:  lookup.ResolveUser,
+		ResolveGroup: lookup.ResolveGroup,
+	}
 }
 
 func (d Discoverer) reader() Reader {
 	if d.Reader != nil {
 		return d.Reader
 	}
-	return OSReader{}
+	lookup := DefaultUserLookup()
+	return OSReader{LookupUserName: lookup.Username}
 }
 
 func (d Discoverer) resolveUser() UserResolver {
 	if d.ResolveUser != nil {
 		return d.ResolveUser
 	}
-	return OSUserResolver
+	return DefaultUserLookup().ResolveUser
+}
+
+func (d Discoverer) resolveGroup() UserResolver {
+	if d.ResolveGroup != nil {
+		return d.ResolveGroup
+	}
+	return DefaultUserLookup().ResolveGroup
 }
 
 // Discover applies pidfile then command_match selectors, then adds descendants
@@ -219,10 +240,7 @@ func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) boo
 		}
 	}
 	if sel.Group != "" {
-		groupResolve := d.ResolveGroup
-		if groupResolve == nil {
-			groupResolve = OSGroupResolver
-		}
+		groupResolve := d.resolveGroup()
 		gid, ok := groupResolve(sel.Group)
 		if !ok || gid != id.GID {
 			return false

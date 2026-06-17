@@ -45,7 +45,11 @@ const (
 // closure), and the safe operation engine. The engine's per-service operation
 // lock serializes start/stop/restart/reload/resume across the worker and the web.
 func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
-	discoverer := process.NewDiscoverer()
+	lookup := deps.UserLookup
+	if lookup == nil {
+		lookup = process.DefaultUserLookup()
+	}
+	discoverer := process.NewDiscovererWithUserLookup(lookup)
 	if deps.ProcReader != nil {
 		discoverer.Reader = deps.ProcReader
 	}
@@ -96,6 +100,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		Locker:           &locker,
 		Scanner:          locks.NewScanner(filepath.Join(deps.Runtime, "locks")),
 		Discoverer:       discoverer,
+		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checkDeps,
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
@@ -227,6 +232,7 @@ type WebBackend struct {
 	edacSampler      checks.EdacSamplerFunc
 	routeSampler     checks.RouteSamplerFunc
 	expander         VolumeExpander
+	userLookup       *process.UserLookup
 	emit             func(Event)
 	opGate           *OpGate
 	defaultTimeout   time.Duration
@@ -267,6 +273,9 @@ type webDiskIOState struct {
 // activated (by editing the service file and reloading). Only non-disabled services
 // get a full runtime engine, checks, and operation support.
 func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
+	if deps.UserLookup == nil {
+		deps.UserLookup = EngineUserLookup(cfg, deps.ExecxRunner)
+	}
 	wb := &WebBackend{
 		entries:          map[string]*webEntry{},
 		watches:          map[string]*webWatch{},
@@ -299,6 +308,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		edacSampler:      deps.EdacSampler,
 		routeSampler:     deps.RouteSampler,
 		expander:         configuredVolumeExpander(deps),
+		userLookup:       deps.UserLookup,
 		emit:             deps.Emit,
 		opGate:           deps.OpGate,
 		defaultTimeout:   deps.DefaultTimeout,
@@ -1176,7 +1186,7 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	user := cfgval.AsString(w.check["user"])
 	sampler := b.procSampler
 	if sampler == nil {
-		sampler = osProcSampler{}
+		sampler = osProcSampler{userLookup: b.userLookup}
 	}
 	samples := sampler.Sample(ProcMatch{Name: name, User: user})
 	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
@@ -1900,7 +1910,7 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	if b.applicationsList != nil {
 		return b.withApplicationSLA(b.applicationsList(ctx))
 	}
-	reports := appinspect.List(ctx, execx.CommandRunner{}, b.cfg, config.CategoryApp, false)
+	reports := appinspect.List(ctx, execx.CommandRunner{}, b.cfg, config.CategoryApp, false, appinspect.WithUserLookup(b.userLookup))
 	if len(reports) == 0 {
 		return nil
 	}

@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/user"
 	"regexp"
 	"syscall"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"sermo/internal/checks"
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/process"
 )
 
 // probeTimeout bounds each app probe command invocation.
@@ -39,17 +39,30 @@ type Report struct {
 	Status       string `json:"status"`
 }
 
+type options struct {
+	userLookup *process.UserLookup
+}
+
+// Option customizes application inspection.
+type Option func(*options)
+
+// WithUserLookup sets the user/group resolver used for owner display.
+func WithUserLookup(lookup *process.UserLookup) Option {
+	return func(o *options) { o.userLookup = lookup }
+}
+
 // List inspects every catalog daemon in the category. When includeMissing is
 // false only installed applications (binary present) are returned. The order
 // follows config.DaemonsInCategory, which sorts by name.
-func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category string, includeMissing bool) []Report {
+func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category string, includeMissing bool, opts ...Option) []Report {
 	if cfg == nil {
 		return nil
 	}
+	options := inspectOptions(opts)
 	var reports []Report
 	for _, name := range cfg.DaemonsInCategory(category) {
 		resolved, _ := cfg.ResolveCatalog(category, name)
-		r := Inspect(ctx, runner, name, resolved)
+		r := Inspect(ctx, runner, name, resolved, WithUserLookup(options.userLookup))
 		if !r.Installed && !includeMissing {
 			continue
 		}
@@ -60,7 +73,12 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 
 // Inspect probes a single resolved daemon: it stats the binary, runs health to
 // confirm it runs when configured, and captures the version when available.
-func Inspect(ctx context.Context, runner execx.Runner, name string, resolved config.Resolved) Report {
+func Inspect(ctx context.Context, runner execx.Runner, name string, resolved config.Resolved, opts ...Option) Report {
+	options := inspectOptions(opts)
+	lookup := options.userLookup
+	if lookup == nil {
+		lookup = process.DefaultUserLookup()
+	}
 	r := Report{
 		Name:        name,
 		DisplayName: config.DisplayName(resolved.Tree, name),
@@ -96,17 +114,17 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	// Resolve the binary's owner user/group from the stat info (Linux *syscall.Stat_t).
 	if info != nil {
 		if sys, ok := info.Sys().(*syscall.Stat_t); ok {
-			uidStr := fmt.Sprintf("%d", sys.Uid)
-			if u, err := user.LookupId(uidStr); err == nil && u.Username != "" {
-				r.User = u.Username
-			} else {
-				r.User = uidStr
+			if name := lookup.Username(sys.Uid); name != "" {
+				r.User = name
 			}
-			gidStr := fmt.Sprintf("%d", sys.Gid)
-			if g, err := user.LookupGroupId(gidStr); err == nil && g.Name != "" {
-				r.Group = g.Name
-			} else {
-				r.Group = gidStr
+			if r.User == "" {
+				r.User = fmt.Sprintf("%d", sys.Uid)
+			}
+			if name := lookup.GroupName(sys.Gid); name != "" {
+				r.Group = name
+			}
+			if r.Group == "" {
+				r.Group = fmt.Sprintf("%d", sys.Gid)
 			}
 		}
 	}
@@ -142,6 +160,14 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	r.Version = raw
 	r.VersionShort = short
 	return r
+}
+
+func inspectOptions(opts []Option) options {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
 }
 
 func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string) {

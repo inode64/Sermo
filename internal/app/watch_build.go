@@ -331,7 +331,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		now:       deps.Now,
 		emit:      deps.Emit,
-		sampler:   deps.ProcSampler, // nil -> osProcSampler at run time
+		sampler:   procSamplerFromDeps(deps),
 	}
 	return &Watch{
 		Name:      name,

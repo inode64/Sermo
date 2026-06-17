@@ -34,3 +34,14 @@ func TestProcMatches(t *testing.T) {
 		t.Error("a name selector must not match an unresolved exe")
 	}
 }
+
+func TestProcMatchesWithLookupAllowsNumericUser(t *testing.T) {
+	id := process.Identity{Exe: "/usr/sbin/nginx", ExeOK: true, UID: 1001, User: "www"}
+	lookup := process.NewUserLookup(process.UserLookupConfig{Mode: process.UserLookupNumeric})
+	if !procMatchesWithLookup(ProcMatch{Name: "nginx", User: "1001"}, id, lookup) {
+		t.Fatal("numeric process-watch user should match real UID")
+	}
+	if procMatchesWithLookup(ProcMatch{Name: "nginx", User: "1002"}, id, lookup) {
+		t.Fatal("wrong numeric process-watch user matched")
+	}
+}

@@ -273,6 +273,12 @@ strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
 `SERMO_INIT` / `SERMO_USER` environment variables override the matching built-in
 (handy for testing or building config off-host).
 
+`${user}` is a config-load built-in. It uses `SERMO_USER` when set, otherwise
+the user running Sermo. It is intentionally separate from the runtime
+`engine.user_lookup` resolver used for process selectors and `kill_only_if`; set
+`SERMO_USER` when you need `${user}` to be deterministic while generating or
+validating config off-host.
+
 | Variable          | Value                                          | Resolved        |
 |-------------------|------------------------------------------------|-----------------|
 | `${name}`         | the resolved service/daemon name              | resolution      |

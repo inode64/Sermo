@@ -218,6 +218,12 @@ Kill decisions depend on how process facts are read, so this is fixed:
   both sides; no basename, prefix or substring matching.
 - **UID** is the real UID from `/proc/<pid>/status`; user selectors match it
   exactly.
+- **User/group names are resolved to numeric IDs before matching.**
+  `engine.user_lookup` controls that lookup. Static `CGO_ENABLED=0` builds can
+  use the default `auto` mode to fall back to `getent` for NSS-backed users
+  while keeping the Sermo binary static. If a configured name cannot be
+  resolved, the selector fails closed and no process is matched or signaled by
+  that name. Numeric UID/GID selectors remain deterministic.
 - **Cmdline** is normally display/logging data, but a `command_match.cmd` field
   is an explicit RE2 regex over the joined argv. Use it only to make discovery
   more specific when the same executable runs several roles, e.g. Java or QEMU

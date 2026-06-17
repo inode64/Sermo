@@ -167,6 +167,13 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 	}
 }
 
+func procSamplerFromDeps(deps Deps) ProcSampler {
+	if deps.ProcSampler != nil {
+		return deps.ProcSampler
+	}
+	return osProcSampler{userLookup: deps.UserLookup}
+}
+
 // evaluate computes whether a PID satisfies every configured condition this
 // cycle, returning the firing decision, the hook environment and a message.
 func (w *procWatcher) evaluate(st *procState, now time.Time, s ProcInfo) (bool, map[string]string, string) {
@@ -270,10 +277,16 @@ func ioBytesPerSec(prevIO, curIO uint64, hadIO, hasIO bool, prevAt, now time.Tim
 }
 
 // osProcSampler reads matching processes and their counters from the host /proc.
-type osProcSampler struct{}
+type osProcSampler struct {
+	userLookup *process.UserLookup
+}
 
-func (osProcSampler) Sample(m ProcMatch) []ProcInfo {
-	pr := process.OSReader{}
+func (s osProcSampler) Sample(m ProcMatch) []ProcInfo {
+	lookup := s.userLookup
+	if lookup == nil {
+		lookup = process.DefaultUserLookup()
+	}
+	pr := process.OSReader{LookupUserName: lookup.Username}
 	pids, err := pr.PIDs()
 	if err != nil {
 		return nil
@@ -283,7 +296,7 @@ func (osProcSampler) Sample(m ProcMatch) []ProcInfo {
 	var out []ProcInfo
 	for _, pid := range pids {
 		id, ok := pr.Identity(pid)
-		if !ok || !procMatches(m, id) {
+		if !ok || !procMatchesWithLookup(m, id, lookup) {
 			continue
 		}
 		info := ProcInfo{PID: pid}
@@ -304,13 +317,23 @@ func (osProcSampler) Sample(m ProcMatch) []ProcInfo {
 // procMatches reports whether a process matches the selector: its name against
 // the resolved exe (full path or basename) and, if set, the owning user.
 func procMatches(m ProcMatch, id process.Identity) bool {
+	return procMatchesWithLookup(m, id, nil)
+}
+
+func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.UserLookup) bool {
 	if m.Name != "" {
 		if !id.ExeOK || (m.Name != id.Exe && m.Name != filepath.Base(id.Exe)) {
 			return false
 		}
 	}
 	if m.User != "" && m.User != id.User {
-		return false
+		if lookup == nil {
+			return false
+		}
+		uid, ok := lookup.ResolveUser(m.User)
+		if !ok || uid != id.UID {
+			return false
+		}
 	}
 	return m.Name != "" || m.User != ""
 }
