@@ -138,12 +138,12 @@
     border-radius: var(--radius-s); border: 1px solid var(--line-2); background: var(--panel);
   }
   input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
-  #svc-controls input, #watch-controls input, #app-controls input { min-width: 13rem; }
-  #svc-filters button, #watch-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
-  #svc-filters button:hover, #watch-filters button:hover { background: var(--panel-2); color: var(--text); }
-  #svc-filters button.f-active, #watch-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 13rem; }
+  #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
   #err { color: var(--crit); min-height: 1.2rem; }
-  body.disconnected #services-section, body.disconnected #watches-section { opacity: .5; transition: opacity .2s; }
+  body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
   .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
@@ -291,7 +291,7 @@
     details, section#locks-section { padding: 0 .7rem; }
     summary { padding: .6rem .7rem; margin: 0 -.7rem; }
     /* The search field owns its row; filters/count wrap underneath. */
-    #svc-controls input, #watch-controls input, #app-controls input { min-width: 0; flex: 1 1 100%; }
+    #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 0; flex: 1 1 100%; }
     #event-controls { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
     /* services → Service · State · Actions (also hide CPU/Memory). */
     .services-table th:nth-child(5), .services-table td:nth-child(5),
@@ -401,17 +401,32 @@
 <div id="op-live"></div>
 <details id="storage-section" open style="display:none">
   <summary>Storage <span id="storage-count" class="muted"></span></summary>
+  <div id="storage-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="storage-search" type="search" placeholder="filter storage watches…">
+    <select id="storage-type" title="Filter by type" aria-label="Filter storage watches by type">
+      <option value="all">all storage types</option>
+    </select>
+    <span id="storage-filters">
+      <button data-wf="all" class="f-active">all</button>
+      <button data-wf="disabled">disabled</button>
+      <button data-wf="ok">ok</button>
+      <button data-wf="monitorized">monitorized</button>
+      <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="failed">failed</button>
+    </span>
+    <span id="storage-filter-count" class="muted"></span>
+  </div>
   <table class="watch-table">
     <thead><tr>
-      <th>Name</th>
-      <th>Type</th>
-      <th>Summary</th>
-      <th>Interval</th>
-      <th>Polarity</th>
-      <th>Hook</th>
-      <th>Notifiers</th>
-      <th>Last activity</th>
-      <th>State</th>
+      <th class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
+      <th class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
+      <th class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
+      <th class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
+      <th class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
       <th>Actions</th>
     </tr></thead>
     <tbody id="storage-rows"></tbody>
@@ -464,17 +479,32 @@
 
 <details id="network-section" open style="display:none">
   <summary>Network <span id="network-count" class="muted"></span></summary>
+  <div id="network-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
+    <input id="network-search" type="search" placeholder="filter network watches…">
+    <select id="network-type" title="Filter by type" aria-label="Filter network watches by type">
+      <option value="all">all network types</option>
+    </select>
+    <span id="network-filters">
+      <button data-wf="all" class="f-active">all</button>
+      <button data-wf="disabled">disabled</button>
+      <button data-wf="ok">ok</button>
+      <button data-wf="monitorized">monitorized</button>
+      <button data-wf="unmonitorized">unmonitorized</button>
+      <button data-wf="failed">failed</button>
+    </span>
+    <span id="network-filter-count" class="muted"></span>
+  </div>
   <table class="watch-table">
     <thead><tr>
-      <th>Name</th>
-      <th>Type</th>
-      <th>Summary</th>
-      <th>Interval</th>
-      <th>Polarity</th>
-      <th>Hook</th>
-      <th>Notifiers</th>
-      <th>Last activity</th>
-      <th>State</th>
+      <th class="sortable" data-watch-sort="name">Name<span class="sort-ind" data-wi="name"></span></th>
+      <th class="sortable" data-watch-sort="type">Type<span class="sort-ind" data-wi="type"></span></th>
+      <th class="sortable" data-watch-sort="summary">Summary<span class="sort-ind" data-wi="summary"></span></th>
+      <th class="sortable" data-watch-sort="interval">Interval<span class="sort-ind" data-wi="interval"></span></th>
+      <th class="sortable" data-watch-sort="polarity">Polarity<span class="sort-ind" data-wi="polarity"></span></th>
+      <th class="sortable" data-watch-sort="hook">Hook<span class="sort-ind" data-wi="hook"></span></th>
+      <th class="sortable" data-watch-sort="notifiers">Notifiers<span class="sort-ind" data-wi="notifiers"></span></th>
+      <th class="sortable" data-watch-sort="last">Last activity<span class="sort-ind" data-wi="last"></span></th>
+      <th class="sortable" data-watch-sort="state">State<span class="sort-ind" data-wi="state"></span></th>
       <th>Actions</th>
     </tr></thead>
     <tbody id="network-rows"></tbody>
@@ -514,7 +544,7 @@
   <div id="watch-controls" style="display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin:.5rem 0 .6rem;">
     <input id="watch-search" type="search" placeholder="filter watches…">
     <select id="watch-type" title="Filter by type" aria-label="Filter watches by type">
-      <option value="all">all types</option>
+      <option value="all">all host types</option>
     </select>
     <span id="watch-filters">
       <button data-wf="all" class="f-active">all</button>
@@ -1128,9 +1158,26 @@ let svcCollapsedGroups = new Set();
 let svcRenderedKey = ""; // last full-render structure; enables in-place row patches
 const SVC_PATCH_MIN = 50; // patch instead of rebuilding the whole tbody from this size up
 let allWatches = [];
-let watchQuery = "";
-let watchStatus = "all"; // all | disabled | ok | monitorized | unmonitorized | failed
-let watchType = "all";   // "all" or a specific check_type (e.g. disk, swap, http)
+const watchPanels = {
+  storage: {
+    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    section: "#storage-section", rows: "#storage-rows", count: "#storage-count",
+    filterCount: "#storage-filter-count", filters: "#storage-filters", search: "#storage-search", typeSelect: "#storage-type",
+    allTypesLabel: "all storage types", empty: "No storage watches.", emptyFiltered: "No storage watches match the filter.",
+  },
+  network: {
+    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: true,
+    section: "#network-section", rows: "#network-rows", count: "#network-count",
+    filterCount: "#network-filter-count", filters: "#network-filters", search: "#network-search", typeSelect: "#network-type",
+    allTypesLabel: "all network types", empty: "No network watches.", emptyFiltered: "No network watches match the filter.",
+  },
+  host: {
+    query: "", status: "all", type: "all", sort: { key: "", dir: 1 }, defaultSortByName: false,
+    section: "#watches-section", rows: "#watch-rows", count: "#watches-count",
+    filterCount: "#watch-count", filters: "#watch-filters", search: "#watch-search", typeSelect: "#watch-type",
+    allTypesLabel: "all host types", empty: "No watches.", emptyFiltered: "No watches match the filter.",
+  },
+};
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
@@ -1219,7 +1266,7 @@ function openPanelTarget(target) {
     const network = $("#network-section");
     const sec = $("#watches-section");
     [storage, network, sec].forEach((s) => { if (s) s.open = true; });
-    setWatchStatus("failed");
+    setAllWatchStatuses("failed");
     const firing = (w) => isWatchAttention(w);
     let dest = sec;
     if (storage && storage.style.display !== "none" && (allWatches || []).some((w) => isStorageWatch(w) && firing(w))) dest = storage;
@@ -2742,10 +2789,15 @@ function watchSearchText(w) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
-function watchMatches(w) {
-  if (watchQuery && !watchSearchText(w).includes(watchQuery)) return false;
-  if (watchType !== "all" && (w.check_type || "") !== watchType) return false;
-  switch (watchStatus) {
+function getWatchPanel(panel) {
+  return watchPanels[panel] || watchPanels.host;
+}
+
+function watchMatches(w, panelKey) {
+  const panel = getWatchPanel(panelKey);
+  if (panel.query && !watchSearchText(w).includes(panel.query)) return false;
+  if (panel.type !== "all" && (w.check_type || "") !== panel.type) return false;
+  switch (panel.status) {
     case "disabled":      return watchStateText(w) === "disabled";
     case "ok":            return watchStateText(w) === "ok";
     case "monitorized":   return watchMonitorized(w);
@@ -2755,29 +2807,46 @@ function watchMatches(w) {
   }
 }
 
-function setWatchQuery(v) {
-  watchQuery = (v || "").trim().toLowerCase();
+function syncWatchFilterActive(panelKey) {
+  const panel = getWatchPanel(panelKey);
+  document.querySelectorAll(`${panel.filters} button`).forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.wf === panel.status));
+}
+
+function setWatchQuery(panelKey, v) {
+  const panel = getWatchPanel(panelKey);
+  panel.query = (v || "").trim().toLowerCase();
   renderWatches();
 }
 
-function setWatchStatus(v) {
-  watchStatus = v || "all";
-  document.querySelectorAll("#watch-filters button").forEach((b) =>
-    b.classList.toggle("f-active", b.dataset.wf === watchStatus));
+function setWatchStatus(panelKey, v) {
+  const panel = getWatchPanel(panelKey);
+  panel.status = v || "all";
+  syncWatchFilterActive(panelKey);
   renderWatches();
 }
 
-function setWatchType(v) {
-  watchType = v || "all";
+function setAllWatchStatuses(v) {
+  Object.keys(watchPanels).forEach((key) => {
+    watchPanels[key].status = v || "all";
+    syncWatchFilterActive(key);
+  });
   renderWatches();
 }
 
-// syncWatchTypeSelect repopulates the #watch-type dropdown from the distinct
-// check types currently present (with per-type counts), mirroring the apps
-// category select. Returns the reconciled selection ("all" if the chosen type no
-// longer exists).
-function syncWatchTypeSelect(watches) {
-  const select = $("#watch-type");
+function setWatchType(panelKey, v) {
+  const panel = getWatchPanel(panelKey);
+  panel.type = v || "all";
+  renderWatches();
+}
+
+// syncWatchTypeSelect repopulates one watch panel's type dropdown from the
+// distinct check types currently present in that panel (with per-type counts),
+// mirroring the apps category select. Returns the reconciled selection ("all" if
+// the chosen type no longer exists).
+function syncWatchTypeSelect(panelKey, watches) {
+  const panel = getWatchPanel(panelKey);
+  const select = $(panel.typeSelect);
   if (!select) return "all";
   const counts = new Map();
   (watches || []).forEach((w) => {
@@ -2786,16 +2855,16 @@ function syncWatchTypeSelect(watches) {
   });
   const types = [...counts.keys()].sort((a, b) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
-  const next = watchType !== "all" && counts.has(watchType) ? watchType : "all";
-  select.innerHTML = `<option value="all">all types</option>` + types.map((t) =>
+  const next = panel.type !== "all" && counts.has(panel.type) ? panel.type : "all";
+  select.innerHTML = `<option value="all">${esc(panel.allTypesLabel)}</option>` + types.map((t) =>
     `<option value="${esc(t)}">${esc(t)} (${counts.get(t)})</option>`).join("");
   select.value = next;
   return next;
 }
 
-function renderWatchFilterCounts(watches) {
+function renderWatchFilterCounts(panelKey, watches) {
   const w = watches || allWatches || [];
-  renderFilterButtonCounts("#watch-filters", {
+  renderFilterButtonCounts(getWatchPanel(panelKey).filters, {
     all: w.length,
     disabled: w.filter((x) => watchStateText(x) === "disabled").length,
     ok: w.filter((x) => watchStateText(x) === "ok").length,
@@ -2803,6 +2872,10 @@ function renderWatchFilterCounts(watches) {
     unmonitorized: w.filter(watchUnmonitorized).length,
     failed: w.filter((x) => watchStateText(x) === "failed").length,
   });
+}
+
+function watchPanelFilterActive(panel) {
+  return !!(panel.query || panel.status !== "all" || panel.type !== "all");
 }
 
 function parseDurationSeconds(raw) {
@@ -2827,7 +2900,6 @@ function parseDurationSeconds(raw) {
   return Number.isFinite(n) ? n : 0;
 }
 
-let watchSort = { key: "", dir: 1 };
 const watchSortKeys = {
   name: (w) => displayName(w).toLowerCase(),
   type: (w) => (w.check_type || "").toLowerCase(),
@@ -2840,9 +2912,21 @@ const watchSortKeys = {
   state: watchStateRank,
 };
 
-function setWatchSort(key) { toggleSort(watchSort, key, renderWatches); }
+function setWatchSort(panelKey, key) { toggleSort(getWatchPanel(panelKey).sort, key, renderWatches); }
 
-function updateWatchSortIndicators() { updateSortIndicatorsFor("wi", watchSort); }
+function updateWatchSortIndicators(panelKey) {
+  const panel = getWatchPanel(panelKey);
+  document.querySelectorAll(`${panel.section} .sort-ind[data-wi]`).forEach((el) => {
+    el.textContent = el.dataset.wi === panel.sort.key ? (panel.sort.dir > 0 ? " ▲" : " ▼") : "";
+  });
+}
+
+function watchPanelKeyForElement(el) {
+  const id = (el && el.closest("details") && el.closest("details").id) || "";
+  if (id === "storage-section") return "storage";
+  if (id === "network-section") return "network";
+  return "host";
+}
 
 function renderConditionRows(conditions) {
   const list = conditions || [];
@@ -2999,67 +3083,45 @@ function watchRowHTML(w) {
 function renderWatches(watches) {
   if (watches) allWatches = watches;
   const all = allWatches || [];
-  renderStorageSection(all.filter(isStorageWatch));
-  renderGroupedSection("#network-section", "#network-rows", "#network-count", all.filter(isNetworkWatch));
-  renderHostWatchesSection(all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w)));
+  renderWatchPanel("storage", all.filter(isStorageWatch));
+  renderWatchPanel("network", all.filter(isNetworkWatch));
+  renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w)));
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
 }
 
-// renderGroupedSection fills a filter-less watch panel (Storage, Network) with a
-// pre-filtered list sorted by name, reusing the Host watches row layout. The
-// panel hides itself when the list is empty.
-function renderGroupedSection(sectionSel, tbodySel, countSel, list) {
-  const section = $(sectionSel);
-  const tbody = $(tbodySel);
-  const cnt = $(countSel);
+// renderWatchPanel fills one watch table (Storage, Network, or Host watches)
+// from its already-classified subset, using the same search/type/status filters,
+// visible count and column sorting for every panel.
+function renderWatchPanel(panelKey, watches) {
+  const panel = getWatchPanel(panelKey);
+  const section = $(panel.section);
+  const tbody = $(panel.rows);
+  const cnt = $(panel.count);
+  const filterCount = $(panel.filterCount);
   if (!section || !tbody) return;
-  if (list.length === 0) {
-    section.style.display = "none";
-    if (cnt) cnt.textContent = "";
-    tbody.innerHTML = "";
-    return;
-  }
-  section.style.display = "block";
-  if (cnt) cnt.textContent = `(${list.length})`;
-  const sorted = list.slice().sort((a, b) =>
-    displayName(a).toLowerCase().localeCompare(displayName(b).toLowerCase(), undefined, { numeric: true, sensitivity: "base" }));
-  tbody.innerHTML = sorted.map(watchRowHTML).join("");
-}
-
-// renderStorageSection fills the dedicated Storage panel (above Services) with
-// the storage/volume watches, sorted by name and with no filter controls.
-function renderStorageSection(list) {
-  renderGroupedSection("#storage-section", "#storage-rows", "#storage-count", list);
-}
-
-// renderHostWatchesSection fills the Host watches table (below Services) with
-// every non-storage watch, honouring the search/type/status filters and sort.
-function renderHostWatchesSection(watches) {
-  const section = $("#watches-section");
-  const tbody = $("#watch-rows");
-  const cnt = $("#watches-count");
-  const filterCount = $("#watch-count");
-  if (!section || !tbody) return;
-  const total = watches.length;
+  const total = (watches || []).length;
   if (total === 0) {
     section.style.display = "none";
     if (cnt) cnt.textContent = "";
     if (filterCount) filterCount.textContent = "";
+    tbody.innerHTML = "";
     return;
   }
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${total})`;
-  renderWatchFilterCounts(watches);
-  watchType = syncWatchTypeSelect(watches);
-  const list = watches.filter(watchMatches);
-  if (watchSort.key && watchSortKeys[watchSort.key]) {
-    sortedBy(list, watchSort, watchSortKeys, "name");
+  renderWatchFilterCounts(panelKey, watches);
+  panel.type = syncWatchTypeSelect(panelKey, watches);
+  syncWatchFilterActive(panelKey);
+  const list = (watches || []).filter((w) => watchMatches(w, panelKey));
+  if (panel.sort.key && watchSortKeys[panel.sort.key]) {
+    sortedBy(list, panel.sort, watchSortKeys, "name");
+  } else if (panel.defaultSortByName) {
+    sortedBy(list, { key: "name", dir: 1 }, watchSortKeys, "name");
   }
-  updateWatchSortIndicators();
-  if (filterCount) filterCount.textContent = (watchQuery || watchStatus !== "all" || watchType !== "all") ? `showing ${list.length} of ${total}` : "";
-  tbody.innerHTML = list.map(watchRowHTML).join("") || (watchQuery || watchStatus !== "all" || watchType !== "all"
-    ? `<tr><td colspan="10" class="muted">No watches match the filter.</td></tr>`
-    : `<tr><td colspan="10" class="muted">No watches.</td></tr>`);
+  updateWatchSortIndicators(panelKey);
+  const filtered = watchPanelFilterActive(panel);
+  if (filterCount) filterCount.textContent = filtered ? `showing ${list.length} of ${total}` : "";
+  tbody.innerHTML = list.map(watchRowHTML).join("") || `<tr><td colspan="10" class="muted">${filtered ? panel.emptyFiltered : panel.empty}</td></tr>`;
 }
 
 // ---- Installed applications ----------------------------------------------
@@ -4279,30 +4341,34 @@ function initStaticHandlers() {
     th.addEventListener("click", () => setEvSort(th.dataset.evSort || ""));
   });
 
-  const watchSearch = $("#watch-search");
-  if (watchSearch) {
-    watchSearch.addEventListener("input", () => setWatchQuery(watchSearch.value));
-    watchSearch.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        watchSearch.value = "";
-        setWatchQuery("");
-      }
-    });
-  }
+  function bindWatchPanelControls(panelKey) {
+    const panel = getWatchPanel(panelKey);
+    const search = $(panel.search);
+    if (search) {
+      search.addEventListener("input", () => setWatchQuery(panelKey, search.value));
+      search.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          search.value = "";
+          setWatchQuery(panelKey, "");
+        }
+      });
+    }
 
-  const watchTypeSelect = $("#watch-type");
-  if (watchTypeSelect) watchTypeSelect.addEventListener("change", () => setWatchType(watchTypeSelect.value));
+    const typeSelect = $(panel.typeSelect);
+    if (typeSelect) typeSelect.addEventListener("change", () => setWatchType(panelKey, typeSelect.value));
 
-  const watchFilters = $("#watch-filters");
-  if (watchFilters) {
-    watchFilters.addEventListener("click", (e) => {
-      const btn = closestFrom(e, "button[data-wf]");
-      if (btn) setWatchStatus(btn.dataset.wf || "all");
-    });
+    const filters = $(panel.filters);
+    if (filters) {
+      filters.addEventListener("click", (e) => {
+        const btn = closestFrom(e, "button[data-wf]");
+        if (btn) setWatchStatus(panelKey, btn.dataset.wf || "all");
+      });
+    }
   }
+  ["storage", "network", "host"].forEach(bindWatchPanelControls);
 
   document.querySelectorAll(".watch-table th.sortable[data-watch-sort]").forEach((th) => {
-    th.addEventListener("click", () => setWatchSort(th.dataset.watchSort || ""));
+    th.addEventListener("click", () => setWatchSort(watchPanelKeyForElement(th), th.dataset.watchSort || ""));
   });
 
   const appSearch = $("#app-search");

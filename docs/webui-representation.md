@@ -208,18 +208,21 @@ Empty state:
 
 - `No applications match the filter.`
 
-## Host watches panel
+## Host watch panels
 
-Section id: `watches-section`
+Section ids: `storage-section`, `network-section`, `watches-section`
+
+`Storage` contains `storage`/`disk` watches, `Network` contains `net`/`icmp`
+watches, and `Host watches` contains the remaining host watch types.
 
 | Part | Current representation |
 | --- | --- |
-| Title | `Host watches` plus total count |
+| Title | Panel name plus total count for that panel's watch subset |
 | Controls | search, type filter, state filters, showing count |
-| Type filter | `all types` plus the distinct watch check types currently present |
+| Type filter | panel-specific `all ... types` plus the distinct check types currently present in that panel |
 | State filters | all, disabled, ok, monitorized, unmonitorized, failed |
 | Sorting | Name, Type, Summary, Interval, Polarity, Hook, Notifiers, Last activity, State |
-| Visibility | hidden when no watches are configured |
+| Visibility | hidden when no watches are configured for that panel's subset |
 
 Columns:
 
@@ -249,6 +252,10 @@ Empty states:
 
 - `No watches.`
 - `No watches match the filter.`
+- `No storage watches.`
+- `No storage watches match the filter.`
+- `No network watches.`
+- `No network watches match the filter.`
 
 ## Events panel
 
