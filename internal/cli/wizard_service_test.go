@@ -302,6 +302,47 @@ func TestServiceFileTargetControlledServices(t *testing.T) {
 	}
 }
 
+func TestWriteServiceFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	original := []byte("engine:\n  interval: 30s\n")
+	if err := os.WriteFile(cfgPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	serviceDir := filepath.Join(tmp, servicesIncludeDir)
+	if err := os.Mkdir(serviceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(serviceDir, "docker-web.yml")
+	if err := os.WriteFile(existing, []byte("kind: service\nname: old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := writeServiceFiles(cfgPath, map[string]map[string]any{
+		"docker-web": {
+			"kind": "service",
+			"name": "docker-web",
+			"control": map[string]any{
+				"type":      "docker",
+				"container": "web",
+			},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("writeServiceFiles error = %v, want existing-file error", err)
+	}
+	after, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(original) {
+		t.Fatalf("global config changed after rejected service write:\n%s", after)
+	}
+	if _, err := os.Stat(cfgPath + ".bak"); !os.IsNotExist(err) {
+		t.Fatalf("backup should not be written when service file preflight fails, stat err=%v", err)
+	}
+}
+
 func TestWizardManagedServiceName(t *testing.T) {
 	if got := wizardManagedServiceName("docker", "/stack/web.1"); got != "docker-stack-web.1" {
 		t.Fatalf("wizardManagedServiceName() = %q, want docker-stack-web.1", got)
