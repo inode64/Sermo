@@ -1,6 +1,8 @@
-# Native disk volume auto-expansion (watch action) — Plan
+# Native disk volume auto-expansion (watch action) - historical plan
 
-> Status: PROPOSAL for review. Nothing implemented yet. Do not commit until approved.
+> Historical implementation plan. Native storage-watch `then.expand` is
+> implemented; use [`docs/configuration.md`](../../configuration.md#thenexpand--volume-growth-storage-watches)
+> for current behavior.
 
 **Goal:** When a `disk` watch detects low space on an LVM-backed filesystem,
 Sermo automatically grows the volume **natively in Go** — orchestration in Go,

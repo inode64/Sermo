@@ -1,4 +1,8 @@
-# Global custom variables (`defaults.variables`) — design
+# Global custom variables (`defaults.variables`) - historical design
+
+Status: historical design. `defaults.variables` is implemented; use
+[`docs/configuration.md`](../../configuration.md#global-custom-variables-defaultsvariables)
+for current precedence and scope.
 
 ## Goal
 

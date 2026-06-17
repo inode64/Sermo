@@ -1,4 +1,8 @@
-# Cascade actions to additional services (`also_apply`) — design
+# Cascade actions to additional services (`also_apply`) - historical design
+
+Status: historical design. `also_apply` is implemented; use
+[`docs/daemons.md`](../../daemons.md#also_apply--cascade-to-other-services) and
+[`docs/safety.md`](../../safety.md) for current operation and safety behavior.
 
 ## Goal
 
@@ -129,8 +133,8 @@ Two drivers supply `op`:
   and `"cascade-skip"` to the **Warn** case so the events surface (Kind is
   free-form). **Required pre-merge check:** verify `internal/web/index.html`'s
   event filter/rendering does not drop an unknown `"cascade"` Kind (apply the
-  CLAUDE.md web-cohesion rules if a new event style is needed) — this is the one
-  claim the design has not yet confirmed against the code.
+  `AGENTS.md` web-cohesion rules if a new event style is needed) — this is the
+  one claim the design has not yet confirmed against the code.
 - `internal/cli/cli.go`: `--no-cascade` flag (manual flag loop), and the
   `runAction` cascade driver + extracted engine-build helper sharing one `OpGate`.
 - `internal/web`: render `cascade` events on the service detail.

@@ -42,8 +42,8 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 
-// ResolveMount expands one configured mount document. Mounts do not merge
-// catalog defaults or service profiles: each file under paths.mounts is the
+// ResolveMount expands one configured mount document. Mounts do not merge catalog
+// defaults or service catalog documents: each file under paths.mounts is the
 // complete declaration for one fstab-backed mount unit.
 func (c *Config) ResolveMount(name string) (Resolved, []string) {
 	doc, ok := c.Mounts[name]
@@ -82,8 +82,8 @@ func cleanMountPath(path string) string {
 
 // expandBinary desugars a top-level `binary` declaration into the legacy
 // ${binary} variable plus a required binary preflight check for executable
-// service/app binaries. Library profiles only use ${binary} as the watched file
-// path, so they do not get an executable preflight.
+// service/app binaries. Library catalog documents only use ${binary} as the
+// watched file path, so they do not get an executable preflight.
 func expandBinary(tree map[string]any, kind string) []string {
 	raw, present := tree["binary"]
 	if !present {

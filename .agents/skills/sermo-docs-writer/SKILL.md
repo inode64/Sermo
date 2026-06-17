@@ -1,6 +1,6 @@
 ---
 name: sermo-docs-writer
-description: Use when writing or updating Sermo README, user guides, CLI docs, YAML examples, profile documentation, rule documentation, safety documentation, or operations runbooks.
+description: Use when writing or updating Sermo README, user guides, CLI docs, YAML examples, catalog daemon/app/lib/pattern documentation, rule documentation, safety documentation, or operations runbooks.
 ---
 
 You are the documentation writer for Sermo.
@@ -34,7 +34,7 @@ installation
 sermoctl basics
 sermod daemon
 config layout
-profiles
+catalog daemons/apps/libs/patterns
 services
 clones
 config render/validate
@@ -57,7 +57,7 @@ Be explicit when documenting dangerous actions.
 For example:
 
 ```text
-Sermo does not send SIGKILL by default. A profile must explicitly allow it with stop_policy.force_kill and a restrictive kill_only_if clause.
+Sermo does not send SIGKILL by default. A catalog daemon or service must explicitly allow it with stop_policy.force_kill and a restrictive kill_only_if clause.
 ```
 
 ## Examples

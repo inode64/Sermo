@@ -7,15 +7,15 @@ with a top-level `watches:` map; those fragments do not use `kind:`.
 
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
-> document of each kind (daemon, app, lib, patterns, service, mount, clone) — and is
-> validated by the test suite, so it cannot drift from the schema. The shipped
-> operational config is `configs/sermo.yml`.
+> document of each kind (daemon, app, lib, patterns, service, mount), plus a
+> cloned service example — and is validated by the test suite, so it cannot
+> drift from the schema. The shipped operational config is `configs/sermo.yml`.
 
 ## Layout
 
 ```
 /etc/sermo/sermo.yml              global config
-/usr/share/sermo/catalog/{services,apps,libs}/*.yml   packaged catalog
+/usr/share/sermo/catalog/{services,apps,libs,patterns}/*.yml   packaged catalog
 /etc/sermo/catalog-available/*.yml   user catalog definitions
 /etc/sermo/services/*.yml included service documents
 /etc/sermo/apps/*.yml     legacy include alias for existing service documents
@@ -789,43 +789,36 @@ bare `check` + `for` example.
 when a threshold is crossed. They are daemon configuration; they never merge into
 a service.
 
-> **Tip — generate watches interactively.** `sermoctl wizard` walks you through
-> creating watches: `sermoctl wizard volume` for storage checks (pick volumes, set
-> the notify threshold as a percent or size (sizes require a `K`/`M`/`G`/`T`
-> suffix), and optionally enable auto-expand)
-> and `sermoctl wizard net` for network interfaces (pick interfaces and which of
-> link state / errors / speed / IP address to watch; already addressless
-> interfaces do not get an immediate "address absent" watch; type `active` to
-> pick only currently up non-loopback interfaces). `sermoctl wizard uplink`
-> generates the full internet-uplink set for an interface (PPPoE, WAN port, LTE
-> modem): link state, assigned address, default route, a bound ping and DNS
-> resolution through the system resolver — the same layering the `pppd` catalog
-> daemon uses, as host watches; type `default` to use the detected default-route
-> interface. There is also `sermoctl wizard service`,
-> which detects installed catalog daemons and writes `kind: service` files into
-> `services/` to enable them (see [daemons](daemons.md)). Use
-> `sermoctl wizard docker` for detected Docker containers and `sermoctl wizard vm`
-> for detected libvirt/QEMU domains; those assistants write service files with
-> `control.type: docker` or `control.type: libvirt` plus matching read-only
-> checks. `sermoctl wizard mount` lists `/etc/fstab` mount points and writes
-> safe `kind: mount` files under `paths.mounts`; it does not execute mount or
-> umount while generating config. When several services are selected, port
-> overrides are skipped unless you explicitly review them; catalog defaults are
-> inherited. When a detected
-> service has known configuration files, the wizard asks whether to add a
-> periodic `checks.config` entry for those paths; that check uses `interval: 60m`
-> by default. Existing `apps/` include directories remain valid as a legacy
-> alias; the wizard preserves them and adds `services/` instead of moving or
-> deleting old files. Run with no
-> argument to choose from the list. It prints the generated `watches:` block and offers to write one watch
-> per file under a directory named after the watch type (for example
-> `/etc/sermo/storage` or `/etc/sermo/network`). If that directory already has
-> watch fragments, the wizard asks whether to review them and then asks before
-> deleting each file individually; during migration it also checks the older
-> assistant-named directories (`volume`, `net`). The wizard adds the type directory to
-> `paths.includes` in `sermo.yml` (writing a `.bak` first); then
-> `sermoctl daemon reload`.
-> New assistant types can be added over time. At any multi-select prompt you can
+> **Tip — generate configuration interactively.** `sermoctl wizard` can write
+> three different surfaces. Watch assistants (`volume`, `net`, `uplink`) print a
+> `watches:` fragment and, if accepted, write one watch per file under a
+> watch-type include directory such as `/etc/sermo/storage` or
+> `/etc/sermo/network`; the wizard adds that directory to `paths.includes`
+> (writing a `.bak` first). Service assistants (`service`, `docker`, `vm`) write
+> one `kind: service` file per target under `services/` and ensure that directory
+> is included; `docker` and `vm` add `control.type: docker` or
+> `control.type: libvirt` plus matching read-only checks. The mount assistant
+> (`mount`) lists `/etc/fstab` mount points and writes safe `kind: mount` files
+> under `paths.mounts`; it does not mount or unmount while generating config.
+>
+> `sermoctl wizard volume` creates storage checks (threshold as a percent or
+> size, optional auto-expand). `sermoctl wizard net` covers interface state,
+> errors, speed and address; type `active` to pick currently up non-loopback
+> interfaces. `sermoctl wizard uplink` generates the layered internet-uplink set
+> for an interface: link state, assigned address, default route, bound ping and
+> DNS resolution; type `default` to use the detected default-route interface.
+> `sermoctl wizard service` detects installed catalog daemons and enables them
+> with `kind: service` files (see [daemons](daemons.md)); when several services
+> are selected, port overrides are skipped unless explicitly reviewed, and known
+> config files can be added as a periodic `checks.config` entry with a default
+> `60m` interval. Older `apps/` include directories remain valid as a legacy service-file
+> alias; the wizard preserves them and appends `services/` instead of moving or
+> deleting old files. Run with no argument to choose from the list.
+>
+> On finishing, the wizard offers to delete managed files whose target is no
+> longer detected. For watch fragments it also checks older assistant-named
+> directories (`volume`, `net`) during migration. New assistant types can be
+> added over time. At any multi-select prompt you can
 > type item numbers (`1,3`), the keyword `all`, or an option's name. When asked
 > for notification targets the numbered list shows only the notifiers defined in
 > the config; the reserved answers `all` / `none` / `default` are offered in the
@@ -835,9 +828,10 @@ a service.
 > `default` are always accepted. When `default` has nothing to inherit (no
 > global `notify` configured) it degrades to a monitor-only watch
 > (`notify: [none]`) with a one-line note — it never re-asks or aborts. The
-> wizard also asks the monitor state (`enabled`/`disabled`/`previous`) and an
-> optional check interval, and on finishing offers to delete any managed file
-> whose target it no longer detects. See [wizards](wizards.md) for the full flow.
+> wizard asks monitored entries for monitor state (`enabled`/`disabled`/
+> `previous`) and an optional check interval; `kind: mount` files are not
+> monitored entries, so the mount assistant skips those questions. See
+> [wizards](wizards.md) for the full flow.
 
 A watch's `then` block (when present) declares the actions taken when it
 fires — a `hook`, a `notify` list, an `expand` (storage only), or any
@@ -1683,8 +1677,8 @@ explicitly instead of expanding to an empty string. Paths must be absolute after
 templating. Do not declare `variables.binary`; validation rejects it. `${binary}`
 is generated from the top-level `binary:` declaration.
 
-For `kind: app`, `kind: daemon` and service profiles, `binary:` also creates a
-required `preflight.binary` check when the profile did not define one. For
+For `kind: app`, `kind: daemon` and service documents, `binary:` also creates a
+required `preflight.binary` check when the document did not define one. For
 `kind: lib`, `binary:` is the watched library file used by
 `restart_on_change.libraries`; it feeds `${binary}` but does not create an
 executable preflight.
@@ -1743,7 +1737,7 @@ defaults:
 - **Names:** must be unique (a duplicated YAML key is a load error) and must not
   be a **reserved name** — the selection keywords `all`/`none`/`default` and the
   runtime tokens `date`/`event`/`action` are rejected. `binary` is also reserved:
-  use top-level `binary:` on each profile/service instead. Builtin names (`host`,
+  use top-level `binary:` on each catalog app, daemon or service instead. Builtin names (`host`,
   `port`, …) are allowed and override the builtin (see precedence).
 - Values support `${env:...}` and list-first-existing exactly like per-service
   variables. They cannot contain another `${var}` (no nesting), like any variable.

@@ -8,7 +8,7 @@
 #   kind: daemon / app / lib /
 #   kind: patterns               -> a catalog dir (paths.catalog)
 #   kind: service                -> an include dir (paths.includes)
-#   kind: mount                  -> a mount dir (paths.mounts)
+#   kind: mount                  -> a mount document under paths.mounts
 #
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is

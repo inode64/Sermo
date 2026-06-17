@@ -1,6 +1,13 @@
-# `sermoctl wizard` — assisted check creation — design
+# `sermoctl wizard` — assisted check creation — historical design
 
-Date: 2026-06-09. Status: approved, implementation pending. Not committed (user reviews).
+Date: 2026-06-09. Status: historical v1 design; superseded by
+[`docs/wizards.md`](../../wizards.md) for the current wizard flow.
+
+This document records the original watch-only assistant design. The implemented
+wizard now also supports service assistants (`service`, `docker`, `vm`) and
+fstab-backed mount units (`mount`), and writes managed files under the configured
+watch include directory, service include directory or `paths.mounts` target
+instead of merging every result into the root `sermo.yml`.
 
 ## Goal
 
@@ -13,8 +20,10 @@ so new check types are added by implementing one interface.
 
 `sermoctl wizard [<name>]`. With no name it lists the registered assistants and
 the user chooses; `sermoctl wizard volume` / `sermoctl wizard net` go straight in.
-The generated `watches:` block is printed, then the user is asked whether to merge
-it into the global `sermo.yml` (a `.bak` is written first; collisions abort).
+The current implementation previews generated YAML and offers to write one
+managed file per selected target under the relevant include/service/mount
+directory. The older merge-into-root-config behavior described by this v1 design
+is no longer the canonical flow.
 
 ## Package `internal/assist` (engine, CLI-independent)
 

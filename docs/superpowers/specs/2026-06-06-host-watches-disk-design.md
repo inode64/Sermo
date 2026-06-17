@@ -1,7 +1,10 @@
-# Host watches: resource monitoring with `disk` check and `hook` action
+# Host watches: resource monitoring with `disk` check and `hook` action - historical design
 
-**Status:** Approved (design) — ready for implementation planning
 **Date:** 2026-06-06
+**Status:** Historical design. Host watches and storage/disk watch support are
+implemented; use [`docs/configuration.md`](../../configuration.md#host-watches),
+[`docs/rules.md`](../../rules.md) and [`docs/wizards.md`](../../wizards.md) for
+current operator-facing behavior.
 
 ## Problem
 

@@ -1,7 +1,9 @@
-# Network interface watch: `net` check with per-metric hooks
+# Network interface watch: `net` check with per-metric hooks - historical design
 
-**Status:** Approved (design) — ready for implementation planning
 **Date:** 2026-06-06
+**Status:** Historical design. Network interface watches are implemented; use
+[`docs/configuration.md`](../../configuration.md#network-interface-watches-net)
+and [`docs/rules.md`](../../rules.md) for current operator-facing behavior.
 **Builds on:** `2026-06-06-host-watches-disk-design.md` (the watch/hook framework)
 
 ## Problem
