@@ -3,6 +3,8 @@ package mountctl
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -85,6 +87,30 @@ func TestAcquireRefcountMountsOnlyOnFirstUse(t *testing.T) {
 	}
 	if got := strings.Join(runner.calls, "|"); got != "mount /mnt/backup" {
 		t.Fatalf("commands = %q, want one mount", got)
+	}
+}
+
+func TestFstabEntriesParsesEscapedMountpoints(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fstab")
+	body := "# comment\n" +
+		"UUID=backup /mnt/backup ext4 defaults,noauto 0 2\n" +
+		"/dev/sdb1 /srv/My\\040Data xfs nofail 0 2\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := FstabEntries(path)
+	if err != nil {
+		t.Fatalf("FstabEntries: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("entries = %+v, want two", entries)
+	}
+	if entries[0].Path != "/mnt/backup" || entries[0].FSType != "ext4" || entries[0].Options != "defaults,noauto" {
+		t.Fatalf("first entry = %+v", entries[0])
+	}
+	if entries[1].Path != "/srv/My Data" || entries[1].Source != "/dev/sdb1" {
+		t.Fatalf("escaped entry = %+v", entries[1])
 	}
 }
 

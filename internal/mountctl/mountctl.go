@@ -81,6 +81,14 @@ type Status struct {
 	State    string `json:"state"`
 }
 
+// FstabEntry is one mount target declared in an fstab file.
+type FstabEntry struct {
+	Source  string
+	Path    string
+	FSType  string
+	Options string
+}
+
 // Controller executes mount operations. All host access is injectable for tests.
 type Controller struct {
 	Runtime        string
@@ -460,13 +468,17 @@ func (c Controller) runtime() string {
 	return "/run/sermo"
 }
 
-// PathInFstab reports whether path is a mountpoint in /etc/fstab.
-func PathInFstab(path string) (bool, error) {
-	data, err := os.ReadFile("/etc/fstab")
-	if err != nil {
-		return false, err
+// FstabEntries reads fstabPath and returns its mount entries. An empty path
+// means /etc/fstab.
+func FstabEntries(fstabPath string) ([]FstabEntry, error) {
+	if fstabPath == "" {
+		fstabPath = "/etc/fstab"
 	}
-	cleanPath := filepath.Clean(path)
+	data, err := os.ReadFile(fstabPath)
+	if err != nil {
+		return nil, err
+	}
+	var entries []FstabEntry
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -476,7 +488,30 @@ func PathInFstab(path string) (bool, error) {
 		if len(fields) < 2 {
 			continue
 		}
-		if filepath.Clean(unescapeFstab(fields[1])) == cleanPath {
+		entry := FstabEntry{
+			Source: unescapeFstab(fields[0]),
+			Path:   filepath.Clean(unescapeFstab(fields[1])),
+		}
+		if len(fields) > 2 {
+			entry.FSType = fields[2]
+		}
+		if len(fields) > 3 {
+			entry.Options = fields[3]
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
+}
+
+// PathInFstab reports whether path is a mountpoint in /etc/fstab.
+func PathInFstab(path string) (bool, error) {
+	entries, err := FstabEntries("/etc/fstab")
+	if err != nil {
+		return false, err
+	}
+	cleanPath := filepath.Clean(path)
+	for _, entry := range entries {
+		if filepath.Clean(entry.Path) == cleanPath {
 			return true, nil
 		}
 	}

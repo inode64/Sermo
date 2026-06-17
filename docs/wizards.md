@@ -1,8 +1,8 @@
 # Wizards (`sermoctl wizard`)
 
 The interactive wizard generates Sermo configuration — a host **watch**
-(`volume`, `net`, `uplink`) or a monitored **service** (`service`, `docker`,
-`vm`). Every assistant lives in `internal/assist/` and is driven from
+(`volume`, `net`, `uplink`), a monitored **service** (`service`, `docker`,
+`vm`) or a fstab-backed **mount unit** (`mount`). Every assistant lives in `internal/assist/` and is driven from
 `internal/cli/wizard.go`.
 
 This document defines the **one question flow all wizards follow** — present and
@@ -15,11 +15,12 @@ and the invariants below, and update this file in the same change.
 
 1. **Wizard type.** `sermoctl wizard <type>` runs that assistant; with no type,
    the wizard lists them and asks (`selectAssistant`). Never require the type.
-2. **Select detected targets.** Each assistant detects what is monitorable
+2. **Select detected targets.** Each assistant detects what is targetable
    (services → active installed catalog daemons first, then optional active
    units with no catalog profile; `docker` → containers from the local Docker
-   API; `vm` → libvirt/QEMU domains; `volume` → mounts; `net`/`uplink` →
-   interfaces) and offers them with `Prompt.MultiChoose`. **Never ask the
+   API; `vm` → libvirt/QEMU domains; `mount` → `/etc/fstab` mount points;
+   `volume` → currently mounted storage volumes; `net`/`uplink` → interfaces)
+   and offers them with `Prompt.MultiChoose`. **Never ask the
    operator to type a name** — the target's identity comes from detection. The
    service assistant completes the catalog group before asking about uncataloged
    units.
@@ -39,21 +40,28 @@ and the invariants below, and update this file in the same change.
 4. **Batch.** When more than one target was selected, ask once whether to apply
    the following shared answers to all of them (`Prompt.Confirm`).
 5. **Monitor state.** `Prompt.AskMonitorState` → `monitor: enabled | disabled |
-   previous`.
+   previous`. Mount units are the exception: `kind: mount` is operated by
+   `sermoctl mount|umount`, not monitored by `sermod`, so it does not ask or
+   write `monitor:`.
 6. **Interval.** `Prompt.AskInterval` → `interval:` (blank inherits the global
-   engine interval). Steps 5–6 are `Prompt.AskMonitoring`.
+   engine interval). Steps 5–6 are `Prompt.AskMonitoring`; mount units skip this
+   for the same reason.
 7. **Wizard-specific options.** For watches: thresholds (`volume`), metrics
    (`net`), probes (`uplink`), the **notifier** question (`chooseNotifiers`),
    and the optional `then.dry_run` rehearsal flag when the generated `then`
    block has a real action to skip. For services: ask whether service
    remediation should start in `shadow` mode (`remediation.shadow: true`) after
-   the shared monitor/interval answers.
+   the shared monitor/interval answers. For mounts: ask only mount-specific
+   safety options such as whether Sermo should use refcounting; the wizard keeps
+   `allow_sigkill` and lazy unmount disabled.
 8. **Preview & accept.** Render the YAML that will be written and confirm.
 9. **Cleanup.** Offer to delete managed files whose target is **no longer
-   detected** on the host (`planWizardWatchDeletes` / `planStaleServiceDeletes`).
+   detected** on the host (`planWizardWatchDeletes` / `planStaleServiceDeletes`
+   / `planStaleMountDeletes`).
 
 Steps 5–7 are gathered once and reused for all targets when step 4 was accepted;
-otherwise they are asked per target.
+otherwise they are asked per target. Mount units only gather their mount-specific
+settings in this shared/per-target shape.
 
 ## Invariants (do not break these)
 
@@ -81,8 +89,10 @@ otherwise they are asked per target.
   behaviour (firing state visible in web UI + "firing" events in logs, but no
   hook/notify and no inheritance of globals). The wizard always generates an
   explicit `then` (using `none` / `default` / names as chosen).
-- **Monitor + interval everywhere.** Every generated entry carries the step-5/6
-  answers via `Monitoring.apply` (`internal/assist/common.go`).
+- **Monitor + interval on monitored entries.** Every generated watch/service
+  carries the step-5/6 answers via `Monitoring.apply`
+  (`internal/assist/common.go`). `kind: mount` files are not monitored entries
+  and must not carry `monitor:` or `interval:`.
 - **Dry-run is watch-local.** Watch assistants ask for `then.dry_run` only when
   the chosen `then` block has a real side effect (`notify`, inherited global
   notify, or native `expand`). `dry_run` never stands alone as the only action.
@@ -139,9 +149,10 @@ while those files exist. The wizard preserves any loaded `apps/` include and
 appends `services/` instead of moving or deleting legacy files.
 
 The volume wizard generates storage **watch fragments** under the `storage/`
-include directory. First-class mount units are different: hand-written
-`kind: mount` files live under `paths.mounts` (default `/etc/sermo/mounts`) and
-are operated with `sermoctl mount|umount`.
+include directory. First-class mount units are different: `sermoctl wizard
+mount` reads `/etc/fstab`, writes `kind: mount` files under `paths.mounts`
+(default `/etc/sermo/mounts`) and they are operated with `sermoctl
+mount|umount`.
 
 ## Adding a new wizard
 

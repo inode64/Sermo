@@ -19,6 +19,7 @@ import (
 	"sermo/internal/assist"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/mountctl"
 	"sermo/internal/servicemgr"
 	"sermo/internal/volume"
 )
@@ -67,6 +68,9 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	}
 	if len(res.Services) > 0 {
 		return a.writeWizardServices(p, opts, globalPath, cfg, res, env), nil
+	}
+	if len(res.Mounts) > 0 {
+		return a.writeWizardMounts(p, opts, globalPath, cfg, res, env), nil
 	}
 	if len(res.Watches) == 0 {
 		fmt.Fprintln(a.Stdout, "Nothing selected; no configuration generated.")
@@ -166,6 +170,7 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 		DefaultNotify: config.NotifyDefault(cfg.Global.Raw),
 		Backend:       backend,
 		Volumes:       listVolumes,
+		Mounts:        listWizardMounts,
 		Ifaces:        listIfaces,
 		DefaultIfaces: defaultRouteIfaces(),
 		ServiceNames:  serviceNameSet(cfg),
@@ -198,6 +203,40 @@ func listVolumes() ([]assist.Volume, error) {
 	for i, m := range mounts {
 		out[i] = assist.Volume{Mountpoint: m.Mountpoint, FSType: m.FSType, Device: m.Device}
 	}
+	return out, nil
+}
+
+func listWizardMounts() ([]assist.MountCandidate, error) {
+	entries, err := mountctl.FstabEntries("/etc/fstab")
+	if err != nil {
+		return nil, err
+	}
+	mounted := map[string]bool{}
+	if mounts, err := checks.DefaultMounts(); err == nil {
+		for _, m := range mounts {
+			mounted[filepath.Clean(m.MountPoint)] = true
+		}
+	}
+	seen := map[string]struct{}{}
+	out := make([]assist.MountCandidate, 0, len(entries))
+	for _, entry := range entries {
+		path := filepath.Clean(entry.Path)
+		if !filepath.IsAbs(path) {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		out = append(out, assist.MountCandidate{
+			Path:    path,
+			Source:  entry.Source,
+			FSType:  entry.FSType,
+			Options: entry.Options,
+			Mounted: mounted[path],
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
 }
 
@@ -476,6 +515,14 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 			if vols, err := env.Volumes(); err == nil {
 				for _, v := range vols {
 					keys[v.Mountpoint] = true
+				}
+			}
+		}
+	case "mount":
+		if env.Mounts != nil {
+			if mounts, err := env.Mounts(); err == nil {
+				for _, m := range mounts {
+					keys[filepath.Clean(m.Path)] = true
 				}
 			}
 		}
