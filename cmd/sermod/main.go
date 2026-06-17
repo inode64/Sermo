@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -27,7 +28,10 @@ import (
 	"sermo/internal/web"
 )
 
-const exitConfigInvalid = 78
+const (
+	exitConfigInvalid  = 78
+	exitAlreadyRunning = 1
+)
 
 func main() {
 	os.Exit(run(os.Args[1:]))
@@ -114,11 +118,29 @@ func run(args []string) int {
 	// Ensure the runtime root exists owner-only (root) before any lock dir or the
 	// pidfile is created under it, so it stays 0700 even when the packaging
 	// (tmpfiles.d / OpenRC) has not pre-created it. Best-effort.
-	if rt := cfg.Global.RuntimeDir(); rt != "" {
-		if err := os.MkdirAll(rt, 0o700); err != nil {
-			logger.Warn("create runtime dir failed", "path", rt, "error", err)
-		}
+	rt := cfg.Global.RuntimeDir()
+	if rt == "" {
+		rt = "/run/sermo"
 	}
+	if err := os.MkdirAll(rt, 0o700); err != nil {
+		logger.Warn("create runtime dir failed", "path", rt, "error", err)
+	}
+
+	instanceLock, err := acquireInstanceLock(rt)
+	if err != nil {
+		var busy *alreadyRunningError
+		if errors.As(err, &busy) {
+			if busy.PID > 0 {
+				logger.Warn("refusing to start a second sermod instance", "pid", busy.PID)
+			} else {
+				logger.Warn("refusing to start a second sermod instance")
+			}
+		} else {
+			logger.Warn("acquire sermod instance lock failed", "error", err)
+		}
+		return exitAlreadyRunning
+	}
+	defer instanceLock.Close()
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))
 	if err != nil {
@@ -239,11 +261,7 @@ func run(args []string) int {
 	// This augments the pidfile managed by OpenRC (/run/sermod.pid) and
 	// systemd's $MAINPID. Best-effort; failure is only logged.
 	{
-		pidDir := cfg.Global.RuntimeDir()
-		if pidDir == "" {
-			pidDir = "/run/sermo"
-		}
-		pidPath := filepath.Join(pidDir, "sermod.pid")
+		pidPath := filepath.Join(rt, "sermod.pid")
 		if err := os.WriteFile(pidPath, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { //nolint:gosec // G306: pidfile is intentionally world-readable (0644)
 			logger.Warn("write pidfile failed (daemon reload via sermoctl may need to fall back)", "path", pidPath, "error", err)
 		} else {

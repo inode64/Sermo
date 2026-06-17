@@ -268,6 +268,12 @@ Trigger a daemon configuration reload with:
 sermoctl daemon reload
 ```
 
+Only one `sermod` instance may run per `<paths.runtime>` directory (default
+`/run/sermo`). At startup it takes an exclusive lock on
+`<paths.runtime>/sermod.lock`; if another instance already holds it, the new
+process logs a warning, exits with status **1**, and does not start a second
+monitor loop.
+
 The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
 at startup to make `sermoctl daemon reload` reliable (it also checks the legacy
 `/run/sermod.pid` used by the OpenRC packaging). If no pidfile is present,
