@@ -250,6 +250,44 @@ func TestRunWizardMountWritesMountUnit(t *testing.T) {
 	}
 }
 
+func TestWriteMountFilesRejectsExistingFileBeforeUpdatingConfig(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	original := []byte("engine:\n  interval: 30s\n")
+	if err := os.WriteFile(cfgPath, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mountDir := filepath.Join(tmp, mountsConfigDir)
+	if err := os.Mkdir(mountDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	existing := filepath.Join(mountDir, "mount-mnt-backup.yml")
+	if err := os.WriteFile(existing, []byte("kind: mount\nname: old\npath: /old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := writeMountFiles(cfgPath, map[string]map[string]any{
+		"mount-mnt-backup": {
+			"kind": "mount",
+			"name": "mount-mnt-backup",
+			"path": "/mnt/backup",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("writeMountFiles error = %v, want existing-file error", err)
+	}
+	after, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(original) {
+		t.Fatalf("global config changed after rejected mount write:\n%s", after)
+	}
+	if _, err := os.Stat(cfgPath + ".bak"); !os.IsNotExist(err) {
+		t.Fatalf("backup should not be written when mount file preflight fails, stat err=%v", err)
+	}
+}
+
 func TestRunWizardUnknownAssistant(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
