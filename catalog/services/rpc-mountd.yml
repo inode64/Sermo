@@ -3,7 +3,9 @@ name: rpc-mountd
 display_name: "NFS Mount Daemon"
 category: storage
 description: "RPC.mountd"
-service: rpc-mountd
+service:
+  systemd: [rpc-mountd, nfs-mountd]
+  openrc: [rpc-mountd, nfs-mountd]
 apps: [rpc-mountd]
 
 checks:

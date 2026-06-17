@@ -386,6 +386,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		"in.tftpd":     {"in.tftpd", "in-tftpd"},
 		"keydb":        {"keydb", "keydb-server"},
 		"qemu-ga":      {"qemu-guest-agent", "qemu-ga"},
+		"rpc-mountd":   {"rpc-mountd", "nfs-mountd"},
 		"rsync":        {"rsyncd", "rsync"},
 		"spamassassin": {"spamd", "spamassassin"},
 	}
@@ -514,6 +515,60 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	versionCommand := version["command"].([]any)
 	if len(versionCommand) != 2 || versionCommand[0] != "/usr/bin/cups-config" || versionCommand[1] != "--version" {
 		t.Fatalf("cupsd version command = %v, want /usr/bin/cups-config --version", versionCommand)
+	}
+}
+
+func TestCatalogNamedDNSCheckIsHostOverrideFriendly(t *testing.T) {
+	root := repoRoot(t)
+	path := filepath.Join(root, "catalog", "services", "named.yml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := yaml.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+
+	vars := nested(t, body, "variables")
+	for _, key := range []string{"host", "port", "query"} {
+		if cfgval.String(vars[key]) == "" {
+			t.Fatalf("named variables must include %q so host-specific listeners can be overridden: %v", key, vars)
+		}
+	}
+	check := nested(t, body, "checks", "port")
+	if got := cfgval.String(check["host"]); got != "${host}" {
+		t.Fatalf("named DNS check host = %q, want ${host}", got)
+	}
+	if got := cfgval.String(check["port"]); got != "${port}" {
+		t.Fatalf("named DNS check port = %q, want ${port}", got)
+	}
+	if got := cfgval.String(check["query"]); got != "${query}" {
+		t.Fatalf("named DNS check query = %q, want ${query}", got)
+	}
+}
+
+func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
+	root := repoRoot(t)
+	for _, name := range []string{"mdadm", "mdmonitor"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(root, "catalog", "services", name+".yml")
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := yaml.Unmarshal(data, &body); err != nil {
+				t.Fatal(err)
+			}
+			degraded := nested(t, body, "checks", "raid", "degraded")
+			if got := cfgval.String(degraded["op"]); got != ">" {
+				t.Fatalf("%s raid degraded op = %q, want >", name, got)
+			}
+			if got := cfgval.String(degraded["value"]); got != "0" {
+				t.Fatalf("%s raid degraded value = %q, want 0", name, got)
+			}
+		})
 	}
 }
 
