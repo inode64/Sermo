@@ -279,6 +279,6 @@ then at most one operation.
   an in-flight operation observes cancellation, its deferred cleanup releases
   the lock and emits the event, and a partially stopped service is left as-is —
   never force-killed because of shutdown.
-- **SIGHUP** reloads the config: validate first, swap workers/watches while
-  preserving per-service runtime state; an invalid config is rejected and the
-  running generation stays.
+- **Daemon reload** validates the new config, swaps workers/watches while
+  preserving per-service runtime state, and keeps the running generation when
+  the new config is invalid.

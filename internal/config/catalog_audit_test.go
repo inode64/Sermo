@@ -90,19 +90,19 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	}
 }
 
-// TestShippedGlobalConfigValidates points the shipped configs/sermo.yml at the
+// TestShippedGlobalConfigValidates points the shipped examples/sermo.yml at the
 // repo catalog and validates it with its bundled apps services.
 func TestShippedGlobalConfigValidates(t *testing.T) {
 	root := repoRoot(t)
 
-	src, err := os.ReadFile(filepath.Join(root, "configs", "sermo.yml"))
+	src, err := os.ReadFile(filepath.Join(root, "examples", "sermo.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	body := strings.ReplaceAll(string(src), "/usr/share/sermo/catalog", filepath.Join(root, "catalog"))
 	body = strings.ReplaceAll(body, "    - /etc/sermo/catalog-available\n", "")
 	if body == string(src) {
-		t.Fatal("configs/sermo.yml no longer lists the packaged catalog paths; update this rewrite")
+		t.Fatal("examples/sermo.yml no longer lists the packaged catalog paths; update this rewrite")
 	}
 
 	dir := t.TempDir()
@@ -113,7 +113,7 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	// include dirs reappear, copy them so their services validate too. `apps`
 	// is a legacy include alias for concrete service files.
 	for _, include := range []string{"services", "apps"} {
-		if bundled := filepath.Join(root, "configs", include); dirExists(bundled) {
+		if bundled := filepath.Join(root, "examples", include); dirExists(bundled) {
 			copyYAMLDir(t, bundled, filepath.Join(dir, include))
 		}
 	}
@@ -129,19 +129,19 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 
 func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	root := repoRoot(t)
-	servicesDir := filepath.Join(root, "configs", "services")
+	servicesDir := filepath.Join(root, "examples", "services")
 	if !dirExists(servicesDir) {
-		t.Fatalf("configs/services is missing")
+		t.Fatalf("examples/services is missing")
 	}
 	services, err := yamlFiles(servicesDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(services) == 0 {
-		t.Fatalf("configs/services has no service examples")
+		t.Fatalf("examples/services has no service examples")
 	}
 
-	appsDir := filepath.Join(root, "configs", "apps")
+	appsDir := filepath.Join(root, "examples", "apps")
 	if !dirExists(appsDir) {
 		return
 	}
@@ -150,15 +150,15 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(apps) > 0 {
-		t.Fatalf("configs/apps is a legacy alias; move service YAML examples to configs/services: %s", strings.Join(apps, ", "))
+		t.Fatalf("examples/apps is a legacy alias; move service YAML examples to examples/services: %s", strings.Join(apps, ", "))
 	}
 }
 
 func TestShippedServiceConfigExamplesValidate(t *testing.T) {
 	root := repoRoot(t)
-	servicesDir := filepath.Join(root, "configs", "services")
+	servicesDir := filepath.Join(root, "examples", "services")
 	if !dirExists(servicesDir) {
-		t.Fatalf("configs/services is missing")
+		t.Fatalf("examples/services is missing")
 	}
 
 	dir := t.TempDir()
@@ -173,10 +173,10 @@ func TestShippedServiceConfigExamplesValidate(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	if len(cfg.Services) == 0 {
-		t.Fatalf("configs/services has no loadable service examples")
+		t.Fatalf("examples/services has no loadable service examples")
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
-		t.Fatalf("configs/services examples must validate cleanly, got: %v", issues)
+		t.Fatalf("examples/services examples must validate cleanly, got: %v", issues)
 	}
 
 	tests := []struct {

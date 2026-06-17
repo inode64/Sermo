@@ -9,13 +9,14 @@ with a top-level `watches:` map; those fragments do not use `kind:`.
 > every configuration surface in one place — global config, watches, and one
 > document of each kind (daemon, app, lib, patterns, service, mount), plus a
 > cloned service example — and is validated by the test suite, so it cannot
-> drift from the schema. The shipped operational config is `configs/sermo.yml`.
+> drift from the schema. The shipped operational config is `examples/sermo.yml`.
 
 ## Layout
 
 ```
 /etc/sermo/sermo.yml              global config
 /usr/share/sermo/catalog/{services,apps,libs,patterns}/*.yml   packaged catalog
+/usr/share/sermo/examples/        packaged examples operators may copy/adapt
 /etc/sermo/catalog-available/*.yml   user catalog definitions
 /etc/sermo/services/*.yml included service documents
 /etc/sermo/apps/*.yml     legacy include alias for existing service documents
@@ -245,10 +246,11 @@ not guess: process selectors and `kill_only_if.users` using that name do not
 match. For critical stop policies, numeric UIDs/GIDs are the most deterministic
 form.
 
-`SIGHUP` reloads the configuration from the path passed to `sermod run
---config` (the same file `sermoctl` uses). `sermod` validates the new config,
-rebuilds its service workers and host watches, and swaps them in without
-restarting the process. Per-service runtime state is preserved across reload:
+When `sermoctl daemon reload` asks the running daemon to reload, `sermod` reads
+the configuration from the path passed to `sermod run --config` (the same file
+`sermoctl` uses). `sermod` validates the new config, rebuilds its service workers
+and host watches, and swaps them in without restarting the process. Per-service
+runtime state is preserved across reload:
 monitoring cycle counters and watched-file baselines for `changed:` conditions
 stay in memory, while remediation cooldown/backoff and rule `for`/`within`
 windows are also persisted in `paths.state` and survive a full `sermod` process
@@ -260,16 +262,10 @@ Per-service CPU rate baselines are reset only when a service is removed from the
 running config; persisted metric and event history remains in `paths.state`
 until normal retention or an explicit `sermoctl state compact`.
 
-You can trigger a reload with any of:
+Trigger a daemon configuration reload with:
 
 ```sh
 sermoctl daemon reload
-# or (when the web UI is enabled)
-#   - click "reload config" in the dashboard (admin only)
-#   - POST /api/reload with X-Sermo-CSRF:1 (admin)
-kill -HUP "$(pidof sermod)"
-systemctl reload sermod     # uses ExecReload in the unit
-rc-service sermod reload
 ```
 
 The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
@@ -1808,15 +1804,10 @@ notifiers:
 
 ```sh
 sermoctl config validate          # whole Sermo configuration
-sermoctl service show mysql-main  # resolved form for one service
 ```
 
 `config validate` exits `78` on a configuration error. See
 [rules](rules.md) for what each section may contain.
-
-Use `sermoctl service show SERVICE` when you need to inspect a service after
-catalog inheritance, clone inheritance, overrides and variables have been
-resolved.
 
 ## Diagnostics
 

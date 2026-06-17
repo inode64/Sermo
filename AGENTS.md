@@ -151,7 +151,7 @@ context and an explicit timeout, invoking an argv directly — never a shell.
 When you change configuration, add a check type, notifier, rule action or
 observable behavior, update the corresponding documentation, catalog examples
 (when generally useful) and `docs/configuration.md`, `docs/rules.md` and the
-daemon docs in the same change. Keep `configs/sermo.yml` comments current. Code
+daemon docs in the same change. Keep `examples/sermo.yml` comments current. Code
 and docs must evolve together.
 
 When a user request, implementation finding or runtime behavior contradicts the

@@ -178,5 +178,5 @@ Add `golang.org/x/net` (for `icmp` + `ipv4`) via `go get golang.org/x/net` +
 - `docs/configuration.md`: extend "Host watches" with the `icmp` check, its
   metrics, per-metric hooks, env vars (`SERMO_HOST`, `SERMO_METRIC`,
   `SERMO_VALUE`, `SERMO_OLD`/`SERMO_NEW`), and the `CAP_NET_RAW` requirement.
-- `configs/sermo.yml`: a commented, disabled-by-default `ping-gw` example.
+- `examples/sermo.yml`: a commented, disabled-by-default `ping-gw` example.
 - `README.md`: extend the host-watches line to mention external hosts (ICMP).

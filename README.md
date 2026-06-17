@@ -98,7 +98,7 @@ sermoctl restart apache-main
 # Pause / resume monitoring of a service (e.g. for maintenance)
 sermoctl unmonitor apache-main   # daemon stops checking it
 sermoctl monitor apache-main     # resume
-sermoctl daemon reload           # ask sermod to re-read its config (SIGHUP)
+sermoctl daemon reload           # ask sermod to re-read its config
 
 # Availability (SLA) per service over rolling windows (hour..year)
 sermoctl sla                     # all services
@@ -110,7 +110,7 @@ sermod run --config /etc/sermo/sermo.yml
 ```
 
 Packaged definitions live under [`catalog/`](catalog/), sample configs under
-[`configs/`](configs/), packaging units under [`packaging/`](packaging/). The
+[`examples/`](examples/), packaging units under [`packaging/`](packaging/). The
 on-host file layout is in
 [configuration → layout](docs/configuration.md#layout).
 

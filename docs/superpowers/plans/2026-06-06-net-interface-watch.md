@@ -31,7 +31,7 @@
 - `internal/app/watch_build_test.go` — net expansion tests.
 - `internal/config/validate.go` — generalise `validateWatchHook` → `validateHookBlock(prefix, block, add)`; add `case "net"` with `validateNetCheck`.
 - `internal/config/validate_watches_test.go` — net validation tests.
-- `configs/sermo.yml`, `docs/configuration.md`, `README.md` — docs + example.
+- `examples/sermo.yml`, `docs/configuration.md`, `README.md` — docs + example.
 
 ---
 
@@ -989,11 +989,11 @@ git commit -m "Validate net interface watches with per-metric hooks"
 ## Task 6: Docs, example config, and final verification
 
 **Files:**
-- Modify: `configs/sermo.yml`
+- Modify: `examples/sermo.yml`
 - Modify: `docs/configuration.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add a disabled-by-default example to `configs/sermo.yml`**
+- [ ] **Step 1: Add a disabled-by-default example to `examples/sermo.yml`**
 
 Append after the existing `watches:` `disk-root` entry (same `watches:` map — add a sibling key; do NOT create a second `watches:` key):
 
@@ -1031,13 +1031,13 @@ Extend the host-watches sentence to mention network interfaces (state/speed/erro
 
 - [ ] **Step 4: Validate the example config**
 
-Run: `go run ./cmd/sermoctl --config configs/sermo.yml config validate`
+Run: `go run ./cmd/sermoctl --config examples/sermo.yml config validate`
 Expected: `OK`, exit 0. Then temporarily flip `net-eth0` `enabled: true`, re-run validate (must still be `OK`), then set back to `enabled: false`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add configs/sermo.yml docs/configuration.md README.md
+git add examples/sermo.yml docs/configuration.md README.md
 git commit -m "Document net interface watches and add example config"
 ```
 
@@ -1046,7 +1046,7 @@ git commit -m "Document net interface watches and add example config"
 ## Final verification
 
 - [ ] `go build ./... && go vet ./... && go test ./...` — all green.
-- [ ] `go run ./cmd/sermoctl --config configs/sermo.yml config validate` exits 0.
+- [ ] `go run ./cmd/sermoctl --config examples/sermo.yml config validate` exits 0.
 - [ ] Disk watches unaffected: existing disk check/build/validation tests still pass; disk hooks still get `SERMO_PATH` and `SERMO_VALUE`.
 - [ ] Net expansion: one `net-eth0` config produces three watches with three distinct hooks.
 

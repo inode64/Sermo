@@ -46,13 +46,7 @@ sermoctl unmonitor SERVICE
 
 sermoctl config validate
 
-sermoctl daemon list
-sermoctl daemon show DAEMON
 sermoctl daemon reload                 # reload sermod config, not services
-
-sermoctl service list
-sermoctl service show SERVICE
-sermoctl service clone SOURCE TARGET
 
 sermoctl services [all] [--long]
 sermoctl apps [all] [--long]

@@ -223,7 +223,7 @@ service-specific quirks become per-service `silence`/`rules`.
 
 Update in the same change: `docs/configuration.md` and `docs/rules.md` (the
 `analyze` block + the `patterns` category), `docs/daemons.md` (patterns category
-alongside apps/libs), and the example `configs/sermo.yml` if a seeded set is
+alongside apps/libs), and the example `examples/sermo.yml` if a seeded set is
 shown. Note the hooks limitation where the dispatch decision lives.
 
 ## Out of scope (v1)

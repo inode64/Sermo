@@ -212,5 +212,5 @@ No change beyond what already exists — `BuildWatches` returns the expanded
 
 - `docs/configuration.md`: extend "Host watches" with the `net` check, its
   metrics, per-metric hooks, and the generalised `SERMO_*` env rule.
-- `configs/sermo.yml`: a commented, disabled-by-default `net-eth0` example.
+- `examples/sermo.yml`: a commented, disabled-by-default `net-eth0` example.
 - `README.md`: extend the host-watches line to mention network interfaces.

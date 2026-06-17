@@ -28,7 +28,7 @@
 - `internal/config/validate.go` — extract `validateStateMetric`; add `validateICMPCheck`; dispatch `case "icmp"`.
 - `internal/config/validate_watches_test.go` — icmp validation tests.
 - `go.mod`, `go.sum` — `golang.org/x/net`.
-- `configs/sermo.yml`, `docs/configuration.md`, `README.md` — docs + example.
+- `examples/sermo.yml`, `docs/configuration.md`, `README.md` — docs + example.
 
 ---
 
@@ -760,9 +760,9 @@ git commit -m "Validate icmp host watches; share state-metric validation"
 ## Task 4: Docs, example config, and final verification
 
 **Files:**
-- Modify: `configs/sermo.yml`, `docs/configuration.md`, `README.md`
+- Modify: `examples/sermo.yml`, `docs/configuration.md`, `README.md`
 
-- [ ] **Step 1: Add a disabled-by-default example to `configs/sermo.yml`**
+- [ ] **Step 1: Add a disabled-by-default example to `examples/sermo.yml`**
 
 Append after the existing `net-eth0` entry (SIBLING key under the existing `watches:` map — do NOT create a second `watches:`):
 
@@ -794,13 +794,13 @@ Extend the host-watches sentence to mention external hosts via ICMP (reachabilit
 
 - [ ] **Step 4: Validate the example config**
 
-Run: `go run ./cmd/sermoctl --config configs/sermo.yml config validate`
+Run: `go run ./cmd/sermoctl --config examples/sermo.yml config validate`
 Expected: `OK`, exit 0. Then temporarily flip `ping-gw` `enabled: true`, re-run validate (must still be `OK`), then set back to `enabled: false`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add configs/sermo.yml docs/configuration.md README.md
+git add examples/sermo.yml docs/configuration.md README.md
 git commit -m "Document icmp host watches and add example config"
 ```
 
@@ -809,7 +809,7 @@ git commit -m "Document icmp host watches and add example config"
 ## Final verification
 
 - [ ] `go build ./... && go vet ./... && go test ./...` — all green.
-- [ ] `go run ./cmd/sermoctl --config configs/sermo.yml config validate` exits 0.
+- [ ] `go run ./cmd/sermoctl --config examples/sermo.yml config validate` exits 0.
 - [ ] Net + disk watches unaffected: their check/build/validation tests still pass (net expansion now runs through `buildMetricWatches`; net state validation through the shared `validateStateMetric`).
 - [ ] icmp expansion: one `ping-gw` config produces two watches with two distinct hooks.
 

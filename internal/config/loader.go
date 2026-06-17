@@ -157,8 +157,8 @@ func absCatalogDirs(dirs []string) []string {
 
 // resolveConfigPaths makes catalog/includes/runtime/state/templates paths
 // absolute. Relative entries are resolved against the global config file's
-// directory so a tree like configs/sermo.yml with `includes: [services]` loads
-// configs/services when run from the repository. `apps` remains supported as a
+// directory so a tree like examples/sermo.yml with `includes: [services]` loads
+// examples/services when run from the repository. `apps` remains supported as a
 // legacy include alias.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))

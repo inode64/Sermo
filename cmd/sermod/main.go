@@ -269,8 +269,7 @@ func run(args []string) int {
 			OperationTimeout: app.MaxOperationTimeout(cfg, deps.OperationTimeout),
 			Readiness:        readiness,
 			// Trigger reload by signalling ourself with SIGHUP. This re-uses the
-			// exact same Monitor.Reload path as external SIGHUP, systemd
-			// ExecReload, or sermoctl (when it finds the pid).
+			// exact same Monitor.Reload path as sermoctl daemon reload.
 			Reload: func() error {
 				return syscall.Kill(os.Getpid(), syscall.SIGHUP)
 			},

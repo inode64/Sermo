@@ -45,7 +45,7 @@ defaults:
 }
 
 // TestRepoDefaultConfigHasMonitorTargets guards the acceptance path
-// `sermod run --config ./configs/sermo.yml`. The shipped config deliberately
+// `sermod run --config ./examples/sermo.yml`. The shipped config deliberately
 // enables no services (operators add their own under an include dir such as
 // `apps`), so the host watches are what must load, validate and build — they
 // are the daemon's out-of-the-box monitor targets.
@@ -189,11 +189,11 @@ func repoConfigPath(t *testing.T) string {
 	}
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			p := filepath.Join(dir, "configs", "sermo.yml")
+			p := filepath.Join(dir, "examples", "sermo.yml")
 			if _, err := os.Stat(p); err == nil {
 				return p
 			}
-			t.Fatalf("configs/sermo.yml not found under module root %s", dir)
+			t.Fatalf("examples/sermo.yml not found under module root %s", dir)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
