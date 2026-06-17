@@ -12,7 +12,7 @@
 #
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is
-# configs/sermo.yml; the field-by-field reference is docs/configuration.md,
+# examples/sermo.yml; the field-by-field reference is docs/configuration.md,
 # docs/daemons.md and docs/rules.md.
 
 # ---------------------------------------------------------------------------

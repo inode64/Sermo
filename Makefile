@@ -30,6 +30,7 @@ localstatedir ?= /var
 # Sermo-specific locations derived from the standard dirs.
 SERMO_CONFDIR ?= $(sysconfdir)/sermo
 SERMO_DATADIR ?= $(datadir)/sermo
+SERMO_EXAMPLEDIR ?= $(SERMO_DATADIR)/examples
 SERMO_RUNDIR ?= /run/sermo
 SERMO_STATEDIR ?= $(localstatedir)/lib/sermo
 SYSTEMD_UNITDIR ?= /usr/lib/systemd/system
@@ -60,7 +61,7 @@ config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/sha
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
-        install install-bin install-catalog install-config install-templates install-tmpfiles install-systemd install-openrc \
+        install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
 all: build
@@ -112,10 +113,10 @@ clean:
 	rm -rf $(BIN)
 	rm -f coverage.out coverage.html
 
-# Full install: binaries, the catalog, sample config, tmpfiles.d, and both init
-# systems. The persistent state directory is intentionally not created here;
-# tmpfiles.d creates it with the same policy as the runtime directory.
-install: install-bin install-catalog install-config install-templates install-tmpfiles install-systemd install-openrc
+# Full install: binaries, the catalog, examples, sample config, tmpfiles.d, and
+# both init systems. The persistent state directory is intentionally not created
+# here; tmpfiles.d creates it with the same policy as the runtime directory.
+install: install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc
 
 install-bin: build
 	$(INSTALL) -Dm755 $(BIN)/sermoctl $(DESTDIR)$(bindir)/sermoctl
@@ -128,6 +129,13 @@ install-catalog:
 		$(INSTALL) -Dm644 "catalog/$$f" "$(DESTDIR)$(SERMO_DATADIR)/catalog/$$f"; \
 	done
 
+# Install optional examples operators can copy or adapt.
+install-examples:
+	@set -e; find examples -type f -name '*.yml' | sed 's|^examples/||' | while read -r f; do \
+		echo "  install examples/$$f"; \
+		$(INSTALL) -Dm644 "examples/$$f" "$(DESTDIR)$(SERMO_EXAMPLEDIR)/$$f"; \
+	done
+
 # Install the global config (kept if one already exists) and create the
 # available/included service directories. `apps` is kept as a legacy include
 # alias for hosts that still store service files there.
@@ -137,7 +145,7 @@ install-config:
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \
 		echo "  install $(SERMO_CONFDIR)/sermo.yml"; \
-		$(config_subst) configs/sermo.yml > $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
+		$(config_subst) examples/sermo.yml > $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
 		chmod 644 $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml; \
 	fi
 
@@ -171,5 +179,6 @@ uninstall:
 	rm -f $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service $(DESTDIR)$(OPENRC_INITDIR)/sermod
 	rm -f $(DESTDIR)$(TMPFILESDIR)/sermo.conf
 	rm -rf $(DESTDIR)$(SERMO_DATADIR)/catalog
+	rm -rf $(DESTDIR)$(SERMO_EXAMPLEDIR)
 	@echo "left $(DESTDIR)$(SERMO_CONFDIR) (config) in place"
 	@echo "left $(DESTDIR)$(SERMO_STATEDIR) (state database) in place"

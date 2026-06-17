@@ -187,5 +187,5 @@ defaults. See implementation evolution in the plans and current
 
 - `docs/configuration.md`: new "Host watches" section documenting `watches`, the
   `disk` check, and the `hook` action, plus the engine-settings cross-reference.
-- `configs/sermo.yml`: a commented, disabled-by-default `watches` example.
+- `examples/sermo.yml`: a commented, disabled-by-default `watches` example.
 - `README.md`: one line under the daemon description noting host watches.

@@ -34,7 +34,7 @@
 - `internal/config/validate.go` — add `validateWatches` called from `Validate`.
 - `internal/config/validate30_test.go` (or a new `validate_watches_test.go`) — watch validation tests.
 - `cmd/sermod/main.go` — build watches, pass to scheduler, relax the "no services" fatal gate to "no services and no watches".
-- `configs/sermo.yml` — commented, disabled-by-default `watches` example.
+- `examples/sermo.yml` — commented, disabled-by-default `watches` example.
 - `docs/configuration.md` — "Host watches" section.
 - `README.md` — one line noting host watches.
 
@@ -1500,13 +1500,13 @@ git commit -m "Wire host watches into the sermod daemon"
 ## Task 10: Documentation and example config
 
 **Files:**
-- Modify: `configs/sermo.yml`
+- Modify: `examples/sermo.yml`
 - Modify: `docs/configuration.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: Add a disabled-by-default example to `configs/sermo.yml`**
+- [ ] **Step 1: Add a disabled-by-default example to `examples/sermo.yml`**
 
-Append at the end of `configs/sermo.yml`:
+Append at the end of `examples/sermo.yml`:
 
 ```yaml
 # Host watches: monitor host resources (disk, …) independently of services and
@@ -1574,14 +1574,14 @@ layout section if appropriate.
 
 - [ ] **Step 4: Validate the example config**
 
-Run: `go run ./cmd/sermoctl --config configs/sermo.yml config validate`
+Run: `go run ./cmd/sermoctl --config examples/sermo.yml config validate`
 Expected: exits 0 (the example watch is `enabled: false`; flip it to `true`
 temporarily to confirm it also validates, then set back to `false`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add configs/sermo.yml docs/configuration.md README.md
+git add examples/sermo.yml docs/configuration.md README.md
 git commit -m "Document host watches and add an example config"
 ```
 
@@ -1590,8 +1590,8 @@ git commit -m "Document host watches and add an example config"
 ## Final verification
 
 - [ ] Run the full suite: `go build ./... && go vet ./... && go test ./...` — all green.
-- [ ] `go run ./cmd/sermoctl --config configs/sermo.yml config validate` exits 0.
-- [ ] Manual smoke (optional): set a `watches.disk-root` with `used_pct: {op: ">=", value: 0}` (always true), `command: [/bin/echo, fired]`, `enabled: true`, run `sermod run --config configs/sermo.yml` briefly and confirm a `kind=hook` log line.
+- [ ] `go run ./cmd/sermoctl --config examples/sermo.yml config validate` exits 0.
+- [ ] Manual smoke (optional): set a `watches.disk-root` with `used_pct: {op: ">=", value: 0}` (always true), `command: [/bin/echo, fired]`, `enabled: true`, run `sermod run --config examples/sermo.yml` briefly and confirm a `kind=hook` log line.
 - [ ] Confirm no service-path behavior changed (existing scheduler/worker tests still pass).
 
 ## Notes / risks

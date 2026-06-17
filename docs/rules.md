@@ -1722,9 +1722,9 @@ block-during-backup:
 
 Backup-tool-specific guards belong in service examples or local overrides, not
 in the base catalog daemon. The shipped
-[`configs/services/mariadb-backup-guard.yml`](../configs/services/mariadb-backup-guard.yml)
+[`examples/services/mariadb-backup-guard.yml`](../examples/services/mariadb-backup-guard.yml)
 example shows how to opt in to a `mariadb-backup` process guard for MariaDB.
-[`configs/services/mysql-wal-g-backup-guard.yml`](../configs/services/mysql-wal-g-backup-guard.yml)
+[`examples/services/mysql-wal-g-backup-guard.yml`](../examples/services/mysql-wal-g-backup-guard.yml)
 does the same for WAL-G on MySQL/MariaDB. The `apps:` list is an override, so an
 opt-in service must keep the database app and add the backup app, for example
 `apps: [mysql, wal-g-mysql]` or `apps: [mariadb, wal-g-mysql]`.
