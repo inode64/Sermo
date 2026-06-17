@@ -179,20 +179,44 @@ func TestShippedServiceConfigExamplesValidate(t *testing.T) {
 		t.Fatalf("configs/services examples must validate cleanly, got: %v", issues)
 	}
 
-	resolved, errs := cfg.Resolve("mariadb-backup-guard")
-	if len(errs) != 0 {
-		t.Fatalf("Resolve(mariadb-backup-guard): %v", errs)
+	tests := []struct {
+		service   string
+		check     string
+		preflight string
+		binaries  []string
+	}{
+		{
+			service:   "mariadb-backup-guard",
+			check:     "mariadb-backup",
+			preflight: "mariadb-backup-binary",
+			binaries:  []string{"/usr/bin/mariadb-backup", "/usr/bin/mariadbbackup"},
+		},
+		{
+			service:   "mysql-wal-g-backup-guard",
+			check:     "wal-g-mysql",
+			preflight: "wal-g-mysql-binary",
+			binaries:  []string{"/usr/bin/wal-g-mysql", "/usr/local/bin/wal-g-mysql", "/usr/bin/wal-g", "/usr/local/bin/wal-g"},
+		},
 	}
-	if got := cfgval.String(valueAt(t, resolved.Tree, "checks", "mariadb-backup", "exe")); got != "/usr/bin/mariadb-backup" {
-		t.Fatalf("mariadb backup example exe = %q, want /usr/bin/mariadb-backup", got)
-	}
-	preflight := nested(t, resolved.Tree, "preflight")
-	entry, ok := preflight["mariadb-backup-binary"].(map[string]any)
-	if !ok {
-		t.Fatalf("mariadb backup example lacks optional app preflight: %v", preflight)
-	}
-	if got := cfgval.Bool(entry["optional"]); !got {
-		t.Fatalf("mariadb backup example preflight optional = %v, want true", got)
+	for _, tt := range tests {
+		t.Run(tt.service, func(t *testing.T) {
+			resolved, errs := cfg.Resolve(tt.service)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve(%s): %v", tt.service, errs)
+			}
+			exe := cfgval.String(valueAt(t, resolved.Tree, "checks", tt.check, "exe"))
+			if !slices.Contains(tt.binaries, exe) {
+				t.Fatalf("%s %s exe = %q, want one of %v", tt.service, tt.check, exe, tt.binaries)
+			}
+			preflight := nested(t, resolved.Tree, "preflight")
+			entry, ok := preflight[tt.preflight].(map[string]any)
+			if !ok {
+				t.Fatalf("%s lacks app preflight %q: %v", tt.service, tt.preflight, preflight)
+			}
+			if got := cfgval.Bool(entry["optional"]); got {
+				t.Fatalf("%s preflight %q optional = %v, want false", tt.service, tt.preflight, got)
+			}
+		})
 	}
 }
 
@@ -706,6 +730,77 @@ func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
 				t.Fatalf("%s %s catalog still has mariadb-backup preflight", name, tree.label)
 			}
 		}
+	}
+}
+
+func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		binaries []string
+	}{
+		{
+			name:     "wal-g-mysql",
+			binaries: []string{"/usr/bin/wal-g-mysql", "/usr/local/bin/wal-g-mysql", "/usr/bin/wal-g", "/usr/local/bin/wal-g"},
+		},
+		{
+			name:     "wal-g-pg",
+			binaries: []string{"/usr/bin/wal-g-pg", "/usr/local/bin/wal-g-pg", "/usr/bin/wal-g", "/usr/local/bin/wal-g"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, ok := cfg.Apps[tt.name]
+			if !ok {
+				t.Fatalf("app %q not found", tt.name)
+			}
+			if got := cfgval.StringList(doc.Body["binary"]); !slices.Equal(got, tt.binaries) {
+				t.Fatalf("%s binary candidates = %v, want %v", tt.name, got, tt.binaries)
+			}
+			resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tt.name, errs)
+			}
+			binary := cfgval.String(valueAt(t, resolved.Tree, "variables", "binary"))
+			if !slices.Contains(tt.binaries, binary) {
+				t.Fatalf("%s resolved binary = %q, want one of %v", tt.name, binary, tt.binaries)
+			}
+			preflight := nested(t, resolved.Tree, "preflight")
+			binaryPreflight, ok := preflight["binary"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s lacks preflight \"binary\": %v", tt.name, preflight)
+			}
+			if got := cfgval.Bool(binaryPreflight["optional"]); got {
+				t.Fatalf("%s preflight \"binary\" optional = %v, want false", tt.name, got)
+			}
+
+			versionPreflight, ok := preflight["version"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s lacks preflight \"version\": %v", tt.name, preflight)
+			}
+			if got := cfgval.Bool(versionPreflight["optional"]); !got {
+				t.Fatalf("%s preflight \"version\" optional = %v, want true", tt.name, got)
+			}
+			versionCommand, ok := nested(t, preflight, "version")["command"].([]any)
+			if !ok || len(versionCommand) == 0 {
+				t.Fatalf("%s version command missing: %v", tt.name, preflight["version"])
+			}
+			if got := cfgval.String(versionCommand[0]); got != binary {
+				t.Fatalf("%s version command binary = %q, want %q", tt.name, got, binary)
+			}
+		})
 	}
 }
 
