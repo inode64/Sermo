@@ -17,7 +17,7 @@ and the invariants below, and update this file in the same change.
    the wizard lists them and asks (`selectAssistant`). Never require the type.
 2. **Select detected targets.** Each assistant detects what is targetable
    (services → active installed catalog daemons first, then optional active
-   units with no catalog profile; `docker` → containers from the local Docker
+   units with no catalog daemon; `docker` → containers from the local Docker
    API; `vm` → libvirt/QEMU domains; `mount` → `/etc/fstab` mount points;
    `volume` → currently mounted storage volumes; `net`/`uplink` → interfaces)
    and offers them with `Prompt.MultiChoose`. **Never ask the
@@ -31,8 +31,8 @@ and the invariants below, and update this file in the same change.
    normally only write `uses:` plus explicit overrides. When configuration files
    are detected, ask whether to add a `checks.config` entry that watches those
    paths; it uses a per-check `interval: 60m` so the service's normal cycle does
-   not need to slow down. For active units with no catalog profile, ask the
-   **PID source** because there is no daemon profile to inherit: a pidfile path
+   not need to slow down. For active units with no catalog daemon, ask the
+   **PID source** because there is no catalog daemon to inherit: a pidfile path
    writes `pidfile:`; with no pidfile, an executable derived from the unit offers
    a `command_match` process selector. Docker and VM service assistants write a
    per-service `control:` block plus a read-only Docker/libvirt check; they do not
@@ -136,7 +136,7 @@ Before storing a newly detected path, resolve symlinks on the target host
 
 `listInstalledDaemons` (`internal/cli/wizard_service.go`) fills each
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
-improve the catalog daemon profile, not the generated `kind: service` entry:
+improve the catalog daemon definition, not the generated `kind: service` entry:
 they write `uses:` and inherit PID/process selectors from `catalog/services`.
 Uncataloged active units write `service.name` plus a basic `checks.service`, and
 their PID question is prefilled from detection and only accepts absolute pidfile
@@ -158,12 +158,16 @@ mount|umount`.
 
 1. Implement `assist.Assistant` (`Name`, `Title`, `Run`) in `internal/assist/`.
 2. Detect targets and select with `MultiChoose` (step 2). No name prompts.
-3. Gather monitor + interval with `Prompt.AskMonitoring`; inject with
-   `Monitoring.apply` (steps 5–6). Batch them with `Prompt.Confirm` when >1.
+3. For monitored entries (watches and services), gather monitor + interval with
+   `Prompt.AskMonitoring`; inject with `Monitoring.apply` (steps 5–6). Batch
+   them with `Prompt.Confirm` when >1. Non-monitored config such as `kind:
+   mount` must skip these fields because validation rejects them.
 4. Ask notifiers (if any) through `chooseNotifiers` (step 7) — never duplicate
    its `none`/`default` handling. If the assistant emits watch actions, use
    `Prompt.AskWatchDryRun` instead of hand-rolling `dry_run`.
 5. Register it in `registry` (`internal/assist/assist.go`).
-6. If it has host targets, extend `detectedTargetKeys` and (for watches)
-   `watchFileTargets` so step-9 cleanup works.
+6. If it has host targets, extend `detectedTargetKeys` and the cleanup path for
+   its output type (`parseWatchFile`/`planWizardWatchDeletes` for watch
+   fragments, `planStaleMountDeletes` for mount files, or the service cleanup
+   target helpers for service files) so step-9 cleanup works.
 7. Add an assistant test plus a case in `contract_test.go`.

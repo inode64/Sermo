@@ -100,7 +100,7 @@ Use these packages. This is the full internal/ layout; it must match
 internal/app          daemon, scheduler and in-memory state (sermod)
 internal/checks       check implementations
 internal/cli          sermoctl command implementations
-internal/config       YAML model, loading, merge, render, variables, validation
+internal/config       YAML model, catalog loading, services/mounts/clones, merge, render, variables, validation
 internal/events       structured event model and logger
 internal/execx        command runner
 internal/locks        runtime locks and external lock checks
@@ -108,7 +108,6 @@ internal/metrics      cpu/memory collectors (service and system scope)
 internal/operation    safe start/stop/restart workflows (shared by sermod+sermoctl)
 internal/preflight    preflight runner (reuses the check runner)
 internal/process      process discovery and signaling
-internal/profiles     profiles, services, clones, render
 internal/rules        rule engine, windows and remediation state
 internal/servicemgr   systemd/openrc abstraction
 ```

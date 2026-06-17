@@ -689,8 +689,8 @@ Protocols, in the order of the table above:
   is a local DHCP client check: `dhclient` receives offers on UDP/68 and does not
   provide a request/response server protocol. The check reads `/proc/net/udp` and
   passes when it finds a local UDP socket bound to `host:port` (`0.0.0.0:68` by
-  default in the packaged profile). It does not send packets and does not consume
-  a lease. Set `lease_file` (the packaged profile defaults to
+  default in the packaged catalog daemon). It does not send packets and does not consume
+  a lease. Set `lease_file` (the packaged catalog daemon defaults to
   `/var/lib/dhcp/dhclient.leases`; override it when your distribution stores ISC
   dhclient leases elsewhere) to also require an unexpired lease. If `interface`
   is set, the lease must belong to that interface.

@@ -30,10 +30,10 @@ const (
 	kindMount    = "mount"
 )
 
-// Daemon categories mirror the catalog subdirectory a definition is loaded from
-// (catalog/services, catalog/apps, catalog/libs); files directly under a catalog
-// root default to CategoryService. The category tracks the kind for display and
-// category-scoped listings.
+// Catalog categories mirror the catalog subdirectory a definition is loaded
+// from (catalog/services, catalog/apps, catalog/libs, catalog/patterns); files
+// directly under a catalog root default to CategoryService. The category tracks
+// the kind for display and category-scoped listings.
 const (
 	CategoryService  = "service"
 	CategoryApp      = "app"
