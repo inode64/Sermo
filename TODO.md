@@ -10,8 +10,7 @@ exists. Nothing here is committed scope; pick items deliberately.
 - Remote API authentication
 - Multi-tenant RBAC
 - Plugin ABI
-- Database persistence
-- Complex notification integrations
+- Complex notification integrations (email, Slack, Teams + templates; additional sinks like file/syslog/generic webhook still pending)
 - Metrics export (Prometheus, OpenMetrics) — also as an event sink besides
   log/slog (JSON file, syslog and webhook sinks are likewise pending)
 - Server MCP or gRPC API
