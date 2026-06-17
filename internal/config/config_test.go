@@ -619,6 +619,30 @@ watches:
 	}
 }
 
+func TestLoadAcceptsLegacyProfilesCatalogPath(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  profiles: [@ROOT@/profiles]
+  includes: [@ROOT@/enabled]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"profiles/demo.yml": "kind: daemon\nname: demo\nbinary: /bin/true\n",
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Daemons["demo"]; !ok {
+		t.Fatalf("legacy profiles path did not load demo daemon: %v", cfg.DaemonNames)
+	}
+	if got := cfg.Global.Catalog[0]; !strings.HasSuffix(got, "profiles") {
+		t.Fatalf("Global.Catalog[0] = %q, want legacy profiles path", got)
+	}
+}
+
 func TestDefaultIncludeDirsPreferServicesAndKeepAppsAlias(t *testing.T) {
 	want := []string{"/etc/sermo/services", "/etc/sermo/apps"}
 	if strings.Join(defaultIncludeDirs, "\n") != strings.Join(want, "\n") {

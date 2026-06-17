@@ -22,8 +22,11 @@ func TestServicesCommand(t *testing.T) {
 		}
 	}
 	nginx := filepath.Join(binDir, "nginx")
-	if err := os.WriteFile(nginx, []byte("x"), 0o755); err != nil {
-		t.Fatal(err)
+	linked := filepath.Join(binDir, "linked")
+	for _, p := range []string{nginx, linked} {
+		if err := os.WriteFile(p, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	write := func(path, body string) {
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -38,6 +41,18 @@ service: { name: nginx }
 binary: %q
 preflight: { binary: { type: binary, path: "${binary}" } }
 `, nginx))
+	write(filepath.Join(daemonsDir, "linked.yml"), `kind: daemon
+name: linked
+display_name: "Linked Service"
+service: { name: linked }
+apps: [linked]
+`)
+	write(filepath.Join(appsDir, "linked.yml"), fmt.Sprintf(`kind: app
+name: linked
+binary: %q
+preflight:
+  version: { type: command, command: ["/definitely-missing-sermo-version-probe"], timeout: 10s }
+`, linked))
 	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nbinary: /bin/git\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
@@ -52,8 +67,14 @@ defaults: { policy: { cooldown: 5m } }
 		t.Fatalf("services exit = %d", code)
 	}
 	got := out.String()
+	if !strings.Contains(got, "SERVICE") {
+		t.Errorf("services should label the first column SERVICE:\n%s", got)
+	}
 	if !strings.Contains(got, "Nginx") || !strings.Contains(got, "ok") {
 		t.Errorf("services should list the installed service Nginx:\n%s", got)
+	}
+	if !strings.Contains(got, "Linked Service") || strings.Contains(got, "Linked Service  -  error") {
+		t.Errorf("services should list app-linked services without failing on version probe errors:\n%s", got)
 	}
 	if strings.Contains(got, "git") {
 		t.Errorf("services must not list app-category daemons:\n%s", got)

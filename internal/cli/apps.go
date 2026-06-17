@@ -16,23 +16,23 @@ import (
 // command reports, and whether they resolve without error. Only installed apps
 // are shown unless `apps all` is given.
 func (a App) runApps(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryApp, "apps", "installed applications")
+	return a.listCategory(ctx, opts, config.CategoryApp, "apps", "installed applications", "APPLICATION")
 }
 
 // runLibs lists the library daemons (daemons/libs) services can watch for
 // changes, with the version each reports and whether it is present.
 func (a App) runLibs(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries")
+	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries", "LIBRARY")
 }
 
 // runServices lists the service daemons (daemons/services and the root): which
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {
-	return a.listCategory(ctx, opts, config.CategoryService, "services", "installed services")
+	return a.listCategory(ctx, opts, config.CategoryService, "services", "installed services", "SERVICE")
 }
 
-func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty string) int {
+func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty, heading string) int {
 	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != "all") {
 		return a.commandUsageError(jsonKey, fmt.Sprintf("%s accepts only optional `all`", jsonKey))
 	}
@@ -43,25 +43,29 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		return code
 	}
 
-	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing, appinspect.WithUserLookup(app.EngineUserLookup(cfg, a.Runner)))
+	inspectOpts := []appinspect.Option{appinspect.WithUserLookup(app.EngineUserLookup(cfg, a.Runner))}
+	if category == config.CategoryService {
+		inspectOpts = append(inspectOpts, appinspect.WithOptionalVersion())
+	}
+	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing, inspectOpts...)
 
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{jsonKey: reports})
 		return exitSuccess
 	}
-	a.printApps(reports, empty, opts.long)
+	a.printApps(reports, empty, opts.long, heading)
 	return exitSuccess
 }
 
 // printApps renders the report table. The VERSION column shows the short version
 // by default; with long set it shows the full raw version string instead.
-func (a App) printApps(reports []appinspect.Report, empty string, long bool) {
+func (a App) printApps(reports []appinspect.Report, empty string, long bool, heading string) {
 	if len(reports) == 0 {
 		fmt.Fprintf(a.Stdout, "no %s\n", empty)
 		return
 	}
 	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "APPLICATION\tVERSION\tSTATUS")
+	fmt.Fprintf(tw, "%s\tVERSION\tSTATUS\n", heading)
 	for _, r := range reports {
 		version := r.VersionShort
 		if long || version == "" {

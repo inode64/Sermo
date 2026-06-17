@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,7 +42,8 @@ type Report struct {
 }
 
 type options struct {
-	userLookup *process.UserLookup
+	userLookup      *process.UserLookup
+	versionOptional bool
 }
 
 // Option customizes application inspection.
@@ -51,6 +54,14 @@ func WithUserLookup(lookup *process.UserLookup) Option {
 	return func(o *options) { o.userLookup = lookup }
 }
 
+// WithOptionalVersion treats a failed version command as an unknown version,
+// leaving installation status based on the binary/health checks. This is useful
+// for service catalog inventory, where the service being installable matters
+// more than a distro-specific version flag.
+func WithOptionalVersion() Option {
+	return func(o *options) { o.versionOptional = true }
+}
+
 // List inspects every catalog daemon in the category. When includeMissing is
 // false only installed applications (binary present) are returned. The order
 // follows config.DaemonsInCategory, which sorts by name.
@@ -58,11 +69,10 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 	if cfg == nil {
 		return nil
 	}
-	options := inspectOptions(opts)
 	var reports []Report
 	for _, name := range cfg.DaemonsInCategory(category) {
 		resolved, _ := cfg.ResolveCatalog(category, name)
-		r := Inspect(ctx, runner, name, resolved, WithUserLookup(options.userLookup))
+		r := Inspect(ctx, runner, name, resolved, opts...)
 		if !r.Installed && !includeMissing {
 			continue
 		}
@@ -150,7 +160,7 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	}
 
 	ok, status, raw, short := runVersionProbe(ctx, runner, resolved.Tree, version)
-	if !ok && version.optional {
+	if !ok && (version.optional || options.versionOptional) {
 		r.OK = true
 		r.Status = "ok"
 		return r
@@ -250,6 +260,9 @@ func binaryPath(tree map[string]any) string {
 				return p
 			}
 		}
+		if p := firstNamespacedBinaryPath(pf); p != "" {
+			return p
+		}
 	}
 	if vars, ok := tree["variables"].(map[string]any); ok {
 		if p := cfgval.AsString(vars["binary"]); p != "" {
@@ -257,6 +270,34 @@ func binaryPath(tree map[string]any) string {
 		}
 	}
 	return config.DocumentBinary(tree)
+}
+
+func firstNamespacedBinaryPath(preflight map[string]any) string {
+	for _, prefix := range namespacedBinaryPrefixes(preflight) {
+		if bin, ok := preflight[prefix+"-binary"].(map[string]any); ok {
+			if p := cfgval.AsString(bin["path"]); p != "" {
+				return p
+			}
+		}
+	}
+	return ""
+}
+
+func namespacedBinaryPrefixes(preflight map[string]any) []string {
+	prefixes := make([]string, 0, len(preflight))
+	for key, raw := range preflight {
+		prefix, ok := strings.CutSuffix(key, "-binary")
+		if !ok || prefix == "" {
+			continue
+		}
+		entry, ok := raw.(map[string]any)
+		if !ok || cfgval.AsString(entry["type"]) != "binary" || cfgval.AsString(entry["path"]) == "" {
+			continue
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	sort.Strings(prefixes)
+	return prefixes
 }
 
 // probeCommand is a daemon's resolved app probe command and the expectations
@@ -276,6 +317,9 @@ type probeCommand struct {
 func probeCommandFor(tree map[string]any, key string) probeCommand {
 	entry := checks.ReservedCommandEntry(tree, key)
 	if entry == nil {
+		entry = namespacedReservedCommandEntry(tree, key)
+	}
+	if entry == nil {
 		return probeCommand{}
 	}
 	vc := probeCommand{argv: cfgval.StringList(entry["command"])}
@@ -286,6 +330,20 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 	vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
 	vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
 	return vc
+}
+
+func namespacedReservedCommandEntry(tree map[string]any, key string) map[string]any {
+	preflight, ok := tree["preflight"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	for _, prefix := range namespacedBinaryPrefixes(preflight) {
+		entry, ok := preflight[prefix+"-"+key].(map[string]any)
+		if ok && len(cfgval.StringList(entry["command"])) > 0 {
+			return entry
+		}
+	}
+	return nil
 }
 
 // shortVersionRE matches the first dotted numeric version in a raw version line:
