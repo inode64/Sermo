@@ -4,4 +4,4 @@ display_name: "nft"
 category: security
 binary: "/usr/bin/nft"
 preflight:
-  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

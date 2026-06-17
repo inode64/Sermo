@@ -7,5 +7,5 @@ variables:
   cups_config: /usr/bin/cups-config
 preflight:
   cups-config: { type: binary, path: "${cups_config}" }
-  health: { type: command, command: ["${cups_config}", "-h"], timeout: 10s, expect_exit: 0 }
+  health: { type: command, command: ["${cups_config}", "--help"], timeout: 10s, expect_exit: 0 }
   version: { type: command, command: ["${cups_config}", "--version"], timeout: 10s }

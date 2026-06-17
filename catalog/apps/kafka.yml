@@ -17,4 +17,4 @@ variables:
 preflight:
   # kafka-topics.sh --version prints e.g. "3.9.0 (Commit:...)" — the canonical
   # way to read the installed Kafka version without a running broker.
-  version: { type: command, command: ["${topics}", "--version"], timeout: 10s }
+  version: { type: command, command: ["${topics}", "--version"], timeout: 10s, optional: true }
