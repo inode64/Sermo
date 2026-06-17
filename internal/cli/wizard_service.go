@@ -744,28 +744,46 @@ func docsPreview(docs map[string]map[string]any) []any {
 // includes dir, ensuring that dir is in paths.includes.
 func writeServiceFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := filepath.Join(filepath.Dir(filepath.Clean(globalPath)), servicesIncludeDir)
+	files, err := planServiceFiles(targetDir, docs)
+	if err != nil {
+		return "", 0, err
+	}
 	if _, err := ensureIncludeDir(globalPath, servicesIncludeDir, targetDir); err != nil {
 		return "", 0, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return "", 0, fmt.Errorf("create %s: %w", targetDir, err)
 	}
-	n := 0
-	for name, doc := range docs {
+	for _, file := range files {
+		if err := os.WriteFile(file.path, file.data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return "", 0, fmt.Errorf("write %s: %w", file.path, err)
+		}
+	}
+	return targetDir, len(files), nil
+}
+
+type plannedServiceFile struct {
+	path string
+	data []byte
+}
+
+func planServiceFiles(targetDir string, docs map[string]map[string]any) ([]plannedServiceFile, error) {
+	files := make([]plannedServiceFile, 0, len(docs))
+	for _, name := range slices.Sorted(maps.Keys(docs)) {
+		doc := docs[name]
 		file := filepath.Join(targetDir, watchConfigFileName(name))
-		if pathExists(file) {
-			return "", 0, fmt.Errorf("service file %s already exists; not overwriting", file)
+		if _, err := os.Stat(file); err == nil {
+			return nil, fmt.Errorf("service file %s already exists; not overwriting", file)
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat %s: %w", file, err)
 		}
 		data, err := yaml.Marshal(doc)
 		if err != nil {
-			return "", 0, fmt.Errorf("render %s: %w", file, err)
+			return nil, fmt.Errorf("render %s: %w", file, err)
 		}
-		if err := os.WriteFile(file, data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return "", 0, fmt.Errorf("write %s: %w", file, err)
-		}
-		n++
+		files = append(files, plannedServiceFile{path: file, data: data})
 	}
-	return targetDir, n, nil
+	return files, nil
 }
 
 func serviceNameSet(cfg *config.Config) map[string]struct{} {
