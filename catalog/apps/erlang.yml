@@ -3,8 +3,6 @@ name: erlang
 display_name: "Erlang/OTP"
 category: messaging
 description: "Erlang runtime (BEAM VM)"
-variables:
-  binary: "/usr/bin/erl"
+binary: "/usr/bin/erl"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-version"], timeout: 10s }

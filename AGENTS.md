@@ -176,6 +176,22 @@ or `cfgval`) or a named, documented constant. Magic duration literals in
 application logic are forbidden. Short literals are acceptable in tests when
 they bound the test itself rather than production behavior.
 
+## Daemon performance discipline
+
+Treat every code path that runs inside `sermod` as performance-sensitive:
+workers, checks, watches, rule evaluation, process discovery, metrics sampling,
+state persistence, web-backend refreshes and reload/rebuild paths all affect the
+long-running daemon. Optimize these paths for speed and bounded resource use
+before adding convenience work. Prefer cached or shared samples over repeated
+host scans in the same cycle, avoid avoidable allocations and sorting in hot
+loops, keep blocking work out of scheduler-critical sections, and make expensive
+operations explicit, rate-limited or interval-bound.
+
+When a new feature adds daemon-cycle work, review its cost at normal fleet scale
+and add tests or benchmarks when the cost is non-obvious. A small inefficiency in
+one service/watch can be multiplied by every configured target and degrade
+monitoring latency, web responsiveness and remediation timing.
+
 ## Small-change checklist
 
 Before finishing any code change:
@@ -188,6 +204,8 @@ Before finishing any code change:
 - Preserve public YAML, JSON, CLI and web field names unless the change is
   explicitly a migration.
 - Add or move tests when a bug or ambiguous behavior is found.
+- For daemon-facing changes, check the runtime cost in the steady-state cycle
+  and avoid repeated scans, blocking calls or avoidable allocations on hot paths.
 - Update docs and examples in the same change when behavior changes.
 
 ## Web UI cohesion

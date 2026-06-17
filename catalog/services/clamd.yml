@@ -7,7 +7,15 @@ apps: [clamd]
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
-pidfile: /run/clamav/clamd.pid
+variables:
+  pidfile: /run/clamav/clamd.pid
+
+os:
+  gentoo:
+    variables:
+      pidfile: /run/clamd.pid
+
+pidfile: "${pidfile}"
 
 checks:
   service: { type: service, expect: active }

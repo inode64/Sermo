@@ -1,0 +1,11 @@
+kind: daemon
+name: virtnetworkd
+display_name: "libvirt Network Daemon"
+category: virtualization
+description: "Modular libvirt daemon for virtual network management."
+service:
+  systemd: [virtnetworkd]
+apps: [virtnetworkd]
+
+checks:
+  service: { type: service, expect: active }

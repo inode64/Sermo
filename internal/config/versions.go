@@ -78,7 +78,7 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl, kind)
 		source := c.versionDiscoverySource(body, *tok, kind)
-		values := materializedVersionValues(source.path, source.options, *tok)
+		values := materializedVersionValues(source.paths, source.options, *tok)
 		for _, value := range values {
 			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind)
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
@@ -91,17 +91,29 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 	}
 }
 
-func materializedVersionValues(discoverPath string, options map[string]any, tok tmplToken) []string {
-	values := discoverVersions(discoverPath, tok)
-	if versionUnversionedEnabled(options, tok) && unversionedVersionExists(discoverPath, tok) {
-		values = append(values, "")
+func materializedVersionValues(discoverPaths []string, options map[string]any, tok tmplToken) []string {
+	seen := map[string]bool{}
+	var values []string
+	for _, discoverPath := range discoverPaths {
+		for _, value := range discoverVersions(discoverPath, tok) {
+			if !seen[value] {
+				seen[value] = true
+				values = append(values, value)
+			}
+		}
+		if versionUnversionedEnabled(options, tok) && unversionedVersionExists(discoverPath, tok) && !seen[""] {
+			seen[""] = true
+			values = append(values, "")
+		}
+	}
+	if len(values) > 0 {
 		sort.Strings(values)
 	}
 	return values
 }
 
 type versionDiscovery struct {
-	path    string
+	paths   []string
 	options map[string]any
 }
 
@@ -112,7 +124,7 @@ type versionDiscovery struct {
 // template, and that app owns the installed-version source.
 func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind string) versionDiscovery {
 	if kind != kindDaemon {
-		return versionDiscovery{path: directVersionDiscoverySource(body), options: body}
+		return versionDiscovery{paths: directVersionDiscoverySources(body), options: body}
 	}
 	for _, name := range cfgval.StringList(body["apps"]) {
 		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
@@ -120,21 +132,30 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 			continue
 		}
 		appBody := stripMeta(doc.Body)
-		source := directVersionDiscoverySource(appBody)
-		if strings.Contains(source, tok.marker()) {
-			return versionDiscovery{path: source, options: appBody}
+		sources := directVersionDiscoverySources(appBody)
+		if anyContains(sources, tok.marker()) {
+			return versionDiscovery{paths: sources, options: appBody}
 		}
 	}
 	return versionDiscovery{options: body}
 }
 
-func directVersionDiscoverySource(body map[string]any) string {
+func directVersionDiscoverySources(body map[string]any) []string {
 	if v, ok := body["versions"].(map[string]any); ok {
 		if from := cfgval.String(v["from"]); from != "" {
-			return from
+			return []string{from}
 		}
 	}
-	return daemonBinary(body)
+	return documentBinaryCandidates(body)
+}
+
+func anyContains(values []string, marker string) bool {
+	for _, value := range values {
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func linkedAppTemplateName(name string, tok tmplToken) string {
@@ -187,12 +208,9 @@ func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	return body
 }
 
-// daemonBinary returns the raw (unexpanded) `binary` variable of a daemon body.
+// daemonBinary returns the raw (unexpanded) binary path of a daemon body.
 func daemonBinary(body map[string]any) string {
-	if vars, ok := body["variables"].(map[string]any); ok {
-		return cfgval.String(vars["binary"])
-	}
-	return ""
+	return DocumentBinary(body)
 }
 
 // discoverVersions globs the discovery path with the token's `${...}` replaced by

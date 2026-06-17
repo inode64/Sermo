@@ -1,0 +1,11 @@
+kind: daemon
+name: pmie
+display_name: "PCP Inference Engine"
+category: observability
+description: "Performance Co-Pilot inference engine daemon."
+service:
+  systemd: [pmie]
+apps: [pmie]
+
+checks:
+  service: { type: service, expect: active }

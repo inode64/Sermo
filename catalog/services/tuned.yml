@@ -1,0 +1,12 @@
+kind: daemon
+name: tuned
+display_name: "TuneD"
+category: system
+description: "Dynamic system tuning daemon."
+service:
+  systemd: [tuned]
+  openrc: [tuned]
+apps: [tuned]
+
+checks:
+  service: { type: service, expect: active }

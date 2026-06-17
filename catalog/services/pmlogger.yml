@@ -1,0 +1,11 @@
+kind: daemon
+name: pmlogger
+display_name: "PCP Archive Logger"
+category: observability
+description: "Performance Co-Pilot primary archive logger."
+service:
+  systemd: [pmlogger]
+apps: [pmlogger]
+
+checks:
+  service: { type: service, expect: active }

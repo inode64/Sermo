@@ -163,8 +163,8 @@ func TestCertFileFormats(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeTemp(t, tc.name, tc.gen(t))
 			res := certForPath(path).Run(context.Background())
-			if res.OK {
-				t.Fatalf("healthy %s should not alert: %q", tc.name, res.Message)
+			if !res.OK {
+				t.Fatalf("healthy %s should pass: %q", tc.name, res.Message)
 			}
 			if got := res.Data["kind"]; got != tc.wantKind {
 				t.Errorf("kind = %v, want %v", got, tc.wantKind)
@@ -188,16 +188,16 @@ func TestCertFileFormats(t *testing.T) {
 
 func TestCertFileMissingIsAlert(t *testing.T) {
 	res := certForPath(filepath.Join(t.TempDir(), "nope.pem")).Run(context.Background())
-	if !res.OK {
-		t.Fatalf("a missing file must alert: %q", res.Message)
+	if res.OK {
+		t.Fatalf("a missing file must fail: %q", res.Message)
 	}
 }
 
 func TestCertFileGarbageIsAlert(t *testing.T) {
 	path := writeTemp(t, "garbage", []byte("not a certificate or key\n"))
 	res := certForPath(path).Run(context.Background())
-	if !res.OK {
-		t.Fatalf("unparseable material must alert: %q", res.Message)
+	if res.OK {
+		t.Fatalf("unparseable material must fail: %q", res.Message)
 	}
 }
 

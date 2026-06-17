@@ -11,6 +11,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
@@ -100,8 +101,12 @@ var measuredCheckTypes = map[string]bool{"tcp": true, "ports": true, "http": tru
 
 // Deps are the host capabilities the daemon wires into each worker.
 type Deps struct {
-	Backend          servicemgr.Backend
-	Manager          servicemgr.Manager
+	Backend servicemgr.Backend
+	Manager servicemgr.Manager
+	// BackendPIDs reports backend-owned process roots for the resolved service
+	// (systemd cgroup PIDs, Docker container init PID, etc.). Optional: nil lets
+	// the runtime derive init-backend PIDs when that is supported.
+	BackendPIDs      func() []int
 	Runtime          string
 	DefaultTimeout   time.Duration
 	OperationTimeout time.Duration
@@ -129,6 +134,12 @@ type Deps struct {
 	// ProcSampler lists matching processes and their counters for `process`
 	// watches. Optional: nil uses the host /proc.
 	ProcSampler ProcSampler
+	// ProcReader is the shared /proc identity source for service discovery. A
+	// *process.CachingReader lets concurrent workers (and web runtime queries)
+	// within one cycle share a single /proc walk instead of each scanning every
+	// PID, cutting discovery from O(services × processes) to O(processes).
+	// Optional: nil makes each discoverer read /proc directly.
+	ProcReader process.Reader
 	// DiskUsage reports filesystem usage for storage checks and web watch summaries.
 	// Optional: nil uses statfs.
 	DiskUsage checks.DiskUsageFunc
@@ -255,14 +266,18 @@ func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) (
 			warnings = append(warnings, w)
 		}
 
-		base := config.ServiceUnit(resolved.Tree, name)
-		candidates, trust := config.ServiceCandidates(resolved.Tree, string(deps.Backend), name)
-		unit, err := resolver.Resolve(context.Background(), deps.Backend, candidates, trust)
-		if err != nil {
-			warnings = append(warnings, "service "+name+": "+err.Error()+" (using "+base+")")
-			unit = base
+		target, warn := control.ResolveWithFallback(context.Background(), name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+		if warn != "" {
+			warnings = append(warnings, "service "+name+": "+warn)
 		}
-		w, warns := buildWorker(name, unit, resolved.Tree, deps, collector)
+		if target.Unit == "" {
+			continue
+		}
+		serviceDeps := deps
+		serviceDeps.Backend = target.Backend
+		serviceDeps.Manager = target.Manager
+		serviceDeps.BackendPIDs = target.BackendPIDs
+		w, warns := buildWorker(name, target.Unit, resolved.Tree, serviceDeps, collector)
 		for _, x := range warns {
 			warnings = append(warnings, "service "+name+": "+x)
 		}
@@ -832,6 +847,9 @@ func liveSampler(service string, lc *metrics.Collector, live *LiveMetrics, servi
 			cur.CPU = sc.CPU.Percent
 			cur.CPUThread = sc.CPUThread.Percent
 			cur.HasCPU = true
+		}
+		if started, ok := oldestPIDStart(pidList, lc.Reader, at); ok {
+			cur.StartedAt, cur.Uptime, cur.UptimeSeconds = serviceRuntimeUptime(started, at)
 		}
 		serviceMetrics.Record(service, cur)
 	}

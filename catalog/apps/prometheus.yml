@@ -2,8 +2,6 @@ kind: app
 name: prometheus
 display_name: "Prometheus"
 category: observability
-variables:
-  binary: /usr/bin/prometheus
+binary: /usr/bin/prometheus
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

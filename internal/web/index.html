@@ -111,6 +111,7 @@
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
   .state-disabled, .state-stopped, .state-unmonitorized { color: var(--text-2); }
   .state-running { color: var(--info); }
+  .state-paused { color: var(--warn); }
   .state-warning { color: var(--warn); }
   .state-ok, .state-monitorized { color: var(--ok); }
   .state-failed { color: var(--crit); }
@@ -415,6 +416,7 @@
       <button data-f="all" class="f-active">all</button>
       <button data-f="disabled">disabled</button>
       <button data-f="running">running</button>
+      <button data-f="paused">paused</button>
       <button data-f="stopped">stopped</button>
       <button data-f="unmonitorized">unmonitorized</button>
       <button data-f="monitorized">monitorized</button>
@@ -511,7 +513,6 @@
     <input id="event-status" type="text" placeholder="status">
     <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
     <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
-    <button id="event-apply">apply</button>
     <button id="event-clear">clear</button>
     <span id="event-count" class="muted"></span>
   </div>
@@ -651,29 +652,24 @@ async function loadMe() {
   }
 }
 
-async function loadReady() {
+// renderReadyBanner shows or hides the startup/shutdown banner from an already-
+// fetched /readyz payload (load() fetches it once with the rest of the dashboard).
+function renderReadyBanner(ready) {
   const el = $("#ready");
-  try {
-    const res = await fetch("readyz?verbose");
-    const body = await res.json();
-    latestReady = body;
-    if (body.ready) {
-      el.style.display = "none";
-      el.textContent = "";
-      renderAttention();
-      return;
-    }
-    const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
-    const msg = body.message ? " — " + esc(body.message) : "";
-    const counts = (body.services != null)
-      ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
-      : "";
-    el.style.display = "block";
-    el.innerHTML = `<span class="inactive">${esc(label)}</span>${msg}${counts}`;
-    renderAttention();
-  } catch (e) {
+  if (!el) return;
+  const body = ready || {};
+  if (body.ready) {
     el.style.display = "none";
+    el.textContent = "";
+    return;
   }
+  const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
+  const msg = body.message ? " — " + esc(body.message) : "";
+  const counts = (body.services != null)
+    ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
+    : "";
+  el.style.display = "block";
+  el.innerHTML = `<span class="inactive">${esc(label)}</span>${msg}${counts}`;
 }
 
 // Connection state: when a fetch fails the table is dimmed and a "disconnected,
@@ -689,9 +685,11 @@ function showDisconnected() {
 
 // load refreshes every panel in one parallel burst: the services fetch is the
 // connection signal (failure dims the page), every other endpoint degrades
-// independently to "keep the last render" on a transient error.
+// independently to "keep the last render" on a transient error. Status-line and
+// overview inputs (readyz, livez, monitoring, ops, host) share the same burst so
+// renderStatus does not re-fetch locks, daemon or ops that load() already has.
 async function load() {
-  const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity] = await Promise.all([
+  const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
     getJSON("api/watches", null),       // host watches (visible even when services=0)
     getJSON("api/applications", null),  // installed applications
@@ -700,6 +698,11 @@ async function load() {
     getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null),
     getJSON("api/locks", null),         // global runtime locks (active and stale)
     getJSON("api/activity", null),      // quick activity summary
+    getJSON("readyz?verbose", {}),
+    getJSON("livez?verbose", {}),
+    getJSON("api/monitoring", {}),
+    getJSON("api/ops", {}),
+    getJSON("api/host", []),
   ]);
   if (services) {
     render(services);
@@ -719,12 +722,19 @@ async function load() {
   if (locks) renderLocks(locks);
   if (activity) renderActivity(activity);
 
-  // Always-visible status (counts, uptime, backend, ready state).
-  renderStatus();
+  renderStatus({
+    ready,
+    live,
+    mon,
+    ops,
+    locks: locks || latestLocks,
+    daemon: daemon || {},
+    hostMetrics: hostMetrics || [],
+  });
+  renderReadyBanner(ready);
+  renderOpsPanel(ops);
 
-  loadReady();
   loadEvents();
-  loadOps();
 
   lastRefresh = Date.now();
   tickRefreshAge();
@@ -753,25 +763,25 @@ async function reloadConfig() {
   }
 }
 
-async function loadOps() {
-  try {
-    const res = await fetch("api/ops");
-    if (!res.ok) return;
-    const o = await res.json();
-    liveOpsSlots = o;
-    if (liveOps.size) renderOperationLive();
-    renderAttention();
-    if (!o.total) {
-      $("#ops").textContent = "";
-      return;
-    }
-    const saturated = o.in_use >= o.total;
-    const cls = saturated ? "failed" : "";
-    $("#ops").innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
-  } catch (e) {
-    $("#ops").textContent = "";
+// renderOpsPanel updates the services-panel slot summary from data load() already
+// fetched; updateLiveOps still polls /api/ops while browser-local ops are active.
+function renderOpsPanel(o) {
+  if (!o) return;
+  liveOpsSlots = o;
+  if (liveOps.size) renderOperationLive();
+  const el = $("#ops");
+  if (!el) return;
+  if (!o.total) {
+    el.textContent = "";
+    return;
   }
+  const saturated = o.in_use >= o.total;
+  const cls = saturated ? "failed" : "";
+  el.innerHTML = `Operation slots: <span class="${cls}">${o.in_use}/${o.total}</span> in use`;
 }
+
+const EVENT_FILTER_DEBOUNCE_MS = 300;
+let eventFilterTimer = null;
 
 async function loadEvents() {
   try {
@@ -793,8 +803,24 @@ async function loadEvents() {
   } catch (e) { /* keep the last feed on a transient error */ }
 }
 
+function scheduleLoadEvents() {
+  if (eventFilterTimer) clearTimeout(eventFilterTimer);
+  eventFilterTimer = setTimeout(() => {
+    eventFilterTimer = null;
+    loadEvents();
+  }, EVENT_FILTER_DEBOUNCE_MS);
+}
+
+function flushLoadEvents() {
+  if (eventFilterTimer) {
+    clearTimeout(eventFilterTimer);
+    eventFilterTimer = null;
+  }
+  loadEvents();
+}
+
 function eventFilterKey(e) {
-  if (e.key === "Enter") loadEvents();
+  if (e.key === "Enter") flushLoadEvents();
   if (e.key === "Escape") clearEventFilters();
 }
 
@@ -1055,10 +1081,12 @@ function nextRemediationCell(s) {
 // so typing or switching a filter re-renders from cache without a refetch.
 let allServices = [];
 let svcQuery = "";
-let svcStatus = "all"; // all | disabled | running | stopped | unmonitorized | monitorized | failed
+let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonitorized | monitorized | failed
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
+let svcRenderedKey = ""; // last full-render structure; enables in-place row patches
+const SVC_PATCH_MIN = 50; // patch instead of rebuilding the whole tbody from this size up
 let allWatches = [];
 let watchQuery = "";
 let watchStatus = "all"; // all | disabled | ok | monitorized | unmonitorized | failed
@@ -1066,6 +1094,9 @@ let watchType = "all";   // "all" or a specific check_type (e.g. disk, swap, htt
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
+let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
+let svcExpandRefreshTick = 0;
+const SVC_EXPAND_FULL_EVERY = 6; // rebuild expansion HTML every N refresh cycles
 let eventExpanded = new Set();
 const liveOps = new Map(); // operations started from this browser session, keyed by service
 let liveOpsTimer = null;
@@ -1080,6 +1111,7 @@ function targetStateClass(state) {
   switch (state) {
     case "disabled": return "state-disabled";
     case "running": return "state-running";
+    case "paused": return "state-paused";
     case "stopped": return "state-stopped";
     case "warning": return "state-warning";
     case "ok": return "state-ok";
@@ -1104,11 +1136,12 @@ function stateRank(state) {
     case "disabled": return 0;
     case "unmonitorized": return 1;
     case "running": return 2;
-    case "stopped": return 3;
-    case "ok": return 4;
-    case "warning": return 5;
-    case "monitorized": return 5;
-    case "failed": return 6;
+    case "paused": return 3;
+    case "stopped": return 4;
+    case "ok": return 5;
+    case "warning": return 6;
+    case "monitorized": return 6;
+    case "failed": return 7;
     default: return 5;
   }
 }
@@ -1128,11 +1161,21 @@ function isFailing(s) { return serviceState(s) === "failed"; }
 function isServiceAttention(s) {
   return serviceState(s) === "failed";
 }
+function isWatchAttention(w) {
+  return watchStateText(w) === "failed";
+}
 function openPanelTarget(target) {
   if (target === "failed-services") {
     const sec = $("#services-section");
     if (sec) sec.open = true;
     setSvcStatus("failed");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
+  if (target === "failed-watches") {
+    const sec = $("#watches-section");
+    if (sec) sec.open = true;
+    setWatchStatus("failed");
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -1166,6 +1209,15 @@ function renderAttention() {
       title: failing.length === 1 ? "1 service needs attention" : `${failing.length} services need attention`,
       detail: failing.slice(0, 4).map((s) => s.name).join(", ") + (failing.length > 4 ? ` and ${failing.length - 4} more` : ""),
       target: "failed-services",
+    });
+  }
+  const failingWatches = (allWatches || []).filter(isWatchAttention);
+  if (failingWatches.length) {
+    items.push({
+      level: "critical",
+      title: failingWatches.length === 1 ? "1 watch firing" : `${failingWatches.length} watches firing`,
+      detail: failingWatches.slice(0, 4).map((w) => displayName(w) || w.name).join(", ") + (failingWatches.length > 4 ? ` and ${failingWatches.length - 4} more` : ""),
+      target: "failed-watches",
     });
   }
   const activeLocks = (latestLocks || []).filter((l) => l.state === "active");
@@ -1244,7 +1296,7 @@ function renderAttention() {
       </button>
     `).join("")}</div>`;
 }
-function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload"; }
+function isTrackedOperation(action) { return action === "start" || action === "stop" || action === "restart" || action === "reload" || action === "resume"; }
 function serviceBusy(name) {
   const op = liveOps.get(name);
   return !!op && !op.finished;
@@ -1342,6 +1394,7 @@ function serviceMatches(s) {
     case "unmonitorized": return serviceUnmonitorized(s);
     case "disabled":
     case "running":
+    case "paused":
     case "stopped":
     case "monitorized":
     case "failed":      return serviceState(s) === svcStatus;
@@ -1423,6 +1476,7 @@ function renderFilterCounts() {
     all: s.length,
     disabled: s.filter((x) => serviceState(x) === "disabled").length,
     running: s.filter((x) => serviceState(x) === "running").length,
+    paused: s.filter((x) => serviceState(x) === "paused").length,
     stopped: s.filter((x) => serviceState(x) === "stopped").length,
     unmonitorized: s.filter(serviceUnmonitorized).length,
     monitorized: s.filter((x) => serviceState(x) === "monitorized").length,
@@ -1455,6 +1509,156 @@ function toggleAllSvcGroups() {
   renderServices();
 }
 
+// serviceRowParts builds one service's main and optional expansion <tr> HTML.
+// Shared by the full tbody rebuild and the large-fleet in-place patch path.
+function serviceRowParts(s) {
+  const st = (s.status || "unknown").toLowerCase();
+  const state = serviceState(s);
+  const category = categoryOf(s, "service");
+  const op = liveOps.get(s.name);
+  const busy = serviceBusy(s.name);
+  const busyText = op
+    ? `<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${esc(op.action)} ${esc(opStateText(op))} · ${opElapsed(op)}s${op.message ? ` <span class="muted">${esc(op.message)}</span>` : ""}</div>`
+    : "";
+  let actions;
+  if (!s.enabled) {
+    actions = '<span class="muted">disabled in config</span>';
+  } else {
+    const stopped = st === "inactive" || st === "failed";
+    const paused = st === "paused";
+    actions = me.can_act ? `
+        <button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
+        <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
+        <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
+        <button ${busy || !paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="resume">resume</button>
+        <button ${busy || st !== "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="reload">reload</button>
+        ${s.monitored
+          ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
+          : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
+      : '<span class="muted">read-only</span>';
+  }
+  const label = esc(displayName(s));
+  const key = "svc:" + s.name;
+  const open = expanded.has(key);
+  const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
+  const name = `<a class="name" data-service-expand="${esc(s.name)}">${label}</a>`;
+  const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
+  const main = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
+    <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
+    <td>${categoryBadge(category)}</td>
+    <td>${stateBadge(state)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : ""}</td>
+    <td>${serviceUptimeCell(s)}</td>
+    <td>${serviceCpuCell(s)}</td>
+    <td>${serviceMemCell(s)}</td>
+    <td>${serviceIoCell(s)}</td>
+    <td class="actions">${actions}</td>
+  </tr>`;
+  const exp = open
+    ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+    : "";
+  return { main, exp };
+}
+
+function serviceRowHTML(s) {
+  const parts = serviceRowParts(s);
+  return parts.main + parts.exp;
+}
+
+// svcRenderedStructure fingerprints the tbody layout (filters, order, groups,
+// expansions). When it is unchanged, large fleets can patch row cells in place
+// instead of replacing every <tr> on each auto-refresh.
+function svcRenderedStructure(list) {
+  const parts = [
+    svcGrouped ? "1" : "0",
+    svcQuery,
+    svcStatus,
+    svcCategory,
+    svcSort.key,
+    String(svcSort.dir),
+    [...svcCollapsedGroups].sort().join("\0"),
+  ];
+  const entries = [];
+  if (!list.length) {
+    entries.push((allServices || []).length ? "nomatch" : "none");
+  } else if (svcGrouped) {
+    const dir = svcSort.key === "category" && svcSort.dir === -1 ? -1 : 1;
+    const groups = new Map();
+    list.forEach((item) => {
+      const category = categoryOf(item, "service");
+      if (!groups.has(category)) groups.set(category, []);
+      groups.get(category).push(item);
+    });
+    Array.from(groups.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
+    ).forEach(([category, items]) => {
+      entries.push("G:" + category + (svcCollapsedGroups.has(category) ? ":c" : ":o"));
+      if (!svcCollapsedGroups.has(category)) {
+        items.forEach((s) => {
+          entries.push("S:" + s.name);
+          if (expanded.has("svc:" + s.name)) entries.push("E:" + s.name);
+        });
+      }
+    });
+  } else {
+    list.forEach((s) => {
+      entries.push("S:" + s.name);
+      if (expanded.has("svc:" + s.name)) entries.push("E:" + s.name);
+    });
+  }
+  parts.push(entries.join(","));
+  return parts.join("|");
+}
+
+function visibleSvcItems(list) {
+  if (!svcGrouped) return list;
+  const dir = svcSort.key === "category" && svcSort.dir === -1 ? -1 : 1;
+  const groups = new Map();
+  list.forEach((item) => {
+    const category = categoryOf(item, "service");
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(item);
+  });
+  const out = [];
+  Array.from(groups.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0], undefined, { numeric: true, sensitivity: "base" }) * dir
+  ).forEach(([category, items]) => {
+    if (!svcCollapsedGroups.has(category)) out.push(...items);
+  });
+  return out;
+}
+
+function patchServiceRow(s) {
+  const tr = document.getElementById("svc-row-" + s.name);
+  if (!tr) return false;
+  const parts = serviceRowParts(s);
+  const tmp = document.createElement("tbody");
+  tmp.innerHTML = parts.main;
+  const next = tmp.firstElementChild;
+  if (!next) return false;
+  tr.className = next.className;
+  tr.dataset.expKey = next.dataset.expKey || "";
+  const cells = tr.children;
+  const nextCells = next.children;
+  for (let i = 0; i < nextCells.length; i++) {
+    if (cells[i]) cells[i].innerHTML = nextCells[i].innerHTML;
+  }
+  return true;
+}
+
+function patchVisibleServiceRows(list) {
+  const tbody = $("#rows");
+  if (!tbody) return false;
+  for (const s of visibleSvcItems(list)) {
+    if (!patchServiceRow(s)) return false;
+  }
+  return true;
+}
+
+function finishSvcRender() {
+  renderAttention();
+  refreshExpandedServices();
+}
+
 // render receives fresh data on each refresh; cache it, then render through the
 // active filter. Calls with no argument re-render the cache (filter changes).
 function render(services) {
@@ -1482,60 +1686,20 @@ function renderServices() {
   updateGroupButtons("svc", svcGrouped, visibleCategories, svcCollapsedGroups, "services");
   const cnt = $("#svc-count");
   if (cnt) cnt.textContent = (svcQuery || svcStatus !== "all" || svcCategory !== "all") ? `showing ${list.length} of ${total}` : "";
-  const serviceRow = (s) => {
-    const st = (s.status || "unknown").toLowerCase();
-    const state = serviceState(s);
-    const category = categoryOf(s, "service");
-    const op = liveOps.get(s.name);
-    const busy = serviceBusy(s.name);
-    const busyText = op
-      ? `<div class="${op.finished ? (op.ok ? 'ok' : 'bad') : 'inactive'}" style="margin-left:1.15rem">${esc(op.action)} ${esc(opStateText(op))} · ${opElapsed(op)}s${op.message ? ` <span class="muted">${esc(op.message)}</span>` : ""}</div>`
-      : "";
-    let actions;
-    if (!s.enabled) {
-      actions = '<span class="muted">disabled in config</span>';
-    } else {
-      const stopped = st === "inactive" || st === "failed";
-      actions = me.can_act ? `
-          <button ${busy || st === "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
-          <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
-          <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
-          <button ${busy || st !== "active" ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="reload">reload</button>
-          ${s.monitored
-            ? `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="unmonitor">unmonitor</button>`
-            : `<button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="monitor">monitor</button>`}`
-        : '<span class="muted">read-only</span>';
-    }
-    const label = esc(displayName(s));
-    const key = "svc:" + s.name;
-    const open = expanded.has(key);
-    const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const name = `<a class="name" data-service-expand="${esc(s.name)}">${label}</a>`;
-    const rowClass = state === "failed" ? "row-failing" : (state === "warning" ? "row-warning" : "");
-    const row = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
-      <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
-      <td>${categoryBadge(category)}</td>
-      <td>${stateBadge(state)}${state === "running" || state === "stopped" ? monitorHint(s) : ""}</td>
-      <td>${serviceUptimeCell(s)}</td>
-      <td>${serviceCpuCell(s)}</td>
-      <td>${serviceMemCell(s)}</td>
-      <td>${serviceIoCell(s)}</td>
-      <td class="actions">${actions}</td>
-    </tr>`;
-    const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="8">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
-      : "";
-    return row + expRow;
-  };
+  const structKey = svcRenderedStructure(list);
+  if (list.length >= SVC_PATCH_MIN && structKey === svcRenderedKey && patchVisibleServiceRows(list)) {
+    finishSvcRender();
+    return;
+  }
   const rows = svcGrouped
-    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 8, serviceRow, svcSort.key === "category" ? svcSort.dir : 1)
-    : list.map(serviceRow).join("");
+    ? renderGroupedRows(list, svcCollapsedGroups, "svc", "service", 8, serviceRowHTML, svcSort.key === "category" ? svcSort.dir : 1)
+    : list.map(serviceRowHTML).join("");
   const empty = (allServices || []).length
     ? `<tr><td colspan="8" class="muted">No services match the filter.</td></tr>`
     : `<tr><td colspan="8" class="muted">No services.</td></tr>`;
   $("#rows").innerHTML = rows || empty;
-  renderAttention();
-  expanded.forEach((k) => { if (k.startsWith("svc:")) loadExpansionFor(k); });
+  svcRenderedKey = structKey;
+  finishSvcRender();
 }
 
 // toggleExpand / loadExpansionFor drive inline expansion, shared by services and
@@ -1543,7 +1707,9 @@ function renderServices() {
 // "wat:<name>" (watch config + recent activity).
 function toggleExpand(key) {
   if (expanded.has(key)) {
-    expanded.delete(key); delete expCache[key];
+    expanded.delete(key);
+    delete expCache[key];
+    delete expDetailCache[key];
     if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
   } else {
     expanded.add(key);
@@ -1572,9 +1738,52 @@ function toggleServiceExpansion(name) {
 }
 
 function refreshExpandedServiceDetails() {
-  expanded.forEach((key) => {
-    if (key.startsWith("svc:")) loadExpansionFor(key);
+  refreshExpandedServices({ metricsOnly: true });
+}
+
+// refreshExpandedServices reloads open expansions on each dashboard refresh.
+// Service expansions skip the full HTML rebuild on most cycles (charts and
+// events are refreshed via hydrateServiceDetail only); a full renderServiceDetail
+// pass runs every SVC_EXPAND_FULL_EVERY cycles or when the cache is empty.
+// Skipped while the tab is hidden unless opts.force is set.
+function refreshExpandedServices(opts = {}) {
+  if (document.hidden && !opts.force) return;
+  if (opts.metricsOnly) {
+    expanded.forEach((k) => {
+      if (!k.startsWith("svc:")) return;
+      const detail = expDetailCache[k];
+      if (detail) hydrateServiceDetail(detail);
+    });
+    return;
+  }
+  const forceFull = !!opts.forceFull;
+  svcExpandRefreshTick++;
+  const periodicFull = forceFull || (svcExpandRefreshTick % SVC_EXPAND_FULL_EVERY === 0);
+  expanded.forEach((k) => {
+    if (k.startsWith("wat:")) {
+      loadExpansionFor(k);
+      return;
+    }
+    if (!k.startsWith("svc:")) return;
+    if (!expCache[k] || periodicFull) {
+      loadExpansionFor(k);
+      return;
+    }
+    refreshServiceExpansionLight(k);
   });
+}
+
+async function refreshServiceExpansionLight(key) {
+  const name = key.slice(4);
+  const tr = [...document.querySelectorAll("tr.exp-row")].find((r) => r.dataset.exp === key);
+  if (!tr) return;
+  try {
+    const res = await fetch(`api/services/${encodeURIComponent(name)}`);
+    if (!res.ok) return;
+    const detailData = await res.json();
+    expDetailCache[key] = detailData;
+    hydrateServiceDetail(detailData);
+  } catch (_) { /* keep charts/events on a transient error */ }
 }
 
 // applyHash opens/scrolls to the service named in a #svc:<name> URL fragment, so a
@@ -1610,6 +1819,7 @@ async function loadExpansionFor(key) {
       const res = await fetch(`api/services/${encodeURIComponent(name)}`);
       if (!res.ok) return;
       detailData = await res.json();
+      expDetailCache[key] = detailData;
       html = renderServiceDetail(detailData);
     } else if (key.startsWith("wat:")) {
       const name = key.slice(4);
@@ -1748,7 +1958,7 @@ function serviceIoCell(s) {
 function slaWindowLabel(window) {
   switch (window) {
     case "hour": return "1h";
-    case "day": return "24h";
+    case "day": return "1d";
     case "week": return "7d";
     case "month": return "30d";
     case "year": return "1y";
@@ -1769,7 +1979,7 @@ function renderSLAWindows(wins, compact) {
   const rows = wins.map((w) => {
     const pct = w.ratio == null ? null : Number(w.ratio) * 100;
     const label = esc(slaWindowLabel(w.window));
-    const pctText = pct == null ? "n/a" : fmtNum(pct, 2) + "%";
+    const pctText = pct == null ? "—" : fmtNum(pct, 2) + "%";
     const count = `${Number(w.up || 0)}/${Number(w.total || 0)}`;
     const title = `${label} · ${pctText} · ${count}`;
     const track = Array.isArray(w.segments) && w.segments.length
@@ -2197,7 +2407,10 @@ function fmtUptime(sec) {
 }
 
 function fmtBytes(n) {
-  n = Number(n) || 0;
+  n = Number(n);
+  // Guard non-finite/negative inputs (e.g. an inconsistent backend counter):
+  // dividing a negative repeatedly would otherwise render nonsense like "-1 KB".
+  if (!Number.isFinite(n) || n < 0) return "0 B";
   const u = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
   while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
@@ -2243,7 +2456,7 @@ function usageBar(pct, label) {
   const p = pctClamp(pct);
   const used = fmtPct(p);
   const freeLabel = fmtPct(100 - p);
-  return usageBarSpan(p, "", label != null ? label : `${used} used`, `${used} used · ${freeLabel} free`, ` aria-label="${used} used, ${freeLabel} free"`);
+  return usageBarSpan(p, "", label != null ? label : used, `${used} used · ${freeLabel} free`, ` aria-label="${used} used, ${freeLabel} free"`);
 }
 
 // usageBarMini is the compact bar used inside dense tables (the process list).
@@ -2282,14 +2495,17 @@ function cpuTotalsLine(pt) {
   return ` · cpu <b>${fmtPct(machine)}</b> ${machineBar}`;
 }
 
+// diskUsedPct returns the used percentage 0..100, or null when the volume
+// reports no usable figures — so callers render "—" instead of a misleading
+// 0% (empty/healthy-looking) bar for missing data.
 function diskUsedPct(d) {
-  if (!d) return 0;
+  if (!d) return null;
   const used = Number(d.used_bytes);
   const total = Number(d.total_bytes);
   if (Number.isFinite(used) && Number.isFinite(total) && total > 0) return pctClamp((used / total) * 100);
   const free = Number(d.free_bytes);
   if (Number.isFinite(free) && Number.isFinite(total) && total > 0) return pctClamp(((total - free) / total) * 100);
-  return pctClamp(d.used_pct);
+  return Number.isFinite(Number(d.used_pct)) ? pctClamp(d.used_pct) : null;
 }
 
 function notifierNames(w) {
@@ -2375,10 +2591,11 @@ function watchSummaryCell(w) {
       return `<span class="bad">${esc(d.path || "")}: ${esc(d.sample_error)}</span>`;
     }
     const fs = d.filesystem ? ` · ${esc(d.filesystem)}` : "";
-    const mount = d.mount_point ? ` · ${esc(d.mount_point)}` : "";
+    const mount = d.mount_point && d.mount_point !== d.path ? ` · ${esc(d.mount_point)}` : "";
     const usedPct = diskUsedPct(d);
+    const bar = usedPct == null ? '<span class="muted">—</span>' : usageBar(usedPct);
     return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
-      <div>${usageBar(usedPct)} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
+      <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
   }
   return w.summary ? esc(w.summary) : "—";
 }
@@ -2444,7 +2661,7 @@ function watchSummaryText(w) {
       d.sample_error,
       d.mount_sample_error,
       d.free_bytes != null ? fmtBytes(d.free_bytes) + " free" : "",
-      fmtPct(diskUsedPct(d)) + " used",
+      diskUsedPct(d) == null ? "" : fmtPct(diskUsedPct(d)) + " used",
     ].filter(Boolean).join(" ");
   }
   const parts = meterParts(w.meter);
@@ -2607,7 +2824,7 @@ function renderDiskWatch(d) {
     ? (d.options || []).map((o) => `<code>${esc(o)}</code>`).join(" ")
     : '<span class="muted">none</span>';
   const inodes = d.inodes_total
-    ? `${(Number(d.inodes_total) - Number(d.inodes_free || 0)).toLocaleString()} used / ${Number(d.inodes_total).toLocaleString()} total (${fmtPct(d.inodes_used_pct)} used, ${fmtPct(d.inodes_free_pct)} free)`
+    ? `${(Number(d.inodes_total) - Number(d.inodes_free || 0)).toLocaleString()} used / ${Number(d.inodes_total).toLocaleString()} total (${fmtPct(d.inodes_used_pct)} used)`
     : '<span class="muted">not reported</span>';
   const errors = [
     d.sample_error ? `statfs: ${d.sample_error}` : "",
@@ -2619,7 +2836,7 @@ function renderDiskWatch(d) {
     <div><span class="muted">Filesystem</span><br><code>${esc(fs)}</code></div>
     <div><span class="muted">Device</span><br>${device}</div>
     <div><span class="muted">Total</span><br><b>${fmtBytes(d.total_bytes)}</b></div>
-    <div><span class="muted">Used</span><br>${usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
+    <div><span class="muted">Used</span><br>${usedPct == null ? '<span class="muted">—</span>' : usageBar(usedPct)} <b>${fmtBytes(d.used_bytes)}</b></div>
     <div><span class="muted">Free</span><br><b>${fmtBytes(d.free_bytes)}</b> (${fmtPct(d.free_pct)})</div>
     <div><span class="muted">Inodes</span><br>${inodes}</div>
     <div><span class="muted">Options</span><br>${options}</div>
@@ -3145,8 +3362,8 @@ function renderActivity(sum) {
 }
 
 // renderOverview fills the at-a-glance tile band under the topbar: one tile per
-// vital sign, colored by health, each clickable to jump to its panel. It runs
-// from renderStatus, which already holds every input — no extra requests.
+// vital sign, colored by health, each clickable to jump to its panel. load()
+// passes the same burst snapshot into renderStatus — no extra requests here.
 function renderOverview(ctx) {
   const band = $("#overview");
   if (!band) return;
@@ -3281,21 +3498,13 @@ async function getJSON(url, dflt) {
   }
 }
 
-async function renderStatus() {
+function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
   try {
-    const [ready, live, mon, ops, locks, daemon, hostMetrics] = await Promise.all([
-      getJSON("readyz?verbose", {}),
-      getJSON("livez?verbose", {}),
-      getJSON("api/monitoring", {}),
-      getJSON("api/ops", {}),
-      getJSON("api/locks", []),
-      getJSON("api/daemon", {}),
-      getJSON("api/host", [])
-    ]);
-    latestReady = ready;
-    liveOpsSlots = ops;
+    const { ready, live, mon, ops, locks, daemon, hostMetrics } = ctx || {};
+    latestReady = ready || {};
+    liveOpsSlots = ops || liveOpsSlots;
     latestLocks = locks || [];
     latestHostMetrics = hostMetrics || [];
 
@@ -3591,7 +3800,10 @@ const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"
 
 function setMetricCheck(name, service) {
   metricCheck = name;
-  if (service) loadExpansionFor("svc:" + service);
+  const key = service ? "svc:" + service : "";
+  const detail = key ? expDetailCache[key] : null;
+  if (detail) loadMetrics(service, serviceMeasuredChecks(detail));
+  else if (service) loadExpansionFor(key);
   else refreshExpandedServiceDetails();
 }
 function setMetricWin(win) { metricWindow = win; refreshExpandedServiceDetails(); }
@@ -4041,14 +4253,14 @@ function initStaticHandlers() {
 
   ["event-service", "event-watch", "event-kind", "event-status"].forEach((id) => {
     const el = $("#" + id);
-    if (el) el.addEventListener("keydown", eventFilterKey);
+    if (!el) return;
+    el.addEventListener("input", scheduleLoadEvents);
+    el.addEventListener("keydown", eventFilterKey);
   });
   const onlyErrors = $("#event-errors");
-  if (onlyErrors) onlyErrors.addEventListener("change", loadEvents);
+  if (onlyErrors) onlyErrors.addEventListener("change", flushLoadEvents);
   const groupEvents = $("#event-group");
   if (groupEvents) groupEvents.addEventListener("change", renderGlobalEvents);
-  const eventApply = $("#event-apply");
-  if (eventApply) eventApply.addEventListener("click", loadEvents);
   const eventClear = $("#event-clear");
   if (eventClear) eventClear.addEventListener("click", clearEventFilters);
 

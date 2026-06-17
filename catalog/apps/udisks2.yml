@@ -1,0 +1,5 @@
+kind: app
+name: udisks2
+display_name: "UDisks2"
+category: storage
+binary: /usr/libexec/udisks2/udisksd

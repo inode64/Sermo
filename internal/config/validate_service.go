@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/dockerctl"
 	"sermo/internal/process"
+	"sermo/internal/virt"
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
@@ -207,6 +209,92 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 		if errMax != nil || dm < di {
 			add("policy.backoff.max must be >= initial")
 		}
+	}
+}
+
+func validateControl(tree map[string]any, add addFunc) {
+	raw, present := tree["control"]
+	if !present {
+		return
+	}
+	control, ok := raw.(map[string]any)
+	if !ok {
+		add("control must be a mapping")
+		return
+	}
+	typ := cfgval.String(control["type"])
+	switch typ {
+	case "libvirt":
+		validateControlKeys(control, set("type", "uri", "domain", "uuid", "socket", "host", "port"), "type, uri, domain, uuid, socket, host, port", add)
+		validateLibvirtControl(control, add)
+	case "docker":
+		validateControlKeys(control, set("type", "socket", "host", "port", "tls", "container"), "type, socket, host, port, tls, container", add)
+		validateDockerControl(control, add)
+	default:
+		add("control.type %q is not one of libvirt, docker", typ)
+	}
+}
+
+func validateControlKeys(control map[string]any, allowed map[string]struct{}, labels string, add addFunc) {
+	for _, key := range slices.Sorted(maps.Keys(control)) {
+		if _, ok := allowed[key]; !ok {
+			add("control key %q is not one of %s", key, labels)
+		}
+	}
+}
+
+func validateLibvirtControl(control map[string]any, add addFunc) {
+	if domain := cfgval.String(control["domain"]); domain == "" {
+		add("control.domain is required for libvirt")
+	}
+	if uri := cfgval.String(control["uri"]); uri != "" && strings.TrimSpace(uri) == "" {
+		add("control.uri must not be blank")
+	}
+	if uuid := cfgval.String(control["uuid"]); uuid != "" {
+		if _, err := virt.ParseUUID(uuid); err != nil {
+			add("control.uuid %q must be a canonical UUID or 32 hex digits", uuid)
+		}
+	}
+	if socket := cfgval.String(control["socket"]); socket != "" && !virt.ValidSocketPath(socket) {
+		add("control.socket %q must be an absolute path", socket)
+	}
+	host := cfgval.String(control["host"])
+	if host != "" && strings.TrimSpace(host) == "" {
+		add("control.host must not be blank")
+	}
+	if host != "" && cfgval.String(control["socket"]) != "" {
+		add("control must not set both socket and host")
+	}
+	if _, present := control["port"]; present {
+		port, ok := cfgval.Int(control["port"])
+		if !ok || !virt.ValidHostPort(host, port) {
+			add("control.port must be an integer in 1..65535")
+		}
+	}
+}
+
+func validateDockerControl(control map[string]any, add addFunc) {
+	if container := cfgval.String(control["container"]); container == "" {
+		add("control.container is required for docker")
+	}
+	if socket := cfgval.String(control["socket"]); socket != "" && !filepath.IsAbs(socket) {
+		add("control.socket %q must be an absolute path", socket)
+	}
+	host := cfgval.String(control["host"])
+	if host != "" && strings.TrimSpace(host) == "" {
+		add("control.host must not be blank")
+	}
+	if host != "" && cfgval.String(control["socket"]) != "" {
+		add("control must not set both socket and host")
+	}
+	if _, present := control["port"]; present {
+		port, ok := cfgval.Int(control["port"])
+		if !ok || port < 1 || port > 65535 {
+			add("control.port must be an integer in 1..65535")
+		}
+	}
+	if !dockerctl.ValidTLSValue(control["tls"]) {
+		add("control.tls %q is not one of true, false, required, skip-verify", cfgval.String(control["tls"]))
 	}
 }
 

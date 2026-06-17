@@ -119,12 +119,27 @@ func New(c Config) Engine {
 		Preflight:        sectionRunner(tree, "preflight", deps),
 		Postflight:       sectionRunner(tree, "postflight", deps),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit),
+		ResumeFunc:       resumeClosure(c.Manager, c.Unit),
 		Discover:         discover,
 		Reaper:           reaper,
 		KillPolicy:       killPolicy,
 		Sleep:            sleep,
 		OperationTimeout: ResolveTimeout(c.OperationTimeout, tree),
 		Emit:             c.Emit,
+	}
+}
+
+type resumeManager interface {
+	Resume(ctx context.Context, service string) error
+}
+
+func resumeClosure(mgr Manager, unit string) func(context.Context) error {
+	rm, ok := mgr.(resumeManager)
+	if !ok {
+		return nil
+	}
+	return func(ctx context.Context) error {
+		return rm.Resume(ctx, unit)
 	}
 }
 

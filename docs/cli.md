@@ -26,7 +26,13 @@ sermoctl is-active SERVICE
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
+sermoctl resume SERVICE [--no-cascade]
 sermoctl reload SERVICE
+
+sermoctl mount TARGET                 # TARGET is a configured mount name or absolute path
+sermoctl umount TARGET
+sermoctl mount status TARGET
+sermoctl mount list
 
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
@@ -82,4 +88,12 @@ is not a clean false (`1`), a usage error (`64`) or a temporary block (`75`):
 I/O errors, backend not detected, an exec that could not be launched, an
 unexpected panic recovered at the top level.
 
-`is-active` maps directly: `0` active, `1` not active, `2` error.
+`is-active` maps directly: `0` active, `1` not active (including `paused`),
+`2` error.
+
+## Mounts
+
+Mount actions are fstab-backed and use `kind: mount` files from
+`/etc/sermo/mounts` by default. A path target that is not configured is still
+accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
+[mount units](configuration.md#mount-units).

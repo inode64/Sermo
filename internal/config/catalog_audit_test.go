@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -153,6 +154,60 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	}
 }
 
+func TestGentooCatalogPidfileOverrides(t *testing.T) {
+	old := detectedOS
+	detectedOS = "gentoo"
+	defer func() { detectedOS = old }()
+
+	root := repoRoot(t)
+	dir := t.TempDir()
+	enabled := filepath.Join(dir, "enabled")
+	if err := os.MkdirAll(enabled, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(dir, "sermo.yml")
+	body := "engine: { backend: openrc }\n" +
+		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"clamd", "mariadb"} {
+		svc := "kind: service\nname: " + name + "\nuses: " + name + "\n"
+		if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(svc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	tests := []struct {
+		name string
+		want []string
+	}{
+		{name: "clamd", want: []string{"/run/clamd.pid"}},
+		{name: "mariadb", want: []string{"/run/mysqld/mariadb.pid", "/run/mysqld/mysqld.pid"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, errs := cfg.Resolve(tc.name)
+			if len(errs) != 0 {
+				t.Fatalf("Resolve() errors = %v", errs)
+			}
+			proc := nested(t, resolved.Tree, "processes", "pidfile")
+			if got := cfgval.StringList(proc["path"]); !slices.Equal(got, tc.want) {
+				t.Fatalf("process pidfile = %q, want %q", got, tc.want)
+			}
+			check := nested(t, resolved.Tree, "checks", "pidfile")
+			if got := cfgval.StringList(check["path"]); !slices.Equal(got, tc.want) {
+				t.Fatalf("check pidfile = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
 	root := repoRoot(t)
 	dir := filepath.Join(root, "catalog", "apps")
@@ -257,12 +312,16 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	}
 
 	want := map[string][]string{
-		"avahi":    {"avahi", "avahi-daemon"},
-		"cups":     {"cupsd"},
-		"dbus":     {"dbus", "dbus-daemon"},
-		"fail2ban": {"fail2ban", "fail2ban-server"},
-		"keydb":    {"keydb", "keydb-server"},
-		"qemu-ga":  {"qemu-guest-agent", "qemu-ga"},
+		"automount":    {"autofs", "automount"},
+		"avahi":        {"avahi", "avahi-daemon"},
+		"cups":         {"cupsd"},
+		"dbus":         {"dbus", "dbus-daemon"},
+		"fail2ban":     {"fail2ban", "fail2ban-server"},
+		"in.tftpd":     {"in.tftpd", "in-tftpd"},
+		"keydb":        {"keydb", "keydb-server"},
+		"qemu-ga":      {"qemu-guest-agent", "qemu-ga"},
+		"rsync":        {"rsyncd", "rsync"},
+		"spamassassin": {"spamd", "spamassassin"},
 	}
 	for name, openrcCandidates := range want {
 		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
@@ -602,7 +661,7 @@ func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 			if serviceBinary != catalogBinary(appDoc) {
 				continue
 			}
-			t.Errorf("%s defines variables.binary %q already owned by app %s; use ${%s_binary} instead", name, serviceBinary, appName, appVariablePrefix(appName))
+			t.Errorf("%s defines binary %q already owned by app %s; use ${%s_binary} instead", name, serviceBinary, appName, appVariablePrefix(appName))
 			if hasVersionProbe(doc.Body) {
 				t.Errorf("%s defines a service-level version probe already owned by app %s", name, appName)
 			}
@@ -661,7 +720,7 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 			if !ok {
 				continue
 			}
-			if strings.Contains(directVersionDiscoverySource(app), tok.marker()) {
+			if anyContains(directVersionDiscoverySources(app), tok.marker()) {
 				hasLinkedDiscovery = true
 				break
 			}
@@ -727,8 +786,7 @@ func catalogBinary(doc *Document) string {
 	if doc == nil {
 		return ""
 	}
-	vars, _ := doc.Body["variables"].(map[string]any)
-	return cfgval.String(vars["binary"])
+	return DocumentBinary(doc.Body)
 }
 
 func hasVersionProbe(body map[string]any) bool {

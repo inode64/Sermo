@@ -98,8 +98,8 @@ func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) 
 	return problems, daysLeft, hasExpiry
 }
 
-// certCheck inspects TLS material. It is condition-style (OK==true means an
-// alert). The material comes from a live TLS endpoint (host) or a local file
+// certCheck inspects TLS material. It is health-style (OK==true means the
+// material is acceptable). The material comes from a live TLS endpoint (host) or a local file
 // (path); exactly one is set. A certificate alerts when it is expiring within
 // expiresInDays, already expired or not yet valid, fails chain/hostname
 // verification (verify, network only), or — between cycles — its signature
@@ -143,11 +143,11 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		// problem, so it is an alert (unlike a transient network error below).
 		data, err := os.ReadFile(c.path) //nolint:gosec // operator-configured path from check config
 		if err != nil {
-			return c.result(true, fmt.Sprintf("%s: %v", c.path, err), start)
+			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 		}
 		parsed, err := parseCertMaterial(data)
 		if err != nil {
-			return c.result(true, fmt.Sprintf("%s: %v", c.path, err), start)
+			return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
 		}
 		s = parsed
 	} else {
@@ -157,9 +157,9 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		}
 		sampled, err := sampler(ctx, c.host, c.port, c.serverName, c.verify)
 		if err != nil {
-			// Cannot retrieve the certificate (network/TLS error): not an alert
-			// here — use a tcp/http check for reachability.
-			return c.result(false, fmt.Sprintf("cert %s:%s: %v", c.host, c.port, err), start)
+			// Cannot retrieve the certificate (network/TLS error): this probe is
+			// quiet here — use a tcp/http check for reachability.
+			return c.result(true, fmt.Sprintf("cert %s:%s: %v", c.host, c.port, err), start)
 		}
 		s = sampled
 	}
@@ -172,13 +172,13 @@ func (c *certCheck) Run(ctx context.Context) Result {
 		onChange:       c.onChange,
 	}, time.Now())
 
-	ok := len(problems) > 0
+	healthy := len(problems) == 0
 	src := c.source()
 	msg := certMessage(src, s, daysLeft, hasExpiry)
-	if ok {
+	if !healthy {
 		msg = src + ": " + strings.Join(problems, "; ")
 	}
-	res := c.result(ok, msg, start)
+	res := c.result(healthy, msg, start)
 	res.Data = certData(c.source(), c.host, c.path, s, daysLeft, hasExpiry)
 	return res
 }

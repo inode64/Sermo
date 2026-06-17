@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sermo/internal/cfgval"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -227,7 +228,7 @@ func TestAppsLinkInjectsAppPreflight(t *testing.T) {
 		"catalog/apps/java.yml": `
 kind: daemon
 name: java
-variables: { binary: /usr/bin/java }
+binary: /usr/bin/java
 preflight:
   binary: { type: binary, path: "${binary}" }
   health: { type: command, command: ["${binary}", "-help"] }
@@ -237,7 +238,8 @@ preflight:
 kind: daemon
 name: tomcat
 apps: [java]
-variables: { binary: /opt/tomcat/bin/catalina.sh, port: 8080 }
+binary: /opt/tomcat/bin/catalina.sh
+variables: { port: 8080 }
 preflight:
   binary: { type: binary, path: "${binary}" }
 checks:
@@ -289,7 +291,7 @@ func TestAppsLinkAcceptsCatalogAlias(t *testing.T) {
 kind: app
 name: dbus
 catalog_aliases: [dbus-daemon]
-variables: { binary: /usr/bin/dbus-daemon }
+binary: /usr/bin/dbus-daemon
 preflight:
   binary: { type: binary, path: "${binary}" }
 `,
@@ -335,7 +337,8 @@ func TestAppsExposeNamespacedVariables(t *testing.T) {
 		"catalog/apps/cupsd.yml": `
 kind: app
 name: cupsd
-variables: { binary: /usr/sbin/cupsd, cups_config: /usr/bin/cups-config }
+binary: /usr/sbin/cupsd
+variables: { cups_config: /usr/bin/cups-config }
 preflight:
   binary: { type: binary, path: "${binary}" }
   cups-config: { type: binary, path: "${cups_config}" }
@@ -381,7 +384,8 @@ func TestSingleAppExposesDefaultVariables(t *testing.T) {
 		"catalog/apps/php-fpm.yml": `
 kind: app
 name: php-fpm
-variables: { binary: /usr/bin/php-fpm, config: /etc/php-fpm.conf }
+binary: /usr/bin/php-fpm
+variables: { config: /etc/php-fpm.conf }
 preflight:
   binary: { type: binary, path: "${binary}" }
 `,
@@ -430,7 +434,7 @@ func TestServiceVariablesOverrideAppVariables(t *testing.T) {
 		"catalog/apps/cupsd.yml": `
 kind: app
 name: cupsd
-variables: { binary: /usr/sbin/cupsd }
+binary: /usr/sbin/cupsd
 preflight:
   binary: { type: binary, path: "${binary}" }
 `,
@@ -470,7 +474,7 @@ func TestServiceVariablesOverrideSingleAppDefaults(t *testing.T) {
 		"catalog/apps/php-fpm.yml": `
 kind: app
 name: php-fpm
-variables: { binary: /usr/bin/php-fpm }
+binary: /usr/bin/php-fpm
 preflight:
   binary: { type: binary, path: "${binary}" }
 `,
@@ -478,7 +482,7 @@ preflight:
 kind: daemon
 name: php-fpm
 apps: [php-fpm]
-variables: { binary: /opt/php/sbin/php-fpm }
+binary: /opt/php/sbin/php-fpm
 preflight:
   config: { type: command, command: ["${binary}", "--test"] }
 checks:
@@ -910,43 +914,160 @@ func TestCollectVariablesFirstExistingPath(t *testing.T) {
 	// First candidate is missing, second exists: resolves to the second.
 	vars := collectVariables(map[string]any{
 		"variables": map[string]any{
-			"binary": []any{missing, present},
+			"tool": []any{missing, present},
 		},
 	})
-	if vars["binary"] != present {
-		t.Errorf("binary = %q, want first existing %q", vars["binary"], present)
+	if vars["tool"] != present {
+		t.Errorf("tool = %q, want first existing %q", vars["tool"], present)
 	}
 
 	// Stops at the first hit even when a later candidate also exists.
 	vars = collectVariables(map[string]any{
 		"variables": map[string]any{
-			"binary": []any{present, missing},
+			"tool": []any{present, missing},
 		},
 	})
-	if vars["binary"] != present {
-		t.Errorf("binary = %q, want %q", vars["binary"], present)
+	if vars["tool"] != present {
+		t.Errorf("tool = %q, want %q", vars["tool"], present)
 	}
 
 	// None exist: falls back to the first candidate so the value stays usable.
 	other := filepath.Join(dir, "also-missing")
 	vars = collectVariables(map[string]any{
 		"variables": map[string]any{
-			"binary": []any{missing, other},
+			"tool": []any{missing, other},
 		},
 	})
-	if vars["binary"] != missing {
-		t.Errorf("binary = %q, want fallback to first %q", vars["binary"], missing)
+	if vars["tool"] != missing {
+		t.Errorf("tool = %q, want fallback to first %q", vars["tool"], missing)
 	}
 
 	// A null/empty first element must not become the fallback: the value should
 	// stay a well-formed (if missing) path, not an empty string.
 	vars = collectVariables(map[string]any{
 		"variables": map[string]any{
-			"binary": []any{nil, missing},
+			"tool": []any{nil, missing},
 		},
 	})
-	if vars["binary"] != missing {
-		t.Errorf("binary = %q, want fallback to first non-empty %q", vars["binary"], missing)
+	if vars["tool"] != missing {
+		t.Errorf("tool = %q, want fallback to first non-empty %q", vars["tool"], missing)
+	}
+}
+
+func TestTopLevelBinaryDesugarsAndPrefersExecutable(t *testing.T) {
+	dir := t.TempDir()
+	notExec := filepath.Join(dir, "not-exec")
+	if err := os.WriteFile(notExec, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	execPath := filepath.Join(dir, "exec")
+	if err := os.WriteFile(execPath, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/app.yml": `
+kind: daemon
+name: app
+binary:
+  - ` + notExec + `
+  - ` + execPath + `
+checks:
+  process: { type: process, exe: "${binary}", user: root }
+`,
+		"enabled/app-main.yml": "kind: service\nname: app-main\nuses: app\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("app-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["binary"]; present {
+		t.Fatalf("top-level binary must be consumed in resolved config")
+	}
+	vars := nested(t, resolved.Tree, "variables")
+	if got := cfgval.String(vars["binary"]); got != execPath {
+		t.Fatalf("variables.binary = %q, want executable %q", got, execPath)
+	}
+	bin := nested(t, nested(t, resolved.Tree, "preflight"), "binary")
+	if got := cfgval.String(bin["path"]); got != execPath {
+		t.Fatalf("preflight.binary.path = %q, want %q", got, execPath)
+	}
+	proc := nested(t, nested(t, resolved.Tree, "checks"), "process")
+	if got := cfgval.String(proc["exe"]); got != execPath {
+		t.Fatalf("process exe = %q, want %q", got, execPath)
+	}
+}
+
+func TestTopLevelLibraryBinaryDoesNotGenerateExecutablePreflight(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/libs/libdemo.yml": `
+kind: lib
+name: libdemo
+binary: /usr/lib64/libdemo.so.1
+preflight:
+  version: { type: command, command: ["/usr/bin/strings", "${binary}"], timeout: 10s, optional: true }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryLibrary, "libdemo")
+	if len(errs) != 0 {
+		t.Fatalf("ResolveCatalog() errors = %v", errs)
+	}
+	vars := nested(t, resolved.Tree, "variables")
+	if got := cfgval.String(vars["binary"]); got != "/usr/lib64/libdemo.so.1" {
+		t.Fatalf("variables.binary = %q, want library path", got)
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	if _, present := preflight["binary"]; present {
+		t.Fatalf("library must not generate executable binary preflight: %v", preflight)
+	}
+}
+
+func TestVariableBinaryRejected(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/app.yml": `
+kind: daemon
+name: app
+variables: { binary: /usr/local/bin/app }
+`,
+		"enabled/app-main.yml": "kind: service\nname: app-main\nuses: app\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	if !hasIssue(issues, "variables.binary is not supported") {
+		t.Fatalf("Validate issues = %v, want variables.binary rejection", issues)
+	}
+}
+
+func TestPidfileRejectsRelativeCandidate(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/app.yml": `
+kind: daemon
+name: app
+pidfile: run/app.pid
+`,
+		"enabled/app-main.yml": "kind: service\nname: app-main\nuses: app\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	if !hasIssue(issues, `pidfile path "run/app.pid" must be absolute`) {
+		t.Fatalf("Validate issues = %v, want relative pidfile issue", issues)
 	}
 }
 
@@ -1515,8 +1636,7 @@ func TestOSVariableBaked(t *testing.T) {
 		"catalog/app.yml": `
 kind: daemon
 name: app
-variables:
-  binary: "/opt/${os}/bin/app"
+binary: "/opt/${os}/bin/app"
 `,
 	})
 	cfg, err := Load(global)
@@ -1546,8 +1666,7 @@ func TestArchVariableBaked(t *testing.T) {
 kind: daemon
 name: qemu
 display_name: "QEMU"
-variables:
-  binary: "/usr/bin/qemu-system-${arch}"
+binary: "/usr/bin/qemu-system-${arch}"
 preflight:
   binary: { type: binary, path: "${binary}" }
 `,
@@ -1576,7 +1695,7 @@ func TestDaemonCategoryFromDirectory(t *testing.T) {
 		"sermo.yml":              baseGlobal,
 		"catalog/nginx.yml":      "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
 		"catalog/apps/git.yml":   "kind: daemon\nname: git\nservice: { name: git }\n",
-		"catalog/libs/glibc.yml": "kind: daemon\nname: glibc\nvariables: { binary: /lib64/libc.so.6 }\n",
+		"catalog/libs/glibc.yml": "kind: daemon\nname: glibc\nbinary: /lib64/libc.so.6\n",
 	})
 	cfg, err := Load(global)
 	if err != nil {
@@ -1686,8 +1805,7 @@ func TestRestartOnChangeDesugarsToChangedRule(t *testing.T) {
 kind: daemon
 name: glibc
 display_name: "GNU C Library"
-variables:
-  binary: "/lib64/libc.so.6"
+binary: "/lib64/libc.so.6"
 `,
 		"enabled/web.yml": `
 kind: service
@@ -1841,6 +1959,35 @@ func TestDiscoverVersions(t *testing.T) {
 	}
 }
 
+func TestMaterializedVersionValuesUsesAllBinaryCandidates(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "first")
+	second := filepath.Join(root, "second")
+	for _, v := range []string{"8.2", "8.3"} {
+		dir := filepath.Join(second, "php"+v, "bin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "php-fpm"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tok := tokenFor("php-fpm%v")
+	if tok == nil {
+		t.Fatal("missing version token")
+	}
+	paths := []string{
+		filepath.Join(first, "php${version}", "bin", "php-fpm"),
+		filepath.Join(second, "php${version}", "bin", "php-fpm"),
+	}
+	got := materializedVersionValues(paths, nil, *tok)
+	want := []string{"8.2", "8.3"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("materializedVersionValues = %v, want %v", got, want)
+	}
+}
+
 // TestDaemonVersionTemplateDiscoversFromLinkedApp covers a daemon template whose
 // monitored binary is generic (no ${version}); installed versions come from the
 // linked app template, and ${version} is baked into daemon aliases.
@@ -1871,8 +2018,7 @@ name: php-fpm%%v
 display_name: "PHP-FPM ${version}"
 versions:
   from: "%s/php${version}/bin/php-fpm"
-variables:
-  binary: "%s/php${version}/bin/php-fpm"
+binary: "%s/php${version}/bin/php-fpm"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"] }
@@ -1887,8 +2033,7 @@ display_name: "PHP-FPM ${version}"
 service:
   systemd: ["php${version}-fpm"]
 apps: ["php-fpm${version}"]
-variables:
-  binary: /usr/sbin/php-fpm
+binary: /usr/sbin/php-fpm
 `
 	if err := os.WriteFile(filepath.Join(catalogDir, "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
 		t.Fatal(err)
@@ -1942,7 +2087,7 @@ func TestDaemonVersionTemplateRequiresLinkedAppDiscovery(t *testing.T) {
 		"catalog/services/worker%v.yml": fmt.Sprintf(`
 kind: daemon
 name: worker%%v
-variables: { binary: "%s/worker${version}" }
+binary: "%s/worker${version}"
 checks: { service: { type: service, expect: active } }
 `, bin),
 	}))
@@ -1981,7 +2126,7 @@ func TestTomcatVersionTemplateLinksMaterializedApp(t *testing.T) {
 	write(filepath.Join(catalogDir, "apps"), "java.yml", `
 kind: app
 name: java
-variables: { binary: /usr/bin/java }
+binary: /usr/bin/java
 preflight:
   binary: { type: binary, path: "${binary}" }
 `)
@@ -1989,8 +2134,7 @@ preflight:
 kind: app
 name: tomcat-%%v
 display_name: "Apache Tomcat ${version}"
-variables:
-  binary: %q
+binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
@@ -2082,8 +2226,7 @@ func TestVersionTemplateServiceLinksMaterializedApp(t *testing.T) {
 kind: app
 name: postgres-%%v
 display_name: "PostgreSQL ${version}"
-variables:
-  binary: %q
+binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
@@ -2172,7 +2315,7 @@ func TestVersionTemplateDiscoversFromLinkedAppTemplate(t *testing.T) {
 kind: app
 name: php-fpm%%v
 display_name: "PHP-FPM ${version}"
-variables: { binary: "%s/php-fpm${version}" }
+binary: "%s/php-fpm${version}"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"] }
@@ -2255,7 +2398,7 @@ kind: app
 name: python%%n
 display_name: "Python ${n}"
 description: "Python runtime ${n}"
-variables: { binary: "%s/python${n}" }
+binary: "%s/python${n}"
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, bin)), 0o644); err != nil {
@@ -2266,7 +2409,7 @@ kind: app
 name: php%%v
 display_name: "PHP ${version}"
 description: "PHP runtime ${version}"
-variables: { binary: "%s/php${version}" }
+binary: "%s/php${version}"
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, bin)), 0o644); err != nil {
@@ -2345,7 +2488,7 @@ func TestVersionTemplateUnversionedRequiresBinary(t *testing.T) {
 kind: app
 name: python%%n
 display_name: "Python ${n}"
-variables: { binary: "%s/python${n}" }
+binary: "%s/python${n}"
 `, bin),
 	}))
 	if err != nil {
@@ -2379,7 +2522,7 @@ name: php%%v
 display_name: "PHP ${version}"
 versions:
   unversioned: false
-variables: { binary: "%s/php${version}" }
+binary: "%s/php${version}"
 `, bin),
 	}))
 	if err != nil {
@@ -2414,7 +2557,7 @@ versions:
   unversioned:
     display_name: "System PHP"
     description: "Default PHP interpreter"
-variables: { binary: "%s/php${version}" }
+binary: "%s/php${version}"
 `, bin),
 	}))
 	if err != nil {
@@ -2448,13 +2591,13 @@ func TestVersionTemplateSkipsExistingCanonicalName(t *testing.T) {
 kind: app
 name: python%%n
 display_name: "Python ${n}"
-variables: { binary: "%s/python${n}" }
+binary: "%s/python${n}"
 `, bin),
 		"catalog/apps/python3.yml": fmt.Sprintf(`
 kind: app
 name: python3
 display_name: "Python Three"
-variables: { binary: "%s/python3" }
+binary: "%s/python3"
 `, bin),
 	}))
 	if err != nil {
@@ -2508,7 +2651,7 @@ name: openvpn-%%i
 display_name: "OpenVPN ${instance}"
 versions:
   from: "%s/openvpn.${instance}"
-variables: { binary: /usr/bin/openvpn }
+binary: /usr/bin/openvpn
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, initd))
@@ -2597,8 +2740,8 @@ kind: daemon
 name: php-fpm
 display_name: "PHP-FPM"
 service: { name: php-fpm }
+binary: /usr/sbin/php-fpm
 variables:
-  binary: /usr/sbin/php-fpm
   user: www-data
 rules:
   block-bad-config:
@@ -2615,8 +2758,7 @@ rules:
 kind: app
 name: php-fpm-%%v
 display_name: "PHP-FPM ${version}"
-variables:
-  binary: "%s/php${version}/bin/php-fpm"
+binary: "%s/php${version}/bin/php-fpm"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"] }
@@ -2802,7 +2944,7 @@ kind: app
 name: ceph-osd%%n
 display_name: "Ceph OSD ${n}"
 versions: { from: "%s/ceph-${n}" }
-variables: { binary: /usr/bin/ceph-osd }
+binary: /usr/bin/ceph-osd
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, osdRoot))
@@ -2888,7 +3030,7 @@ func TestVersionTemplateCephOSDNoMatch(t *testing.T) {
 kind: app
 name: ceph-osd%%n
 versions: { from: "%s/ceph-${n}" }
-variables: { binary: /usr/bin/ceph-osd }
+binary: /usr/bin/ceph-osd
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, emptyRoot)), 0o644); err != nil {
@@ -2940,7 +3082,7 @@ rules:
 		"catalog/svc.yml": `
 kind: daemon
 name: svc
-variables: { binary: /bin/true }
+binary: /bin/true
 checks:
   config:
     type: command
@@ -2986,7 +3128,7 @@ func TestExpandAnalyzeUnknownSetAndBadSilence(t *testing.T) {
 		global := writeConfig(t, map[string]string{
 			"sermo.yml":                   baseGlobal,
 			"catalog/patterns/common.yml": "kind: patterns\nname: common\nrules:\n  - { id: dep, match: x, severity: warning }\n",
-			"catalog/svc.yml":             "kind: daemon\nname: svc\nvariables: { binary: /bin/true }\nchecks:\n  config:\n    type: command\n    command: [\"${binary}\"]\n    analyze:\n" + analyze,
+			"catalog/svc.yml":             "kind: daemon\nname: svc\nbinary: /bin/true\nchecks:\n  config:\n    type: command\n    command: [\"${binary}\"]\n    analyze:\n" + analyze,
 			"enabled/svc-main.yml":        "kind: service\nname: svc-main\nuses: svc\n",
 		})
 		cfg, err := Load(global)
@@ -3051,6 +3193,41 @@ checks:
 	req, _ := chk["requires"].([]any)
 	if len(req) != 1 || req[0] != "service" {
 		t.Fatalf("pidfile check requires = %v, want [service]", chk["requires"])
+	}
+}
+
+func TestExpandPidfileCandidateListDesugars(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/svc.yml": `
+kind: daemon
+name: svc
+pidfile:
+  - /run/svc-main.pid
+  - /run/svc-legacy.pid
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	want := []string{"/run/svc-main.pid", "/run/svc-legacy.pid"}
+	procs := resolved.Tree["processes"].(map[string]any)
+	sel := procs["pidfile"].(map[string]any)
+	if got := cfgval.StringList(sel["path"]); !slices.Equal(got, want) {
+		t.Fatalf("process pidfile paths = %v, want %v", got, want)
+	}
+	checks := resolved.Tree["checks"].(map[string]any)
+	chk := checks["pidfile"].(map[string]any)
+	if got := cfgval.StringList(chk["path"]); !slices.Equal(got, want) {
+		t.Fatalf("check pidfile paths = %v, want %v", got, want)
 	}
 }
 
@@ -3161,6 +3338,30 @@ checks:
 	}
 }
 
+func TestGlobalBinaryVariableRejected(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+engine: { backend: auto }
+paths:
+  catalog: [ @ROOT@/catalog ]
+  includes: [ @ROOT@/enabled ]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+  variables:
+    binary: /usr/bin/app
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	issues := Validate(cfg)
+	if !hasIssue(issues, `defaults.variables: "binary" is reserved for top-level binary declarations`) {
+		t.Fatalf("Validate issues = %v, want defaults.variables.binary rejection", issues)
+	}
+}
+
 func TestResolveWatchesExpandsCustomVars(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
@@ -3199,8 +3400,7 @@ func TestChangedLibraryConditionResolvesPath(t *testing.T) {
 		"catalog/libs/glibc.yml": `
 kind: daemon
 name: glibc
-variables:
-  binary: "/lib64/libc.so.6"
+binary: "/lib64/libc.so.6"
 `,
 		"enabled/web.yml": `
 kind: service
