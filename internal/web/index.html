@@ -462,6 +462,26 @@
   <p id="ops" class="muted" style="margin:.6rem 0 0"></p>
 </details>
 
+<details id="network-section" open style="display:none">
+  <summary>Network <span id="network-count" class="muted"></span></summary>
+  <table class="watch-table">
+    <thead><tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Summary</th>
+      <th>Interval</th>
+      <th>Polarity</th>
+      <th>Hook</th>
+      <th>Notifiers</th>
+      <th>Last activity</th>
+      <th>State</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="network-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Network host watches (connectivity and reachability). Other host watches are listed below.</p>
+</details>
+
 <details id="apps-section" open style="display:none">
   <summary>
     <span class="summary-title">Installed applications <span id="apps-count" class="muted"></span></span>
@@ -1193,15 +1213,17 @@ function openPanelTarget(target) {
     return;
   }
   if (target === "failed-watches") {
-    // Storage watches live in their own panel; a firing one could be in either
-    // section, so open both and scroll to whichever actually holds it.
+    // Storage and network watches live in their own panels; a firing one could be
+    // in any of the three, so open all and scroll to whichever actually holds it.
     const storage = $("#storage-section");
+    const network = $("#network-section");
     const sec = $("#watches-section");
-    if (storage) storage.open = true;
-    if (sec) sec.open = true;
+    [storage, network, sec].forEach((s) => { if (s) s.open = true; });
     setWatchStatus("failed");
-    const failingStorage = (allWatches || []).some((w) => isStorageWatch(w) && isWatchAttention(w));
-    const dest = (failingStorage && storage && storage.style.display !== "none") ? storage : sec;
+    const firing = (w) => isWatchAttention(w);
+    let dest = sec;
+    if (storage && storage.style.display !== "none" && (allWatches || []).some((w) => isStorageWatch(w) && firing(w))) dest = storage;
+    else if (network && network.style.display !== "none" && (allWatches || []).some((w) => isNetworkWatch(w) && firing(w))) dest = network;
     dest && dest.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
@@ -2916,6 +2938,14 @@ function isStorageWatch(w) {
   return t === "storage" || t === "disk";
 }
 
+// isNetworkWatch reports whether a watch is a network/connectivity check. These
+// get their own panel right after Services; every other (non-storage) type stays
+// in the Host watches table below.
+function isNetworkWatch(w) {
+  const t = ((w && w.check_type) || "").toLowerCase();
+  return t === "net" || t === "icmp";
+}
+
 // watchRowHTML builds the table row(s) for one watch — the main row plus its
 // expansion row when open. Shared by the Storage panel and the Host watches
 // table so both render identically (including the expand action).
@@ -2970,17 +3000,18 @@ function renderWatches(watches) {
   if (watches) allWatches = watches;
   const all = allWatches || [];
   renderStorageSection(all.filter(isStorageWatch));
-  renderHostWatchesSection(all.filter((w) => !isStorageWatch(w)));
+  renderGroupedSection("#network-section", "#network-rows", "#network-count", all.filter(isNetworkWatch));
+  renderHostWatchesSection(all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w)));
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
 }
 
-// renderStorageSection fills the dedicated Storage panel (above Services) with
-// the storage/volume watches, sorted by name. It has no filter controls — the
-// volume list is short — but reuses the same row layout as the Host watches table.
-function renderStorageSection(list) {
-  const section = $("#storage-section");
-  const tbody = $("#storage-rows");
-  const cnt = $("#storage-count");
+// renderGroupedSection fills a filter-less watch panel (Storage, Network) with a
+// pre-filtered list sorted by name, reusing the Host watches row layout. The
+// panel hides itself when the list is empty.
+function renderGroupedSection(sectionSel, tbodySel, countSel, list) {
+  const section = $(sectionSel);
+  const tbody = $(tbodySel);
+  const cnt = $(countSel);
   if (!section || !tbody) return;
   if (list.length === 0) {
     section.style.display = "none";
@@ -2993,6 +3024,12 @@ function renderStorageSection(list) {
   const sorted = list.slice().sort((a, b) =>
     displayName(a).toLowerCase().localeCompare(displayName(b).toLowerCase(), undefined, { numeric: true, sensitivity: "base" }));
   tbody.innerHTML = sorted.map(watchRowHTML).join("");
+}
+
+// renderStorageSection fills the dedicated Storage panel (above Services) with
+// the storage/volume watches, sorted by name and with no filter controls.
+function renderStorageSection(list) {
+  renderGroupedSection("#storage-section", "#storage-rows", "#storage-count", list);
 }
 
 // renderHostWatchesSection fills the Host watches table (below Services) with
