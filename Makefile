@@ -4,7 +4,10 @@ GOAMD64 ?= v1
 GO_BUILD_ENV := CGO_ENABLED=$(CGO_ENABLED) GOAMD64=$(GOAMD64)
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS ?= -s -w -X sermo/internal/buildinfo.Version=$(VERSION)
+# Go linker flags for -ldflags. Named GO_LDFLAGS (not LDFLAGS) so Gentoo and
+# other distro build environments can export LDFLAGS=-Wl,... without breaking
+# go build.
+GO_LDFLAGS ?= -s -w -X sermo/internal/buildinfo.Version=$(VERSION)
 
 # Standard GNU-style install variables. Override on the command line, e.g.
 #   make install DESTDIR=/tmp/stage PREFIX=/usr
@@ -67,8 +70,8 @@ tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(
 all: build
 
 build:
-	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
-	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
+	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
+	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
 
 test:
 	go test ./...
