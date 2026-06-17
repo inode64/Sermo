@@ -2173,7 +2173,6 @@ function drawSLAChart(points, win) {
     const tip = `Incident ${fmtTime(new Date(o.t).toISOString())} · ${fmtNum(o.pct, 2)}% · ${Number(o.p.up || 0)}/${Number(o.p.total || 0)}`;
     return `<g>
       <title>${esc(tip)}</title>
-      <line x1="${tx.toFixed(1)}" y1="${padT}" x2="${tx.toFixed(1)}" y2="${baseY}" stroke="#cf222e" stroke-width="1" opacity=".45"></line>
       <circle cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="3.4" fill="#cf222e"></circle>
     </g>`;
   }).join("");
