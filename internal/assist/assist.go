@@ -7,6 +7,16 @@ type Volume struct {
 	Device     string
 }
 
+// MountCandidate is an fstab-backed mount target the mount assistant can
+// register as a first-class kind: mount unit.
+type MountCandidate struct {
+	Path    string
+	Source  string
+	FSType  string
+	Options string
+	Mounted bool
+}
+
 // Iface is a candidate network interface the net assistant can monitor.
 type Iface struct {
 	Name       string
@@ -64,6 +74,7 @@ type Env struct {
 	DefaultNotify    []string                          // top-level `notify` default; nil = no inherited notification
 	Backend          string                            // active init system: "systemd" | "openrc"
 	Volumes          func() ([]Volume, error)          // candidate disk volumes
+	Mounts           func() ([]MountCandidate, error)  // candidate fstab-backed mount units
 	Ifaces           func() ([]Iface, error)           // host network interfaces
 	DefaultIfaces    []string                          // interfaces with an up default route
 	Daemons          func() ([]DaemonCandidate, error) // catalog daemons detected as installed
@@ -78,6 +89,7 @@ type Env struct {
 type Result struct {
 	Watches  map[string]any
 	Services map[string]any
+	Mounts   map[string]any
 	Summary  string
 }
 
@@ -93,6 +105,7 @@ var registry = []Assistant{
 	serviceAssistant{},
 	dockerAssistant{},
 	vmAssistant{},
+	mountAssistant{},
 	volumeAssistant{},
 	netAssistant{},
 	uplinkAssistant{},

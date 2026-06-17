@@ -97,3 +97,7 @@ Mount actions are fstab-backed and use `kind: mount` files from
 `/etc/sermo/mounts` by default. A path target that is not configured is still
 accepted, but it uses safe defaults and must exist in `/etc/fstab`. See
 [mount units](configuration.md#mount-units).
+
+`sermoctl wizard mount` lists mount points declared in `/etc/fstab` and writes
+safe `kind: mount` files under `paths.mounts`; it does not execute mount or
+umount while generating the config.
