@@ -22,7 +22,7 @@ When this skill is active:
 1. Preserve the separation between daemon, CLI and shared internal engine.
 2. Keep the MVP small and operationally safe.
 3. Prefer explicit interfaces to hidden coupling.
-4. Keep config rendering separate from runtime execution.
+4. Keep resolved config inspection separate from runtime execution.
 5. Ensure new features fit the model: checks, rules, guards, locks, operations.
 6. Reject designs where `sermod` and `sermoctl` duplicate service-action logic.
 7. Prefer simple, testable internal packages.
@@ -54,7 +54,7 @@ Prioritize in this order:
 1. sermoctl backend/status/start/stop/restart
 2. backend autodetection
 3. YAML config loading
-4. config validate/render
+4. config validate and service show
 5. checks: service, tcp, http, command
 6. preflight and guards
 7. locks
