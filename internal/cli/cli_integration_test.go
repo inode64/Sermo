@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"sermo/internal/config"
 	"sermo/internal/servicemgr"
 )
 
@@ -78,9 +79,12 @@ func TestIntegrationStatusViaFakeRCService(t *testing.T) {
 	app := App{
 		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}},
 		NewManager: servicemgr.NewManager,
-		Env:        func(string) string { return "" },
-		Stdout:     &stdout,
-		Stderr:     &bytes.Buffer{},
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			return nil, errNoConfigForInvalidTest
+		},
+		Env:    func(string) string { return "" },
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
 	}
 	code := app.Run(context.Background(), []string{"status", "nginx"})
 	if code != exitSuccess {
@@ -95,6 +99,9 @@ func TestIntegrationStatusViaFakeSystemctl(t *testing.T) {
 	withFakeSystemctl(t)
 	var stdout bytes.Buffer
 	app := systemdApp(&stdout, &bytes.Buffer{})
+	app.LoadConfig = func(string, ...config.Option) (*config.Config, error) {
+		return nil, errNoConfigForInvalidTest
+	}
 
 	code := app.Run(context.Background(), []string{"status", "nginx"})
 	if code != exitSuccess {

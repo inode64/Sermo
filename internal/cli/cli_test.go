@@ -15,15 +15,103 @@ import (
 )
 
 func TestVersionCommand(t *testing.T) {
-	for _, arg := range []string{"version", "--version", "-V"} {
+	for _, arg := range []string{"version", "--version", "-V", "--json version"} {
 		var stdout bytes.Buffer
 		app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-		if code := app.Run(context.Background(), []string{arg}); code != exitSuccess {
+		if code := app.Run(context.Background(), strings.Fields(arg)); code != exitSuccess {
 			t.Fatalf("Run(%q) exit = %d, want %d", arg, code, exitSuccess)
 		}
 		if !strings.HasPrefix(stdout.String(), "sermo ") {
 			t.Errorf("Run(%q) stdout = %q, want it to start with %q", arg, stdout.String(), "sermo ")
 		}
+	}
+}
+
+func TestHelpCommandPrintsStructuredUsage(t *testing.T) {
+	var stdout bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+
+	code := app.Run(context.Background(), []string{"--help"})
+	if code != exitSuccess {
+		t.Fatalf("--help exit = %d, want %d", code, exitSuccess)
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"Sermo operator CLI",
+		"Usage:",
+		"Global Flags:",
+		"Safe Service Operations:",
+		"sermoctl help [COMMAND]",
+		"Use `sermoctl help COMMAND`",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("--help output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestHelpCommandTopic(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+
+	code := app.Run(context.Background(), []string{"help", "restart"})
+	if code != exitSuccess {
+		t.Fatalf("help restart exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"Command: sermoctl restart",
+		"sermoctl restart SERVICE [--no-cascade]",
+		"--no-cascade",
+		"Manual restarts are not remediation-rate-limited",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help restart output missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestHelpVersionTopicDoesNotPrintVersion(t *testing.T) {
+	var stdout bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
+
+	code := app.Run(context.Background(), []string{"help", "version"})
+	if code != exitSuccess {
+		t.Fatalf("help version exit = %d, want %d", code, exitSuccess)
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Command: sermoctl version") || strings.HasPrefix(out, "sermo ") {
+		t.Fatalf("help version output = %q", out)
+	}
+}
+
+func TestCommandHelpFlagShowsFocusedHelp(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+
+	code := app.Run(context.Background(), []string{"status", "--help"})
+	if code != exitSuccess {
+		t.Fatalf("status --help exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "Command: sermoctl status") || !strings.Contains(out, "sermoctl status SERVICE") {
+		t.Fatalf("status --help output = %q", out)
+	}
+}
+
+func TestUnknownHelpTopicIsUsageError(t *testing.T) {
+	var stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+
+	code := app.Run(context.Background(), []string{"help", "not-a-command"})
+	if code != exitUsage {
+		t.Fatalf("help not-a-command exit = %d, want %d", code, exitUsage)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, `unknown help topic "not-a-command"`) || !strings.Contains(out, "Command: sermoctl help") {
+		t.Fatalf("unknown help topic stderr = %q", out)
 	}
 }
 
@@ -138,6 +226,10 @@ func TestStatusRequiresService(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
 	}
+	out := stderr.String()
+	if !strings.Contains(out, "status requires a service name") || !strings.Contains(out, "Command: sermoctl status") {
+		t.Fatalf("stderr = %q, want focused status usage", out)
+	}
 }
 
 func TestIsActiveActiveExitZero(t *testing.T) {
@@ -209,6 +301,9 @@ func statusApp(status servicemgr.ServiceStatus, statusErr error, stdout, stderr 
 		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: status.Backend}},
 		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
 			return fakeManager{status: status, err: statusErr}, nil
+		},
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			return nil, errors.New("no test config")
 		},
 		Env:    func(string) string { return "" },
 		Stdout: stdout,

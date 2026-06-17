@@ -13,11 +13,11 @@ import (
 // runDaemon dispatches daemon catalog inspection and sermod control subcommands.
 func (a App) runDaemon(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.usageError("daemon requires a subcommand (list|show|reload)")
+		return a.commandUsageError("daemon", "daemon requires a subcommand (list|show|reload)")
 	}
 	if opts.args[0] == "reload" {
 		if len(opts.args) > 1 {
-			return a.usageError("daemon reload takes no arguments")
+			return a.commandUsageError("daemon", "daemon reload takes no arguments")
 		}
 		return a.runReload(ctx, opts)
 	}
@@ -29,11 +29,14 @@ func (a App) runDaemon(ctx context.Context, opts options) int {
 
 	switch opts.args[0] {
 	case "list":
+		if len(opts.args) > 1 {
+			return a.commandUsageError("daemon", "daemon list takes no arguments")
+		}
 		a.printNamed(opts, sortedUnique(cfg.Daemons), cfg.Daemons, "daemons")
 		return exitSuccess
 	case "show":
-		if len(opts.args) < 2 {
-			return a.usageError("daemon show requires a daemon name")
+		if len(opts.args) != 2 {
+			return a.commandUsageError("daemon", "daemon show requires exactly one daemon name")
 		}
 		name := opts.args[1]
 		doc, ok := cfg.Daemons[name]
@@ -42,7 +45,7 @@ func (a App) runDaemon(ctx context.Context, opts options) int {
 		}
 		return a.renderTree(opts, config.Resolved{Name: name, Tree: doc.Body})
 	default:
-		return a.usageError(fmt.Sprintf("unknown daemon subcommand %q", opts.args[0]))
+		return a.commandUsageError("daemon", fmt.Sprintf("unknown daemon subcommand %q", opts.args[0]))
 	}
 }
 
@@ -50,7 +53,7 @@ func (a App) runDaemon(ctx context.Context, opts options) int {
 // `service clone SOURCE TARGET`.
 func (a App) runService(opts options) int {
 	if len(opts.args) == 0 {
-		return a.usageError("service requires a subcommand (list|show|clone)")
+		return a.commandUsageError("service", "service requires a subcommand (list|show|clone)")
 	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
@@ -59,20 +62,23 @@ func (a App) runService(opts options) int {
 
 	switch opts.args[0] {
 	case "list":
+		if len(opts.args) > 1 {
+			return a.commandUsageError("service", "service list takes no arguments")
+		}
 		a.printNamed(opts, sortedUnique(cfg.Services), cfg.Services, "services")
 		return exitSuccess
 	case "show":
-		if len(opts.args) < 2 {
-			return a.usageError("service show requires a service name")
+		if len(opts.args) != 2 {
+			return a.commandUsageError("service", "service show requires exactly one service name")
 		}
 		return a.showResolvedService(opts, cfg, opts.args[1])
 	case "clone":
-		if len(opts.args) < 3 {
-			return a.usageError("service clone requires SOURCE and TARGET")
+		if len(opts.args) != 3 {
+			return a.commandUsageError("service", "service clone requires SOURCE and TARGET")
 		}
 		return a.cloneService(opts, cfg, opts.args[1], opts.args[2])
 	default:
-		return a.usageError(fmt.Sprintf("unknown service subcommand %q", opts.args[0]))
+		return a.commandUsageError("service", fmt.Sprintf("unknown service subcommand %q", opts.args[0]))
 	}
 }
 

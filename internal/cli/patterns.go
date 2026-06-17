@@ -12,6 +12,9 @@ import (
 // set's name, its rule count, and its description. Unlike apps/libs it probes no
 // binary, so it is a bespoke lister rather than appinspect.List.
 func (a App) runPatterns(opts options) int {
+	if len(opts.args) > 0 {
+		return a.commandUsageError("patterns", "patterns takes no arguments")
+	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
 		return code
