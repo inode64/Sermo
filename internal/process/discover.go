@@ -180,11 +180,12 @@ func (d Discoverer) ObserveState(exe, user string) string {
 	}
 }
 
-// matches reports whether a process satisfies a command_match selector. Sermo
-// requires both exact resolved exe and real UID, so a partial selector never
-// matches.
+// matches reports whether a process satisfies a command_match selector. Every
+// configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
+// cmd is an explicit regex over argv used only to narrow discovery for shared
+// binaries, not to authorize signaling.
 func (d Discoverer) matches(sel Selector, id Identity, resolve UserResolver) bool {
-	// At least one strong matcher is required; a selector is never user/group-only
+	// At least one process-shape matcher is required; a selector is never user/group-only
 	// (so a bare owner can never select unrelated processes).
 	if sel.Exe == "" && sel.Cmd == "" {
 		return false
@@ -276,7 +277,19 @@ func descendants(snapshot map[int]Identity, seeds []int) []int {
 	return out
 }
 
+// snapshotIdentities reads every visible process identity. When the reader can
+// supply a whole snapshot in one call (the shared CachingReader), that single
+// walk is reused across concurrent discoveries; otherwise it falls back to a
+// per-PID read.
 func snapshotIdentities(reader Reader) map[int]Identity {
+	if sr, ok := reader.(SnapshotReader); ok {
+		return sr.Snapshot()
+	}
+	return buildSnapshot(reader)
+}
+
+// buildSnapshot walks /proc once via the reader, reading each PID's identity.
+func buildSnapshot(reader Reader) map[int]Identity {
 	snapshot := map[int]Identity{}
 	pids, err := reader.PIDs()
 	if err != nil {

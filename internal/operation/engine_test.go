@@ -21,6 +21,7 @@ type fakeManager struct {
 	stopErr   error
 	startErr  error
 	reloadErr error
+	resumeErr error
 	resetErr  error
 	status    servicemgr.Status
 	statusErr error
@@ -52,6 +53,11 @@ func (m *fakeManager) Stop(_ context.Context, s string) error {
 func (m *fakeManager) Reload(_ context.Context, s string) error {
 	m.calls = append(m.calls, "reload "+s)
 	return m.reloadErr
+}
+
+func (m *fakeManager) Resume(_ context.Context, s string) error {
+	m.calls = append(m.calls, "resume "+s)
+	return m.resumeErr
 }
 
 func (m *fakeManager) SupportsReload(_ context.Context, s string) (bool, error) {
@@ -136,6 +142,7 @@ func (h *harness) engine() Engine {
 		Guard:      func(context.Context, string) (bool, string, error) { return h.guardBlocked, h.guardReason, h.guardErr },
 		Preflight:  func(context.Context) checks.Outcome { return h.preflight },
 		Postflight: func(context.Context) checks.Outcome { return h.postflight },
+		ResumeFunc: func(ctx context.Context) error { return h.mgr.Resume(ctx, "mysqld") },
 		Discover:   h.discover,
 		Reaper:     h.reaper,
 		KillPolicy: h.killPolicy,
@@ -167,6 +174,33 @@ func TestRestartOK(t *testing.T) {
 	}
 	if h.released != 1 {
 		t.Errorf("op lock released %d times, want 1", h.released)
+	}
+}
+
+func TestResumeOK(t *testing.T) {
+	h := defaultHarness()
+	res := h.engine().Resume(context.Background())
+	if !res.OK() {
+		t.Fatalf("status = %q, want ok (%s)", res.Status, res.Message)
+	}
+	if !h.mgr.did("resume mysqld") {
+		t.Fatalf("expected resume call, calls=%v", h.mgr.calls)
+	}
+}
+
+func TestResumeUnsupported(t *testing.T) {
+	h := defaultHarness()
+	engine := h.engine()
+	engine.ResumeFunc = nil
+	res := engine.Resume(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "unsupported") {
+		t.Fatalf("message = %q, want unsupported", res.Message)
+	}
+	if h.mgr.did("resume mysqld") {
+		t.Fatalf("must not call manager without ResumeFunc, calls=%v", h.mgr.calls)
 	}
 }
 
@@ -355,7 +389,7 @@ func TestRestartOrphanProcessesDoesNotStart(t *testing.T) {
 
 func TestRestartDiscoveryErrorDoesNotStart(t *testing.T) {
 	h := defaultHarness()
-	h.discoverErrs = []error{errors.New("selector config: command_match selector requires both exe and user")}
+	h.discoverErrs = []error{errors.New("selector config: command_match selector has invalid cmd regex")}
 	res := h.restart(t)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)

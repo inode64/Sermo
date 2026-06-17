@@ -115,6 +115,10 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	version := probeCommandFor(resolved.Tree, "version")
 	if len(health.argv) > 0 {
 		r.OK, r.Status = runExitProbe(ctx, runner, health)
+		if !r.OK && health.optional {
+			r.OK = true
+			r.Status = "ok"
+		}
 		if r.OK && len(version.argv) > 0 {
 			r.Version, r.VersionShort = captureVersion(ctx, runner, resolved.Tree, version)
 		}
@@ -128,6 +132,11 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 	}
 
 	ok, status, raw, short := runVersionProbe(ctx, runner, resolved.Tree, version)
+	if !ok && version.optional {
+		r.OK = true
+		r.Status = "ok"
+		return r
+	}
 	r.OK = ok
 	r.Status = status
 	r.Version = raw
@@ -217,9 +226,11 @@ func binaryPath(tree map[string]any) string {
 		}
 	}
 	if vars, ok := tree["variables"].(map[string]any); ok {
-		return cfgval.AsString(vars["binary"])
+		if p := cfgval.AsString(vars["binary"]); p != "" {
+			return p
+		}
 	}
-	return ""
+	return config.DocumentBinary(tree)
 }
 
 // probeCommand is a daemon's resolved app probe command and the expectations
@@ -227,6 +238,7 @@ func binaryPath(tree map[string]any) string {
 type probeCommand struct {
 	argv       []string
 	expectExit int
+	optional   bool
 	stdout     checks.OutputMatcher
 	stderr     checks.OutputMatcher
 }
@@ -244,6 +256,7 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
 		vc.expectExit = v
 	}
+	vc.optional = cfgval.Bool(entry["optional"])
 	vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
 	vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
 	return vc

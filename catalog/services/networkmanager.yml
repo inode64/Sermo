@@ -1,0 +1,13 @@
+kind: daemon
+name: networkmanager
+catalog_aliases: [NetworkManager]
+display_name: "NetworkManager"
+category: network
+description: "NetworkManager system network management daemon."
+service:
+  systemd: [NetworkManager]
+  openrc: [NetworkManager, networkmanager]
+apps: [networkmanager]
+
+checks:
+  service: { type: service, expect: active }

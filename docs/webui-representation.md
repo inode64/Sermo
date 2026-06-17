@@ -110,8 +110,10 @@ Editable notes:
 | Items | warning / critical buttons |
 | Click behavior | opens the related panel |
 
-Signals include failing services, failed watches, recent errors and readiness
-issues.
+Signals include failing services, firing host watches, recent errors and
+readiness issues. A failing-services item opens the Services panel with the
+`failed` filter; a firing-watches item opens Host watches with the `failed`
+filter (`failed-watches` target).
 
 ## Live operations
 
@@ -148,7 +150,7 @@ Columns:
 | CPU total | latest whole process-tree CPU usage |
 | Memory | latest process-tree resident memory |
 | IO R/W | cumulative process-tree disk read/write bytes |
-| Actions | start, stop, restart, reload, monitor/unmonitor |
+| Actions | start, stop, restart, reload, resume, monitor/unmonitor |
 
 Row expansion:
 
@@ -255,14 +257,16 @@ Section id: `events-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Events` plus shadow-event note |
-| Controls | service, watch, kind, status, only errors, group actions, apply, clear |
+| Controls | service, watch, kind, status, only errors, group actions, clear |
 | Table | event rows grouped by action when enabled |
 | Limit | latest matching events |
 
 Editable notes:
 
-- Keep service/watch/kind/status as quick text filters.
-- Grouping should stay optional; raw chronology is still useful.
+- Service/watch/kind/status filter live as the operator types (300ms debounce),
+  matching the services and watches panels; Enter applies immediately, Escape
+  clears. The `only errors` checkbox refetches on change. Grouping stays
+  client-side and optional; raw chronology is still useful.
 
 ## Notifiers panel
 

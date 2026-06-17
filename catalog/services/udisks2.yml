@@ -1,0 +1,11 @@
+kind: daemon
+name: udisks2
+display_name: "UDisks2"
+category: storage
+description: "D-Bus service for disk management."
+service:
+  systemd: [udisks2]
+apps: [udisks2]
+
+checks:
+  service: { type: service, expect: active }

@@ -620,7 +620,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "service":
 		if st := cfgval.String(entry["expect"]); st != "" {
 			if _, ok := serviceStates[st]; !ok {
-				add("%s expect %q is not one of active, inactive, failed, unknown", path, st)
+				add("%s expect %q is not one of active, inactive, paused, failed, unknown", path, st)
 			}
 		}
 	case "process":
@@ -641,7 +641,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s.path is required for a binary check", path)
 		}
 	case "pidfile":
-		if cfgval.String(entry["path"]) == "" {
+		if len(cfgval.StringList(entry["path"])) == 0 {
 			add("%s.path is required for a pidfile check", path)
 		}
 	case "libraries":

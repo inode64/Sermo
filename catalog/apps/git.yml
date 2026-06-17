@@ -2,8 +2,6 @@ kind: app
 name: git
 display_name: "Git"
 category: runtime
-variables:
-  binary: "/usr/bin/git"
+binary: "/usr/bin/git"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

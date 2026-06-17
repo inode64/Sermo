@@ -2,8 +2,6 @@ kind: app
 name: sqlite
 display_name: "SQLite"
 category: database
-variables:
-  binary: "/usr/bin/sqlite3"
+binary: "/usr/bin/sqlite3"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-version"], timeout: 10s }

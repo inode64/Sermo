@@ -2,8 +2,6 @@ kind: app
 name: mongod
 display_name: "MongoDB"
 category: database
-variables:
-  binary: "/usr/bin/mongod"
+binary: "/usr/bin/mongod"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

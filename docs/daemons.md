@@ -53,8 +53,7 @@ kind: daemon
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc)"
-variables:
-  binary: "/lib64/libc.so.6"        # the file watched for changes (and its version)
+binary: "/lib64/libc.so.6"          # the file watched for changes (and its version)
 ```
 
 A service (or daemon definition) opts in with `restart_on_change`:
@@ -213,7 +212,7 @@ or service override either form; when several apps are linked, use the prefixed
 names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
-service's preflight, which **blocks start/restart/reload** (a preflight-failed
+service's preflight, which **blocks start/restart/reload/resume** (a preflight-failed
 operation never executes the action) — you do not start, restart or reload a
 service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
@@ -263,8 +262,7 @@ rules:
     then:
       action: block
       message: "${display_name} backup is running"   # → "MariaDB backup is running"
-variables:
-  binary: "/usr/bin/qemu-system-${arch}"             # → /usr/bin/qemu-system-x86_64
+binary: "/usr/bin/qemu-system-${arch}"               # → /usr/bin/qemu-system-x86_64
 ```
 
 An explicit `variables` entry of the same name always takes precedence over a
@@ -290,7 +288,7 @@ strings. The `SERMO_ARCH` / `SERMO_OS` / `SERMO_HOST` / `SERMO_HOSTNAME` /
 | `${os}`           | os-release id (`SERMO_OS`)                     | load (baked)    |
 | `${date}`         | event timestamp (RFC3339)                      | runtime²        |
 | `${event}`        | the firing rule's name                         | runtime²        |
-| `${action}`       | the action taken (restart/start/stop/reload)   | runtime²        |
+| `${action}`       | the action taken (restart/start/stop/reload/resume) | runtime²        |
 
 ¹ `${host}` only applies when the daemon does not define a `host` variable (a
 bind address like `127.0.0.1`); an explicit `host` always wins.
@@ -393,6 +391,127 @@ loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
 process selector from init metadata and keeps the WebUI from showing CPU/memory
 process totals for a service that cannot have them.
 
+### `control: libvirt` — QEMU/libvirt virtual machines
+
+A service can be controlled as a libvirt/QEMU virtual machine instead of a
+systemd/OpenRC unit:
+
+```yaml
+kind: service
+name: vm-web01
+control:
+  type: libvirt
+  uri: qemu:///system
+  domain: web01
+  socket: /run/libvirt/libvirt-sock     # or /run/libvirt/virtqemud-sock on modular libvirt
+
+checks:
+  vm:
+    type: libvirt
+    socket: /run/libvirt/libvirt-sock
+    query: qemu:///system
+    params: { domain: web01 }
+
+processes:
+  qemu:
+    type: command_match
+    exe: /usr/bin/qemu-system-x86_64
+    cmd: "web01|2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4"
+    user: qemu
+```
+
+`control.domain` is the libvirt domain Sermo operates. `uri` defaults to
+`qemu:///system`; `socket` defaults to `/run/libvirt/libvirt-sock` unless `host`
+is set for a remote libvirt TCP connection. Modular libvirt deployments often
+expose QEMU domains through `/run/libvirt/virtqemud-sock`; set `socket` to that
+path when the monolithic socket is absent. `uuid` is optional and, when set,
+Sermo looks up the domain by UUID instead of name.
+
+The safe operation engine is unchanged: locks, guards, preflight, postflight,
+operation timeouts and remediation policy still apply. The primitive actions are
+libvirt operations:
+
+- `start` creates/boots the defined domain (`DomainCreate`).
+- `stop` requests a graceful guest shutdown (`DomainShutdown`); it does not
+  destroy the VM.
+- `restart` is still Sermo's safe stop+start flow.
+- `resume` resumes a paused domain (`DomainResume`).
+- `reload` is unsupported for VM domains unless a future service-specific
+  mechanism is added.
+
+Libvirt status maps to Sermo status as follows: running/blocked → `active`,
+paused/pmsuspended → `paused`, shutoff/shutdown/nostate → `inactive`, crashed →
+`failed`. The CLI and web UI show a VM paused by libvirt as `paused`, distinct
+from Sermo's monitor pause (`unmonitor`).
+
+Process discovery is intentionally explicit in this first VM integration. If you
+want process metrics or residual-process reporting for the QEMU process, add a
+restrictive `processes.command_match` selector as above: exact `exe` and `user`
+plus a `cmd` regex that narrows the shared QEMU binary to the intended domain or
+UUID. The cmdline selector narrows discovery; residual signaling is still
+authorized only by `stop_policy.kill_only_if`.
+
+`sermoctl wizard vm` can generate this `kind: service` shape from domains
+detected through the local libvirt socket. It probes both
+`/run/libvirt/libvirt-sock` and `/run/libvirt/virtqemud-sock` and writes the
+socket it actually used into the generated service and check.
+
+### `control: docker` — Docker containers
+
+A service can be controlled as one Docker container instead of a systemd/OpenRC
+unit:
+
+```yaml
+kind: service
+name: web-container
+control:
+  type: docker
+  container: web
+  socket: /run/docker.sock
+
+checks:
+  docker:
+    type: docker
+    socket: /run/docker.sock
+    container: web
+    on_change: true
+    expect:
+      container.status: { op: "==", value: running }
+      container.health: { op: "==", value: healthy }
+```
+
+`control.container` is the Docker container name or id Sermo operates. With no
+`socket` or `host`, control uses `/run/docker.sock`; set `socket` for another
+local socket, or set `host` and optional `port`/`tls` for a TCP Docker API
+endpoint. `control.interface` is not supported for control; interface-bound
+egress remains available on Docker checks.
+
+The safe operation engine is unchanged: locks, guards, preflight, postflight,
+operation timeouts and remediation policy still apply. The primitive actions are
+Docker Engine API operations:
+
+- `start` calls the container start endpoint.
+- `stop` calls the container stop endpoint with no Docker-side kill escalation;
+  Sermo's operation timeout is the outer bound, and residual handling remains in
+  Sermo's stop policy.
+- `restart` is still Sermo's safe stop+start flow.
+- `resume` unpauses a paused container.
+- `reload` is unsupported for Docker containers unless a future
+  service-specific mechanism is added.
+
+Docker status maps to Sermo status as follows: running -> `active`, paused ->
+`paused`, created/exited -> `inactive`, restarting/dead/removing -> `failed`.
+The CLI and web UI show a Docker-paused container as `paused`, distinct from
+Sermo's monitor pause (`unmonitor`).
+
+For process metrics and residual-process reporting, Sermo reads the container's
+`State.Pid` from Docker inspect and discovers that process tree. You normally do
+not need a `processes:` selector for a controlled container. Residual signaling
+is still authorized only by `stop_policy.kill_only_if`.
+
+`sermoctl wizard docker` can generate this `kind: service` shape from containers
+detected through the local Docker socket.
+
 ### `also_service` — auxiliary init units
 
 A service can name **auxiliary init units of its own** (a `.socket`, `.timer`,
@@ -439,10 +558,11 @@ also_apply: [nginx, varnish]
   are cut by a visited set.
 - Entries must be configured services and must not include the service itself.
 - `sermoctl start|stop|restart <svc> --no-cascade` acts on exactly one service.
-- `sermoctl reload <svc>` reloads a single service through the engine (no
-  cascade — `reload` touches the primary only). Use `sermoctl daemon reload` to
-  reload the running `sermod` configuration (`SIGHUP`). In the web UI the
-  per-service **reload** button is enabled only while the service is `active`.
+- `sermoctl reload <svc>` and `sermoctl resume <svc>` act on the primary only
+  (no cascade). Use `sermoctl daemon reload` to reload the running `sermod`
+  configuration (`SIGHUP`). In the web UI the per-service **reload** button is
+  enabled only while the service is `active`, and **resume** only while it is
+  `paused`.
 
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.
@@ -461,8 +581,9 @@ processes:
 - `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
 - `cmd` — a Go RE2 regex matched against the process **cmdline** (argv joined).
   Use it for shared binaries (`java .*unifi`, `openvpn .*tun1\.conf`) the way the
-  legacy per-service kill lists did. (The cmdline is spoofable, so a `cmd`-only
-  match still passes `stop_policy.kill_only_if` before any kill.)
+  legacy per-service kill lists did. The cmdline is spoofable, so `cmd` only
+  narrows discovery; residual signaling is still authorized only by
+  `stop_policy.kill_only_if` (`exe_any` plus `users`).
 - `user` / `group` — the process real UID / GID owner.
 
 These feed monitoring **and** the residual reaper, so a richer selector lets a
@@ -523,6 +644,15 @@ pidfile from one line:
 pidfile: /run/named/named.pid
 ```
 
+When a daemon legitimately uses different pidfile names across distributions,
+declare candidates in preference order:
+
+```yaml
+pidfile:
+  - /run/mysqld/mariadb.pid
+  - /run/mysqld/mysqld.pid
+```
+
 Use `/run` here, not `/var/run`. If a distro init script or service manager
 reports the legacy `/var/run/...` spelling, write the equivalent `/run/...` path
 in the daemon profile. Before committing a new pidfile or socket path, resolve
@@ -536,8 +666,10 @@ missing or stale pidfile is reported as an **error only while the service is
 active** (it means the daemon died or lost its pidfile without the service
 manager noticing); a legitimately stopped service is skipped, not alarmed. An
 existing pidfile selector or a check already named `pidfile` is respected, so a
-daemon that needs a candidate list or custom check can still spell it out. The
-shorthand path can reference variables (e.g. `pidfile: "${pidfile}"`).
+daemon that needs a custom check can still spell it out. The shorthand path can
+reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
+order and pass on the first live pidfile; if none exists, the backend PID
+fallback can still satisfy the gated health check.
 
 ## Versioned daemons
 
@@ -551,10 +683,8 @@ the same token links that app.
 kind: app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-variables:
-  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 
 ---
@@ -566,15 +696,16 @@ apps: ["postgres-${version}"]
 ```
 
 On load, Sermo discovers installed versions by globbing the linked app's
-`variables.binary` path with `${version}` wildcarded (here
-`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Each match
-becomes a concrete app and concrete daemon with `%v` and `${version}` substituted
-everywhere (name, display_name, service, app links, ...) — `postgres-14`,
-`postgres-16`, ... — and the templates themselves are dropped. If nothing is
-installed the template yields nothing. The filename mirrors the name
-(`postgres-%v.yml`); only that one file is needed. `%v` may sit anywhere in the
-name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name; inside
-the body always use `${version}` (e.g. in `service` or `apps`).
+`binary` path with `${version}` wildcarded (here
+`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. A
+candidate list is checked as a list, so distro-specific locations can stay in
+one app template. Each match becomes a concrete app and concrete daemon with
+`%v` and `${version}` substituted everywhere (name, display_name, service, app
+links, ...) — `postgres-14`, `postgres-16`, ... — and the templates themselves
+are dropped. If nothing is installed the template yields nothing. The filename
+mirrors the name (`postgres-%v.yml`); only that one file is needed. `%v` may sit
+anywhere in the name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in
+the name; inside the body always use `${version}` (e.g. in `service` or `apps`).
 
 Keep application discovery in `catalog/apps`. A versioned or instanced daemon
 that links a matching app, such as `apps: ["postgres-${version}"]`,
@@ -590,7 +721,7 @@ kind: app
 name: openvpn-%i
 versions:
   from: "/etc/init.d/openvpn.${instance}"
-variables: { binary: /usr/bin/openvpn }
+binary: /usr/bin/openvpn
 
 ---
 kind: daemon
@@ -618,7 +749,7 @@ numbers, otherwise working exactly like `%v`:
 kind: app
 name: python%n
 display_name: "Python ${n}"
-variables: { binary: "/usr/bin/python${n}" }
+binary: "/usr/bin/python${n}"
 ```
 
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
@@ -640,7 +771,7 @@ display_name: "Python ${n}"
 versions:
   unversioned:
     description: "Active Python interpreter"
-variables: { binary: "/usr/bin/python${n}" }
+binary: "/usr/bin/python${n}"
 ```
 
 Use `%i`/`${instance}` for named init instances discovered from a bounded app

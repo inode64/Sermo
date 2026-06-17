@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,7 +19,7 @@ import (
 // injectable for tests; it defaults to a /proc-or-signal liveness check.
 type pidfileCheck struct {
 	base
-	path         string
+	paths        []string
 	alive        func(int) bool
 	fallbackPIDs func() []int
 }
@@ -29,26 +30,45 @@ func (c pidfileCheck) Run(_ context.Context) Result {
 	if alive == nil {
 		alive = pidAlive
 	}
-	pid, err := process.ReadPidfile(c.path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
-				r := c.result(true, fmt.Sprintf("%s absent; backend reports %d running pid(s)", c.path, len(pids)), start)
-				r.Data = map[string]any{"pids": pids, "source": "backend"}
-				return r
-			}
-			return c.result(false, c.path+" does not exist (service active but no pidfile)", start)
-		}
-		return c.result(false, fmt.Sprintf("%s: %v", c.path, err), start)
+	if len(c.paths) == 0 {
+		return c.result(false, "pidfile check has no path candidates", start)
 	}
-	if !alive(pid) {
-		r := c.result(false, fmt.Sprintf("%s references pid %d which is not running", c.path, pid), start)
-		r.Data = map[string]any{"pid": pid}
+	var failures []string
+	for _, path := range c.paths {
+		pid, err := process.ReadPidfile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		if !alive(pid) {
+			failures = append(failures, fmt.Sprintf("%s references pid %d which is not running", path, pid))
+			continue
+		}
+		r := c.result(true, fmt.Sprintf("%s -> pid %d running", path, pid), start)
+		r.Data = map[string]any{"pid": pid, "path": path}
 		return r
 	}
-	r := c.result(true, fmt.Sprintf("%s -> pid %d running", c.path, pid), start)
-	r.Data = map[string]any{"pid": pid}
-	return r
+	if len(failures) > 0 {
+		return c.result(false, strings.Join(failures, "; "), start)
+	}
+	if len(c.paths) == 1 {
+		path := c.paths[0]
+		if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
+			r := c.result(true, fmt.Sprintf("%s absent; backend reports %d running pid(s)", path, len(pids)), start)
+			r.Data = map[string]any{"pids": pids, "source": "backend"}
+			return r
+		}
+		return c.result(false, path+" does not exist (service active but no pidfile)", start)
+	}
+	if pids := c.liveFallbackPIDs(alive); len(pids) > 0 {
+		r := c.result(true, fmt.Sprintf("no pidfile candidate exists (%s); backend reports %d running pid(s)", strings.Join(c.paths, ", "), len(pids)), start)
+		r.Data = map[string]any{"pids": pids, "source": "backend", "paths": c.paths}
+		return r
+	}
+	return c.result(false, fmt.Sprintf("none of pidfile candidates exist (%s) (service active but no pidfile)", strings.Join(c.paths, ", ")), start)
 }
 
 func (c pidfileCheck) liveFallbackPIDs(alive func(int) bool) []int {

@@ -1,0 +1,5 @@
+kind: app
+name: polkit
+display_name: "Polkit"
+category: system
+binary: /usr/lib/polkit-1/polkitd

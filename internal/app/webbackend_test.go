@@ -284,7 +284,11 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	add(t0.Add(4*time.Minute), Event{Service: "web", Kind: "action", Action: "restart", Status: "blocked"})
 	add(t0.Add(5*time.Minute), Event{Watch: "disk", Kind: "hook-failed", Message: "failed"})
 
-	b := &WebBackend{events: events}
+	b := &WebBackend{
+		events:     events,
+		order:      []string{"web", "db"},
+		watchOrder: []string{"disk"},
+	}
 
 	services := b.lastServiceEvents()
 	if got := services["web"]; got == nil || got.Action != "restart" || got.Status != "blocked" {

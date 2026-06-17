@@ -1,0 +1,5 @@
+kind: app
+name: pmlogger_farm
+display_name: "PCP Archive Logger Farm"
+category: observability
+binary: /usr/libexec/pcp/bin/pmlogger_farm

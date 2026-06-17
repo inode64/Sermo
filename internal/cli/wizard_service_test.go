@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -243,6 +244,67 @@ func TestServiceCleanupDirsIncludesLegacyAppsOnlyWhenLoaded(t *testing.T) {
 	want = []string{filepath.Join(tmp, servicesIncludeDir)}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("serviceCleanupDirs without legacy include = %v, want %v", got, want)
+	}
+}
+
+func TestDetectedServiceTargetKeysIncludeControlledServices(t *testing.T) {
+	env := assist.Env{
+		Daemons: func() ([]assist.DaemonCandidate, error) {
+			return []assist.DaemonCandidate{{Name: "nginx"}}, nil
+		},
+		DockerContainers: func() ([]assist.DockerCandidate, error) {
+			return []assist.DockerCandidate{{Name: "docker-web", Container: "web"}}, nil
+		},
+		VMs: func() ([]assist.VMCandidate, error) {
+			return []assist.VMCandidate{{Name: "vm-web01", Domain: "web01"}}, nil
+		},
+	}
+	keys := detectedTargetKeys(env, "service")
+	for _, want := range []string{"service:nginx", "docker:web", "vm:web01"} {
+		if !keys[want] {
+			t.Fatalf("detected service keys = %v, missing %s", keys, want)
+		}
+	}
+}
+
+func TestServiceFileTargetControlledServices(t *testing.T) {
+	tmp := t.TempDir()
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "docker",
+			body: "kind: service\nname: docker-web\ncontrol: {type: docker, container: web}\n",
+			want: "docker:web",
+		},
+		{
+			name: "vm",
+			body: "kind: service\nname: vm-web01\ncontrol: {type: libvirt, domain: web01}\n",
+			want: "vm:web01",
+		},
+		{
+			name: "catalog",
+			body: "kind: service\nname: nginx-main\nuses: nginx\n",
+			want: "service:nginx",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(tmp, tc.name+".yml")
+			if err := os.WriteFile(path, []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if got := serviceFileTarget(path); got != tc.want {
+				t.Fatalf("serviceFileTarget() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWizardManagedServiceName(t *testing.T) {
+	if got := wizardManagedServiceName("docker", "/stack/web.1"); got != "docker-stack-web.1" {
+		t.Fatalf("wizardManagedServiceName() = %q, want docker-stack-web.1", got)
 	}
 }
 

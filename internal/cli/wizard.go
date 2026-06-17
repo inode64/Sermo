@@ -175,6 +175,12 @@ func (a App) wizardEnv(ctx context.Context, opts options, cfg *config.Config) as
 			}
 			return listInstalledDaemons(ctx, cfg, servicemgr.Backend(backend), a.Runner, opts.timeout)
 		},
+		DockerContainers: func() ([]assist.DockerCandidate, error) {
+			return listWizardDockerContainers(ctx, opts.timeout)
+		},
+		VMs: func() ([]assist.VMCandidate, error) {
+			return listWizardVMs(ctx, opts.timeout)
+		},
 	}
 }
 
@@ -484,8 +490,31 @@ func detectedTargetKeys(env assist.Env, wizard string) map[string]bool {
 	case "service":
 		if env.Daemons != nil {
 			if ds, err := env.Daemons(); err == nil {
-				for _, d := range ds {
-					keys[d.Name] = true
+				if len(ds) > 0 {
+					keys[serviceDetectedFamilyKey("service")] = true
+					for _, d := range ds {
+						keys[serviceTargetKey("service", d.Name)] = true
+					}
+				}
+			}
+		}
+		if env.DockerContainers != nil {
+			if containers, err := env.DockerContainers(); err == nil {
+				if len(containers) > 0 {
+					keys[serviceDetectedFamilyKey("docker")] = true
+					for _, c := range containers {
+						keys[serviceTargetKey("docker", c.Container)] = true
+					}
+				}
+			}
+		}
+		if env.VMs != nil {
+			if vms, err := env.VMs(); err == nil {
+				if len(vms) > 0 {
+					keys[serviceDetectedFamilyKey("vm")] = true
+					for _, vm := range vms {
+						keys[serviceTargetKey("vm", vm.Domain)] = true
+					}
 				}
 			}
 		}

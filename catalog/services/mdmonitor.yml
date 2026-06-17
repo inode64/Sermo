@@ -1,0 +1,12 @@
+kind: daemon
+name: mdmonitor
+display_name: "MD array monitor"
+category: storage
+description: "mdadm monitor service for Linux software RAID arrays."
+service:
+  systemd: [mdmonitor]
+apps: [mdadm]
+
+checks:
+  service: { type: service, expect: active }
+  raid: { type: raid, degraded: { op: "==", value: 0 } }

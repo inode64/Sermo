@@ -84,8 +84,7 @@ checks/processes/rules and override only the binary.
 kind: profile
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-variables:
-  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 ```
 
 ## Categories and library restarts
@@ -95,8 +94,10 @@ Profiles are categorized by the subdirectory under a profiles root: `services/`,
 directory sets `Document.Category`. `apps` and `libs` are minimal profiles (name,
 display_name, description, binary, version) surfaced by `sermoctl apps` / `libs`.
 
-A `library` profile names a shared library and the file to watch (`variables.binary`,
-e.g. `/lib64/libc.so.6`). A service opts into library-change restarts with:
+A `library` profile names a shared library and the file to watch (`binary`,
+e.g. `/lib64/libc.so.6`). Unlike app/service binaries, library `binary` values
+are watched files and do not generate an executable preflight. A service opts
+into library-change restarts with:
 
 ```yaml
 restart_on_change:

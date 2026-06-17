@@ -45,7 +45,8 @@ func TestAppsVersionShortCommand(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(appsDir, "native.yml"), []byte(fmt.Sprintf(`kind: app
 name: nativeapp
 display_name: "NativeApp"
-variables: { binary: %q, shortprog: %q }
+binary: %q
+variables: { shortprog: %q }
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
@@ -57,7 +58,7 @@ preflight:
 	if err := os.WriteFile(filepath.Join(appsDir, "fallback.yml"), []byte(fmt.Sprintf(`kind: app
 name: fallbackapp
 display_name: "FallbackApp"
-variables: { binary: %q }
+binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
@@ -68,7 +69,8 @@ preflight:
 	if err := os.WriteFile(filepath.Join(appsDir, "empty.yml"), []byte(fmt.Sprintf(`kind: app
 name: emptyapp
 display_name: "EmptyApp"
-variables: { binary: %q, shortprog: %q }
+binary: %q
+variables: { shortprog: %q }
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
@@ -157,8 +159,7 @@ func TestAppsCommand(t *testing.T) {
 name: %s
 display_name: %q
 service: { name: %s }
-variables:
-  binary: %q
+binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

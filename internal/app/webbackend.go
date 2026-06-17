@@ -18,6 +18,7 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/diag"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
@@ -31,16 +32,30 @@ import (
 	"sermo/internal/web"
 )
 
-const applicationsCacheTTL = 30 * time.Second
+const (
+	applicationsCacheTTL = 30 * time.Second
+	// serviceStatusCacheTTL bounds how often the web list re-queries systemd/OpenRC.
+	serviceStatusCacheTTL = 10 * time.Second
+	// slaTimelineCacheTTL caches SLA timeline strips for detail/expansion views.
+	slaTimelineCacheTTL = 45 * time.Second
+)
 
 // serviceRuntime builds the per-service runtime pieces shared by a worker and the
 // web backend: a process discoverer, the check deps (with a backend-status
 // closure), and the safe operation engine. The engine's per-service operation
-// lock serializes start/stop/restart/reload across the worker and the web.
+// lock serializes start/stop/restart/reload/resume across the worker and the web.
 func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	discoverer := process.NewDiscoverer()
-	backendPIDs := servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
-	discoverer.BackendPIDs = backendPIDs
+	if deps.ProcReader != nil {
+		discoverer.Reader = deps.ProcReader
+	}
+	backendPIDs := deps.BackendPIDs
+	if backendPIDs == nil && deps.Backend != servicemgr.BackendLibvirt && deps.Backend != servicemgr.BackendDocker {
+		backendPIDs = servicemgr.BackendPIDsFuncWithRunner(deps.Backend, unit, deps.ExecxRunner, nil)
+	}
+	if backendPIDs != nil {
+		discoverer.BackendPIDs = backendPIDs
+	}
 	checkDeps := checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
@@ -133,6 +148,10 @@ type webEntry struct {
 	processWarnings   []string
 	noResidentProcess bool
 	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
+
+	statusMu     sync.Mutex
+	cachedStatus string
+	statusAt     time.Time
 }
 
 // webWatch is a configured host watch for UI visibility (services may be 0).
@@ -167,7 +186,7 @@ type diagnosticCleaner interface {
 
 // WebBackend implements web.Backend over the daemon's services: status from the
 // backend, monitoring state and SLA from the store, the latest check results from
-// the shared snapshots, and start/stop/restart/reload through the same safe operation
+// the shared snapshots, and start/stop/restart/reload/resume through the same safe operation
 // engine the workers use.
 type WebBackend struct {
 	order            []string
@@ -221,6 +240,19 @@ type WebBackend struct {
 	applicationsAt    time.Time
 	applicationsCache []web.Application
 	applicationsList  func(context.Context) []web.Application
+
+	slaCacheMu sync.Mutex
+	slaCache   map[slaCacheKey]cachedSLATimelines
+}
+
+type slaCacheKey struct {
+	service string
+	check   string // empty for service-level SLA
+}
+
+type cachedSLATimelines struct {
+	windows []web.SLAWindow
+	at      time.Time
 }
 
 type webDiskIOState struct {
@@ -272,6 +304,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		defaultTimeout:   deps.DefaultTimeout,
 		operationTimeout: deps.OperationTimeout,
 		now:              deps.Now,
+		slaCache:         map[slaCacheKey]cachedSLATimelines{},
 	}
 	if wb.serviceMetrics == nil {
 		wb.serviceMetrics = NewServiceMetricSampler()
@@ -295,11 +328,12 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			continue
 		}
 		disabled := cfgval.Disabled(doc.Body)
-		base := config.ServiceUnit(resolved.Tree, name)
-		candidates, trust := config.ServiceCandidates(resolved.Tree, string(deps.Backend), name)
-		unit, err := resolver.Resolve(context.Background(), deps.Backend, candidates, trust)
-		if err != nil {
-			unit = base
+		target, warn := control.ResolveWithFallback(context.Background(), name, resolved.Tree, deps.Backend, deps.Manager, resolver)
+		if warn != "" {
+			warnings = append(warnings, "service "+name+": "+warn)
+		}
+		if target.Unit == "" {
+			continue
 		}
 		iv := cfgval.Duration(resolved.Tree["interval"])
 		if iv <= 0 {
@@ -308,8 +342,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		entry := &webEntry{
 			displayName:       config.DisplayName(resolved.Tree, name),
 			category:          config.CategoryLabel(resolved.Tree, config.CategoryService),
-			unit:              unit,
-			backend:           string(deps.Backend),
+			unit:              target.Unit,
+			backend:           string(target.Backend),
 			interval:          iv,
 			policyCooldown:    rules.ParsePolicy(resolved.Tree).Cooldown,
 			noResidentProcess: noResidentProcess(resolved.Tree),
@@ -317,8 +351,12 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		if disabled {
 			entry.disabled = true
 		} else {
-			engine, checkDeps, discoverer := serviceRuntime(name, unit, resolved.Tree, deps, operationEventEmitter(deps.Emit))
-			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, deps, unit)
+			serviceDeps := deps
+			serviceDeps.Backend = target.Backend
+			serviceDeps.Manager = target.Manager
+			serviceDeps.BackendPIDs = target.BackendPIDs
+			engine, checkDeps, discoverer := serviceRuntime(name, target.Unit, resolved.Tree, serviceDeps, operationEventEmitter(deps.Emit))
+			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, serviceDeps, target.Unit)
 			names, types := checkCatalog(resolved.Tree)
 			entry.engine = engine
 			entry.status = checkDeps.Status
@@ -486,15 +524,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.RemediationState = "disabled"
 		return svc
 	}
-	status := "unknown"
-	if e.status != nil {
-		if st, err := e.status(ctx); err != nil {
-			status = "error"
-		} else {
-			status = string(st)
-		}
-	}
-	svc.Status = status
+	svc.Status = e.backendStatus(ctx, b.webNow())
 	if active, source, changed, ok := b.monitorView(name); ok {
 		svc.Monitored, svc.MonitorSource, svc.MonitorChangedAt = active, source, changed
 	}
@@ -755,15 +785,13 @@ func (b *WebBackend) lastServiceEvents() map[string]*web.Event {
 		return nil
 	}
 	out := map[string]*web.Event{}
-	for _, e := range b.events.Recent("", 0) {
-		if e.Service == "" {
+	for _, name := range b.order {
+		ev, ok := b.events.LastService(name)
+		if !ok {
 			continue
 		}
-		if _, seen := out[e.Service]; seen {
-			continue
-		}
-		ev := loggedEventToWeb(e)
-		out[e.Service] = &ev
+		webEv := loggedEventToWeb(ev)
+		out[name] = &webEv
 	}
 	return out
 }
@@ -773,19 +801,47 @@ func (b *WebBackend) lastWatchActivities() map[string]watchActivity {
 		return nil
 	}
 	out := map[string]watchActivity{}
-	for _, e := range b.events.Recent("", 200) {
-		if e.Watch == "" || !isWatchActivityKind(e.Kind) {
+	for _, name := range b.watchOrder {
+		ev, ok := b.events.LastWatchActivity(name)
+		if !ok {
 			continue
 		}
-		if _, seen := out[e.Watch]; seen {
-			continue
-		}
-		out[e.Watch] = watchActivity{
-			At:   e.Time.Format(time.RFC3339),
-			Kind: e.Kind,
+		out[name] = watchActivity{
+			At:   ev.Time.Format(time.RFC3339),
+			Kind: ev.Kind,
 		}
 	}
 	return out
+}
+
+// backendStatus returns the init-system status for a service, reusing a short TTL
+// cache so the service list does not invoke systemctl/rc-status on every poll.
+func (e *webEntry) backendStatus(ctx context.Context, now time.Time) string {
+	if e == nil || e.status == nil {
+		return "unknown"
+	}
+	e.statusMu.Lock()
+	defer e.statusMu.Unlock()
+	if !e.statusAt.IsZero() && now.Sub(e.statusAt) < serviceStatusCacheTTL {
+		return e.cachedStatus
+	}
+	st, err := e.status(ctx)
+	if err != nil {
+		e.cachedStatus = "error"
+	} else {
+		e.cachedStatus = string(st)
+	}
+	e.statusAt = now
+	return e.cachedStatus
+}
+
+func (e *webEntry) invalidateStatusCache() {
+	if e == nil {
+		return
+	}
+	e.statusMu.Lock()
+	e.statusAt = time.Time{}
+	e.statusMu.Unlock()
 }
 
 func watchViewFailed(w web.Watch) bool {
@@ -2261,7 +2317,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 		if len(procWarnings) > 0 {
 			d.ProcessWarnings = procWarnings
 		}
-		d.Processes, d.ProcessTotals = aggregateProcesses(procs, metrics.OSReader{})
+		d.Processes, d.ProcessTotals = aggregateProcesses(procs, b.runtimeMetricReader())
 		attachLiveCPU(&d, b.live, name)
 	}
 
@@ -2282,25 +2338,45 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 }
 
 func (b *WebBackend) serviceSLAWindows(name string, now time.Time) []web.SLAWindow {
-	if b.sla == nil {
-		return nil
-	}
-	tls, err := b.sla.SLATimelines(name, now)
-	if err != nil {
-		return nil
-	}
-	return toWebSLAWindows(tls)
+	return b.cachedSLAWindows(name, "", now)
 }
 
 func (b *WebBackend) checkSLAWindows(service, check string, now time.Time) []web.SLAWindow {
+	return b.cachedSLAWindows(service, check, now)
+}
+
+func (b *WebBackend) cachedSLAWindows(service, check string, now time.Time) []web.SLAWindow {
 	if b.sla == nil {
 		return nil
 	}
-	tls, err := b.sla.CheckSLATimelines(service, check, now)
+	key := slaCacheKey{service: service, check: check}
+	b.slaCacheMu.Lock()
+	if b.slaCache == nil {
+		b.slaCache = map[slaCacheKey]cachedSLATimelines{}
+	}
+	if cached, ok := b.slaCache[key]; ok && now.Sub(cached.at) < slaTimelineCacheTTL {
+		out := cached.windows
+		b.slaCacheMu.Unlock()
+		return slices.Clone(out)
+	}
+	b.slaCacheMu.Unlock()
+
+	var tls []state.SLAWindowTimeline
+	var err error
+	if check == "" {
+		tls, err = b.sla.SLATimelines(service, now)
+	} else {
+		tls, err = b.sla.CheckSLATimelines(service, check, now)
+	}
 	if err != nil {
 		return nil
 	}
-	return toWebSLAWindows(tls)
+	windows := toWebSLAWindows(tls)
+
+	b.slaCacheMu.Lock()
+	b.slaCache[key] = cachedSLATimelines{windows: slices.Clone(windows), at: now}
+	b.slaCacheMu.Unlock()
+	return windows
 }
 
 func toWebSLAWindows(tls []state.SLAWindowTimeline) []web.SLAWindow {
@@ -2730,15 +2806,15 @@ func (b *WebBackend) lastServiceEvent(name string) *web.Event {
 	if b.events == nil {
 		return nil
 	}
-	events := b.events.Recent(name, 1)
-	if len(events) == 0 {
+	ev, ok := b.events.LastService(name)
+	if !ok {
 		return nil
 	}
-	ev := loggedEventToWeb(events[0])
-	return &ev
+	webEv := loggedEventToWeb(ev)
+	return &webEv
 }
 
-// Operate runs a start/stop/restart/reload action on a service.
+// Operate runs a start/stop/restart/reload/resume action on a service.
 func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
@@ -2770,6 +2846,7 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 	if r.Service == "" {
 		r.Service = name
 	}
+	e.invalidateStatusCache()
 	msg := r.Message
 	if msg == "" {
 		msg = string(r.Status)

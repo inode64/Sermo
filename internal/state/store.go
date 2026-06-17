@@ -202,7 +202,11 @@ func Open(path string) (*Store, error) {
 		}
 	}
 
-	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(on)"
+	// synchronous=NORMAL is safe under WAL (no corruption risk; at worst the last
+	// few committed cycles are lost on a power cut) and avoids an fsync on every
+	// commit — the per-cycle SLA/measurement writes would otherwise each force a
+	// disk sync.
+	dsn := "file:" + path + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(on)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open state db %s: %w", path, err)
