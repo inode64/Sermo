@@ -453,6 +453,7 @@ func TestCatalogAppsUseCanonicalNames(t *testing.T) {
 		"dbus-daemon":     "dbus",
 		"fail2ban-server": "fail2ban",
 		"keydb-server":    "keydb",
+		"lm-sensors":      "lm_sensors",
 	}
 	listed := map[string]struct{}{}
 	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
