@@ -191,7 +191,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	case "pidfile":
 		return buildPidfileCheck(b, entry, deps)
 	case "libraries":
-		return buildLibrariesCheck(b, entry, runner)
+		return buildLibrariesCheck(b, entry)
 	case "metric":
 		return buildMetricCheck(b, entry, deps)
 	case "process":
@@ -495,12 +495,13 @@ func buildBinaryCheck(b base, entry map[string]any) (Check, string) {
 }
 
 // buildLibrariesCheck builds a check on a binary's shared-library dependencies.
-func buildLibrariesCheck(b base, entry map[string]any, runner execx.Runner) (Check, string) {
+// Implemented natively with debug/elf (no ldd).
+func buildLibrariesCheck(b base, entry map[string]any) (Check, string) {
 	binary := cfgval.AsString(entry["binary"])
 	if binary == "" {
 		return nil, "libraries check requires a binary"
 	}
-	return librariesCheck{base: b, runner: runner, binary: binary}, ""
+	return librariesCheck{base: b, binary: binary}, ""
 }
 
 // buildMetricCheck builds a check comparing a sampled metric to a threshold.

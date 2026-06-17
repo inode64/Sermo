@@ -25,5 +25,4 @@ exists. Nothing here is committed scope; pick items deliberately.
   form, never a shell string).
 - Variable-to-variable references (`variables.x: "${y}"`), with cycle
   detection. Today a variable value containing `${...}` is a validation error.
-- Replace the `libraries` check's `ldd` with native ELF parsing (`debug/elf`),
-  removing the only loader-querying external process.
+
