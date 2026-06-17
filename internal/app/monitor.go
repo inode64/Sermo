@@ -166,17 +166,14 @@ func (m *Monitor) applyConfig(cfg *config.Config) {
 	m.deps.DefaultTimeout = EngineDuration(cfg, "default_timeout", 10*time.Second)
 	m.deps.OperationTimeout = EngineDuration(cfg, "operation_timeout", 90*time.Second)
 	m.deps.MaxParallel = EngineInt(cfg, "max_parallel_checks", 8)
+	m.deps.UserLookup = EngineUserLookup(cfg, m.deps.ExecxRunner)
 	m.deps.SystemFreshness = m.deps.Interval / 2
 	if m.collector != nil && m.deps.SystemFreshness > 0 {
 		m.collector.SystemFreshness = m.deps.SystemFreshness
 	}
-	// Preserve the shared /proc snapshot reader across reloads (just refresh its
-	// reuse window); create it if this is the first apply.
-	if cr, ok := m.deps.ProcReader.(*process.CachingReader); ok {
-		cr.SetFreshness(m.deps.SystemFreshness)
-	} else {
-		m.deps.ProcReader = process.NewCachingReader(process.OSReader{}, m.deps.SystemFreshness)
-	}
+	// Recreate the shared /proc reader so reloads can change user/group lookup
+	// policy as well as the freshness window.
+	m.deps.ProcReader = process.NewCachingReader(process.OSReader{LookupUserName: m.deps.UserLookup.Username}, m.deps.SystemFreshness)
 	notifiers, warns := notify.Build(cfg.Notifiers(), notify.WithTemplateDir(cfg.Global.TemplateDir()))
 	m.deps.Notifiers = notifiers
 	m.deps.GlobalNotify = config.NotifyDefault(cfg.Global.Raw)

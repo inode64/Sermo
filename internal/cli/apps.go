@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"text/tabwriter"
 
+	"sermo/internal/app"
 	"sermo/internal/appinspect"
 	"sermo/internal/config"
 )
@@ -42,7 +43,7 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 		return code
 	}
 
-	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing)
+	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing, appinspect.WithUserLookup(app.EngineUserLookup(cfg, a.Runner)))
 
 	if opts.json {
 		writeJSON(a.Stdout, map[string]any{jsonKey: reports})

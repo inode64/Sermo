@@ -178,6 +178,8 @@ engine:
   default_timeout: 10s        # default per-check timeout
   operation_timeout: 90s        # outer deadline for safe service actions
   startup_delay: 0            # grace period before the first cycle (0 disables)
+  user_lookup: auto           # auto | native | getent | numeric
+  user_lookup_timeout: 250ms  # per-getent lookup timeout; cached in-process
 ```
 
 `engine.interval` is the default cadence at which every service's checks are
@@ -215,6 +217,29 @@ it starts its first check cycle, giving the host time to finish booting so
 services that are still coming up are not flagged or remediated prematurely. The
 wait applies once, on startup, before any worker runs; a shutdown signal during
 the wait aborts cleanly without starting any worker. The default `0` disables it.
+
+`engine.user_lookup` controls how Sermo turns user/group names into UID/GID
+values for runtime process identity:
+
+- `auto` (default): if the binary was built with CGO enabled, Go's `os/user`
+  uses libc/NSS, so LDAP/SSSD/NIS-backed users resolve through the host's normal
+  identity stack. If the binary was built static with `CGO_ENABLED=0`, Sermo
+  first uses the native passwd/group reader and then falls back to `getent
+  passwd` / `getent group` so the static binary can still ask the host NSS
+  setup.
+- `native`: use only Go's `os/user`. With CGO disabled this normally means
+  local `/etc/passwd` and `/etc/group`.
+- `getent`: prefer `getent passwd|group`, then fall back to native lookup.
+- `numeric`: disable name lookup. Numeric UID/GID selectors still work; named
+  selectors fail closed and owner columns show numeric IDs when no name is
+  available.
+
+`engine.user_lookup_timeout` bounds each `getent` call; results, including
+misses, are cached in the running process so normal monitoring does not spawn a
+command for every process every cycle. If a name cannot be resolved, Sermo does
+not guess: process selectors and `kill_only_if.users` using that name do not
+match. For critical stop policies, numeric UIDs/GIDs are the most deterministic
+form.
 
 `SIGHUP` reloads the configuration from the path passed to `sermod run
 --config` (the same file `sermoctl` uses). `sermod` validates the new config,
@@ -1590,7 +1615,9 @@ bytes), and — once a rate is available — `SERMO_CPU` (percent) and `SERMO_IO
 restart resets it (the real elapsed-since-start is not tracked across restarts).
 `io` reads `/proc/<pid>/io`, which requires the daemon to have permission to read
 it (typically running as root); when it is unreadable the IO condition never fires.
-The WebUI shows current matches, PIDs and aggregate RSS/IO counters.
+The optional `user:` filter is resolved through `engine.user_lookup`; numeric
+UIDs are accepted and avoid host identity-service ambiguity. The WebUI shows
+current matches, PIDs and aggregate RSS/IO counters.
 
 Other resource types will be added as new check `type` values using the same
 watch/hook structure.
@@ -1600,8 +1627,8 @@ watch/hook structure.
 Only the per-service parts of `defaults` merge into a service: `stop_policy`,
 `policy`, and `rule_window`. Engine-wide settings (`interval`,
 `max_parallel_checks`, `max_parallel_operations`, `default_timeout`,
-`operation_timeout`, `startup_delay`, `backend`) are daemon configuration and
-never merge into a service.
+`operation_timeout`, `startup_delay`, `backend`, `user_lookup`,
+`user_lookup_timeout`) are daemon configuration and never merge into a service.
 
 `defaults.policy.cooldown` is **required and positive**: every resolved service
 inherits a loop-prevention cooldown unless it overrides it.

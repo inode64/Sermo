@@ -113,6 +113,11 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 The `storage` check also verifies the **mount** of its `path` — see
 [storage and mount](configuration.md#host-watches).
 
+`process` checks and process condition leaves match real UID/GID values read
+from `/proc/<pid>/status`. A configured `user:` or `group:` name is resolved
+through `engine.user_lookup`; if the name cannot be resolved it fails closed and
+matches no process. Numeric UID/GID values avoid host identity-service ambiguity.
+
 The `command` check asserts the command's outcome: `expect_exit` (default 0) and
 optional `expect_stdout` / `expect_stderr` matchers — a plain string requires that
 substring, or an `{op, value}` mapping compares the trimmed output (`== != > >= <

@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	"sermo/internal/config"
 	"sermo/internal/execx"
+	"sermo/internal/process"
 )
 
 // fakeRunner returns a canned result per command path; commands without an
@@ -81,6 +83,31 @@ func TestInspectBinaryStates(t *testing.T) {
 	r := inspect(t, runner, tree(writeBinary(t, 0o755), nil))
 	if !r.Installed || !r.OK || r.Status != "ok" || !strings.Contains(r.Permissions, "0755") {
 		t.Errorf("plain executable: %+v", r)
+	}
+}
+
+func TestInspectUsesConfiguredUserLookupForOwners(t *testing.T) {
+	path := writeBinary(t, 0o755)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatal("stat did not return syscall.Stat_t")
+	}
+	runner := fakeRunner{byCommand: map[string]execx.Result{
+		commandKey("getent", "passwd", fmt.Sprintf("%d", st.Uid)): {Stdout: "ldap-owner:x:4242:4243::/home/ldap-owner:/bin/bash\n"},
+		commandKey("getent", "group", fmt.Sprintf("%d", st.Gid)):  {Stdout: "ldap-group:x:4243:ldap-owner\n"},
+	}}
+	lookup := process.NewUserLookup(process.UserLookupConfig{
+		Mode:   process.UserLookupGetent,
+		Runner: runner,
+	})
+
+	report := Inspect(context.Background(), fakeRunner{}, "app", config.Resolved{Name: "app", Tree: tree(path, nil)}, WithUserLookup(lookup))
+	if report.User != "ldap-owner" || report.Group != "ldap-group" {
+		t.Fatalf("owner = %q/%q, want ldap-owner/ldap-group", report.User, report.Group)
 	}
 }
 

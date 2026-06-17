@@ -229,6 +229,9 @@ type Deps struct {
 	// ExecxRunner is used for executing hook commands from watches (file, process,
 	// and generic watches). If nil, OSHookRunner will use execx.CommandRunner{}.
 	ExecxRunner execx.Runner
+	// UserLookup resolves users/groups for process discovery, kill policies and
+	// owner display. Optional: nil uses process.DefaultUserLookup.
+	UserLookup *process.UserLookup
 	// VolumeExpander grows storage-watch filesystems for `then.expand`. Optional:
 	// nil uses volume.Expander with ExecxRunner. Tests inject a fake so no real
 	// LVM/filesystem commands run.

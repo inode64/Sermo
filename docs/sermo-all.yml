@@ -27,6 +27,8 @@ engine:
   default_timeout: 10s         # per-check timeout when a check sets none
   operation_timeout: 90s       # outer deadline for safe start/stop/restart/reload/resume
   startup_delay: 0             # grace before the first cycle after boot
+  user_lookup: auto            # auto | native | getent | numeric
+  user_lookup_timeout: 250ms   # per-getent lookup timeout; cached in-process
 
 paths:
   catalog:                     # packaged + admin daemon/app/lib definitions
