@@ -109,67 +109,6 @@ func (a App) cloneService(opts options, cfg *config.Config, source, target strin
 	return exitSuccess
 }
 
-// runConfigDiff renders two resolved services and reports their line difference.
-func (a App) runConfigDiff(globalPath string, rest []string, opts options) int {
-	if len(rest) < 2 {
-		return a.usageError("config diff requires BASE and SERVICE")
-	}
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
-	}
-
-	base, code := a.renderForDiff(opts, cfg, rest[0])
-	if code != exitSuccess {
-		return code
-	}
-	other, code := a.renderForDiff(opts, cfg, rest[1])
-	if code != exitSuccess {
-		return code
-	}
-
-	removed, added := config.LineDiff(base, other)
-	identical := len(removed) == 0 && len(added) == 0
-	if opts.json {
-		writeJSON(a.Stdout, map[string]any{
-			"base":      rest[0],
-			"service":   rest[1],
-			"identical": identical,
-			"removed":   removed,
-			"added":     added,
-		})
-		return exitSuccess
-	}
-	if identical {
-		fmt.Fprintf(a.Stdout, "%s and %s resolve identically\n", rest[0], rest[1])
-		return exitSuccess
-	}
-	fmt.Fprintf(a.Stdout, "--- %s\n+++ %s\n", rest[0], rest[1])
-	for _, l := range removed {
-		fmt.Fprintf(a.Stdout, "- %s\n", l)
-	}
-	for _, l := range added {
-		fmt.Fprintf(a.Stdout, "+ %s\n", l)
-	}
-	return exitSuccess
-}
-
-func (a App) renderForDiff(opts options, cfg *config.Config, name string) (string, int) {
-	if code := a.requireService(opts, cfg, name); code != exitSuccess {
-		return "", code
-	}
-	resolved, code := a.resolveService(opts, cfg, name)
-	if code != exitSuccess {
-		return "", code
-	}
-	data, err := config.RenderYAML(resolved)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("render %s: %v", name, err))
-		return "", exitRuntimeError
-	}
-	return string(data), exitSuccess
-}
-
 // requireService reports an unknown-service error unless name is configured.
 // It returns exitSuccess when the service exists.
 func (a App) requireService(opts options, cfg *config.Config, name string) int {

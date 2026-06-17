@@ -39,8 +39,6 @@ sermoctl processes SERVICE
 sermoctl locks SERVICE
 
 sermoctl config validate [SERVICE]
-sermoctl config render SERVICE
-sermoctl config diff BASE SERVICE
 
 sermoctl daemon list
 sermoctl daemon show DAEMON

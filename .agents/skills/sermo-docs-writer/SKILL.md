@@ -37,7 +37,8 @@ config layout
 catalog daemons/apps/libs/patterns
 services
 clones
-config render/validate
+config validate
+service show
 checks
 rules
 guards
@@ -67,7 +68,7 @@ Prefer complete examples:
 ```bash
 sermoctl preflight mysql-main
 sermoctl restart mysql-main
-sermoctl config render mysql-main
+sermoctl service show mysql-main
 ```
 
 ```yaml
