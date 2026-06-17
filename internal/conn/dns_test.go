@@ -152,6 +152,28 @@ func TestFirstNameserver(t *testing.T) {
 	}
 }
 
+func TestDNSProbeInterfaceIgnoresLoopbackNameserver(t *testing.T) {
+	tests := []struct {
+		name  string
+		host  string
+		iface string
+		want  string
+	}{
+		{name: "ipv4 loopback", host: "127.0.0.1", iface: "br0"},
+		{name: "ipv6 loopback", host: "::1", iface: "br0"},
+		{name: "bracketed ipv6 loopback", host: "[::1]", iface: "br0"},
+		{name: "remote nameserver", host: "192.0.2.53", iface: "br0", want: "br0"},
+		{name: "empty interface", host: "192.0.2.53"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dnsProbeInterface(tc.host, tc.iface); got != tc.want {
+				t.Fatalf("dnsProbeInterface(%q, %q) = %q, want %q", tc.host, tc.iface, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDNSProbeResolvconf(t *testing.T) {
 	// A fake DNS server answering one A record, reached via resolvconf: true.
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")

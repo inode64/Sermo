@@ -305,6 +305,77 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 }
 
+func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
+	events := NewEventLog(10)
+	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)
+	add := func(at time.Time, e Event) {
+		events.now = func() time.Time { return at }
+		events.Add(e)
+	}
+	add(t0, Event{Watch: "uplink-dns", Kind: "firing", Message: "dns timeout"})
+	add(t0.Add(time.Minute), Event{Watch: "uplink-dns", Kind: "recovered", Message: "dns ok"})
+
+	b := &WebBackend{
+		events:     events,
+		watchOrder: []string{"uplink-dns"},
+	}
+	activities := b.lastWatchActivities()
+	wantAt := t0.Add(time.Minute).Format(time.RFC3339)
+	if got := activities["uplink-dns"]; got.Kind != "recovered" || got.At != wantAt {
+		t.Fatalf("uplink-dns activity = %+v, want recovered at %s", got, wantAt)
+	}
+}
+
+func TestWatchViewFailedIgnoresActivityBeforeMonitorChange(t *testing.T) {
+	tests := []struct {
+		name     string
+		watch    web.Watch
+		wantFail bool
+	}{
+		{
+			name: "failed activity before monitor change is stale",
+			watch: web.Watch{
+				LastActivityKind: "firing",
+				LastActivity:     "2026-06-17T14:10:43Z",
+				MonitorChangedAt: "2026-06-17T14:14:53Z",
+			},
+		},
+		{
+			name: "failed activity after monitor change is current",
+			watch: web.Watch{
+				LastActivityKind: "firing",
+				LastActivity:     "2026-06-17T14:20:43Z",
+				MonitorChangedAt: "2026-06-17T14:14:53Z",
+			},
+			wantFail: true,
+		},
+		{
+			name: "bad timestamp keeps conservative failure",
+			watch: web.Watch{
+				LastActivityKind: "firing",
+				LastActivity:     "bad-time",
+				MonitorChangedAt: "2026-06-17T14:14:53Z",
+			},
+			wantFail: true,
+		},
+		{
+			name: "recovered activity is not failed",
+			watch: web.Watch{
+				LastActivityKind: "recovered",
+				LastActivity:     "2026-06-17T14:20:43Z",
+				MonitorChangedAt: "2026-06-17T14:14:53Z",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := watchViewFailed(tt.watch); got != tt.wantFail {
+				t.Fatalf("watchViewFailed() = %v, want %v", got, tt.wantFail)
+			}
+		})
+	}
+}
+
 func TestWebBackendApplicationsCache(t *testing.T) {
 	calls := 0
 	b := &WebBackend{

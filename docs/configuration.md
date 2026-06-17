@@ -873,10 +873,11 @@ combination.
 the `check` + `for` (or per-metric conditions) are still evaluated; when the
 window is satisfied the watch emits a `firing` event (visible in the web UI
 Alerts/Watches tiles, "failed" state badge, failed filter, and in the event
-log under the watch expansion), but **no hook is executed and no notifications
-are delivered** (global `notify:` defaults are **not** inherited for bare
-watches). This is the form you use when you only want the condition surfaced in
-the dashboard and logs:
+log under the watch expansion). When a previously firing watch clears, it emits
+`recovered` and the watch returns to `ok`. No hook is executed and no
+notifications are delivered (global `notify:` defaults are **not** inherited
+for bare watches). This is the form you use when you only want the condition
+surfaced in the dashboard and logs:
 
 ```yaml
 watches:

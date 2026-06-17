@@ -57,7 +57,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, err
 	}
 
-	c, err := BindDialer(cfg.Interface).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
+	c, err := BindDialer(dnsProbeInterface(host, cfg.Interface)).DialContext(ctx, "udp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return Result{}, err
 	}
@@ -105,6 +105,14 @@ func firstNameserver(path string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no nameserver entries in %s", path)
+}
+
+func dnsProbeInterface(host, iface string) string {
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	if ip != nil && ip.IsLoopback() {
+		return ""
+	}
+	return iface
 }
 
 // parseDNSAnswerAddrs walks a DNS response's answer section and returns the

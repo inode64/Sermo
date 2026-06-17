@@ -855,10 +855,25 @@ func (e *webEntry) invalidateStatusCache() {
 }
 
 func watchViewFailed(w web.Watch) bool {
-	if WatchActivityFailed(w.LastActivityKind) {
+	if WatchActivityFailed(w.LastActivityKind) && watchActivityCurrent(w.LastActivity, w.MonitorChangedAt) {
 		return true
 	}
 	return (w.Disk != nil && (w.Disk.SampleError != "" || w.Disk.MountSampleError != "")) || watchReadingsFailed(w.Readings)
+}
+
+func watchActivityCurrent(activity, changed string) bool {
+	if activity == "" || changed == "" {
+		return true
+	}
+	activityAt, err := time.Parse(time.RFC3339, activity)
+	if err != nil {
+		return true
+	}
+	changedAt, err := time.Parse(time.RFC3339, changed)
+	if err != nil {
+		return true
+	}
+	return !activityAt.Before(changedAt)
 }
 
 func watchReadingsFailed(readings []web.WatchReading) bool {
@@ -872,7 +887,7 @@ func watchReadingsFailed(readings []web.WatchReading) bool {
 
 func isWatchActivityKind(kind string) bool {
 	switch kind {
-	case "firing", "dry-run", "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
+	case "firing", "recovered", "dry-run", "hook", "notify", "hook-failed", "notify-failed", "expand", "expand-skipped", "expand-failed":
 		return true
 	default:
 		return false
