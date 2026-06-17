@@ -633,7 +633,9 @@ Protocols, in the order of the table above:
   probe asks the first `nameserver` of `/etc/resolv.conf` — the server the
   system would ask first; with pppd's `usepeerdns`, the provider's
   resolver, which is how the `pppd` catalog daemon verifies resolution through
-  the uplink. RFC 1035.
+  the uplink. If that resolver is loopback (`127.0.0.0/8` or `::1`), an
+  `interface` pin is ignored for the DNS packet because the local resolver must
+  be reached through loopback. RFC 1035.
 - `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies the
   server answers in **server mode** with a synchronized **stratum (1–15)**; a
   kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result

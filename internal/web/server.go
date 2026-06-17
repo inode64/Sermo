@@ -115,7 +115,7 @@ type Watch struct {
 	Meter            *WatchMeter      `json:"meter,omitempty"`
 	Readings         []WatchReading   `json:"readings,omitempty"`
 	Expand           *WatchExpand     `json:"expand,omitempty"`
-	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last hook/notify for this watch, if any
+	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
 	LastActivityKind string           `json:"last_activity_kind,omitempty"`
 }
 

@@ -51,3 +51,25 @@ func TestWatchState(t *testing.T) {
 		})
 	}
 }
+
+func TestWatchActivityFailed(t *testing.T) {
+	tests := []struct {
+		kind string
+		want bool
+	}{
+		{kind: "firing", want: true},
+		{kind: "hook-failed", want: true},
+		{kind: "notify-failed", want: true},
+		{kind: "expand-failed", want: true},
+		{kind: "recovered"},
+		{kind: "hook"},
+		{kind: "notify"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.kind, func(t *testing.T) {
+			if got := WatchActivityFailed(tt.kind); got != tt.want {
+				t.Fatalf("WatchActivityFailed(%q) = %v, want %v", tt.kind, got, tt.want)
+			}
+		})
+	}
+}
