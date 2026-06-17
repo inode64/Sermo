@@ -38,6 +38,19 @@ func dockerWizardEnv(*config.Config) assist.Env {
 	}
 }
 
+func mountWizardEnv(*config.Config) assist.Env {
+	return assist.Env{
+		Mounts: func() ([]assist.MountCandidate, error) {
+			return []assist.MountCandidate{{
+				Path:    "/mnt/backup",
+				Source:  "UUID=backup",
+				FSType:  "ext4",
+				Mounted: false,
+			}}, nil
+		},
+	}
+}
+
 func TestIfaceHasUsableAddress(t *testing.T) {
 	addr := func(cidr string) net.Addr {
 		ip, n, err := net.ParseCIDR(cidr)
@@ -175,6 +188,65 @@ func TestRunWizardDockerWritesService(t *testing.T) {
 	}
 	if _, ok := loaded.Services["docker-web"]; !ok {
 		t.Fatalf("loaded config did not include docker-web: %v", loaded.ServiceNames)
+	}
+}
+
+func TestRunWizardMountWritesMountUnit(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := strings.Join([]string{
+		"1", // select /mnt/backup
+		"y", // use refcounting
+		"y", // write mount file
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	app := App{
+		Stdin:         strings.NewReader(script),
+		Stdout:        &out,
+		Stderr:        &bytes.Buffer{},
+		LoadConfig:    config.Load,
+		wizardEnvFunc: mountWizardEnv,
+	}
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "mount"})
+	if code != exitSuccess {
+		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
+	}
+	mountPath := filepath.Join(tmp, mountsConfigDir, "mount-mnt-backup.yml")
+	data, err := os.ReadFile(mountPath)
+	if err != nil {
+		t.Fatalf("mount file not written: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"kind: mount",
+		"name: mount-mnt-backup",
+		"path: /mnt/backup",
+		"refcount: true",
+		"allow_sigkill: false",
+		"allow_lazy: false",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("mount file missing %q:\n%s", want, text)
+		}
+	}
+	merged, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(merged), "mounts:") {
+		t.Fatalf("paths.mounts not updated: %s", merged)
+	}
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load merged config: %v", err)
+	}
+	if _, ok := loaded.Mounts["mount-mnt-backup"]; !ok {
+		t.Fatalf("loaded config did not include mount-mnt-backup: %v", loaded.MountNames)
 	}
 }
 
@@ -390,6 +462,26 @@ func TestTargetsStale(t *testing.T) {
 				t.Fatalf("targetsStale(%v) = %v, want %v", tc.targets, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestPlanStaleMountDeletes(t *testing.T) {
+	dir := t.TempDir()
+	oldFile := filepath.Join(dir, "old.yml")
+	if err := os.WriteFile(oldFile, []byte("kind: mount\nname: mount-old\npath: /old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	currentFile := filepath.Join(dir, "current.yml")
+	if err := os.WriteFile(currentFile, []byte("kind: mount\nname: mount-current\npath: /mnt/current\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p := assist.NewPrompt(strings.NewReader("y\ny\n"), &strings.Builder{})
+	deletes, err := planStaleMountDeletes(p, dir, map[string]bool{"/mnt/current": true})
+	if err != nil {
+		t.Fatalf("planStaleMountDeletes: %v", err)
+	}
+	if len(deletes) != 1 || deletes[0] != oldFile {
+		t.Fatalf("deletes = %v, want [%s]", deletes, oldFile)
 	}
 }
 

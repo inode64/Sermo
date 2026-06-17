@@ -144,3 +144,26 @@ func TestGeneratedControlledServicesPassConfigValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratedMountsPassConfigValidation(t *testing.T) {
+	body := buildMountUnit(MountCandidate{Path: "/mnt/backup"}, mountSettings{refcount: true})
+	cfg := &config.Config{
+		Global: config.Global{
+			Raw:      map[string]any{},
+			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+		},
+		Mounts: map[string]*config.Document{
+			"mount-mnt-backup": {
+				Kind: "mount",
+				Name: "mount-mnt-backup",
+				Body: body,
+			},
+		},
+		MountNames: []string{"mount-mnt-backup"},
+	}
+	for _, issue := range config.Validate(cfg) {
+		if issue.Scope == "mount mount-mnt-backup" {
+			t.Errorf("wizard-generated mount failed validation: %s", issue)
+		}
+	}
+}

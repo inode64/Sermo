@@ -807,8 +807,11 @@ a service.
 > `sermoctl wizard docker` for detected Docker containers and `sermoctl wizard vm`
 > for detected libvirt/QEMU domains; those assistants write service files with
 > `control.type: docker` or `control.type: libvirt` plus matching read-only
-> checks. When several services are selected, port overrides are skipped unless
-> you explicitly review them; catalog defaults are inherited. When a detected
+> checks. `sermoctl wizard mount` lists `/etc/fstab` mount points and writes
+> safe `kind: mount` files under `paths.mounts`; it does not execute mount or
+> umount while generating config. When several services are selected, port
+> overrides are skipped unless you explicitly review them; catalog defaults are
+> inherited. When a detected
 > service has known configuration files, the wizard asks whether to add a
 > periodic `checks.config` entry for those paths; that check uses `interval: 60m`
 > by default. Existing `apps/` include directories remain valid as a legacy
