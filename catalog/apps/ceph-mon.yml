@@ -3,8 +3,6 @@ name: ceph-mon
 display_name: "Ceph Monitor"
 category: storage
 description: "Ceph cluster monitor daemon"
-variables:
-  binary: "/usr/bin/ceph-mon"
+binary: "/usr/bin/ceph-mon"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -7,7 +7,7 @@ import (
 	"sermo/internal/process"
 )
 
-// DefaultOperationTimeout is the outer deadline for start/stop/restart/reload
+// DefaultOperationTimeout is the outer deadline for start/stop/restart/reload/resume
 // when no shorter parent context applies. Matches sermoctl's default for service actions.
 const DefaultOperationTimeout = 90 * time.Second
 

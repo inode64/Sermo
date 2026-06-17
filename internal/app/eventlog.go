@@ -27,14 +27,16 @@ type EventStore interface {
 // event is appended to the store. It is safe for concurrent use; workers and
 // watches add, the web reads.
 type EventLog struct {
-	mu           sync.Mutex
-	now          func() time.Time
-	store        EventStore
-	onStoreError func(error)
-	buf          []LoggedEvent
-	size         int
-	next         int // write index
-	count        int
+	mu            sync.Mutex
+	now           func() time.Time
+	store         EventStore
+	onStoreError  func(error)
+	buf           []LoggedEvent
+	size          int
+	next          int // write index
+	count         int
+	lastByService map[string]LoggedEvent
+	lastByWatch   map[string]LoggedEvent
 }
 
 // NewEventLog returns a log retaining the last size events (min 1).
@@ -42,7 +44,13 @@ func NewEventLog(size int) *EventLog {
 	if size < 1 {
 		size = 1
 	}
-	return &EventLog{now: time.Now, size: size, buf: make([]LoggedEvent, size)}
+	return &EventLog{
+		now:           time.Now,
+		size:          size,
+		buf:           make([]LoggedEvent, size),
+		lastByService: map[string]LoggedEvent{},
+		lastByWatch:   map[string]LoggedEvent{},
+	}
 }
 
 // NewPersistentEventLog returns an EventLog backed by store. It loads the last
@@ -108,6 +116,28 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	return out
 }
 
+// LastService returns the newest retained event for service, if any.
+func (l *EventLog) LastService(service string) (LoggedEvent, bool) {
+	if l == nil || service == "" {
+		return LoggedEvent{}, false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ev, ok := l.lastByService[service]
+	return ev, ok
+}
+
+// LastWatchActivity returns the newest retained watch-activity event for watch.
+func (l *EventLog) LastWatchActivity(watch string) (LoggedEvent, bool) {
+	if l == nil || watch == "" {
+		return LoggedEvent{}, false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	ev, ok := l.lastByWatch[watch]
+	return ev, ok
+}
+
 func (l *EventLog) orderedLocked() []LoggedEvent {
 	out := make([]LoggedEvent, 0, l.count)
 	if l.count < l.size {
@@ -125,6 +155,30 @@ func (l *EventLog) addLocked(e LoggedEvent) {
 	if l.count < l.size {
 		l.count++
 	}
+	l.indexLocked(e)
+}
+
+func (l *EventLog) indexLocked(e LoggedEvent) {
+	if e.Service != "" {
+		if l.lastByService == nil {
+			l.lastByService = map[string]LoggedEvent{}
+		}
+		l.lastByService[e.Service] = e
+	}
+	if e.Watch != "" && isWatchActivityKind(e.Kind) {
+		if l.lastByWatch == nil {
+			l.lastByWatch = map[string]LoggedEvent{}
+		}
+		l.lastByWatch[e.Watch] = e
+	}
+}
+
+func (l *EventLog) rebuildIndexesLocked() {
+	l.lastByService = map[string]LoggedEvent{}
+	l.lastByWatch = map[string]LoggedEvent{}
+	for _, e := range l.orderedLocked() {
+		l.indexLocked(e)
+	}
 }
 
 func (l *EventLog) loadRecentFromStore() error {
@@ -140,6 +194,7 @@ func (l *EventLog) loadRecentFromStore() error {
 	for i := len(records) - 1; i >= 0; i-- {
 		l.addLocked(loggedEventFromRecord(records[i]))
 	}
+	l.rebuildIndexesLocked()
 	return nil
 }
 
@@ -161,6 +216,7 @@ func (l *EventLog) Prune(before time.Time) int {
 		l.buf = make([]LoggedEvent, l.size)
 		l.next = 0
 		l.count = 0
+		l.rebuildIndexesLocked()
 		l.mu.Unlock()
 		return l.pruneStore(before, cleared)
 	}
@@ -191,6 +247,7 @@ func (l *EventLog) Prune(before time.Time) int {
 	} else {
 		l.next = 0
 	}
+	l.rebuildIndexesLocked()
 	l.mu.Unlock()
 	return l.pruneStore(before, cleared)
 }

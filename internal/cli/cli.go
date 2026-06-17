@@ -20,8 +20,10 @@ import (
 	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/config"
+	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
+	"sermo/internal/mountctl"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
@@ -48,7 +50,7 @@ type App struct {
 	NewManager func(servicemgr.Backend) (servicemgr.Manager, error)
 	LoadConfig func(globalPath string, opts ...config.Option) (*config.Config, error)
 	Discover   func(selectors []process.Selector) ([]process.Process, []string)
-	// Operate runs a start/stop/restart/reload through the operation engine for a
+	// Operate runs a start/stop/restart/reload/resume through the operation engine for a
 	// resolved service. Injectable for testing; the error covers backend/wiring
 	// failures (the Result carries operational outcomes).
 	Operate func(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error)
@@ -82,6 +84,9 @@ type App struct {
 	// feed over HTTP using the config's web address/port (and password for auth if
 	// present).
 	PruneEvents func(ctx context.Context, opts options, before time.Time) (int, error)
+	// MountController builds the host mount controller for `sermoctl mount|umount`.
+	// nil uses the real host commands and /proc readers.
+	MountController func(*config.Config) mountctl.Controller
 }
 
 type options struct {
@@ -222,8 +227,12 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runStatus(ctx, opts)
 	case "is-active":
 		return a.runIsActive(ctx, opts)
-	case "start", "stop", "restart":
+	case "start", "stop", "restart", "resume":
 		return a.runAction(ctx, opts, opts.command)
+	case "mount":
+		return a.runMount(ctx, opts)
+	case "umount":
+		return a.runUmount(ctx, opts)
 	case "config":
 		return a.runConfig(opts)
 	case "locks":
@@ -423,7 +432,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 	return exitNotActive
 }
 
-// runAction performs a start/stop/restart/reload through the safe operation engine
+// runAction performs a start/stop/restart/reload/resume through the safe operation engine
 // (section 18): the resolved service is run under the internal operation lock,
 // active named runtime locks, required preflight, guards, residual-process
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
@@ -468,8 +477,8 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 // result is returned and drives the exit code.
 func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
 	targets := config.CascadeTargets(resolved.Tree)
-	// also_apply cascades only start/stop/restart, not reload.
-	if opts.noCascade || action == "reload" || len(targets) == 0 {
+	// also_apply cascades only start/stop/restart, not reload/resume.
+	if opts.noCascade || action == "reload" || action == "resume" || len(targets) == 0 {
 		return a.Operate(ctx, opts, cfg, resolved, service, action)
 	}
 	lookup := func(svc string) []string {
@@ -518,8 +527,9 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		return operation.Result{}, fmt.Errorf("service manager unavailable: %v", err)
 	}
 
-	candidates, trust := config.ServiceCandidates(resolved.Tree, string(detection.Backend), service)
-	unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, candidates, trust)
+	resolver := servicemgr.NewUnitResolver()
+	resolver.Manager = manager
+	target, err := control.Resolve(ctx, service, resolved.Tree, detection.Backend, manager, resolver)
 	if err != nil {
 		return operation.Result{}, err
 	}
@@ -530,13 +540,15 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
 	}
 	discoverer := process.NewDiscoverer()
-	discoverer.BackendPIDs = servicemgr.BackendPIDsFunc(detection.Backend, unit)
+	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
+		discoverer.BackendPIDs = backendPIDs
+	}
 	engine := operation.New(operation.Config{
 		Service:          service,
-		Unit:             unit,
-		Backend:          string(detection.Backend),
+		Unit:             target.Unit,
+		Backend:          string(target.Backend),
 		Tree:             resolved.Tree,
-		Manager:          manager,
+		Manager:          target.Manager,
 		Locker:           &locker,
 		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer:       discoverer,
@@ -819,12 +831,13 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 		if err != nil {
 			return "", err
 		}
-		candidates, trust := config.ServiceCandidates(tree, string(detection.Backend), base)
-		unit, err := servicemgr.NewUnitResolver().Resolve(ctx, detection.Backend, candidates, trust)
+		resolver := servicemgr.NewUnitResolver()
+		resolver.Manager = manager
+		target, err := control.Resolve(ctx, base, tree, detection.Backend, manager, resolver)
 		if err != nil {
 			return "", err
 		}
-		status, err := manager.Status(ctx, unit)
+		status, err := target.Manager.Status(ctx, target.Unit)
 		if err != nil {
 			return "", err
 		}
@@ -962,13 +975,30 @@ func (a App) discoverProcesses(ctx context.Context, opts options, resolved confi
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	candidates, trust := config.ServiceCandidates(resolved.Tree, string(detection.Backend), service)
-	unit, err := servicemgr.UnitResolver{Runner: a.Runner}.Resolve(ctx, detection.Backend, candidates, trust)
+	manager, err := a.NewManager(detection.Backend)
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	discoverer.BackendPIDs = servicemgr.BackendPIDsFuncWithRunner(detection.Backend, unit, a.Runner, nil)
+	target, err := control.Resolve(ctx, service, resolved.Tree, detection.Backend, manager, servicemgr.UnitResolver{Runner: a.Runner, Manager: manager})
+	if err != nil {
+		return discoverer.Discover(selectors)
+	}
+	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
+		discoverer.BackendPIDs = backendPIDs
+	}
 	return discoverer.Discover(selectors)
+}
+
+func backendPIDsForTarget(target control.Target, runner execx.Runner) func() []int {
+	if target.BackendPIDs != nil {
+		return target.BackendPIDs
+	}
+	switch target.Backend {
+	case servicemgr.BackendSystemd, servicemgr.BackendOpenRC:
+		return servicemgr.BackendPIDsFuncWithRunner(target.Backend, target.Unit, runner, nil)
+	default:
+		return nil
+	}
 }
 
 func formatProcess(p process.Process) string {
@@ -1006,6 +1036,10 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
+	if status, code, ok := a.configuredServiceStatus(ctx, opts); ok {
+		return status, code
+	}
+
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
@@ -1024,6 +1058,47 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 	return status, exitSuccess
+}
+
+func (a App) configuredServiceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int, bool) {
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil {
+		return servicemgr.ServiceStatus{}, 0, false
+	}
+	if _, ok := cfg.Services[opts.service()]; !ok {
+		return servicemgr.ServiceStatus{}, 0, false
+	}
+	resolved, errs := cfg.Resolve(opts.service())
+	if len(errs) > 0 {
+		a.reportError(opts, fmt.Sprintf("config resolve failed: %v", errs[0]))
+		return servicemgr.ServiceStatus{}, exitRuntimeError, true
+	}
+	if _, controlled := resolved.Tree["control"]; !controlled {
+		return servicemgr.ServiceStatus{}, 0, false
+	}
+	detection, err := a.Detector.Detect(ctx, opts.backend)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
+		return servicemgr.ServiceStatus{}, exitRuntimeError, true
+	}
+	manager, err := a.NewManager(detection.Backend)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
+		return servicemgr.ServiceStatus{}, exitRuntimeError, true
+	}
+	resolver := servicemgr.NewUnitResolver()
+	resolver.Manager = manager
+	target, err := control.Resolve(ctx, opts.service(), resolved.Tree, detection.Backend, manager, resolver)
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
+		return servicemgr.ServiceStatus{}, exitRuntimeError, true
+	}
+	status, err := target.Manager.Status(ctx, opts.service())
+	if err != nil {
+		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
+		return servicemgr.ServiceStatus{}, exitRuntimeError, true
+	}
+	return status, exitSuccess, true
 }
 
 func (a App) reportError(opts options, msg string) {
@@ -1066,7 +1141,7 @@ type statusJSON struct {
 // not given. Backend actions can legitimately take much longer than a probe.
 func defaultTimeout(command string) time.Duration {
 	switch command {
-	case "start", "stop", "restart", "reload", "state":
+	case "start", "stop", "restart", "reload", "resume", "mount", "umount", "state":
 		return 90 * time.Second
 	default:
 		return 2 * time.Second
@@ -1525,11 +1600,12 @@ func flagValue(args []string, i int, flag string) (string, int, error) {
 
 func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] [--version|-V] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: version | backend|init | status SERVICE | is-active SERVICE | start|stop|restart SERVICE [--no-cascade] | reload SERVICE")
+	fmt.Fprintln(w, "commands: version | backend|init | status SERVICE | is-active SERVICE | start|stop|restart|resume SERVICE [--no-cascade] | reload SERVICE")
+	fmt.Fprintln(w, "          mount TARGET | umount TARGET | mount status TARGET | mount list")
 	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
-	fmt.Fprintln(w, "          diagnose | diagnose clean|clear | wizard [service|volume|net|uplink]")
+	fmt.Fprintln(w, "          diagnose | diagnose clean|clear | wizard [service|docker|vm|volume|net|uplink]")
 	fmt.Fprintln(w, "          state compact [--before TIME] # prune old history and vacuum; TIME=RFC3339 or duration")
 	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | daemon reload | service list | service show SERVICE")
 	fmt.Fprintln(w, "          service clone SOURCE TARGET")

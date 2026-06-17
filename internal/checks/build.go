@@ -478,11 +478,11 @@ func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
 // process. Gate it with `requires: [service]` so it only errors while the service
 // is active.
 func buildPidfileCheck(b base, entry map[string]any, deps Deps) (Check, string) {
-	path := cfgval.AsString(entry["path"])
-	if path == "" {
+	paths := cfgval.StringList(entry["path"])
+	if len(paths) == 0 {
 		return nil, "pidfile check requires a path"
 	}
-	return pidfileCheck{base: b, path: path, fallbackPIDs: deps.PidfileFallbackPIDs}, ""
+	return pidfileCheck{base: b, paths: paths, fallbackPIDs: deps.PidfileFallbackPIDs}, ""
 }
 
 // buildBinaryCheck builds a check on a binary's fingerprint.

@@ -2,8 +2,6 @@ kind: app
 name: snmp-ups
 display_name: "SNMP UPS Driver"
 category: hardware
-variables:
-  binary: "/lib/nut/snmp-ups"
+binary: "/lib/nut/snmp-ups"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

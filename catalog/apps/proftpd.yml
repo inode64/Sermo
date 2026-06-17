@@ -2,8 +2,6 @@ kind: app
 name: proftpd
 display_name: "ProFTPD"
 category: network
-variables:
-  binary: "/usr/bin/proftpd"
+binary: "/usr/bin/proftpd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -3,7 +3,9 @@ name: in.tftpd
 display_name: "TFTP Server"
 category: network
 description: "In.tftpd"
-service: in-tftpd
+service:
+  systemd: [in-tftpd, tftpd]
+  openrc: [in.tftpd, in-tftpd]
 apps: [in.tftpd]
 
 variables:

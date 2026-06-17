@@ -1,0 +1,7 @@
+kind: app
+name: tuned
+display_name: "TuneD"
+category: system
+binary: /usr/bin/tuned
+preflight:
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

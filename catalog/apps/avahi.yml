@@ -3,8 +3,6 @@ name: avahi
 catalog_aliases: [avahi-daemon]
 display_name: "Avahi"
 category: network
-variables:
-  binary: "/usr/bin/avahi-daemon"
+binary: "/usr/bin/avahi-daemon"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

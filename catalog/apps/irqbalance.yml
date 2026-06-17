@@ -1,8 +1,6 @@
 kind: app
 name: irqbalance
 category: hardware
-variables:
-  binary: "/usr/bin/irqbalance"
+binary: "/usr/bin/irqbalance"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], expect_exit: 1, timeout: 10s }

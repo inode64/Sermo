@@ -108,3 +108,39 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratedControlledServicesPassConfigValidation(t *testing.T) {
+	cfg := &config.Config{
+		Global: config.Global{
+			Raw:      map[string]any{},
+			Defaults: map[string]any{"policy": map[string]any{"cooldown": "5m"}},
+		},
+		Services: map[string]*config.Document{
+			"docker-web": {
+				Kind: "service",
+				Name: "docker-web",
+				Body: buildDockerService(DockerCandidate{
+					Name:      "docker-web",
+					Container: "web",
+					Socket:    "/run/docker.sock",
+				}),
+			},
+			"vm-web01": {
+				Kind: "service",
+				Name: "vm-web01",
+				Body: buildVMService(VMCandidate{
+					Name:   "vm-web01",
+					Domain: "web01",
+					URI:    "qemu:///system",
+					Socket: "/run/libvirt/libvirt-sock",
+				}),
+			},
+		},
+		ServiceNames: []string{"docker-web", "vm-web01"},
+	}
+	for _, issue := range config.Validate(cfg) {
+		if issue.Scope == "docker-web" || issue.Scope == "vm-web01" {
+			t.Errorf("wizard-generated controlled service failed validation: %s", issue)
+		}
+	}
+}

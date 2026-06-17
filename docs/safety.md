@@ -14,7 +14,8 @@ any `security:` toggle that tries to disable them.
 4. **Never SIGKILL by default.** `force_kill` is false unless explicitly enabled.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector. `argv[0]`/cmdline are never trusted, and a process
+   `kill_only_if` selector. A `command_match.cmd` regex may narrow process
+   discovery for shared binaries, but cmdline never authorizes a kill; a process
    whose exe cannot be resolved (permission, or a `(deleted)` binary) is never
    killed — it is reported as a residual instead.
 6. **`force_kill: true` requires `kill_only_if`** with both a `users` selector
@@ -22,13 +23,13 @@ any `security:` toggle that tries to disable them.
 
 ## The operation engine
 
-Every start/stop/restart/reload — manual (`sermoctl`) or automatic (`sermod`) —
+Every start/stop/restart/reload/resume — manual (`sermoctl`) or automatic (`sermod`) —
 runs through the same engine (section 18):
 
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").
 2. Block on any active named runtime lock.
-3. Run required preflight (start/restart/reload).
+3. Run required preflight (start/restart/reload/resume).
 4. Block if any guard blocks the action.
 5. For stop/restart, stop, wait `graceful_timeout`, discover residual processes.
 6. If residuals remain and `force_kill` is false → `orphan_processes`; a failed
@@ -38,8 +39,9 @@ runs through the same engine (section 18):
    reality — `systemctl reset-failed` (systemd) or `rc-service … zap` (OpenRC) —
    so a lingering failed/stuck marker can't disagree with the actual processes.
    Best effort: it never fails a stop that already succeeded.
-8. For start/restart, start and verify status; for reload, reload in place.
-   Run required postflight for start/restart/reload.
+8. For start/restart, start and verify status; for reload, reload in place; for
+   resume, resume the target and verify status. Run required postflight for
+   start/restart/reload/resume.
 
 A residual Sermo is not allowed to identify and kill is **reported, not killed**:
 a clean `orphan_processes` failure is safer than killing the wrong process.
@@ -91,7 +93,10 @@ lists.
 service do). It manages services owned by different users and touches privileged
 areas, so several features need it:
 
-- **Service control** — start/stop/restart/reload via systemd/OpenRC.
+- **Service control** — start/stop/restart/reload via systemd/OpenRC,
+  start/stop/restart/resume of VM domains via libvirt when a service declares
+  `control.type: libvirt`, and start/stop/restart/resume of Docker containers
+  when it declares `control.type: docker`.
 - **Signalling other users' processes** — the stop policy reaps residual
   processes that match the `kill_only_if` selector, across UIDs.
 - **Cross-user `/proc` inspection** — resolving a process's `/proc/<pid>/exe`,
@@ -141,7 +146,7 @@ Two complementary blocking mechanisms guard operations:
    that duplicates mechanism 1.
 
 The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
-serializes start/stop/restart/reload for one service. It is deliberately outside the
+serializes start/stop/restart/reload/resume for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never
 listed as a named lock, and cannot be released by `sermoctl lock release`. A
 live holder makes a second operation fail fast with exit `75` ("operation in
@@ -179,19 +184,47 @@ Lifecycle:
   safely above the protected work's real duration — one that expires
   mid-backup would wrongly unblock restarts.
 
+## Mount operations
+
+Mount units (`kind: mount`, loaded from `paths.mounts`, default
+`/etc/sermo/mounts`) are manual operator actions exposed by
+`sermoctl mount|umount`; they are not daemon-cycle remediation. They still use
+the same safety posture:
+
+- Mount source, type and options come only from `/etc/fstab`. Sermo runs
+  `mount <path>` / `umount <path>` with argv directly and a timeout; it never
+  builds a shell command from YAML.
+- Each target has an operation lock under `<paths.runtime>/mounts/ops`, so two
+  callers cannot race the same mount.
+- With `refcount: true` (the default), `mount` increments a runtime counter and
+  `umount` decrements it; the real unmount is attempted only when the counter
+  reaches zero.
+- Busy unmounts are reported with the processes using the mount. Sermo does not
+  signal them unless `umount.allow_sigkill: true` or `stop_policy.force_kill:
+  true` is explicitly configured.
+- Any mount policy that can send SIGKILL must define
+  `stop_policy.kill_only_if` with restrictive `users` and `exe_any` selectors.
+  Cmdline narrowing may help discovery, but it never authorizes a kill by
+  itself.
+- Lazy unmount (`umount -l`) is disabled unless `umount.allow_lazy: true` is set
+  on that mount.
+
 ## Process identity and matching
 
 Kill decisions depend on how process facts are read, so this is fixed:
 
 - **Exe** is the resolved target of `/proc/<pid>/exe` — the absolute real path
-  of the running binary. Never `argv[0]`/cmdline, which a process can set to
-  anything. Selectors match it by **exact equality** after canonicalizing both
-  sides; no basename, prefix or substring matching.
+  of the running binary. It is matched by **exact equality** after canonicalizing
+  both sides; no basename, prefix or substring matching.
 - **UID** is the real UID from `/proc/<pid>/status`; user selectors match it
   exactly.
-- **Cmdline** is read for display and logging only — never for matching.
-- A selector with several fields (`exe` and `user`) requires **all** of them
-  to match.
+- **Cmdline** is normally display/logging data, but a `command_match.cmd` field
+  is an explicit RE2 regex over the joined argv. Use it only to make discovery
+  more specific when the same executable runs several roles, e.g. Java or QEMU
+  wrappers. Cmdline is spoofable, so it does not satisfy `kill_only_if` and does
+  not make a process killable by itself.
+- A selector with several fields (`exe`, `cmd`, `user`, `group`) requires **all**
+  of them to match.
 - **Unresolvable exe fails safe**: if `/proc/<pid>/exe` cannot be read or
   resolves to a `(deleted)` path (binary replaced by an upgrade), the process
   matches no exe selector — it is reported as a residual with exe unknown and

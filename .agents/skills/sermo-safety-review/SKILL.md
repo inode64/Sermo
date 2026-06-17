@@ -18,7 +18,7 @@ Always verify:
 5. Auto-remediation uses the same safe operation path as manual CLI actions.
 6. `SIGKILL` is never used unless explicitly allowed.
 7. Any `SIGKILL` allowance has a restrictive `kill_only_if` clause.
-8. Processes are never killed by name only, and never by argv[0]/cmdline.
+8. Processes are never killed by name only, and cmdline never authorizes a kill.
 9. Process matching validates `exe` and `user`: `exe` is the resolved
    `/proc/<pid>/exe` path matched exactly (an unresolvable exe never matches);
    prefer `pidfile` or `cgroup` as extra evidence.
@@ -67,7 +67,7 @@ Flag any code or config that:
 
 ```text
 uses pkill/killall
-matches processes by substring, basename, or argv[0]/cmdline
+matches killable processes by substring, basename, or argv[0]/cmdline
 runs shell commands with unescaped user input
 ignores command errors
 ignores context cancellation

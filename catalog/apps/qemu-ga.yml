@@ -2,8 +2,6 @@ kind: app
 name: qemu-ga
 display_name: "QEMU Guest Agent"
 category: virtualization
-variables:
-  binary: "/usr/bin/qemu-ga"
+binary: "/usr/bin/qemu-ga"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

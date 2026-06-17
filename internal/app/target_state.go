@@ -7,6 +7,7 @@ import "strings"
 const (
 	TargetStateDisabled      = "disabled"
 	TargetStateRunning       = "running"
+	TargetStatePaused        = "paused"
 	TargetStateStopped       = "stopped"
 	TargetStateOK            = "ok"
 	TargetStateMonitorized   = "monitorized"
@@ -21,6 +22,10 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string) st
 		return TargetStateDisabled
 	}
 	active := strings.EqualFold(backendStatus, "active")
+	paused := strings.EqualFold(backendStatus, "paused")
+	if paused {
+		return TargetStatePaused
+	}
 	if !monitored {
 		if active {
 			return TargetStateRunning

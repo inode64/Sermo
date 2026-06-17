@@ -94,8 +94,8 @@ func TestCertHealthyNoAlert(t *testing.T) {
 	c := certWith(healthyCert())
 	c.expiresInDays = 14
 	res := c.Run(context.Background())
-	if res.OK {
-		t.Fatalf("a valid cert 60 days out should not alert: %q", res.Message)
+	if !res.OK {
+		t.Fatalf("a valid cert 60 days out should pass: %q", res.Message)
 	}
 	if res.Data["days_left"].(int) < 58 {
 		t.Fatalf("days_left = %v", res.Data["days_left"])
@@ -135,21 +135,21 @@ func TestCertExpiringSoon(t *testing.T) {
 	s.NotAfter = time.Now().Add(5 * 24 * time.Hour)
 	c := certWith(s)
 	c.expiresInDays = 14
-	if !c.Run(context.Background()).OK {
-		t.Fatal("a cert 5 days out should alert with expires_in_days=14")
+	if c.Run(context.Background()).OK {
+		t.Fatal("a cert 5 days out should fail with expires_in_days=14")
 	}
 }
 
 func TestCertExpiredAndNotYetValid(t *testing.T) {
 	expired := healthyCert()
 	expired.NotAfter = time.Now().Add(-time.Hour)
-	if !certWith(expired).Run(context.Background()).OK {
-		t.Fatal("an expired cert must alert")
+	if certWith(expired).Run(context.Background()).OK {
+		t.Fatal("an expired cert must fail")
 	}
 	future := healthyCert()
 	future.NotBefore = time.Now().Add(time.Hour)
-	if !certWith(future).Run(context.Background()).OK {
-		t.Fatal("a not-yet-valid cert must alert")
+	if certWith(future).Run(context.Background()).OK {
+		t.Fatal("a not-yet-valid cert must fail")
 	}
 }
 
@@ -157,8 +157,8 @@ func TestCertVerifyError(t *testing.T) {
 	s := healthyCert()
 	s.VerifyError = "x509: certificate signed by unknown authority"
 	c := certWith(s)
-	if res := c.Run(context.Background()); !res.OK {
-		t.Fatal("a chain verify error must alert")
+	if res := c.Run(context.Background()); res.OK {
+		t.Fatal("a chain verify error must fail")
 	}
 }
 
@@ -167,15 +167,15 @@ func TestCertAlgorithmChangeEdge(t *testing.T) {
 	c := &certCheck{base: base{name: "c"}, host: "x", port: "443", serverName: "x", verify: false, onAlgoChange: true,
 		sampler: func(context.Context, string, string, string, bool) (CertSample, error) { return cur, nil }}
 
-	if c.Run(context.Background()).OK {
-		t.Fatal("first run primes and must not alert on change")
+	if !c.Run(context.Background()).OK {
+		t.Fatal("first run primes and must pass without a change")
 	}
 	cur.SignatureAlgorithm = "ECDSA-SHA256" // algorithm changed
-	if !c.Run(context.Background()).OK {
-		t.Fatal("an algorithm change must alert after priming")
-	}
 	if c.Run(context.Background()).OK {
-		t.Fatal("a stable algorithm must not keep alerting")
+		t.Fatal("an algorithm change must fail after priming")
+	}
+	if !c.Run(context.Background()).OK {
+		t.Fatal("a stable algorithm must pass after the changed sample is recorded")
 	}
 }
 
@@ -187,8 +187,8 @@ func TestCertIssuerAndFingerprintChange(t *testing.T) {
 	c.Run(context.Background()) // prime
 	cur.Issuer = "CN=Other CA"
 	cur.Fingerprint = "bbbb"
-	if !c.Run(context.Background()).OK {
-		t.Fatal("issuer/fingerprint change must alert")
+	if c.Run(context.Background()).OK {
+		t.Fatal("issuer/fingerprint change must fail")
 	}
 }
 
@@ -197,8 +197,8 @@ func TestCertSamplerErrorIsNotAlert(t *testing.T) {
 		sampler: func(context.Context, string, string, string, bool) (CertSample, error) {
 			return CertSample{}, context.DeadlineExceeded
 		}}
-	if c.Run(context.Background()).OK {
-		t.Fatal("a sampler error must not alert (reachability is a tcp/http concern)")
+	if !c.Run(context.Background()).OK {
+		t.Fatal("a sampler error must pass (reachability is a tcp/http concern)")
 	}
 }
 
@@ -209,8 +209,8 @@ func TestBuildCertCheck(t *testing.T) {
 	if len(warns) != 0 || len(built) != 1 {
 		t.Fatalf("cert check should build: warns=%v built=%d", warns, len(built))
 	}
-	if built[0].Check.Run(context.Background()).OK {
-		t.Fatal("a healthy cert should not alert")
+	if !built[0].Check.Run(context.Background()).OK {
+		t.Fatal("a healthy cert should pass")
 	}
 	if _, warns := Build(map[string]any{"c": map[string]any{"type": "cert"}}, Deps{}); len(warns) == 0 {
 		t.Fatal("a cert check without a host should warn")

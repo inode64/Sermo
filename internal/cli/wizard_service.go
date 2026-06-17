@@ -679,7 +679,7 @@ func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]b
 		}
 		path := filepath.Join(dir, name)
 		target := serviceFileTarget(path)
-		if target == "" || detected[target] {
+		if target == "" || !serviceTargetFamilyDetected(target, detected) || detected[target] {
 			continue
 		}
 		stale = append(stale, staleFile{path: path, label: path + " (" + target + ")"})
@@ -687,8 +687,10 @@ func planStaleServiceDeletes(p *assist.Prompt, dir string, detected map[string]b
 	return confirmStaleDeletes(p, dir, "service", stale), nil
 }
 
-// serviceFileTarget returns the catalog daemon a managed service file targets:
-// its `uses:` value, or the doc `name` when self-contained. "" when unreadable.
+// serviceFileTarget returns the typed target a managed service file controls.
+// Catalog/init services use "service:<name>", Docker services use
+// "docker:<container>", and libvirt VM services use "vm:<domain>". "" when
+// unreadable or not targetable.
 func serviceFileTarget(path string) string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -698,11 +700,36 @@ func serviceFileTarget(path string) string {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return ""
 	}
+	if control, ok := doc["control"].(map[string]any); ok {
+		switch cfgval.AsString(control["type"]) {
+		case "docker":
+			return serviceTargetKey("docker", cfgval.AsString(control["container"]))
+		case "libvirt":
+			return serviceTargetKey("vm", cfgval.AsString(control["domain"]))
+		}
+	}
 	if s, _ := doc["uses"].(string); s != "" {
-		return s
+		return serviceTargetKey("service", s)
 	}
 	s, _ := doc["name"].(string)
-	return s
+	return serviceTargetKey("service", s)
+}
+
+func serviceTargetKey(family, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	return family + ":" + name
+}
+
+func serviceDetectedFamilyKey(family string) string {
+	return "__detected:" + family
+}
+
+func serviceTargetFamilyDetected(target string, detected map[string]bool) bool {
+	family, _, ok := strings.Cut(target, ":")
+	return ok && detected[serviceDetectedFamilyKey(family)]
 }
 
 func docsPreview(docs map[string]map[string]any) []any {

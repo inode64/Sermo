@@ -21,6 +21,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/notify"
+	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 	"sermo/internal/state"
 	"sermo/internal/web"
@@ -195,6 +196,11 @@ func run(args []string) int {
 		collector.SystemFreshness = deps.SystemFreshness
 	}
 	deps.Collector = collector
+
+	// One shared /proc snapshot for service discovery: concurrent workers and web
+	// runtime queries within a cycle reuse a single walk instead of each scanning
+	// every PID. Freshness mirrors the metrics collector's SystemFreshness.
+	deps.ProcReader = process.NewCachingReader(process.OSReader{}, deps.SystemFreshness)
 
 	// A second collector dedicated to the web's per-cycle live CPU sampling, kept
 	// separate from the engine's so their rate deltas never corrupt each other.

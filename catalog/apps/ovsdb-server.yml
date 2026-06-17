@@ -1,0 +1,7 @@
+kind: app
+name: ovsdb-server
+display_name: "Open vSwitch Database Server"
+category: virtualization
+binary: /usr/bin/ovsdb-server
+preflight:
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

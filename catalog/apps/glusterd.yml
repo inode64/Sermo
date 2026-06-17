@@ -2,8 +2,6 @@ kind: app
 name: glusterd
 display_name: "GlusterFS"
 category: storage
-variables:
-  binary: "/usr/bin/glusterd"
+binary: "/usr/bin/glusterd"
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

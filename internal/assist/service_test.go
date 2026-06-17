@@ -207,6 +207,21 @@ func TestServiceAssistantGenericDetectedPidfile(t *testing.T) {
 	}
 }
 
+func TestServiceAssistantSkipsGenericServicesWithNone(t *testing.T) {
+	env := Env{Daemons: func() ([]DaemonCandidate, error) {
+		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"}}, nil
+	}}
+	script := strings.Join([]string{"y", "none"}, "\n") + "\n"
+	p := NewPrompt(strings.NewReader(script), &strings.Builder{})
+	res, err := serviceAssistant{}.Run(p, env)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Services) != 0 {
+		t.Fatalf("services = %v, want none", res.Services)
+	}
+}
+
 func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "customd", Title: "customd", Unit: "customd", Status: "active", Generic: true, Pidfile: "/run/customd.pid"}}, nil

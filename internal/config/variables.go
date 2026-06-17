@@ -17,21 +17,34 @@ var varRef = regexp.MustCompile(`\$\{([^}]*)\}`)
 // collectVariables reads the merged `variables` section into a flat string map.
 // Values are stringified (a YAML int like `port: 8080` becomes "8080"). A
 // list-valued variable is treated as candidate paths and resolves to the first
-// one that exists on the filesystem (see firstExistingPath).
+// one that exists on the filesystem (see firstExistingPath). A top-level
+// `binary` field is the only supported binary declaration and feeds the built-in
+// ${binary} variable. It chooses the first executable candidate, except for
+// library profiles where the value is a watched file and only existence matters.
 func collectVariables(tree map[string]any) map[string]string {
+	return collectVariablesForKind(tree, cfgval.String(tree["kind"]))
+}
+
+func collectVariablesForKind(tree map[string]any, kind string) map[string]string {
 	raw, ok := tree["variables"].(map[string]any)
-	if !ok {
-		return map[string]string{}
-	}
-	vars := make(map[string]string, len(raw))
-	for k, v := range raw {
-		if list, ok := v.([]any); ok {
-			vars[k] = expandEnvString(firstExistingPath(list))
-			continue
+	vars := map[string]string{}
+	if ok {
+		vars = make(map[string]string, len(raw)+1)
+		for k, v := range raw {
+			if k == "binary" {
+				continue
+			}
+			if list, ok := v.([]any); ok {
+				vars[k] = expandEnvString(firstExistingPath(list))
+				continue
+			}
+			// Resolve ${env:...} in a variable value here (before nested-variable
+			// validation) so a variable can hold a secret from the environment.
+			vars[k] = expandEnvString(cfgval.String(v))
 		}
-		// Resolve ${env:...} in a variable value here (before nested-variable
-		// validation) so a variable can hold a secret from the environment.
-		vars[k] = expandEnvString(cfgval.String(v))
+	}
+	if binary := topLevelBinaryForKind(tree, kind); binary != "" {
+		vars["binary"] = binary
 	}
 	return vars
 }
@@ -44,9 +57,13 @@ func collectVariables(tree map[string]any) map[string]string {
 // so the value stays well-formed and downstream preflight checks report it as
 // missing rather than expanding to an empty string.
 func firstExistingPath(candidates []any) string {
+	return firstExistingStringPath(cfgval.StringList(candidates))
+}
+
+func firstExistingStringPath(candidates []string) string {
 	var first string
-	for _, c := range candidates {
-		p := cfgval.String(c)
+	for _, p := range candidates {
+		p = expandEnvString(p)
 		if p == "" {
 			continue
 		}
@@ -58,6 +75,68 @@ func firstExistingPath(candidates []any) string {
 		}
 	}
 	return first
+}
+
+// topLevelBinary resolves a document's top-level `binary` declaration to the
+// binary variable value. A list is ordered: service/app binaries prefer the
+// first regular executable, then the first existing path, then the first
+// non-empty candidate. Libraries use the first existing path because the value
+// is the watched library file, not an executable.
+func topLevelBinary(tree map[string]any) string {
+	return topLevelBinaryForKind(tree, cfgval.String(tree["kind"]))
+}
+
+func topLevelBinaryForKind(tree map[string]any, kind string) string {
+	if _, present := tree["binary"]; !present {
+		return ""
+	}
+	if kind == kindLibrary {
+		return firstExistingStringPath(cfgval.StringList(tree["binary"]))
+	}
+	return firstExecutablePath(tree["binary"])
+}
+
+func firstExecutablePath(raw any) string {
+	candidates := cfgval.StringList(raw)
+	var first string
+	var firstExisting string
+	for _, p := range candidates {
+		p = expandEnvString(p)
+		if p == "" {
+			continue
+		}
+		if first == "" {
+			first = p
+		}
+		info, err := os.Stat(p)
+		if err != nil {
+			continue
+		}
+		if firstExisting == "" {
+			firstExisting = p
+		}
+		if info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+			return p
+		}
+	}
+	if firstExisting != "" {
+		return firstExisting
+	}
+	return first
+}
+
+// DocumentBinary returns the document's configured top-level binary path. It is
+// used by catalog inspection and version discovery paths that need to read raw
+// catalog documents.
+func DocumentBinary(tree map[string]any) string {
+	return topLevelBinary(tree)
+}
+
+func documentBinaryCandidates(tree map[string]any) []string {
+	if _, present := tree["binary"]; present {
+		return cfgval.StringList(tree["binary"])
+	}
+	return nil
 }
 
 // validateVariableValues rejects variable values that themselves contain

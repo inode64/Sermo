@@ -55,6 +55,7 @@ func Validate(cfg *Config) []Issue {
 	issues = append(issues, validateGlobal(cfg)...)
 	issues = append(issues, validateDocuments(cfg)...)
 	issues = append(issues, validateServices(cfg)...)
+	issues = append(issues, validateMounts(cfg)...)
 	return issues
 }
 
@@ -101,6 +102,11 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 		if templateDir := cfgval.String(paths["templates"]); templateDir != "" && !filepath.IsAbs(templateDir) {
 			add("paths.templates %q must be an absolute directory", templateDir)
+		}
+		for _, dir := range cfg.Global.Mounts {
+			if dir != "" && !filepath.IsAbs(dir) {
+				add("paths.mounts entry %q must be an absolute directory", dir)
+			}
 		}
 	}
 
@@ -155,7 +161,7 @@ func validateDocuments(cfg *Config) []Issue {
 	// Duplicate names are detected per kind, so a daemon and an app may share a
 	// name (e.g. the `apache` service and the `apache` app that owns its binary).
 	counts := map[string]map[string]int{
-		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {},
+		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {}, kindMount: {},
 	}
 
 	for _, doc := range cfg.docs {
@@ -175,14 +181,15 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
 			}
 		}
+		issues = append(issues, validateTopLevelBinary(doc, scope)...)
 		issues = append(issues, validateCatalogAliases(doc, scope)...)
 		switch doc.Kind {
-		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService:
+		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
 		case "":
-			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon, app, lib, patterns or service)"})
+			issues = append(issues, Issue{Scope: scope, Msg: "document has no kind (expected daemon, app, lib, patterns, service or mount)"})
 			continue
 		default:
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon, app, lib, patterns or service)", doc.Kind)})
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("unknown kind %q (expected daemon, app, lib, patterns, service or mount)", doc.Kind)})
 			continue
 		}
 		if doc.Name == "" {
@@ -195,11 +202,34 @@ func validateDocuments(cfg *Config) []Issue {
 		counts[doc.Kind][doc.Name]++
 	}
 
-	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindPatterns, kindService} {
+	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount} {
 		for _, name := range slices.Sorted(maps.Keys(counts[kind])) {
 			if counts[kind][name] > 1 {
 				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})
 			}
+		}
+	}
+	return issues
+}
+
+func validateTopLevelBinary(doc *Document, scope string) []Issue {
+	var issues []Issue
+	if vars, ok := doc.Body["variables"].(map[string]any); ok {
+		if _, exists := vars["binary"]; exists {
+			issues = append(issues, Issue{Scope: scope, Msg: "variables.binary is not supported; use top-level binary"})
+		}
+	}
+	raw, present := doc.Body["binary"]
+	if !present {
+		return issues
+	}
+	candidates := cfgval.StringList(raw)
+	if len(candidates) == 0 {
+		issues = append(issues, Issue{Scope: scope, Msg: "binary must be a non-empty path string or list"})
+	}
+	for _, path := range candidates {
+		if !filepath.IsAbs(path) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("binary path %q must be absolute", path)})
 		}
 	}
 	return issues
@@ -258,6 +288,111 @@ func validateServices(cfg *Config) []Issue {
 	return issues
 }
 
+func validateMounts(cfg *Config) []Issue {
+	var issues []Issue
+	paths := map[string]string{}
+	for _, name := range cfg.MountNames {
+		if name == "" {
+			continue
+		}
+		resolved, errs := cfg.ResolveMount(name)
+		for _, e := range errs {
+			issues = append(issues, Issue{Scope: "mount " + name, Msg: e})
+		}
+		if resolved.Tree == nil {
+			continue
+		}
+		issues = append(issues, validateMount(name, resolved.Tree)...)
+		path := filepath.Clean(cfgval.String(resolved.Tree["path"]))
+		if path != "." && path != "" {
+			if prev := paths[path]; prev != "" && prev != name {
+				issues = append(issues, Issue{Scope: "mount " + name, Msg: fmt.Sprintf("path %q is already used by mount %q", path, prev)})
+			} else {
+				paths[path] = name
+			}
+		}
+	}
+	return issues
+}
+
+func validateMount(name string, tree map[string]any) []Issue {
+	var issues []Issue
+	add := func(format string, args ...any) {
+		issues = append(issues, Issue{Scope: "mount " + name, Msg: fmt.Sprintf(format, args...)})
+	}
+
+	allowed := set("kind", "name", "display_name", "description", "category", "path", "refcount", "umount", "stop_policy", "variables", "os")
+	for _, key := range slices.Sorted(maps.Keys(tree)) {
+		if _, ok := allowed[key]; !ok {
+			add("key %q is not supported for kind: mount", key)
+		}
+	}
+
+	path := cfgval.String(tree["path"])
+	if path == "" {
+		add("path is required")
+	} else if !filepath.IsAbs(path) {
+		add("path %q must be an absolute path", path)
+	}
+	if v, present := tree["refcount"]; present {
+		if _, ok := v.(bool); !ok {
+			add("refcount must be true or false")
+		}
+	}
+
+	umount, _ := tree["umount"].(map[string]any)
+	if _, present := tree["umount"]; present && umount == nil {
+		add("umount must be a mapping")
+	}
+	allowSIGKILL := false
+	if umount != nil {
+		allowedUmount := set("term_timeout", "kill_timeout", "allow_sigkill", "allow_lazy")
+		for _, key := range slices.Sorted(maps.Keys(umount)) {
+			if _, ok := allowedUmount[key]; !ok {
+				add("umount key %q is not one of term_timeout, kill_timeout, allow_sigkill, allow_lazy", key)
+			}
+		}
+		for _, field := range []string{"term_timeout", "kill_timeout"} {
+			if v, present := umount[field]; present && !isPositiveDuration(cfgval.String(v)) {
+				add("umount.%s %q must be a valid positive duration", field, cfgval.String(v))
+			}
+		}
+		for _, field := range []string{"allow_sigkill", "allow_lazy"} {
+			if v, present := umount[field]; present {
+				b, ok := v.(bool)
+				if !ok {
+					add("umount.%s must be true or false", field)
+				}
+				if field == "allow_sigkill" && ok && b {
+					allowSIGKILL = true
+				}
+			}
+		}
+	}
+
+	if sp, ok := tree["stop_policy"].(map[string]any); ok {
+		force, _ := sp["force_kill"].(bool)
+		if force {
+			allowSIGKILL = true
+		}
+	} else if _, present := tree["stop_policy"]; present {
+		add("stop_policy must be a mapping")
+	}
+	validateStopPolicy(tree, add)
+	if allowSIGKILL {
+		sp, _ := tree["stop_policy"].(map[string]any)
+		_, hasKoi := sp["kill_only_if"].(map[string]any)
+		if !hasKoi {
+			add("umount.allow_sigkill=true requires stop_policy.kill_only_if")
+		}
+	}
+
+	for _, e := range validateVariableValues(collectVariables(tree)) {
+		add("variables: %s", e)
+	}
+	return issues
+}
+
 func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, services map[string]struct{}) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
@@ -300,6 +435,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateProcesses(tree, add)
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
+	validateControl(tree, add)
 	validateServiceField(tree, add)
 	validateAlsoService(tree, add)
 	validateCascade(name, tree, services, add)

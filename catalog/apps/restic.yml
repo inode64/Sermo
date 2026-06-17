@@ -2,8 +2,6 @@ kind: app
 name: restic
 display_name: "restic"
 category: storage
-variables:
-  binary: /usr/bin/restic
+binary: /usr/bin/restic
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
