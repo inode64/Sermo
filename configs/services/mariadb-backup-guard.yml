@@ -1,0 +1,33 @@
+kind: service
+name: mariadb-backup-guard
+uses: mariadb
+
+# EXAMPLE - opt in only on hosts that use mariadb-backup/mariadbbackup.
+#
+# The base mysql and mariadb catalog daemons stay backup-tool-neutral. If this
+# host protects backups with another system, copy this shape and point the check
+# at that tool instead. For a MySQL service, use `uses: mysql` and
+# `apps: [mysql, mariadb-backup]`.
+# Rename this service, or copy the apps/checks/rules blocks into the concrete
+# database service you already enable, before using it on a host.
+
+apps: [mariadb, mariadb-backup]
+
+checks:
+  mariadb-backup:
+    type: process
+    optional: true
+    exe: "${mariadb_backup_binary}"
+    user: "${user}"
+    state: running
+
+rules:
+  block-restart-during-mariadb-backup:
+    type: guard
+    blocks: [restart, stop]
+    if:
+      active:
+        check: mariadb-backup
+    then:
+      action: block
+      message: "${display_name} backup is running"

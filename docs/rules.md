@@ -1707,9 +1707,15 @@ Guard rules block unsafe actions and use `action: block` with a `message`:
 block-during-backup:
   type: guard
   blocks: [restart, stop]
-  if: { active: { check: mariadb-backup } }
+  if: { file: { path: /run/backup/in-progress, exists: true } }
   then: { action: block, message: "Backup is running" }
 ```
+
+Backup-tool-specific guards belong in service examples or local overrides, not
+in the base catalog daemon. The shipped
+[`configs/services/mariadb-backup-guard.yml`](../configs/services/mariadb-backup-guard.yml)
+example shows how to opt in to a `mariadb-backup` process guard for MariaDB, and
+how to adapt the same shape for MySQL.
 
 Guards are evaluated before remediation; a remediation action that a guard
 blocks never runs.

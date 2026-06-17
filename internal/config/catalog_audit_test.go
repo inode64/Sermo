@@ -154,6 +154,48 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	}
 }
 
+func TestShippedServiceConfigExamplesValidate(t *testing.T) {
+	root := repoRoot(t)
+	servicesDir := filepath.Join(root, "configs", "services")
+	if !dirExists(servicesDir) {
+		t.Fatalf("configs/services is missing")
+	}
+
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Services) == 0 {
+		t.Fatalf("configs/services has no loadable service examples")
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("configs/services examples must validate cleanly, got: %v", issues)
+	}
+
+	resolved, errs := cfg.Resolve("mariadb-backup-guard")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve(mariadb-backup-guard): %v", errs)
+	}
+	if got := cfgval.String(valueAt(t, resolved.Tree, "checks", "mariadb-backup", "exe")); got != "/usr/bin/mariadb-backup" {
+		t.Fatalf("mariadb backup example exe = %q, want /usr/bin/mariadb-backup", got)
+	}
+	preflight := nested(t, resolved.Tree, "preflight")
+	entry, ok := preflight["mariadb-backup-binary"].(map[string]any)
+	if !ok {
+		t.Fatalf("mariadb backup example lacks optional app preflight: %v", preflight)
+	}
+	if got := cfgval.Bool(entry["optional"]); !got {
+		t.Fatalf("mariadb backup example preflight optional = %v, want true", got)
+	}
+}
+
 func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	old := detectedOS
 	detectedOS = "gentoo"
@@ -582,24 +624,6 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 			wantResolved: "/usr/bin/alloy",
 			preflight:    "alloy-binary",
 		},
-		{
-			name:              "mariadb backup guard uses optional app binary",
-			service:           "mariadb",
-			path:              []any{"checks", "mariadb-backup", "exe"},
-			wantRaw:           "${mariadb_backup_binary}",
-			wantResolved:      "/usr/bin/mariadb-backup",
-			preflight:         "mariadb-backup-binary",
-			preflightOptional: true,
-		},
-		{
-			name:              "mysql backup guard uses optional app binary",
-			service:           "mysql",
-			path:              []any{"checks", "mariadb-backup", "exe"},
-			wantRaw:           "${mariadb_backup_binary}",
-			wantResolved:      "/usr/bin/mariadb-backup",
-			preflight:         "mariadb-backup-binary",
-			preflightOptional: true,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -629,6 +653,59 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 				t.Fatalf("%s preflight %q optional = %v, want %v", tt.service, tt.preflight, got, tt.preflightOptional)
 			}
 		})
+	}
+}
+
+func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	section := func(tree map[string]any, key string) map[string]any {
+		out, _ := tree[key].(map[string]any)
+		return out
+	}
+
+	for _, name := range []string{"mysql", "mariadb"} {
+		doc, ok := cfg.Daemons[name]
+		if !ok {
+			t.Fatalf("service %q not found", name)
+		}
+		if apps := cfgval.StringList(doc.Body["apps"]); slices.Contains(apps, "mariadb-backup") {
+			t.Fatalf("%s links mariadb-backup by default: %v", name, apps)
+		}
+
+		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+		if len(errs) > 0 {
+			t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+		}
+		for _, tree := range []struct {
+			label string
+			body  map[string]any
+		}{
+			{label: "raw", body: doc.Body},
+			{label: "resolved", body: resolved.Tree},
+		} {
+			if _, ok := section(tree.body, "checks")["mariadb-backup"]; ok {
+				t.Fatalf("%s %s catalog still has mariadb-backup check", name, tree.label)
+			}
+			if _, ok := section(tree.body, "rules")["block-restart-during-backup"]; ok {
+				t.Fatalf("%s %s catalog still has mariadb-backup guard", name, tree.label)
+			}
+			if _, ok := section(tree.body, "preflight")["mariadb-backup-binary"]; ok {
+				t.Fatalf("%s %s catalog still has mariadb-backup preflight", name, tree.label)
+			}
+		}
 	}
 }
 
