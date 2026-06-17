@@ -32,6 +32,11 @@ TMPFILESDIR ?= /usr/lib/tmpfiles.d
 OPENRC_INITDIR ?= $(sysconfdir)/init.d
 
 INSTALL ?= install
+install_dirs = @set -e; for d in $(1); do \
+	if [ ! -d "$$d" ]; then \
+		$(INSTALL) -d -m 755 "$$d"; \
+	fi; \
+done
 
 # Go-installed developer tools live in ~/go/bin on local machines.
 LINT_PATH = PATH="$(HOME)/go/bin:$(PATH)"
@@ -122,7 +127,7 @@ install-catalog:
 # available/included service directories. `apps` is kept as a legacy include
 # alias for hosts that still store service files there.
 install-config:
-	$(INSTALL) -d $(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/mounts
+	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/mounts)
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \
@@ -142,17 +147,17 @@ install-templates:
 # systemd-tmpfiles config that creates /run/sermo and the state dir at 0700.
 # Apply on a live system with: systemd-tmpfiles --create sermo.conf
 install-tmpfiles:
-	$(INSTALL) -d $(DESTDIR)$(TMPFILESDIR)
+	$(call install_dirs,$(DESTDIR)$(TMPFILESDIR))
 	$(tmpfiles_subst) packaging/systemd/sermo.conf > $(DESTDIR)$(TMPFILESDIR)/sermo.conf
 	chmod 644 $(DESTDIR)$(TMPFILESDIR)/sermo.conf
 
 install-systemd:
-	$(INSTALL) -d $(DESTDIR)$(SYSTEMD_UNITDIR)
+	$(call install_dirs,$(DESTDIR)$(SYSTEMD_UNITDIR))
 	$(unit_subst) packaging/systemd/sermod.service > $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service
 	chmod 644 $(DESTDIR)$(SYSTEMD_UNITDIR)/sermod.service
 
 install-openrc:
-	$(INSTALL) -d $(DESTDIR)$(OPENRC_INITDIR)
+	$(call install_dirs,$(DESTDIR)$(OPENRC_INITDIR))
 	$(unit_subst) packaging/openrc/sermod > $(DESTDIR)$(OPENRC_INITDIR)/sermod
 	chmod 755 $(DESTDIR)$(OPENRC_INITDIR)/sermod
 
