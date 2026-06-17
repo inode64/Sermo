@@ -497,7 +497,7 @@ type librariesCheck struct {
 
 func (c librariesCheck) Run(ctx context.Context) Result {
 	start := time.Now()
-	ctx, cancel := c.withTimeout(ctx)
+	_, cancel := c.withTimeout(ctx)
 	defer cancel()
 
 	ef, err := elf.Open(c.binary)

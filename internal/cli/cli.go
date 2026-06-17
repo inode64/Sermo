@@ -1105,14 +1105,6 @@ func (a App) fail(opts options, msg string) int {
 	return exitRuntimeError
 }
 
-// usageError writes a subcommand usage error to Stderr and returns the usage
-// exit code, centralising the "usage error:" prefix. Commands with a dedicated
-// help topic should use commandUsageError so the operator sees focused help.
-func (a App) usageError(msg string) int {
-	fmt.Fprintln(a.Stderr, "usage error: "+msg)
-	return exitUsage
-}
-
 type statusJSON struct {
 	Service          string `json:"service"`
 	State            string `json:"state"`

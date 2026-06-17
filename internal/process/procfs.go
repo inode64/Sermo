@@ -132,13 +132,6 @@ func readCmdline(pid int) []string {
 	return parts
 }
 
-func lookupUser(uid uint32) string {
-	if name, ok := nativeUserName(uid); ok {
-		return name
-	}
-	return ""
-}
-
 // OSUserResolver resolves a selector user name (or numeric id) to a real UID
 // through the passwd database.
 func OSUserResolver(name string) (uint32, bool) {

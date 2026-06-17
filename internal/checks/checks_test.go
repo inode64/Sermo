@@ -380,12 +380,6 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 	}
 }
 
-type scriptedRunner struct{ result execx.Result }
-
-func (r scriptedRunner) Run(context.Context, string, ...string) (execx.Result, error) {
-	return r.result, nil
-}
-
 func TestLibrariesCheck(t *testing.T) {
 	// Non-existent binary should fail (open error).
 	c := librariesCheck{base: base{name: "lib"}, binary: "/non/existent/binary/that/does/not/exist"}

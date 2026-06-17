@@ -83,7 +83,7 @@ sermoctl backend
 sermoctl status nginx
 sermoctl is-active nginx
 
-# List installed services, applications and libraries, their version and health
+# List installed services, applications and libraries
 sermoctl services      # service software (nginx, mariadb, ...)
 sermoctl apps          # tools/runtimes (only installed)
 sermoctl apps all      # include not-installed

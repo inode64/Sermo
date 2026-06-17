@@ -43,6 +43,10 @@ paths:
   templates: /etc/sermo/templates
 ```
 
+Older installations may still have `paths.profiles`. Sermo accepts it as a
+legacy alias only when `paths.catalog` is absent; new configs should use
+`paths.catalog`.
+
 `paths.runtime` is the root for named runtime locks (`<runtime>/locks`, one file
 per lock named `<service>[.<name>].lock`) and internal operation locks
 (`<runtime>/ops/<service>.lock`). It lives on tmpfs and is wiped on reboot.
