@@ -44,7 +44,7 @@ sermoctl locks SERVICE
 sermoctl monitor SERVICE
 sermoctl unmonitor SERVICE
 
-sermoctl config validate [SERVICE]
+sermoctl config validate
 
 sermoctl daemon list
 sermoctl daemon show DAEMON

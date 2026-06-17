@@ -17,15 +17,9 @@ func TestIssueHelpers(t *testing.T) {
 
 	issues := []config.Issue{
 		{Scope: "svc", Msg: "one"},
-		{Scope: "other", Msg: "two"},
 		{Scope: "svc", Msg: "three"},
 	}
-	filtered := filterIssues(issues, "svc")
-	if len(filtered) != 2 || filtered[1].Msg != "three" {
-		t.Fatalf("filterIssues = %+v", filtered)
-	}
-
-	asJSON := issuesJSON(filtered)
+	asJSON := issuesJSON(issues)
 	if len(asJSON) != 2 || asJSON[0]["scope"] != "svc" || asJSON[0]["error"] != "one" {
 		t.Fatalf("issuesJSON = %+v", asJSON)
 	}
