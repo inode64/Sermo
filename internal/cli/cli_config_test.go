@@ -58,18 +58,29 @@ func TestConfigValidateOK(t *testing.T) {
 	}
 }
 
-func TestConfigRenderExpandsVariables(t *testing.T) {
+func TestConfigRejectsRemovedSubcommands(t *testing.T) {
 	global := writeTempConfig(t)
-	var stdout bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
-
-	code := app.Run(context.Background(), []string{"--config", global, "config", "render", "redis-main"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "render", args: []string{"config", "render", "redis-main"}},
+		{name: "diff", args: []string{"config", "diff", "redis-main", "redis-alt"}},
 	}
-	out := stdout.String()
-	if !strings.Contains(out, "port: \"6379\"") {
-		t.Fatalf("render did not expand port, got:\n%s", out)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
+
+			code := app.Run(context.Background(), append([]string{"--config", global}, tc.args...))
+			if code != exitUsage {
+				t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
+			}
+			if !strings.Contains(stderr.String(), "unknown config subcommand") {
+				t.Fatalf("stderr = %q, want unknown config subcommand", stderr.String())
+			}
+		})
 	}
 }
 
@@ -99,19 +110,5 @@ checks:
 	}
 	if !strings.Contains(stderr.String(), "ERROR bad:") {
 		t.Fatalf("stderr = %q, want ERROR bad", stderr.String())
-	}
-}
-
-func TestConfigRenderUnknownService(t *testing.T) {
-	global := writeTempConfig(t)
-	var stderr bytes.Buffer
-	app := App{Env: func(string) string { return "" }, Stdout: &bytes.Buffer{}, Stderr: &stderr}
-
-	code := app.Run(context.Background(), []string{"--config", global, "config", "render", "nope"})
-	if code != exitRuntimeError {
-		t.Fatalf("Run() exit = %d, want %d", code, exitRuntimeError)
-	}
-	if !strings.Contains(stderr.String(), "unknown service") {
-		t.Fatalf("stderr = %q, want unknown service", stderr.String())
 	}
 }

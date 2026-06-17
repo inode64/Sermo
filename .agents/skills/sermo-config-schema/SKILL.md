@@ -296,17 +296,11 @@ postflight entries use the same schema as preflight/checks; optional is boolean
 file_exists checks do not point under <paths.runtime>/locks; Sermo named runtime locks are checked by the engine
 ```
 
-## Rendered config
+## Resolved config
 
-`sermoctl config render SERVICE` must output the final resolved config and source files.
-
-Include:
-
-```yaml
-resolved_from:
-  - /usr/share/sermo/catalog/services/apache.yml
-  - /etc/sermo/services/apache-main.yml
-```
+`sermoctl service show SERVICE` outputs the final resolved service config.
+Do not document or reintroduce a resolved-config rendering subcommand under
+`sermoctl config`.
 
 ## Output format
 

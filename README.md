@@ -8,7 +8,7 @@ and applies **guarded** remediation rules — never restarting blindly.
 It ships two binaries:
 
 - **`sermoctl`** — the operator CLI (status, safe start/stop/restart/reload/resume, config
-  validate/render, locks, processes, preflight, per-service availability/SLA,
+  validate, locks, processes, preflight, per-service availability/SLA,
   `diagnose` for config/host/database consistency).
 - **`sermod`** — the daemon: one independent worker per service runs checks,
   evaluates rules and drives remediation through the same safe operation engine
@@ -79,10 +79,8 @@ sermoctl apps          # tools/runtimes (only installed)
 sermoctl apps all      # include not-installed
 sermoctl libs          # shared libraries (restart triggers)
 
-# Validate and render the resolved configuration
+# Validate configuration
 sermoctl config validate
-sermoctl config render apache-main
-sermoctl config diff redis-main redis-cache
 
 # Operate a configured service through the safe engine
 sermoctl restart apache-main

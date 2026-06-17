@@ -616,10 +616,10 @@ func operationExit(status operation.ResultStatus) int {
 	}
 }
 
-// runConfig dispatches the `config` subcommands (validate, render, diff).
+// runConfig dispatches the `config` subcommands.
 func (a App) runConfig(opts options) int {
 	if len(opts.args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: config requires a subcommand (validate|render|diff)")
+		fmt.Fprintln(a.Stderr, "usage error: config requires a subcommand (validate)")
 		writeUsage(a.Stderr)
 		return exitUsage
 	}
@@ -629,53 +629,13 @@ func (a App) runConfig(opts options) int {
 	globalPath := opts.globalPath()
 
 	switch sub {
-	case "render":
-		return a.runConfigRender(globalPath, rest, opts)
 	case "validate":
 		return a.runConfigValidate(globalPath, rest, opts)
-	case "diff":
-		return a.runConfigDiff(globalPath, rest, opts)
 	default:
 		fmt.Fprintf(a.Stderr, "usage error: unknown config subcommand %q\n", sub)
 		writeUsage(a.Stderr)
 		return exitUsage
 	}
-}
-
-func (a App) runConfigRender(globalPath string, rest []string, opts options) int {
-	if len(rest) == 0 {
-		return a.usageError("config render requires a service name")
-	}
-	service := rest[0]
-
-	cfg, err := a.LoadConfig(globalPath)
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
-	}
-	if code := a.requireService(opts, cfg, service); code != exitSuccess {
-		return code
-	}
-
-	resolved, code := a.resolveService(opts, cfg, service)
-	if code != exitSuccess {
-		return code
-	}
-
-	var out []byte
-	if opts.json {
-		out, err = config.RenderJSON(resolved)
-	} else {
-		out, err = config.RenderYAML(resolved)
-	}
-	if err != nil {
-		return a.fail(opts, fmt.Sprintf("render failed: %v", err))
-	}
-
-	_, _ = a.Stdout.Write(out)
-	if n := len(out); n == 0 || out[n-1] != '\n' {
-		fmt.Fprintln(a.Stdout)
-	}
-	return exitSuccess
 }
 
 func (a App) runConfigValidate(globalPath string, rest []string, opts options) int {
@@ -1602,7 +1562,7 @@ func writeUsage(w io.Writer) {
 	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] [--version|-V] COMMAND [ARGS]")
 	fmt.Fprintln(w, "commands: version | backend|init | status SERVICE | is-active SERVICE | start|stop|restart|resume SERVICE [--no-cascade] | reload SERVICE")
 	fmt.Fprintln(w, "          mount TARGET | umount TARGET | mount status TARGET | mount list")
-	fmt.Fprintln(w, "          config validate [SERVICE] | config render SERVICE | config diff BASE SERVICE")
+	fmt.Fprintln(w, "          config validate [SERVICE]")
 	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
 	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
 	fmt.Fprintln(w, "          diagnose | diagnose clean|clear | wizard [service|docker|vm|mount|volume|net|uplink]")
