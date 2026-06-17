@@ -3,6 +3,8 @@ package checks
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -102,5 +104,48 @@ func TestNetSamplerError(t *testing.T) {
 		sampler: func(string) (NetSample, error) { return NetSample{}, errors.New("boom") }}
 	if c.Run(context.Background()).OK {
 		t.Fatal("sampler error must not fire")
+	}
+}
+
+func TestSampleNetFromSysfsFallback(t *testing.T) {
+	root := t.TempDir()
+	iface := "sermo-test0"
+	dir := filepath.Join(root, iface)
+	statDir := filepath.Join(dir, "statistics")
+	if err := os.MkdirAll(statDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(dir, "flags"):           "0x1003\n",
+		filepath.Join(dir, "operstate"):       "up\n",
+		filepath.Join(dir, "speed"):           "1000\n",
+		filepath.Join(statDir, "rx_errors"):   "7\n",
+		filepath.Join(statDir, "tx_errors"):   "11\n",
+		filepath.Join(statDir, "rx_dropped"):  "13\n",
+		filepath.Join(statDir, "tx_dropped"):  "17\n",
+		filepath.Join(statDir, "collisions"):  "19\n",
+		filepath.Join(statDir, "multicast"):   "23\n",
+		filepath.Join(statDir, "rx_packets"):  "29\n",
+		filepath.Join(statDir, "tx_packets"):  "31\n",
+		filepath.Join(statDir, "rx_bytes"):    "37\n",
+		filepath.Join(statDir, "tx_bytes"):    "41\n",
+		filepath.Join(statDir, "rx_overruns"): "43\n",
+		filepath.Join(statDir, "tx_overruns"): "47\n",
+	}
+	for path, body := range files {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sample, err := sampleNetFromSysfs(iface, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sample.State != "up" || !sample.SpeedKnown || sample.SpeedMbps != 1000 {
+		t.Fatalf("sample = %+v, want up speed 1000", sample)
+	}
+	if sample.Counters["rx_errors"] != 7 || sample.Counters["tx_errors"] != 11 {
+		t.Fatalf("counters = %+v, want rx/tx errors", sample.Counters)
 	}
 }

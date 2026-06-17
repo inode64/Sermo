@@ -4,4 +4,4 @@ display_name: "PPP Daemon"
 category: network
 binary: "/usr/bin/pppd"
 preflight:
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}","--version"], timeout: 10s, optional: true }

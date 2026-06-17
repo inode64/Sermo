@@ -507,8 +507,8 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	}
 	health := preflight["cupsd-health"].(map[string]any)
 	healthCommand := health["command"].([]any)
-	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cups-config" || healthCommand[1] != "-h" {
-		t.Fatalf("cupsd health command = %v, want /usr/bin/cups-config -h", healthCommand)
+	if len(healthCommand) != 2 || healthCommand[0] != "/usr/bin/cups-config" || healthCommand[1] != "--help" {
+		t.Fatalf("cupsd health command = %v, want /usr/bin/cups-config --help", healthCommand)
 	}
 	version := preflight["cupsd-version"].(map[string]any)
 	versionCommand := version["command"].([]any)

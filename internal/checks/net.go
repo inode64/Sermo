@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -165,22 +166,60 @@ func SampleNet(iface string) (NetSample, error) { return defaultNetSampler(iface
 
 // defaultNetSampler reads interface flags and /sys/class/net/<iface>.
 func defaultNetSampler(iface string) (NetSample, error) {
+	return sampleNetFromSysfs(iface, "/sys/class/net")
+}
+
+// InterfaceExists reports whether an interface is visible through netlink or
+// sysfs. The sysfs fallback keeps diagnostics useful in restricted containers
+// where net.InterfaceByName cannot query netlink but /sys/class/net is mounted.
+func InterfaceExists(iface string) bool {
 	ifi, err := net.InterfaceByName(iface)
 	if err != nil {
-		return NetSample{}, err
+		_, statErr := os.Stat(sysfsIfaceDir("/sys/class/net", iface))
+		return statErr == nil
+	}
+	return ifi != nil
+}
+
+func sampleNetFromSysfs(iface, root string) (NetSample, error) {
+	ifi, err := net.InterfaceByName(iface)
+	dir := sysfsIfaceDir(root, iface)
+	if err != nil {
+		if _, statErr := os.Stat(dir); statErr != nil {
+			return NetSample{}, err
+		}
 	}
 	state := "down"
-	if ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagRunning != 0 {
+	if err == nil && ifi.Flags&net.FlagUp != 0 && ifi.Flags&net.FlagRunning != 0 {
+		state = "up"
+	}
+	if err != nil && sysfsIfaceUp(dir) {
 		state = "up"
 	}
 	sample := NetSample{State: state, Counters: map[string]uint64{}}
 
-	if raw, err := os.ReadFile("/sys/class/net/" + iface + "/speed"); err == nil {
+	if raw, err := os.ReadFile(filepath.Join(dir, "speed")); err == nil {
 		if v, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64); err == nil && v >= 0 {
 			sample.SpeedMbps, sample.SpeedKnown = v, true
 		}
 	}
 
+	if err == nil {
+		addNetInterfaceAddrs(&sample, ifi)
+	}
+
+	statDir := filepath.Join(dir, "statistics")
+	if entries, err := os.ReadDir(statDir); err == nil {
+		for _, e := range entries {
+			if v, err := readProcUint(filepath.Join(statDir, e.Name())); err == nil {
+				sample.Counters[e.Name()] = v
+			}
+		}
+	}
+	return sample, nil
+}
+
+func addNetInterfaceAddrs(sample *NetSample, ifi *net.Interface) {
 	if addrs, err := ifi.Addrs(); err == nil {
 		for _, a := range addrs {
 			ipn, ok := a.(*net.IPNet)
@@ -189,16 +228,31 @@ func defaultNetSampler(iface string) (NetSample, error) {
 			}
 			sample.Addrs = append(sample.Addrs, ipn.IP.String())
 		}
-		slices.Sort(sample.Addrs)
 	}
+	slices.Sort(sample.Addrs)
+}
 
-	statDir := "/sys/class/net/" + iface + "/statistics"
-	if entries, err := os.ReadDir(statDir); err == nil {
-		for _, e := range entries {
-			if v, err := readProcUint(statDir + "/" + e.Name()); err == nil {
-				sample.Counters[e.Name()] = v
-			}
-		}
+func sysfsIfaceDir(root, iface string) string {
+	return filepath.Join(root, filepath.Base(iface))
+}
+
+func sysfsIfaceUp(dir string) bool {
+	flags := sysfsIfaceFlagBits(filepath.Join(dir, "flags"))
+	operstate := strings.TrimSpace(readTextFile(filepath.Join(dir, "operstate")))
+	return flags&0x1 != 0 && (flags&0x40 != 0 || operstate == "up" || operstate == "unknown")
+}
+
+func sysfsIfaceFlagBits(path string) uint64 {
+	raw := strings.TrimSpace(readTextFile(path))
+	raw = strings.TrimPrefix(raw, "0x")
+	flags, _ := strconv.ParseUint(raw, 16, 64)
+	return flags
+}
+
+func readTextFile(path string) string {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return ""
 	}
-	return sample, nil
+	return string(data)
 }

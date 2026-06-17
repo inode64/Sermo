@@ -1,7 +1,6 @@
 package diag
 
 import (
-	"net"
 	"os"
 	"sermo/internal/checks"
 )
@@ -18,8 +17,7 @@ func (OSHost) PathExists(path string) bool {
 
 // InterfaceExists reports whether a network interface with the given name exists.
 func (OSHost) InterfaceExists(name string) bool {
-	_, err := net.InterfaceByName(name)
-	return err == nil
+	return checks.InterfaceExists(name)
 }
 
 // IsMountPoint reports whether path is a mount point, per the shared

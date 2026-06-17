@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -246,7 +247,7 @@ func listWizardMounts() ([]assist.MountCandidate, error) {
 func listIfaces() ([]assist.Iface, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return listIfacesFromSysfs("/sys/class/net")
 	}
 	out := make([]assist.Iface, 0, len(ifs))
 	for _, in := range ifs {
@@ -258,7 +259,58 @@ func listIfaces() ([]assist.Iface, error) {
 			HasAddress: ifaceHasUsableAddress(addrs),
 		})
 	}
+	if !hasNonLoopbackIface(out) {
+		if sysfs, err := listIfacesFromSysfs("/sys/class/net"); err == nil && hasNonLoopbackIface(sysfs) {
+			return sysfs, nil
+		}
+	}
 	return out, nil
+}
+
+func hasNonLoopbackIface(ifaces []assist.Iface) bool {
+	for _, iface := range ifaces {
+		if !iface.Loopback {
+			return true
+		}
+	}
+	return false
+}
+
+func listIfacesFromSysfs(root string) ([]assist.Iface, error) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]assist.Iface, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		name := entry.Name()
+		dir := filepath.Join(root, name)
+		flags := sysfsIfaceFlags(filepath.Join(dir, "flags"))
+		operstate := strings.TrimSpace(readSmallFile(filepath.Join(dir, "operstate")))
+		loopback := flags&0x8 != 0 || name == "lo"
+		up := flags&0x1 != 0 && (flags&0x40 != 0 || operstate == "up" || operstate == "unknown")
+		out = append(out, assist.Iface{Name: name, Up: up, Loopback: loopback})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func sysfsIfaceFlags(path string) uint64 {
+	raw := strings.TrimSpace(readSmallFile(path))
+	raw = strings.TrimPrefix(raw, "0x")
+	flags, _ := strconv.ParseUint(raw, 16, 64)
+	return flags
+}
+
+func readSmallFile(path string) string {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 func defaultRouteIfaces() []string {

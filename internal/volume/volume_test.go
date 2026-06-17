@@ -87,6 +87,7 @@ func TestListFiltersPseudoFilesystems(t *testing.T) {
 		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"},
 		Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/mnt/backup", FSType: "ext4"},
 		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"}, // dup mountpoint
+		Mount{Device: "/dev/sda1", Mountpoint: "/srv/workspace/project", FSType: "ext4"},
 	)
 	got, err := List(src)
 	if err != nil {
