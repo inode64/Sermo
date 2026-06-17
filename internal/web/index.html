@@ -399,6 +399,26 @@
 <div id="err"></div>
 <div id="attention"></div>
 <div id="op-live"></div>
+<details id="storage-section" open style="display:none">
+  <summary>Storage <span id="storage-count" class="muted"></span></summary>
+  <table class="watch-table">
+    <thead><tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th>Summary</th>
+      <th>Interval</th>
+      <th>Polarity</th>
+      <th>Hook</th>
+      <th>Notifiers</th>
+      <th>Last activity</th>
+      <th>State</th>
+      <th>Actions</th>
+    </tr></thead>
+    <tbody id="storage-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Storage host watches monitor volume usage and can grow volumes via <code>then.expand</code>. Other host watches are listed below.</p>
+</details>
+
 <details id="services-section" open>
   <summary>
     <span class="summary-title">Services <span id="services-count" class="muted"></span></span>
@@ -1173,10 +1193,16 @@ function openPanelTarget(target) {
     return;
   }
   if (target === "failed-watches") {
+    // Storage watches live in their own panel; a firing one could be in either
+    // section, so open both and scroll to whichever actually holds it.
+    const storage = $("#storage-section");
     const sec = $("#watches-section");
+    if (storage) storage.open = true;
     if (sec) sec.open = true;
     setWatchStatus("failed");
-    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    const failingStorage = (allWatches || []).some((w) => isStorageWatch(w) && isWatchAttention(w));
+    const dest = (failingStorage && storage && storage.style.display !== "none") ? storage : sec;
+    dest && dest.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
   const el = $("#" + target);
@@ -2745,8 +2771,8 @@ function syncWatchTypeSelect(watches) {
   return next;
 }
 
-function renderWatchFilterCounts() {
-  const w = allWatches || [];
+function renderWatchFilterCounts(watches) {
+  const w = watches || allWatches || [];
   renderFilterButtonCounts("#watch-filters", {
     all: w.length,
     disabled: w.filter((x) => watchStateText(x) === "disabled").length,
@@ -2882,14 +2908,102 @@ function renderWatchReadings(readings) {
   return `<div class="watch-grid">${cells}</div>`;
 }
 
+// isStorageWatch reports whether a watch is a storage/volume check. Storage
+// watches get their own panel above Services; every other type stays in the
+// Host watches table below. Matches the backend isStorageCheckType.
+function isStorageWatch(w) {
+  const t = ((w && w.check_type) || "").toLowerCase();
+  return t === "storage" || t === "disk";
+}
+
+// watchRowHTML builds the table row(s) for one watch — the main row plus its
+// expansion row when open. Shared by the Storage panel and the Host watches
+// table so both render identically (including the expand action).
+function watchRowHTML(w) {
+  const state = watchStateText(w);
+  const polarity = w.fire_on_fail
+    ? '<span class="muted">on fail</span>'
+    : '<span class="muted">on threshold</span>';
+  const hook = w.has_hook ? '✓' : '—';
+  const notif = notifierCell(w);
+  const summary = watchSummaryCell(w);
+  let last = '—';
+  if (w.last_activity) {
+    const kind = w.last_activity_kind ? ` (${esc(w.last_activity_kind)})` : '';
+    last = `<span title="${esc(w.last_activity)}">${esc(w.last_activity.substring(11,19))}${kind}</span>`;
+  }
+  const key = "wat:" + w.name;
+  const open = expanded.has(key);
+  const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
+  const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
+    ? `<button data-watch="${esc(w.name)}" data-watch-action="expand">expand ${esc(fmtBytes(w.expand.by_bytes))}</button>`
+    : "";
+  const monitorBtn = !w.enabled
+    ? '<span class="muted">disabled in config</span>'
+    : (me.can_act
+      ? (w.monitored
+        ? `<button data-watch="${esc(w.name)}" data-watch-action="unmonitor">unmonitor</button>`
+        : `<button data-watch="${esc(w.name)}" data-watch-action="monitor">monitor</button>`)
+      : '<span class="muted">read-only</span>');
+  const actions = !w.enabled
+    ? '<span class="muted">disabled in config</span>'
+    : [expandBtn, monitorBtn].filter(Boolean).join(" ");
+  const row = `<tr class="clickable" data-exp-key="${esc(key)}">
+    <td>${chev}${esc(displayName(w))}</td>
+    <td>${esc(w.check_type || "")}</td>
+    <td class="watch-summary">${summary}</td>
+    <td>${esc(w.interval || "")}</td>
+    <td>${polarity}</td>
+    <td>${hook}</td>
+    <td>${notif}</td>
+    <td>${last}</td>
+    <td>${stateBadge(state)}${watchStateHint(w)}</td>
+    <td class="actions">${actions}</td>
+  </tr>`;
+  const expRow = open
+    ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
+    : "";
+  return row + expRow;
+}
+
 function renderWatches(watches) {
   if (watches) allWatches = watches;
+  const all = allWatches || [];
+  renderStorageSection(all.filter(isStorageWatch));
+  renderHostWatchesSection(all.filter((w) => !isStorageWatch(w)));
+  expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
+}
+
+// renderStorageSection fills the dedicated Storage panel (above Services) with
+// the storage/volume watches, sorted by name. It has no filter controls — the
+// volume list is short — but reuses the same row layout as the Host watches table.
+function renderStorageSection(list) {
+  const section = $("#storage-section");
+  const tbody = $("#storage-rows");
+  const cnt = $("#storage-count");
+  if (!section || !tbody) return;
+  if (list.length === 0) {
+    section.style.display = "none";
+    if (cnt) cnt.textContent = "";
+    tbody.innerHTML = "";
+    return;
+  }
+  section.style.display = "block";
+  if (cnt) cnt.textContent = `(${list.length})`;
+  const sorted = list.slice().sort((a, b) =>
+    displayName(a).toLowerCase().localeCompare(displayName(b).toLowerCase(), undefined, { numeric: true, sensitivity: "base" }));
+  tbody.innerHTML = sorted.map(watchRowHTML).join("");
+}
+
+// renderHostWatchesSection fills the Host watches table (below Services) with
+// every non-storage watch, honouring the search/type/status filters and sort.
+function renderHostWatchesSection(watches) {
   const section = $("#watches-section");
   const tbody = $("#watch-rows");
   const cnt = $("#watches-count");
   const filterCount = $("#watch-count");
   if (!section || !tbody) return;
-  const total = (allWatches || []).length;
+  const total = watches.length;
   if (total === 0) {
     section.style.display = "none";
     if (cnt) cnt.textContent = "";
@@ -2898,64 +3012,17 @@ function renderWatches(watches) {
   }
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${total})`;
-  renderWatchFilterCounts();
-  watchType = syncWatchTypeSelect(allWatches);
-  const list = (allWatches || []).filter(watchMatches);
+  renderWatchFilterCounts(watches);
+  watchType = syncWatchTypeSelect(watches);
+  const list = watches.filter(watchMatches);
   if (watchSort.key && watchSortKeys[watchSort.key]) {
     sortedBy(list, watchSort, watchSortKeys, "name");
   }
   updateWatchSortIndicators();
   if (filterCount) filterCount.textContent = (watchQuery || watchStatus !== "all" || watchType !== "all") ? `showing ${list.length} of ${total}` : "";
-  const rows = list.map((w) => {
-    const state = watchStateText(w);
-    const polarity = w.fire_on_fail
-      ? '<span class="muted">on fail</span>'
-      : '<span class="muted">on threshold</span>';
-    const hook = w.has_hook ? '✓' : '—';
-    const notif = notifierCell(w);
-    const summary = watchSummaryCell(w);
-    let last = '—';
-    if (w.last_activity) {
-      const kind = w.last_activity_kind ? ` (${esc(w.last_activity_kind)})` : '';
-      last = `<span title="${esc(w.last_activity)}">${esc(w.last_activity.substring(11,19))}${kind}</span>`;
-    }
-    const key = "wat:" + w.name;
-    const open = expanded.has(key);
-    const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
-    const expandBtn = (w.expand && Number(w.expand.by_bytes) > 0 && me.can_act && w.enabled)
-      ? `<button data-watch="${esc(w.name)}" data-watch-action="expand">expand ${esc(fmtBytes(w.expand.by_bytes))}</button>`
-      : "";
-    const monitorBtn = !w.enabled
-      ? '<span class="muted">disabled in config</span>'
-      : (me.can_act
-        ? (w.monitored
-          ? `<button data-watch="${esc(w.name)}" data-watch-action="unmonitor">unmonitor</button>`
-          : `<button data-watch="${esc(w.name)}" data-watch-action="monitor">monitor</button>`)
-        : '<span class="muted">read-only</span>');
-    const actions = !w.enabled
-      ? '<span class="muted">disabled in config</span>'
-      : [expandBtn, monitorBtn].filter(Boolean).join(" ");
-    const row = `<tr class="clickable" data-exp-key="${esc(key)}">
-      <td>${chev}${esc(displayName(w))}</td>
-      <td>${esc(w.check_type || "")}</td>
-      <td class="watch-summary">${summary}</td>
-      <td>${esc(w.interval || "")}</td>
-      <td>${polarity}</td>
-      <td>${hook}</td>
-      <td>${notif}</td>
-      <td>${last}</td>
-      <td>${stateBadge(state)}${watchStateHint(w)}</td>
-      <td class="actions">${actions}</td>
-    </tr>`;
-    const expRow = open
-      ? `<tr class="exp-row" data-exp="${esc(key)}"><td colspan="10">${expCache[key] || '<span class="muted">loading…</span>'}</td></tr>`
-      : "";
-    return row + expRow;
-  });
-  tbody.innerHTML = rows.join("") || (watchQuery || watchStatus !== "all" || watchType !== "all"
+  tbody.innerHTML = list.map(watchRowHTML).join("") || (watchQuery || watchStatus !== "all" || watchType !== "all"
     ? `<tr><td colspan="10" class="muted">No watches match the filter.</td></tr>`
     : `<tr><td colspan="10" class="muted">No watches.</td></tr>`);
-  expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
 }
 
 // ---- Installed applications ----------------------------------------------
@@ -3468,20 +3535,6 @@ function renderOverview(ctx) {
       target: "daemon-section",
     }));
   }
-  // One tile per mounted disk/volume watch, same gauge style as the host metrics
-  // above. The tile turns crit exactly when the volume's watch is firing.
-  watches.filter((w) => w && w.disk && Number(w.disk.total_bytes) > 0).forEach((w) => {
-    const d = w.disk;
-    const p = diskUsedPct(d);
-    tiles.push(tile({
-      label: `Vol ${d.mount_point || d.path || w.name || ""}`.trim(),
-      value: `${fmtNum(p, 2)}<small>%</small>`,
-      sub: `${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free`,
-      cls: watchStateText(w) === "failed" ? "t-crit" : "",
-      extra: usageBar(p, fmtPct(p)),
-      target: "watches-section",
-    }));
-  });
   band.innerHTML = tiles.join("");
 }
 
