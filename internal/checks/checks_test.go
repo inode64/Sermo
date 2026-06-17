@@ -448,7 +448,7 @@ func TestResolveNeededBasic(t *testing.T) {
 	defer ef.Close()
 
 	dirs := collectLibrarySearchDirs("/bin/sh", ef)
-	missing := resolveNeeded([]string{"libc.so.6"}, dirs, "/bin/sh", make(map[string]bool))
+	missing := resolveNeeded([]string{"libc.so.6"}, dirs, make(map[string]bool))
 	if len(missing) > 0 {
 		t.Logf("note: resolveNeeded reported missing in smoke test (distro dependent): %v", missing)
 	}
