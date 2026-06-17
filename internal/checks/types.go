@@ -512,16 +512,57 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	}
 
 	dirs := collectLibrarySearchDirs(c.binary, ef)
-	missing := 0
-	for _, soname := range needed {
-		if findLibrary(soname, dirs) == "" {
-			missing++
+
+	// LD_LIBRARY_PATH takes precedence (as the real dynamic linker does).
+	// We prepend it so it is searched first.
+	if lp := os.Getenv("LD_LIBRARY_PATH"); lp != "" {
+		for _, p := range strings.Split(lp, ":") {
+			if p != "" {
+				dirs = append([]string{expandOrigin(p, c.binary)}, dirs...)
+			}
 		}
+		dirs = dedupPreserveOrder(dirs)
 	}
-	if missing > 0 {
+
+	missing := resolveNeeded(needed, dirs, c.binary, make(map[string]bool))
+	if len(missing) > 0 {
 		return c.result(false, c.binary+": missing shared libraries", start)
 	}
 	return c.result(true, c.binary+": all shared libraries resolve", start)
+}
+
+// resolveNeeded recursively resolves DT_NEEDED entries (including transitive
+// dependencies of the resolved libraries). It returns the list of sonames
+// that could not be located.
+func resolveNeeded(needed []string, dirs []string, origin string, seen map[string]bool) []string {
+	var missing []string
+	for _, soname := range needed {
+		if seen[soname] {
+			continue
+		}
+		seen[soname] = true
+
+		path := findLibrary(soname, dirs)
+		if path == "" {
+			missing = append(missing, soname)
+			continue
+		}
+
+		// Open the resolved library to collect its own DT_NEEDED (transitive).
+		ef, err := elf.Open(path)
+		if err != nil {
+			missing = append(missing, soname+" (open failed)")
+			continue
+		}
+		subNeeded, _ := ef.DynString(elf.DT_NEEDED)
+		ef.Close()
+
+		if len(subNeeded) > 0 {
+			subMissing := resolveNeeded(subNeeded, dirs, origin, seen)
+			missing = append(missing, subMissing...)
+		}
+	}
+	return missing
 }
 
 // collectLibrarySearchDirs builds the library search path list for the given
@@ -592,10 +633,16 @@ func expandOrigin(p, binary string) string {
 	dir := filepath.Dir(binary)
 	p = strings.ReplaceAll(p, "$ORIGIN", dir)
 	p = strings.ReplaceAll(p, "${ORIGIN}", dir)
-	return p
+	return filepath.Clean(p)
 }
 
 func findLibrary(soname string, dirs []string) string {
+	if filepath.IsAbs(soname) {
+		if _, err := os.Stat(soname); err == nil {
+			return soname
+		}
+		return ""
+	}
 	for _, d := range dirs {
 		cand := filepath.Join(d, soname)
 		if _, err := os.Stat(cand); err == nil {
@@ -623,6 +670,20 @@ func parseLdSoConf(path string) []string {
 			continue // we handle .d explicitly
 		}
 		out = append(out, line)
+	}
+	return out
+}
+
+// dedupPreserveOrder removes duplicate directories while keeping the first
+// occurrence (used after prepending LD_LIBRARY_PATH).
+func dedupPreserveOrder(dirs []string) []string {
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
 	}
 	return out
 }
