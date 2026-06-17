@@ -65,6 +65,16 @@ On merged-/usr hosts where `/usr/sbin` is a symlink to `/usr/bin`, the default
 real `usr/sbin` directory and replace the host symlink when extracted. Pass an
 explicit `sbindir=...` only when the target really has a distinct sbin directory.
 
+Do not deploy a `DESTDIR` tree by extracting a tar archive directly into `/`
+with preserved directory metadata. A staged tree contains directory entries such
+as `./`, `etc/` and `usr/`; plain `tar -xpf` can apply those modes to existing
+system directories. Use the package manager, copy the installed files directly,
+or extract ad-hoc test archives with:
+
+```sh
+sudo tar --no-overwrite-dir -C / -xpf sermo-stage.tar
+```
+
 ## Quick start
 
 ```sh
