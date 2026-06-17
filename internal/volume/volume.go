@@ -12,6 +12,7 @@ package volume
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -225,7 +226,50 @@ func List(mounts MountSource) ([]Mount, error) {
 		seen[m.Mountpoint] = true
 		out = append(out, m)
 	}
-	return out, nil
+	return pruneNestedSameDeviceMounts(out), nil
+}
+
+func pruneNestedSameDeviceMounts(mounts []Mount) []Mount {
+	sort.SliceStable(mounts, func(i, j int) bool {
+		return len(cleanMountpoint(mounts[i].Mountpoint)) < len(cleanMountpoint(mounts[j].Mountpoint))
+	})
+	out := make([]Mount, 0, len(mounts))
+	for _, m := range mounts {
+		if hasParentMountOnSameDevice(out, m) {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+func hasParentMountOnSameDevice(existing []Mount, child Mount) bool {
+	for _, parent := range existing {
+		if parent.Device == child.Device && nestedMountpoint(parent.Mountpoint, child.Mountpoint) {
+			return true
+		}
+	}
+	return false
+}
+
+func nestedMountpoint(parent, child string) bool {
+	parent = cleanMountpoint(parent)
+	child = cleanMountpoint(child)
+	if parent == child {
+		return false
+	}
+	if parent == "/" {
+		return strings.HasPrefix(child, "/")
+	}
+	return strings.HasPrefix(child, parent+"/")
+}
+
+func cleanMountpoint(path string) string {
+	path = strings.TrimRight(path, "/")
+	if path == "" {
+		return "/"
+	}
+	return path
 }
 
 // procMounts reads the mount table via the shared /proc/mounts parser

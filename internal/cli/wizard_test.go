@@ -84,6 +84,43 @@ func TestIfaceHasUsableAddress(t *testing.T) {
 	}
 }
 
+func TestListIfacesFromSysfs(t *testing.T) {
+	root := t.TempDir()
+	writeIface := func(name, flags, operstate string) {
+		t.Helper()
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "flags"), []byte(flags+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "operstate"), []byte(operstate+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeIface("lo", "0x9", "unknown")
+	writeIface("eth0", "0x1003", "up")
+	writeIface("tun0", "0x1091", "unknown")
+
+	got, err := listIfacesFromSysfs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("interfaces = %+v, want 3", got)
+	}
+	if got[0].Name != "eth0" || !got[0].Up || got[0].Loopback {
+		t.Fatalf("eth0 = %+v, want up non-loopback", got[0])
+	}
+	if got[1].Name != "lo" || !got[1].Loopback {
+		t.Fatalf("lo = %+v, want loopback", got[1])
+	}
+	if got[2].Name != "tun0" || !got[2].Up || got[2].Loopback {
+		t.Fatalf("tun0 = %+v, want up non-loopback", got[2])
+	}
+}
+
 func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")

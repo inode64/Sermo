@@ -30,6 +30,7 @@ localstatedir ?= /var
 # Sermo-specific locations derived from the standard dirs.
 SERMO_CONFDIR ?= $(sysconfdir)/sermo
 SERMO_DATADIR ?= $(datadir)/sermo
+SERMO_RUNDIR ?= /run/sermo
 SERMO_STATEDIR ?= $(localstatedir)/lib/sermo
 SYSTEMD_UNITDIR ?= /usr/lib/systemd/system
 TMPFILESDIR ?= /usr/lib/tmpfiles.d
@@ -54,9 +55,9 @@ LINT_CACHE_ENV = $(LINT_PATH) XDG_CACHE_HOME="$${XDG_CACHE_HOME:-$(LINT_CACHE_DI
 # locations baked into the packaging templates.
 unit_subst = sed -e 's|/usr/bin/sermod|$(sbindir)/sermod|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
 # Rewrite the catalog/config paths in the sample config to the chosen dirs.
-config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g'
-# Rewrite the state dir in the tmpfiles config (runtime /run/sermo is fixed).
-tmpfiles_subst = sed -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
+config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/share/sermo|$(SERMO_DATADIR)|g' -e 's|/etc/sermo|$(SERMO_CONFDIR)|g' -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
+# Rewrite runtime/state dirs in the tmpfiles config.
+tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
 .PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
         install install-bin install-catalog install-config install-templates install-tmpfiles install-systemd install-openrc \
