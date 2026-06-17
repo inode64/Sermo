@@ -122,6 +122,9 @@ func loadGlobal(path string) (Global, error) {
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
 		g.Catalog = cfgval.StringList(paths["catalog"])
+		if len(g.Catalog) == 0 {
+			g.Catalog = cfgval.StringList(paths["profiles"])
+		}
 		g.Includes = cfgval.StringList(paths["includes"])
 		g.Mounts = cfgval.StringList(paths["mounts"])
 		if len(g.Includes) == 0 {

@@ -809,9 +809,12 @@ Python 3      Python 3.11.2                ok
 Only installed applications are shown; `sermoctl apps all` also lists the rest as
 `not installed`. The same `--long` and `all` apply to `sermoctl libs` and
 `sermoctl services`. With version templates this lists each installed version as
-its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). `--json` is unaffected by
-`--long` — it always emits both, with the structured `name`, `display_name`,
-`binary`, `version`, `version_short`, `installed`, `ok` and `status`.
+its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). For `sermoctl services`, version
+commands are best-effort inventory data: a failed distro-specific version probe
+leaves the version unknown instead of marking the installed service as an error.
+`--json` is unaffected by `--long` — it always emits both, with the structured
+`name`, `display_name`, `binary`, `version`, `version_short`, `installed`, `ok`
+and `status`.
 
 When an app declares `health`, Sermo uses it as the preferred health probe for
 `sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit

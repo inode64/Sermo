@@ -1,6 +1,72 @@
 package appinspect
 
-import "testing"
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"sermo/internal/config"
+	"sermo/internal/execx"
+)
+
+type testRunner map[string]execx.Result
+
+func (r testRunner) Run(_ context.Context, name string, _ ...string) (execx.Result, error) {
+	if res, ok := r[name]; ok {
+		return res, nil
+	}
+	return execx.Result{ExitCode: 127}, fmt.Errorf("%s: not found", name)
+}
+
+func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "webd")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved := config.Resolved{Tree: map[string]any{
+		"preflight": map[string]any{
+			"web-binary":  map[string]any{"type": "binary", "path": binary},
+			"web-version": map[string]any{"type": "command", "command": []any{binary, "--version"}},
+		},
+	}}
+
+	report := Inspect(context.Background(), testRunner{
+		binary: {Stdout: "Webd 1.2.3\n", ExitCode: 0},
+	}, "web", resolved)
+	if !report.Installed || !report.OK || report.Binary != binary || report.Status != "ok" {
+		t.Fatalf("Inspect() = %+v, want installed ok report for namespaced binary", report)
+	}
+	if report.Version != "Webd 1.2.3" || report.VersionShort != "1.2.3" {
+		t.Fatalf("version = %q short=%q, want Webd 1.2.3 / 1.2.3", report.Version, report.VersionShort)
+	}
+}
+
+func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "webd")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved := config.Resolved{Tree: map[string]any{
+		"preflight": map[string]any{
+			"binary":  map[string]any{"type": "binary", "path": binary},
+			"version": map[string]any{"type": "command", "command": []any{binary, "--version"}},
+		},
+	}}
+	runner := testRunner{binary: {Stderr: "bad flag\n", ExitCode: 2}}
+
+	strict := Inspect(context.Background(), runner, "web", resolved)
+	if strict.OK || strict.Status == "ok" {
+		t.Fatalf("strict Inspect() = %+v, want version failure", strict)
+	}
+	optional := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
+	if !optional.OK || optional.Status != "ok" {
+		t.Fatalf("optional Inspect() = %+v, want ok with unknown version", optional)
+	}
+}
 
 func TestProbeCommandFor(t *testing.T) {
 	tree := map[string]any{
