@@ -97,6 +97,23 @@ func TestBuildMessageHeadersAndInjectionGuard(t *testing.T) {
 	}
 }
 
+func TestBuildMessageHTMLMultipart(t *testing.T) {
+	raw := string(buildMessage("sermo@x", []string{"ops@x"}, Message{
+		Subject: "report",
+		Body:    "plain body",
+		HTML:    "<strong>html body</strong>",
+	}))
+	if !strings.Contains(raw, "Content-Type: multipart/alternative;") {
+		t.Fatalf("HTML message must be multipart/alternative:\n%s", raw)
+	}
+	if !strings.Contains(raw, "Content-Type: text/plain; charset=utf-8") || !strings.Contains(raw, "plain body") {
+		t.Fatalf("missing plain part:\n%s", raw)
+	}
+	if !strings.Contains(raw, "Content-Type: text/html; charset=utf-8") || !strings.Contains(raw, "<strong>html body</strong>") {
+		t.Fatalf("missing HTML part:\n%s", raw)
+	}
+}
+
 func TestBareAddr(t *testing.T) {
 	if got := bareAddr("Sermo Ops <ops@example.com>"); got != "ops@example.com" {
 		t.Fatalf("bareAddr = %q", got)

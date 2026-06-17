@@ -10,6 +10,7 @@ import (
 	"net/smtp"
 	"net/url"
 	"sermo/internal/cfgval"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -181,7 +182,8 @@ func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Mes
 	return c.Quit()
 }
 
-// buildMessage renders a minimal RFC 5322 plain-text message.
+// buildMessage renders a minimal RFC 5322 message. Messages with HTML are sent
+// as multipart/alternative so mail clients can fall back to the plain body.
 func buildMessage(from string, to []string, msg Message) []byte {
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
@@ -189,13 +191,36 @@ func buildMessage(from string, to []string, msg Message) []byte {
 	b.WriteString("Subject: " + sanitizeHeader(msg.Subject) + "\r\n")
 	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	if msg.HTML == "" {
+		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+		b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
+		b.WriteString("\r\n")
+		writeCRLFBody(&b, msg.Body)
+		return []byte(b.String())
+	}
+
+	boundary := "sermo-report-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n")
 	b.WriteString("\r\n")
-	b.WriteString(strings.ReplaceAll(msg.Body, "\n", "\r\n"))
-	if !strings.HasSuffix(msg.Body, "\n") {
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
+	b.WriteString("\r\n")
+	writeCRLFBody(&b, msg.Body)
+	b.WriteString("--" + boundary + "\r\n")
+	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
+	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
+	b.WriteString("\r\n")
+	writeCRLFBody(&b, msg.HTML)
+	b.WriteString("--" + boundary + "--\r\n")
+	return []byte(b.String())
+}
+
+func writeCRLFBody(b *strings.Builder, body string) {
+	b.WriteString(strings.ReplaceAll(body, "\n", "\r\n"))
+	if !strings.HasSuffix(body, "\n") {
 		b.WriteString("\r\n")
 	}
-	return []byte(b.String())
 }
 
 // bareAddr extracts the address from a "Name <addr>" string, or returns it as-is.
