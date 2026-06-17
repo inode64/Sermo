@@ -192,10 +192,14 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 
 	for _, arg := range args {
-		if arg == "version" || arg == "--version" || arg == "-V" {
+		if arg == "--version" || arg == "-V" {
 			fmt.Fprintln(a.Stdout, buildinfo.String())
 			return exitSuccess
 		}
+	}
+	if len(args) > 0 && args[0] == "version" {
+		fmt.Fprintln(a.Stdout, buildinfo.String())
+		return exitSuccess
 	}
 
 	opts, err := parseArgs(args)
@@ -205,7 +209,15 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return exitUsage
 	}
 	if opts.help {
-		writeUsage(a.Stdout)
+		if opts.command != "" {
+			if !writeCommandUsage(a.Stdout, opts.command) {
+				fmt.Fprintf(a.Stderr, "usage error: unknown help topic %q\n", opts.command)
+				writeUsage(a.Stderr)
+				return exitUsage
+			}
+		} else {
+			writeUsage(a.Stdout)
+		}
 		return exitSuccess
 	}
 	if opts.timeout <= 0 {
@@ -221,6 +233,11 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 
 	switch opts.command {
+	case "help":
+		return runHelp(a, opts)
+	case "version":
+		fmt.Fprintln(a.Stdout, buildinfo.String())
+		return exitSuccess
 	case "backend", "init":
 		return a.runBackend(ctx, opts)
 	case "status":
@@ -271,7 +288,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runDiagnose(opts)
 	case "reload":
 		if opts.service() == "" {
-			return a.usageError("reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
+			return a.commandUsageError("reload", "reload requires a service name; use `sermoctl daemon reload` to reload sermod config")
 		}
 		return a.runAction(ctx, opts, "reload")
 	case "wizard":
@@ -288,6 +305,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 }
 
 func (a App) runBackend(ctx context.Context, opts options) int {
+	if len(opts.args) > 0 {
+		return a.commandUsageError(opts.command, fmt.Sprintf("%s takes no arguments", opts.command))
+	}
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
@@ -312,9 +332,10 @@ func (a App) runBackend(ctx context.Context, opts options) int {
 
 func (a App) runStatus(ctx context.Context, opts options) int {
 	if opts.service() == "" {
-		fmt.Fprintln(a.Stderr, "usage error: status requires a service name")
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("status", "status requires a service name")
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError("status", "status takes exactly one service name")
 	}
 
 	status, code := a.serviceStatus(ctx, opts)
@@ -409,9 +430,10 @@ func metaSuffix(source, changedAt string) string {
 
 func (a App) runIsActive(ctx context.Context, opts options) int {
 	if opts.service() == "" {
-		fmt.Fprintln(a.Stderr, "usage error: is-active requires a service name")
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("is-active", "is-active requires a service name")
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError("is-active", "is-active takes exactly one service name")
 	}
 
 	status, code := a.serviceStatus(ctx, opts)
@@ -439,9 +461,10 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 // fully guarded (section 16).
 func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if opts.service() == "" {
-		fmt.Fprintf(a.Stderr, "usage error: %s requires a service name\n", action)
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError(action, fmt.Sprintf("%s requires a service name", action))
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError(action, fmt.Sprintf("%s takes exactly one service name", action))
 	}
 	service := opts.service()
 
@@ -619,9 +642,7 @@ func operationExit(status operation.ResultStatus) int {
 // runConfig dispatches the `config` subcommands.
 func (a App) runConfig(opts options) int {
 	if len(opts.args) == 0 {
-		fmt.Fprintln(a.Stderr, "usage error: config requires a subcommand (validate)")
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("config", "config requires a subcommand (validate)")
 	}
 
 	sub := opts.args[0]
@@ -632,9 +653,7 @@ func (a App) runConfig(opts options) int {
 	case "validate":
 		return a.runConfigValidate(globalPath, rest, opts)
 	default:
-		fmt.Fprintf(a.Stderr, "usage error: unknown config subcommand %q\n", sub)
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("config", fmt.Sprintf("unknown config subcommand %q", sub))
 	}
 }
 
@@ -642,6 +661,14 @@ func (a App) runConfigValidate(globalPath string, rest []string, opts options) i
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
+	}
+	if len(rest) > 1 {
+		return a.commandUsageError("config", "config validate accepts at most one service name")
+	}
+	if len(rest) == 1 {
+		if _, ok := cfg.Services[rest[0]]; !ok {
+			return a.fail(opts, fmt.Sprintf("unknown service %q", rest[0]))
+		}
 	}
 
 	issues := config.Validate(cfg)
@@ -708,9 +735,10 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 // under engine.default_timeout (section 19). A required check failure exits 1.
 func (a App) runPreflight(ctx context.Context, opts options) int {
 	if opts.service() == "" {
-		fmt.Fprintln(a.Stderr, "usage error: preflight requires a service name")
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("preflight", "preflight requires a service name")
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError("preflight", "preflight takes exactly one service name")
 	}
 	service := opts.service()
 
@@ -820,9 +848,10 @@ func engineDefaultTimeout(cfg *config.Config) time.Duration {
 // stale), reading the runtime root from the loaded config (section 20).
 func (a App) runLocks(opts options) int {
 	if opts.service() == "" {
-		fmt.Fprintln(a.Stderr, "usage error: locks requires a service name")
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("locks", "locks requires a service name")
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError("locks", "locks takes exactly one service name")
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -882,9 +911,10 @@ func formatLock(lock locks.Lock) string {
 // (section 21), reading the service's `processes` selectors from resolved config.
 func (a App) runProcesses(opts options) int {
 	if opts.service() == "" {
-		fmt.Fprintln(a.Stderr, "usage error: processes requires a service name")
-		writeUsage(a.Stderr)
-		return exitUsage
+		return a.commandUsageError("processes", "processes requires a service name")
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError("processes", "processes takes exactly one service name")
 	}
 	service := opts.service()
 
@@ -999,6 +1029,10 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 	if status, code, ok := a.configuredServiceStatus(ctx, opts); ok {
 		return status, code
 	}
+	if a.serviceNameRejectedByConfig(opts) {
+		a.reportError(opts, fmt.Sprintf("unknown service %q", opts.service()))
+		return servicemgr.ServiceStatus{}, exitRuntimeError
+	}
 
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
@@ -1018,6 +1052,15 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 	return status, exitSuccess
+}
+
+func (a App) serviceNameRejectedByConfig(opts options) bool {
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil {
+		return false
+	}
+	_, ok := cfg.Services[opts.service()]
+	return len(cfg.Services) > 0 && !ok
 }
 
 func (a App) configuredServiceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int, bool) {
@@ -1078,9 +1121,8 @@ func (a App) fail(opts options, msg string) int {
 }
 
 // usageError writes a subcommand usage error to Stderr and returns the usage
-// exit code, centralising the "usage error:" prefix. Top-level commands that
-// also print the full usage block keep emitting the line inline before
-// writeUsage so the ordering (error line, then usage) is preserved.
+// exit code, centralising the "usage error:" prefix. Commands with a dedicated
+// help topic should use commandUsageError so the operator sees focused help.
 func (a App) usageError(msg string) int {
 	fmt.Fprintln(a.Stderr, "usage error: "+msg)
 	return exitUsage
@@ -1130,7 +1172,13 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 func (a App) runEvents(ctx context.Context, opts options) int {
 	args := opts.args
 	if len(args) > 0 && args[0] == "clear" {
+		if len(args) > 1 {
+			return a.commandUsageError("events", "events clear accepts only optional --before TIME")
+		}
 		return a.runEventsClear(ctx, opts, "events")
+	}
+	if len(args) > 1 {
+		return a.commandUsageError("events", "events accepts at most one service name")
 	}
 
 	// list mode: `sermoctl events [SERVICE] [--limit N]`
@@ -1201,9 +1249,12 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 // recent-events view, so clearing it uses the same daemon event-prune path.
 func (a App) runActivity(ctx context.Context, opts options) int {
 	if len(opts.args) > 0 && opts.args[0] == "clear" {
+		if len(opts.args) > 1 {
+			return a.commandUsageError("activity", "activity clear accepts only optional --before TIME")
+		}
 		return a.runEventsClear(ctx, opts, "activity entries")
 	}
-	return a.usageError("activity supports only: clear [--before TIME]")
+	return a.commandUsageError("activity", "activity supports only: clear [--before TIME]")
 }
 
 func (a App) runEventsClear(ctx context.Context, opts options, noun string) int {
@@ -1556,23 +1607,6 @@ func flagValue(args []string, i int, flag string) (string, int, error) {
 		return "", i, fmt.Errorf("%s requires a value", flag)
 	}
 	return args[i+1], i + 1, nil
-}
-
-func writeUsage(w io.Writer) {
-	fmt.Fprintln(w, "usage: sermoctl [--backend auto|systemd|openrc] [--config path] [--json] [--quiet] [--timeout duration] [--version|-V] COMMAND [ARGS]")
-	fmt.Fprintln(w, "commands: version | backend|init | status SERVICE | is-active SERVICE | start|stop|restart|resume SERVICE [--no-cascade] | reload SERVICE")
-	fmt.Fprintln(w, "          mount TARGET | umount TARGET | mount status TARGET | mount list")
-	fmt.Fprintln(w, "          config validate [SERVICE]")
-	fmt.Fprintln(w, "          locks SERVICE | processes SERVICE | preflight SERVICE | monitor SERVICE | unmonitor SERVICE")
-	fmt.Fprintln(w, "          sla [SERVICE] | sla --series SERVICE [--since DURATION]")
-	fmt.Fprintln(w, "          diagnose | diagnose clean|clear | wizard [service|docker|vm|mount|volume|net|uplink]")
-	fmt.Fprintln(w, "          state compact [--before TIME] # prune old history and vacuum; TIME=RFC3339 or duration")
-	fmt.Fprintln(w, "          apps [all] [--long] | libs [all] [--long] | patterns | services [all] [--long] | daemon list | daemon show DAEMON | daemon reload | service list | service show SERVICE")
-	fmt.Fprintln(w, "          service clone SOURCE TARGET")
-	fmt.Fprintln(w, "          events [SERVICE] [--limit N]   # list recent (global or per-service)")
-	fmt.Fprintln(w, "          events clear [--before TIME]   # TIME=RFC3339 or duration (e.g. 2h); omits TIME => all")
-	fmt.Fprintln(w, "          activity clear [--before TIME] # same event log behind the web Recent activity panel")
-	fmt.Fprintln(w, "          lock SERVICE [--name N] --reason R --ttl D -- COMMAND... | lock acquire ... | lock release SERVICE [--name N]")
 }
 
 func writeJSON(w io.Writer, value any) {

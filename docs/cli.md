@@ -1,8 +1,8 @@
 # CLI
 
 `sermoctl` is the operator and scripting interface. Run it with no arguments
-for the authoritative usage; `sermoctl <command> --help`-style hints are shown
-on usage errors.
+or `--help` for the command index, and use `sermoctl help COMMAND` or
+`sermoctl COMMAND --help` for focused usage, flags and examples.
 
 ## Root flags
 
@@ -15,9 +15,13 @@ on usage errors.
 --version / -V
 ```
 
+Global flags may be placed before or after the command. Command-specific flags
+are shown by `sermoctl help COMMAND`.
+
 ## Command surface
 
 ```bash
+sermoctl help [COMMAND]
 sermoctl backend
 sermoctl init                       # alias for sermoctl backend
 sermoctl version
@@ -37,6 +41,8 @@ sermoctl mount list
 sermoctl preflight SERVICE
 sermoctl processes SERVICE
 sermoctl locks SERVICE
+sermoctl monitor SERVICE
+sermoctl unmonitor SERVICE
 
 sermoctl config validate [SERVICE]
 
@@ -47,6 +53,11 @@ sermoctl daemon reload                 # reload sermod config, not services
 sermoctl service list
 sermoctl service show SERVICE
 sermoctl service clone SOURCE TARGET
+
+sermoctl services [all] [--long]
+sermoctl apps [all] [--long]
+sermoctl libs [all] [--long]
+sermoctl patterns
 
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be RFC3339 or duration (e.g. 1h)
@@ -62,11 +73,19 @@ sermoctl state compact [--before TIME]  # prunes old history and vacuums the sta
 sermoctl lock SERVICE [--name NAME] --reason REASON --ttl DURATION -- COMMAND...
 sermoctl lock acquire SERVICE [--name NAME] --reason REASON --ttl DURATION
 sermoctl lock release SERVICE [--name NAME]
+
+sermoctl wizard
+sermoctl wizard service|docker|vm|mount|volume|net|uplink
 ```
 
-Plus `apps`, `libs`, `patterns`, `services`, `monitor`/`unmonitor`, `sla`,
-`diagnose` and `wizard` — see the usage output and
-[configuration](configuration.md).
+Examples:
+
+```bash
+sermoctl help restart
+sermoctl restart mysql-main
+sermoctl daemon reload
+sermoctl state compact --before 720h
+```
 
 ## Exit codes
 

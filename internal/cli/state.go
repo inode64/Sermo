@@ -14,12 +14,12 @@ const stateHistoryRetention = 366 * 24 * time.Hour
 // runState dispatches persistent state-store maintenance commands.
 func (a App) runState(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.usageError("state supports only: compact [--before TIME]")
+		return a.commandUsageError("state", "state supports only: compact [--before TIME]")
 	}
 	sub := opts.args[0]
 	rest := opts.args[1:]
 	if sub != "compact" || len(rest) > 0 {
-		return a.usageError("state supports only: compact [--before TIME]")
+		return a.commandUsageError("state", "state supports only: compact [--before TIME]")
 	}
 	return a.runStateCompact(ctx, opts)
 }

@@ -21,7 +21,7 @@ func (a App) runDiagnose(opts options) int {
 		if (opts.args[0] == "clean" || opts.args[0] == "clear") && len(opts.args) == 1 {
 			return a.runDiagnoseClean(opts)
 		}
-		return a.usageError("diagnose supports only: diagnose [--json] | diagnose clean|clear [--json]")
+		return a.commandUsageError("diagnose", "diagnose supports only: diagnose [--json] | diagnose clean|clear [--json]")
 	}
 
 	cfg, code := a.loadConfig(opts)

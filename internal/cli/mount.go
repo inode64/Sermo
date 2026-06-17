@@ -14,24 +14,33 @@ import (
 
 func (a App) runMount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.usageError("mount requires a target, or subcommand status/list")
+		return a.commandUsageError("mount", "mount requires a target, or subcommand status/list")
 	}
 	switch opts.args[0] {
 	case "list":
+		if len(opts.args) > 1 {
+			return a.commandUsageError("mount", "mount list takes no arguments")
+		}
 		return a.runMountList(opts)
 	case "status":
-		if len(opts.args) < 2 {
-			return a.usageError("mount status requires a mount name or path")
+		if len(opts.args) != 2 {
+			return a.commandUsageError("mount", "mount status requires exactly one mount name or path")
 		}
 		return a.runMountStatus(opts, opts.args[1])
 	default:
+		if len(opts.args) > 1 {
+			return a.commandUsageError("mount", "mount takes exactly one target")
+		}
 		return a.runMountAcquire(ctx, opts, opts.args[0])
 	}
 }
 
 func (a App) runUmount(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
-		return a.usageError("umount requires a mount name or path")
+		return a.commandUsageError("umount", "umount requires a mount name or path")
+	}
+	if len(opts.args) > 1 {
+		return a.commandUsageError("umount", "umount takes exactly one mount name or path")
 	}
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
