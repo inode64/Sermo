@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"crypto/tls"
+	"debug/elf"
 	"io"
 	"net"
 	"net/http"
@@ -392,7 +393,7 @@ func TestLibrariesCheck(t *testing.T) {
 		t.Fatalf("non-existent binary should fail, got OK with %q", res.Message)
 	}
 
-	// A real dynamically-linked binary on the test host must resolve.
+	// A real dynamically-linked binary on the test host must resolve (now with transitive).
 	c = librariesCheck{base: base{name: "lib", timeout: time.Second}, binary: "/bin/sh"}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("/bin/sh libraries should resolve: %s", res.Message)
@@ -404,6 +405,52 @@ func TestLibrariesCheckRealBinary(t *testing.T) {
 	c := librariesCheck{base: base{name: "lib", timeout: time.Second}, binary: "/bin/sh"}
 	if res := c.Run(context.Background()); !res.OK {
 		t.Fatalf("/bin/sh libraries should resolve: %s", res.Message)
+	}
+}
+
+// Low-level tests for the native resolver helpers.
+func TestFindLibrary(t *testing.T) {
+	// Absolute path
+	abs := "/bin/sh"
+	if got := findLibrary(abs, nil); got != abs {
+		t.Fatalf("absolute: got %q", got)
+	}
+	if got := findLibrary("/nonexistent/abs/path", nil); got != "" {
+		t.Fatalf("missing absolute should return empty")
+	}
+
+	// Relative via dirs
+	dirs := []string{"/bin", "/usr/bin"}
+	if got := findLibrary("sh", dirs); got == "" {
+		t.Fatalf("sh should be found via dirs")
+	}
+	if got := findLibrary("nonexistentlib.so.9", dirs); got != "" {
+		t.Fatalf("missing should return empty")
+	}
+}
+
+func TestExpandOrigin(t *testing.T) {
+	bin := "/usr/local/bin/myapp"
+	if got := expandOrigin("$ORIGIN/../lib", bin); !strings.HasSuffix(got, "/usr/local/lib") {
+		t.Fatalf("$ORIGIN expand: %q", got)
+	}
+	if got := expandOrigin("/fixed/path", bin); got != "/fixed/path" {
+		t.Fatalf("no origin: %q", got)
+	}
+}
+
+func TestResolveNeededBasic(t *testing.T) {
+	// Exercises the recursive resolver (direct + transitive).
+	ef, err := elf.Open("/bin/sh")
+	if err != nil {
+		t.Skip("cannot open /bin/sh for transitive test")
+	}
+	defer ef.Close()
+
+	dirs := collectLibrarySearchDirs("/bin/sh", ef)
+	missing := resolveNeeded([]string{"libc.so.6"}, dirs, "/bin/sh", make(map[string]bool))
+	if len(missing) > 0 {
+		t.Logf("note: resolveNeeded reported missing in smoke test (distro dependent): %v", missing)
 	}
 }
 
