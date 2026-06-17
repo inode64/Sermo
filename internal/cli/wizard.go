@@ -27,6 +27,9 @@ import (
 // runWizard drives the interactive assistant that generates `watches:` config.
 // `sermoctl wizard [name]` runs the named assistant, or lists them to choose.
 func (a App) runWizard(ctx context.Context, opts options) int {
+	if len(opts.args) > 1 {
+		return a.commandUsageError("wizard", "wizard accepts at most one assistant name")
+	}
 	code, err := a.runWizardSession(ctx, opts)
 	if err != nil {
 		// Piped/truncated stdin: a prompt was still waiting when input ended.

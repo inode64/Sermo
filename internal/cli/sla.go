@@ -23,6 +23,9 @@ const defaultSLASeriesWindow = 24 * time.Hour
 // where the service was not monitored (Sermo down, or the service paused or
 // disabled) are absent from the series, never counted as downtime.
 func (a App) runSLA(opts options) int {
+	if len(opts.args) > 1 {
+		return a.commandUsageError("sla", "sla accepts at most one service name")
+	}
 	cfg, code := a.loadConfig(opts)
 	if code != exitSuccess {
 		return code
@@ -71,7 +74,7 @@ func (a App) runSLA(opts options) int {
 func (a App) runSLASeries(opts options, cfg *config.Config) int {
 	service := opts.service()
 	if service == "" {
-		return a.usageError("sla --series requires a service name")
+		return a.commandUsageError("sla", "sla --series requires a service name")
 	}
 	if _, ok := cfg.Services[service]; !ok {
 		return a.fail(opts, fmt.Sprintf("unknown service %q", service))

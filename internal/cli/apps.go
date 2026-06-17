@@ -32,6 +32,9 @@ func (a App) runServices(ctx context.Context, opts options) int {
 }
 
 func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, empty string) int {
+	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != "all") {
+		return a.commandUsageError(jsonKey, fmt.Sprintf("%s accepts only optional `all`", jsonKey))
+	}
 	includeMissing := len(opts.args) > 0 && opts.args[0] == "all"
 
 	cfg, code := a.loadConfig(opts)
