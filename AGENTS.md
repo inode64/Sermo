@@ -141,7 +141,7 @@ those primitives small, injectable and covered by tests.
 Avoid external commands whenever practical; prefer the Go standard library or a
 Go-module alternative, unless the entry explicitly requires a third-party library
 or command. When an external command is genuinely required (`systemctl`,
-`rc-service`, user `command` checks, hooks, `ldd`, …), production code must not
+`rc-service`, user `command` checks, hooks, …), production code must not
 call `os/exec` directly: it goes through an injectable `execx` runner with a
 context and an explicit timeout, invoking an argv directly — never a shell.
 `execx` and tests/fakes are the only exceptions.

@@ -3,12 +3,14 @@ package checks
 import (
 	"bytes"
 	"context"
+	"debug/elf"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -484,16 +486,12 @@ func (c processCheck) Run(_ context.Context) Result {
 	return c.result(ok, fmt.Sprintf("state %s (want %s)", state, c.expect), start)
 }
 
-// librariesCheck runs ldd on a binary and fails if any shared library does not
-// resolve (section 19). It is typically an optional preflight entry.
-//
-// This is the one internal use of an external tool: ldd consults the dynamic
-// loader (search paths, ld.so.cache, transitive deps), which cannot be faithfully
-// reimplemented from debug/elf alone, so per the native-Go policy it stays a
-// documented exception (AGENTS.md).
+// librariesCheck verifies that all DT_NEEDED shared libraries for a binary
+// can be resolved using the dynamic linker's search rules (rpath/runpath,
+// system library directories and /etc/ld.so.conf*). Implemented with debug/elf
+// only (no external ldd), per the native-Go policy.
 type librariesCheck struct {
 	base
-	runner execx.Runner
 	binary string
 }
 
@@ -502,22 +500,131 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	res, _ := c.runner.Run(ctx, "ldd", c.binary)
-	out := res.Stdout + res.Stderr
-	if strings.Contains(out, "not found") {
-		return c.result(false, c.binary+": missing shared libraries", start)
+	ef, err := elf.Open(c.binary)
+	if err != nil {
+		return c.result(false, c.binary+": "+err.Error(), start)
 	}
-	if strings.Contains(out, "not a dynamic executable") {
+	defer ef.Close()
+
+	needed, err := ef.DynString(elf.DT_NEEDED)
+	if err != nil || len(needed) == 0 {
 		return c.result(true, c.binary+": static binary, no shared libraries", start)
 	}
-	if res.ExitCode != 0 {
-		msg := FirstNonEmptyLine(res.Stderr)
-		if msg == "" {
-			msg = fmt.Sprintf("ldd exit %d", res.ExitCode)
+
+	dirs := collectLibrarySearchDirs(c.binary, ef)
+	missing := 0
+	for _, soname := range needed {
+		if findLibrary(soname, dirs) == "" {
+			missing++
 		}
-		return c.result(false, "ldd "+c.binary+": "+msg, start)
+	}
+	if missing > 0 {
+		return c.result(false, c.binary+": missing shared libraries", start)
 	}
 	return c.result(true, c.binary+": all shared libraries resolve", start)
+}
+
+// collectLibrarySearchDirs builds the library search path list for the given
+// binary, honouring its DT_RUNPATH / DT_RPATH (with $ORIGIN expansion),
+// its directory, common multi-arch paths, and a best-effort parse of
+// /etc/ld.so.conf (and .d fragments).
+func collectLibrarySearchDirs(binary string, ef *elf.File) []string {
+	var dirs []string
+
+	// Prefer RUNPATH, fall back to RPATH (older binaries).
+	if rps, _ := ef.DynString(elf.DT_RUNPATH); len(rps) > 0 && rps[0] != "" {
+		for _, p := range strings.Split(rps[0], ":") {
+			if p != "" {
+				dirs = append(dirs, expandOrigin(p, binary))
+			}
+		}
+	} else if rps, _ := ef.DynString(elf.DT_RPATH); len(rps) > 0 && rps[0] != "" {
+		for _, p := range strings.Split(rps[0], ":") {
+			if p != "" {
+				dirs = append(dirs, expandOrigin(p, binary))
+			}
+		}
+	}
+
+	// Directory of the binary itself (some apps ship private libs next to exe).
+	if d := filepath.Dir(binary); d != "" && d != "." {
+		dirs = append(dirs, d)
+	}
+
+	// Common system locations (covers most distros and multi-arch setups).
+	dirs = append(dirs,
+		"/lib", "/usr/lib",
+		"/lib64", "/usr/lib64",
+		"/lib/x86_64-linux-gnu", "/usr/lib/x86_64-linux-gnu",
+		"/lib/aarch64-linux-gnu", "/usr/lib/aarch64-linux-gnu",
+		"/lib/i386-linux-gnu", "/usr/lib/i386-linux-gnu",
+		"/lib/arm-linux-gnueabihf", "/usr/lib/arm-linux-gnueabihf",
+	)
+
+	// Best-effort augmentation from ld.so.conf and fragments.
+	if more := parseLdSoConf("/etc/ld.so.conf"); len(more) > 0 {
+		dirs = append(dirs, more...)
+	}
+	// Common drop-in directory even if main conf doesn't include it.
+	if entries, _ := os.ReadDir("/etc/ld.so.conf.d"); len(entries) > 0 {
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".conf") {
+				if more := parseLdSoConf(filepath.Join("/etc/ld.so.conf.d", e.Name())); len(more) > 0 {
+					dirs = append(dirs, more...)
+				}
+			}
+		}
+	}
+
+	// Deduplicate while preserving order.
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		if d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func expandOrigin(p, binary string) string {
+	dir := filepath.Dir(binary)
+	p = strings.ReplaceAll(p, "$ORIGIN", dir)
+	p = strings.ReplaceAll(p, "${ORIGIN}", dir)
+	return p
+}
+
+func findLibrary(soname string, dirs []string) string {
+	for _, d := range dirs {
+		cand := filepath.Join(d, soname)
+		if _, err := os.Stat(cand); err == nil {
+			return cand
+		}
+	}
+	return ""
+}
+
+// parseLdSoConf returns directory paths listed in a simple ld.so.conf file.
+// It ignores comments and basic "include" lines (we separately scan the
+// common /etc/ld.so.conf.d directory).
+func parseLdSoConf(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		if strings.HasPrefix(line, "include ") {
+			continue // we handle .d explicitly
+		}
+		out = append(out, line)
+	}
+	return out
 }
 
 // TrimOutput removes surrounding whitespace from captured command, SQL,
