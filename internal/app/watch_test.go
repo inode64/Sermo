@@ -35,6 +35,22 @@ func (c *countingCheck) Run(context.Context) checks.Result {
 	return checks.Result{Check: "counting", OK: true}
 }
 
+type scriptedCheck struct {
+	results []checks.Result
+	calls   int
+}
+
+func (c *scriptedCheck) Name() string { return "scripted" }
+func (c *scriptedCheck) Run(context.Context) checks.Result {
+	if c.calls >= len(c.results) {
+		c.calls++
+		return c.results[len(c.results)-1]
+	}
+	res := c.results[c.calls]
+	c.calls++
+	return res
+}
+
 func TestWatchPausedSkipsCheck(t *testing.T) {
 	check := &countingCheck{}
 	w := &Watch{
@@ -68,6 +84,33 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	}
 	if env["SERMO_WATCH"] != "disk-root" || env["SERMO_PATH"] != "/" || env["SERMO_CHECK_TYPE"] != "disk" {
 		t.Fatalf("unexpected env: %v", env)
+	}
+}
+
+func TestWatchEmitsRecoveredAfterFiringClears(t *testing.T) {
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "dns", OK: false, Message: "dns timeout"},
+		{Check: "dns", OK: true, Message: "dns ok"},
+		{Check: "dns", OK: true, Message: "dns ok"},
+	}}
+	var events []Event
+	w := &Watch{
+		Name:       "uplink-dns",
+		CheckType:  "dns",
+		Check:      check,
+		FireOnFail: true,
+		Emit:       func(e Event) { events = append(events, e) },
+	}
+
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+	w.RunCycle(context.Background())
+
+	if got := eventKinds(events); strings.Join(got, ",") != "firing,recovered" {
+		t.Fatalf("event kinds = %v, want firing,recovered", got)
+	}
+	if events[1].Message != "dns ok" {
+		t.Fatalf("recovered message = %q, want dns ok", events[1].Message)
 	}
 }
 
@@ -201,6 +244,14 @@ func hasEventKind(events []Event, kind string) bool {
 		}
 	}
 	return false
+}
+
+func eventKinds(events []Event) []string {
+	kinds := make([]string, 0, len(events))
+	for _, e := range events {
+		kinds = append(kinds, e.Kind)
+	}
+	return kinds
 }
 
 var errExpandTest = errTest("boom")

@@ -70,6 +70,7 @@ type Watch struct {
 
 	state       rules.WindowState
 	policyState rules.RemediationState
+	firing      bool
 }
 
 // RunCycle runs the check, advances the window, and fires the hook on a firing
@@ -88,8 +89,13 @@ func (w *Watch) RunCycle(ctx context.Context) {
 		fired = !res.OK
 	}
 	if !w.state.Fires(w.Window, fired) {
+		if w.firing {
+			w.firing = false
+			w.emit(Event{Watch: w.Name, Kind: "recovered", Message: res.Message})
+		}
 		return
 	}
+	w.firing = true
 	// Always emit a "firing" event when the `for` (or `within`) window is
 	// satisfied. This makes the alert visible in the web UI (state=failed,
 	// Alerts/Watches counts, failed filter) and in the event log even for
