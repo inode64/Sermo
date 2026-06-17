@@ -1,0 +1,7 @@
+kind: app
+name: nfsdcld
+display_name: "NFS client tracking daemon"
+category: storage
+binary:
+  - /usr/sbin/nfsdcld
+  - /usr/bin/nfsdcld

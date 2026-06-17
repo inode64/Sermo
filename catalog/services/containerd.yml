@@ -1,0 +1,21 @@
+kind: daemon
+name: containerd
+display_name: "containerd"
+category: virtualization
+description: "Container runtime used by Docker, Kubernetes and other OCI tooling."
+service:
+  systemd: [containerd]
+  openrc: [containerd]
+apps: [containerd]
+
+variables:
+  user: root
+
+processes:
+  main:
+    type: command_match
+    exe: "${containerd_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }

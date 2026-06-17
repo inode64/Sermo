@@ -385,6 +385,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		"fail2ban":     {"fail2ban", "fail2ban-server"},
 		"in.tftpd":     {"in.tftpd", "in-tftpd"},
 		"keydb":        {"keydb", "keydb-server"},
+		"lm_sensors":   {"lm_sensors", "lm-sensors"},
 		"qemu-ga":      {"qemu-guest-agent", "qemu-ga"},
 		"rpc-mountd":   {"rpc-mountd", "nfs-mountd"},
 		"rsync":        {"rsyncd", "rsync"},
@@ -567,6 +568,76 @@ func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
 			}
 			if got := cfgval.String(degraded["value"]); got != "0" {
 				t.Fatalf("%s raid degraded value = %q, want 0", name, got)
+			}
+		})
+	}
+}
+
+func TestRequestedHostProfilesExist(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		app         string
+		binaryVar   string
+		wantProcess bool
+	}{
+		{name: "containerd", app: "containerd", binaryVar: "${containerd_binary}", wantProcess: true},
+		{name: "libvirt-dbus", app: "libvirt-dbus", binaryVar: "${libvirt_dbus_binary}", wantProcess: true},
+		{name: "nfsdcld", app: "nfsdcld", binaryVar: "${nfsdcld_binary}", wantProcess: true},
+		{name: "lm_sensors", app: "lm_sensors", wantProcess: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, ok := cfg.Daemons[tc.name]
+			if !ok {
+				t.Fatalf("service catalog %q not found", tc.name)
+			}
+			if _, ok := cfg.Apps[tc.app]; !ok {
+				t.Fatalf("app catalog %q not found", tc.app)
+			}
+			if !slices.Contains(cfgval.StringList(doc.Body["apps"]), tc.app) {
+				t.Fatalf("%s apps = %v, want %s", tc.name, doc.Body["apps"], tc.app)
+			}
+			resolved, errs := cfg.ResolveCatalog(CategoryService, tc.name)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tc.name, errs)
+			}
+			check := nested(t, resolved.Tree, "checks", "service")
+			if got := cfgval.String(check["type"]); got != "service" {
+				t.Fatalf("%s service check type = %q, want service", tc.name, got)
+			}
+			if got := cfgval.String(check["expect"]); got != "active" {
+				t.Fatalf("%s service check expect = %q, want active", tc.name, got)
+			}
+			processes, ok := doc.Body["processes"].(map[string]any)
+			if !tc.wantProcess {
+				if !ok || len(processes) != 0 {
+					t.Fatalf("%s processes = %v, want empty map for oneshot service", tc.name, doc.Body["processes"])
+				}
+				return
+			}
+			if !ok {
+				t.Fatalf("%s missing process selector", tc.name)
+			}
+			main := nested(t, doc.Body, "processes", "main")
+			if got := cfgval.String(main["exe"]); got != tc.binaryVar {
+				t.Fatalf("%s process exe = %q, want %q", tc.name, got, tc.binaryVar)
+			}
+			if got := cfgval.String(main["user"]); got != "${user}" {
+				t.Fatalf("%s process user = %q, want ${user}", tc.name, got)
 			}
 		})
 	}

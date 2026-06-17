@@ -1,0 +1,10 @@
+kind: app
+name: lm_sensors
+catalog_aliases: [lm-sensors]
+display_name: "lm_sensors"
+category: hardware
+binary:
+  - /usr/bin/sensors
+  - /bin/sensors
+preflight:
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s, optional: true }

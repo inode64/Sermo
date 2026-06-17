@@ -1,0 +1,7 @@
+kind: app
+name: libvirt-dbus
+display_name: "libvirt D-Bus"
+category: virtualization
+binary:
+  - /usr/bin/libvirt-dbus
+  - /usr/sbin/libvirt-dbus

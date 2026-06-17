@@ -1,0 +1,21 @@
+kind: daemon
+name: nfsdcld
+display_name: "NFS client tracking daemon"
+category: storage
+description: "NFSv4 client tracking daemon used by the kernel NFS server."
+service:
+  systemd: [nfsdcld]
+  openrc: [nfsdcld]
+apps: [nfsdcld]
+
+variables:
+  user: root
+
+processes:
+  main:
+    type: command_match
+    exe: "${nfsdcld_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
