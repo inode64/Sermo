@@ -1,0 +1,33 @@
+kind: service
+name: mysql-wal-g-backup-guard
+uses: mysql
+
+# EXAMPLE - opt in only on hosts that use WAL-G for MySQL/MariaDB backups.
+#
+# The base mysql and mariadb catalog daemons stay backup-tool-neutral. If this
+# host protects backups with another system, copy this shape and point the check
+# at that tool instead. For a MariaDB service, use `uses: mariadb` and
+# `apps: [mariadb, wal-g-mysql]`.
+# Rename this service, or copy the apps/checks/rules blocks into the concrete
+# database service you already enable, before using it on a host.
+
+apps: [mysql, wal-g-mysql]
+
+checks:
+  wal-g-mysql:
+    type: process
+    optional: true
+    exe: "${wal_g_mysql_binary}"
+    user: "${user}"
+    state: running
+
+rules:
+  block-restart-during-wal-g-mysql:
+    type: guard
+    blocks: [restart, stop]
+    if:
+      active:
+        check: wal-g-mysql
+    then:
+      action: block
+      message: "${display_name} WAL-G backup is running"
