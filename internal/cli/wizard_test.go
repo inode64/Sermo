@@ -38,6 +38,22 @@ func dockerWizardEnv(*config.Config) assist.Env {
 	}
 }
 
+func vmWizardEnv(*config.Config) assist.Env {
+	return assist.Env{
+		ServiceNames: map[string]struct{}{},
+		VMs: func() ([]assist.VMCandidate, error) {
+			return []assist.VMCandidate{{
+				Name:   "vm-web01",
+				Title:  "web01",
+				Domain: "web01",
+				Status: "running",
+				URI:    "qemu:///system",
+				Socket: "/run/libvirt/libvirt-sock",
+			}}, nil
+		},
+	}
+}
+
 func mountWizardEnv(*config.Config) assist.Env {
 	return assist.Env{
 		Mounts: func() ([]assist.MountCandidate, error) {
@@ -188,6 +204,61 @@ func TestRunWizardDockerWritesService(t *testing.T) {
 	}
 	if _, ok := loaded.Services["docker-web"]; !ok {
 		t.Fatalf("loaded config did not include docker-web: %v", loaded.ServiceNames)
+	}
+}
+
+func TestRunWizardVMWritesService(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "sermo.yml")
+	if err := os.WriteFile(cfgPath, []byte("engine:\n  interval: 30s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := strings.Join([]string{
+		"1", // select vm-web01
+		"1", // monitor enabled
+		"",  // interval inherit
+		"n", // no shadow
+		"y", // write service file
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	app := App{
+		Stdin:         strings.NewReader(script),
+		Stdout:        &out,
+		Stderr:        &bytes.Buffer{},
+		LoadConfig:    config.Load,
+		wizardEnvFunc: vmWizardEnv,
+	}
+	code := app.Run(context.Background(), []string{"--config", cfgPath, "wizard", "vm"})
+	if code != exitSuccess {
+		t.Fatalf("exit = %d, want success; out=%s", code, out.String())
+	}
+	servicePath := filepath.Join(tmp, servicesIncludeDir, "vm-web01.yml")
+	data, err := os.ReadFile(servicePath)
+	if err != nil {
+		t.Fatalf("service file not written: %v", err)
+	}
+	text := string(data)
+	for _, want := range []string{
+		"kind: service",
+		"name: vm-web01",
+		"type: libvirt",
+		"domain: web01",
+		"uri: qemu:///system",
+		"socket: /run/libvirt/libvirt-sock",
+		"domain.state",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("service file missing %q:\n%s", want, text)
+		}
+	}
+	loaded, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load merged config: %v", err)
+	}
+	if _, ok := loaded.Services["vm-web01"]; !ok {
+		t.Fatalf("loaded config did not include vm-web01: %v", loaded.ServiceNames)
 	}
 }
 
