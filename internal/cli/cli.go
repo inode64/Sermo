@@ -659,23 +659,16 @@ func (a App) runConfig(opts options) int {
 }
 
 func (a App) runConfigValidate(globalPath string, rest []string, opts options) int {
+	if len(rest) > 0 {
+		return a.commandUsageError("config", "config validate takes no service name; it validates the whole Sermo configuration")
+	}
+
 	cfg, err := a.LoadConfig(globalPath)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("load config failed: %v", err))
 	}
-	if len(rest) > 1 {
-		return a.commandUsageError("config", "config validate accepts at most one service name")
-	}
-	if len(rest) == 1 {
-		if _, ok := cfg.Services[rest[0]]; !ok {
-			return a.fail(opts, fmt.Sprintf("unknown service %q", rest[0]))
-		}
-	}
 
 	issues := config.Validate(cfg)
-	if len(rest) > 0 {
-		issues = filterIssues(issues, rest[0])
-	}
 
 	if len(issues) == 0 {
 		switch {
@@ -712,16 +705,6 @@ func scopedIssues(scope string, msgs []string) []config.Issue {
 		issues = append(issues, config.Issue{Scope: scope, Msg: m})
 	}
 	return issues
-}
-
-func filterIssues(issues []config.Issue, scope string) []config.Issue {
-	out := make([]config.Issue, 0, len(issues))
-	for _, is := range issues {
-		if is.Scope == scope {
-			out = append(out, is)
-		}
-	}
-	return out
 }
 
 func issuesJSON(issues []config.Issue) []map[string]string {
