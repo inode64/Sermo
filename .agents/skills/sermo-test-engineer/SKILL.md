@@ -43,8 +43,8 @@ Mock command execution and process tables.
 Create or maintain tests for:
 
 ```text
-config merge; defaults merged as base layer (defaults < profile < overrides)
-profile uses resolution
+config merge; defaults merged as base layer (defaults < daemon < overrides)
+daemon uses resolution
 clone resolution; clone copies the source unexpanded
 clone cycle detection
 variable expansion; nested variable (value with ${...}) rejected
@@ -81,7 +81,6 @@ Recommended fixture layout:
 
 ```text
 internal/config/testdata/
-internal/profiles/testdata/
 internal/rules/testdata/
 internal/servicemgr/testdata/
 internal/process/testdata/

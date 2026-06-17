@@ -1,4 +1,9 @@
-# Stopped-state invariants + richer process matching — design
+# Stopped-state invariants + richer process matching - historical design
+
+Status: historical design. Stopped-state invariants and richer
+`command_match` selectors are implemented; use
+[`docs/daemons.md`](../../daemons.md#stopped-state-invariants-stop_policy) and
+[`docs/safety.md`](../../safety.md) for current process safety behavior.
 
 ## Goal
 

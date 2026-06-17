@@ -1,4 +1,8 @@
-# Output pattern analysis (`catalog/patterns/`) — design
+# Output pattern analysis (`catalog/patterns/`) - historical design
+
+Status: historical design. `catalog/patterns` and check `analyze:` blocks are
+implemented; use [`docs/rules.md`](../../rules.md) and
+[`docs/daemons.md`](../../daemons.md) for current operator-facing behavior.
 
 ## Goal
 
@@ -83,7 +87,7 @@ does not reach them and there is no orange outcome to map a `warning` onto.
 Extending `analyze` to hooks needs (a) a warning lane in the hook outcome model
 and (b) a resolution path for the watches tree — deferred to a follow-up. This
 limitation is recorded here and at the dispatch site per the both-surfaces rule
-in `CLAUDE.md`.
+in `AGENTS.md`.
 
 ```yaml
 checks:
@@ -215,7 +219,7 @@ service-specific quirks become per-service `silence`/`rules`.
   remediation).
 - Catalog: a seeded `common.yml` + a service using it validates.
 
-## Docs (CLAUDE.md parity — same change)
+## Docs (`AGENTS.md` parity — same change)
 
 Update in the same change: `docs/configuration.md` and `docs/rules.md` (the
 `analyze` block + the `patterns` category), `docs/daemons.md` (patterns category

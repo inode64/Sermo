@@ -1,6 +1,8 @@
-# HTTPS Certificate Inspection in the `http` Check — Implementation Plan
+# HTTPS Certificate Inspection in the `http` Check - Implementation Plan - historical
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. **All code modifications must use a git worktree** (see AGENTS.md "AI / agent workspaces"). Steps use checkbox (`- [ ]`) syntax for tracking.
+> Historical implementation plan. The feature is implemented; keep this
+> checklist as archival context only. For new agent work, follow the repository's
+> current `AGENTS.md` workflow rather than the old worktree instruction.
 
 **Goal:** Make the `http` check protocol-aware so that, on an `https://` URL, it can also assert the server certificate's expiry, chain/hostname validity, and changes — reusing the certificate machinery in `internal/checks/cert.go`.
 
@@ -10,7 +12,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-09-https-cert-check-design.md`
 
-**Conventions reminder (CLAUDE.md):** every modified `.go` file must be `gofmt`-clean (a PostToolUse hook applies this automatically in Claude Code). Before the final commit, run the full static-analysis checklist (Task 7).
+**Conventions reminder (`AGENTS.md`):** every modified `.go` file must be
+`gofmt`-clean. Before the final commit, run the full static-analysis checklist
+(Task 7).
 
 ---
 
@@ -692,7 +696,7 @@ Expected: prints nothing.
 Run: `go build ./... && go test ./...`
 Expected: all pass.
 
-- [ ] **Step 3: Static analysis (per CLAUDE.md)**
+- [ ] **Step 3: Static analysis (per `AGENTS.md`)**
 
 ```sh
 export PATH="$HOME/go/bin:$PATH"

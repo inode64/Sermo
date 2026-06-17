@@ -1,6 +1,6 @@
 ---
 name: sermo-config-schema
-description: Use when designing, editing, validating, merging, rendering, or reviewing Sermo YAML configuration, profiles, services, clones, variables, checks, guards, locks, rules, or stop policies.
+description: Use when designing, editing, validating, merging, rendering, or reviewing Sermo YAML configuration, catalog daemons/apps/libs/patterns, services, mounts, clones, variables, checks, guards, locks, rules, or stop policies.
 ---
 
 You are the Sermo configuration schema designer.
@@ -20,8 +20,18 @@ You are the Sermo configuration schema designer.
 Support:
 
 ```yaml
-kind: profile
+kind: daemon
 name: apache
+```
+
+```yaml
+kind: app
+name: openssl
+```
+
+```yaml
+kind: lib
+name: glibc
 ```
 
 ```yaml
@@ -36,18 +46,24 @@ name: redis-cache
 clone: redis-main
 ```
 
+```yaml
+kind: mount
+name: mount-backup
+path: /mnt/backup
+```
+
 Every document has a `kind` and a `name`. Optional human-facing metadata may
 accompany them:
 
 ```yaml
-kind: profile
+kind: daemon
 name: mariadb
 display_name: "MariaDB"   # optional pretty label
 description: "..."        # optional free-text note
 category: "database"      # optional WebUI grouping/filter label
 ```
 
-- `display_name` is the label shown to humans (`profile list`, `service list`).
+- `display_name` is the label shown to humans (`daemon show`, `service list`).
   When absent or blank it falls back to `name`. Omit it when it would just repeat
   `name`.
 - `description` is optional free text with NO fallback: when absent, nothing is
@@ -58,13 +74,13 @@ category: "database"      # optional WebUI grouping/filter label
 
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
-what `${var}` resolves to after expansion. Same for `uses` with a profile. See
+what `${var}` resolves to after expansion. Same for `uses` with a catalog daemon. See
 `docs/configuration.md`.
 
 ## Version templates
 
-A profile whose name contains `%v` (free-form version) or `%n` (plain integer) is
-a version template: it materializes into one concrete profile per installed
+A catalog daemon or app whose name contains `%v` (free-form version) or `%n`
+(plain integer) is a version template: it materializes into one concrete document per installed
 version when several can coexist (php-fpm, postgres, tomcat, beam, db, python).
 `%v` pairs with `${version}` and accepts `8.3`/`12.0.2`; `%n` pairs with `${n}`
 and matches only whole integers (`python%n` → `python2`, `python3`, not
@@ -77,11 +93,11 @@ exactly one file, named to match (`postgres-%v.yml`). `%v` is substituted only i
 the name; inside the body always use `${version}` (binary, display_name, aliases).
 When the monitored `binary` is version-agnostic, point discovery at a
 version-specific path with `versions.from` (discovery-only; stripped from the
-materialized profile). A template may also `uses` a base profile to inherit
+materialized document). A template may also `uses` a base daemon to inherit
 checks/processes/rules and override only the binary.
 
 ```yaml
-kind: profile
+kind: daemon
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
 binary: "/usr/lib64/postgresql-${version}/bin/postgres"
@@ -89,12 +105,13 @@ binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 
 ## Categories and library restarts
 
-Profiles are categorized by the subdirectory under a profiles root: `services/`,
-`apps/`, `libs/` (files at the root default to `service`). Loading recurses; the
-directory sets `Document.Category`. `apps` and `libs` are minimal profiles (name,
+Catalog documents are categorized by the subdirectory under a catalog root:
+`services/`, `apps/`, `libs/`, `patterns/` (files at the root default to
+`service`). Loading recurses; the directory sets `Document.Category`. `apps` and
+`libs` are minimal catalog documents (name,
 display_name, description, binary, version) surfaced by `sermoctl apps` / `libs`.
 
-A `library` profile names a shared library and the file to watch (`binary`,
+A `library` catalog document names a shared library and the file to watch (`binary`,
 e.g. `/lib64/libc.so.6`). Unlike app/service binaries, library `binary` values
 are watched files and do not generate an executable preflight. A service opts
 into library-change restarts with:
@@ -108,7 +125,7 @@ This desugars at resolution into one remediation rule per library:
 `if: { changed: { library: X, path: <lib file> } } then: { action: restart }`.
 The `changed` condition (true when the file's size/mtime differs from the
 across-cycle baseline; first cycle adopts, successful restart re-baselines) is the
-primitive; referenced names must be `library` profiles.
+primitive; referenced names must be `library` catalog documents.
 
 ## Merge rules
 
@@ -123,13 +140,13 @@ enabled: false disables inherited item
 delete: true removes inherited item
 ```
 
-Precedence, low to high: `global defaults < profile (uses)/clone source < service
+Precedence, low to high: `global defaults < daemon (uses)/clone source < service
 overrides`. The global `defaults` (stop_policy, policy, rule_window) is the base
 layer of every service; engine settings (interval, max_parallel_checks,
 default_timeout, backend) are NOT merged into services. Variables expand once,
 after all merging. See `docs/configuration.md`.
 The effective `defaults.policy.cooldown` is required and must be positive. A
-profile or service may omit `policy.cooldown` only when it inherits that value;
+daemon or service may omit `policy.cooldown` only when it inherits that value;
 any explicit override must also be positive.
 `paths.runtime` is the single runtime root. Named runtime locks are derived from
 `<paths.runtime>/locks`, and operation locks from `<paths.runtime>/ops`.
@@ -244,12 +261,12 @@ Validate:
 
 ```text
 duplicate service names
-missing profiles in uses
+missing catalog daemons in uses
 missing service targets in clone
 clone cycles
 unknown check types
 unknown rule condition types (and/or/not/failed/active/metric/service/process/file/command/changed)
-changed condition requires a path; restart_on_change references must be library profiles
+changed condition requires a path; restart_on_change references must be library catalog documents
 unknown actions
 missing variables
 nested variable (a variable value containing ${...}) — rejected in MVP
@@ -272,7 +289,7 @@ paths.runtime, if set, is an absolute directory
 paths.locks rejected in MVP; locks/ops directories derive from paths.runtime
 /etc/sermo/locks.d not scanned for active locks
 defaults.policy.cooldown present and positive
-resolved service policy.cooldown present and positive; profile/service omissions are allowed only when inherited
+resolved service policy.cooldown present and positive; daemon/service omissions are allowed only when inherited
 policy.max_actions requires max_actions_window
 block/alert actions require a message
 postflight entries use the same schema as preflight/checks; optional is boolean
@@ -287,8 +304,8 @@ Include:
 
 ```yaml
 resolved_from:
-  - /usr/share/sermo/profiles/apache.yml
-  - /etc/sermo/apps/apache-main.yml
+  - /usr/share/sermo/catalog/services/apache.yml
+  - /etc/sermo/services/apache-main.yml
 ```
 
 ## Output format

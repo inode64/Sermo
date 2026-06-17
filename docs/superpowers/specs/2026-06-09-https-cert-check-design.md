@@ -1,6 +1,8 @@
-# HTTPS certificate inspection in the `http` check — design
+# HTTPS certificate inspection in the `http` check - historical design
 
-Date: 2026-06-09
+Date: 2026-06-09. Status: historical design; the `cert_*` options on `http`
+checks are implemented. Use [`docs/rules.md`](../../rules.md) for current check
+semantics and examples.
 
 ## Goal
 

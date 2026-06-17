@@ -25,11 +25,12 @@ type loadOptions struct {
 }
 
 // WithCatalogDirs overrides the catalog search directories (the definition
-// directories holding services/apps/libs) declared in the global config's
-// paths.catalog. Relative entries are resolved against the current working
-// directory (not the config file), since the override is a caller/CLI choice. It
-// backs `sermod --catalog` and lets tests load the installed config (which points
-// at /usr/share/sermo/catalog) while keeping definitions in the source tree.
+// directories holding services/apps/libs/patterns) declared in the global
+// config's paths.catalog. Relative entries are resolved against the current
+// working directory (not the config file), since the override is a caller/CLI
+// choice. It backs `sermod --catalog` and lets tests load the installed config
+// (which points at /usr/share/sermo/catalog) while keeping definitions in the
+// source tree.
 func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
 }
@@ -191,10 +192,10 @@ func resolveConfigPath(base, p string) string {
 }
 
 // loadDir reads every *.yml/*.yaml document in dir, recursing into
-// subdirectories. A `services`/`apps`/`libs` subdirectory tags the daemons it
-// holds with that category; files directly in dir default to CategoryService. A
-// missing directory is not an error (a host may not have user daemons), but an
-// unreadable one is.
+// subdirectories. A `services`/`apps`/`libs`/`patterns` subdirectory tags the
+// catalog documents it holds with that category; files directly in dir default
+// to CategoryService. A missing directory is not an error (a host may not have
+// user catalog documents), but an unreadable one is.
 func (c *Config) loadDir(dir string) error {
 	return c.loadCategoryDir(dir, "", false)
 }

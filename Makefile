@@ -111,7 +111,7 @@ install-bin: build
 	$(INSTALL) -Dm755 $(BIN)/sermoctl $(DESTDIR)$(bindir)/sermoctl
 	$(INSTALL) -Dm755 $(BIN)/sermod $(DESTDIR)$(sbindir)/sermod
 
-# Install the whole catalog preserving the services/apps/libs subdirectory layout.
+# Install the whole catalog preserving the services/apps/libs/patterns layout.
 install-catalog:
 	@set -e; find catalog -type f -name '*.yml' | sed 's|^catalog/||' | while read -r f; do \
 		echo "  install catalog/$$f"; \

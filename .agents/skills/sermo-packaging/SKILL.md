@@ -13,7 +13,7 @@ Use these defaults:
 /usr/bin/sermoctl
 /usr/sbin/sermod
 /etc/sermo/
-/usr/share/sermo/profiles/
+/usr/share/sermo/catalog/
 /run/sermo/
 /var/lib/sermo/
 /var/log/sermo/ only if not using system logs
@@ -67,10 +67,11 @@ packaging/debian/
 
 `make install` is the canonical installer. It uses standard GNU directory
 variables and `DESTDIR` staging, composed of granular targets: `install-bin`
-(sermoctl→`$(bindir)`, sermod→`$(sbindir)`), `install-profiles` (recursive,
-preserving `services/apps/libs`), `install-config` (sample `sermo.yml`, never
-overwriting an existing one; creates apps-available/-enabled), `install-systemd`
-and `install-openrc`. The unit/init templates carry default `/usr/bin/sermod` and
+(sermoctl→`$(bindir)`, sermod→`$(sbindir)`), `install-catalog` (recursive,
+preserving `services/apps/libs/patterns`), `install-config` (sample `sermo.yml`,
+never overwriting an existing one; creates catalog-available, services, apps and
+mounts config directories), `install-templates`, `install-tmpfiles`,
+`install-systemd` and `install-openrc`. The unit/init templates carry default `/usr/bin/sermod` and
 `/etc/sermo` paths that install rewrites to the chosen `$(sbindir)` /
 `$(SERMO_CONFDIR)`; the sample config's `/usr/share/sermo` and `/etc/sermo` paths
 are rewritten too, so the install is relocatable. Variables: `DESTDIR`,

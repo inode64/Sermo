@@ -1,6 +1,12 @@
-# Connection-protocol checks (MySQL/MariaDB first) — design
+# Connection-protocol checks (MySQL/MariaDB first) — historical design
 
-Date: 2026-06-09. Status: approved, implementation pending. Not committed (user reviews).
+Date: 2026-06-09. Status: historical design; implemented and superseded by the
+current check documentation in [`docs/rules.md`](../../rules.md) and the
+implementation under `internal/conn`.
+
+This document records the original protocol-registry proposal. Use
+`docs/rules.md` and the catalog definitions as the current source of truth for
+supported protocol checks and their YAML fields.
 
 ## Goal
 

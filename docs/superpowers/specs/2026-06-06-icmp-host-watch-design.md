@@ -1,7 +1,9 @@
-# ICMP host watch: `icmp` check with per-metric hooks
+# ICMP host watch: `icmp` check with per-metric hooks - historical design
 
-**Status:** Approved (design) — ready for implementation planning
 **Date:** 2026-06-06
+**Status:** Historical design. ICMP host watches are implemented; use
+[`docs/configuration.md`](../../configuration.md#icmp-watches)
+and [`docs/rules.md`](../../rules.md) for current operator-facing behavior.
 **Builds on:** `2026-06-06-host-watches-disk-design.md` (watch/hook framework) and
 `2026-06-06-net-interface-watch-design.md` (per-metric hooks + grouped config).
 

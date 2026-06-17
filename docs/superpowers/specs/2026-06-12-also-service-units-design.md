@@ -1,4 +1,8 @@
-# Additional init units per service (`also_service`) — design
+# Additional init units per service (`also_service`) - historical design
+
+Status: historical design. `also_service` is implemented; use
+[`docs/daemons.md`](../../daemons.md#also_service--auxiliary-init-units) for
+current YAML and operation ordering.
 
 ## Goal
 

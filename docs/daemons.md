@@ -30,8 +30,8 @@ catalog/
   patterns/   # output-analysis rule sets referenced by a check's analyze: block
 ```
 
-The directory sets the daemon's category (`service` / `app` / `library` /
-`patterns`); files placed directly in a daemons root default to `service`.
+The directory sets the catalog category (`service` / `app` / `library` /
+`patterns`); files placed directly in a catalog root default to `service`.
 `sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
 showing which are installed, the version their version command reports, and
 whether they resolve without error (add `all` to include the not-installed).
@@ -309,7 +309,7 @@ pidfile selector — e.g. `processes.main: { type: pidfile, path: "${pidfile}" }
 and the `command_match` user — `user: "${user}"`.
 
 Runtime paths in Sermo config use the canonical `/run` spelling. Do not write
-new `/var/run` pidfiles or sockets in catalog profiles, generated services or
+new `/var/run` pidfiles or sockets in catalog daemons, generated services or
 examples; `/var/run` is the legacy compatibility alias for `/run`, and detected
 paths should be normalized to `/run/...` before they are committed to config.
 Before adding a new runtime path, check whether it or a parent directory is a
@@ -655,7 +655,7 @@ pidfile:
 
 Use `/run` here, not `/var/run`. If a distro init script or service manager
 reports the legacy `/var/run/...` spelling, write the equivalent `/run/...` path
-in the daemon profile. Before committing a new pidfile or socket path, resolve
+in the daemon definition. Before committing a new pidfile or socket path, resolve
 it with `readlink -f` or inspect it with `namei -l`; if any component is a
 symlink, use the resolved canonical target.
 
@@ -780,7 +780,7 @@ path, for example `versions: { from: "/etc/init.d/openvpn.${instance}" }` on
 
 ### Listing installed applications
 
-`sermoctl apps` reports the applications described by daemons: which are
+`sermoctl apps` reports the applications described by catalog apps: which are
 installed (their binary is present and executable), whether their `health`
 command succeeds when configured, and the version their `version` command
 reports. The VERSION column shows the short version by default; add `--long` to
