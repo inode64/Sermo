@@ -4,5 +4,4 @@ display_name: "Grafana Alloy"
 category: observability
 binary: /usr/bin/alloy
 preflight:
-  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
