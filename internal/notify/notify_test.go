@@ -43,6 +43,24 @@ func TestBuildSkipsDisabledNotifier(t *testing.T) {
 	}
 }
 
+func TestBuildCanSkipTemplates(t *testing.T) {
+	raw := map[string]any{
+		"ops-email": map[string]any{
+			"type": "email", "dsn": "smtp://localhost:25", "from": "sermo@x", "to": []any{"ops@x"}, "template": "default-alert",
+		},
+	}
+	if notifiers, warns := Build(raw); len(notifiers) != 0 || len(warns) == 0 {
+		t.Fatalf("template without dir should warn and skip: notifiers=%v warns=%v", notifiers, warns)
+	}
+	notifiers, warns := Build(raw, WithoutTemplates())
+	if len(warns) != 0 {
+		t.Fatalf("WithoutTemplates should ignore template warnings, got %v", warns)
+	}
+	if _, ok := notifiers["ops-email"]; !ok {
+		t.Fatalf("ops-email should build when templates are disabled: %v", notifiers)
+	}
+}
+
 func TestSupportedTypes(t *testing.T) {
 	got := SupportedTypes()
 	if len(got) != 3 || got[0] != "email" || got[1] != "slack" || got[2] != "teams" {

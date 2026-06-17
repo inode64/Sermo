@@ -321,15 +321,18 @@ var commandUsages = []commandUsage{
 		Name:    "services",
 		Summary: "List packaged service catalog entries and installation status.",
 		Usage: []string{
-			"sermoctl services [all] [--long]",
+			"sermoctl services [all] [--long] [--notify NAME[,NAME]|all]",
 		},
 		Flags: []string{
-			"all     include entries whose binary is not installed",
-			"--long  show full version command output",
+			"all       include entries whose binary is not installed",
+			"--long    show full version command output",
+			"--notify  send an HTML report through selected configured notifiers",
 		},
 		Examples: []string{
 			"sermoctl services",
 			"sermoctl services all --long",
+			"sermoctl services --notify ops-email",
+			"sermoctl services all --notify all",
 		},
 	},
 	{

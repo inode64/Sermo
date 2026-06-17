@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"sermo/internal/app"
@@ -36,6 +37,9 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	if len(opts.args) > 1 || (len(opts.args) == 1 && opts.args[0] != "all") {
 		return a.commandUsageError(jsonKey, fmt.Sprintf("%s accepts only optional `all`", jsonKey))
 	}
+	if len(opts.notifyNames) > 0 && category != config.CategoryService {
+		return a.commandUsageError(jsonKey, "--notify is only supported by services")
+	}
 	includeMissing := len(opts.args) > 0 && opts.args[0] == "all"
 
 	cfg, code := a.loadConfig(opts)
@@ -49,11 +53,26 @@ func (a App) listCategory(ctx context.Context, opts options, category, jsonKey, 
 	}
 	reports := appinspect.List(ctx, a.Runner, cfg, category, includeMissing, inspectOpts...)
 
+	var notified []string
+	if category == config.CategoryService && len(opts.notifyNames) > 0 {
+		var code int
+		notified, code = a.sendServicesReport(ctx, opts, cfg, reports, includeMissing)
+		if code != exitSuccess {
+			return code
+		}
+	}
 	if opts.json {
-		writeJSON(a.Stdout, map[string]any{jsonKey: reports})
+		out := map[string]any{jsonKey: reports}
+		if notified != nil {
+			out["notified"] = notified
+		}
+		writeJSON(a.Stdout, out)
 		return exitSuccess
 	}
 	a.printApps(reports, empty, opts.long, heading)
+	if notified != nil && !opts.quiet {
+		fmt.Fprintf(a.Stdout, "sent services report to %s\n", strings.Join(notified, ", "))
+	}
 	return exitSuccess
 }
 
