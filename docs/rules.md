@@ -1714,8 +1714,40 @@ block-during-backup:
 Backup-tool-specific guards belong in service examples or local overrides, not
 in the base catalog daemon. The shipped
 [`configs/services/mariadb-backup-guard.yml`](../configs/services/mariadb-backup-guard.yml)
-example shows how to opt in to a `mariadb-backup` process guard for MariaDB, and
-how to adapt the same shape for MySQL.
+example shows how to opt in to a `mariadb-backup` process guard for MariaDB.
+[`configs/services/mysql-wal-g-backup-guard.yml`](../configs/services/mysql-wal-g-backup-guard.yml)
+does the same for WAL-G on MySQL/MariaDB. The `apps:` list is an override, so an
+opt-in service must keep the database app and add the backup app, for example
+`apps: [mysql, wal-g-mysql]` or `apps: [mariadb, wal-g-mysql]`.
+
+For PostgreSQL, use the concrete materialized catalog daemon and app for the
+installed version (for example `postgres-16`) and add `wal-g-pg`:
+
+```yaml
+kind: service
+name: postgres-main
+uses: postgres-16
+apps: [postgres-16, wal-g-pg]
+
+checks:
+  wal-g-pg:
+    type: process
+    optional: true
+    exe: "${wal_g_pg_binary}"
+    user: postgres
+    state: running
+
+rules:
+  block-restart-during-wal-g-pg:
+    type: guard
+    blocks: [restart, stop]
+    if:
+      active:
+        check: wal-g-pg
+    then:
+      action: block
+      message: "${display_name} WAL-G backup is running"
+```
 
 Guards are evaluated before remediation; a remediation action that a guard
 blocks never runs.
