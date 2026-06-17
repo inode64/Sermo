@@ -86,6 +86,7 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "events clear extra", args: []string{"events", "clear", "extra"}, want: "events clear accepts only optional --before TIME"},
 		{name: "activity extra", args: []string{"activity", "clear", "extra"}, want: "activity clear accepts only optional --before TIME"},
 		{name: "activity bad subcommand", args: []string{"activity", "list"}, want: "activity supports only"},
+		{name: "config validate service arg", args: []string{"config", "validate", "web"}, want: "config validate takes no service name"},
 		{name: "sla extra", args: []string{"sla", "web", "extra"}, want: "sla accepts at most one service name"},
 		{name: "state compact extra", args: []string{"state", "compact", "extra"}, want: "state supports only"},
 		{name: "diagnose clean extra", args: []string{"diagnose", "clean", "extra"}, want: "diagnose supports only"},
@@ -145,22 +146,24 @@ func TestConfiguredStatusRejectsUnknownService(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRejectsUnknownServiceArgument(t *testing.T) {
-	global := writeActionConfig(t)
+func TestConfigValidateRejectsServiceArgumentBeforeLoadingConfig(t *testing.T) {
 	var stderr bytes.Buffer
 	app := App{
-		Env:        func(string) string { return "" },
-		Stdout:     &bytes.Buffer{},
-		Stderr:     &stderr,
-		LoadConfig: config.Load,
+		Env:    func(string) string { return "" },
+		Stdout: &bytes.Buffer{},
+		Stderr: &stderr,
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) {
+			t.Fatal("config validate with a positional argument must fail before loading config")
+			return nil, nil
+		},
 	}
 
-	code := app.Run(context.Background(), []string{"--config", global, "config", "validate", "ghost"})
-	if code != exitRuntimeError {
-		t.Fatalf("config validate ghost exit = %d, want %d", code, exitRuntimeError)
+	code := app.Run(context.Background(), []string{"--config", "/tmp/missing-sermo.yml", "config", "validate", "ghost"})
+	if code != exitUsage {
+		t.Fatalf("config validate ghost exit = %d, want %d", code, exitUsage)
 	}
-	if got := stderr.String(); !strings.Contains(got, `unknown service "ghost"`) {
-		t.Fatalf("stderr = %q, want unknown service", got)
+	if got := stderr.String(); !strings.Contains(got, "config validate takes no service name") {
+		t.Fatalf("stderr = %q, want service argument usage error", got)
 	}
 }
 

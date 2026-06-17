@@ -1803,9 +1803,8 @@ notifiers:
 ## Validating
 
 ```sh
-sermoctl config validate          # all services
-sermoctl config validate mysql    # one service
-sermoctl service show mysql-main  # resolved form
+sermoctl config validate          # whole Sermo configuration
+sermoctl service show mysql-main  # resolved form for one service
 ```
 
 `config validate` exits `78` on a configuration error. See

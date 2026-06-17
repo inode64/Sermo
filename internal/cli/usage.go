@@ -298,11 +298,10 @@ var commandUsages = []commandUsage{
 		Name:    "config",
 		Summary: "Validate Sermo configuration.",
 		Usage: []string{
-			"sermoctl config validate [SERVICE]",
+			"sermoctl config validate",
 		},
 		Examples: []string{
 			"sermoctl config validate",
-			"sermoctl config validate mysql-main",
 		},
 	},
 	{
