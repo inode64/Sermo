@@ -1,0 +1,17 @@
+kind: daemon
+name: lm_sensors
+catalog_aliases: [lm-sensors]
+display_name: "lm_sensors"
+category: hardware
+description: "Hardware sensor initialization service."
+service:
+  systemd: [lm_sensors, lm-sensors]
+  openrc: [lm_sensors, lm-sensors]
+apps: [lm_sensors]
+
+# lm_sensors commonly loads kernel modules and exits, leaving the unit active.
+# Hardware-specific temperature/fan thresholds belong in explicit sensors checks.
+processes: {}
+
+checks:
+  service: { type: service, expect: active }

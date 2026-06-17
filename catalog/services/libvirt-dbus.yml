@@ -1,0 +1,21 @@
+kind: daemon
+name: libvirt-dbus
+display_name: "libvirt D-Bus"
+category: virtualization
+description: "D-Bus bridge exposing libvirt objects to desktop and management clients."
+service:
+  systemd: [libvirt-dbus]
+  openrc: [libvirt-dbus]
+apps: [libvirt-dbus]
+
+variables:
+  user: root
+
+processes:
+  main:
+    type: command_match
+    exe: "${libvirt_dbus_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
