@@ -67,7 +67,7 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 
 	resolve := r.ResolveUser
 	if resolve == nil {
-		resolve = OSUserResolver
+		resolve = DefaultUserLookup().ResolveUser
 	}
 	sleep := r.Sleep
 	if sleep == nil {

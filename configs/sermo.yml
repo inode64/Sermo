@@ -19,6 +19,13 @@ engine:
   # time to finish booting so services that are still coming up are not flagged
   # or remediated prematurely. 0 (the default) disables the wait.
   startup_delay: 0
+  # User/group resolution for process selectors, kill_only_if and owner display.
+  # auto: with CGO builds use libc/NSS through os/user; with static CGO=0 builds
+  # use native passwd/group files and fall back to `getent` for LDAP/SSSD/NIS.
+  # native: os/user only. getent: prefer getent. numeric: UID/GID only.
+  user_lookup: auto
+  # Timeout for each getent lookup. Results are cached in-process.
+  user_lookup_timeout: 250ms
 
 paths:
   # Packaged catalog directory — the service/app/library definitions, installed by

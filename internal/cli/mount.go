@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/locks"
 	"sermo/internal/mountctl"
@@ -154,14 +155,21 @@ func (a App) configuredMountSpec(opts options, cfg *config.Config, name string) 
 }
 
 func (a App) mountController(cfg *config.Config, opts options) mountctl.Controller {
+	lookup := app.EngineUserLookup(cfg, a.Runner)
 	if a.MountController != nil {
 		c := a.MountController(cfg)
 		if c.CommandTimeout <= 0 {
 			c.CommandTimeout = opts.timeout
 		}
+		if c.ResolveUser == nil {
+			c.ResolveUser = lookup.ResolveUser
+		}
+		if c.UserLookup == nil {
+			c.UserLookup = lookup
+		}
 		return c
 	}
-	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, CommandTimeout: opts.timeout}
+	return mountctl.Controller{Runtime: cfg.Global.RuntimeDir(), Runner: a.Runner, ResolveUser: lookup.ResolveUser, UserLookup: lookup, CommandTimeout: opts.timeout}
 }
 
 func (a App) printMountResult(opts options, res mountctl.Result, err error) int {

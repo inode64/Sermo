@@ -562,7 +562,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	locker.OnReclaim = func(service, reason string) {
 		fmt.Fprintf(a.Stderr, "reclaimed stale operation lock for %s (%s)\n", service, reason)
 	}
-	discoverer := process.NewDiscoverer()
+	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
 	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
@@ -575,6 +575,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Locker:           &locker,
 		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer:       discoverer,
+		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
@@ -756,11 +757,12 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	}
 
 	section, _ := resolved.Tree["preflight"].(map[string]any)
+	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
 	deps := checks.Deps{
 		Service:        service,
 		DefaultTimeout: engineDefaultTimeout(cfg),
 		Status:         a.statusFunc(opts, resolved.Tree, config.ServiceUnit(resolved.Tree, service)),
-		Processes:      process.NewDiscoverer().ObserveState,
+		Processes:      discoverer.ObserveState,
 	}
 	built, warnings := checks.Build(section, deps)
 	for _, w := range warnings {
@@ -932,7 +934,7 @@ func (a App) runProcesses(opts options) int {
 	}
 
 	selectors, warnings := process.ParseSelectors(resolved.Tree)
-	procs, discWarnings := a.discoverProcesses(context.Background(), opts, resolved, service, selectors)
+	procs, discWarnings := a.discoverProcesses(context.Background(), opts, cfg, resolved, service, selectors)
 	warnings = append(warnings, discWarnings...)
 
 	for _, w := range warnings {
@@ -956,11 +958,11 @@ func (a App) runProcesses(opts options) int {
 	return exitSuccess
 }
 
-func (a App) discoverProcesses(ctx context.Context, opts options, resolved config.Resolved, service string, selectors []process.Selector) ([]process.Process, []string) {
+func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service string, selectors []process.Selector) ([]process.Process, []string) {
 	if a.Discover != nil {
 		return a.Discover(selectors)
 	}
-	discoverer := process.NewDiscoverer()
+	discoverer := process.NewDiscovererWithUserLookup(app.EngineUserLookup(cfg, a.Runner))
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
 		return discoverer.Discover(selectors)

@@ -76,6 +76,50 @@ defaults:
 	}
 }
 
+func TestValidateEngineUserLookup(t *testing.T) {
+	global := writeConfig(t, map[string]string{"sermo.yml": `
+engine:
+  user_lookup: ldap
+  user_lookup_timeout: 0s
+paths:
+  includes: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+`})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issues := Validate(cfg)
+	mustHave(t, issues, "engine.user_lookup")
+	mustHave(t, issues, "engine.user_lookup_timeout")
+}
+
+func TestValidateEngineUserLookupAcceptsDocumentedModes(t *testing.T) {
+	for _, mode := range []string{"auto", "native", "getent", "numeric"} {
+		t.Run(mode, func(t *testing.T) {
+			global := writeConfig(t, map[string]string{"sermo.yml": `
+engine:
+  user_lookup: ` + mode + `
+  user_lookup_timeout: 250ms
+paths:
+  includes: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+`})
+			cfg, err := Load(global)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, is := range Validate(cfg) {
+				if strings.Contains(is.Msg, "user_lookup") {
+					t.Fatalf("unexpected issue for %s: %v", mode, is)
+				}
+			}
+		})
+	}
+}
+
 func TestValidateLibvirtControl(t *testing.T) {
 	valid := validateService(t, `
 kind: service

@@ -98,6 +98,7 @@ type Controller struct {
 	DiscoverUsers  func(string) ([]process.Process, error)
 	Signaler       process.Signaler
 	ResolveUser    process.UserResolver
+	UserLookup     *process.UserLookup
 	Sleep          func(time.Duration)
 	Now            func() time.Time
 	CommandTimeout time.Duration
@@ -437,7 +438,7 @@ func (c Controller) discoverUsers(path string) ([]process.Process, error) {
 	if c.DiscoverUsers != nil {
 		return c.DiscoverUsers(path)
 	}
-	return Users(path)
+	return UsersWithLookup(path, c.userLookup())
 }
 
 func (c Controller) signaler() process.Signaler {
@@ -451,7 +452,14 @@ func (c Controller) resolveUser() process.UserResolver {
 	if c.ResolveUser != nil {
 		return c.ResolveUser
 	}
-	return process.OSUserResolver
+	return c.userLookup().ResolveUser
+}
+
+func (c Controller) userLookup() *process.UserLookup {
+	if c.UserLookup != nil {
+		return c.UserLookup
+	}
+	return process.DefaultUserLookup()
 }
 
 func (c Controller) now() time.Time {
@@ -520,7 +528,16 @@ func PathInFstab(path string) (bool, error) {
 
 // Users returns processes with cwd/root/fd targets under mountPath.
 func Users(mountPath string) ([]process.Process, error) {
-	reader := process.OSReader{}
+	return UsersWithLookup(mountPath, nil)
+}
+
+// UsersWithLookup returns processes using mountPath, resolving user display
+// names with lookup.
+func UsersWithLookup(mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
+	if lookup == nil {
+		lookup = process.DefaultUserLookup()
+	}
+	reader := process.OSReader{LookupUserName: lookup.Username}
 	pids, err := reader.PIDs()
 	if err != nil {
 		return nil, err

@@ -29,6 +29,7 @@ type Config struct {
 	Locker           *locks.OperationLocker
 	Scanner          locks.Scanner
 	Discoverer       process.Discoverer
+	ResolveUser      process.UserResolver
 	CheckDeps        checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
 	LockTTL          time.Duration
 	Sleep            func(time.Duration)
@@ -84,9 +85,13 @@ func New(c Config) Engine {
 		return procs, nil
 	}
 
+	resolveUser := c.ResolveUser
+	if resolveUser == nil {
+		resolveUser = c.Discoverer.ResolveUser
+	}
 	reaper := process.Reaper{
 		Signaler:    process.OSSignaler{},
-		ResolveUser: process.OSUserResolver,
+		ResolveUser: resolveUser,
 		Sleep:       sleep,
 	}
 

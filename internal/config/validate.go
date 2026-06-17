@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/process"
 )
 
 // Issue is a single validation finding, scoped to a document or "global".
@@ -77,6 +78,12 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 		if v, present := engine["startup_delay"]; present && !isNonNegativeDuration(cfgval.String(v)) {
 			add("engine.startup_delay %q must be a valid non-negative duration (0 disables the wait)", cfgval.String(v))
+		}
+		if mode := cfgval.String(engine["user_lookup"]); !process.ValidUserLookupMode(mode) {
+			add("engine.user_lookup %q is not one of auto, native, getent, numeric", mode)
+		}
+		if v, present := engine["user_lookup_timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
+			add("engine.user_lookup_timeout %q must be a valid positive duration", cfgval.String(v))
 		}
 		if v, present := engine["max_parallel_checks"]; present {
 			if n, ok := cfgval.Int(v); !ok || n <= 0 {

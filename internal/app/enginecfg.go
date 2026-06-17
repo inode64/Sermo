@@ -5,6 +5,8 @@ import (
 
 	"sermo/internal/cfgval"
 	"sermo/internal/config"
+	"sermo/internal/execx"
+	"sermo/internal/process"
 )
 
 func engineMap(cfg *config.Config) map[string]any {
@@ -37,6 +39,15 @@ func EngineInt(cfg *config.Config, key string, fallback int) int {
 // EngineString reads a string field from the engine block ("" when unset).
 func EngineString(cfg *config.Config, key string) string {
 	return cfgval.AsString(engineValue(cfg, key))
+}
+
+// EngineUserLookup builds the user/group resolver configured under engine.
+func EngineUserLookup(cfg *config.Config, runner execx.Runner) *process.UserLookup {
+	return process.NewUserLookup(process.UserLookupConfig{
+		Mode:    EngineString(cfg, "user_lookup"),
+		Timeout: EngineDuration(cfg, "user_lookup_timeout", process.DefaultUserLookupTimeout),
+		Runner:  runner,
+	})
 }
 
 func engineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
