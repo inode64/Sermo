@@ -82,28 +82,45 @@ func wizardMountTargetDir(globalPath string) string {
 
 func writeMountFiles(globalPath string, docs map[string]map[string]any) (string, int, error) {
 	targetDir := wizardMountTargetDir(globalPath)
+	files, err := planMountFiles(targetDir, docs)
+	if err != nil {
+		return "", 0, err
+	}
 	if _, err := ensureMountDir(globalPath, mountsConfigDir, targetDir); err != nil {
 		return "", 0, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return "", 0, fmt.Errorf("create %s: %w", targetDir, err)
 	}
-	n := 0
+	for _, file := range files {
+		if err := os.WriteFile(file.path, file.data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
+			return "", 0, fmt.Errorf("write %s: %w", file.path, err)
+		}
+	}
+	return targetDir, len(files), nil
+}
+
+type plannedMountFile struct {
+	path string
+	data []byte
+}
+
+func planMountFiles(targetDir string, docs map[string]map[string]any) ([]plannedMountFile, error) {
+	files := make([]plannedMountFile, 0, len(docs))
 	for _, name := range slices.Sorted(maps.Keys(docs)) {
 		file := filepath.Join(targetDir, watchConfigFileName(name))
-		if pathExists(file) {
-			return "", 0, fmt.Errorf("mount file %s already exists; not overwriting", file)
+		if _, err := os.Stat(file); err == nil {
+			return nil, fmt.Errorf("mount file %s already exists; not overwriting", file)
+		} else if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat %s: %w", file, err)
 		}
 		data, err := yaml.Marshal(docs[name])
 		if err != nil {
-			return "", 0, fmt.Errorf("render %s: %w", file, err)
+			return nil, fmt.Errorf("render %s: %w", file, err)
 		}
-		if err := os.WriteFile(file, data, 0o644); err != nil { //nolint:gosec // config is world-readable by design
-			return "", 0, fmt.Errorf("write %s: %w", file, err)
-		}
-		n++
+		files = append(files, plannedMountFile{path: file, data: data})
 	}
-	return targetDir, n, nil
+	return files, nil
 }
 
 func ensureMountDir(globalPath, relDir, targetDir string) (string, error) {
