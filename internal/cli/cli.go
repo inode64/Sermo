@@ -272,8 +272,6 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runPatterns(opts)
 	case "services":
 		return a.runServices(ctx, opts)
-	case "service":
-		return a.runService(opts)
 	case "state":
 		return a.runState(ctx, opts)
 	case "lock":

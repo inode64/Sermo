@@ -6,7 +6,6 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/sermod run --config /etc/sermo/sermo.yml
-ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=5s
 # Sermo needs to inspect and signal other services' processes, so it runs as

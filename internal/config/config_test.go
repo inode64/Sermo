@@ -559,7 +559,7 @@ service: { name: redis }
 
 func TestLoadResolvesRelativePaths(t *testing.T) {
 	root := t.TempDir()
-	configDir := filepath.Join(root, "configs")
+	configDir := filepath.Join(root, "examples")
 	enabledDir := filepath.Join(configDir, "apps")
 	catalogDir := filepath.Join(root, "catalog")
 	for _, d := range []string{enabledDir, catalogDir} {

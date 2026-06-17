@@ -37,7 +37,7 @@ var commandGroups = []commandGroup{
 	},
 	{
 		Title:    "Configuration And Catalog",
-		Commands: []string{"config", "daemon", "service", "services", "apps", "libs", "patterns", "wizard"},
+		Commands: []string{"config", "daemon", "services", "apps", "libs", "patterns", "wizard"},
 	},
 	{
 		Title:    "History And Diagnostics",
@@ -56,7 +56,7 @@ var commandUsages = []commandUsage{
 		},
 		Examples: []string{
 			"sermoctl help restart",
-			"sermoctl service --help",
+			"sermoctl services --help",
 		},
 	},
 	{
@@ -306,31 +306,15 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    "daemon",
-		Summary: "Inspect catalog daemons or reload the running sermod process.",
+		Summary: "Reload the running sermod process.",
 		Usage: []string{
-			"sermoctl daemon list",
-			"sermoctl daemon show DAEMON",
 			"sermoctl daemon reload",
 		},
 		Notes: []string{
-			"`daemon reload` sends SIGHUP to sermod; it does not reload an application service.",
+			"`daemon reload` reloads sermod configuration; it does not reload an application service.",
 		},
 		Examples: []string{
-			"sermoctl daemon show nginx",
 			"sermoctl daemon reload",
-		},
-	},
-	{
-		Name:    "service",
-		Summary: "Inspect or clone concrete configured services.",
-		Usage: []string{
-			"sermoctl service list",
-			"sermoctl service show SERVICE",
-			"sermoctl service clone SOURCE TARGET",
-		},
-		Examples: []string{
-			"sermoctl service show mysql-main",
-			"sermoctl service clone redis-main redis-cache",
 		},
 	},
 	{

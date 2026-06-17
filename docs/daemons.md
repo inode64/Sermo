@@ -234,11 +234,12 @@ category: "database"         # optional WebUI grouping/filter label
 
 These fields are optional and behave differently when missing:
 
-- **`display_name`** is the label used wherever Sermo shows the application to a
-  human (e.g. `daemon list`, `service list`). When it is absent or blank, Sermo
-  falls back to `name`. Set it only when it adds something over `name` — a proper
-  brand (`MariaDB`, `PostgreSQL`, `OpenSSH`) or a version (`PHP-FPM 8.3`). If the
-  display name would just repeat `name`, leave it out and let the fallback apply.
+- **`display_name`** is the label used wherever Sermo shows the catalog entry to
+  a human (e.g. `sermoctl services`, `sermoctl apps` and the Web UI). When it is
+  absent or blank, Sermo falls back to `name`. Set it only when it adds something
+  over `name` — a proper brand (`MariaDB`, `PostgreSQL`, `OpenSSH`) or a version
+  (`PHP-FPM 8.3`). If the display name would just repeat `name`, leave it out and
+  let the fallback apply.
 - **`description`** is an optional free-text note. It has **no fallback**: when it
   is absent, nothing is shown for it — Sermo never substitutes `name`. Use it for
   a real sentence, not a restatement of the name.
@@ -566,9 +567,8 @@ also_apply: [nginx, varnish]
 - `sermoctl start|stop|restart <svc> --no-cascade` acts on exactly one service.
 - `sermoctl reload <svc>` and `sermoctl resume <svc>` act on the primary only
   (no cascade). Use `sermoctl daemon reload` to reload the running `sermod`
-  configuration (`SIGHUP`). In the web UI the per-service **reload** button is
-  enabled only while the service is `active`, and **resume** only while it is
-  `paused`.
+  configuration. In the web UI the per-service **reload** button is enabled only
+  while the service is `active`, and **resume** only while it is `paused`.
 
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.
