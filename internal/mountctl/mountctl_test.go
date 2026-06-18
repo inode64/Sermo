@@ -66,6 +66,19 @@ func testController(t *testing.T, mounted *bool, runner *fakeRunner) Controller 
 	}
 }
 
+func TestUsersWithLookupStopsOnCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled before the scan begins
+
+	procs, err := usersWithLookup(ctx, "/nonexistent-mount", nil)
+	if err == nil {
+		t.Fatal("usersWithLookup returned nil error for a cancelled context; want context.Canceled")
+	}
+	if len(procs) != 0 {
+		t.Fatalf("usersWithLookup returned %d processes; want none for a cancelled scan", len(procs))
+	}
+}
+
 func TestAcquireRefcountMountsOnlyOnFirstUse(t *testing.T) {
 	mounted := false
 	runner := &fakeRunner{mounted: &mounted}
