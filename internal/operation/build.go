@@ -33,7 +33,10 @@ type Config struct {
 	CheckDeps   checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
 	// MetricSample supplies fresh metric readings for preflight/postflight/guard
 	// evaluation when CheckDeps.Metrics is unset. Optional.
-	MetricSample     func(context.Context) checks.MetricReader
+	MetricSample func(context.Context) checks.MetricReader
+	// Changed reports whether a watched library/config path differs from its
+	// acknowledged baseline for `changed:` guard conditions. Optional.
+	Changed          func(string) (bool, error)
 	LockTTL          time.Duration
 	Sleep            func(time.Duration)
 	OperationTimeout time.Duration
@@ -133,7 +136,7 @@ func New(c Config) Engine {
 			report, err := c.Scanner.Scan(c.Service)
 			return report.Locks, err
 		},
-		Guard:            guardClosure(tree, deps, c.MetricSample, nil),
+		Guard:            guardClosure(tree, deps, c.MetricSample, c.Changed),
 		Preflight:        sectionRunner(tree, "preflight", deps, c.MetricSample),
 		Postflight:       sectionRunner(tree, "postflight", deps, c.MetricSample),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
