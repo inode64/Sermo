@@ -9,6 +9,29 @@ import (
 	"time"
 )
 
+// pqBindDialer adapts *net.Dialer to lib/pq's Dialer/DialerContext interfaces.
+type pqBindDialer struct {
+	*net.Dialer
+}
+
+func (d pqBindDialer) Dial(network, address string) (net.Conn, error) {
+	return d.Dialer.Dial(network, address)
+}
+
+func (d pqBindDialer) DialTimeout(network, address string, timeout time.Duration) (net.Conn, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return d.Dialer.DialContext(ctx, network, address)
+}
+
+func (d pqBindDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return d.Dialer.DialContext(ctx, network, address)
+}
+
+func pqDialer(iface string) pqBindDialer {
+	return pqBindDialer{BindDialer(iface)}
+}
+
 // probeBanner dials cfg (port defaulting to defaultPort), runs handshake on the
 // connection and closes it. It folds the dial / defer-close prologue that every
 // banner protocol's Probe repeats; the protocol supplies only its default port
@@ -96,4 +119,15 @@ func dialDeadline(ctx context.Context, cfg Config, defaultPort int) (net.Conn, e
 // "&net.Dialer{}.DialContext(ctx, \"unix\", …)" incantation lives in one place.
 func dialUnix(ctx context.Context, socket string) (net.Conn, error) {
 	return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+}
+
+// probeDialer returns a dialer for driver-backed protocol probes. When iface is
+// non-empty it egresses through SO_BINDTODEVICE (BindDialer); timeout bounds the
+// TCP connect only.
+func probeDialer(iface string, timeout time.Duration) *net.Dialer {
+	d := BindDialer(iface)
+	if timeout > 0 {
+		d.Timeout = timeout
+	}
+	return d
 }
