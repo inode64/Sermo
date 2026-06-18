@@ -27,6 +27,26 @@ func TestVersionCommand(t *testing.T) {
 	}
 }
 
+func TestVersionFlagNotTriggeredAsFlagValue(t *testing.T) {
+	// `-V` here is the value of --reason, not a version request, so it must not
+	// set opts.version (the old all-args scan would have matched it).
+	opts, err := parseArgs([]string{"lock", "acquire", "svc", "--reason", "-V", "--ttl", "1h"})
+	if err != nil {
+		t.Fatalf("parseArgs: %v", err)
+	}
+	if opts.version {
+		t.Fatal("a -V flag value must not request the version")
+	}
+	if opts.reason != "-V" {
+		t.Fatalf("reason = %q, want -V (the flag value)", opts.reason)
+	}
+
+	// As a standalone global flag it does request the version.
+	if v, err := parseArgs([]string{"--version"}); err != nil || !v.version {
+		t.Fatalf("parseArgs(--version) = %+v, %v; want version=true", v, err)
+	}
+}
+
 func TestHelpCommandPrintsStructuredUsage(t *testing.T) {
 	var stdout bytes.Buffer
 	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &bytes.Buffer{}}
