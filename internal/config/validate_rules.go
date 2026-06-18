@@ -302,10 +302,19 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 		add("%s inline probe must have exactly one type key", path)
 		return
 	}
-	for k := range m {
-		if !checks.IsSingleShotType(k) {
-			add("%s inline probe type %q is unknown", path, k)
+	for typ, raw := range m {
+		fields, ok := raw.(map[string]any)
+		if !ok {
+			add("%s.%s must be a mapping", path, typ)
+			continue
 		}
+		if !checks.IsSingleShotType(typ) {
+			add("%s inline probe type %q is unknown", path, typ)
+			continue
+		}
+		entry := maps.Clone(fields)
+		entry["type"] = typ
+		validateSingleShotCheckFields(path+"."+typ, typ, entry, "", add)
 	}
 }
 
