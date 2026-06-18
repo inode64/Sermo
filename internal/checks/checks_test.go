@@ -402,6 +402,19 @@ func TestLibrariesCheckRealBinary(t *testing.T) {
 	}
 }
 
+func TestLibrariesCheckHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c := librariesCheck{base: base{name: "lib", timeout: time.Second}, binary: "/bin/sh"}
+	res := c.Run(ctx)
+	if res.OK {
+		t.Fatal("libraries check must fail when the context is already cancelled")
+	}
+	if !strings.Contains(res.Message, context.Canceled.Error()) {
+		t.Fatalf("message = %q, want context.Canceled", res.Message)
+	}
+}
+
 // Low-level tests for the native resolver helpers.
 func TestFindLibrary(t *testing.T) {
 	// Absolute path
@@ -442,7 +455,7 @@ func TestResolveNeededBasic(t *testing.T) {
 	defer ef.Close()
 
 	dirs := collectLibrarySearchDirs("/bin/sh", ef)
-	missing := resolveNeeded([]string{"libc.so.6"}, dirs, make(map[string]bool))
+	missing := resolveNeeded(context.Background(), []string{"libc.so.6"}, dirs, make(map[string]bool))
 	if len(missing) > 0 {
 		t.Logf("note: resolveNeeded reported missing in smoke test (distro dependent): %v", missing)
 	}
