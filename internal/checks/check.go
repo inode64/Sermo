@@ -7,8 +7,8 @@
 // file_exists, binary, process, metric (via the daemon's stateful collector),
 // libraries, count, and host-resource probes (disk, autofs, load, fds, conntrack,
 // firewall_rules, entropy, zombies, oom, cert). Multi-target watch types (net,
-// icmp, swap, file) are built for host watches, not single-shot service checks —
-// see buildCheck and config validation's knownCheckTypes.
+// icmp and swap are usable in single-metric form; file remains watch-only. See
+// buildCheck and TypeInfo for the shared dispatch/validation vocabulary.
 package checks
 
 import (
@@ -52,13 +52,11 @@ type Check interface {
 // IsHealthType reports whether OK==true means the check is healthy. Host watches
 // invert these checks and fire on failure; condition-style checks fire on OK.
 func IsHealthType(typ string) bool {
-	switch typ {
-	case "tcp", "ports", "http", "command", "service", "file_exists", "binary", "pidfile", "process", "libraries", "config", "autofs", "sqlite", "sqlite3", "websocket", "ws", "route", "firewall_rules":
-		return true
-	default:
-		_, ok := conn.Lookup(typ)
-		return ok
+	if info, ok := TypeInfoFor(typ); ok {
+		return info.Health
 	}
+	_, ok := conn.Lookup(typ)
+	return ok
 }
 
 // Built pairs a check with whether its failure is optional (a warning) or

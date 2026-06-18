@@ -213,24 +213,6 @@ func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarni
 	return built, warnings
 }
 
-// SingleShotCheckTypes are the check types valid in a service's
-// checks:/preflight:/postflight: sections and (minus the service-scoped ones
-// config excludes for watches) as host watches. Config validation consumes this
-// list directly and TestSingleShotCheckTypesAreBuildable locks it against the
-// buildCheck dispatch, so the two can never drift. Connection-protocol types
-// (mysql, smtp, …) are intentionally absent — they come from the conn registry.
-// The multi-target watch-only types (net, icmp, swap, file) are also absent:
-// they fire per metric/target instead of producing one Result.
-var SingleShotCheckTypes = []string{
-	"tcp", "ports", "http", "command", "service", "file_exists", "binary",
-	"pidfile", "process", "metric", "libraries", "count", "storage", "disk",
-	"autofs", "load", "hdparm", "sensors", "smart", "raid", "edac", "config",
-	"fds", "memory", "pressure", "pids", "diskio", "conntrack", "entropy",
-	"zombies", "oom", "cert", "sqlite", "sqlite3", "sql", "mongodb-query",
-	"influxdb-query", "size", "websocket", "ws", "net", "icmp", "swap",
-	"route", "firewall_rules",
-}
-
 func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, client *http.Client, deps Deps) (Check, string) {
 	switch typ {
 	case "tcp":

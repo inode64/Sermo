@@ -472,13 +472,6 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 	}
 }
 
-// knownCheckTypes are the single-shot check types valid in a service's
-// checks:/preflight:/postflight: sections (and referenceable from rules), taken
-// from the checks package so validation and the builder share one list
-// (section: unified checks). net/icmp/swap are usable here in their
-// single-metric form (an explicit `metric:` producing one Result); only their
-// multi-metric `metrics:` map shape and the `file` watch stay watch-only.
-var knownCheckTypes = set(checks.SingleShotCheckTypes...)
 var countKinds = set("any", "file", "dir", "symlink")
 
 // httpMethods are the standard HTTP request methods an http check may use.
@@ -576,7 +569,7 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 }
 
 func validateSingleShotCheckFields(path, typ string, entry map[string]any, locksDir string, add addFunc) bool {
-	if _, known := knownCheckTypes[typ]; !known {
+	if !checks.IsSingleShotType(typ) {
 		// A connection-protocol check (mysql, …): the type names a protocol in
 		// the conn registry, validated generically below.
 		if proto, isProto := conn.Lookup(typ); isProto {
