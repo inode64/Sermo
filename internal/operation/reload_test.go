@@ -2,6 +2,7 @@ package operation
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
 	"strconv"
@@ -16,12 +17,18 @@ import (
 // scriptedRunner is a fake execx.Runner: it records argv and returns a canned
 // result keyed by the command name (the first argv element).
 type scriptedRunner struct {
-	calls   [][]string
-	results map[string]execx.Result
+	calls          [][]string
+	results        map[string]execx.Result
+	respectContext bool
 }
 
-func (r *scriptedRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+func (r *scriptedRunner) Run(ctx context.Context, name string, args ...string) (execx.Result, error) {
 	r.calls = append(r.calls, append([]string{name}, args...))
+	if r.respectContext {
+		if err := ctx.Err(); err != nil {
+			return execx.Result{}, err
+		}
+	}
 	if res, ok := r.results[name]; ok {
 		return res, nil
 	}
@@ -128,6 +135,26 @@ func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	case <-got:
 	case <-time.After(time.Second):
 		t.Fatal("native signal reload did not deliver SIGUSR1 to the main pid")
+	}
+}
+
+func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
+	mgr := &fakeManager{canReload: false}
+	runner := &scriptedRunner{
+		results:        map[string]execx.Result{"systemctl": {Stdout: strconv.Itoa(os.Getpid()) + "\n"}},
+		respectContext: true,
+	}
+	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
+	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "myd")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := reload(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("reload err = %v, want context.Canceled", err)
+	}
+	if runner.ran("systemctl") {
+		t.Fatalf("reload tried MainPID resolution after cancellation; calls=%v", runner.calls)
 	}
 }
 
