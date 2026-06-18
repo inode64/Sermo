@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"mime"
 	"net"
 	"net/mail"
 	"net/smtp"
@@ -200,7 +201,7 @@ func buildMessage(from string, to []string, msg Message) []byte {
 	var b strings.Builder
 	b.WriteString("From: " + from + "\r\n")
 	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
-	b.WriteString("Subject: " + sanitizeHeader(msg.Subject) + "\r\n")
+	b.WriteString("Subject: " + encodeHeader(msg.Subject) + "\r\n")
 	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
 	b.WriteString("MIME-Version: 1.0\r\n")
 	if msg.HTML == "" {
@@ -246,4 +247,12 @@ func bareAddr(s string) string {
 // sanitizeHeader strips CR/LF to prevent header injection from a check message.
 func sanitizeHeader(s string) string {
 	return strings.NewReplacer("\r", " ", "\n", " ").Replace(s)
+}
+
+// encodeHeader makes an arbitrary string safe for an unstructured header value:
+// it strips CR/LF (injection guard) and RFC 2047-encodes non-ASCII so a UTF-8
+// subject is not emitted raw into a 7-bit header. Pure ASCII is returned
+// unchanged.
+func encodeHeader(s string) string {
+	return mime.QEncoding.Encode("utf-8", sanitizeHeader(s))
 }
