@@ -68,6 +68,27 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	}
 }
 
+func TestShortVersionForIgnoresFailedCommand(t *testing.T) {
+	tree := map[string]any{
+		"commands": map[string]any{
+			"version_short": map[string]any{"command": []any{"/bin/tool", "--short"}},
+		},
+	}
+
+	// A version_short command that exits non-zero must NOT have its (garbage)
+	// output trusted; fall back to parsing the raw version line.
+	failing := testRunner{"/bin/tool": {Stdout: "ERROR: bad usage\n", ExitCode: 1}}
+	if got := shortVersionFor(context.Background(), failing, tree, "Webd 1.2.3"); got != "1.2.3" {
+		t.Fatalf("shortVersionFor on failed command = %q, want fallback 1.2.3", got)
+	}
+
+	// A successful command's first line is trusted verbatim.
+	ok := testRunner{"/bin/tool": {Stdout: "2.0.0\n", ExitCode: 0}}
+	if got := shortVersionFor(context.Background(), ok, tree, "Webd 1.2.3"); got != "2.0.0" {
+		t.Fatalf("shortVersionFor on success = %q, want 2.0.0", got)
+	}
+}
+
 func TestProbeCommandFor(t *testing.T) {
 	tree := map[string]any{
 		"commands": map[string]any{
