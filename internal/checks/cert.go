@@ -98,16 +98,10 @@ func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) 
 	return problems, daysLeft, hasExpiry
 }
 
-// certCheck inspects TLS material. It is health-style (OK==true means the
-// material is acceptable). The material comes from a live TLS endpoint (host) or a local file
-// (path); exactly one is set. A certificate alerts when it is expiring within
-// expiresInDays, already expired or not yet valid, fails chain/hostname
-// verification (verify, network only), or — between cycles — its signature
-// algorithm, issuer or fingerprint changed. Non-expiring material (keys, CSRs)
-// alerts only on change, or when the file is missing/unreadable/unparseable. It
-// is stateful for the change detection (a pointer), so change conditions work
-// when built once (a host watch); as a per-service check only the level
-// conditions apply.
+// certCheck inspects TLS material from a live endpoint or local file. It is
+// health-style: OK means the material is acceptable. Expiry, verification and
+// change predicates produce alerts; change detection persists only when the
+// check instance is reused.
 type certCheck struct {
 	base
 	host           string

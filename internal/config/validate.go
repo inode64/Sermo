@@ -33,24 +33,8 @@ var rejectedSecurityToggles = []string{
 	"require_kill_selector",
 }
 
-// Validate runs the implemented subset of section 30 over a loaded config and
-// returns every issue found. An empty slice means the configuration is valid as
-// far as the current checks go.
-//
-// Covered: document kind/name presence and uniqueness, uses/clone resolution and
-// cycles, variable existence/nesting/expansion, backend values, engine durations
-// (including operation_timeout, the non-negative startup_delay) and
-// max_parallel_checks/max_parallel_operations, paths.locks
-// rejection, paths.runtime absoluteness,
-// security toggles, policy.cooldown/max_actions/backoff, port/expect_status range,
-// check/preflight/postflight entry schemas (type, optional, command array form,
-// service/process states, metric grammar, file_exists not under the lock dir),
-// stop_policy.force_kill/kill_only_if, service, and rules (type, if/then, action,
-// guard/block constraints, for/within windows, and the condition tree: exactly
-// one operator per node, check references, states, and metric scope/catalog with
-// system metrics confined to alert rules — directly and indirectly through a
-// metric check reference — and the metric threshold form matching the metric's
-// available forms).
+// Validate returns all schema and safety issues for a loaded config. An empty
+// slice means the current validators accept the configuration.
 func Validate(cfg *Config) []Issue {
 	var issues []Issue
 	issues = append(issues, validateGlobal(cfg)...)
