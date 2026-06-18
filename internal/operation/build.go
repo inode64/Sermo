@@ -256,6 +256,11 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 					return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any command_match selector with exact exe and user", pidfile, pid)
 				}
 			}
+			if source == reloadPIDMain && hasCommandMatchSelector(selectors) {
+				if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
+					return fmt.Errorf("reload: MainPID %d does not match any command_match selector with exact exe and user", pid)
+				}
+			}
 			if err := ctx.Err(); err != nil {
 				return err
 			}
