@@ -370,6 +370,34 @@ rules:
 	mustHave(t, issues, "command condition must declare a timeout")
 }
 
+func TestValidateInlineProbeFields(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  bad-http:
+    type: alert
+    if: { failed: { http: {} } }
+    then: { action: alert, message: m }
+  bad-shape:
+    type: alert
+    if: { active: { tcp: "127.0.0.1:80" } }
+    then: { action: alert, message: m }
+  ok-http:
+    type: alert
+    if: { failed: { http: { url: "http://127.0.0.1/" } } }
+    then: { action: alert, message: m }
+`)
+	mustHave(t, issues, "rules.bad-http.if.failed.http.url is required for an http check")
+	mustHave(t, issues, "rules.bad-shape.if.active.tcp must be a mapping")
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "ok-http") {
+			t.Fatalf("valid inline http probe wrongly flagged: %v", is)
+		}
+	}
+}
+
 func TestValidateSystemMetricOnlyInAlert(t *testing.T) {
 	issues := validateService(t, `
 kind: service
