@@ -10,15 +10,9 @@ import (
 	"sermo/internal/execx"
 )
 
-// hdparmCheck times disk read throughput with hdparm and compares it to
-// thresholds (a level check, like disk/load: OK==true means every predicate
-// holds — i.e. the alerting condition is met). `read` is the buffered disk-read
-// rate (hdparm -t, the real device speed) and `cached` is the cached-read rate
-// (hdparm -T, memory/cache). Only the timings the configured predicates need are
-// run, so a `cached`-only check skips the slow buffered pass. hdparm needs root
-// and -t reads for ~3 s from the device, so schedule this on a long per-check
-// `interval` (e.g. 24h) and give it a generous `timeout`. The measured MB/s are
-// placed in Result.Data ("read"/"cached") for hooks and time-series recording.
+// hdparmCheck compares configured hdparm timing rates with thresholds. It is
+// condition-style: OK means every predicate holds. Only timings used by
+// predicates are run; hdparm -t needs root and adds device I/O.
 type hdparmCheck struct {
 	base
 	runner execx.Runner
