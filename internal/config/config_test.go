@@ -539,6 +539,95 @@ uses: web
 	}
 }
 
+func TestAppsLinkPreflightKeyCollisionErrors(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/shared.yml": `
+kind: app
+name: shared
+binary: /usr/bin/shared
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/stack.yml": `
+kind: daemon
+name: stack
+apps: [shared, shared]
+binary: /opt/stack/bin/stack
+variables: { port: 8080 }
+checks:
+  port: { type: tcp, port: "${port}" }
+`,
+		"enabled/stack-main.yml": `
+kind: service
+name: stack-main
+uses: stack
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs := cfg.Resolve("stack-main")
+	if len(errs) == 0 {
+		t.Fatal("duplicate app preflight keys must error")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, `apps preflight key "shared-binary" would overwrite`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("errors = %v; want a preflight key collision error", errs)
+	}
+
+	// A manual preflight key must not be silently overwritten by an app check.
+	global = writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/shared.yml": `
+kind: app
+name: shared
+binary: /usr/bin/shared
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+		"catalog/stack.yml": `
+kind: daemon
+name: stack
+apps: [shared]
+binary: /opt/stack/bin/stack
+preflight:
+  shared-binary: { type: binary, path: "/opt/stack/bin/stack" }
+variables: { port: 8080 }
+checks:
+  port: { type: tcp, port: "${port}" }
+`,
+		"enabled/stack-main.yml": `
+kind: service
+name: stack-main
+uses: stack
+`,
+	})
+	cfg, err = Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs = cfg.Resolve("stack-main")
+	if len(errs) == 0 {
+		t.Fatal("manual/app preflight key collision must error")
+	}
+	found = false
+	for _, e := range errs {
+		if strings.Contains(e, `apps preflight key "shared-binary" would overwrite`) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("errors = %v; want a manual preflight collision error", errs)
+	}
+}
+
 func TestAppsLinkCycleErrorsInsteadOfRecursing(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
