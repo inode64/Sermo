@@ -3,9 +3,31 @@ package checks
 import (
 	"context"
 	"errors"
+	"net"
 	"testing"
 	"time"
 )
+
+func TestSameIPv4(t *testing.T) {
+	want := net.ParseIP("192.0.2.10")
+	cases := []struct {
+		name string
+		peer net.Addr
+		ok   bool
+	}{
+		{"matching target", &net.IPAddr{IP: net.ParseIP("192.0.2.10")}, true},
+		{"different host", &net.IPAddr{IP: net.ParseIP("192.0.2.11")}, false},
+		{"nil peer", nil, false},
+		{"wrong addr type", &net.UDPAddr{IP: net.ParseIP("192.0.2.10")}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sameIPv4(tc.peer, want); got != tc.ok {
+				t.Fatalf("sameIPv4 = %v, want %v", got, tc.ok)
+			}
+		})
+	}
+}
 
 func pinger(samples ...PingSample) PingSamplerFunc {
 	i := 0
