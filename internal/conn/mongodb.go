@@ -34,11 +34,7 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() {
-		dctx, cancel := context.WithTimeout(context.Background(), mongoDisconnectTimeout)
-		defer cancel()
-		_ = client.Disconnect(dctx)
-	}()
+	defer MongoDisconnect(client)
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		return Result{}, err
@@ -129,4 +125,16 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 		opts.SetTLSConfig(tc)
 	}
 	return mongo.Connect(opts)
+}
+
+// MongoDisconnect closes a MongoDB client with a fresh bounded context. Callers
+// often invoke it after their operation context has expired, so teardown must
+// not reuse the caller's cancelled context or run unbounded.
+func MongoDisconnect(client *mongo.Client) {
+	if client == nil {
+		return
+	}
+	dctx, cancel := context.WithTimeout(context.Background(), mongoDisconnectTimeout)
+	defer cancel()
+	_ = client.Disconnect(dctx)
 }
