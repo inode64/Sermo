@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 )
@@ -45,12 +46,24 @@ func (ajpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if _, err := c.Write(buildAJPCPing()); err != nil {
 		return Result{}, err
 	}
-	buf := make([]byte, 16)
-	n, err := c.Read(buf)
-	if err != nil {
+	// Read the full reply, not a single Read: TCP may split the small CPong across
+	// segments, and a short Read would falsely report a live connector as down.
+	header := make([]byte, 4)
+	if _, err := io.ReadFull(c, header); err != nil {
 		return Result{}, err
 	}
-	prefix, err := parseAJPResponse(buf[:n])
+	if header[0] != 0x41 || header[1] != 0x42 { // "AB"
+		return Result{}, errors.New("not an AJP response (bad magic)")
+	}
+	length := int(header[2])<<8 | int(header[3])
+	if length < 1 || length > 8192 { // AJP packets are bounded at 8KiB
+		return Result{}, errors.New("invalid AJP response length")
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(c, payload); err != nil {
+		return Result{}, err
+	}
+	prefix, err := parseAJPResponse(append(header, payload...))
 	if err != nil {
 		return Result{}, err
 	}
