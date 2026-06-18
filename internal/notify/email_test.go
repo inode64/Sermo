@@ -2,9 +2,50 @@ package notify
 
 import (
 	"context"
+	"net"
 	"strings"
 	"testing"
+	"time"
 )
+
+// TestSMTPSendHonorsContextDeadline proves the SMTP conversation is bounded: a
+// server that accepts the connection then never sends its greeting must not hang
+// smtpSend — the connection deadline (derived from ctx) returns an error.
+func TestSMTPSendHonorsContextDeadline(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	// Accept and hold the connection open without ever replying.
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		<-make(chan struct{})
+	}()
+
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	dsn := emailDSN{host: host, port: port}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- smtpSend(ctx, dsn, "from@example.com", []string{"to@example.com"}, Message{Subject: "s", Body: "b"})
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("smtpSend returned nil; want a deadline error from the stalled server")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("smtpSend hung past the context deadline")
+	}
+}
 
 func TestParseEmailDSN(t *testing.T) {
 	cases := []struct {

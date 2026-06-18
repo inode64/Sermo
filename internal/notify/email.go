@@ -15,8 +15,9 @@ import (
 	"time"
 )
 
-// dialTimeout bounds the SMTP connection attempt so a dead mail server cannot
-// stall a watch cycle.
+// dialTimeout bounds the SMTP connection attempt, and is the fallback deadline
+// for the whole SMTP conversation when the caller's context carries none, so a
+// dead or stalled mail server cannot hang a watch cycle.
 const dialTimeout = 15 * time.Second
 
 // emailDSN is a parsed SMTP DSN: smtp://[user:pass@]host[:port] (STARTTLS) or
@@ -135,6 +136,17 @@ func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Mes
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", d.addr(), err)
 	}
+
+	// net/smtp ignores ctx, so bound the whole SMTP conversation (greeting, EHLO,
+	// STARTTLS, AUTH, MAIL/RCPT/DATA, QUIT) with a connection deadline. Without
+	// it a server that completes the handshake then stalls mid-conversation would
+	// hang the watch cycle indefinitely. Honor the caller's deadline when set,
+	// otherwise fall back to dialTimeout.
+	deadline := time.Now().Add(dialTimeout)
+	if d, ok := ctx.Deadline(); ok {
+		deadline = d
+	}
+	_ = conn.SetDeadline(deadline)
 
 	c, err := smtp.NewClient(conn, d.host)
 	if err != nil {
