@@ -10,25 +10,11 @@ import (
 	"sermo/internal/execx"
 )
 
-func TestCountNftRules(t *testing.T) {
-	out := `{
-		"nftables": [
-			{"metainfo": {"version": "1.0.9"}},
-			{"table": {"family": "inet", "name": "filter"}},
-			{"chain": {"family": "inet", "table": "filter", "name": "input"}},
-			{"rule": {"family": "inet", "table": "filter", "chain": "input"}},
-			{"rule": {"family": "inet", "table": "filter", "chain": "forward"}}
-		]
-	}`
-	got, err := countNftRules(out)
-	if err != nil {
-		t.Fatalf("countNftRules() error = %v", err)
-	}
-	if got != 2 {
-		t.Fatalf("countNftRules() = %d, want 2", got)
-	}
-	if _, err := countNftRules("{"); err == nil {
-		t.Fatal("invalid nft JSON must error")
+func TestCountLoadedNftablesRulesHonorsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := countLoadedNftablesRules(ctx); err == nil {
+		t.Fatal("cancelled context must fail")
 	}
 }
 
@@ -98,11 +84,10 @@ func TestFirewallRulesCheckRun(t *testing.T) {
 }
 
 func TestDefaultFirewallRulesSampler(t *testing.T) {
-	nftOneRule := `{"nftables":[{"rule":{"family":"inet","table":"filter","chain":"input"}}]}`
-	nftNoRules := `{"nftables":[{"table":{"family":"inet","name":"filter"}}]}`
 	tests := []struct {
 		name    string
 		backend string
+		nft     func(context.Context) (uint64, error)
 		runner  firewallRunner
 		want    FirewallRulesSample
 		wantErr string
@@ -110,40 +95,41 @@ func TestDefaultFirewallRulesSampler(t *testing.T) {
 		{
 			name:    "auto prefers nftables when rules exist",
 			backend: firewallBackendAuto,
-			runner: firewallRunner{
-				"nft -j list ruleset": {result: execx.Result{Stdout: nftOneRule}},
-			},
-			want: FirewallRulesSample{Backend: firewallBackendNftables, Rules: 1},
+			nft:     func(context.Context) (uint64, error) { return 1, nil },
+			want:    FirewallRulesSample{Backend: firewallBackendNftables, Rules: 1},
 		},
 		{
 			name:    "auto falls back to iptables when nftables has no rules",
 			backend: firewallBackendAuto,
+			nft:     func(context.Context) (uint64, error) { return 0, nil },
 			runner: firewallRunner{
-				"nft -j list ruleset": {result: execx.Result{Stdout: nftNoRules}},
-				"iptables-save":       {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n-A OUTPUT -j ACCEPT\n"}},
-				"ip6tables-save":      {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n"}},
+				"iptables-save":  {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n-A OUTPUT -j ACCEPT\n"}},
+				"ip6tables-save": {result: execx.Result{Stdout: "-A INPUT -j ACCEPT\n"}},
 			},
 			want: FirewallRulesSample{Backend: firewallBackendIptables, Rules: 3},
 		},
 		{
 			name:    "auto returns nftables zero when legacy tools are unavailable",
 			backend: firewallBackendAuto,
-			runner: firewallRunner{
-				"nft -j list ruleset": {result: execx.Result{Stdout: nftNoRules}},
-			},
-			want: FirewallRulesSample{Backend: firewallBackendNftables, Rules: 0},
+			nft:     func(context.Context) (uint64, error) { return 0, nil },
+			want:    FirewallRulesSample{Backend: firewallBackendNftables, Rules: 0},
 		},
 		{
-			name:    "explicit nftables parse error",
+			name:    "explicit nftables netlink error",
 			backend: firewallBackendNftables,
-			runner: firewallRunner{
-				"nft -j list ruleset": {result: execx.Result{Stdout: "{"}},
-			},
-			wantErr: "parse nft JSON",
+			nft:     func(context.Context) (uint64, error) { return 0, fmt.Errorf("permission denied") },
+			wantErr: "nftables: permission denied",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.nft == nil {
+				tc.nft = func(context.Context) (uint64, error) { return 0, nil }
+			}
+			prev := nftablesRuleCounter
+			nftablesRuleCounter = tc.nft
+			defer func() { nftablesRuleCounter = prev }()
+
 			got, err := defaultFirewallRulesSampler(context.Background(), tc.backend, tc.runner)
 			if tc.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {

@@ -2,7 +2,6 @@ package checks
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,8 +24,8 @@ type FirewallRulesSample struct {
 }
 
 // FirewallRulesSamplerFunc reads loaded nftables/iptables rules. The backend is
-// auto, nftables or iptables. Injected for tests; the default runs nft or
-// iptables-save through the configured execx runner.
+// auto, nftables or iptables. Injected for tests; the default reads nftables via
+// netlink and iptables through iptables-save on the configured execx runner.
 type FirewallRulesSamplerFunc func(ctx context.Context, backend string, runner execx.Runner) (FirewallRulesSample, error)
 
 // firewallRulesCheck verifies that a packet-filter ruleset is actually loaded.
@@ -138,14 +137,10 @@ func defaultFirewallRulesSampler(ctx context.Context, backend string, runner exe
 	}
 }
 
-func sampleNftablesRules(ctx context.Context, runner execx.Runner) (FirewallRulesSample, error) {
-	res, err := runner.Run(ctx, "nft", "-j", "list", "ruleset")
-	if err != nil || res.ExitCode != 0 {
-		return FirewallRulesSample{}, commandResultError("nft", res, err)
-	}
-	rules, err := countNftRules(res.Stdout)
+func sampleNftablesRules(ctx context.Context, _ execx.Runner) (FirewallRulesSample, error) {
+	rules, err := nftablesRuleCounter(ctx)
 	if err != nil {
-		return FirewallRulesSample{}, err
+		return FirewallRulesSample{}, fmt.Errorf("nftables: %w", err)
 	}
 	return FirewallRulesSample{Backend: firewallBackendNftables, Rules: rules}, nil
 }
@@ -192,37 +187,6 @@ func commandResultError(command string, res execx.Result, err error) error {
 		return err
 	}
 	return fmt.Errorf("%s exit %d", command, res.ExitCode)
-}
-
-func countNftRules(out string) (uint64, error) {
-	var doc any
-	if err := json.Unmarshal([]byte(out), &doc); err != nil {
-		return 0, fmt.Errorf("parse nft JSON: %w", err)
-	}
-	return countNftRuleNodes(doc), nil
-}
-
-func countNftRuleNodes(v any) uint64 {
-	switch x := v.(type) {
-	case map[string]any:
-		var total uint64
-		for k, v := range x {
-			if k == "rule" {
-				total++
-				continue
-			}
-			total += countNftRuleNodes(v)
-		}
-		return total
-	case []any:
-		var total uint64
-		for _, item := range x {
-			total += countNftRuleNodes(item)
-		}
-		return total
-	default:
-		return 0
-	}
 }
 
 func countIptablesRules(out string) uint64 {
