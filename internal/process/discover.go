@@ -201,6 +201,30 @@ func (d Discoverer) ObserveState(exe, user string) string {
 	}
 }
 
+// StrictMatchPID reports whether pid currently matches a command_match selector
+// that declares both exact resolved exe and real user. Pidfile-only evidence is
+// intentionally ignored: callers that are about to signal a process need the
+// stronger identity check used by the signaling safety invariants.
+func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool) {
+	if pid <= 0 {
+		return Process{}, false
+	}
+	id, ok := d.reader().Identity(pid)
+	if !ok {
+		return Process{}, false
+	}
+	resolve := d.resolveUser()
+	for _, sel := range selectors {
+		if sel.Type != SelectorCommandMatch || sel.Exe == "" || sel.User == "" {
+			continue
+		}
+		if d.matches(sel, id, resolve) {
+			return toProcess(id, sel.Name, sourceCommand), true
+		}
+	}
+	return Process{}, false
+}
+
 // matches reports whether a process satisfies a command_match selector. Every
 // configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
 // cmd is an explicit regex over argv used only to narrow discovery for shared
