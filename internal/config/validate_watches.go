@@ -263,13 +263,11 @@ func validateNetMetricCondition(prefix, metric string, m map[string]any, add add
 // process are excluded: they need per-service context (backend status, a metric
 // sampler, process discovery) that the watch builder does not provide.
 func validateWatchableCheck(prefix, typ string, fields map[string]any, locksDir string, add addFunc) bool {
-	if _, serviceScoped := serviceScopedWatchExclusions[typ]; serviceScoped {
+	if checks.IsServiceScopedType(typ) {
 		return false
 	}
 	return validateSingleShotCheckFields(prefix, typ, fields, locksDir, add)
 }
-
-var serviceScopedWatchExclusions = set("service", "metric", "process")
 
 // validateSwapCheck validates a swap watch: a non-empty metrics map of usage
 // (used_pct/free_pct/free_bytes thresholds) and/or io (per-cycle delta), each
