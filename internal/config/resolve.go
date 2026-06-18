@@ -334,7 +334,12 @@ func expandReloadOnChange(tree map[string]any) []string {
 			errs = append(errs, "reload_on_change.paths entry is empty")
 			continue
 		}
-		rules[fmt.Sprintf("reload-on-change-%d", i+1)] = map[string]any{
+		key := fmt.Sprintf("reload-on-change-%d", i+1)
+		if _, exists := rules[key]; exists {
+			errs = append(errs, fmt.Sprintf("reload_on_change would overwrite existing rule %q; rename that rule", key))
+			continue
+		}
+		rules[key] = map[string]any{
 			"type": "remediation",
 			"if":   map[string]any{"changed": map[string]any{"path": p}},
 			"then": map[string]any{"action": "reload"},
@@ -542,7 +547,12 @@ func (c *Config) expandRestartOnChange(tree map[string]any) []string {
 			errs = append(errs, fmt.Sprintf("library %q has no binary to watch", lib))
 			continue
 		}
-		libraries["restart-on-change-"+lib] = map[string]any{
+		key := "restart-on-change-" + lib
+		if _, exists := libraries[key]; exists {
+			errs = append(errs, fmt.Sprintf("restart_on_change would overwrite existing rule %q; rename that rule", key))
+			continue
+		}
+		libraries[key] = map[string]any{
 			"type": "remediation",
 			"if":   map[string]any{"changed": map[string]any{"library": lib, "path": path}},
 			"then": map[string]any{"action": "restart"},
