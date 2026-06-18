@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -15,7 +16,7 @@ type fakeSizer struct {
 	now   time.Time
 }
 
-func (f *fakeSizer) sample(string) (int64, error) {
+func (f *fakeSizer) sample(context.Context, string) (int64, error) {
 	s := f.sizes[f.i]
 	if f.i < len(f.sizes)-1 {
 		f.i++
@@ -109,6 +110,30 @@ func TestBuildAndRunSizeCheckRealFile(t *testing.T) {
 	}
 	if r.Data["current_bytes"].(int64) != 1024 {
 		t.Fatalf("current_bytes = %v, want 1024", r.Data["current_bytes"])
+	}
+}
+
+func TestSizeCheckHonorsCanceledContext(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "f.bin"), make([]byte, 1024), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &sizeCheck{
+		base:   base{name: "s", timeout: time.Second},
+		path:   root,
+		growBy: 1,
+		window: time.Hour,
+		state:  &sizeState{},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	res := c.Run(ctx)
+	if res.OK {
+		t.Fatal("canceled size check should fail")
+	}
+	if !strings.Contains(res.Message, context.Canceled.Error()) {
+		t.Fatalf("message = %q, want context canceled", res.Message)
 	}
 }
 
