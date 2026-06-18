@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -12,6 +13,11 @@ import (
 )
 
 func init() { Register(mongodbProtocol{}, "mongo") }
+
+// mongoDisconnectTimeout bounds the client teardown so an unreachable server
+// cannot hang the probe in its deferred Disconnect (the probe's own context may
+// already be expired by then, so a fresh bounded context is used).
+const mongoDisconnectTimeout = 5 * time.Second
 
 // mongodbProtocol probes a MongoDB server.
 type mongodbProtocol struct{}
@@ -28,7 +34,11 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	defer func() { _ = client.Disconnect(context.Background()) }()
+	defer func() {
+		dctx, cancel := context.WithTimeout(context.Background(), mongoDisconnectTimeout)
+		defer cancel()
+		_ = client.Disconnect(dctx)
+	}()
 
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		return Result{}, err
