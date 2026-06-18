@@ -495,7 +495,7 @@ type librariesCheck struct {
 
 func (c librariesCheck) Run(ctx context.Context) Result {
 	start := time.Now()
-	_, cancel := c.withTimeout(ctx)
+	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
 	ef, err := elf.Open(c.binary)
@@ -522,7 +522,10 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 		dirs = dedupPreserveOrder(dirs)
 	}
 
-	missing := resolveNeeded(needed, dirs, make(map[string]bool))
+	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
+	if err := ctx.Err(); err != nil {
+		return c.result(false, c.binary+": "+err.Error(), start)
+	}
 	if len(missing) > 0 {
 		return c.result(false, c.binary+": missing shared libraries", start)
 	}
@@ -532,9 +535,12 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 // resolveNeeded recursively resolves DT_NEEDED entries (including transitive
 // dependencies of the resolved libraries). It returns the list of sonames
 // that could not be located.
-func resolveNeeded(needed []string, dirs []string, seen map[string]bool) []string {
+func resolveNeeded(ctx context.Context, needed []string, dirs []string, seen map[string]bool) []string {
 	var missing []string
 	for _, soname := range needed {
+		if err := ctx.Err(); err != nil {
+			return missing
+		}
 		if seen[soname] {
 			continue
 		}
@@ -556,7 +562,7 @@ func resolveNeeded(needed []string, dirs []string, seen map[string]bool) []strin
 		ef.Close()
 
 		if len(subNeeded) > 0 {
-			subMissing := resolveNeeded(subNeeded, dirs, seen)
+			subMissing := resolveNeeded(ctx, subNeeded, dirs, seen)
 			missing = append(missing, subMissing...)
 		}
 	}
