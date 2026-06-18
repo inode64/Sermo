@@ -298,16 +298,18 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 	if err := c.run(ctx, "umount", spec.Path); err == nil {
 		return Result{Name: spec.Name, Path: spec.Path, Action: "umount", Status: "ok", Message: "unmounted", Mounted: false}, nil
 	}
-	if mounted, _ = c.isMounted(spec.Path); !mounted {
+	// Only treat the path as unmounted when the recheck succeeds and reports so;
+	// a read failure must not be mistaken for "unmounted" and skip escalation.
+	if ok, rerr := c.isMounted(spec.Path); rerr == nil && !ok {
 		return Result{Name: spec.Name, Path: spec.Path, Action: "umount", Status: "ok", Message: "unmounted", Mounted: false}, nil
 	}
 
-	blockers, _ := c.discoverUsers(spec.Path)
+	blockers, _ := c.discoverUsers(ctx, spec.Path)
 	result := Result{Name: spec.Name, Path: spec.Path, Action: "umount", Status: "failed", Message: "mount is busy", Mounted: true, Blockers: blockers}
 	if spec.Umount.AllowSIGKILL && len(blockers) > 0 {
 		reaper := process.Reaper{
 			Rediscover: func() []process.Process {
-				procs, _ := c.discoverUsers(spec.Path)
+				procs, _ := c.discoverUsers(ctx, spec.Path)
 				return procs
 			},
 			Signaler:    c.signaler(),
@@ -434,11 +436,11 @@ func (c Controller) inFstab(path string) (bool, error) {
 	return PathInFstab(path)
 }
 
-func (c Controller) discoverUsers(path string) ([]process.Process, error) {
+func (c Controller) discoverUsers(ctx context.Context, path string) ([]process.Process, error) {
 	if c.DiscoverUsers != nil {
 		return c.DiscoverUsers(path)
 	}
-	return UsersWithLookup(path, c.userLookup())
+	return usersWithLookup(ctx, path, c.userLookup())
 }
 
 func (c Controller) signaler() process.Signaler {
@@ -534,6 +536,13 @@ func Users(mountPath string) ([]process.Process, error) {
 // UsersWithLookup returns processes using mountPath, resolving user display
 // names with lookup.
 func UsersWithLookup(mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
+	return usersWithLookup(context.Background(), mountPath, lookup)
+}
+
+// usersWithLookup is the context-aware scan: it walks /proc and stops early if
+// ctx is cancelled, so a hung mount (e.g. a dead NFS server stalling readlink on
+// a /proc fd) cannot block umount escalation past the operation deadline.
+func usersWithLookup(ctx context.Context, mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
 	}
@@ -545,6 +554,9 @@ func UsersWithLookup(mountPath string, lookup *process.UserLookup) ([]process.Pr
 	cleanMount := filepath.Clean(mountPath)
 	var out []process.Process
 	for _, pid := range pids {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
 		if !pidUsesPath(pid, cleanMount) {
 			continue
 		}

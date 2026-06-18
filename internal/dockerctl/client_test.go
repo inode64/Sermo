@@ -6,7 +6,30 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestEnsureDeadline(t *testing.T) {
+	// A context with a deadline is returned unchanged.
+	parent, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	got, c1 := ensureDeadline(parent)
+	defer c1()
+	if got != parent {
+		t.Fatal("ensureDeadline replaced a context that already had a deadline")
+	}
+
+	// A deadline-less context gets one bounded by defaultTimeout.
+	got, c2 := ensureDeadline(context.Background())
+	defer c2()
+	dl, ok := got.Deadline()
+	if !ok {
+		t.Fatal("ensureDeadline did not set a deadline on a deadline-less context")
+	}
+	if d := time.Until(dl); d <= 0 || d > defaultTimeout+time.Second {
+		t.Fatalf("fallback deadline = %v; want ~%v", d, defaultTimeout)
+	}
+}
 
 func TestClientInfoInspectAndStop(t *testing.T) {
 	var stopped bool

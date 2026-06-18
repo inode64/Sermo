@@ -13,9 +13,27 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"sermo/internal/cfgval"
 )
+
+// defaultTimeout bounds a Docker API request when the caller's context carries
+// no deadline. The Docker http.Client has no Timeout of its own (so a bounded
+// caller context governs each request, and a slow stop with t=-1 is not cut
+// short), so without this fallback a hung daemon that accepts the connection but
+// never responds could block a watch cycle indefinitely.
+const defaultTimeout = 10 * time.Second
+
+// ensureDeadline returns ctx unchanged when it already carries a deadline,
+// otherwise a child bounded by defaultTimeout. The returned cancel must be
+// called.
+func ensureDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, defaultTimeout)
+}
 
 const (
 	// DefaultSocket is Docker's local Unix API socket on modern Linux systems.
@@ -245,6 +263,8 @@ func (c *Client) Unpause(ctx context.Context, container string) error {
 }
 
 func (c *Client) get(ctx context.Context, path string, out any) error {
+	ctx, cancel := ensureDeadline(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.Base+path, nil)
 	if err != nil {
 		return err
@@ -265,6 +285,8 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 }
 
 func (c *Client) post(ctx context.Context, path string, body io.Reader, ok ...int) error {
+	ctx, cancel := ensureDeadline(ctx)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Base+path, body)
 	if err != nil {
 		return err
