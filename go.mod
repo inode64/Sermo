@@ -14,6 +14,7 @@ require (
 	github.com/gosnmp/gosnmp v1.43.2
 	github.com/lib/pq v1.12.3
 	github.com/quic-go/quic-go v0.60.0
+	github.com/spf13/pflag v1.0.10
 	go.mongodb.org/mongo-driver/v2 v2.6.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0

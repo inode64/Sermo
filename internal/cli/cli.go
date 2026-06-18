@@ -15,6 +15,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/spf13/pflag"
+
 	"sermo/internal/app"
 	"sermo/internal/assist"
 	"sermo/internal/buildinfo"
@@ -1476,133 +1478,72 @@ func (a App) runReload(ctx context.Context, opts options) int {
 
 func parseArgs(args []string) (options, error) {
 	opts := options{backend: ""}
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch {
-		case arg == "--help" || arg == "-h":
-			opts.help = true
-		case arg == "--version" || arg == "-V":
-			opts.version = true
-		case arg == "--json":
-			opts.json = true
-		case arg == "--quiet" || arg == "-q":
-			opts.quiet = true
-		case arg == "--no-cascade":
-			opts.noCascade = true
-		case arg == "--series":
-			opts.series = true
-		case arg == "--long":
-			opts.long = true
-		case isFlag(arg, "--notify"):
-			v, ni, err := flagValue(args, i, "--notify")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			opts.notifyNames = append(opts.notifyNames, splitFlagList(v)...)
-		case isFlag(arg, "--since"):
-			v, ni, err := flagValue(args, i, "--since")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			if opts.since, err = time.ParseDuration(v); err != nil {
-				return opts, fmt.Errorf("--since: %w", err)
-			}
-		case isFlag(arg, "--before"):
-			v, ni, err := flagValue(args, i, "--before")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			opts.before = v
-		case isFlag(arg, "--limit"):
-			v, ni, err := flagValue(args, i, "--limit")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			if opts.eventLimit, err = strconv.Atoi(v); err != nil || opts.eventLimit < 0 {
-				return opts, fmt.Errorf("--limit must be a non-negative integer")
-			}
-		case isFlag(arg, "--backend"):
-			v, ni, err := flagValue(args, i, "--backend")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			if opts.backend, err = servicemgr.ParseBackend(v); err != nil {
-				return opts, err
-			}
-		case isFlag(arg, "--timeout"):
-			v, ni, err := flagValue(args, i, "--timeout")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			if opts.timeout, err = time.ParseDuration(v); err != nil {
-				return opts, fmt.Errorf("--timeout: %w", err)
-			}
-		case isFlag(arg, "--config"):
-			v, ni, err := flagValue(args, i, "--config")
-			if err != nil {
-				return opts, err
-			}
-			i, opts.config = ni, v
-		case isFlag(arg, "--name"):
-			v, ni, err := flagValue(args, i, "--name")
-			if err != nil {
-				return opts, err
-			}
-			i, opts.name = ni, v
-		case isFlag(arg, "--reason"):
-			v, ni, err := flagValue(args, i, "--reason")
-			if err != nil {
-				return opts, err
-			}
-			i, opts.reason = ni, v
-		case isFlag(arg, "--ttl"):
-			v, ni, err := flagValue(args, i, "--ttl")
-			if err != nil {
-				return opts, err
-			}
-			i = ni
-			if opts.ttl, err = time.ParseDuration(v); err != nil {
-				return opts, fmt.Errorf("--ttl: %w", err)
-			}
-		case arg == "--":
-			// Everything after `--` is a literal command (the lock wrapper).
-			opts.commandArgs = append(opts.commandArgs, args[i+1:]...)
-			return opts, nil
-		case strings.HasPrefix(arg, "-"):
-			return opts, fmt.Errorf("unknown flag %s", arg)
-		case opts.command == "":
-			opts.command = arg
-		default:
-			opts.args = append(opts.args, arg)
+	flagArgs, commandArgs := splitCommandArgs(args)
+	opts.commandArgs = append(opts.commandArgs, commandArgs...)
+
+	var backend string
+	var notifyValues []string
+	fs := pflag.NewFlagSet("sermoctl", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	fs.SetInterspersed(true)
+	fs.BoolVarP(&opts.help, "help", "h", false, "")
+	fs.BoolVarP(&opts.version, "version", "V", false, "")
+	fs.BoolVar(&opts.json, "json", false, "")
+	fs.BoolVarP(&opts.quiet, "quiet", "q", false, "")
+	fs.BoolVar(&opts.noCascade, "no-cascade", false, "")
+	fs.BoolVar(&opts.series, "series", false, "")
+	fs.BoolVar(&opts.long, "long", false, "")
+	fs.StringArrayVar(&notifyValues, "notify", nil, "")
+	fs.DurationVar(&opts.since, "since", 0, "")
+	fs.StringVar(&opts.before, "before", "", "")
+	fs.IntVar(&opts.eventLimit, "limit", 0, "")
+	fs.StringVar(&backend, "backend", "", "")
+	fs.DurationVar(&opts.timeout, "timeout", 0, "")
+	fs.StringVar(&opts.config, "config", "", "")
+	fs.StringVar(&opts.name, "name", "", "")
+	fs.StringVar(&opts.reason, "reason", "", "")
+	fs.DurationVar(&opts.ttl, "ttl", 0, "")
+
+	if err := fs.Parse(flagArgs); err != nil {
+		return opts, normalizePflagError(err)
+	}
+	if opts.eventLimit < 0 {
+		return opts, fmt.Errorf("--limit must be a non-negative integer")
+	}
+	if backend != "" {
+		parsedBackend, err := servicemgr.ParseBackend(backend)
+		if err != nil {
+			return opts, err
 		}
+		opts.backend = parsedBackend
+	}
+	for _, value := range notifyValues {
+		opts.notifyNames = append(opts.notifyNames, splitFlagList(value)...)
+	}
+	rest := fs.Args()
+	if len(rest) > 0 {
+		opts.command = rest[0]
+		opts.args = append(opts.args, rest[1:]...)
 	}
 	return opts, nil
 }
 
-// isFlag reports whether arg is the named value flag in either form: exactly
-// `--flag` (value follows as the next arg) or `--flag=value` (inline).
-func isFlag(arg, flag string) bool {
-	return arg == flag || strings.HasPrefix(arg, flag+"=")
+// splitCommandArgs preserves the lock wrapper convention: everything after a
+// literal `--` is a command payload, not another sermoctl flag or argument.
+func splitCommandArgs(args []string) (flagArgs, commandArgs []string) {
+	for i, arg := range args {
+		if arg == "--" {
+			return args[:i], args[i+1:]
+		}
+	}
+	return args, nil
 }
 
-// flagValue extracts a value flag's value at args[i], handling both
-// `--flag=value` (inline) and `--flag value` (next arg). It returns the value
-// and the index to continue the scan from (advanced past a consumed next arg),
-// or an error when the space form has no following value.
-func flagValue(args []string, i int, flag string) (string, int, error) {
-	if v, ok := strings.CutPrefix(args[i], flag+"="); ok {
-		return v, i, nil
+func normalizePflagError(err error) error {
+	if msg := err.Error(); strings.HasPrefix(msg, "unknown flag: ") {
+		return fmt.Errorf("unknown flag %s", strings.TrimPrefix(msg, "unknown flag: "))
 	}
-	if i+1 >= len(args) {
-		return "", i, fmt.Errorf("%s requires a value", flag)
-	}
-	return args[i+1], i + 1, nil
+	return err
 }
 
 func writeJSON(w io.Writer, value any) {
