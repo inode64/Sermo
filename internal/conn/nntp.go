@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/textproto"
 	"strconv"
 )
 
@@ -26,10 +27,10 @@ func (nntpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 
 // nntpHandshake reads the greeting (200 posting allowed / 201 posting
 // prohibited), authenticates with AUTHINFO USER/PASS when a user is supplied, and
-// quits. Reuses the RFC 959 reply reader (NNTP shares its 3-digit reply codes).
+// quits. NNTP shares the 3-digit status-line format parsed by net/textproto.
 func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
-	br := bufio.NewReader(rw)
-	code, greeting, err := readReplyCode(br)
+	tp := textproto.NewReader(bufio.NewReader(rw))
+	code, greeting, err := tp.ReadResponse(0)
 	if err != nil {
 		return Result{}, err
 	}
@@ -45,7 +46,7 @@ func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		if _, err := fmt.Fprintf(rw, "AUTHINFO USER %s\r\n", cfg.User); err != nil {
 			return Result{}, err
 		}
-		code, text, err := readReplyCode(br)
+		code, text, err := tp.ReadResponse(0)
 		if err != nil {
 			return Result{}, err
 		}
@@ -53,7 +54,7 @@ func nntpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			if _, err := fmt.Fprintf(rw, "AUTHINFO PASS %s\r\n", cfg.Password); err != nil {
 				return Result{}, err
 			}
-			if code, text, err = readReplyCode(br); err != nil {
+			if code, text, err = tp.ReadResponse(0); err != nil {
 				return Result{}, err
 			}
 		}

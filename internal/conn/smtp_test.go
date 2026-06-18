@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/base64"
 	"strings"
@@ -90,9 +89,11 @@ func TestSMTPHandshakeHELOFallback(t *testing.T) {
 	}
 }
 
-func TestReadReplyCodeRejectsMismatchedMultilineTerminator(t *testing.T) {
-	br := bufio.NewReader(strings.NewReader("220-Welcome\r\n421 service closing\r\n"))
-	if _, _, err := readReplyCode(br); err == nil {
-		t.Fatal("mismatched final code in a multi-line reply must fail")
+func TestSMTPHandshakeRejectsMalformedMultilineGreeting(t *testing.T) {
+	// A multi-line greeting whose continuation never terminates with the opening
+	// code is malformed; the probe must fail rather than misread it.
+	conn := rw{in: strings.NewReader("220-Welcome\r\n421 service closing\r\n"), out: &bytes.Buffer{}}
+	if _, err := smtpHandshake(conn, Config{}); err == nil {
+		t.Fatal("a malformed multi-line greeting must fail")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/textproto"
 )
 
 func init() { Register(ftpProtocol{}) }
@@ -26,8 +27,8 @@ func (ftpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // ftpHandshake reads the 220 greeting, logs in with USER/PASS when credentials
 // are supplied, and quits. FTP shares SMTP's multi-line reply format.
 func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
-	br := bufio.NewReader(rw)
-	code, greeting, err := readReplyCode(br)
+	tp := textproto.NewReader(bufio.NewReader(rw))
+	code, greeting, err := tp.ReadResponse(0)
 	if err != nil {
 		return Result{}, err
 	}
@@ -44,7 +45,7 @@ func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 		if _, err := fmt.Fprintf(rw, "USER %s\r\n", user); err != nil {
 			return Result{}, err
 		}
-		code, text, err := readReplyCode(br)
+		code, text, err := tp.ReadResponse(0)
 		if err != nil {
 			return Result{}, err
 		}
@@ -54,7 +55,7 @@ func ftpHandshake(rw io.ReadWriter, cfg Config) (Result, error) {
 			if _, err := fmt.Fprintf(rw, "PASS %s\r\n", cfg.Password); err != nil {
 				return Result{}, err
 			}
-			code, text, err = readReplyCode(br)
+			code, text, err = tp.ReadResponse(0)
 			if err != nil {
 				return Result{}, err
 			}
