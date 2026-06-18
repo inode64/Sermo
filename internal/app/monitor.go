@@ -110,7 +110,8 @@ func (m *Monitor) Reload() {
 	// See section 24 and reload state preservation.
 	m.stopGenerationLocked(false)
 
-	saved := captureWorkerState(oldWorkers)
+	savedWorkers := captureWorkerState(oldWorkers)
+	savedWatches := captureWatchState(oldWatches)
 	prevCfg := m.cfg
 	prevDeps := m.deps
 
@@ -129,7 +130,8 @@ func (m *Monitor) Reload() {
 		return
 	}
 
-	applyWorkerState(workers, saved)
+	applyWorkerState(workers, savedWorkers)
+	applyWatchState(watches, savedWatches)
 	resetRemovedServiceMetrics(m.collector, oldWorkers, workers)
 
 	m.cfg = newCfg
