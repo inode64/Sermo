@@ -144,6 +144,22 @@ func TestExpandXFSAndBtrfsUseMountpoint(t *testing.T) {
 	}
 }
 
+func TestExpandRejectsNonPositiveSize(t *testing.T) {
+	for _, by := range []int64{0, -1 << 20} {
+		r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "2147483648"}}}
+		e := Expander{Runner: r}
+		tgt := Target{Mountpoint: "/mnt/backup", FSType: "ext4", Device: "/dev/vg0/data", VG: "vg0", LV: "data"}
+		if _, err := e.Expand(context.Background(), tgt, by); err == nil {
+			t.Fatalf("Expand(by=%d) must error, not run lvextend", by)
+		}
+		for _, call := range r.calls {
+			if strings.HasPrefix(call, "lvextend") {
+				t.Fatalf("Expand(by=%d) ran %q; lvextend must not run for a non-positive size", by, call)
+			}
+		}
+	}
+}
+
 func TestExpandNoFreeSpaceErrors(t *testing.T) {
 	r := &fakeRunner{out: map[string]execx.Result{"vgs": {Stdout: "0"}}}
 	e := Expander{Runner: r}
