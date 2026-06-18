@@ -16,7 +16,7 @@ import (
 // SizeSamplerFunc returns the byte size of a file or directory. Injected for
 // tests; the default uses os.Stat for a file and a recursive walk for a
 // directory.
-type SizeSamplerFunc func(path string) (int64, error)
+type SizeSamplerFunc func(ctx context.Context, path string) (int64, error)
 
 // sizeSample is one timestamped size observation.
 type sizeSample struct {
@@ -44,8 +44,11 @@ type sizeCheck struct {
 	state   *sizeState
 }
 
-func (c *sizeCheck) Run(_ context.Context) Result {
+func (c *sizeCheck) Run(ctx context.Context) Result {
 	start := time.Now()
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
+
 	sampler := c.sampler
 	if sampler == nil {
 		sampler = dirOrFileSize
@@ -55,7 +58,7 @@ func (c *sizeCheck) Run(_ context.Context) Result {
 		clock = time.Now
 	}
 
-	size, err := sampler(c.path)
+	size, err := sampler(ctx, c.path)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("size %s: %v", c.path, err), start)
 	}
@@ -101,9 +104,15 @@ func humanizeSigned(n int64) string {
 
 // dirOrFileSize returns the size of a regular file, or the recursive sum of
 // regular-file sizes under a directory.
-func dirOrFileSize(path string) (int64, error) {
+func dirOrFileSize(ctx context.Context, path string) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
+		return 0, err
+	}
+	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
 	if !info.IsDir() {
@@ -111,6 +120,9 @@ func dirOrFileSize(path string) (int64, error) {
 	}
 	var total int64
 	err = filepath.WalkDir(path, func(_ string, d fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			return err
 		}

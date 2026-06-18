@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -59,7 +60,7 @@ func TestCountClassifiesEntriesNonRecursive(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.kind, func(t *testing.T) {
-			n, err := countOf(root, tc.kind, false, "==", 0).tally()
+			n, err := countOf(root, tc.kind, false, "==", 0).tally(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -73,12 +74,26 @@ func TestCountClassifiesEntriesNonRecursive(t *testing.T) {
 func TestCountRecursiveDescendsSubtree(t *testing.T) {
 	root := countTree(t)
 	// Recursive files: a.txt, b.txt, sub/c.txt = 3.
-	if n, _ := countOf(root, countFile, true, "==", 0).tally(); n != 3 {
+	if n, _ := countOf(root, countFile, true, "==", 0).tally(context.Background()); n != 3 {
 		t.Fatalf("recursive file count = %d, want 3", n)
 	}
 	// Recursive dirs: sub/, sub/nested/ = 2 (root itself never counted).
-	if n, _ := countOf(root, countDir, true, "==", 0).tally(); n != 2 {
+	if n, _ := countOf(root, countDir, true, "==", 0).tally(context.Background()); n != 2 {
 		t.Fatalf("recursive dir count = %d, want 2", n)
+	}
+}
+
+func TestCountCheckHonorsCanceledContext(t *testing.T) {
+	root := countTree(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	res := countOf(root, countAny, true, ">", 0).Run(ctx)
+	if res.OK {
+		t.Fatal("canceled count check should fail")
+	}
+	if !strings.Contains(res.Message, context.Canceled.Error()) {
+		t.Fatalf("message = %q, want context canceled", res.Message)
 	}
 }
 

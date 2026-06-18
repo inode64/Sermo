@@ -34,10 +34,12 @@ type countCheck struct {
 	value     float64
 }
 
-func (c countCheck) Run(_ context.Context) Result {
+func (c countCheck) Run(ctx context.Context) Result {
 	start := time.Now()
+	ctx, cancel := c.withTimeout(ctx)
+	defer cancel()
 
-	n, err := c.tally()
+	n, err := c.tally(ctx)
 	if err != nil {
 		return c.result(false, fmt.Sprintf("count %s: %v", c.path, err), start)
 	}
@@ -61,16 +63,25 @@ func (c countCheck) Run(_ context.Context) Result {
 
 // tally counts the matching entries, either directly under path or, when
 // recursive, anywhere in its subtree (excluding path itself).
-func (c countCheck) tally() (int, error) {
+func (c countCheck) tally(ctx context.Context) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	if c.recursive {
-		return c.tallyRecursive()
+		return c.tallyRecursive(ctx)
 	}
 	entries, err := os.ReadDir(c.path)
 	if err != nil {
 		return 0, err
 	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	n := 0
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 		if c.matches(e.Type()) {
 			n++
 		}
@@ -78,9 +89,12 @@ func (c countCheck) tally() (int, error) {
 	return n, nil
 }
 
-func (c countCheck) tallyRecursive() (int, error) {
+func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 	n := 0
 	err := filepath.WalkDir(c.path, func(path string, d fs.DirEntry, err error) error {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if err != nil {
 			// A failure to open the root is fatal; an unreadable subdirectory is
 			// skipped so the count covers everything that could be read.
