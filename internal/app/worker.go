@@ -100,6 +100,10 @@ type Worker struct {
 	// RuleWindows publishes rule window progress for the web detail. Optional.
 	RuleWindows *RuleWindowRegistry
 
+	// MetricChecks holds checks and preflight entries for defense-in-depth
+	// suppression of remediation rules that read scope: system metrics.
+	MetricChecks map[string]any
+
 	// windows holds per-rule for/within state across cycles (section 15).
 	windows map[string]*rules.WindowState
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
@@ -404,7 +408,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, e
 	// Defense-in-depth for safety invariant 13: a system-scoped metric must
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
-	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, nil) {
+	if r.Type != rules.RuleAlert && rules.ConditionUsesSystemMetric(r.If, w.MetricChecks) {
 		w.emit(Event{Kind: "error", Rule: r.Name, Message: "scope: system metric may only drive alert rules; rule suppressed"})
 		return false
 	}
