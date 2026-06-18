@@ -241,8 +241,11 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 	if spec.hasSig {
 		pidfile := reloadPidfile(tree)
 		return func(ctx context.Context) error {
-			pid, err := reloadPID(deps.Runner, backend, unit, pidfile)
+			pid, err := reloadPID(ctx, deps.Runner, backend, unit, pidfile)
 			if err != nil {
+				return err
+			}
+			if err := ctx.Err(); err != nil {
 				return err
 			}
 			return process.OSSignaler{}.Signal(pid, spec.signal)
@@ -271,9 +274,15 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 
 // reloadPID resolves the process to signal for a native reload: systemd's MainPID
 // when available, otherwise the service's pidfile (the only source on OpenRC).
-func reloadPID(runner execx.Runner, backend, unit, pidfile string) (int, error) {
-	if pid, ok := servicemgr.MainPID(runner, servicemgr.Backend(backend), unit); ok {
+func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if pid, ok := servicemgr.MainPIDContext(ctx, runner, servicemgr.Backend(backend), unit); ok {
 		return pid, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 	if pidfile != "" {
 		return process.ReadPidfile(pidfile)
