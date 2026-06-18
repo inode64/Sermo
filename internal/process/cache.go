@@ -49,6 +49,17 @@ func (c *CachingReader) SetFreshness(d time.Duration) {
 	c.mu.Unlock()
 }
 
+// Invalidate drops the cached snapshot so the next Snapshot rebuilds from live
+// /proc. Safety-critical callers that must never act on a stale process table —
+// notably residual discovery and the kill-escalation reaper, which would
+// otherwise SIGKILL a PID that has already exited (and may have been reused) —
+// call this before each read. Safe to call concurrently.
+func (c *CachingReader) Invalidate() {
+	c.mu.Lock()
+	c.primed = false
+	c.mu.Unlock()
+}
+
 // Snapshot returns the cached identity map, rebuilding it when stale. The
 // returned map is shared and must not be mutated by callers (discovery only
 // reads it).

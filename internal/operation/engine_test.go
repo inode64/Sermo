@@ -481,6 +481,62 @@ func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 	}
 }
 
+// countingPIDReader counts how often the live process table is walked, so a test
+// can prove residual discovery bypasses the CachingReader's freshness window.
+type countingPIDReader struct {
+	ids   map[int]process.Identity
+	walks int
+}
+
+func (r *countingPIDReader) PIDs() ([]int, error) {
+	r.walks++
+	pids := make([]int, 0, len(r.ids))
+	for pid := range r.ids {
+		pids = append(pids, pid)
+	}
+	return pids, nil
+}
+
+func (r *countingPIDReader) Identity(pid int) (process.Identity, bool) {
+	id, ok := r.ids[pid]
+	return id, ok
+}
+
+func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
+	// The residual-discovery closure must read live /proc on every call, never a
+	// cached monitoring snapshot — otherwise the reaper would SIGKILL PIDs that
+	// already exited (safety invariants 1, 4, 12). With a long freshness window a
+	// plain CachingReader would walk /proc once; the operation engine must
+	// invalidate it before each discovery.
+	inner := &countingPIDReader{ids: map[int]process.Identity{100: {PID: 100, PPID: 1}}}
+	discoverer := process.NewDiscoverer()
+	discoverer.Reader = process.NewCachingReader(inner, time.Hour)
+
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	engine := New(Config{
+		Service:    "mysql-main",
+		Unit:       "mysqld",
+		Backend:    "systemd",
+		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"type": "command_match", "exe": "/usr/sbin/mysqld", "user": "mysql"}}},
+		Manager:    &fakeManager{status: servicemgr.StatusActive},
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: discoverer,
+		Sleep:      func(time.Duration) {},
+	})
+
+	if _, err := engine.Discover(); err != nil {
+		t.Fatalf("first Discover: %v", err)
+	}
+	if _, err := engine.Discover(); err != nil {
+		t.Fatalf("second Discover: %v", err)
+	}
+	if inner.walks != 2 {
+		t.Fatalf("live /proc walks = %d; want 2 (cache invalidated before each residual discovery)", inner.walks)
+	}
+}
+
 func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))

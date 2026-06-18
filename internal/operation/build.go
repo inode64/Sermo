@@ -77,7 +77,17 @@ func New(c Config) Engine {
 		warningError("selector config", selectorWarnings),
 	)
 
+	// This closure is the Engine's residual discovery and the reaper's
+	// Rediscover: it runs after a stop and between every SIGTERM/SIGKILL round.
+	// It must read live /proc, never a shared monitoring snapshot — acting on a
+	// stale process table would escalate SIGKILL against PIDs that already exited
+	// (and may have been reused), defeating the reaper's per-round identity
+	// re-check (safety invariants 1, 4, 12). So invalidate the cache first when
+	// the reader is a CachingReader.
 	discover := func() ([]process.Process, error) {
+		if inv, ok := c.Discoverer.Reader.(interface{ Invalidate() }); ok {
+			inv.Invalidate()
+		}
 		procs, warnings := c.Discoverer.Discover(selectors)
 		if len(warnings) > 0 && !hasCommandMatch {
 			return procs, warningError("runtime discovery", warnings)
