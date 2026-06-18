@@ -101,7 +101,10 @@ func writeRESP(w io.Writer, args ...string) error {
 }
 
 // readRESP reads one reply: simple string (+), integer (:) and bulk string ($)
-// return their payload; an error reply (-) returns it as a Go error.
+// return their payload; an error reply (-) returns it as a Go error. Any other
+// type byte (RESP arrays, RESP3 aggregates) is an explicit error rather than a
+// silently mis-stripped payload — the handshake only issues commands that answer
+// with the scalar types above.
 func readRESP(br *bufio.Reader) (string, error) {
 	line, err := readCRLFLine(br)
 	if err != nil {
@@ -129,7 +132,7 @@ func readRESP(br *bufio.Reader) (string, error) {
 		}
 		return string(buf[:n]), nil
 	default:
-		return line[1:], nil
+		return "", fmt.Errorf("unsupported RESP reply type %q", string(line[0]))
 	}
 }
 

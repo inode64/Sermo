@@ -1,11 +1,27 @@
 package conn
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"strings"
 	"testing"
 )
+
+func TestReadRESPRejectsUnsupportedType(t *testing.T) {
+	// A RESP array (or any non-scalar type) must error, not return a payload with
+	// its first byte stripped.
+	br := bufio.NewReader(strings.NewReader("*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n"))
+	if got, err := readRESP(br); err == nil {
+		t.Fatalf("readRESP on array reply = %q, nil; want an error", got)
+	}
+
+	// Scalars still parse.
+	br = bufio.NewReader(strings.NewReader("+PONG\r\n"))
+	if got, err := readRESP(br); err != nil || got != "PONG" {
+		t.Fatalf("readRESP(+PONG) = %q, %v; want PONG, nil", got, err)
+	}
+}
 
 func TestRedisRegistered(t *testing.T) {
 	p, ok := Lookup("redis")
