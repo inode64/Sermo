@@ -657,8 +657,24 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		t.Fatalf("events = %+v, want one error explaining the suppression", events)
 	}
 
+	events = nil
+	r = rules.Rule{
+		Name: "bad-inline-probe",
+		Type: rules.RuleRemediation,
+		If: map[string]any{"failed": map[string]any{
+			"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"},
+		}},
+	}
+	if w.fires(context.Background(), ev, r, nil) {
+		t.Fatal("an inline system-metric remediation probe must never fire")
+	}
+	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
+		t.Fatalf("inline events = %+v, want one error explaining the suppression", events)
+	}
+
 	// The same metric on an alert rule keeps working.
 	r.Type = rules.RuleAlert
+	r.If = map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}}
 	if !w.fires(context.Background(), ev, r, nil) {
 		t.Fatal("an alert rule on the same system metric must still fire")
 	}

@@ -431,9 +431,17 @@ rules:
     type: remediation
     if: { metric: { scope: system, name: total_cpu, op: ">", value: 90% } }
     then: { action: restart }
+  bad-inline:
+    type: remediation
+    if: { failed: { metric: { scope: system, name: total_cpu, op: ">", value: 90% } } }
+    then: { action: restart }
   ok-alert:
     type: alert
     if: { metric: { scope: system, name: total_cpu, op: ">", value: 90% } }
+    then: { action: alert, message: "machine hot" }
+  ok-alert-inline:
+    type: alert
+    if: { failed: { metric: { scope: system, name: total_cpu, op: ">", value: 90% } } }
     then: { action: alert, message: "machine hot" }
 `)
 	mustHave(t, issues, "scope: system metric is only allowed in alert rules")

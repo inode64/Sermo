@@ -152,11 +152,20 @@ func ConditionUsesSystemMetric(node map[string]any, checks map[string]any) bool 
 			}
 		case "failed", "active":
 			m, ok := v.(map[string]any)
-			if !ok || checks == nil {
+			if !ok {
 				continue
 			}
-			if c, ok := checks[cfgval.AsString(m["check"])].(map[string]any); ok &&
-				cfgval.AsString(c["type"]) == "metric" && cfgval.AsString(c["scope"]) == "system" {
+			if ref := cfgval.AsString(m["check"]); ref != "" {
+				if checks == nil {
+					continue
+				}
+				if c, ok := checks[ref].(map[string]any); ok &&
+					cfgval.AsString(c["type"]) == "metric" && cfgval.AsString(c["scope"]) == "system" {
+					return true
+				}
+				continue
+			}
+			if c, ok := m["metric"].(map[string]any); ok && cfgval.AsString(c["scope"]) == "system" {
 				return true
 			}
 		}
