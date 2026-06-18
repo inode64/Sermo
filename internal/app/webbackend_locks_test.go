@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -255,23 +256,23 @@ func TestWebBackendLocksContext(t *testing.T) {
 		state       string
 		owner       string
 		releaseable bool
-		blocks      int
+		blocks      []string
 	}{}
 	for _, lk := range locks {
 		byName[lk.Name] = struct {
 			state       string
 			owner       string
 			releaseable bool
-			blocks      int
-		}{lk.State, lk.OwnerStatus, lk.Releaseable, len(lk.BlockedActions)}
+			blocks      []string
+		}{lk.State, lk.OwnerStatus, lk.Releaseable, lk.BlockedActions}
 		if lk.Name == "backup" && (lk.TTLRemainingSeconds <= 0 || lk.CreatedAgeSeconds <= 0) {
 			t.Fatalf("active lock timing fields missing: %+v", lk)
 		}
 	}
-	if byName["backup"].state != "active" || byName["backup"].owner != "live" || byName["backup"].releaseable || byName["backup"].blocks != 3 {
+	if byName["backup"].state != "active" || byName["backup"].owner != "live" || byName["backup"].releaseable || !slices.Equal(byName["backup"].blocks, serviceOperationActionList()) {
 		t.Fatalf("backup context = %+v", byName["backup"])
 	}
-	if byName["old"].state != "expired" || !byName["old"].releaseable || byName["old"].blocks != 0 {
+	if byName["old"].state != "expired" || !byName["old"].releaseable || len(byName["old"].blocks) != 0 {
 		t.Fatalf("old context = %+v", byName["old"])
 	}
 }
