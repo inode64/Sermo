@@ -401,6 +401,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 	worker = &Worker{
 		Service:      name,
 		Rules:        ruleSet,
+		MetricChecks: rules.ReferencedChecks(tree),
 		Policy:       rules.ParsePolicy(tree),
 		State:        remediationState,
 		Notifiers:    deps.Notifiers,

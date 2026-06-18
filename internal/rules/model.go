@@ -173,9 +173,9 @@ func ConditionUsesSystemMetric(node map[string]any, checks map[string]any) bool 
 	return false
 }
 
-// referencedChecks merges the sections a rule's failed/active references may
+// ReferencedChecks merges the sections a rule's failed/active references may
 // point at (checks and preflight), for system-metric detection.
-func referencedChecks(tree map[string]any) map[string]any {
+func ReferencedChecks(tree map[string]any) map[string]any {
 	out := map[string]any{}
 	for _, section := range []string{"checks", "preflight"} {
 		if m, ok := tree[section].(map[string]any); ok {
@@ -202,7 +202,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 	// default.
 	fbFor, fbWithin := ParseRuleWindow(tree["rule_window"])
 
-	refChecks := referencedChecks(tree)
+	refChecks := ReferencedChecks(tree)
 	var rules []Rule
 	var warnings []string
 	for _, name := range slices.Sorted(maps.Keys(raw)) {
