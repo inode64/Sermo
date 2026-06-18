@@ -1385,3 +1385,31 @@ func TestValidateWatchPortRangeMatchesServices(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateFileProcessWatchRejectsEntryLevelWindow(t *testing.T) {
+	bad := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"cfg": map[string]any{
+				"check": map[string]any{
+					"type": "file", "path": "/etc/app.conf",
+					"size": map[string]any{"on": "change"},
+				},
+				"for":  map[string]any{"cycles": 3},
+				"then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+			"proc": map[string]any{
+				"check":  map[string]any{"type": "process", "name": "nginx", "cpu": map[string]any{"op": ">", "value": 90}},
+				"within": map[string]any{"cycles": 5, "min_matches": 2},
+				"then":   map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
+			},
+		},
+	})
+	for _, w := range []string{
+		"watches.cfg.for is ignored on a file watch",
+		"watches.proc.within is ignored on a process watch",
+	} {
+		if !hasIssue(bad, w) {
+			t.Fatalf("missing issue %q in %v", w, bad)
+		}
+	}
+}
