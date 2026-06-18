@@ -274,7 +274,7 @@ func validateServices(cfg *Config) []Issue {
 		if resolved.Tree == nil {
 			continue
 		}
-		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services)...)
+		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, effectiveBackend(cfg))...)
 	}
 	return issues
 }
@@ -384,7 +384,18 @@ func validateMount(name string, tree map[string]any) []Issue {
 	return issues
 }
 
-func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, services map[string]struct{}) []Issue {
+// effectiveBackend returns the init backend validation should assume: an explicit
+// engine.backend when set, otherwise the host-detected init (${init}).
+func effectiveBackend(cfg *Config) string {
+	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
+		if backend := cfgval.String(engine["backend"]); backend != "" && backend != "auto" {
+			return backend
+		}
+	}
+	return detectedInit
+}
+
+func validateResolved(name string, tree map[string]any, runtime string, notifiers map[string]struct{}, services map[string]struct{}, backend string) []Issue {
 	var issues []Issue
 	add := func(format string, args ...any) {
 		issues = append(issues, Issue{Scope: name, Msg: fmt.Sprintf(format, args...)})
@@ -431,7 +442,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateAlsoService(tree, add)
 	validateCascade(name, tree, services, add)
 	validateCommands(tree, add)
-	validateReload(tree, add)
+	validateReload(tree, backend, add)
 	validateRuleWindow(tree, add)
 	validateServiceMonitors(tree, notifiers, add)
 	validateRules(tree, notifiers, add)
