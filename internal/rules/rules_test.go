@@ -369,6 +369,13 @@ func TestParseRulesDropsSystemMetricRemediation(t *testing.T) {
 				"if":   map[string]any{"metric": map[string]any{"scope": "system", "name": "total_cpu", "op": ">", "value": "95%"}},
 				"then": map[string]any{"action": "restart"},
 			},
+			"bad-inline-probe": map[string]any{
+				"type": "remediation",
+				"if": map[string]any{"failed": map[string]any{
+					"metric": map[string]any{"scope": "system", "name": "total_cpu", "op": ">", "value": "95%"},
+				}},
+				"then": map[string]any{"action": "restart"},
+			},
 			"bad-nested": map[string]any{
 				"type": "remediation",
 				"if": map[string]any{"not": map[string]any{
@@ -402,7 +409,7 @@ func TestParseRulesDropsSystemMetricRemediation(t *testing.T) {
 	if len(rules) != 2 || names[0] != "ok-alert" || names[1] != "ok-service" {
 		t.Fatalf("rules = %v, want only ok-alert and ok-service", names)
 	}
-	if len(warns) != 3 {
+	if len(warns) != 4 {
 		t.Fatalf("warnings = %v, want one per dropped rule", warns)
 	}
 	for _, w := range warns {

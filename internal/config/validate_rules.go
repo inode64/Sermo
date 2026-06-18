@@ -309,6 +309,10 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 		}
 		entry := maps.Clone(fields)
 		entry["type"] = typ
+		if typ == "metric" {
+			validateMetric(entry, path+"."+typ, allowSystemMetric, add)
+			continue
+		}
 		if !validateSingleShotCheckFields(path+"."+typ, typ, entry, "", add) {
 			add("%s inline probe type %q is unknown", path, typ)
 		}
