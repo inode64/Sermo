@@ -114,9 +114,9 @@ func mysqlGreeting(r io.Reader) (Result, error) {
 // so the sql check can open a MySQL/MariaDB connection reusing this logic.
 func MySQLDSN(cfg Config) string { return buildDSN(cfg) }
 
-// buildDSN renders a go-sql-driver DSN from cfg, using mysql.Config so that
-// special characters in the password are escaped correctly.
-func buildDSN(cfg Config) string {
+// buildMySQLConfig renders a go-sql-driver config from cfg. When cfg.Interface
+// is set, TCP dials egress through BindDialer (SO_BINDTODEVICE).
+func buildMySQLConfig(cfg Config) *mysql.Config {
 	host := cfg.Host
 	if host == "" {
 		host = "127.0.0.1"
@@ -131,6 +131,10 @@ func buildDSN(cfg Config) string {
 	c.User = cfg.User
 	c.Passwd = cfg.Password
 	c.DBName = cfg.Database
+	if cfg.Interface != "" {
+		d := BindDialer(cfg.Interface)
+		c.DialFunc = d.DialContext
+	}
 	if tls := normalizeTLS(cfg.TLS); tls != "" {
 		c.TLSConfig = tls
 	}
@@ -140,7 +144,13 @@ func buildDSN(cfg Config) string {
 			c.Params[k] = v
 		}
 	}
-	return c.FormatDSN()
+	return c
+}
+
+// buildDSN renders a go-sql-driver DSN from cfg, using mysql.Config so that
+// special characters in the password are escaped correctly.
+func buildDSN(cfg Config) string {
+	return buildMySQLConfig(cfg).FormatDSN()
 }
 
 // normalizeTLS maps a friendly tls value to the go-sql-driver tls key. An empty

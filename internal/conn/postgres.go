@@ -3,12 +3,13 @@ package conn
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net"
 	"net/url"
 	"strconv"
 	"strings"
 
-	_ "github.com/lib/pq" // registers the "postgres" database/sql driver
+	"github.com/lib/pq"
 )
 
 func init() {
@@ -26,7 +27,7 @@ func (postgresProtocol) RequiresUser() bool { return true }
 // the server responds with a ping, and reads its version. The caller's context
 // bounds the whole probe.
 func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
-	db, err := sql.Open("postgres", buildPGDSN(cfg))
+	db, err := openPostgresDB(cfg)
 	if err != nil {
 		return Result{}, err
 	}
@@ -45,6 +46,32 @@ func (postgresProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 // PostgresDSN renders a lib/pq connection URL from cfg (escaping the password).
 // Exported so the sql check can open a PostgreSQL connection reusing this logic.
 func PostgresDSN(cfg Config) string { return buildPGDSN(cfg) }
+
+// openPostgresDB opens a PostgreSQL pool via lib/pq, routing TCP dials through
+// BindDialer when cfg.Interface is set so multihomed probes egress the right link.
+func openPostgresDB(cfg Config) (*sql.DB, error) {
+	connector, err := pq.NewConnector(buildPGDSN(cfg))
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Interface != "" {
+		connector.Dialer(pqDialer(cfg.Interface))
+	}
+	return sql.OpenDB(connector), nil
+}
+
+// postgresConnector builds the lib/pq connector for cfg. Used by tests to verify
+// interface binding is wired without opening a connection.
+func postgresConnector(cfg Config) (*pq.Connector, error) {
+	connector, err := pq.NewConnector(buildPGDSN(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("postgres connector: %w", err)
+	}
+	if cfg.Interface != "" {
+		connector.Dialer(pqDialer(cfg.Interface))
+	}
+	return connector, nil
+}
 
 // buildPGDSN renders a lib/pq connection URL from cfg. A URL (with
 // url.UserPassword) escapes special characters in the password correctly.

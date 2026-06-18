@@ -95,6 +95,9 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 		port = 27017
 	}
 	opts := options.Client().SetHosts([]string{net.JoinHostPort(host, strconv.Itoa(port))})
+	if cfg.Interface != "" {
+		opts.SetDialer(BindDialer(cfg.Interface))
+	}
 	if cfg.User != "" {
 		// Auth database: an explicit auth_source, else the target database, else
 		// admin (MongoDB's conventional credentials database).
