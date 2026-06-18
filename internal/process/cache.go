@@ -5,18 +5,14 @@ import (
 	"time"
 )
 
-// SnapshotReader can return a whole-/proc identity snapshot in one call. The
-// shared CachingReader implements it so discovery reuses a single /proc walk
-// instead of issuing PIDs() + Identity() round-trips itself.
+// SnapshotReader can return a whole-/proc identity snapshot in one call.
 type SnapshotReader interface {
 	Snapshot() map[int]Identity
 }
 
-// CachingReader wraps a Reader and serves a whole-/proc identity snapshot that
-// is rebuilt at most once per freshness window. Many service discoveries (and
-// web runtime queries) running within the same window then share one /proc
-// walk instead of each scanning every PID — turning the per-cycle cost from
-// O(services × processes) into O(processes). Safe for concurrent use.
+// CachingReader shares one /proc identity snapshot per freshness window, turning
+// per-cycle discovery from O(services x processes) into O(processes). Safe for
+// concurrent use.
 //
 // A freshness of 0 disables caching (every call rebuilds), so behaviour matches
 // a bare reader. The cached map is replaced wholesale on rebuild and never
@@ -32,8 +28,7 @@ type CachingReader struct {
 	primed    bool
 }
 
-// NewCachingReader returns a CachingReader over inner (defaulting to the host
-// OSReader) that reuses a snapshot for up to freshness.
+// NewCachingReader returns a CachingReader over inner. nil uses OSReader.
 func NewCachingReader(inner Reader, freshness time.Duration) *CachingReader {
 	if inner == nil {
 		inner = OSReader{}

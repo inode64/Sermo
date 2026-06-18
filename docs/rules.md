@@ -1067,8 +1067,8 @@ reported corruption fails the check with the detail. The file is opened
 A `sql` check runs a query against a database and compares its **scalar result**
 (the first column of the first row) against a `value`. It is **condition-style**
 (`OK == true` means the comparison holds), so in rules `active: {check: …}`
-fires on it. It reuses the MySQL/PostgreSQL connection builders and the SQLite
-read-only open of the other checks.
+fires on it. It uses the same connection fields as the MySQL/PostgreSQL checks
+and opens SQLite databases read-only.
 
 ```yaml
 checks:
@@ -1161,7 +1161,7 @@ checks:
 An `influxdb-query` check runs a query against InfluxDB and compares a **scalar
 result** against a `value`, the time-series counterpart of the `sql`/
 `mongodb-query` checks. It is **condition-style** (`OK == true` means the
-comparison holds) and reuses the `influxdb` connection variables (`host`/`port`/
+comparison holds) and uses the `influxdb` connection variables (`host`/`port`/
 `user`/`password`/`tls`). The **`language`** selects the query API:
 
 - **`influxql`** (default) — InfluxDB **1.x** `GET /query` against a `database`.
@@ -1318,8 +1318,7 @@ checks:
 ```
 
 A referenced field the probe did not return fails the check with a clear
-message. This reuses the same comparison engine as the `http` and `sql` checks,
-so it works for every registered protocol with no per-protocol configuration.
+message. The same comparison operators work for every registered protocol field.
 
 **Response latency (`expect_latency`).** Any protocol check also accepts
 `expect_latency: { op, value }` (milliseconds), like the `http` check — it fails
@@ -1450,9 +1449,9 @@ watches:
       notify: [ops-email]
 ```
 
-Like the other host-resource checks it is **condition-style**: a predicate
-expresses the *alerting* condition (e.g. `read < 100`), so the watch hook/notify
-fires when it holds. **`hdparm` needs root** (raw device access); without it the
+`hdparm` is **condition-style**: a predicate expresses the *alerting* condition
+(e.g. `read < 100`), so the watch hook/notify fires when it holds.
+**`hdparm` needs root** (raw device access); without it the
 check fails with hdparm's error. Because `-t` reads from the platter for a few
 seconds and adds real I/O load, schedule it on a **long `interval`** (e.g. `24h`)
 with a generous `timeout`. The measured `read`/`cached` are placed in the result
@@ -1555,8 +1554,8 @@ checks:
 ### Count
 
 A `count` check tallies the entries in a directory and compares the total to a
-threshold. Like `metric`, it is condition-style: it passes (so `active`/`failed`
-on it is true) when `op value` holds — useful for "too many queued files",
+threshold. It is condition-style: it passes (so `active`/`failed` on it is true)
+when `op value` holds — useful for "too many queued files",
 "backlog not draining", "spool directory empty", etc.
 
 ```yaml
@@ -1628,7 +1627,7 @@ process on an 8-thread host shows only `~12.5%` there), `cpu_thread` is what you
 alert on to catch a process — especially a single-threaded one — pegging its
 thread: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
 "90%"`. A multi-threaded process spanning several cores can read above `100%`.
-Like `cpu` it is a rate (not ready on the first cycle).
+`cpu_thread` is a rate, so it is not ready on the first cycle.
 
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`
@@ -1794,6 +1793,6 @@ limits.
 Use `remediation.shadow: true` when you want these service remediation rules to
 evaluate windows, guards and policy without executing the resulting
 start/stop/restart/reload/resume operation. It emits `shadow` events and does not
-advance live remediation cooldown state. This is separate from host watch
-`then.dry_run: true`, which skips watch `hook`, `notify` and `expand` actions;
+advance live remediation cooldown state. Host watch `then.dry_run: true` is
+separate: it skips watch `hook`, `notify` and `expand` actions;
 see [configuration](configuration.md#host-watches) for examples.

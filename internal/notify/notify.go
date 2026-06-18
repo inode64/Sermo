@@ -76,9 +76,8 @@ var builders = map[string]func(name string, entry map[string]any) (Notifier, err
 	"teams": buildTeams,
 }
 
-// Build constructs the named notifiers from the global `notifiers` section
-// (raw == cfg.Notifiers()). Malformed or unknown-type entries are skipped with
-// a warning, mirroring BuildWorkers/BuildWatches.
+// Build constructs global notifiers. Malformed or unknown-type entries become
+// warnings, not fatal errors.
 func Build(raw map[string]any, opts ...Option) (map[string]Notifier, []string) {
 	var options buildOptions
 	for _, opt := range opts {

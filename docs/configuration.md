@@ -309,12 +309,10 @@ so a fleet of services does not all probe on the same tick.
 
 ### Per-check interval
 
-An individual check may run **less often** than the worker cycle by setting its
-own `interval`. The worker keeps ticking at its resolution; a check with an
-`interval` simply runs every `round(interval / resolution)` cycles and **reuses
-its last result** on the cycles in between — so the check cache and rule windows
-stay complete, just with a value that is refreshed less often. This is ideal for
-expensive checks (a version probe, `ldd`, a slow command) next to cheap ones.
+An individual check may run **less often** than the worker cycle with
+`interval`. The worker keeps ticking at its resolution; the check runs every
+`round(interval / resolution)` cycles and **reuses its last result** between
+runs, keeping check caches and rule windows complete.
 
 ```yaml
 interval: 30s            # the service resolution (or engine.interval)
@@ -353,9 +351,9 @@ displayed version. The list is sortable by name, category or version, and
 expanding a row reveals the full version string, the binary's file location and
 its permissions. Services and applications can be filtered and grouped by their
 top-level `category` metadata field.
-This is the same data the `sermoctl apps` command reports (served from
-`GET /api/applications`). The dashboard caches this application list for up to
-30 seconds, so frequent auto-refreshes don't rerun every app version probe.
+The same data is available from `sermoctl apps` and `GET /api/applications`.
+The dashboard caches the list for up to 30 seconds, so auto-refreshes do not
+rerun every app version probe.
 For an editable panel-by-panel map, see
 [webui-representation.md](webui-representation.md).
 
@@ -676,7 +674,7 @@ sermoctl sla --series apache-main --since 168h     # last 7 days
 sermoctl --json sla --series apache-main           # points: start, up, total, ratio
 ```
 
-Each point is one monitored minute; **unmonitored minutes are simply absent**
+Each point is one monitored minute; **unmonitored minutes are absent**
 (gaps), so a graph can render an excluded period (Sermo down, or the service
 paused/disabled) distinctly from real downtime. The web dashboard uses the same
 points to place incident markers at the minute the problem was observed.
@@ -738,10 +736,8 @@ added without touching watches or rules (each registers a builder in
 `internal/notify`). A new transport looks the same: a `type` plus its own
 fields, addressed by name.
 
-Set **`enabled: false`** on any notifier to keep it defined but skip it when a
-watch or rule generates a notification. This is useful for temporarily muting a
-target or staging credentials. Disabled notifiers may still be referenced by
-`notify` selections; they simply do not receive delivery attempts.
+Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
+Disabled notifiers may still be referenced by `notify` selections.
 
 `sermoctl services --notify NAME[,NAME]` reuses the same configured notifiers to
 send an ad-hoc services inventory report. Email notifiers receive a
@@ -882,8 +878,7 @@ Alerts/Watches tiles, "failed" state badge, failed filter, and in the event
 log under the watch expansion). When a previously firing watch clears, it emits
 `recovered` and the watch returns to `ok`. No hook is executed and no
 notifications are delivered (global `notify:` defaults are **not** inherited
-for bare watches). This is the form you use when you only want the condition
-surfaced in the dashboard and logs:
+for bare watches).
 
 ```yaml
 watches:
@@ -1221,11 +1216,10 @@ Hook extras: `SERMO_INTERFACE`, `SERMO_METRIC`, and — for the change metrics
 
 ### `icmp` — external host (ping)
 
-An `icmp` watch monitors an **external host** by ICMP echo (ping): its
-reachability and its round-trip latency. Like `net` it is grouped per host — the
-host is named once and each metric is independent, with its own condition **and
-its own hook**. The entry expands into one watch per metric, so the metrics never
-share state and fire separately.
+An `icmp` watch monitors an **external host** by ICMP echo (ping): reachability
+and round-trip latency. The host is named once and each metric is independent,
+with its own condition **and its own hook**. The entry expands into one watch
+per metric, so metrics do not share state.
 
 ```yaml
 watches:
@@ -1580,9 +1574,8 @@ Hook extras: `SERMO_PATH` (the changed path), `SERMO_CHANGE`
 A `process` watch tracks the processes whose **name** matches (the resolved exe
 basename or its full path), optionally filtered by owning `user`, and fires the
 hook **once per matching PID** when that process has been alive at least `for`
-and/or its CPU/memory/IO crosses a threshold. (This is the daemon's host watch; it
-is distinct from the per-service `process` check, which reports running/zombie/
-absent state.)
+and/or its CPU/memory/IO crosses a threshold. It is distinct from the
+per-service `process` check, which reports running/zombie/absent state.
 
 ```yaml
 watches:
@@ -1608,16 +1601,15 @@ Declare at least one of `for`, `cpu`, `memory`, `io`, `gone`. The presence
 conditions (`for`/`cpu`/`memory`/`io`) **all** must hold for a PID to fire (AND),
 and firing is **edge-triggered per PID**: the hook runs once when the conditions
 become true and re-arms only after they stop holding — not every cycle. `cpu` and
-`io` are rates, so they need two samples: a just-discovered PID never fires on them
-in its first cycle. Each matching PID is tracked and fired independently — **one
-event and one hook per PID** — so a worker pool produces one hook per offending
-worker.
+`io` are rates, so they need two samples: a new PID never fires on them in its
+first cycle. Each matching PID is tracked independently — **one event and one
+hook per PID** — so a worker pool produces one hook per offending worker.
 
 `gone: true` is the inverse — it fires once when a previously-seen matching PID
 **disappears** (and re-arms if it returns), so it never fires merely because the
 process is present. Set it alone for a pure liveness alert ("nginx is gone"), or
 alongside the presence conditions. With multiple matching PIDs it fires per exited
-PID, mirroring the per-PID model.
+PID.
 
 Hook extras: `SERMO_PID` (the matching pid), `SERMO_PROCESS` (the configured
 name), `SERMO_CHANGE` (`threshold` for a presence fire, `gone` for a
