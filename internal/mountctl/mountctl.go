@@ -557,7 +557,7 @@ func usersWithLookup(ctx context.Context, mountPath string, lookup *process.User
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		if !pidUsesPath(pid, cleanMount) {
+		if !pidUsesPath(ctx, pid, cleanMount) {
 			continue
 		}
 		if id, ok := reader.Identity(pid); ok {
@@ -578,10 +578,16 @@ func usersWithLookup(ctx context.Context, mountPath string, lookup *process.User
 	return out, nil
 }
 
-func pidUsesPath(pid int, mountPath string) bool {
+func pidUsesPath(ctx context.Context, pid int, mountPath string) bool {
+	if err := ctx.Err(); err != nil {
+		return false
+	}
 	base := filepath.Join("/proc", fmt.Sprint(pid))
 	for _, name := range []string{"cwd", "root"} {
-		if linkUnderMount(filepath.Join(base, name), mountPath) {
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		if linkUnderMount(ctx, filepath.Join(base, name), mountPath) {
 			return true
 		}
 	}
@@ -591,14 +597,20 @@ func pidUsesPath(pid int, mountPath string) bool {
 		return false
 	}
 	for _, entry := range entries {
-		if linkUnderMount(filepath.Join(fdDir, entry.Name()), mountPath) {
+		if err := ctx.Err(); err != nil {
+			return false
+		}
+		if linkUnderMount(ctx, filepath.Join(fdDir, entry.Name()), mountPath) {
 			return true
 		}
 	}
 	return false
 }
 
-func linkUnderMount(link, mountPath string) bool {
+func linkUnderMount(ctx context.Context, link, mountPath string) bool {
+	if err := ctx.Err(); err != nil {
+		return false
+	}
 	target, err := os.Readlink(link)
 	if err != nil || !filepath.IsAbs(target) {
 		return false
