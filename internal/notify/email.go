@@ -124,11 +124,15 @@ func (d emailDSN) defaultPort() string {
 // authenticates when credentials are present (refusing PLAIN over cleartext),
 // and delivers the message.
 func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Message) error {
+	return smtpSendWithTLSConfig(ctx, d, from, to, msg, smtpTLSConfig(d.host))
+}
+
+func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []string, msg Message, tlsCfg *tls.Config) error {
 	m, err := buildMailMessage(from, to, msg)
 	if err != nil {
 		return err
 	}
-	client, err := newSMTPClient(d)
+	client, err := newSMTPClient(d, tlsCfg)
 	if err != nil {
 		return err
 	}
@@ -138,19 +142,24 @@ func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Mes
 	return nil
 }
 
-func newSMTPClient(d emailDSN) (*gomail.Client, error) {
+func smtpTLSConfig(host string) *tls.Config {
+	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
+}
+
+func newSMTPClient(d emailDSN, tlsCfg *tls.Config) (*gomail.Client, error) {
 	port, err := strconv.Atoi(d.port)
 	if err != nil || port <= 0 || port > 65535 {
 		return nil, fmt.Errorf("invalid SMTP port %q", d.port)
 	}
 
-	tlsCfg := &tls.Config{ServerName: d.host, MinVersion: tls.VersionTLS12}
 	opts := []gomail.Option{
 		gomail.WithPort(port),
 		gomail.WithTimeout(dialTimeout),
 		gomail.WithTLSConfig(tlsCfg),
-		gomail.WithDialContextFunc(smtpDialContext(d.implicitTLS, tlsCfg)),
 		gomail.WithoutNoop(),
+	}
+	if !d.implicitTLS {
+		opts = append(opts, gomail.WithDialContextFunc(smtpDialContext()))
 	}
 
 	switch {
@@ -174,18 +183,10 @@ func newSMTPClient(d emailDSN) (*gomail.Client, error) {
 	return client, nil
 }
 
-func smtpDialContext(implicitTLS bool, tlsCfg *tls.Config) gomail.DialContextFunc {
+func smtpDialContext() gomail.DialContextFunc {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
 		dialer := &net.Dialer{Timeout: dialTimeout}
-		var (
-			conn net.Conn
-			err  error
-		)
-		if implicitTLS {
-			conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsCfg}).DialContext(ctx, network, address)
-		} else {
-			conn, err = dialer.DialContext(ctx, network, address)
-		}
+		conn, err := dialer.DialContext(ctx, network, address)
 		if err != nil {
 			return nil, err
 		}
