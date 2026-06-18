@@ -152,9 +152,21 @@ type Deps struct {
 	// PingSampler probes ICMP hosts for icmp checks and web watch summaries.
 	// Optional: nil uses native ICMP.
 	PingSampler checks.PingSamplerFunc
+	// SwapSampler reads system swap for swap checks and web watch summaries.
+	// Optional: nil reads /proc/meminfo and /proc/vmstat.
+	SwapSampler checks.SwapSamplerFunc
+	// LoadSampler reads load averages for load checks and web watch summaries.
+	// Optional: nil reads /proc.
+	LoadSampler checks.LoadSamplerFunc
 	// OomSampler reads the cumulative OOM-kill counter for checks and web watch
 	// summaries. Optional: nil reads /proc/vmstat.
 	OomSampler checks.OomSamplerFunc
+	// FdsSampler reads system file-descriptor usage for fds checks and web watch
+	// summaries. Optional: nil reads /proc/sys/fs/file-nr.
+	FdsSampler checks.FdsSamplerFunc
+	// MemorySampler reads system RAM for memory checks and web watch summaries.
+	// Optional: nil reads /proc/meminfo.
+	MemorySampler checks.MemorySamplerFunc
 	// PidsSampler reads the kernel PID table for checks and web watch summaries.
 	// Optional: nil reads /proc/loadavg and kernel.pid_max.
 	PidsSampler checks.PidsSamplerFunc
