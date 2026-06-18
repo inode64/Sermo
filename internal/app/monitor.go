@@ -222,11 +222,11 @@ func (m *Monitor) emitReloadError(msg string) {
 
 // formatValidationIssues joins the first few validation findings for reload errors.
 func formatValidationIssues(issues []config.Issue) string {
-	const max = 5
-	msgs := make([]string, 0, min(len(issues), max))
+	const limit = 5
+	msgs := make([]string, 0, min(len(issues), limit))
 	for i, issue := range issues {
-		if i >= max {
-			msgs = append(msgs, fmt.Sprintf("... and %d more", len(issues)-max))
+		if i >= limit {
+			msgs = append(msgs, fmt.Sprintf("... and %d more", len(issues)-limit))
 			break
 		}
 		msgs = append(msgs, issue.Msg)
