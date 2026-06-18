@@ -398,6 +398,29 @@ rules:
 	}
 }
 
+func TestValidateInlineProbeConnectionProtocols(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  ok-mysql:
+    type: alert
+    if: { failed: { mysql: { port: 3306 } } }
+    then: { action: alert, message: m }
+  bad-mysql:
+    type: alert
+    if: { failed: { mysql: { port: 70000 } } }
+    then: { action: alert, message: m }
+`)
+	mustHave(t, issues, `rules.bad-mysql.if.failed.mysql.port "70000" must be an integer in 1..65535`)
+	for _, is := range issues {
+		if strings.Contains(is.Msg, "ok-mysql") {
+			t.Fatalf("valid inline mysql probe wrongly flagged: %v", is)
+		}
+	}
+}
+
 func TestValidateSystemMetricOnlyInAlert(t *testing.T) {
 	issues := validateService(t, `
 kind: service

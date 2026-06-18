@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
-	"sermo/internal/checks"
 )
 
 // validateWindow checks an optional for/within firing window at the dotted prefix,
@@ -308,13 +307,11 @@ func validateProbe(v any, path string, checkNames, systemMetricChecks map[string
 			add("%s.%s must be a mapping", path, typ)
 			continue
 		}
-		if !checks.IsSingleShotType(typ) {
-			add("%s inline probe type %q is unknown", path, typ)
-			continue
-		}
 		entry := maps.Clone(fields)
 		entry["type"] = typ
-		validateSingleShotCheckFields(path+"."+typ, typ, entry, "", add)
+		if !validateSingleShotCheckFields(path+"."+typ, typ, entry, "", add) {
+			add("%s inline probe type %q is unknown", path, typ)
+		}
 	}
 }
 
