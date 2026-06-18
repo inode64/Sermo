@@ -13,6 +13,7 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/locks"
+	"sermo/internal/metrics"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
@@ -184,12 +185,33 @@ func TestSectionRunnerBuildWarningBlocksRequiredPreflight(t *testing.T) {
 		},
 	}
 
-	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second})(context.Background())
+	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second}, nil)(context.Background())
 	if out.OK {
 		t.Fatalf("outcome OK = true, want required build warning to fail: %+v", out)
 	}
 	if len(out.Results) != 1 || out.Results[0].Check != "cpu" || out.Results[0].OK || out.Results[0].Optional {
 		t.Fatalf("results = %+v, want required failed build-warning result", out.Results)
+	}
+}
+
+func TestSectionRunnerMetricSampleEnablesMetricPreflight(t *testing.T) {
+	tree := map[string]any{
+		"preflight": map[string]any{
+			"load": map[string]any{"type": "metric", "name": "load1", "scope": "system", "op": "<", "value": "10"},
+		},
+	}
+	sample := func(context.Context) checks.MetricReader {
+		return func(scope, name string) (metrics.Reading, bool) {
+			if scope != "system" || name != "load1" {
+				return metrics.Reading{}, false
+			}
+			return metrics.Reading{Absolute: 1.5, HasAbsolute: true, Ready: true}, true
+		}
+	}
+
+	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second}, sample)(context.Background())
+	if !out.OK {
+		t.Fatalf("outcome OK = false, want metric preflight to pass with MetricSample: %+v", out)
 	}
 }
 
@@ -200,7 +222,7 @@ func TestSectionRunnerOptionalBuildWarningDoesNotBlock(t *testing.T) {
 		},
 	}
 
-	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second})(context.Background())
+	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second}, nil)(context.Background())
 	if !out.OK {
 		t.Fatalf("outcome OK = false, want optional build warning to pass: %+v", out)
 	}

@@ -25,12 +25,15 @@ type Config struct {
 	Tree    map[string]any // resolved service config; New derives also_service units
 	//                        and the stop_policy invariants from it
 
-	Manager          Manager
-	Locker           *locks.OperationLocker
-	Scanner          locks.Scanner
-	Discoverer       process.Discoverer
-	ResolveUser      process.UserResolver
-	CheckDeps        checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
+	Manager     Manager
+	Locker      *locks.OperationLocker
+	Scanner     locks.Scanner
+	Discoverer  process.Discoverer
+	ResolveUser process.UserResolver
+	CheckDeps   checks.Deps // Runner/HTTPClient/DefaultTimeout; Status is filled in
+	// MetricSample supplies fresh metric readings for preflight/postflight/guard
+	// evaluation when CheckDeps.Metrics is unset. Optional.
+	MetricSample     func(context.Context) checks.MetricReader
 	LockTTL          time.Duration
 	Sleep            func(time.Duration)
 	OperationTimeout time.Duration
@@ -130,9 +133,9 @@ func New(c Config) Engine {
 			report, err := c.Scanner.Scan(c.Service)
 			return report.Locks, err
 		},
-		Guard:            guardClosure(tree, deps),
-		Preflight:        sectionRunner(tree, "preflight", deps),
-		Postflight:       sectionRunner(tree, "postflight", deps),
+		Guard:            guardClosure(tree, deps, c.MetricSample, nil),
+		Preflight:        sectionRunner(tree, "preflight", deps, c.MetricSample),
+		Postflight:       sectionRunner(tree, "postflight", deps, c.MetricSample),
 		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:       resumeClosure(c.Manager, c.Unit),
 		Discover:         discover,
@@ -361,12 +364,19 @@ func firstWarningError(errs ...error) error {
 	return nil
 }
 
+func checkDepsForEval(ctx context.Context, deps checks.Deps, sample func(context.Context) checks.MetricReader) checks.Deps {
+	if deps.Metrics == nil && sample != nil {
+		deps.Metrics = sample(ctx)
+	}
+	return deps
+}
+
 // sectionRunner builds and runs a checks/preflight/postflight section, returning
 // its evaluated outcome. A missing section is a trivial pass.
-func sectionRunner(tree map[string]any, section string, deps checks.Deps) func(context.Context) checks.Outcome {
+func sectionRunner(tree map[string]any, section string, deps checks.Deps, sample func(context.Context) checks.MetricReader) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
 		entries, _ := tree[section].(map[string]any)
-		built, warnings := checks.BuildWithWarnings(entries, deps)
+		built, warnings := checks.BuildWithWarnings(entries, checkDepsForEval(ctx, deps, sample))
 		results := checks.BuildWarningResults(warnings)
 		results = append(results, checks.Run(ctx, built, 0)...)
 		return checks.Evaluate(results)
@@ -375,18 +385,19 @@ func sectionRunner(tree map[string]any, section string, deps checks.Deps) func(c
 
 // guardClosure runs the service's named checks once, caches them, and evaluates
 // the guard rules against that cache plus inline probes (sections 14, 17).
-func guardClosure(tree map[string]any, deps checks.Deps) func(context.Context, string) (bool, string, error) {
+func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (bool, string, error) {
 	return func(ctx context.Context, action string) (bool, string, error) {
+		runDeps := checkDepsForEval(ctx, deps, sample)
 		ruleSet, _ := rules.ParseRules(tree)
 		section, _ := tree["checks"].(map[string]any)
-		built, _ := checks.Build(section, deps)
+		built, _ := checks.Build(section, runDeps)
 		preflightSection, _ := tree["preflight"].(map[string]any)
-		preflightBuilt, _ := checks.Build(preflightSection, deps)
+		preflightBuilt, _ := checks.Build(preflightSection, runDeps)
 		cache := map[string]checks.Result{}
 		for _, r := range checks.Run(ctx, built, 0) {
 			cache[r.Check] = r
 		}
-		ev := &rules.Evaluator{Cache: cache, ResolveRef: rules.NewCheckResolver(preflightBuilt, 0), Deps: deps}
+		ev := &rules.Evaluator{Cache: cache, ResolveRef: rules.NewCheckResolver(preflightBuilt, 0), Deps: runDeps, Changed: changed}
 		return rules.Guard(ctx, ruleSet, action, ev)
 	}
 }
