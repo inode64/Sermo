@@ -533,6 +533,22 @@ rules:
 	mustHave(t, issues, "value \"abc\" must be a number")
 }
 
+func TestValidateSystemTotalSwapMetric(t *testing.T) {
+	good := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+rules:
+  swap-alert:
+    type: alert
+    if: { metric: { scope: system, name: total_swap, op: ">", value: 80% } }
+    then: { action: alert, message: "swap high" }
+`)
+	if len(good) != 0 {
+		t.Fatalf("total_swap should be in the system metric catalog, got %v", good)
+	}
+}
+
 func TestValidateStopPolicyKillSelector(t *testing.T) {
 	issues := validateService(t, `
 kind: service
