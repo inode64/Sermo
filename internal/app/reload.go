@@ -8,6 +8,42 @@ import (
 	"sermo/internal/rules"
 )
 
+// watchSnapshot preserves per-watch window and policy pacing state across reload.
+type watchSnapshot struct {
+	state       rules.WindowState
+	policyState *rules.RemediationState
+	firing      bool
+}
+
+func captureWatchState(watches []*Watch) map[string]watchSnapshot {
+	out := make(map[string]watchSnapshot, len(watches))
+	for _, w := range watches {
+		if w == nil {
+			continue
+		}
+		snap := watchSnapshot{firing: w.firing, policyState: cloneRemediationState(&w.policyState)}
+		if cloned := w.state.Clone(); cloned != nil {
+			snap.state = *cloned
+		}
+		out[w.Name] = snap
+	}
+	return out
+}
+
+func applyWatchState(watches []*Watch, saved map[string]watchSnapshot) {
+	for _, w := range watches {
+		snap, ok := saved[w.Name]
+		if !ok {
+			continue
+		}
+		w.state = snap.state
+		w.firing = snap.firing
+		if snap.policyState != nil {
+			w.policyState = *snap.policyState
+		}
+	}
+}
+
 // workerSnapshot preserves per-service runtime state across a config reload.
 type workerSnapshot struct {
 	cycle       int

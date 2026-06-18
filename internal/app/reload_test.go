@@ -47,6 +47,28 @@ func TestCaptureAndApplyWorkerState(t *testing.T) {
 	}
 }
 
+func TestCaptureAndApplyWatchState(t *testing.T) {
+	r := rules.Rule{For: &rules.ForWindow{Cycles: 3}}
+	old := &Watch{
+		Name:   "load-high",
+		Window: r,
+	}
+	old.state.Fires(r, true)
+	old.state.Fires(r, true)
+	old.firing = true
+
+	saved := captureWatchState([]*Watch{old})
+	fresh := &Watch{Name: "load-high", Window: r}
+	applyWatchState([]*Watch{fresh}, saved)
+
+	if fresh.firing != true {
+		t.Fatalf("firing = %v, want preserved", fresh.firing)
+	}
+	if fresh.state.Progress(r) != "2/3" {
+		t.Fatalf("window progress = %q, want 2/3", fresh.state.Progress(r))
+	}
+}
+
 func TestResetRemovedServiceMetrics(t *testing.T) {
 	collector := metrics.New(metrics.OSReader{})
 	resetRemovedServiceMetrics(collector,
