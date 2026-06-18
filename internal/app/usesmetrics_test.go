@@ -34,6 +34,20 @@ func TestUsesMetrics(t *testing.T) {
 			wantSystem: true,
 		},
 		{
+			name: "system metric inline under failed probe",
+			tree: map[string]any{"rules": map[string]any{"r": map[string]any{"if": map[string]any{
+				"failed": map[string]any{"metric": map[string]any{"scope": "system", "name": "total_cpu"}},
+			}}}},
+			wantSystem: true,
+		},
+		{
+			name: "service metric inline under active probe",
+			tree: map[string]any{"rules": map[string]any{"r": map[string]any{"if": map[string]any{
+				"active": map[string]any{"metric": map[string]any{"name": "memory"}},
+			}}}},
+			wantService: true,
+		},
+		{
 			name: "no metric references",
 			tree: map[string]any{"checks": map[string]any{"c": map[string]any{"type": "tcp"}}},
 		},

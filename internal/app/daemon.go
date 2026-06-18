@@ -935,6 +935,14 @@ func scanMetricScopes(node map[string]any, mark func(string)) {
 			if m, ok := v.(map[string]any); ok {
 				mark(scopeOf(m))
 			}
+		case "failed", "active":
+			m, ok := v.(map[string]any)
+			if !ok || cfgval.AsString(m["check"]) != "" {
+				continue
+			}
+			if metric, ok := m["metric"].(map[string]any); ok {
+				mark(scopeOf(metric))
+			}
 		case "and", "or":
 			if list, ok := v.([]any); ok {
 				for _, item := range list {
