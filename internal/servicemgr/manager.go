@@ -73,13 +73,18 @@ func newManager(backend Backend, runner execx.Runner) (Manager, error) {
 // systemd exposes it via `systemctl show -p MainPID`; OpenRC has no uniform
 // equivalent, so it returns false there (pidfile selectors cover OpenRC).
 func MainPID(runner execx.Runner, backend Backend, unit string) (int, bool) {
+	return MainPIDContext(context.Background(), runner, backend, unit)
+}
+
+// MainPIDContext is MainPID bound to the caller's context.
+func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, unit string) (int, bool) {
 	if backend != BackendSystemd {
 		return 0, false
 	}
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
-	res, err := execx.Run(context.Background(), runner, defaultDetectTimeout, "systemctl", "show", "-p", "MainPID", "--value", "--", unit)
+	res, err := execx.Run(ctx, runner, defaultDetectTimeout, "systemctl", "show", "-p", "MainPID", "--value", "--", unit)
 	if err != nil {
 		return 0, false
 	}
