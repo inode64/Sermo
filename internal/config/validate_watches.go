@@ -188,9 +188,24 @@ func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
 // watch (net, icmp, swap): the runtime reads them only inside each metric's own
 // block, so an entry-level copy would be silently ignored.
 func validateMetricWatchEntry(name string, entry map[string]any, add func(string, ...any)) {
-	for _, key := range []string{"then", "for", "within"} {
+	validateIgnoredWatchEntryFields(name, "multi-metric", entry, []string{"then", "for", "within"}, "metrics.<name>.%s", add)
+}
+
+// validateStatefulWatchEntry flags entry-level for/within on a file or process
+// watch: these use internal per-path/per-PID state and never read the shared
+// rules window fields at the entry level.
+func validateStatefulWatchEntry(name, typ string, entry map[string]any, add func(string, ...any)) {
+	validateIgnoredWatchEntryFields(name, typ, entry, []string{"for", "within"}, "", add)
+}
+
+func validateIgnoredWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add func(string, ...any)) {
+	for _, key := range keys {
 		if _, present := entry[key]; present {
-			add("watches.%s.%s is ignored on a multi-metric watch; move it into the metric's own block (metrics.<name>.%s)", name, key, key)
+			msg := fmt.Sprintf("watches.%s.%s is ignored on a %s watch", name, key, typ)
+			if moveHint != "" {
+				msg += fmt.Sprintf("; move it into the metric's own block ("+moveHint+")", key)
+			}
+			add("%s", msg)
 		}
 	}
 }
@@ -389,6 +404,7 @@ func validateICMPMetricCondition(prefix, metric string, m map[string]any, add ad
 // recursive, and at least one attribute condition (size threshold/change,
 // permissions/owner on change, existence on delete), plus the entry's hook.
 func validateFileCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	validateStatefulWatchEntry(name, "file", entry, add)
 	if cfgval.String(check["path"]) == "" {
 		add("watches.%s.check.path is required for a file check", name)
 	}
@@ -432,6 +448,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 // at least one condition (for duration, or cpu/memory/io {op, value}), plus the
 // entry's hook.
 func validateProcessWatch(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
+	validateStatefulWatchEntry(name, "process", entry, add)
 	if cfgval.String(check["name"]) == "" {
 		add("watches.%s.check.name is required for a process check", name)
 	}
