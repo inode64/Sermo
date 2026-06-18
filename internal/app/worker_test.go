@@ -672,6 +672,22 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		t.Fatalf("inline events = %+v, want one error explaining the suppression", events)
 	}
 
+	events = nil
+	w.MetricChecks = map[string]any{
+		"machine-hot": map[string]any{"type": "metric", "scope": "system", "name": "total_cpu", "op": ">", "value": "90%"},
+	}
+	r = rules.Rule{
+		Name: "bad-check-ref",
+		Type: rules.RuleRemediation,
+		If:   map[string]any{"active": map[string]any{"check": "machine-hot"}},
+	}
+	if w.fires(context.Background(), ev, r, nil) {
+		t.Fatal("a remediation rule referencing a system metric check must never fire")
+	}
+	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
+		t.Fatalf("check-ref events = %+v, want one error explaining the suppression", events)
+	}
+
 	// The same metric on an alert rule keeps working.
 	r.Type = rules.RuleAlert
 	r.If = map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}}
