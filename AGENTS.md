@@ -190,6 +190,22 @@ side as authoritative. If the user accepts the requested behavior or the change
 is implemented, update the conflicting documentation in the same patch; do not
 leave docs describing the old behavior.
 
+## Documentation scope and style
+
+Document only what is required for one of these reasons:
+
+- User-facing behavior, configuration, CLI, safety policy or operational
+  workflow changed and must stay in lockstep with the code.
+- A lint rule or analyzer requires the documentation or justification, such as
+  exported Go symbols, `//nolint` rationale or a security exception.
+- The requirement, invariant or exception is necessary to use, maintain or
+  review the code safely.
+
+Keep documentation direct. Prefer the shortest accurate explanation, link to an
+existing source of truth instead of repeating it, and remove redundant prose when
+editing nearby text. Do not document obvious implementation steps just to narrate
+the code.
+
 ## Central builders
 
 New check types, watch kinds, notifiers and rule actions start in the central
