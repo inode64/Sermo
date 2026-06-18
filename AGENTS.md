@@ -146,6 +146,36 @@ call `os/exec` directly: it goes through an injectable `execx` runner with a
 context and an explicit timeout, invoking an argv directly — never a shell.
 `execx` and tests/fakes are the only exceptions.
 
+## Protocol probes: interface binding is mandatory
+
+Every `internal/conn` protocol probe must honor `cfg.Interface` — the egress
+network interface (Linux `SO_BINDTODEVICE`), set on multi-homed hosts so a probe
+leaves through a specific link. The shared `BindDialer(cfg.Interface)` (and
+`BindListenConfig` for packet sockets) is the single mechanism; every probe dials
+through it, directly or via `probeBanner`/`dialDeadline`/`dialConn`. A probe that
+silently uses default routing is a bug.
+
+This constrains adopting a Go module to "simplify" a protocol. Decide by where the
+library does its I/O:
+
+1. **Codec-only library (no I/O)** — preferred. Keep dialing through `BindDialer`
+   and hand the bytes to the library to build/parse. Interface binding is
+   untouched. Example: DNS uses `golang.org/x/net/dns/dnsmessage` purely as a wire
+   codec over the existing UDP dial.
+2. **Library that does its own I/O but accepts a custom dialer or connection** —
+   acceptable. Route its dialing through `BindDialer` via the library's hook so
+   binding is preserved. Example: NTP uses `github.com/beevik/ntp` through its
+   `QueryOptions.Dialer` callback, which dials with `BindDialer(cfg.Interface)`.
+3. **Library that dials internally and cannot accept a custom dialer/connection**
+   — do NOT adopt it: it would bypass `SO_BINDTODEVICE` and break interface
+   binding. Keep the hand-rolled probe (and its transport) instead. This is why
+   the DHCP probe keeps its own raw-socket transport (`dhcp_linux.go`) rather than
+   switching to a full DHCP client library, even though a module exists.
+
+In short: interface binding wins over code reduction. A module is only worth
+adopting when binding survives — otherwise our own code stays. Record the reason
+at the probe when a migration is intentionally not done.
+
 ## Documentation lockstep
 
 When you change configuration, add a check type, notifier, rule action or
