@@ -239,7 +239,7 @@ func modeString(info os.FileInfo) string {
 func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]any, rawVersion string) string {
 	if vc := probeCommandFor(tree, "version_short"); len(vc.argv) > 0 {
 		res, err := execx.Run(ctx, runner, probeTimeout, vc.argv[0], vc.argv[1:]...)
-		if err == nil || res.ExitCode != 0 {
+		if err == nil && res.ExitCode == 0 {
 			if line := checks.FirstNonEmptyLine(res.Stdout); line != "" {
 				return line
 			}
