@@ -138,6 +138,25 @@ func TestBuildMessageHeadersAndInjectionGuard(t *testing.T) {
 	}
 }
 
+func TestBuildMessageEncodesNonASCIISubject(t *testing.T) {
+	raw := string(buildMessage("sermo@x", []string{"a@x"}, Message{
+		Subject: "Alerta de memoria: 95% en café",
+		Body:    "b",
+	}))
+	// A UTF-8 subject must be RFC 2047 encoded, not emitted raw.
+	if strings.Contains(raw, "Subject: Alerta de memoria") {
+		t.Fatalf("non-ASCII subject emitted raw:\n%s", raw)
+	}
+	if !strings.Contains(raw, "Subject: =?utf-8?q?") {
+		t.Fatalf("subject not RFC 2047 encoded:\n%s", raw)
+	}
+	// A plain ASCII subject is still passed through readably.
+	ascii := string(buildMessage("sermo@x", []string{"a@x"}, Message{Subject: "plain alert", Body: "b"}))
+	if !strings.Contains(ascii, "Subject: plain alert\r\n") {
+		t.Fatalf("ASCII subject should be unchanged:\n%s", ascii)
+	}
+}
+
 func TestBuildMessageHTMLMultipart(t *testing.T) {
 	raw := string(buildMessage("sermo@x", []string{"ops@x"}, Message{
 		Subject: "report",
