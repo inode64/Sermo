@@ -4,7 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
+	"math/big"
 	"net"
 	"strings"
 	"testing"
@@ -82,6 +88,31 @@ func TestSMTPSendRequiresSTARTTLSForCredentials(t *testing.T) {
 	}
 }
 
+func TestSMTPSendImplicitTLSAuthenticates(t *testing.T) {
+	serverTLS, clientTLS := testSMTPServerTLS(t)
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", serverTLS)
+	if err != nil {
+		t.Fatalf("listen TLS: %v", err)
+	}
+	defer ln.Close()
+
+	commands := make(chan string, 16)
+	go servePlainSMTP(t, ln, commands)
+
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	dsn := emailDSN{host: host, port: port, user: "ops", pass: "secret", implicitTLS: true}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	if err := smtpSendWithTLSConfig(ctx, dsn, "from@example.com", []string{"to@example.com"}, Message{Subject: "s", Body: "b"}, clientTLS); err != nil {
+		t.Fatalf("smtpSendWithTLSConfig: %v", err)
+	}
+	if !hasSMTPCommand(commands, "AUTH PLAIN") {
+		t.Fatal("SMTPS send did not authenticate")
+	}
+}
+
 func servePlainSMTP(t *testing.T, ln net.Listener, commands chan<- string) {
 	t.Helper()
 	c, err := ln.Accept()
@@ -105,7 +136,22 @@ func servePlainSMTP(t *testing.T, ln net.Listener, commands chan<- string) {
 		switch {
 		case strings.HasPrefix(upper, "EHLO"), strings.HasPrefix(upper, "HELO"):
 			write("250-localhost")
+			write("250-8BITMIME")
 			write("250 AUTH PLAIN")
+		case strings.HasPrefix(upper, "AUTH PLAIN"):
+			write("235 2.7.0 authentication successful")
+		case strings.HasPrefix(upper, "DATA"):
+			write("354 end data with <CR><LF>.<CR><LF>")
+			for {
+				data, err := br.ReadString('\n')
+				if err != nil {
+					return
+				}
+				if strings.TrimRight(data, "\r\n") == "." {
+					break
+				}
+			}
+			write("250 2.0.0 queued")
 		case strings.HasPrefix(upper, "QUIT"):
 			write("221 bye")
 			return
@@ -113,6 +159,49 @@ func servePlainSMTP(t *testing.T, ln net.Listener, commands chan<- string) {
 			write("250 ok")
 		}
 	}
+}
+
+func hasSMTPCommand(commands <-chan string, prefix string) bool {
+	for {
+		select {
+		case cmd := <-commands:
+			if strings.HasPrefix(strings.ToUpper(cmd), prefix) {
+				return true
+			}
+		default:
+			return false
+		}
+	}
+}
+
+func testSMTPServerTLS(t *testing.T) (*tls.Config, *tls.Config) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "127.0.0.1"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	cert := tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
+	leaf, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatalf("parse cert: %v", err)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(leaf)
+	return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+		&tls.Config{ServerName: "127.0.0.1", RootCAs: roots, MinVersion: tls.VersionTLS12}
 }
 
 func TestParseEmailDSN(t *testing.T) {
