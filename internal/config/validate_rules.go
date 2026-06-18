@@ -58,7 +58,7 @@ var processStates = set("running", "zombie", "absent")
 var validActions = set("restart", "start", "stop", "reload", "resume", "alert", "block")
 var metricCatalog = map[string]map[string]struct{}{
 	"service": set("memory", "swap", "cpu", "cpu_thread", "process_count", "io", "io_read", "io_write", "fds", "threads"),
-	"system":  set("total_memory", "total_cpu", "load1", "load5", "load15"),
+	"system":  set("total_memory", "total_swap", "total_cpu", "load1", "load5", "load15"),
 }
 
 // metricForms records which value forms each metric exposes (section 12/14), so
@@ -77,6 +77,7 @@ var metricForms = map[string]metricForm{
 	"fds":           {absolute: true},
 	"threads":       {absolute: true},
 	"total_memory":  {absolute: true, percent: true},
+	"total_swap":    {absolute: true, percent: true},
 	"total_cpu":     {percent: true},
 	"load1":         {absolute: true},
 	"load5":         {absolute: true},
