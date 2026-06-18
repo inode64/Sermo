@@ -1,7 +1,10 @@
 package notify
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -44,6 +47,71 @@ func TestSMTPSendHonorsContextDeadline(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("smtpSend hung past the context deadline")
+	}
+}
+
+func TestSMTPSendRequiresSTARTTLSForCredentials(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	commands := make(chan string, 8)
+	go servePlainSMTP(t, ln, commands)
+
+	host, port, _ := net.SplitHostPort(ln.Addr().String())
+	dsn := emailDSN{host: host, port: port, user: "ops", pass: "secret"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	err = smtpSend(ctx, dsn, "from@example.com", []string{"to@example.com"}, Message{Subject: "s", Body: "b"})
+	if err == nil || !strings.Contains(err.Error(), "STARTTLS") {
+		t.Fatalf("smtpSend err = %v, want STARTTLS refusal", err)
+	}
+	for {
+		select {
+		case cmd := <-commands:
+			if strings.HasPrefix(strings.ToUpper(cmd), "AUTH") {
+				t.Fatalf("AUTH was sent before STARTTLS: %q", cmd)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func servePlainSMTP(t *testing.T, ln net.Listener, commands chan<- string) {
+	t.Helper()
+	c, err := ln.Accept()
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	br := bufio.NewReader(c)
+	write := func(format string, args ...any) {
+		_, _ = fmt.Fprintf(c, format+"\r\n", args...)
+	}
+	write("220 local test smtp")
+	for {
+		line, err := br.ReadString('\n')
+		if err != nil {
+			return
+		}
+		cmd := strings.TrimRight(line, "\r\n")
+		commands <- cmd
+		upper := strings.ToUpper(cmd)
+		switch {
+		case strings.HasPrefix(upper, "EHLO"), strings.HasPrefix(upper, "HELO"):
+			write("250-localhost")
+			write("250 AUTH PLAIN")
+		case strings.HasPrefix(upper, "QUIT"):
+			write("221 bye")
+			return
+		default:
+			write("250 ok")
+		}
 	}
 }
 
@@ -121,12 +189,13 @@ func TestEmailSendDispatchesToSender(t *testing.T) {
 	}
 }
 
-func TestBuildMessageHeadersAndInjectionGuard(t *testing.T) {
-	raw := string(buildMessage("sermo@x", []string{"a@x", "b@x"}, Message{
-		Subject: "alert\r\nBcc: evil@x", // header-injection attempt
+func TestBuildMailMessageHeadersAndInjectionGuard(t *testing.T) {
+	raw := renderMailMessage(t, "sermo@example.com", []string{"a@example.com", "b@example.com"}, Message{
+		Subject: "alert\r\nBcc: evil@example.com", // header-injection attempt
 		Body:    "line1\nline2",
-	}))
-	if !strings.Contains(raw, "From: sermo@x\r\n") || !strings.Contains(raw, "To: a@x, b@x\r\n") {
+	})
+	if !strings.Contains(raw, "From: <sermo@example.com>\r\n") ||
+		!strings.Contains(raw, "To: <a@example.com>, <b@example.com>\r\n") {
 		t.Fatalf("missing headers:\n%s", raw)
 	}
 	// The CRLF in the subject must not have spawned a new header line.
@@ -138,47 +207,60 @@ func TestBuildMessageHeadersAndInjectionGuard(t *testing.T) {
 	}
 }
 
-func TestBuildMessageEncodesNonASCIISubject(t *testing.T) {
-	raw := string(buildMessage("sermo@x", []string{"a@x"}, Message{
+func TestBuildMailMessageEncodesNonASCIISubject(t *testing.T) {
+	raw := renderMailMessage(t, "sermo@example.com", []string{"a@example.com"}, Message{
 		Subject: "Alerta de memoria: 95% en café",
 		Body:    "b",
-	}))
+	})
 	// A UTF-8 subject must be RFC 2047 encoded, not emitted raw.
 	if strings.Contains(raw, "Subject: Alerta de memoria") {
 		t.Fatalf("non-ASCII subject emitted raw:\n%s", raw)
 	}
-	if !strings.Contains(raw, "Subject: =?utf-8?q?") {
+	if !strings.Contains(raw, "Subject: =?UTF-8?") {
 		t.Fatalf("subject not RFC 2047 encoded:\n%s", raw)
 	}
 	// A plain ASCII subject is still passed through readably.
-	ascii := string(buildMessage("sermo@x", []string{"a@x"}, Message{Subject: "plain alert", Body: "b"}))
+	ascii := renderMailMessage(t, "sermo@example.com", []string{"a@example.com"}, Message{Subject: "plain alert", Body: "b"})
 	if !strings.Contains(ascii, "Subject: plain alert\r\n") {
 		t.Fatalf("ASCII subject should be unchanged:\n%s", ascii)
 	}
 }
 
-func TestBuildMessageHTMLMultipart(t *testing.T) {
-	raw := string(buildMessage("sermo@x", []string{"ops@x"}, Message{
+func TestBuildMailMessageHTMLMultipart(t *testing.T) {
+	raw := renderMailMessage(t, "sermo@example.com", []string{"ops@example.com"}, Message{
 		Subject: "report",
 		Body:    "plain body",
 		HTML:    "<strong>html body</strong>",
-	}))
+	})
 	if !strings.Contains(raw, "Content-Type: multipart/alternative;") {
 		t.Fatalf("HTML message must be multipart/alternative:\n%s", raw)
 	}
-	if !strings.Contains(raw, "Content-Type: text/plain; charset=utf-8") || !strings.Contains(raw, "plain body") {
+	if !strings.Contains(raw, "Content-Type: text/plain; charset=UTF-8") || !strings.Contains(raw, "plain body") {
 		t.Fatalf("missing plain part:\n%s", raw)
 	}
-	if !strings.Contains(raw, "Content-Type: text/html; charset=utf-8") || !strings.Contains(raw, "<strong>html body</strong>") {
+	if !strings.Contains(raw, "Content-Type: text/html; charset=UTF-8") || !strings.Contains(raw, "<strong>html body</strong>") {
 		t.Fatalf("missing HTML part:\n%s", raw)
 	}
 }
 
-func TestBareAddr(t *testing.T) {
-	if got := bareAddr("Sermo Ops <ops@example.com>"); got != "ops@example.com" {
-		t.Fatalf("bareAddr = %q", got)
+func TestBuildMailMessageValidatesAddresses(t *testing.T) {
+	if _, err := buildMailMessage("not an address", []string{"ops@example.com"}, Message{Subject: "s", Body: "b"}); err == nil {
+		t.Fatal("buildMailMessage accepted an invalid from address")
 	}
-	if got := bareAddr("plain@example.com"); got != "plain@example.com" {
-		t.Fatalf("bareAddr = %q", got)
+	if _, err := buildMailMessage("sermo@example.com", []string{"not an address"}, Message{Subject: "s", Body: "b"}); err == nil {
+		t.Fatal("buildMailMessage accepted an invalid recipient")
 	}
+}
+
+func renderMailMessage(t *testing.T, from string, to []string, msg Message) string {
+	t.Helper()
+	m, err := buildMailMessage(from, to, msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	if _, err := m.WriteTo(&b); err != nil {
+		t.Fatal(err)
+	}
+	return b.String()
 }

@@ -5,15 +5,16 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"mime"
 	"net"
-	"net/mail"
-	"net/smtp"
 	"net/url"
-	"sermo/internal/cfgval"
 	"strconv"
 	"strings"
 	"time"
+
+	gomail "github.com/wneessen/go-mail"
+	gomailsmtp "github.com/wneessen/go-mail/smtp"
+
+	"sermo/internal/cfgval"
 )
 
 // dialTimeout bounds the SMTP connection attempt, and is the fallback deadline
@@ -121,138 +122,133 @@ func (d emailDSN) defaultPort() string {
 
 // smtpSend connects per the DSN (implicit TLS or opportunistic STARTTLS),
 // authenticates when credentials are present (refusing PLAIN over cleartext),
-// and delivers the message. Uses only net/smtp (no external dependency).
+// and delivers the message.
 func smtpSend(ctx context.Context, d emailDSN, from string, to []string, msg Message) error {
-	raw := buildMessage(from, to, msg)
+	m, err := buildMailMessage(from, to, msg)
+	if err != nil {
+		return err
+	}
+	client, err := newSMTPClient(d)
+	if err != nil {
+		return err
+	}
+	if err := client.DialAndSendWithContext(ctx, m); err != nil {
+		return fmt.Errorf("send email via %s: %w", d.addr(), err)
+	}
+	return nil
+}
+
+func newSMTPClient(d emailDSN) (*gomail.Client, error) {
+	port, err := strconv.Atoi(d.port)
+	if err != nil || port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("invalid SMTP port %q", d.port)
+	}
+
 	tlsCfg := &tls.Config{ServerName: d.host, MinVersion: tls.VersionTLS12}
-	dialer := &net.Dialer{Timeout: dialTimeout}
-
-	var conn net.Conn
-	var err error
-	if d.implicitTLS {
-		conn, err = tls.DialWithDialer(dialer, "tcp", d.addr(), tlsCfg)
-	} else {
-		conn, err = dialer.DialContext(ctx, "tcp", d.addr())
-	}
-	if err != nil {
-		return fmt.Errorf("dial %s: %w", d.addr(), err)
+	opts := []gomail.Option{
+		gomail.WithPort(port),
+		gomail.WithTimeout(dialTimeout),
+		gomail.WithTLSConfig(tlsCfg),
+		gomail.WithDialContextFunc(smtpDialContext(d.implicitTLS, tlsCfg)),
+		gomail.WithoutNoop(),
 	}
 
-	// net/smtp ignores ctx, so bound the whole SMTP conversation (greeting, EHLO,
-	// STARTTLS, AUTH, MAIL/RCPT/DATA, QUIT) with a connection deadline. Without
-	// it a server that completes the handshake then stalls mid-conversation would
-	// hang the watch cycle indefinitely. Honor the caller's deadline when set,
-	// otherwise fall back to dialTimeout.
-	deadline := time.Now().Add(dialTimeout)
-	if d, ok := ctx.Deadline(); ok {
-		deadline = d
+	switch {
+	case d.implicitTLS:
+		opts = append(opts, gomail.WithSSL())
+	case d.user != "":
+		opts = append(opts, gomail.WithTLSPolicy(gomail.TLSMandatory))
+	default:
+		opts = append(opts, gomail.WithTLSPolicy(gomail.TLSOpportunistic))
 	}
-	_ = conn.SetDeadline(deadline)
 
-	c, err := smtp.NewClient(conn, d.host)
-	if err != nil {
-		conn.Close()
-		return err
-	}
-	defer c.Close()
-
-	tlsActive := d.implicitTLS
-	if !d.implicitTLS {
-		if ok, _ := c.Extension("STARTTLS"); ok {
-			if err := c.StartTLS(tlsCfg); err != nil {
-				return fmt.Errorf("starttls: %w", err)
-			}
-			tlsActive = true
-		}
-	}
 	if d.user != "" {
-		if !tlsActive {
-			return errors.New("refusing to send SMTP credentials over an unencrypted connection")
-		}
-		if err := c.Auth(smtp.PlainAuth("", d.user, d.pass, d.host)); err != nil {
-			return fmt.Errorf("auth: %w", err)
-		}
+		auth := gomailsmtp.PlainAuth("", d.user, d.pass, d.host, false)
+		opts = append(opts, gomail.WithSMTPAuthCustom(auth))
 	}
 
-	if err := c.Mail(bareAddr(from)); err != nil {
-		return fmt.Errorf("MAIL FROM: %w", err)
-	}
-	for _, rcpt := range to {
-		if err := c.Rcpt(bareAddr(rcpt)); err != nil {
-			return fmt.Errorf("RCPT TO %s: %w", rcpt, err)
-		}
-	}
-	w, err := c.Data()
+	client, err := gomail.NewClient(d.host, opts...)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("build SMTP client: %w", err)
 	}
-	if _, err := w.Write(raw); err != nil {
-		return err
-	}
-	if err := w.Close(); err != nil {
-		return err
-	}
-	return c.Quit()
+	return client, nil
 }
 
-// buildMessage renders a minimal RFC 5322 message. Messages with HTML are sent
-// as multipart/alternative so mail clients can fall back to the plain body.
-func buildMessage(from string, to []string, msg Message) []byte {
-	var b strings.Builder
-	b.WriteString("From: " + from + "\r\n")
-	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
-	b.WriteString("Subject: " + encodeHeader(msg.Subject) + "\r\n")
-	b.WriteString("Date: " + time.Now().Format(time.RFC1123Z) + "\r\n")
-	b.WriteString("MIME-Version: 1.0\r\n")
-	if msg.HTML == "" {
-		b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-		b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
-		b.WriteString("\r\n")
-		writeCRLFBody(&b, msg.Body)
-		return []byte(b.String())
-	}
-
-	boundary := "sermo-report-" + strconv.FormatInt(time.Now().UnixNano(), 36)
-	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n")
-	b.WriteString("\r\n")
-	b.WriteString("--" + boundary + "\r\n")
-	b.WriteString("Content-Type: text/plain; charset=utf-8\r\n")
-	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
-	b.WriteString("\r\n")
-	writeCRLFBody(&b, msg.Body)
-	b.WriteString("--" + boundary + "\r\n")
-	b.WriteString("Content-Type: text/html; charset=utf-8\r\n")
-	b.WriteString("Content-Transfer-Encoding: 8bit\r\n")
-	b.WriteString("\r\n")
-	writeCRLFBody(&b, msg.HTML)
-	b.WriteString("--" + boundary + "--\r\n")
-	return []byte(b.String())
-}
-
-func writeCRLFBody(b *strings.Builder, body string) {
-	b.WriteString(strings.ReplaceAll(body, "\n", "\r\n"))
-	if !strings.HasSuffix(body, "\n") {
-		b.WriteString("\r\n")
+func smtpDialContext(implicitTLS bool, tlsCfg *tls.Config) gomail.DialContextFunc {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialer := &net.Dialer{Timeout: dialTimeout}
+		var (
+			conn net.Conn
+			err  error
+		)
+		if implicitTLS {
+			conn, err = (&tls.Dialer{NetDialer: dialer, Config: tlsCfg}).DialContext(ctx, network, address)
+		} else {
+			conn, err = dialer.DialContext(ctx, network, address)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if deadline, ok := ctx.Deadline(); ok {
+			conn = &boundedDeadlineConn{Conn: conn, limit: deadline}
+		}
+		return conn, nil
 	}
 }
 
-// bareAddr extracts the address from a "Name <addr>" string, or returns it as-is.
-func bareAddr(s string) string {
-	if a, err := mail.ParseAddress(s); err == nil {
-		return a.Address
+type boundedDeadlineConn struct {
+	net.Conn
+	limit time.Time
+}
+
+func (c *boundedDeadlineConn) SetDeadline(t time.Time) error {
+	return c.Conn.SetDeadline(c.deadline(t))
+}
+
+func (c *boundedDeadlineConn) SetReadDeadline(t time.Time) error {
+	return c.Conn.SetReadDeadline(c.deadline(t))
+}
+
+func (c *boundedDeadlineConn) SetWriteDeadline(t time.Time) error {
+	return c.Conn.SetWriteDeadline(c.deadline(t))
+}
+
+func (c *boundedDeadlineConn) deadline(t time.Time) time.Time {
+	if c.limit.IsZero() {
+		return t
 	}
-	return s
+	if t.IsZero() || t.After(c.limit) {
+		return c.limit
+	}
+	return t
+}
+
+func buildMailMessage(from string, to []string, msg Message) (*gomail.Msg, error) {
+	m := gomail.NewMsg(gomail.WithCharset(gomail.CharsetUTF8), gomail.WithEncoding(gomail.NoEncoding))
+	if err := m.From(from); err != nil {
+		return nil, fmt.Errorf("from address: %w", err)
+	}
+	if err := m.To(to...); err != nil {
+		return nil, fmt.Errorf("to address: %w", err)
+	}
+	m.Subject(sanitizeHeader(msg.Subject))
+	m.SetDate()
+	m.SetBodyString(gomail.TypeTextPlain, crlfBody(msg.Body))
+	if msg.HTML != "" {
+		m.AddAlternativeString(gomail.TypeTextHTML, crlfBody(msg.HTML))
+	}
+	return m, nil
+}
+
+func crlfBody(body string) string {
+	body = strings.ReplaceAll(body, "\n", "\r\n")
+	if !strings.HasSuffix(body, "\r\n") {
+		body += "\r\n"
+	}
+	return body
 }
 
 // sanitizeHeader strips CR/LF to prevent header injection from a check message.
 func sanitizeHeader(s string) string {
 	return strings.NewReplacer("\r", " ", "\n", " ").Replace(s)
-}
-
-// encodeHeader makes an arbitrary string safe for an unstructured header value:
-// it strips CR/LF (injection guard) and RFC 2047-encodes non-ASCII so a UTF-8
-// subject is not emitted raw into a 7-bit header. Pure ASCII is returned
-// unchanged.
-func encodeHeader(s string) string {
-	return mime.QEncoding.Encode("utf-8", sanitizeHeader(s))
 }
