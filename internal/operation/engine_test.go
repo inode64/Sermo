@@ -177,6 +177,38 @@ func TestRestartOK(t *testing.T) {
 	}
 }
 
+func TestSectionRunnerBuildWarningBlocksRequiredPreflight(t *testing.T) {
+	tree := map[string]any{
+		"preflight": map[string]any{
+			"cpu": map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
+		},
+	}
+
+	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second})(context.Background())
+	if out.OK {
+		t.Fatalf("outcome OK = true, want required build warning to fail: %+v", out)
+	}
+	if len(out.Results) != 1 || out.Results[0].Check != "cpu" || out.Results[0].OK || out.Results[0].Optional {
+		t.Fatalf("results = %+v, want required failed build-warning result", out.Results)
+	}
+}
+
+func TestSectionRunnerOptionalBuildWarningDoesNotBlock(t *testing.T) {
+	tree := map[string]any{
+		"preflight": map[string]any{
+			"cpu": map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90", "optional": true},
+		},
+	}
+
+	out := sectionRunner(tree, "preflight", checks.Deps{Service: "web", DefaultTimeout: time.Second})(context.Background())
+	if !out.OK {
+		t.Fatalf("outcome OK = false, want optional build warning to pass: %+v", out)
+	}
+	if len(out.Results) != 1 || out.Results[0].Check != "cpu" || !out.Results[0].Optional {
+		t.Fatalf("results = %+v, want optional build-warning result", out.Results)
+	}
+}
+
 func TestResumeOK(t *testing.T) {
 	h := defaultHarness()
 	res := h.engine().Resume(context.Background())
