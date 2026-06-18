@@ -86,7 +86,7 @@ func TestOpGateAcquireFailureShuttingDown(t *testing.T) {
 		return operation.Result{}
 	})
 	if res.Status != operation.ResultFailed || res.Message != "shutting down" {
-		t.Fatalf("result = %+v, want failed/shutting down", res)
+		t.Fatalf("result = %+v, want failed/shutting down on cancel", res)
 	}
 }
 
@@ -120,8 +120,8 @@ func TestOpGateAcquireFailureSlotsBusyTimeout(t *testing.T) {
 	})
 	close(hold)
 
-	if res.Status != operation.ResultFailed {
-		t.Fatalf("status = %s, want failed", res.Status)
+	if res.Status != operation.ResultBlocked {
+		t.Fatalf("status = %s, want blocked (must not consume remediation cooldown)", res.Status)
 	}
 	want := "operation slots busy (1/1); operation timeout exceeded"
 	if res.Message != want {
