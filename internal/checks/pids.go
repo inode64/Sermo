@@ -20,10 +20,7 @@ type PidsSample struct {
 // default reads /proc/loadavg and /proc/sys/kernel/pid_max.
 type PidsSamplerFunc func() (PidsSample, error)
 
-// pidsCheck watches the kernel PID table against its maximum. Like fds it is a
-// level check: OK==true means every predicate holds. A full PID table makes
-// every fork()/clone() fail with EAGAIN host-wide — the end state the zombies
-// check's docs warn about — so it is worth catching while there is headroom.
+// pidsCheck is a level check for PID table exhaustion.
 type pidsCheck struct {
 	base
 	preds   []levelPred

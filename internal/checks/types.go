@@ -308,10 +308,8 @@ func (m statusMatcher) String() string {
 	return strings.Join(parts, ",")
 }
 
-// cmdState carries change-detection state across cycles for a command/config
-// check. Being a pointer it survives when the check is built once (a host watch),
-// like the conn/cert checks; rebuilt per-cycle service checks simply never prime
-// it, so on_change there is inert rather than firing spuriously.
+// cmdState persists on_change state for checks reused across cycles; rebuilt
+// service checks leave on_change inert.
 type cmdState struct {
 	primed bool
 	last   string

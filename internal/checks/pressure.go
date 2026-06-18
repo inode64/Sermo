@@ -27,11 +27,7 @@ type PressureSample struct {
 // or io). Injected for tests; the default reads /proc/pressure/<resource>.
 type PressureSamplerFunc func(resource string) (PressureSample, error)
 
-// pressureCheck watches a kernel PSI resource against stall-percentage
-// thresholds. Like disk it is a level check: OK==true means every predicate
-// holds (the alert condition). PSI is the kernel's own "this host is
-// struggling" signal, complementing `load` (queue depth) and `memory`
-// (headroom) with actual stall time.
+// pressureCheck is a level check for kernel PSI stall percentages.
 type pressureCheck struct {
 	base
 	resource string

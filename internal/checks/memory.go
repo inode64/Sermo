@@ -19,10 +19,8 @@ type MemorySample struct {
 // default reads /proc/meminfo.
 type MemorySamplerFunc func() (MemorySample, error)
 
-// memoryCheck watches system RAM against thresholds. Like disk it is a level
-// check: OK==true means every predicate holds (the alert condition). It is
-// built on MemAvailable — the kernel's estimate of allocatable memory — so
-// page cache and reclaimable buffers never read as "used".
+// memoryCheck is a level check: OK means every predicate holds. It uses
+// MemAvailable, so page cache and reclaimable buffers do not read as used.
 type memoryCheck struct {
 	base
 	preds   []levelPred
