@@ -133,7 +133,7 @@ func New(c Config) Engine {
 		Guard:            guardClosure(tree, deps),
 		Preflight:        sectionRunner(tree, "preflight", deps),
 		Postflight:       sectionRunner(tree, "postflight", deps),
-		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit),
+		ReloadFunc:       reloadClosure(tree, deps, c.Manager, c.Backend, c.Unit, c.Discoverer, selectors),
 		ResumeFunc:       resumeClosure(c.Manager, c.Unit),
 		Discover:         discover,
 		Reaper:           reaper,
@@ -172,14 +172,14 @@ func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 // native reload — a signal to the main process or a command — that either
 // overrides the backend reload (`when: always`) or stands in for it only when the
 // init backend cannot reload the unit itself (`when: auto`, the default).
-func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string) func(context.Context) error {
+func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	initReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
 
 	spec := parseReloadSpec(tree)
 	if spec == nil {
 		return initReload
 	}
-	native := nativeReloadFunc(spec, deps, backend, unit, tree)
+	native := nativeReloadFunc(spec, deps, backend, unit, tree, discoverer, selectors)
 	if spec.always {
 		return native
 	}
@@ -237,13 +237,18 @@ func parseReloadSpec(tree map[string]any) *reloadSpec {
 
 // nativeReloadFunc turns a reloadSpec into the closure that performs the reload:
 // running its command, or sending its signal to the service's main process.
-func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, tree map[string]any) func(context.Context) error {
+func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, tree map[string]any, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	if spec.hasSig {
 		pidfile := reloadPidfile(tree)
 		return func(ctx context.Context) error {
-			pid, err := reloadPID(ctx, deps.Runner, backend, unit, pidfile)
+			pid, source, err := reloadPID(ctx, deps.Runner, backend, unit, pidfile)
 			if err != nil {
 				return err
+			}
+			if source == reloadPIDPidfile {
+				if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
+					return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any command_match selector with exact exe and user", pidfile, pid)
+				}
 			}
 			if err := ctx.Err(); err != nil {
 				return err
@@ -274,20 +279,28 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 
 // reloadPID resolves the process to signal for a native reload: systemd's MainPID
 // when available, otherwise the service's pidfile (the only source on OpenRC).
-func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile string) (int, error) {
+type reloadPIDSource string
+
+const (
+	reloadPIDMain    reloadPIDSource = "mainpid"
+	reloadPIDPidfile reloadPIDSource = "pidfile"
+)
+
+func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile string) (int, reloadPIDSource, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if pid, ok := servicemgr.MainPIDContext(ctx, runner, servicemgr.Backend(backend), unit); ok {
-		return pid, nil
+		return pid, reloadPIDMain, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if pidfile != "" {
-		return process.ReadPidfile(pidfile)
+		pid, err := process.ReadPidfile(pidfile)
+		return pid, reloadPIDPidfile, err
 	}
-	return 0, fmt.Errorf("reload: cannot resolve a pid to signal — the backend exposes no MainPID (OpenRC) and the service declares no pidfile:; add a pidfile: so the signal target can be found")
+	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal — the backend exposes no MainPID (OpenRC) and the service declares no pidfile:; add a pidfile: so the signal target can be found")
 }
 
 // reloadPidfile returns the service's pidfile path from its processes section (a

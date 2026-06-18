@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"sermo/internal/checks"
 	"sermo/internal/execx"
+	"sermo/internal/process"
 )
 
 // scriptedRunner is a fake execx.Runner: it records argv and returns a canned
@@ -46,9 +48,42 @@ func (r *scriptedRunner) ran(name string) bool {
 
 func depsWith(runner execx.Runner) checks.Deps { return checks.Deps{Runner: runner} }
 
+func reloadClosureForTest(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string) func(context.Context) error {
+	return reloadClosure(tree, deps, mgr, backend, unit, process.Discoverer{}, nil)
+}
+
+type reloadProcessReader struct {
+	ids map[int]process.Identity
+}
+
+func (r reloadProcessReader) PIDs() ([]int, error) {
+	pids := make([]int, 0, len(r.ids))
+	for pid := range r.ids {
+		pids = append(pids, pid)
+	}
+	return pids, nil
+}
+
+func (r reloadProcessReader) Identity(pid int) (process.Identity, bool) {
+	id, ok := r.ids[pid]
+	return id, ok
+}
+
+func reloadDiscoverer(ids map[int]process.Identity) process.Discoverer {
+	return process.Discoverer{
+		Reader: reloadProcessReader{ids: ids},
+		ResolveUser: func(name string) (uint32, bool) {
+			if name == "svcuser" {
+				return 1001, true
+			}
+			return 0, false
+		},
+	}
+}
+
 func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
-	reload := reloadClosure(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "systemd", "mysqld")
+	reload := reloadClosureForTest(map[string]any{}, depsWith(&scriptedRunner{}), mgr, "systemd", "mysqld")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -61,7 +96,7 @@ func TestReloadClosureLegacyCommandAlwaysRuns(t *testing.T) {
 	mgr := &fakeManager{canReload: true} // even though the unit can reload...
 	runner := &scriptedRunner{}
 	tree := map[string]any{"commands": map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}}
-	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "nginx")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -77,7 +112,7 @@ func TestReloadClosureAutoCommandPrefersBackendWhenSupported(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
 	runner := &scriptedRunner{}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}, "when": "auto"}}
-	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "nginx")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -93,7 +128,7 @@ func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
 	mgr := &fakeManager{canReload: false} // the unit has no ExecReload / reload()
 	runner := &scriptedRunner{}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}
-	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "nginx")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -108,7 +143,7 @@ func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
 func TestReloadClosureCommandWithoutRunnerReturnsError(t *testing.T) {
 	mgr := &fakeManager{canReload: false}
 	tree := map[string]any{"reload": map[string]any{"command": []any{"sermo-no-such-command-xyz"}, "when": "always"}}
-	reload := reloadClosure(tree, checks.Deps{}, mgr, "systemd", "svc")
+	reload := reloadClosureForTest(tree, checks.Deps{}, mgr, "systemd", "svc")
 
 	if err := reload(context.Background()); err == nil {
 		t.Fatal("reload without an injected runner returned nil, want command error")
@@ -127,7 +162,7 @@ func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	defer signal.Stop(got)
 
 	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
-	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "myd")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "myd")
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -145,7 +180,7 @@ func TestReloadClosureSignalHonorsCanceledContext(t *testing.T) {
 		respectContext: true,
 	}
 	tree := map[string]any{"reload": map[string]any{"signal": "USR1", "when": "always"}}
-	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "myd")
+	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "myd")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -175,7 +210,14 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 		"reload":    map[string]any{"signal": "USR2"},
 		"processes": map[string]any{"main": map[string]any{"type": "pidfile", "path": pidfile}},
 	}
-	reload := reloadClosure(tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc")
+	selectors := []process.Selector{
+		{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}},
+		{Name: "identity", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/svc", User: "svcuser"},
+	}
+	discoverer := reloadDiscoverer(map[int]process.Identity{
+		pid: {PID: pid, UID: 1001, Exe: "/usr/sbin/svc", ExeOK: true},
+	})
+	reload := reloadClosure(tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", discoverer, selectors)
 	if err := reload(context.Background()); err != nil {
 		t.Fatalf("reload: %v", err)
 	}
@@ -183,5 +225,25 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	case <-got:
 	case <-time.After(time.Second):
 		t.Fatal("native signal reload did not deliver SIGUSR2 via the pidfile pid")
+	}
+}
+
+func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
+	dir := t.TempDir()
+	pidfile := dir + "/svc.pid"
+	if err := os.WriteFile(pidfile, []byte("999999\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mgr := &fakeManager{canReload: false}
+	tree := map[string]any{
+		"reload":    map[string]any{"signal": "HUP"},
+		"processes": map[string]any{"main": map[string]any{"type": "pidfile", "path": pidfile}},
+	}
+	selectors := []process.Selector{{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}}}
+	reload := reloadClosure(tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", reloadDiscoverer(nil), selectors)
+
+	err := reload(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "does not match any command_match selector with exact exe and user") {
+		t.Fatalf("reload err = %v, want strict identity failure", err)
 	}
 }
