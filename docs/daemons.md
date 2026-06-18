@@ -157,10 +157,12 @@ reload:
   init reload where one exists), so set `when: always` to keep the old
   always-run-the-command behavior.
 - **Signal target.** The signal goes to systemd's `MainPID`, or — on OpenRC, or
-  any unit with no MainPID — to the PID in the service's `pidfile:`. A signal
-  reload with neither available fails; declare `pidfile:` for daemons that must
-  reload by signal on OpenRC. Daemons without pidfiles reload by signal only on
-  systemd; on OpenRC they rely on the init script's own `reload` (`when: auto`).
+  any unit with no MainPID — to the PID in the service's `pidfile:`. The pidfile
+  fallback is only used when that PID also matches a `processes:` `command_match`
+  selector with exact `exe` and `user`; a stale pidfile must not signal an
+  unrelated process. A signal reload with neither target available fails. Daemons
+  without pidfiles reload by signal only on systemd; on OpenRC they rely on the
+  init script's own `reload` (`when: auto`).
 
 The reload that `reload:` produces is what the **`reload` action**,
 `reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload

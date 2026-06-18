@@ -308,6 +308,34 @@ func TestObserveState(t *testing.T) {
 	}
 }
 
+func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			100: {PID: 100, UID: 110, Exe: testExe, ExeOK: true, State: "S"},
+			101: {PID: 101, UID: 999, Exe: testExe, ExeOK: true, State: "S"},
+			102: {PID: 102, UID: 110, Exe: "/opt/sermo-test/other", ExeOK: true, State: "S"},
+			103: {PID: 103, UID: 110, ExeOK: false, State: "S"},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
+	}
+	selectors := []Selector{
+		{Name: "pidfile", Type: SelectorPidfile, Paths: []string{"/run/mysqld.pid"}},
+		{Name: "cmd-only", Type: SelectorCommandMatch, Cmd: "mysqld"},
+		{Name: "exe-only", Type: SelectorCommandMatch, Exe: testExe},
+		{Name: "main", Type: SelectorCommandMatch, Exe: testExe, User: "mysql"},
+	}
+
+	proc, ok := d.StrictMatchPID(100, selectors)
+	if !ok || proc.PID != 100 || proc.Source != sourceCommand {
+		t.Fatalf("StrictMatchPID matched = %+v/%v, want command_match pid 100", proc, ok)
+	}
+	for _, pid := range []int{101, 102, 103, 999} {
+		if proc, ok := d.StrictMatchPID(pid, selectors); ok {
+			t.Fatalf("StrictMatchPID(%d) = %+v, want no strict match", pid, proc)
+		}
+	}
+}
+
 func TestParseSelectors(t *testing.T) {
 	tree := map[string]any{
 		"processes": map[string]any{
