@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -100,36 +101,22 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, names, thenBlock, err := parseThenAndExplicit(entry)
+	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
+		checkType:    typ,
+		parseExpand:  true,
+		emptyMessage: "then requires a hook, notify and/or expand",
+	})
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
-	}
-	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	dryRun := dryRunEnabled(thenBlock)
-	expand, err := parseExpand(thenBlock, typ)
-	if err != nil {
-		return nil, "watch " + name + ": " + err.Error()
-	}
-	// Absent `then` key: pure alert/monitor-only (web UI + events only).
-	// Do not inherit globals; produce "firing" events but no actions.
-	if thenBlock != nil {
-		if !hasWatchAction(hook, names, effectiveNames, expand) {
-			return nil, "watch " + name + ": then requires a hook, notify and/or expand"
-		}
-	} else {
-		hook = HookSpec{}
-		effectiveNames = nil
-		expand = nil
-		dryRun = false
 	}
 	w := &Watch{
 		Name:       name,
 		CheckType:  typ,
 		Check:      check,
 		Window:     rules.ParseWindowRule(entry),
-		Hook:       hook,
-		Notifiers:  resolveNotifiers(effectiveNames, deps.Notifiers),
-		DryRun:     dryRun,
+		Hook:       actions.hook,
+		Notifiers:  resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+		DryRun:     actions.dryRun,
 		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
 		Interval:   interval,
 		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),
@@ -137,8 +124,8 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		Now:        deps.Now,
 		Emit:       deps.Emit,
 	}
-	if expand != nil {
-		w.Expand = expand
+	if actions.expand != nil {
+		w.Expand = actions.expand
 		w.Policy = rules.ParsePolicy(entry)
 		w.Expander = configuredVolumeExpander(deps)
 	}
@@ -207,32 +194,21 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
 		}
-		hook, names, thenBlock, err := parseThenAndExplicit(mEntry)
+		actions, err := resolveWatchActions(mEntry, deps, watchActionOptions{
+			emptyMessage: "then requires a hook and/or notify",
+		})
 		if err != nil {
 			warns = append(warns, "watch "+name+".metrics."+key+": "+err.Error())
 			continue
-		}
-		effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-		dryRun := dryRunEnabled(thenBlock)
-		// Absent per-metric `then`: pure alert (web+logs only); do not inherit.
-		if thenBlock != nil {
-			if !hasWatchAction(hook, names, effectiveNames, nil) {
-				warns = append(warns, "watch "+name+".metrics."+key+": then requires a hook and/or notify")
-				continue
-			}
-		} else {
-			hook = HookSpec{}
-			effectiveNames = nil
-			dryRun = false
 		}
 		out = append(out, &Watch{
 			Name:      name,
 			CheckType: cfgval.AsString(checkEntry["type"]),
 			Check:     check,
 			Window:    rules.ParseWindowRule(mEntry),
-			Hook:      hook,
-			Notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
-			DryRun:    dryRun,
+			Hook:      actions.hook,
+			Notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+			DryRun:    actions.dryRun,
 			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
 			Interval:  interval,
 			IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
@@ -254,30 +230,20 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, names, thenBlock, err := parseThenAndExplicit(entry)
+	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
+		emptyMessage: "then requires a hook and/or notify",
+	})
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
-	}
-	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	dryRun := dryRunEnabled(thenBlock)
-	// Absent `then`: pure alert (no hook/notify, no global inheritance).
-	if thenBlock != nil {
-		if !hasWatchAction(hook, names, effectiveNames, nil) {
-			return nil, "watch " + name + ": then requires a hook and/or notify"
-		}
-	} else {
-		hook = HookSpec{}
-		effectiveNames = nil
-		dryRun = false
 	}
 	fw := &fileWatcher{
 		name:      name,
 		path:      cfgval.AsString(checkEntry["path"]),
 		recursive: cfgval.Bool(checkEntry["recursive"]),
 		cond:      cond,
-		hook:      hook,
-		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
-		dryRun:    dryRun,
+		hook:      actions.hook,
+		notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+		dryRun:    actions.dryRun,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		emit:      deps.Emit,
 	}
@@ -286,7 +252,7 @@ func buildFileWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		CheckType: "file",
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		DryRun:    dryRun,
+		DryRun:    actions.dryRun,
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     fw.runCycle,
@@ -305,29 +271,19 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
 	}
-	hook, names, thenBlock, err := parseThenAndExplicit(entry)
+	actions, err := resolveWatchActions(entry, deps, watchActionOptions{
+		emptyMessage: "then requires a hook and/or notify",
+	})
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
-	}
-	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
-	dryRun := dryRunEnabled(thenBlock)
-	// Absent `then`: pure alert (no hook/notify, no global inheritance).
-	if thenBlock != nil {
-		if !hasWatchAction(hook, names, effectiveNames, nil) {
-			return nil, "watch " + name + ": then requires a hook and/or notify"
-		}
-	} else {
-		hook = HookSpec{}
-		effectiveNames = nil
-		dryRun = false
 	}
 	pw := &procWatcher{
 		name:      name,
 		match:     ProcMatch{Name: pname, User: cfgval.AsString(checkEntry["user"])},
 		cond:      cond,
-		hook:      hook,
-		notifiers: resolveNotifiers(effectiveNames, deps.Notifiers),
-		dryRun:    dryRun,
+		hook:      actions.hook,
+		notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+		dryRun:    actions.dryRun,
 		runner:    OSHookRunner{Runner: deps.ExecxRunner},
 		now:       deps.Now,
 		emit:      deps.Emit,
@@ -338,7 +294,7 @@ func buildProcWatch(name string, entry, checkEntry map[string]any, deps Deps, in
 		CheckType: "process",
 		Interval:  interval,
 		IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		DryRun:    dryRun,
+		DryRun:    actions.dryRun,
 		Now:       deps.Now,
 		Emit:      deps.Emit,
 		Cycle:     pw.runCycle,
@@ -493,6 +449,46 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 		hook.Stdout, hook.Stderr = stdout, stderr
 	}
 	return hook, cfgval.StringList(then["notify"]), nil
+}
+
+type watchActions struct {
+	hook           HookSpec
+	effectiveNames []string
+	dryRun         bool
+	expand         *ExpandSpec
+}
+
+type watchActionOptions struct {
+	checkType    string
+	parseExpand  bool
+	emptyMessage string
+}
+
+func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOptions) (watchActions, error) {
+	hook, names, thenBlock, err := parseThenAndExplicit(entry)
+	if err != nil {
+		return watchActions{}, err
+	}
+	if thenBlock == nil {
+		return watchActions{}, nil
+	}
+	effectiveNames := effectiveNotify(names, deps.GlobalNotify)
+	var expand *ExpandSpec
+	if opts.parseExpand {
+		expand, err = parseExpand(thenBlock, opts.checkType)
+		if err != nil {
+			return watchActions{}, err
+		}
+	}
+	if !hasWatchAction(hook, names, effectiveNames, expand) {
+		return watchActions{}, errors.New(opts.emptyMessage)
+	}
+	return watchActions{
+		hook:           hook,
+		effectiveNames: effectiveNames,
+		dryRun:         dryRunEnabled(thenBlock),
+		expand:         expand,
+	}, nil
 }
 
 // parseExpand reads a `then.expand` storage-expansion action. It is only valid on
