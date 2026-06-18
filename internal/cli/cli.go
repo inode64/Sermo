@@ -99,6 +99,7 @@ type options struct {
 	quiet     bool
 	noCascade bool // --no-cascade: act on exactly this service, skip also_apply
 	help      bool
+	version   bool // --version / -V
 	timeout   time.Duration
 	config    string
 	command   string
@@ -199,22 +200,18 @@ func (a App) Run(ctx context.Context, args []string) int {
 		a.BuildNotifiers = buildReportNotifiers
 	}
 
-	for _, arg := range args {
-		if arg == "--version" || arg == "-V" {
-			fmt.Fprintln(a.Stdout, buildinfo.String())
-			return exitSuccess
-		}
-	}
-	if len(args) > 0 && args[0] == "version" {
-		fmt.Fprintln(a.Stdout, buildinfo.String())
-		return exitSuccess
-	}
-
 	opts, err := parseArgs(args)
 	if err != nil {
 		fmt.Fprintf(a.Stderr, "usage error: %v\n", err)
 		writeUsage(a.Stderr)
 		return exitUsage
+	}
+	// `--version`/`-V` is parsed as a global flag (so it is never mistaken for the
+	// *value* of another flag, e.g. `lock svc --reason -V`); the `version`
+	// subcommand is handled in the command switch below.
+	if opts.version {
+		fmt.Fprintln(a.Stdout, buildinfo.String())
+		return exitSuccess
 	}
 	if opts.help {
 		if opts.command != "" {
@@ -1479,6 +1476,8 @@ func parseArgs(args []string) (options, error) {
 		switch {
 		case arg == "--help" || arg == "-h":
 			opts.help = true
+		case arg == "--version" || arg == "-V":
+			opts.version = true
 		case arg == "--json":
 			opts.json = true
 		case arg == "--quiet" || arg == "-q":
