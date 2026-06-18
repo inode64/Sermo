@@ -2,13 +2,11 @@ package checks
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"net"
-	"os"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/vishvananda/netlink"
 )
 
 // DefaultRoute is one up default-route entry: the egress interface and the
@@ -20,8 +18,8 @@ type DefaultRoute struct {
 }
 
 // RouteSamplerFunc lists the kernel's up default routes for an address family
-// ("ipv4" or "ipv6"). Injected for tests; the default reads /proc/net/route
-// and /proc/net/ipv6_route.
+// ("ipv4" or "ipv6"). Injected for tests; the default reads routes through
+// netlink.
 type RouteSamplerFunc func(family string) ([]DefaultRoute, error)
 
 // routeCheck verifies the host has an up default route — optionally egressing
@@ -84,96 +82,91 @@ func matchingRoutes(routes []DefaultRoute, iface string) []DefaultRoute {
 	return matched
 }
 
-// defaultRouteSampler reads the kernel routing tables from procfs.
+// Linux route type values from rtnetlink. netlink.Route.Type is 0 when unset in
+// tests/builders, and the kernel reports unicast routes as 1.
+const routeTypeUnicast = 1
+
+// defaultRouteSampler reads the kernel routing tables through netlink.
 func defaultRouteSampler(family string) ([]DefaultRoute, error) {
-	if family == "ipv6" {
-		data, err := os.ReadFile("/proc/net/ipv6_route")
-		if err != nil {
-			return nil, err
-		}
-		return parseIPv6RouteTable(string(data)), nil
-	}
-	data, err := os.ReadFile("/proc/net/route")
+	nlFamily, err := netlinkFamily(family)
 	if err != nil {
 		return nil, err
 	}
-	return parseRouteTable(string(data)), nil
+
+	links, err := netlink.LinkList()
+	if err != nil {
+		return nil, err
+	}
+	routes, err := netlink.RouteList(nil, nlFamily)
+	if err != nil {
+		return nil, err
+	}
+	return defaultRoutesFromNetlink(family, routes, netlinkLinkNames(links)), nil
 }
 
 // SampleRoutes returns one live default-route observation using the default
-// procfs sampler.
+// netlink sampler.
 func SampleRoutes(family string) ([]DefaultRoute, error) { return defaultRouteSampler(family) }
 
-// rtfUp is the kernel RTF_UP route flag (the route is usable).
-const rtfUp = 0x1
+func netlinkFamily(family string) (int, error) {
+	switch family {
+	case "ipv4", "":
+		return netlink.FAMILY_V4, nil
+	case "ipv6":
+		return netlink.FAMILY_V6, nil
+	default:
+		return 0, fmt.Errorf("unknown route family %q", family)
+	}
+}
 
-// parseRouteTable extracts the up IPv4 default routes from /proc/net/route
-// (header line, then per-route: Iface Destination Gateway Flags ... Mask ...;
-// addresses are little-endian hex words). Default = destination and mask both
-// zero.
-func parseRouteTable(data string) []DefaultRoute {
-	var out []DefaultRoute
-	for i, line := range strings.Split(data, "\n") {
-		fields := strings.Fields(line)
-		if i == 0 || len(fields) < 8 {
-			continue // header or malformed
+func netlinkLinkNames(links []netlink.Link) map[int]string {
+	names := make(map[int]string, len(links))
+	for _, link := range links {
+		if attrs := link.Attrs(); attrs != nil && attrs.Index > 0 && attrs.Name != "" {
+			names[attrs.Index] = attrs.Name
 		}
-		flags, err := strconv.ParseUint(fields[3], 16, 32)
-		if err != nil || flags&rtfUp == 0 {
+	}
+	return names
+}
+
+func defaultRoutesFromNetlink(family string, routes []netlink.Route, linkNames map[int]string) []DefaultRoute {
+	var out []DefaultRoute
+	for _, route := range routes {
+		if !isDefaultNetlinkRoute(family, route) {
 			continue
 		}
-		if fields[1] != "00000000" || fields[7] != "00000000" {
-			continue // not the default route
+		if len(route.MultiPath) > 0 {
+			for _, hop := range route.MultiPath {
+				out = appendDefaultRoute(out, family, linkNames[hop.LinkIndex], hop.Gw)
+			}
+			continue
 		}
-		out = append(out, DefaultRoute{Iface: fields[0], Gateway: hexLEIPv4(fields[2])})
+		out = appendDefaultRoute(out, family, linkNames[route.LinkIndex], route.Gw)
 	}
 	return out
 }
 
-// parseIPv6RouteTable extracts the up IPv6 default routes from
-// /proc/net/ipv6_route (per-route: dest dest-prefix src src-prefix next-hop
-// metric refcnt use flags device; addresses are big-endian hex). Default =
-// destination prefix zero; loopback-device entries (the kernel's fallback
-// reject routes) are skipped.
-func parseIPv6RouteTable(data string) []DefaultRoute {
-	var out []DefaultRoute
-	for _, line := range strings.Split(data, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 10 {
-			continue
-		}
-		flags, err := strconv.ParseUint(fields[8], 16, 32)
-		if err != nil || flags&rtfUp == 0 {
-			continue
-		}
-		if fields[1] != "00" || fields[9] == "lo" {
-			continue
-		}
-		out = append(out, DefaultRoute{Iface: fields[9], Gateway: hexBEIPv6(fields[4])})
+func isDefaultNetlinkRoute(family string, route netlink.Route) bool {
+	if route.Type != 0 && route.Type != routeTypeUnicast {
+		return false
 	}
-	return out
+	if route.Dst == nil {
+		return true
+	}
+	ones, bits := route.Dst.Mask.Size()
+	if ones != 0 {
+		return false
+	}
+	return (family == "ipv6" && bits == 128) || (family != "ipv6" && bits == 32)
 }
 
-// hexLEIPv4 renders a little-endian hex word from /proc/net/route as a dotted
-// IPv4 address, or "" for zero (no gateway).
-func hexLEIPv4(s string) string {
-	n, err := strconv.ParseUint(s, 16, 32)
-	if err != nil || n == 0 {
-		return ""
+func appendDefaultRoute(routes []DefaultRoute, family, iface string, gateway net.IP) []DefaultRoute {
+	if iface == "" || (family == "ipv6" && iface == "lo") {
+		return routes
 	}
-	return net.IPv4(byte(n), byte(n>>8), byte(n>>16), byte(n>>24)).String()
-}
-
-// hexBEIPv6 renders a 32-digit big-endian hex address from
-// /proc/net/ipv6_route as an IPv6 address, or "" for zero (no next hop).
-func hexBEIPv6(s string) string {
-	raw, err := hex.DecodeString(s)
-	if err != nil || len(raw) != net.IPv6len {
-		return ""
+	gw := ""
+	if len(gateway) > 0 && !gateway.IsUnspecified() {
+		gw = gateway.String()
 	}
-	ip := net.IP(raw)
-	if ip.IsUnspecified() {
-		return ""
-	}
-	return ip.String()
+	return append(routes, DefaultRoute{Iface: iface, Gateway: gw})
 }

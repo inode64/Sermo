@@ -3,48 +3,64 @@ package checks
 import (
 	"context"
 	"fmt"
+	"net"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/vishvananda/netlink"
 )
 
-// ipv4RouteFixture mirrors /proc/net/route on a host with a PPP uplink: an up
-// gatewayless default via ppp0, a non-default LAN route, and a downed default
-// (RTF_UP clear) that must be ignored.
-const ipv4RouteFixture = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
-	"ppp0\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0\n" +
-	"eth0\t0000A8C0\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n" +
-	"eth1\t00000000\t0101A8C0\t0002\t0\t0\t0\t00000000\t0\t0\t0\n"
+const routeTypeBlackhole = 6
 
-func TestParseRouteTable(t *testing.T) {
-	routes := parseRouteTable(ipv4RouteFixture)
-	if len(routes) != 1 || routes[0].Iface != "ppp0" || routes[0].Gateway != "" {
-		t.Fatalf("routes = %v, want one gatewayless default via ppp0", routes)
+func TestDefaultRoutesFromNetlinkIPv4(t *testing.T) {
+	default4 := mustCIDR(t, "0.0.0.0/0")
+	lan := mustCIDR(t, "192.168.0.0/24")
+	routes := []netlink.Route{
+		{LinkIndex: 1, Dst: nil, Gw: net.ParseIP("192.168.1.1"), Type: routeTypeUnicast},
+		{LinkIndex: 2, Dst: default4, Type: routeTypeUnicast},
+		{LinkIndex: 2, Dst: lan, Type: routeTypeUnicast},
+		{LinkIndex: 3, Dst: default4, Type: routeTypeBlackhole},
+		{Dst: default4, MultiPath: []*netlink.NexthopInfo{
+			{LinkIndex: 1, Gw: net.ParseIP("10.0.0.1")},
+			{LinkIndex: 2},
+		}},
 	}
-
-	// A gatewayed default decodes the little-endian hex address.
-	gw := "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\n" +
-		"eth0\t00000000\t0101A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"
-	routes = parseRouteTable(gw)
-	if len(routes) != 1 || routes[0].Gateway != "192.168.1.1" {
-		t.Fatalf("routes = %v, want default via eth0 gw 192.168.1.1", routes)
+	got := defaultRoutesFromNetlink("ipv4", routes, map[int]string{1: "eth0", 2: "ppp0", 3: "blackhole"})
+	want := []DefaultRoute{
+		{Iface: "eth0", Gateway: "192.168.1.1"},
+		{Iface: "ppp0"},
+		{Iface: "eth0", Gateway: "10.0.0.1"},
+		{Iface: "ppp0"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("routes = %#v, want %#v", got, want)
 	}
 }
 
-func TestParseIPv6RouteTable(t *testing.T) {
-	zero32 := strings.Repeat("0", 32)
-	gw := "fe80000000000000021122fffe334455"
-	data := strings.Join([]string{
-		// up default via eth0 with a link-local next hop
-		zero32 + " 00 " + zero32 + " 00 " + gw + " 00000400 00000001 00000000 00000003 eth0",
-		// kernel fallback reject route on lo — skipped
-		zero32 + " 00 " + zero32 + " 00 " + zero32 + " ffffffff 00000001 00000000 00200200 lo",
-		// non-default prefix — skipped
-		"20010db8000000000000000000000000 40 " + zero32 + " 00 " + zero32 + " 00000100 00000001 00000000 00000001 eth0",
-	}, "\n")
-	routes := parseIPv6RouteTable(data)
-	if len(routes) != 1 || routes[0].Iface != "eth0" || routes[0].Gateway != "fe80::211:22ff:fe33:4455" {
-		t.Fatalf("routes = %v, want one default via eth0 with link-local gw", routes)
+func TestDefaultRoutesFromNetlinkIPv6SkipsLoopback(t *testing.T) {
+	default6 := mustCIDR(t, "::/0")
+	routes := []netlink.Route{
+		{LinkIndex: 1, Dst: default6, Type: routeTypeUnicast},
+		{LinkIndex: 2, Dst: default6, Gw: net.ParseIP("fe80::211:22ff:fe33:4455"), Type: routeTypeUnicast},
+	}
+	got := defaultRoutesFromNetlink("ipv6", routes, map[int]string{1: "lo", 2: "eth0"})
+	want := []DefaultRoute{{Iface: "eth0", Gateway: "fe80::211:22ff:fe33:4455"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("routes = %#v, want %#v", got, want)
+	}
+}
+
+func TestNetlinkFamily(t *testing.T) {
+	if family, err := netlinkFamily("ipv4"); err != nil || family != netlink.FAMILY_V4 {
+		t.Fatalf("ipv4 family = %d, %v", family, err)
+	}
+	if family, err := netlinkFamily("ipv6"); err != nil || family != netlink.FAMILY_V6 {
+		t.Fatalf("ipv6 family = %d, %v", family, err)
+	}
+	if _, err := netlinkFamily("ipx"); err == nil {
+		t.Fatal("bad family should error")
 	}
 }
 
@@ -97,4 +113,13 @@ func TestBuildRouteCheck(t *testing.T) {
 	if rc.family != "ipv4" || rc.iface != "ppp0" {
 		t.Fatalf("check = %+v, want ipv4/ppp0 (family defaults to ipv4)", rc)
 	}
+}
+
+func mustCIDR(t *testing.T, s string) *net.IPNet {
+	t.Helper()
+	_, network, err := net.ParseCIDR(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return network
 }

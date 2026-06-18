@@ -15,6 +15,7 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/quic-go/quic-go v0.60.0
 	github.com/spf13/pflag v1.0.10
+	github.com/vishvananda/netlink v1.3.1
 	go.mongodb.org/mongo-driver/v2 v2.6.1
 	golang.org/x/crypto v0.53.0
 	golang.org/x/net v0.56.0
@@ -41,6 +42,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.2.0 // indirect
 	github.com/xdg-go/stringprep v1.0.4 // indirect
