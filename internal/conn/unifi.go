@@ -41,9 +41,7 @@ func (unifiProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if normalizeTLS(cfg.TLS) != "true" {
 		tc.InsecureSkipVerify = true //nolint:gosec // UniFi ships a self-signed cert; operator opts into verification with tls: true
 	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	tr.TLSClientConfig = tc
-	client := &http.Client{Transport: tr}
+	client := httpProbeClient(cfg.Interface, tc)
 
 	url := "https://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/status"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

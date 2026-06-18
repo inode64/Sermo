@@ -1,6 +1,7 @@
 package conn
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -22,19 +23,19 @@ func TestSNMPRegistered(t *testing.T) {
 
 func TestBuildSNMPParamsV2c(t *testing.T) {
 	// No user, no password -> v2c, community "public" (anonymous).
-	p := buildSNMPParams(Config{Host: "dev", Port: 161}, time.Second)
+	p := buildSNMPParams(context.Background(), Config{Host: "dev", Port: 161}, time.Second)
 	if p.Version != g.Version2c || p.Community != "public" {
 		t.Fatalf("v2c default = %v / %q", p.Version, p.Community)
 	}
 	// Password without a user -> v2c with that community.
-	p = buildSNMPParams(Config{Host: "dev", Password: "secret"}, time.Second)
+	p = buildSNMPParams(context.Background(), Config{Host: "dev", Password: "secret"}, time.Second)
 	if p.Version != g.Version2c || p.Community != "secret" {
 		t.Fatalf("v2c community = %v / %q", p.Version, p.Community)
 	}
 }
 
 func TestBuildSNMPParamsV3(t *testing.T) {
-	p := buildSNMPParams(Config{Host: "dev", User: "monitor", Password: "authpass"}, time.Second)
+	p := buildSNMPParams(context.Background(), Config{Host: "dev", User: "monitor", Password: "authpass"}, time.Second)
 	if p.Version != g.Version3 || p.SecurityModel != g.UserSecurityModel {
 		t.Fatalf("v3 = %v / %v", p.Version, p.SecurityModel)
 	}
@@ -50,7 +51,7 @@ func TestBuildSNMPParamsV3(t *testing.T) {
 	}
 
 	// User without a password -> v3 noAuthNoPriv.
-	p = buildSNMPParams(Config{Host: "dev", User: "monitor"}, time.Second)
+	p = buildSNMPParams(context.Background(), Config{Host: "dev", User: "monitor"}, time.Second)
 	if p.MsgFlags != g.NoAuthNoPriv {
 		t.Fatalf("user without password must be noAuthNoPriv, got %v", p.MsgFlags)
 	}

@@ -47,22 +47,15 @@ func PrometheusClient(cfg Config) (*http.Client, string) {
 		port = 9090
 	}
 	scheme := "http"
-	client := &http.Client{}
+	client := httpProbeClient(cfg.Interface, nil)
 	mode := normalizeTLS(cfg.TLS)
-	if cfg.Interface != "" || mode != "" {
-		tr := http.DefaultTransport.(*http.Transport).Clone()
-		if cfg.Interface != "" {
-			tr.DialContext = BindDialer(cfg.Interface).DialContext
+	if mode != "" {
+		scheme = "https"
+		tlsConfig := tlsClientConfig(host)
+		if mode == "skip-verify" {
+			tlsConfig.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
-		if mode != "" {
-			scheme = "https"
-			tc := tlsClientConfig(host)
-			if mode == "skip-verify" {
-				tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
-			}
-			tr.TLSClientConfig = tc
-		}
-		client.Transport = tr
+		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 	return client, scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
 }
