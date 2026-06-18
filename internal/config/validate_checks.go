@@ -618,12 +618,18 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
 		validateAnalyze(path, entry, add)
 	case "service":
-		if st := cfgval.String(entry["expect"]); st != "" {
+		st := cfgval.String(entry["expect"])
+		if st == "" {
+			add("%s.expect is required for a service check", path)
+		} else {
 			if _, ok := serviceStates[st]; !ok {
 				add("%s expect %q is not one of active, inactive, paused, failed, unknown", path, st)
 			}
 		}
 	case "process":
+		if cfgval.String(entry["exe"]) == "" {
+			add("%s.exe is required for a process check", path)
+		}
 		if st := cfgval.String(entry["state"]); st != "" {
 			if _, ok := processStates[st]; !ok {
 				add("%s state %q is not one of running, zombie, absent", path, st)
