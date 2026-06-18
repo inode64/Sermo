@@ -247,3 +247,21 @@ func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
 		t.Fatalf("reload err = %v, want strict identity failure", err)
 	}
 }
+
+func TestReloadClosureSignalMainPIDRequiresStrictIdentity(t *testing.T) {
+	wrongPID := 424242
+	mgr := &fakeManager{canReload: false}
+	runner := &scriptedRunner{results: map[string]execx.Result{
+		"systemctl": {Stdout: strconv.Itoa(wrongPID) + "\n"},
+	}}
+	tree := map[string]any{"reload": map[string]any{"signal": "HUP", "when": "always"}}
+	selectors := []process.Selector{{
+		Name: "main", Type: process.SelectorCommandMatch, Exe: "/usr/sbin/svc", User: "svcuser",
+	}}
+	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "svc", reloadDiscoverer(nil), selectors)
+
+	err := reload(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "MainPID 424242 does not match any command_match selector") {
+		t.Fatalf("reload err = %v, want strict MainPID identity failure", err)
+	}
+}
