@@ -30,6 +30,28 @@ func TestCachingReaderReusesSnapshotWithinFreshness(t *testing.T) {
 	}
 }
 
+func TestCachingReaderInvalidateForcesRebuild(t *testing.T) {
+	inner := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100, PPID: 1}}}}
+	now := time.Unix(0, 0)
+	cr := NewCachingReader(inner, 5*time.Second)
+	cr.now = func() time.Time { return now }
+
+	// Prime the cache, then a second read within the window reuses it.
+	snapshotIdentities(cr)
+	snapshotIdentities(cr)
+	if inner.pidCalls != 1 {
+		t.Fatalf("pidCalls = %d; want 1 (snapshot reused within freshness)", inner.pidCalls)
+	}
+
+	// Invalidate forces the next read to rebuild from live /proc even though the
+	// freshness window has not elapsed — the guarantee the reaper depends on.
+	cr.Invalidate()
+	snapshotIdentities(cr)
+	if inner.pidCalls != 2 {
+		t.Fatalf("pidCalls = %d; want 2 (rebuilt after Invalidate)", inner.pidCalls)
+	}
+}
+
 func TestCachingReaderZeroFreshnessAlwaysRebuilds(t *testing.T) {
 	inner := &countingReader{fakeReader: fakeReader{ids: map[int]Identity{100: {PID: 100}}}}
 	cr := NewCachingReader(inner, 0)
