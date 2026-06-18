@@ -14,9 +14,7 @@ import (
 
 func init() { Register(mongodbProtocol{}, "mongo") }
 
-// mongoDisconnectTimeout bounds the client teardown so an unreachable server
-// cannot hang the probe in its deferred Disconnect (the probe's own context may
-// already be expired by then, so a fresh bounded context is used).
+// mongoDisconnectTimeout bounds teardown after the operation context expires.
 const mongoDisconnectTimeout = 5 * time.Second
 
 // mongodbProtocol probes a MongoDB server.
@@ -26,9 +24,7 @@ func (mongodbProtocol) Name() string       { return "mongodb" }
 func (mongodbProtocol) DefaultPort() int   { return 27017 }
 func (mongodbProtocol) RequiresUser() bool { return false }
 
-// Probe connects (authenticating with the configured user/password when set),
-// verifies the server responds to a ping, and reads its version via buildInfo.
-// The caller's context bounds the whole probe.
+// Probe pings MongoDB and returns version/topology extras.
 func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	client, err := MongoConnect(cfg)
 	if err != nil {
@@ -45,9 +41,7 @@ func (mongodbProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	// Best effort: a successful ping already proves connect + auth.
 	_ = client.Database("admin").RunCommand(ctx, bson.D{{Key: "buildInfo", Value: 1}}).Decode(&info)
 
-	// Topology: hello/isMaster expose the replica-set role so an expect: rule can
-	// assert it (e.g. role == primary, set_name == rs0). Best effort; it runs
-	// pre-auth and never fails the probe.
+	// Topology is best effort; ping already proved liveness.
 	role, setName, readOnly := mongoTopology(ctx, client)
 	extra := map[string]string{"role": role, "read_only": strconv.FormatBool(readOnly)}
 	putIfSet(extra, "set_name", setName)
@@ -90,11 +84,7 @@ func mongoRole(primary, secondary, arbiter bool, setName string) string {
 	}
 }
 
-// MongoConnect builds a MongoDB client from cfg (host/port/user/password/tls and
-// an optional `auth_source` param). The connection is lazy — the first operation,
-// bounded by its context, surfaces connection errors. Exported so the
-// mongodb-query check reuses the same connection logic (host/port/user/password/
-// database/tls), mirroring MySQLDSN/PostgresDSN.
+// MongoConnect builds a lazy MongoDB client from cfg.
 func MongoConnect(cfg Config) (*mongo.Client, error) {
 	host := cfg.Host
 	if host == "" {
@@ -127,9 +117,7 @@ func MongoConnect(cfg Config) (*mongo.Client, error) {
 	return mongo.Connect(opts)
 }
 
-// MongoDisconnect closes a MongoDB client with a fresh bounded context. Callers
-// often invoke it after their operation context has expired, so teardown must
-// not reuse the caller's cancelled context or run unbounded.
+// MongoDisconnect closes a MongoDB client with the bounded teardown timeout.
 func MongoDisconnect(client *mongo.Client) {
 	if client == nil {
 		return

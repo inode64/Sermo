@@ -20,10 +20,7 @@ type FdsSample struct {
 // reads /proc/sys/fs/file-nr.
 type FdsSamplerFunc func() (FdsSample, error)
 
-// fdsCheck watches the system-wide open file descriptors against the kernel
-// maximum (fs.file-max). Like disk it is a level check: OK==true means every
-// predicate holds. Catches fd exhaustion, which makes every open()/socket()/
-// accept() across the host fail with EMFILE/ENFILE.
+// fdsCheck is a level check for system-wide file descriptor exhaustion.
 type fdsCheck struct {
 	base
 	preds   []levelPred

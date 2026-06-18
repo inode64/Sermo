@@ -13,9 +13,7 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
-// SizeSamplerFunc returns the byte size of a file or directory. Injected for
-// tests; the default uses os.Stat for a file and a recursive walk for a
-// directory.
+// SizeSamplerFunc measures a file or directory in bytes.
 type SizeSamplerFunc func(ctx context.Context, path string) (int64, error)
 
 // sizeSample is one timestamped size observation.
@@ -24,16 +22,12 @@ type sizeSample struct {
 	size int64
 }
 
-// sizeState keeps the recent size samples within the configured window. Being a
-// pointer, it survives across cycles when the check is built once (a host watch).
+// sizeState stores samples across cycles for one built check.
 type sizeState struct {
 	samples []sizeSample
 }
 
-// sizeCheck alerts when a file or directory grows by at least growBy within the
-// window. It is condition-style (OK==true means "grew too fast"): only increases
-// trip it — a steady or shrinking path passes. It is stateful, so it is meant to
-// run as a host watch where the same check instance ticks each cycle.
+// sizeCheck is stateful: OK means path grew by growBy within window.
 type sizeCheck struct {
 	base
 	path    string
@@ -64,7 +58,6 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 	}
 	now := clock()
 
-	// Drop samples older than the window, then record the current one.
 	cutoff := now.Add(-c.window)
 	kept := c.state.samples[:0]
 	for _, s := range c.state.samples {

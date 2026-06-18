@@ -15,9 +15,8 @@ import (
 	"sermo/internal/conn"
 )
 
-// mongoCheck runs a MongoDB query and compares a scalar result against a value.
-// It is condition-style like the sql check: OK == true means the comparison
-// holds. Three query shapes are supported:
+// mongoCheck compares a scalar MongoDB query result. OK means op/value matched.
+// Supported shapes:
 //   - count:     a `collection` (+ optional JSON `filter`) — compares the
 //     matching document count.
 //   - aggregate: a `collection` + JSON `pipeline` — runs the pipeline and pulls
@@ -25,9 +24,7 @@ import (
 //   - command:   a JSON `command` run on the database — pulls the scalar at the
 //     dotted `result` path from the reply.
 //
-// Connection variables (host/port/user/password/database/tls, plus auth_source)
-// mirror the mysql/mariadb checks and reuse conn.MongoConnect. Use a read-only
-// user; the query is run as given.
+// Use a read-only user; the query is run as given.
 type mongoCheck struct {
 	base
 	cfg        conn.Config
@@ -135,9 +132,7 @@ func mongoRawScalar(rv bson.RawValue) (string, bool) {
 	}
 }
 
-// buildMongoCheck builds a mongodb-query check, resolving the connection (reusing
-// the mysql-style host/port/user/password/database/tls fields) and the query
-// shape (count / aggregate / command).
+// buildMongoCheck builds a mongodb-query check.
 func buildMongoCheck(b base, entry map[string]any) (Check, string) {
 	op := cfgval.AsString(entry["op"])
 	if !validCompareOp(op) {
