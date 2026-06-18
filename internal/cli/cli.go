@@ -527,6 +527,7 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 	seq := app.OrderedGroup(service, action, lookup, map[string]bool{}, 0)
 	var primary operation.Result
 	var primaryErr error
+	var cascadeFailed bool
 	for _, svc := range seq {
 		res := resolved
 		if svc != service {
@@ -542,13 +543,16 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			primary, primaryErr = out, err
 			continue
 		}
+		if err == nil && app.CascadeTargetFailed(out) {
+			cascadeFailed = true
+		}
 		if err != nil {
 			fmt.Fprintf(a.Stderr, "cascade %s: %v\n", svc, err)
 		} else if !opts.quiet {
 			fmt.Fprintf(a.Stdout, "cascade %s: %s %s\n", svc, action, out.Status)
 		}
 	}
-	return primary, primaryErr
+	return app.DowngradePrimaryOnCascadeFailure(primary, cascadeFailed), primaryErr
 }
 
 // defaultOperate wires the real operation engine from a resolved service and
