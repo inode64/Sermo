@@ -53,6 +53,28 @@ func TestApplyGatesRequires(t *testing.T) {
 	}
 }
 
+func TestLibChangedFuncSharesWorkerBaseline(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/lib.so"
+	writeFile(t, path, "v1")
+
+	baseline := map[string]string{}
+	changed := LibChangedFunc(baseline)
+	w := &Worker{libBaseline: baseline}
+
+	if c, _ := changed(path); c {
+		t.Fatal("first observation must adopt baseline, not report changed")
+	}
+	if c, _ := w.changed(path); c {
+		t.Fatal("worker must share the same adopted baseline")
+	}
+
+	writeFile(t, path, "v2")
+	if c, _ := changed(path); !c {
+		t.Fatal("shared baseline must see the file change")
+	}
+}
+
 func TestApplyGatesSkipWhenChanged(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/conf"

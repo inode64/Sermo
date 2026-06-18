@@ -582,6 +582,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	collector := metrics.New(metrics.OSReader{})
 	selectors, _ := process.ParseSelectors(resolved.Tree)
 	metricSample := app.MetricSampleForOperation(service, resolved.Tree, collector, discoverer, selectors)
+	libBaseline := map[string]string{}
 	engine := operation.New(operation.Config{
 		Service:          service,
 		Unit:             target.Unit,
@@ -594,6 +595,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner},
 		MetricSample:     metricSample,
+		Changed:          app.LibChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 

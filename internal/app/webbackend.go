@@ -271,7 +271,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			serviceDeps.Backend = target.Backend
 			serviceDeps.Manager = target.Manager
 			serviceDeps.BackendPIDs = target.BackendPIDs
-			engine, checkDeps, discoverer := serviceRuntime(name, target.Unit, resolved.Tree, serviceDeps, operationEventEmitter(deps.Emit))
+			engine, checkDeps, discoverer := serviceRuntime(name, target.Unit, resolved.Tree, serviceDeps, map[string]string{}, operationEventEmitter(deps.Emit))
 			selectors, processWarnings := serviceProcessSelectors(context.Background(), resolved.Tree, serviceDeps, target.Unit)
 			names, types := checkCatalog(resolved.Tree)
 			entry.engine = engine
