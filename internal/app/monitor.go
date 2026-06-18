@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -97,7 +98,7 @@ func (m *Monitor) Reload() {
 		return
 	}
 	if issues := config.Validate(newCfg); len(issues) > 0 {
-		m.emitReloadError(fmt.Sprintf("config invalid: %s", issues[0].Msg))
+		m.emitReloadError(fmt.Sprintf("config invalid: %s", formatValidationIssues(issues)))
 		return
 	}
 
@@ -217,4 +218,18 @@ func (m *Monitor) emitReloadError(msg string) {
 	if m.deps.Emit != nil {
 		m.deps.Emit(Event{Kind: "error", Action: "reload", Message: msg})
 	}
+}
+
+// formatValidationIssues joins the first few validation findings for reload errors.
+func formatValidationIssues(issues []config.Issue) string {
+	const max = 5
+	msgs := make([]string, 0, min(len(issues), max))
+	for i, issue := range issues {
+		if i >= max {
+			msgs = append(msgs, fmt.Sprintf("... and %d more", len(issues)-max))
+			break
+		}
+		msgs = append(msgs, issue.Msg)
+	}
+	return strings.Join(msgs, "; ")
 }
