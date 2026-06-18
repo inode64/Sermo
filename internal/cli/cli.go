@@ -26,6 +26,7 @@ import (
 	"sermo/internal/control"
 	"sermo/internal/execx"
 	"sermo/internal/locks"
+	"sermo/internal/metrics"
 	"sermo/internal/mountctl"
 	"sermo/internal/notify"
 	"sermo/internal/operation"
@@ -578,6 +579,9 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 	if backendPIDs := backendPIDsForTarget(target, a.Runner); backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
+	collector := metrics.New(metrics.OSReader{})
+	selectors, _ := process.ParseSelectors(resolved.Tree)
+	metricSample := app.MetricSampleForOperation(service, resolved.Tree, collector, discoverer, selectors)
 	engine := operation.New(operation.Config{
 		Service:          service,
 		Unit:             target.Unit,
@@ -589,6 +593,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner},
+		MetricSample:     metricSample,
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 

@@ -6,10 +6,22 @@ import (
 
 	"sermo/internal/checks"
 	"sermo/internal/locks"
+	"sermo/internal/metrics"
 	"sermo/internal/operation"
 	"sermo/internal/process"
 	"sermo/internal/servicemgr"
 )
+
+// MetricSampleForOperation builds a per-operation metric reader for preflight,
+// postflight and guard evaluation when the resolved service references metrics.
+func MetricSampleForOperation(name string, tree map[string]any, collector *metrics.Collector, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) checks.MetricReader {
+	if collector == nil || noResidentProcess(tree) {
+		return nil
+	}
+	return metricSampler(name, tree, collector, func() []int {
+		return discoverPIDs(discoverer, selectors)
+	})
+}
 
 // serviceRuntime builds the per-service runtime pieces shared by a worker and the
 // web backend: a process discoverer, the check deps (with a backend-status
@@ -31,6 +43,8 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
+	selectors, _ := serviceProcessSelectors(context.Background(), tree, deps, unit)
+	metricSample := MetricSampleForOperation(name, tree, deps.Collector, discoverer, selectors)
 	checkDeps := checkDepsFromAppDeps(deps, checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
@@ -57,6 +71,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checkDeps,
+		MetricSample:     metricSample,
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
 		Emit:             recordOperation,
