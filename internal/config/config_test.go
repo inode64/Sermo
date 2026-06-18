@@ -539,6 +539,54 @@ uses: web
 	}
 }
 
+func TestAppsLinkCycleErrorsInsteadOfRecursing(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/app-a.yml": `
+kind: app
+name: app-a
+apps: [app-b]
+binary: /usr/bin/app-a
+`,
+		"catalog/apps/app-b.yml": `
+kind: app
+name: app-b
+apps: [app-a]
+binary: /usr/bin/app-b
+`,
+		"catalog/web.yml": `
+kind: daemon
+name: web
+apps: [app-a]
+variables: { port: 80 }
+checks:
+  port: { type: tcp, port: "${port}" }
+`,
+		"enabled/web-main.yml": `
+kind: service
+name: web-main
+uses: web
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs := cfg.Resolve("web-main")
+	if len(errs) == 0 {
+		t.Fatal("a cyclic apps: linkage must error, not recurse")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "apps cycle detected") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("errors = %v; want an 'apps cycle detected' error", errs)
+	}
+}
+
 func TestValidateCleanConfig(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

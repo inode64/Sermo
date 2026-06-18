@@ -640,6 +640,15 @@ func (c *Config) fillChangedLibraryPaths(node map[string]any, scope string) []st
 // ResolveDaemon, so they carry concrete paths regardless of this service's own
 // variables.
 func (c *Config) expandApps(tree map[string]any) []string {
+	return c.expandAppsChain(tree, nil)
+}
+
+// expandAppsChain is expandApps with cycle tracking: chain carries the app names
+// already being resolved on this path so a self- or mutually-referential
+// `apps:` linkage (an app document that itself lists `apps:`) fails as a config
+// error instead of recursing until the stack overflows. chain holds app names
+// only — a daemon/service that links an app of the same name is not a cycle.
+func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 	_, present := tree["apps"]
 	names := cfgval.StringList(tree["apps"])
 	delete(tree, "apps")
@@ -653,12 +662,17 @@ func (c *Config) expandApps(tree map[string]any) []string {
 		preflight = map[string]any{}
 	}
 	for _, name := range names {
+		if slices.Contains(chain, name) {
+			cycle := append(append([]string{}, chain...), name)
+			errs = append(errs, fmt.Sprintf("apps cycle detected: %s", strings.Join(cycle, " -> ")))
+			continue
+		}
 		doc, ok := c.Apps[name]
 		if !ok {
 			errs = append(errs, fmt.Sprintf("apps references %q, which is not an app", name))
 			continue
 		}
-		resolved, rerrs := c.resolveDoc(doc, name)
+		resolved, rerrs := c.resolveDocBody(doc, name, append(append([]string{}, chain...), name))
 		if len(rerrs) > 0 {
 			errs = append(errs, rerrs...)
 			continue
@@ -716,12 +730,22 @@ func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
 // resolveDoc expands a single catalog document's own body (no service merge),
 // shared by ResolveDaemon and the `apps` linkage (which resolves app documents).
 func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
+	// Top level (daemon/service/catalog): its apps: links start a fresh app
+	// chain. The top-level name is a different namespace than apps, so a daemon
+	// linking an app of the same name is not a cycle.
+	return c.resolveDocBody(doc, name, nil)
+}
+
+// resolveDocBody expands doc's own body and its apps: links, threading appChain
+// (the app names already being resolved on this path) so expandAppsChain can
+// detect a cyclic apps: linkage instead of recursing into a stack overflow.
+func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
 	vars, errs := c.expansionVariablesForKind(body, name, doc.Kind)
 	errs = append(errs, expandBinary(body, doc.Kind)...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
-	errs = append(errs, c.expandApps(expanded)...)
+	errs = append(errs, c.expandAppsChain(expanded, appChain)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
