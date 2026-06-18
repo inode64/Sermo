@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -21,20 +22,6 @@ func TestDNSRegistered(t *testing.T) {
 	}
 	if p.RequiresUser() {
 		t.Fatal("dns must not require a user")
-	}
-}
-
-func TestEncodeDNSName(t *testing.T) {
-	got, err := encodeDNSName("www.example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []byte{3, 'w', 'w', 'w', 7, 'e', 'x', 'a', 'm', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0}
-	if string(got) != string(want) {
-		t.Fatalf("encodeDNSName = %v, want %v", got, want)
-	}
-	if _, err := encodeDNSName("a." + string(make([]byte, 64)) + ".com"); err == nil {
-		t.Fatal("an over-long label must error")
 	}
 }
 
@@ -58,6 +45,17 @@ func TestBuildDNSQueryHeader(t *testing.T) {
 	}
 }
 
+// dnsQNameBytes wire-encodes a domain name as length-prefixed labels ending in a
+// zero byte, for crafting raw test messages.
+func dnsQNameBytes(name string) []byte {
+	var b []byte
+	for _, label := range strings.Split(name, ".") {
+		b = append(b, byte(len(label)))
+		b = append(b, label...)
+	}
+	return append(b, 0)
+}
+
 // dnsResponse crafts a minimal DNS response header.
 func dnsResponse(id uint16, rcode, ancount int) []byte {
 	b := make([]byte, 12)
@@ -68,8 +66,8 @@ func dnsResponse(id uint16, rcode, ancount int) []byte {
 	return b
 }
 
-func TestParseDNSResponse(t *testing.T) {
-	id, rcode, answers, err := parseDNSResponse(dnsResponse(0x1234, 0, 2))
+func TestParseDNSReply(t *testing.T) {
+	id, rcode, answers, _, err := parseDNSReply(dnsResponse(0x1234, 0, 2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,11 +76,11 @@ func TestParseDNSResponse(t *testing.T) {
 	}
 	// A query (QR=0) is not a valid response.
 	q := make([]byte, 12)
-	if _, _, _, err := parseDNSResponse(q); err == nil {
+	if _, _, _, _, err := parseDNSReply(q); err == nil {
 		t.Fatal("QR=0 must be rejected")
 	}
 	// Too short.
-	if _, _, _, err := parseDNSResponse([]byte{0, 0}); err == nil {
+	if _, _, _, _, err := parseDNSReply([]byte{0, 0}); err == nil {
 		t.Fatal("short response must error")
 	}
 }
@@ -107,28 +105,31 @@ func dnsAnswerRR(typ uint16, rdata []byte) []byte {
 	return append(append(rr, tail...), rdata...)
 }
 
-func TestParseDNSAnswerAddrs(t *testing.T) {
+func TestParseDNSReplyAnswerAddrs(t *testing.T) {
 	// Header (1 question, 3 answers) + question + A + CNAME (skipped) + AAAA.
 	msg := dnsResponse(0x1, 0, 3)
 	binary.BigEndian.PutUint16(msg[4:], 1) // QDCOUNT
-	q, err := encodeDNSName("example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-	msg = append(msg, q...)
+	msg = append(msg, dnsQNameBytes("example.com")...)
 	msg = append(msg, 0, 1, 0, 1) // QTYPE A, QCLASS IN
 	msg = append(msg, dnsAnswerRR(1, []byte{93, 184, 216, 34})...)
 	msg = append(msg, dnsAnswerRR(5, []byte{0xC0, 0x0C})...) // CNAME
 	v6 := append([]byte{0x26, 0x06, 0x28, 0x00}, make([]byte, 12)...)
 	msg = append(msg, dnsAnswerRR(28, v6)...)
 
-	addrs := parseDNSAnswerAddrs(msg)
+	_, _, _, addrs, err := parseDNSReply(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(addrs) != 2 || addrs[0] != "2606:2800::" || addrs[1] != "93.184.216.34" {
 		t.Fatalf("addrs = %v, want the sorted A + AAAA records", addrs)
 	}
 
 	// A truncated answer section yields what was parsed, never panics.
-	if got := parseDNSAnswerAddrs(msg[:len(msg)-10]); len(got) != 1 {
+	_, _, _, got, err := parseDNSReply(msg[:len(msg)-10])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
 		t.Fatalf("truncated = %v, want just the A record", got)
 	}
 }
