@@ -739,12 +739,11 @@ fields, addressed by name.
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
 
-`sermoctl services --notify NAME[,NAME]` reuses the same configured notifiers to
-send an ad-hoc services inventory report. Email notifiers receive a
-multipart plain-text/HTML message with summary cards and a service table; Slack
-and Teams receive the text fallback. Use `--notify all` to send the report to
-every enabled notifier. This report is rendered by the CLI itself and does not
-use notifier templates.
+`sermoctl services --notify NAME[,NAME]` sends an ad-hoc services inventory
+report through configured notifiers. Email notifiers receive a multipart
+plain-text/HTML message with summary cards and a service table; Slack and Teams
+receive the text fallback. `--notify all` targets every enabled notifier. The
+CLI renders this report directly; notifier templates are not used.
 
 `none` is a **reserved keyword** and cannot be used as a notifier name.
 
@@ -1401,10 +1400,10 @@ Predicates: `used_pct` (percent of the limit), `free` (`file-max − allocated`)
 
 A `diskio` watch monitors one block device's I/O, computed from per-cycle
 `/proc/diskstats` deltas: **utilization** (share of wall time the device was
-busy), **throughput** and **average request latency**. Catches the saturated or
-degraded disk that storage-space checks cannot see. Like the other counter
-checks it is **stateful**: the first cycle only baselines (never fires), and a
-counter reset clamps the delta to zero.
+busy), **throughput** and **average request latency**. Use it for saturated or
+degraded disks that storage-space checks cannot see. It is **stateful**: the
+first cycle only baselines (never fires), and a counter reset clamps the delta to
+zero.
 
 ```yaml
 watches:

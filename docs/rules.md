@@ -1106,12 +1106,11 @@ checks:
 
 ### MongoDB query (`mongodb-query`)
 
-A `mongodb-query` check runs a MongoDB query and compares a **scalar result**
-against a `value`, the document-store counterpart of the `sql` check. It is
-**condition-style** (`OK == true` means the comparison holds). It uses the same
-connection variables as the `mongodb` connection check (`host`/`port`/`user`/
-`password`/`database`/`tls`, plus `auth_source`) and the official MongoDB driver.
-Three query shapes are supported:
+A `mongodb-query` check runs a MongoDB query, compares a **scalar result** with
+`value`, and is **condition-style** (`OK == true` means the comparison holds).
+It uses the same connection variables as the `mongodb` connection check
+(`host`/`port`/`user`/`password`/`database`/`tls`, plus `auth_source`) and the
+official MongoDB driver. Three query shapes are supported:
 
 ```yaml
 checks:
@@ -1158,11 +1157,10 @@ checks:
 
 ### InfluxDB query (`influxdb-query`)
 
-An `influxdb-query` check runs a query against InfluxDB and compares a **scalar
-result** against a `value`, the time-series counterpart of the `sql`/
-`mongodb-query` checks. It is **condition-style** (`OK == true` means the
-comparison holds) and uses the `influxdb` connection variables (`host`/`port`/
-`user`/`password`/`tls`). The **`language`** selects the query API:
+An `influxdb-query` check runs an InfluxDB query, compares a **scalar result**
+with `value`, and is **condition-style** (`OK == true` means the comparison
+holds). It uses the `influxdb` connection variables (`host`/`port`/`user`/
+`password`/`tls`). The **`language`** selects the query API:
 
 - **`influxql`** (default) — InfluxDB **1.x** `GET /query` against a `database`.
 - **`flux`** — InfluxDB **2.x** `POST /api/v2/query` against an `org` with a
@@ -1217,8 +1215,8 @@ A `size` check watches a file or directory and **alerts when it grows** by at
 least `grow_by` within the `within` window — useful to catch a runaway log, a
 disk-filling spool or a leaking cache. Only **increases** trip it: a steady or
 shrinking path passes. It is **condition-style** (`OK == true` means "grew too
-fast", so `active: {check: …}` fires) and **stateful**, so run it as a **host
-watch** where the same instance ticks each cycle and remembers recent sizes.
+fast", so `active: {check: …}` fires) and **stateful**; run it as a **host
+watch** when growth history must persist across cycles.
 
 ```yaml
 watches:
@@ -1462,10 +1460,9 @@ generic: any check that publishes numeric `Result.Data` fields can opt in.)
 
 ### Hardware sensors
 
-These checks watch physical-health signals. Like the other host-resource checks
-they are **condition-style** (a predicate is the *alerting* condition), and their
-numeric values are **recorded over time and graphed** in the service detail so you
-can spot gradual degradation (overheating, a wearing SSD, rising ECC errors).
+Physical-health checks are **condition-style**: predicates are alerting
+conditions. Numeric values are **recorded over time and graphed** in the service
+detail so gradual degradation is visible.
 
 - **`sensors`** — lm-sensors-style **hwmon** inputs (no external tool; reads
   `/sys/class/hwmon`). Aggregates: `temp` (the hottest matching temperature, °C),
@@ -1554,9 +1551,8 @@ checks:
 ### Count
 
 A `count` check tallies the entries in a directory and compares the total to a
-threshold. It is condition-style: it passes (so `active`/`failed` on it is true)
-when `op value` holds — useful for "too many queued files",
-"backlog not draining", "spool directory empty", etc.
+threshold. It is condition-style: `active`/`failed` is true when `op value`
+holds.
 
 ```yaml
 checks:

@@ -18,18 +18,9 @@ import (
 	"sermo/internal/conn"
 )
 
-// influxCheck runs a query against an InfluxDB HTTP API and compares a scalar
-// result against a value — the time-series counterpart of the sql/mongodb-query
-// checks. It is condition-style: OK == true means the comparison holds.
-// Connection variables (host/port/user/password/tls) mirror the influxdb
-// connection check. Two query languages are supported:
-//   - influxql (default): InfluxDB 1.x `GET /query` against `database`; the JSON
-//     result's scalar is the last column of the first row (or the named `column`).
-//   - flux: InfluxDB 2.x `POST /api/v2/query` against `org` with a `token`; the
-//     annotated-CSV result's scalar is the `_value` column of the first data row
-//     (or the named `column`).
-//
-// Use a read-only user/token; the query is run as given.
+// influxCheck runs an InfluxDB query and compares one scalar result with a
+// threshold. It is condition-style: OK means the comparison holds. Use a
+// read-only user or token.
 type influxCheck struct {
 	base
 	cfg      conn.Config
