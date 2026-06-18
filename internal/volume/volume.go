@@ -129,6 +129,12 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 	if grow > free {
 		grow = free // use all that is available, as the operator script does
 	}
+	if grow <= 0 {
+		// Config validation already requires a positive expand.by, but Expand is
+		// exported: guard so a zero/negative request never reaches lvextend as a
+		// no-op or malformed `-L+<n>b` argument.
+		return Result{}, fmt.Errorf("expand size must be positive, got %d bytes for %s", by, t.Mountpoint)
+	}
 
 	lv := fmt.Sprintf("/dev/%s/%s", t.VG, t.LV)
 	if _, err := execx.Run(ctx, e.Runner, e.timeout(), "lvextend", fmt.Sprintf("-L+%db", grow), lv); err != nil {
