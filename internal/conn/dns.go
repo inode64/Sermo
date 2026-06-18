@@ -1,7 +1,6 @@
 package conn
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -12,6 +11,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"golang.org/x/net/dns/dnsmessage"
 )
 
 func init() { Register(dnsProtocol{}) }
@@ -20,6 +21,8 @@ func init() { Register(dnsProtocol{}) }
 // configurable name (default "localhost") and verifies the server answers. A
 // NOERROR or NXDOMAIN reply means the server is up and speaking DNS; SERVFAIL,
 // REFUSED, a transport error or a timeout fail the check. No authentication.
+// Message encoding/parsing uses golang.org/x/net/dns/dnsmessage (the package the
+// standard library resolver builds on) rather than a hand-rolled wire codec.
 type dnsProtocol struct{}
 
 func (dnsProtocol) Name() string       { return "dns" }
@@ -72,7 +75,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	rid, rcode, answers, err := parseDNSResponse(buf[:n])
+	rid, rcode, answers, addrs, err := parseDNSReply(buf[:n])
 	if err != nil {
 		return Result{}, err
 	}
@@ -86,7 +89,7 @@ func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		"query":     name,
 		"rcode":     rcodeName(rcode),
 		"answers":   strconv.Itoa(answers),
-		"addresses": strings.Join(parseDNSAnswerAddrs(buf[:n]), ","),
+		"addresses": strings.Join(addrs, ","),
 	}}, nil
 }
 
@@ -113,70 +116,6 @@ func dnsProbeInterface(host, iface string) string {
 		return ""
 	}
 	return iface
-}
-
-// parseDNSAnswerAddrs walks a DNS response's answer section and returns the
-// A/AAAA record addresses, sorted — so an `expect` assertion can verify what a
-// name actually resolved to. Other record types (CNAME, …) are skipped; a
-// malformed section yields what was parsed up to it.
-func parseDNSAnswerAddrs(b []byte) []string {
-	if len(b) < 12 {
-		return nil
-	}
-	qd := int(binary.BigEndian.Uint16(b[4:]))
-	an := int(binary.BigEndian.Uint16(b[6:]))
-	off := 12
-	for range qd { // skip questions: name + QTYPE + QCLASS
-		off = skipDNSName(b, off)
-		if off < 0 || off+4 > len(b) {
-			return nil
-		}
-		off += 4
-	}
-	var addrs []string
-	for range an {
-		off = skipDNSName(b, off)
-		if off < 0 || off+10 > len(b) {
-			break
-		}
-		typ := binary.BigEndian.Uint16(b[off:])
-		class := binary.BigEndian.Uint16(b[off+2:])
-		rdlen := int(binary.BigEndian.Uint16(b[off+8:]))
-		off += 10
-		if off+rdlen > len(b) {
-			break
-		}
-		if class == 1 {
-			switch {
-			case typ == 1 && rdlen == net.IPv4len:
-				addrs = append(addrs, net.IP(b[off:off+rdlen]).String())
-			case typ == 28 && rdlen == net.IPv6len:
-				addrs = append(addrs, net.IP(b[off:off+rdlen]).String())
-			}
-		}
-		off += rdlen
-	}
-	slices.Sort(addrs)
-	return addrs
-}
-
-// skipDNSName advances past a (possibly compressed) DNS name, returning the new
-// offset or -1 on a malformed name.
-func skipDNSName(b []byte, off int) int {
-	for {
-		if off >= len(b) {
-			return -1
-		}
-		l := int(b[off])
-		switch {
-		case l == 0:
-			return off + 1
-		case l&0xC0 == 0xC0: // compression pointer: two bytes, ends the name
-			return off + 2
-		default:
-			off += 1 + l
-		}
-	}
 }
 
 // dnsResponseOK reports whether an rcode means the server answered healthily: a
@@ -210,52 +149,92 @@ func dnsID() uint16 {
 	return binary.BigEndian.Uint16(b[:])
 }
 
-// buildDNSQuery builds a standard recursive query message (header + one question).
+// buildDNSQuery builds a standard recursive query message (header + one question)
+// for name and qtype, packed with dnsmessage.
 func buildDNSQuery(id uint16, name string, qtype uint16) ([]byte, error) {
-	qname, err := encodeDNSName(name)
+	qname, err := dnsmessage.NewName(dnsFQDN(name))
 	if err != nil {
 		return nil, err
 	}
-	msg := make([]byte, 12)
-	binary.BigEndian.PutUint16(msg[0:], id)
-	binary.BigEndian.PutUint16(msg[2:], 0x0100) // flags: RD=1
-	binary.BigEndian.PutUint16(msg[4:], 1)      // QDCOUNT=1
-	msg = append(msg, qname...)
-	tail := make([]byte, 4)
-	binary.BigEndian.PutUint16(tail[0:], qtype) // QTYPE
-	binary.BigEndian.PutUint16(tail[2:], 1)     // QCLASS=IN
-	return append(msg, tail...), nil
+	msg := dnsmessage.Message{
+		Header: dnsmessage.Header{ID: id, RecursionDesired: true},
+		Questions: []dnsmessage.Question{{
+			Name:  qname,
+			Type:  dnsmessage.Type(qtype),
+			Class: dnsmessage.ClassINET,
+		}},
+	}
+	return msg.Pack()
 }
 
-// encodeDNSName encodes a domain name as length-prefixed labels ending with a
-// zero byte.
-func encodeDNSName(name string) ([]byte, error) {
-	var b bytes.Buffer
-	name = strings.TrimSuffix(name, ".")
-	if name != "" {
-		for _, label := range strings.Split(name, ".") {
-			if len(label) == 0 || len(label) > 63 {
-				return nil, fmt.Errorf("invalid DNS label %q", label)
+// dnsFQDN returns name as a fully-qualified domain name (trailing dot), the form
+// dnsmessage.NewName requires. An empty name becomes the root ".".
+func dnsFQDN(name string) string {
+	if strings.HasSuffix(name, ".") {
+		return name
+	}
+	return name + "."
+}
+
+// parseDNSReply parses a DNS response with dnsmessage: it returns the id, RCODE,
+// the header's answer count and the A/AAAA addresses (sorted). It errors on a
+// too-short message or a query (QR=0). The answer section is parsed leniently —
+// a malformed record stops collection and yields what was read so far — so a
+// truncated reply still reports liveness rather than failing the probe.
+func parseDNSReply(b []byte) (id uint16, rcode int, answers int, addrs []string, err error) {
+	var p dnsmessage.Parser
+	hdr, err := p.Start(b)
+	if err != nil {
+		return 0, 0, 0, nil, err
+	}
+	if !hdr.Response {
+		return hdr.ID, 0, 0, nil, errors.New("not a DNS response (QR=0)")
+	}
+	if len(b) >= 12 { // always true after Start; makes the header read bounds-safe
+		answers = int(binary.BigEndian.Uint16(b[6:8])) // ANCOUNT from the header
+	}
+	// Collect A/AAAA answers; a malformed question/answer section still leaves a
+	// valid header for the liveness verdict, so it is not a probe error.
+	if p.SkipAllQuestions() == nil {
+		addrs = dnsAnswerAddrs(&p)
+	}
+	return hdr.ID, int(hdr.RCode), answers, addrs, nil
+}
+
+// dnsAnswerAddrs walks a parser positioned at the answer section and returns the
+// A/AAAA (IN class) addresses, sorted. Other record types are skipped; a
+// malformed record ends collection without error.
+func dnsAnswerAddrs(p *dnsmessage.Parser) []string {
+	var addrs []string
+loop:
+	for {
+		h, err := p.AnswerHeader()
+		if err != nil {
+			break // ErrSectionDone or a malformed header
+		}
+		switch h.Type {
+		case dnsmessage.TypeA:
+			a, err := p.AResource()
+			if err != nil {
+				break loop
 			}
-			b.WriteByte(byte(len(label)))
-			b.WriteString(label)
+			if h.Class == dnsmessage.ClassINET {
+				addrs = append(addrs, net.IP(a.A[:]).String())
+			}
+		case dnsmessage.TypeAAAA:
+			aaaa, err := p.AAAAResource()
+			if err != nil {
+				break loop
+			}
+			if h.Class == dnsmessage.ClassINET {
+				addrs = append(addrs, net.IP(aaaa.AAAA[:]).String())
+			}
+		default:
+			if err := p.SkipAnswer(); err != nil {
+				break loop
+			}
 		}
 	}
-	b.WriteByte(0)
-	return b.Bytes(), nil
-}
-
-// parseDNSResponse reads a DNS message header, returning the id, RCODE and answer
-// count. It errors on a too-short message or a query (QR=0).
-func parseDNSResponse(b []byte) (id uint16, rcode int, answers int, err error) {
-	if len(b) < 12 {
-		return 0, 0, 0, errors.New("short DNS response")
-	}
-	id = binary.BigEndian.Uint16(b[0:])
-	if b[2]&0x80 == 0 {
-		return id, 0, 0, errors.New("not a DNS response (QR=0)")
-	}
-	rcode = int(b[3] & 0x0f)
-	answers = int(binary.BigEndian.Uint16(b[6:]))
-	return id, rcode, answers, nil
+	slices.Sort(addrs)
+	return addrs
 }
