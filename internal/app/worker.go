@@ -433,6 +433,28 @@ func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule
 	return cond, err
 }
 
+// LibChangedFunc returns a `changed:` evaluator backed by baseline. The worker
+// and operation engine share the same map so manual actions honor the same
+// acknowledged fingerprints as automatic remediation.
+func LibChangedFunc(baseline map[string]string) func(string) (bool, error) {
+	if baseline == nil {
+		return nil
+	}
+	return func(path string) (bool, error) {
+		return libPathChanged(baseline, path)
+	}
+}
+
+func libPathChanged(baseline map[string]string, path string) (bool, error) {
+	cur := fileFingerprint(path)
+	base, seen := baseline[path]
+	if !seen {
+		baseline[path] = cur
+		return false, nil
+	}
+	return cur != base, nil
+}
+
 // changed reports whether the file at path differs from the acknowledged
 // baseline. The first observation adopts the current fingerprint (so a daemon
 // start never triggers a restart); thereafter it is true until acknowledged.
@@ -440,13 +462,7 @@ func (w *Worker) changed(path string) (bool, error) {
 	if w.libBaseline == nil {
 		w.libBaseline = map[string]string{}
 	}
-	cur := fileFingerprint(path)
-	base, seen := w.libBaseline[path]
-	if !seen {
-		w.libBaseline[path] = cur
-		return false, nil
-	}
-	return cur != base, nil
+	return libPathChanged(w.libBaseline, path)
 }
 
 // acknowledgeChanges refreshes every watched baseline to the current fingerprint,

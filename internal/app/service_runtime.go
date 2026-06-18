@@ -27,7 +27,7 @@ func MetricSampleForOperation(name string, tree map[string]any, collector *metri
 // web backend: a process discoverer, the check deps (with a backend-status
 // closure), and the safe operation engine. The engine's per-service operation
 // lock serializes start/stop/restart/reload/resume across the worker and the web.
-func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
+func serviceRuntime(name, unit string, tree map[string]any, deps Deps, libBaseline map[string]string, recordOperation func(operation.Result)) (operation.Engine, checks.Deps, process.Discoverer) {
 	lookup := deps.UserLookup
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
@@ -72,6 +72,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 		ResolveUser:      discoverer.ResolveUser,
 		CheckDeps:        checkDeps,
 		MetricSample:     metricSample,
+		Changed:          LibChangedFunc(libBaseline),
 		Sleep:            deps.Sleep,
 		OperationTimeout: deps.OperationTimeout,
 		Emit:             recordOperation,

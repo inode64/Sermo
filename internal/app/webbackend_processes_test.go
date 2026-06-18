@@ -365,7 +365,7 @@ func TestServiceRuntimePidfileCheckUsesBackendFallbackWhenSystemdHasNoPIDFile(t 
 		OperationTimeout: time.Second,
 		ExecxRunner:      systemdPIDRunner{pid: os.Getpid()},
 		Emit:             func(Event) {},
-	}, nil)
+	}, nil, nil)
 	built, warnings := checks.Build(map[string]any{
 		"pidfile": map[string]any{"type": "pidfile", "path": filepath.Join(t.TempDir(), "missing.pid")},
 	}, checkDeps)

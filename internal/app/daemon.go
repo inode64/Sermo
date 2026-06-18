@@ -337,7 +337,8 @@ func wireCascade(workers []*Worker, cascadeMap map[string][]string, deps Deps) {
 }
 
 func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *metrics.Collector) (*Worker, []string) {
-	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps, nil)
+	libBaseline := map[string]string{}
+	engine, checkDeps, discoverer := serviceRuntime(name, unit, tree, deps, libBaseline, nil)
 
 	maxParallel := deps.MaxParallel
 	ruleSet, _ := rules.ParseRules(tree)
@@ -426,6 +427,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		Now:          deps.Now,
 		Emit:         deps.Emit,
 		windows:      windowStates,
+		libBaseline:  libBaseline,
 	}
 	worker.Checks = func(ctx context.Context, d checks.Deps) map[string]checks.Result {
 		setCycleMetrics(d.Metrics)
