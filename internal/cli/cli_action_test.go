@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
 )
@@ -31,6 +32,50 @@ defaults:
 kind: service
 name: web
 service: { name: web }
+`)
+	return global
+}
+
+func writeInvalidActionConfig(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, `
+paths:
+  includes: [ `+root+`/enabled ]
+  runtime: `+root+`/run
+  locks: `+root+`/locks
+defaults:
+  policy:
+    cooldown: 5m
+`)
+	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
+kind: service
+name: web
+service: { name: web }
+`)
+	return global
+}
+
+func writeReloadCommandConfig(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, `
+paths:
+  includes: [ `+root+`/enabled ]
+  runtime: `+root+`/run
+defaults:
+  policy:
+    cooldown: 5m
+`)
+	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
+kind: service
+name: web
+service: { name: web }
+reload:
+  command: [reload-web, --check]
+  when: always
 `)
 	return global
 }
@@ -140,6 +185,28 @@ func TestActionWiringErrorExit2(t *testing.T) {
 	}
 }
 
+func TestReloadValidatesConfigBeforeOperate(t *testing.T) {
+	global := writeInvalidActionConfig(t)
+	var stderr bytes.Buffer
+	called := false
+	app := actionApp(operation.Result{Service: "web", Action: "reload", Status: operation.ResultOK}, nil, nil, &stderr)
+	app.Operate = func(context.Context, options, *config.Config, config.Resolved, string, string) (operation.Result, error) {
+		called = true
+		return operation.Result{}, nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
+	if code != exitConfigInvalid {
+		t.Fatalf("Run() exit = %d, want %d", code, exitConfigInvalid)
+	}
+	if called {
+		t.Fatal("reload operated despite invalid configuration")
+	}
+	if !strings.Contains(stderr.String(), "ERROR global") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
 func TestActionUnknownService(t *testing.T) {
 	global := writeActionConfig(t)
 	var stderr bytes.Buffer
@@ -151,6 +218,53 @@ func TestActionUnknownService(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unknown service") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+type reloadRecordingRunner struct {
+	calls [][]string
+}
+
+func (r *reloadRecordingRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	r.calls = append(r.calls, append([]string{name}, args...))
+	return execx.Result{}, nil
+}
+
+func (r *reloadRecordingRunner) ran(name string) bool {
+	for _, call := range r.calls {
+		if len(call) > 0 && call[0] == name {
+			return true
+		}
+	}
+	return false
+}
+
+func TestReloadNativeCommandUsesAppRunner(t *testing.T) {
+	global := writeReloadCommandConfig(t)
+	runner := &reloadRecordingRunner{}
+	var actions []string
+	var stdout bytes.Buffer
+	app := App{
+		LoadConfig: config.Load,
+		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{actions: &actions}, nil
+		},
+		Runner: runner,
+		Env:    func(string) string { return "" },
+		Stdout: &stdout,
+		Stderr: &bytes.Buffer{},
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "reload", "web"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d; stdout=%q", code, exitSuccess, stdout.String())
+	}
+	if !runner.ran("reload-web") {
+		t.Fatalf("native reload command did not use App.Runner; calls=%v", runner.calls)
+	}
+	if len(actions) != 0 {
+		t.Fatalf("reload command with when=always should not call backend manager; actions=%v", actions)
 	}
 }
 

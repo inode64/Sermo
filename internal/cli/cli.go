@@ -481,6 +481,12 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if code := a.requireService(opts, cfg, service); code != exitSuccess {
 		return code
 	}
+	if action == "reload" {
+		if issues := config.Validate(cfg); len(issues) > 0 {
+			a.printIssues(opts, issues)
+			return exitConfigInvalid
+		}
+	}
 	resolved, code := a.resolveService(opts, cfg, service)
 	if code != exitSuccess {
 		return code
@@ -582,7 +588,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
-		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg)},
+		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner},
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
 	})
 
