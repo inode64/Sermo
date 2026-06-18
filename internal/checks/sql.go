@@ -12,11 +12,8 @@ import (
 	"sermo/internal/conn"
 )
 
-// sqlCheck runs a query against a database and compares the scalar result (first
-// column of the first row) against a value. It is condition-style: OK == true
-// means the comparison holds. It reuses the conn DSN builders (mysql/postgres)
-// and the read-only SQLite open of the sqlite check; all three drivers share the
-// database/sql API. The query is read at face value — use a read-only user.
+// sqlCheck is condition-style: OK means the scalar query result matches
+// op/value. The query is run as given; use a read-only user.
 type sqlCheck struct {
 	base
 	engine string

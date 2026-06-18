@@ -158,8 +158,9 @@ reload:
   always-run-the-command behavior.
 - **Signal target.** The signal goes to systemd's `MainPID`, or — on OpenRC, or
   any unit with no MainPID — to the PID in the service's `pidfile:`. A signal
-  reload with neither available fails with a clear error; give the daemon a
-  `pidfile:` so the target can be resolved.
+  reload with neither available fails; declare `pidfile:` for daemons that must
+  reload by signal on OpenRC. Daemons without pidfiles reload by signal only on
+  systemd; on OpenRC they rely on the init script's own `reload` (`when: auto`).
 
 The reload that `reload:` produces is what the **`reload` action**,
 `reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload
@@ -167,21 +168,11 @@ button all run. It is a service-control concept: it applies to service daemons
 (`kind: service`/`daemon`), not to host `watches:`, which observe host metrics
 and fire hooks rather than reload a unit.
 
-A signal reload needs a process to signal: systemd's `MainPID` (available while
-the unit is active) or, on OpenRC and any backend without a MainPID, the PID in
-the service's `pidfile:`. If neither exists the reload fails with a clear error
-rather than silently doing nothing — declare a `pidfile:` for a daemon that must
-reload by signal on OpenRC. Daemons that write no pidfile (e.g. Prometheus, Loki)
-therefore reload by signal only on systemd; on OpenRC they rely on the init
-script's own `reload` (`when: auto`).
-
 ## App dependencies (`apps`)
 
-A service often runs on top of one or more **apps** — the runtimes/tools in
-`catalog/apps` (java, openssl, perl, …). An app owns the **binary**, **health**
-and **version** checks for that tool; it is the single source of truth, shared by
-every service that uses it. A service (or daemon definition) links the apps it
-needs with `apps:` — a list, since a service may depend on several:
+A service can link one or more **apps** from `catalog/apps` (java, openssl,
+perl, …). An app owns the tool's **binary**, **health** and **version** checks.
+Link them with `apps:`:
 
 ```yaml
 # catalog/services/tomcat-%v.yml — Tomcat runs on the JVM
@@ -912,10 +903,8 @@ new value. Clone chains resolve transitively; cycles are rejected.
 ## Multiple instances of one application
 
 To run several instances of the same application — same binary, same checks and
-rules, differing only in listen port, pidfile and config file — let each instance
-`uses` the daemon and override just the variables that make it unique. No
-special "instance" mechanism is involved: it is the ordinary `uses` + `variables`
-inheritance.
+rules, different listen port, pidfile and config file — let each instance `uses`
+the daemon and override only its unique variables.
 
 The daemon parametrizes everything that varies with `${...}` placeholders and
 threads each one into the commands and checks that consume it. In particular the
@@ -986,9 +975,8 @@ monitor: enabled    # enabled (default) | disabled | previous
   last stopped. On the very first run (no recorded state) it defaults to
   monitored.
 
-This is distinct from the top-level `enabled: false`, which disables the service
-entirely (no worker is built for it at all). With `monitor`, the worker is always
-present; only whether it runs its checks/rules each cycle changes.
+Top-level `enabled: false` disables the service entirely; no worker is built.
+With `monitor`, the worker exists and only check/rule execution changes.
 
 The live state is toggled at runtime with `sermoctl monitor <svc>` /
 `sermoctl unmonitor <svc>` and persisted in the state database under

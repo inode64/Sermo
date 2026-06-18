@@ -123,8 +123,8 @@ filter (`failed-watches` target).
 | Slot text | operation slots in use / total |
 | Cards | action, service, state, elapsed time, message |
 
-This is session-local for operations started from the current browser, enriched
-with `/api/ops` where available.
+Session-local for operations started from the current browser; enriched with
+`/api/ops` where available.
 
 ## Services panel
 
@@ -346,8 +346,7 @@ Columns:
 
 Container: `tr.exp-row` under the selected service row.
 
-Opened from a service row/name. This is the only service-detail surface; there
-is no separate lower detail panel.
+Opened from a service row/name. There is no separate lower detail panel.
 
 | Area | Current representation |
 | --- | --- |
