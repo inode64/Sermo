@@ -113,6 +113,25 @@ func TestSMTPSendImplicitTLSAuthenticates(t *testing.T) {
 	}
 }
 
+func TestSMTPTimeoutUsesCallerDeadlineOrFallback(t *testing.T) {
+	if got := smtpTimeout(context.Background()); got != dialTimeout {
+		t.Fatalf("smtpTimeout without deadline = %v, want %v", got, dialTimeout)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	got := smtpTimeout(ctx)
+	if got <= 59*time.Minute || got > time.Hour {
+		t.Fatalf("smtpTimeout with caller deadline = %v, want close to 1h", got)
+	}
+
+	expired, cancelExpired := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelExpired()
+	if got := smtpTimeout(expired); got != minSMTPTimeout {
+		t.Fatalf("smtpTimeout with expired context = %v, want %v", got, minSMTPTimeout)
+	}
+}
+
 func servePlainSMTP(t *testing.T, ln net.Listener, commands chan<- string) {
 	t.Helper()
 	c, err := ln.Accept()
