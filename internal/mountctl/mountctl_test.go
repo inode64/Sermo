@@ -79,6 +79,15 @@ func TestUsersWithLookupStopsOnCancelledContext(t *testing.T) {
 	}
 }
 
+func TestPidUsesPathHonorsCancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// The current process always uses /; a cancelled context must abort before readlink.
+	if pidUsesPath(ctx, os.Getpid(), "/") {
+		t.Fatal("pidUsesPath must stop immediately when the context is cancelled")
+	}
+}
+
 func TestAcquireRefcountMountsOnlyOnFirstUse(t *testing.T) {
 	mounted := false
 	runner := &fakeRunner{mounted: &mounted}
