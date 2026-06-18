@@ -22,6 +22,8 @@ import (
 // dead or stalled mail server cannot hang a watch cycle.
 const dialTimeout = 15 * time.Second
 
+const minSMTPTimeout = time.Nanosecond
+
 // emailDSN is a parsed SMTP DSN: smtp://[user:pass@]host[:port] (STARTTLS) or
 // smtps://… (implicit TLS, default port 465).
 type emailDSN struct {
@@ -132,7 +134,7 @@ func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []st
 	if err != nil {
 		return err
 	}
-	client, err := newSMTPClient(d, tlsCfg)
+	client, err := newSMTPClient(d, tlsCfg, smtpTimeout(ctx))
 	if err != nil {
 		return err
 	}
@@ -142,11 +144,22 @@ func smtpSendWithTLSConfig(ctx context.Context, d emailDSN, from string, to []st
 	return nil
 }
 
+func smtpTimeout(ctx context.Context) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return minSMTPTimeout
+		}
+		return remaining
+	}
+	return dialTimeout
+}
+
 func smtpTLSConfig(host string) *tls.Config {
 	return &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12}
 }
 
-func newSMTPClient(d emailDSN, tlsCfg *tls.Config) (*gomail.Client, error) {
+func newSMTPClient(d emailDSN, tlsCfg *tls.Config, timeout time.Duration) (*gomail.Client, error) {
 	port, err := strconv.Atoi(d.port)
 	if err != nil || port <= 0 || port > 65535 {
 		return nil, fmt.Errorf("invalid SMTP port %q", d.port)
@@ -154,12 +167,12 @@ func newSMTPClient(d emailDSN, tlsCfg *tls.Config) (*gomail.Client, error) {
 
 	opts := []gomail.Option{
 		gomail.WithPort(port),
-		gomail.WithTimeout(dialTimeout),
+		gomail.WithTimeout(timeout),
 		gomail.WithTLSConfig(tlsCfg),
 		gomail.WithoutNoop(),
 	}
 	if !d.implicitTLS {
-		opts = append(opts, gomail.WithDialContextFunc(smtpDialContext()))
+		opts = append(opts, gomail.WithDialContextFunc(smtpDialContext(timeout)))
 	}
 
 	switch {
@@ -183,9 +196,9 @@ func newSMTPClient(d emailDSN, tlsCfg *tls.Config) (*gomail.Client, error) {
 	return client, nil
 }
 
-func smtpDialContext() gomail.DialContextFunc {
+func smtpDialContext(timeout time.Duration) gomail.DialContextFunc {
 	return func(ctx context.Context, network, address string) (net.Conn, error) {
-		dialer := &net.Dialer{Timeout: dialTimeout}
+		dialer := &net.Dialer{Timeout: timeout}
 		conn, err := dialer.DialContext(ctx, network, address)
 		if err != nil {
 			return nil, err
