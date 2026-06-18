@@ -10,9 +10,7 @@ import (
 	"time"
 )
 
-// count entry kinds: which directory entries a count check tallies. Entries are
-// classified by their lstat type, so a symlink is always a symlink (never
-// followed) and is not also counted as a file or directory.
+// Count entry kinds use lstat types, so symlinks are never followed.
 const (
 	countAny     = "any"     // every entry, regardless of type
 	countFile    = "file"    // regular files only
@@ -20,11 +18,7 @@ const (
 	countSymlink = "symlink" // symbolic links only
 )
 
-// countCheck tallies the directory entries under path that match a kind filter
-// and compares the total to a threshold. Like diskCheck/metricCheck it is
-// condition-style: OK=true means the `op value` predicate holds (so
-// `active: {check: ...}` fires when the count crosses the threshold). With
-// recursive it descends the whole subtree; otherwise only the immediate entries.
+// countCheck is condition-style: OK means the entry count matches op/value.
 type countCheck struct {
 	base
 	path      string
@@ -61,8 +55,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 	return res
 }
 
-// tally counts the matching entries, either directly under path or, when
-// recursive, anywhere in its subtree (excluding path itself).
+// tally excludes the root path itself.
 func (c countCheck) tally(ctx context.Context) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -114,9 +107,7 @@ func (c countCheck) tallyRecursive(ctx context.Context) (int, error) {
 	return n, err
 }
 
-// matches reports whether an entry with the given lstat type bits is counted
-// under the kind filter. WalkDir/ReadDir report the entry's own type without
-// following symlinks, so links are classified as links, not their targets.
+// matches applies the configured lstat-kind filter.
 func (c countCheck) matches(typ fs.FileMode) bool {
 	switch c.kind {
 	case countAny:

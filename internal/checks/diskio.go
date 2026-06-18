@@ -40,12 +40,8 @@ type diskIOState struct {
 	last   DiskIOSample
 }
 
-// diskIOCheck watches a block device's I/O rates, computed from per-cycle
-// /proc/diskstats deltas: utilization (share of wall time the device was busy),
-// read/write throughput and average request latency. Like swap io it is
-// stateful (the first cycle only baselines) and a pointer type; a watch ticks
-// sequentially on its own goroutine, so the state needs no locking. OK==true
-// means every predicate holds (the alert condition).
+// diskIOCheck is a stateful level check for per-cycle /proc/diskstats deltas.
+// The first cycle only baselines; one watch ticks sequentially, so no lock.
 type diskIOCheck struct {
 	base
 	device  string

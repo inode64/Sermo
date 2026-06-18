@@ -39,12 +39,8 @@ type Manager interface {
 	// control --reload` or `nginx -s reload`; OpenRC runs the init script's
 	// `reload`). A unit/script with no reload support surfaces as an action error.
 	Reload(ctx context.Context, service string) error
-	// SupportsReload reports whether the init backend can reload the unit in place:
-	// systemd's `CanReload` (the unit defines `ExecReload`), or an OpenRC init
-	// script that defines a `reload` command. It lets the operation engine decide
-	// whether to use the backend reload or fall back to a native signal/command
-	// (a `reload:` block with `when: auto`). Best-effort: a query error reports
-	// false so the caller falls back to the native reload it was given.
+	// SupportsReload reports whether the init backend can reload the unit in
+	// place. Query errors report false so a configured native reload can run.
 	SupportsReload(ctx context.Context, service string) (bool, error)
 	// ResetState reconciles the init system's recorded state with reality,
 	// clearing a lingering failed/stuck marker so it no longer disagrees with the

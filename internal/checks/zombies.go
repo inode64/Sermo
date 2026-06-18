@@ -13,10 +13,7 @@ import (
 // when /proc cannot be read. Injected for tests; the default scans /proc.
 type ZombieSamplerFunc func() (uint64, bool)
 
-// zombieCheck watches the number of zombie processes against a threshold. A few
-// zombies are transient and normal; a growing count means a parent is not
-// reaping its children, which eventually exhausts the PID table. Like disk it is
-// a level check: OK==true means the threshold holds.
+// zombieCheck is a level check for zombie process count.
 type zombieCheck struct {
 	base
 	op      string
