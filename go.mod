@@ -3,6 +3,7 @@ module sermo
 go 1.26
 
 require (
+	github.com/beevik/ntp v1.5.0
 	github.com/cloudsoda/go-smb2 v0.0.0-20260609183447-7b96c35f5f4b
 	github.com/digitalocean/go-libvirt v0.0.0-20260609165003-6254771e63a8
 	github.com/dustin/go-humanize v1.0.1

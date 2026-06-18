@@ -4,6 +4,8 @@ github.com/Azure/go-ntlmssp v0.1.0 h1:DjFo6YtWzNqNvQdrwEyr/e4nhU3vRiwenz5QX7sFz+
 github.com/Azure/go-ntlmssp v0.1.0/go.mod h1:NYqdhxd/8aAct/s4qSYZEerdPuH1liG2/X9DiVTbhpk=
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e h1:4dAU9FXIyQktpoUAgOJK3OTFc/xug0PCXYCqU0FgDKI=
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
+github.com/beevik/ntp v1.5.0 h1:y+uj/JjNwlY2JahivxYvtmv4ehfi3h74fAuABB9ZSM4=
+github.com/beevik/ntp v1.5.0/go.mod h1:mJEhBrwT76w9D+IfOEGvuzyuudiW9E52U2BaTrMOYow=
 github.com/cloudsoda/go-smb2 v0.0.0-20260609183447-7b96c35f5f4b h1:VE/gRw9Mahc4LRVqcCr/+boMTCD/5g97ioBKlGER8Yw=
 github.com/cloudsoda/go-smb2 v0.0.0-20260609183447-7b96c35f5f4b/go.mod h1:1pQXB0vAlzRlqcY7LYKOOZMw0wKfJPFxTLsJRF2Gswo=
 github.com/cloudsoda/sddl v0.0.0-20250224235906-926454e91efc h1:0xCWmFKBmarCqqqLeM7jFBSw/Or81UEElFqO8MY+GDs=
