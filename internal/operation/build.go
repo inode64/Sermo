@@ -250,6 +250,9 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 	}
 	argv := spec.command
 	runner := deps.Runner
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
 	return func(ctx context.Context) error {
 		res, err := runner.Run(ctx, argv[0], argv[1:]...)
 		if err != nil {
