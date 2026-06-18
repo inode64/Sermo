@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -59,6 +60,27 @@ func TestCascaderRunReportsTargetsReturnsPrimary(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].Kind != "cascade" || events[0].Service != "dep" {
 		t.Fatalf("expected one cascade event for dep, got %+v", events)
+	}
+}
+
+func TestCascaderDowngradesPrimaryWhenAdditionalFails(t *testing.T) {
+	op := func(_ context.Context, svc, action string) operation.Result {
+		if svc == "dep" {
+			return operation.Result{Service: svc, Status: operation.ResultFailed, Message: "stop failed"}
+		}
+		return operation.Result{Service: svc, Status: operation.ResultOK, Message: "restart ok"}
+	}
+	c := cascader{
+		op:     op,
+		lookup: func(s string) []string { return map[string][]string{"primary": {"dep"}}[s] },
+		emit:   func(Event) {},
+	}
+	res := c.run(context.Background(), "primary", "restart")
+	if res.Status != operation.ResultFailed {
+		t.Fatalf("status = %s, want failed when cascade target fails", res.Status)
+	}
+	if !strings.Contains(res.Message, "cascade target failed") {
+		t.Fatalf("message = %q, want cascade failure noted", res.Message)
 	}
 }
 

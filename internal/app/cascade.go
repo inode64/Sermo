@@ -31,20 +31,55 @@ type cascader struct {
 // (start/restart: primary first, pre-order; stop: primary last, post-order),
 // sequentially and best-effort. It returns root's own Result (the primary), which
 // drives the caller's bookkeeping; additionals are reported as `cascade` events.
+// When an additional target fails, a successful primary is downgraded to failed
+// so callers do not treat the cascade as fully successful.
 func (c cascader) run(ctx context.Context, root, action string) operation.Result {
 	visited := map[string]bool{}
 	seq := OrderedGroup(root, action, c.lookup, visited, 0)
 	var primary operation.Result
+	var cascadeFailed bool
 	for _, svc := range seq {
 		res := c.operate(ctx, svc, action)
 		if svc == root {
 			primary = res
 			continue
 		}
+		if cascadeTargetFailed(res) {
+			cascadeFailed = true
+		}
 		if c.emit != nil {
 			c.emit(Event{Service: svc, Kind: "cascade", Action: action,
 				Status: string(res.Status), Message: "cascade from " + root})
 		}
+	}
+	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed)
+}
+
+// CascadeTargetFailed reports whether an also_apply target's operation failed
+// (blocked targets are retried and still treated as non-fatal).
+func CascadeTargetFailed(res operation.Result) bool {
+	return cascadeTargetFailed(res)
+}
+
+// DowngradePrimaryOnCascadeFailure marks a successful primary as failed when an
+// additional cascade target failed.
+func DowngradePrimaryOnCascadeFailure(primary operation.Result, cascadeFailed bool) operation.Result {
+	return downgradePrimaryOnCascadeFailure(primary, cascadeFailed)
+}
+
+func cascadeTargetFailed(res operation.Result) bool {
+	return res.Status != operation.ResultOK && res.Status != operation.ResultBlocked
+}
+
+func downgradePrimaryOnCascadeFailure(primary operation.Result, cascadeFailed bool) operation.Result {
+	if !cascadeFailed || !primary.OK() {
+		return primary
+	}
+	primary.Status = operation.ResultFailed
+	if primary.Message == "" {
+		primary.Message = "cascade target failed"
+	} else {
+		primary.Message += "; cascade target failed"
 	}
 	return primary
 }
