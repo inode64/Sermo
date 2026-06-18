@@ -305,6 +305,25 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 }
 
+func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
+	events := NewEventLog(10)
+	for _, action := range serviceOperationActionList() {
+		events.Add(Event{Service: "web", Kind: "action", Action: action, Status: "ok"})
+	}
+	events.Add(Event{Watch: "disk", Kind: "hook", Status: "ok"})
+	events.Add(Event{Watch: "disk", Kind: "notify", Status: "ok"})
+	events.Add(Event{Kind: "error", Message: "boom"})
+
+	b := &WebBackend{events: events}
+	got := b.ActivitySummary(context.Background())
+	if got.ServiceActions != 5 {
+		t.Fatalf("ServiceActions = %d, want 5 for start/stop/restart/reload/resume", got.ServiceActions)
+	}
+	if got.WatchHooks != 1 || got.WatchNotifies != 1 || got.Errors != 1 {
+		t.Fatalf("ActivitySummary = %+v, want hook/notify/error counted", got)
+	}
+}
+
 func TestWebBackendLastWatchActivityIncludesRecovered(t *testing.T) {
 	events := NewEventLog(10)
 	t0 := time.Date(2026, 6, 7, 14, 0, 0, 0, time.UTC)

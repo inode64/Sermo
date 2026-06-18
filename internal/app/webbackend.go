@@ -2119,6 +2119,19 @@ func (b *WebBackend) emitLockReleaseEvent(service, name, kind, status, message s
 	})
 }
 
+func isServiceOperationAction(action string) bool {
+	switch action {
+	case "start", "stop", "restart", "reload", "resume":
+		return true
+	default:
+		return false
+	}
+}
+
+func serviceOperationActionList() []string {
+	return []string{"start", "stop", "restart", "reload", "resume"}
+}
+
 // ActivitySummary returns a rollup of recent events for the dashboard.
 func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 	summary := web.ActivitySummary{}
@@ -2141,7 +2154,7 @@ func (b *WebBackend) ActivitySummary(ctx context.Context) web.ActivitySummary {
 
 	for _, e := range events {
 		switch {
-		case e.Kind == "action" && (e.Action == "start" || e.Action == "stop" || e.Action == "restart"):
+		case e.Kind == "action" && isServiceOperationAction(e.Action):
 			summary.ServiceActions++
 		case e.Kind == "hook" || e.Kind == "hook-failed":
 			summary.WatchHooks++
@@ -2472,7 +2485,7 @@ func lockToWebAt(lk locks.Lock, service string, now time.Time) web.Lock {
 		Releaseable: lk.State == locks.StateExpired || lk.State == locks.StateStale,
 	}
 	if lk.State == locks.StateActive {
-		w.BlockedActions = []string{"start", "stop", "restart"}
+		w.BlockedActions = serviceOperationActionList()
 	}
 	if !lk.CreatedAt.IsZero() {
 		w.CreatedAt = lk.CreatedAt.UTC().Format(time.RFC3339)
