@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"sermo/internal/app"
@@ -1191,7 +1192,8 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		return exitSuccess
 	}
 
-	fmt.Fprintln(a.Stdout, "TIME                 TARGET           KIND       ACTION   MESSAGE")
+	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "TIME\tTARGET\tKIND\tACTION\tMESSAGE")
 	for _, e := range evs {
 		ts := e.Time
 		if len(ts) >= 19 {
@@ -1218,12 +1220,15 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 		if len(action) > 7 {
 			action = action[:7]
 		}
+		// The message column is capped for terminal readability; tabwriter sizes
+		// the rest to content.
 		msg := e.Message
 		if len(msg) > 60 {
 			msg = msg[:57] + "..."
 		}
-		fmt.Fprintf(a.Stdout, "%s  %-15s  %-8s  %-7s  %s\n", ts, target, kind, action, msg)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", ts, target, kind, action, msg)
 	}
+	_ = tw.Flush()
 	return exitSuccess
 }
 

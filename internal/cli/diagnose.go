@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 
 	"sermo/internal/diag"
 	"sermo/internal/state"
@@ -87,9 +88,11 @@ func (a App) runDiagnoseClean(opts options) int {
 }
 
 func (a App) writeDiagnoseText(r diag.Result) {
+	tw := tabwriter.NewWriter(a.Stdout, 0, 0, 2, ' ', 0)
 	for _, f := range r.Findings {
-		fmt.Fprintf(a.Stdout, "%-7s %s: %s\n", f.Level, f.Scope, f.Message)
+		fmt.Fprintf(tw, "%s\t%s: %s\n", f.Level, f.Scope, f.Message)
 	}
+	_ = tw.Flush()
 	errors, warnings := r.Errors(), r.Warnings()
 	fmt.Fprintf(a.Stdout, "%d error(s), %d warning(s)\n", errors, warnings)
 	if len(r.Findings) == 0 || (errors == 0 && warnings == 0) {
