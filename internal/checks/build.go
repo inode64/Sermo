@@ -28,6 +28,57 @@ import (
 // report unavailable).
 type MetricReader func(scope, name string) (metrics.Reading, bool)
 
+// Samplers groups host probes that can be injected for checks. It is a narrow
+// dependency bundle: service-specific capabilities such as Status, Metrics,
+// Processes and pidfile fallback PIDs stay on Deps.
+type Samplers struct {
+	DiskUsage            DiskUsageFunc
+	NetSampler           NetSamplerFunc
+	PingSampler          PingSamplerFunc
+	SwapSampler          SwapSamplerFunc
+	RouteSampler         RouteSamplerFunc
+	LoadSampler          LoadSamplerFunc
+	OomSampler           OomSamplerFunc
+	FdsSampler           FdsSamplerFunc
+	MemorySampler        MemorySamplerFunc
+	PressureSampler      PressureSamplerFunc
+	PidsSampler          PidsSamplerFunc
+	DiskIOSampler        DiskIOSamplerFunc
+	SensorSampler        SensorSamplerFunc
+	RaidSampler          RaidSamplerFunc
+	EdacSampler          EdacSamplerFunc
+	MountSampler         MountSamplerFunc
+	ConntrackSampler     ConntrackSamplerFunc
+	FirewallRulesSampler FirewallRulesSamplerFunc
+	EntropySampler       EntropySamplerFunc
+	ZombieSampler        ZombieSamplerFunc
+}
+
+// ApplyTo returns deps with every sampler from s copied into it.
+func (s Samplers) ApplyTo(deps Deps) Deps {
+	deps.DiskUsage = s.DiskUsage
+	deps.NetSampler = s.NetSampler
+	deps.PingSampler = s.PingSampler
+	deps.SwapSampler = s.SwapSampler
+	deps.RouteSampler = s.RouteSampler
+	deps.LoadSampler = s.LoadSampler
+	deps.OomSampler = s.OomSampler
+	deps.FdsSampler = s.FdsSampler
+	deps.MemorySampler = s.MemorySampler
+	deps.PressureSampler = s.PressureSampler
+	deps.PidsSampler = s.PidsSampler
+	deps.DiskIOSampler = s.DiskIOSampler
+	deps.SensorSampler = s.SensorSampler
+	deps.RaidSampler = s.RaidSampler
+	deps.EdacSampler = s.EdacSampler
+	deps.MountSampler = s.MountSampler
+	deps.ConntrackSampler = s.ConntrackSampler
+	deps.FirewallRulesSampler = s.FirewallRulesSampler
+	deps.EntropySampler = s.EntropySampler
+	deps.ZombieSampler = s.ZombieSampler
+	return deps
+}
+
 // Deps are the host capabilities a built check set may need.
 type Deps struct {
 	Service        string
