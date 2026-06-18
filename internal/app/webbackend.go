@@ -60,7 +60,7 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 	if backendPIDs != nil {
 		discoverer.BackendPIDs = backendPIDs
 	}
-	checkDeps := checks.Deps{
+	checkDeps := checkDepsFromAppDeps(deps, checks.Deps{
 		Service:        name,
 		DefaultTimeout: deps.DefaultTimeout,
 		Runner:         deps.ExecxRunner,
@@ -71,25 +71,9 @@ func serviceRuntime(name, unit string, tree map[string]any, deps Deps, recordOpe
 			}
 			return st.Status, nil
 		},
-		Processes:            discoverer.ObserveState,
-		PidfileFallbackPIDs:  pidfileFallbackPIDs(context.Background(), deps, unit, backendPIDs),
-		DiskUsage:            deps.DiskUsage,
-		MountSampler:         deps.MountSampler,
-		NetSampler:           deps.NetSampler,
-		PingSampler:          deps.PingSampler,
-		OomSampler:           deps.OomSampler,
-		PidsSampler:          deps.PidsSampler,
-		DiskIOSampler:        deps.DiskIOSampler,
-		SensorSampler:        deps.SensorSampler,
-		RaidSampler:          deps.RaidSampler,
-		EdacSampler:          deps.EdacSampler,
-		RouteSampler:         deps.RouteSampler,
-		PressureSampler:      deps.PressureSampler,
-		ConntrackSampler:     deps.ConntrackSampler,
-		FirewallRulesSampler: deps.FirewallRulesSampler,
-		EntropySampler:       deps.EntropySampler,
-		ZombieSampler:        deps.ZombieSampler,
-	}
+		Processes:           discoverer.ObserveState,
+		PidfileFallbackPIDs: pidfileFallbackPIDs(context.Background(), deps, unit, backendPIDs),
+	})
 	locker := configureOperationLocker(deps.Runtime, operationLockReclaimEvent(deps.Emit))
 	engine := operation.New(operation.Config{
 		Service:          name,

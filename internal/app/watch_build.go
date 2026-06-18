@@ -643,26 +643,10 @@ func configTestCommandRaw(tree map[string]any) any {
 // (buildSingleWatch, buildMetricWatches). It forwards every sampler that host
 // resource checks and multi-metric watches may use.
 func watchInlineDeps(deps Deps) checks.Deps {
-	return checks.Deps{
-		DefaultTimeout:       deps.DefaultTimeout,
-		Runner:               deps.ExecxRunner,
-		DiskUsage:            deps.DiskUsage,
-		MountSampler:         deps.MountSampler,
-		NetSampler:           deps.NetSampler,
-		PingSampler:          deps.PingSampler,
-		OomSampler:           deps.OomSampler,
-		PidsSampler:          deps.PidsSampler,
-		DiskIOSampler:        deps.DiskIOSampler,
-		SensorSampler:        deps.SensorSampler,
-		RaidSampler:          deps.RaidSampler,
-		EdacSampler:          deps.EdacSampler,
-		RouteSampler:         deps.RouteSampler,
-		PressureSampler:      deps.PressureSampler,
-		ConntrackSampler:     deps.ConntrackSampler,
-		FirewallRulesSampler: deps.FirewallRulesSampler,
-		EntropySampler:       deps.EntropySampler,
-		ZombieSampler:        deps.ZombieSampler,
-	}
+	return checkDepsFromAppDeps(deps, checks.Deps{
+		DefaultTimeout: deps.DefaultTimeout,
+		Runner:         deps.ExecxRunner,
+	})
 }
 
 // monitorDeps maps the app Deps to the checks.Deps a synthesized monitor needs.
