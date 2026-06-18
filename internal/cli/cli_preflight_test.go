@@ -80,6 +80,42 @@ func TestPreflightFailsOnRequiredCheck(t *testing.T) {
 	}
 }
 
+func TestPreflightFailsOnRequiredBuildWarning(t *testing.T) {
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, `
+paths:
+  includes: [ `+root+`/enabled ]
+defaults:
+  policy:
+    cooldown: 5m
+`)
+	mustWrite(t, filepath.Join(root, "enabled", "apache-main.yml"), `
+kind: service
+name: apache-main
+service: { name: apache2 }
+preflight:
+  cpu:
+    type: metric
+    name: cpu
+    op: ">"
+    value: "90"
+`)
+
+	var stdout, stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	code := app.Run(context.Background(), []string{"--config", global, "preflight", "apache-main"})
+	if code != exitNotActive {
+		t.Fatalf("Run() exit = %d, want %d; stdout=%s stderr=%s", code, exitNotActive, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "preflight apache-main: FAIL") {
+		t.Fatalf("stdout = %q, want FAIL", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "metric check needs a metric source") {
+		t.Fatalf("stderr = %q, want metric source warning", stderr.String())
+	}
+}
+
 func TestPreflightJSON(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "apache2")
