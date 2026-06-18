@@ -83,9 +83,13 @@ func (g *OpGate) Run(ctx context.Context, service, action string, fn func(contex
 	}
 	release, ok := g.acquire(ctx)
 	if !ok {
+		msg := g.acquireFailureMessage(ctx)
+		status := operation.ResultBlocked
+		if errors.Is(ctx.Err(), context.Canceled) {
+			status = operation.ResultFailed
+		}
 		return operation.Result{
-			Service: service, Action: action, Status: operation.ResultFailed,
-			Message: g.acquireFailureMessage(ctx),
+			Service: service, Action: action, Status: status, Message: msg,
 		}
 	}
 	defer release()
