@@ -476,6 +476,15 @@ func TestBuildProcessCheckNeedsObserver(t *testing.T) {
 	}
 }
 
+func TestBuildProcessCheckRequiresExe(t *testing.T) {
+	section := map[string]any{"p": map[string]any{"type": "process", "user": "mysql", "state": "running"}}
+	if _, warnings := Build(section, Deps{Processes: func(string, string) string { return "running" }}); len(warnings) != 1 {
+		t.Fatalf("process check without exe should warn, got %v", warnings)
+	} else if !strings.Contains(warnings[0], "requires exe") {
+		t.Fatalf("warning = %q, want requires exe", warnings[0])
+	}
+}
+
 func TestRunConcurrentPreservesOrderAndOptional(t *testing.T) {
 	built := []Built{
 		{Check: fileExistsCheck{base: base{name: "a"}, path: "/definitely/missing"}, Optional: true},

@@ -587,8 +587,8 @@ func buildMetricCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 func buildProcessCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	exe := cfgval.AsString(entry["exe"])
 	user := cfgval.AsString(entry["user"])
-	if exe == "" && user == "" {
-		return nil, "process check requires exe and/or user"
+	if exe == "" {
+		return nil, "process check requires exe"
 	}
 	if deps.Processes == nil {
 		return nil, "process check needs process discovery, unavailable here"

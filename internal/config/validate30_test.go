@@ -520,14 +520,18 @@ name: svc
 service: { name: x }
 checks:
   cmd: { type: command, command: "echo hi" }
+  svc-missing: { type: service }
   svc-state: { type: service, expect: bogus }
+  proc-user-only: { type: process, user: mysql }
   proc: { type: process, exe: /x, state: weird }
   opt: { type: binary, path: /x, optional: "yes" }
 preflight:
   lockfile: { type: file_exists, path: /run/sermo/locks/x.lock }
 `)
 	mustHave(t, issues, "command must be an array, not a shell string")
+	mustHave(t, issues, "expect is required for a service check")
 	mustHave(t, issues, `expect "bogus" is not one of`)
+	mustHave(t, issues, "exe is required for a process check")
 	mustHave(t, issues, `state "weird" is not one of`)
 	mustHave(t, issues, "optional must be a boolean")
 	mustHave(t, issues, "must not point under the runtime lock dir")
