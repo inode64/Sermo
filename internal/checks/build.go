@@ -107,10 +107,60 @@ type Deps struct {
 	SizeSampler SizeSamplerFunc
 }
 
+// BuildWarning is an unusable check entry reported during construction. It can be
+// rendered as operator-facing text or folded into an Outcome as a failed Result.
+type BuildWarning struct {
+	Service  string
+	Check    string
+	Text     string
+	Optional bool
+}
+
+// String returns the warning text historically returned by Build.
+func (w BuildWarning) String() string { return w.Text }
+
+// Result returns a failed check result for this build warning. Optional malformed
+// checks remain optional warnings; required malformed checks block preflight and
+// postflight like any other required check failure.
+func (w BuildWarning) Result() Result {
+	return Result{Service: w.Service, Check: w.Check, OK: false, Optional: w.Optional, Message: w.Text}
+}
+
+// BuildWarningResults converts build warnings into check results.
+func BuildWarningResults(warnings []BuildWarning) []Result {
+	if len(warnings) == 0 {
+		return nil
+	}
+	results := make([]Result, 0, len(warnings))
+	for _, w := range warnings {
+		results = append(results, w.Result())
+	}
+	return results
+}
+
 // Build turns a checks/preflight/postflight section (a map keyed by check name)
 // into runnable checks, skipping `enabled: false` entries and reporting unusable
 // ones as warnings. Entries are built in name order for stable output.
 func Build(section map[string]any, deps Deps) ([]Built, []string) {
+	built, warnings := BuildWithWarnings(section, deps)
+	return built, BuildWarningStrings(warnings)
+}
+
+// BuildWarningStrings renders build warnings as operator-facing strings.
+func BuildWarningStrings(warnings []BuildWarning) []string {
+	if len(warnings) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(warnings))
+	for _, w := range warnings {
+		out = append(out, w.String())
+	}
+	return out
+}
+
+// BuildWithWarnings is Build's structured form. Use it where build warnings
+// must participate in check outcomes, not only be printed.
+func BuildWithWarnings(section map[string]any, deps Deps) ([]Built, []BuildWarning) {
 	if section == nil {
 		return nil, nil
 	}
@@ -125,11 +175,15 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 	}
 
 	var built []Built
-	var warnings []string
+	var warnings []BuildWarning
 	for _, name := range slices.Sorted(maps.Keys(section)) {
 		entry, ok := section[name].(map[string]any)
 		if !ok {
-			warnings = append(warnings, fmt.Sprintf("check %q is not a mapping", name))
+			warnings = append(warnings, BuildWarning{
+				Service: deps.Service,
+				Check:   name,
+				Text:    fmt.Sprintf("check %q is not a mapping", name),
+			})
 			continue
 		}
 		if cfgval.Disabled(entry) {
@@ -146,7 +200,12 @@ func Build(section map[string]any, deps Deps) ([]Built, []string) {
 
 		check, warn := buildCheck(typ, b, entry, runner, client, deps)
 		if warn != "" {
-			warnings = append(warnings, fmt.Sprintf("check %q: %s", name, warn))
+			warnings = append(warnings, BuildWarning{
+				Service:  deps.Service,
+				Check:    name,
+				Text:     fmt.Sprintf("check %q: %s", name, warn),
+				Optional: cfgval.Bool(entry["optional"]),
+			})
 			continue
 		}
 		built = append(built, Built{Check: check, Optional: cfgval.Bool(entry["optional"])})

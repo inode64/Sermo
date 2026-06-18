@@ -46,6 +46,30 @@ func TestBuildServiceCheckNeedsStatus(t *testing.T) {
 	}
 }
 
+func TestBuildWithWarningsReturnsOutcomeResults(t *testing.T) {
+	section := map[string]any{
+		"metric":  map[string]any{"type": "metric", "name": "cpu", "op": ">", "value": "90"},
+		"process": map[string]any{"type": "process", "exe": "/usr/bin/app", "optional": true},
+	}
+
+	built, warnings := BuildWithWarnings(section, Deps{Service: "web", DefaultTimeout: time.Second})
+	if len(built) != 0 || len(warnings) != 2 {
+		t.Fatalf("built=%d warnings=%v, want no built checks and two warnings", len(built), warnings)
+	}
+
+	results := BuildWarningResults(warnings)
+	out := Evaluate(results)
+	if out.OK {
+		t.Fatalf("required build warning must make outcome fail: %+v", out)
+	}
+	if results[0].Service != "web" || results[0].Check != "metric" || results[0].Optional {
+		t.Fatalf("required warning result = %+v, want service/check and non-optional", results[0])
+	}
+	if results[1].Check != "process" || !results[1].Optional {
+		t.Fatalf("optional warning result = %+v, want optional process warning", results[1])
+	}
+}
+
 func TestBuildTimeoutPerCheck(t *testing.T) {
 	section := map[string]any{
 		"slow":    map[string]any{"type": "binary", "path": "/x", "timeout": "30s"},

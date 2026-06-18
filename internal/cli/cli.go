@@ -753,14 +753,16 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		Status:         a.statusFunc(opts, resolved.Tree, config.ServiceUnit(resolved.Tree, service)),
 		Processes:      discoverer.ObserveState,
 	}
-	built, warnings := checks.Build(section, deps)
+	built, buildWarnings := checks.BuildWithWarnings(section, deps)
+	warnings := checks.BuildWarningStrings(buildWarnings)
 	for _, w := range warnings {
 		fmt.Fprintf(a.Stderr, "warning: %s\n", w)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, app.PreflightDeadline(deps.DefaultTimeout))
 	defer cancel()
-	results := checks.Run(ctx, built, 0)
+	results := checks.BuildWarningResults(buildWarnings)
+	results = append(results, checks.Run(ctx, built, 0)...)
 	outcome := checks.Evaluate(results)
 
 	if opts.json {

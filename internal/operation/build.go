@@ -341,8 +341,10 @@ func firstWarningError(errs ...error) error {
 func sectionRunner(tree map[string]any, section string, deps checks.Deps) func(context.Context) checks.Outcome {
 	return func(ctx context.Context) checks.Outcome {
 		entries, _ := tree[section].(map[string]any)
-		built, _ := checks.Build(entries, deps)
-		return checks.Evaluate(checks.Run(ctx, built, 0))
+		built, warnings := checks.BuildWithWarnings(entries, deps)
+		results := checks.BuildWarningResults(warnings)
+		results = append(results, checks.Run(ctx, built, 0)...)
+		return checks.Evaluate(results)
 	}
 }
 
