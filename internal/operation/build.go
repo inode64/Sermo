@@ -81,6 +81,7 @@ func New(c Config) Engine {
 	configErr := firstWarningError(
 		warningError("stop_policy", stopPolicyWarnings),
 		warningError("selector config", selectorWarnings),
+		reloadConfigError(tree),
 	)
 
 	// This closure is the Engine's residual discovery and the reaper's
@@ -218,6 +219,25 @@ type reloadSpec struct {
 // plain backend reload. Note a bare `reload: { command: [...] }` defaults to
 // `when: auto` (prefer the init reload), unlike legacy `commands.reload` which is
 // always `when: always`.
+// reloadConfigError reports an invalid native reload declaration that validation
+// should have rejected but must not be silently ignored at runtime.
+func reloadConfigError(tree map[string]any) error {
+	r, ok := tree["reload"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	if name := cfgval.AsString(r["signal"]); name != "" {
+		if _, err := process.ParseSignal(name); err != nil {
+			return fmt.Errorf("reload.signal: %v", err)
+		}
+		return nil
+	}
+	if argv := cfgval.StringArray(r["command"]); len(argv) > 0 {
+		return nil
+	}
+	return fmt.Errorf("reload: block declares no command or signal")
+}
+
 func parseReloadSpec(tree map[string]any) *reloadSpec {
 	if r, ok := tree["reload"].(map[string]any); ok {
 		spec := &reloadSpec{always: cfgval.AsString(r["when"]) == "always"}

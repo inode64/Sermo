@@ -507,6 +507,34 @@ func TestRestartRediscoveryErrorDoesNotStart(t *testing.T) {
 	}
 }
 
+func TestNewInvalidReloadBlocksRestart(t *testing.T) {
+	dir := t.TempDir()
+	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
+	mgr := &fakeManager{status: servicemgr.StatusActive}
+	engine := New(Config{
+		Service:    "web",
+		Unit:       "nginx",
+		Backend:    "systemd",
+		Tree:       map[string]any{"reload": map[string]any{"signal": "NOTASIGNAL"}},
+		Manager:    mgr,
+		Locker:     &locker,
+		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
+		Discoverer: process.NewDiscoverer(),
+		Sleep:      func(time.Duration) {},
+	})
+
+	res := engine.Restart(context.Background())
+	if res.Status != ResultFailed {
+		t.Fatalf("status = %q, want failed", res.Status)
+	}
+	if !strings.Contains(res.Message, "reload.signal") {
+		t.Fatalf("message = %q, want reload config error", res.Message)
+	}
+	if mgr.did("start nginx") {
+		t.Error("must NOT start when reload config is invalid")
+	}
+}
+
 func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 	dir := t.TempDir()
 	locker := locks.NewOperationLocker(filepath.Join(dir, "ops"))
