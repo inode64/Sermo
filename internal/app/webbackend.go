@@ -124,6 +124,7 @@ type WebBackend struct {
 	netSampler       checks.NetSamplerFunc
 	pingSampler      checks.PingSamplerFunc
 	oomSampler       checks.OomSamplerFunc
+	fdsSampler       checks.FdsSamplerFunc
 	pidsSampler      checks.PidsSamplerFunc
 	pressureSampler  checks.PressureSamplerFunc
 	conntrackSampler checks.ConntrackSamplerFunc
@@ -200,6 +201,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		netSampler:       deps.NetSampler,
 		pingSampler:      deps.PingSampler,
 		oomSampler:       deps.OomSampler,
+		fdsSampler:       deps.FdsSampler,
 		pidsSampler:      deps.PidsSampler,
 		pressureSampler:  deps.PressureSampler,
 		conntrackSampler: deps.ConntrackSampler,
@@ -1040,6 +1042,8 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 		return b.icmpWatchView(w)
 	case "oom":
 		return b.oomWatchView()
+	case "fds":
+		return b.fdsWatchView()
 	case "pids":
 		return b.pidsWatchView()
 	case "pressure":
@@ -1426,6 +1430,27 @@ func (b *WebBackend) oomWatchView() (*web.WatchMeter, []web.WatchReading, string
 		fmt.Sprintf("%d oom_kill total", count)
 }
 
+func (b *WebBackend) fdsWatchView() (*web.WatchMeter, []web.WatchReading, string) {
+	sampler := b.fdsSampler
+	if sampler == nil {
+		sampler = checks.SampleFds
+	}
+	s, err := sampler()
+	if err != nil {
+		msg := err.Error()
+		return nil, watchErrorReadings(msg), "fds: " + msg
+	}
+	summary := fmt.Sprintf("fds %d allocated", s.Allocated)
+	if s.Max > 0 {
+		usedPct := float64(s.Allocated) / float64(s.Max) * 100
+		summary = fmt.Sprintf("fds %d/%d allocated (%.1f%%)", s.Allocated, s.Max, usedPct)
+	}
+	if meter := countMeter("fds", s.Allocated, s.Max); meter != nil {
+		return meter, nil, summary
+	}
+	return nil, []web.WatchReading{{Field: "count", Label: "Allocated", Value: fmt.Sprintf("%d", s.Allocated)}}, summary
+}
+
 func (b *WebBackend) pidsWatchView() (*web.WatchMeter, []web.WatchReading, string) {
 	sampler := b.pidsSampler
 	if sampler == nil {
@@ -1632,11 +1657,9 @@ func byteUsage(r metrics.Reading) (used, total, free uint64, ok bool) {
 	return used, total, total - min(used, total), true
 }
 
-// watchMeter builds the generic usage gauge (progress bar) for the host watch
-// types that have a natural 0-100% capacity: memory and load come from the
-// collector's cached system snapshot (shared with the overview tiles, no extra
-// probe); fds and pids read their tiny /proc files live. nil for any other
-// type, or when the needed data is unavailable.
+// watchMeter builds the generic usage gauge (progress bar) for host watch types
+// served by the collector's cached system snapshot (shared with overview tiles,
+// no extra probe). nil for any other type, or when the needed data is unavailable.
 func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 	switch checkType {
 	case "memory":
@@ -1663,18 +1686,6 @@ func watchMeter(checkType string, system metrics.Snapshot) *web.WatchMeter {
 			pct = r.Absolute / float64(ncpu) * 100
 		}
 		return &web.WatchMeter{Kind: "load", UsedPct: pct, Load: r.Absolute, NumCPU: ncpu}
-	case "fds":
-		s, err := checks.SampleFds()
-		if err != nil {
-			return nil
-		}
-		return countMeter("fds", s.Allocated, s.Max)
-	case "pids":
-		s, err := checks.SamplePids()
-		if err != nil {
-			return nil
-		}
-		return countMeter("pids", s.Threads, s.Max)
 	}
 	return nil
 }

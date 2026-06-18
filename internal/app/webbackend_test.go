@@ -584,6 +584,10 @@ func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
 				"type":     "pids",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			}},
+			"fd-table": map[string]any{"check": map[string]any{
+				"type":     "fds",
+				"used_pct": map[string]any{"op": ">=", "value": 80},
+			}},
 			"net-eth0": map[string]any{
 				"check": map[string]any{"type": "net", "interface": "eth0"},
 				"metrics": map[string]any{
@@ -605,6 +609,7 @@ func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
 
 	b, warns := NewWebBackend(cfg, Deps{
 		OomSampler:  func() (uint64, bool) { return 7, true },
+		FdsSampler:  func() (checks.FdsSample, error) { return checks.FdsSample{Allocated: 8500, Max: 10000}, nil },
 		PidsSampler: func() (checks.PidsSample, error) { return checks.PidsSample{Threads: 123, Max: 1000}, nil },
 		NetSampler: func(iface string) (checks.NetSample, error) {
 			if iface != "eth0" {
@@ -652,6 +657,14 @@ func TestWebBackendOomNetICMPAndPidsReadings(t *testing.T) {
 	}
 	if !strings.Contains(pids.Summary, "123/1000") {
 		t.Fatalf("pids summary = %q", pids.Summary)
+	}
+
+	fds := byName["fd-table"]
+	if fds.Meter == nil || fds.Meter.Kind != "fds" || fds.Meter.Count != 8500 || fds.Meter.Max != 10000 {
+		t.Fatalf("fds meter = %+v", fds.Meter)
+	}
+	if !strings.Contains(fds.Summary, "8500/10000") {
+		t.Fatalf("fds summary = %q", fds.Summary)
 	}
 
 	netWatch := byName["net-eth0"]
@@ -889,6 +902,33 @@ func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
 	w := watches[0]
 	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "loadavg failed" {
 		t.Fatalf("watch = %+v, want failed with pids error reading", w)
+	}
+}
+
+func TestWebBackendFdsReadingErrorMarksWatchFailed(t *testing.T) {
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"fd-table": map[string]any{"check": map[string]any{
+				"type":     "fds",
+				"used_pct": map[string]any{"op": ">=", "value": 80},
+			}},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{
+		FdsSampler: func() (checks.FdsSample, error) {
+			return checks.FdsSample{}, errors.New("file-nr failed")
+		},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 {
+		t.Fatalf("watches = %+v, want one", watches)
+	}
+	w := watches[0]
+	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "file-nr failed" {
+		t.Fatalf("watch = %+v, want failed with fds error reading", w)
 	}
 }
 
