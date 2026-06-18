@@ -215,6 +215,7 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		perPacket = time.Second
 	}
 	id := os.Getpid() & 0xffff
+	reply := make([]byte, 1500)
 	var rtts []float64
 	for seq := 0; seq < count; seq++ {
 		msg := icmp.Message{
@@ -230,18 +231,32 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		if _, err := conn.WriteTo(b, addr); err != nil {
 			continue
 		}
-		reply := make([]byte, 1500)
-		_ = conn.SetReadDeadline(time.Now().Add(perPacket))
-		n, _, err := conn.ReadFrom(reply)
-		if err != nil {
-			continue
-		}
-		rm, err := icmp.ParseMessage(1, reply[:n]) // 1 = ICMPv4 protocol number
-		if err != nil {
-			continue
-		}
-		if rm.Type == ipv4.ICMPTypeEchoReply {
+		// A raw ip4:icmp socket receives a copy of every echo reply on the host,
+		// so a reply for another concurrent ping (which shares this PID-derived
+		// id) can arrive first. Read until we see the echo reply that matches
+		// THIS request — our id and seq, from the target address — or the
+		// per-packet deadline passes; skip everything else instead of mistaking
+		// a stray reply for ours.
+		deadline := time.Now().Add(perPacket)
+		_ = conn.SetReadDeadline(deadline)
+		for {
+			n, peer, err := conn.ReadFrom(reply)
+			if err != nil {
+				break // deadline or read error: no matching reply for this seq
+			}
+			if !sameIPv4(peer, addr.IP) {
+				continue
+			}
+			rm, err := icmp.ParseMessage(1, reply[:n]) // 1 = ICMPv4 protocol number
+			if err != nil {
+				continue
+			}
+			echo, ok := rm.Body.(*icmp.Echo)
+			if rm.Type != ipv4.ICMPTypeEchoReply || !ok || echo.ID != id || echo.Seq != seq {
+				continue
+			}
 			rtts = append(rtts, float64(time.Since(sent).Microseconds())/1000.0)
+			break
 		}
 	}
 	if len(rtts) == 0 {
@@ -252,4 +267,17 @@ func defaultPingSampler(host, iface string, count int, timeout time.Duration) (P
 		sum += r
 	}
 	return PingSample{Reachable: true, RTTKnown: true, RTTms: sum / float64(len(rtts))}, nil
+}
+
+// sameIPv4 reports whether peer (the source of a received ICMP packet) is the
+// expected target IP, so a raw socket's replies for other hosts are not counted
+// as this check's reply.
+func sameIPv4(peer net.Addr, want net.IP) bool {
+	if peer == nil {
+		return false
+	}
+	if ip, ok := peer.(*net.IPAddr); ok {
+		return ip.IP.Equal(want)
+	}
+	return false
 }
