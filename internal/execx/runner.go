@@ -24,7 +24,7 @@ type Result struct {
 // This runner exists only for the few justified cases where Go has no native
 // API (see AGENTS.md "Native by default"): the service-manager backends
 // (systemctl/rc-service), user-configured `command` checks and watch hooks,
-// `firewall_rules` (nft/iptables-save), and the `libraries` check's `ldd`. It
+// `firewall_rules` (iptables-save), and the `libraries` check's `ldd`. It
 // always invokes an argv directly — never a shell — so check/hook commands cannot
 // be subject to shell injection.
 type Runner interface {
