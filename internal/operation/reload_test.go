@@ -98,6 +98,16 @@ func TestReloadClosureAutoCommandFallsBackWhenUnsupported(t *testing.T) {
 	}
 }
 
+func TestReloadClosureCommandWithoutRunnerReturnsError(t *testing.T) {
+	mgr := &fakeManager{canReload: false}
+	tree := map[string]any{"reload": map[string]any{"command": []any{"sermo-no-such-command-xyz"}, "when": "always"}}
+	reload := reloadClosure(tree, checks.Deps{}, mgr, "systemd", "svc")
+
+	if err := reload(context.Background()); err == nil {
+		t.Fatal("reload without an injected runner returned nil, want command error")
+	}
+}
+
 func TestReloadClosureSignalSentToMainPID(t *testing.T) {
 	// MainPID resolves to this test process; the native reload sends USR1 to it.
 	pid := os.Getpid()
