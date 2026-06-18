@@ -1,6 +1,8 @@
 package conn
 
 import (
+	"context"
+	"net/http"
 	"testing"
 	"time"
 )
@@ -37,5 +39,23 @@ func TestLDAPProbeDialerInterfaceBinding(t *testing.T) {
 	d := probeDialer("eth0", time.Second)
 	if d.Control == nil {
 		t.Fatal("LDAP probe dialer must use BindDialer when interface is set")
+	}
+}
+
+func TestHTTPProbeClientInterfaceBinding(t *testing.T) {
+	client := httpProbeClient("eth0", nil)
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok || tr.DialContext == nil {
+		t.Fatalf("HTTP probe client transport = %#v, want bound DialContext", client.Transport)
+	}
+}
+
+func TestSNMPParamsInterfaceBinding(t *testing.T) {
+	params := buildSNMPParams(context.Background(), Config{Host: "dev", Interface: "eth0"}, time.Second)
+	if params.Control == nil {
+		t.Fatal("SNMP params must use BindDialer control hook when interface is set")
+	}
+	if params.Context == nil {
+		t.Fatal("SNMP params must carry the probe context")
 	}
 }

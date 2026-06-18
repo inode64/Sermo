@@ -38,16 +38,14 @@ func (ippProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		port = 631
 	}
 	scheme := "http"
-	client := &http.Client{}
+	client := httpProbeClient(cfg.Interface, nil)
 	if mode := normalizeTLS(cfg.TLS); mode != "" {
 		scheme = "https"
-		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tc := tlsClientConfig(host)
+		tlsConfig := tlsClientConfig(host)
 		if mode == "skip-verify" {
-			tc.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
+			tlsConfig.InsecureSkipVerify = true //nolint:gosec // operator chose tls: skip-verify
 		}
-		tr.TLSClientConfig = tc
-		client.Transport = tr
+		client = httpProbeClient(cfg.Interface, tlsConfig)
 	}
 
 	url := scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"

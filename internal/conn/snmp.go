@@ -42,7 +42,7 @@ func (snmpProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 			timeout = d
 		}
 	}
-	params := buildSNMPParams(cfg, timeout)
+	params := buildSNMPParams(ctx, cfg, timeout)
 	if err := params.Connect(); err != nil {
 		return Result{}, err
 	}
@@ -87,7 +87,7 @@ func snmpVersionName(cfg Config) string {
 // buildSNMPParams maps the connection config to a gosnmp client: v2c (community)
 // when no user is set, otherwise v3 USM (authNoPriv with SHA when a password is
 // present, else noAuthNoPriv).
-func buildSNMPParams(cfg Config, timeout time.Duration) *g.GoSNMP {
+func buildSNMPParams(ctx context.Context, cfg Config, timeout time.Duration) *g.GoSNMP {
 	host := cfg.Host
 	if host == "" {
 		host = "127.0.0.1"
@@ -100,9 +100,13 @@ func buildSNMPParams(cfg Config, timeout time.Duration) *g.GoSNMP {
 		Target:    host,
 		Port:      uint16(port),
 		Transport: "udp",
+		Context:   ctx,
 		Timeout:   timeout,
 		Retries:   1,
 		MaxOids:   g.MaxOids,
+	}
+	if cfg.Interface != "" {
+		p.Control = BindDialer(cfg.Interface).Control
 	}
 	if cfg.User == "" {
 		p.Version = g.Version2c
