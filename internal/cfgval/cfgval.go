@@ -181,7 +181,11 @@ func ByteSize(v any) (uint64, bool) {
 	}
 	n, err := strconv.ParseFloat(s, 64)
 	bytes := n * unit
-	if err != nil || n < 0 || math.IsNaN(bytes) || math.IsInf(bytes, 0) || bytes > float64(^uint64(0)) {
+	// Reject anything that does not fit a uint64. float64(^uint64(0)) rounds up to
+	// 2^64, so a strict `>` would let values in [2^64-1024, 2^64) through and the
+	// uint64(bytes) conversion of a float at/above 2^63 is undefined in Go; use
+	// `>=` against 2^64 so only representable values convert.
+	if err != nil || n < 0 || math.IsNaN(bytes) || math.IsInf(bytes, 0) || bytes >= math.Exp2(64) {
 		return 0, false
 	}
 	return uint64(bytes), true

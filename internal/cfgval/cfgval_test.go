@@ -163,6 +163,9 @@ func TestByteSize(t *testing.T) {
 		{"-1G", 0, false},
 		{"NaN", 0, false},
 		{"10P", 0, false},
+		{"16777215T", 16777215 << 40, true}, // (2^24-1) TiB: largest that still fits uint64
+		{"16777216T", 0, false},             // 2^24 TiB == 2^64: must not overflow to a small value
+		{"99999999T", 0, false},             // far over 2^64
 		{true, 0, false},
 	}
 	for _, c := range cases {
