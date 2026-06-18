@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -138,7 +139,7 @@ func (c influxCheck) influxqlScalar(ctx context.Context, client *http.Client, ba
 
 	idx := len(row) - 1 // default: the last column (the value; `time` is first)
 	if c.column != "" {
-		idx = indexOf(cols, c.column)
+		idx = slices.Index(cols, c.column)
 		if idx < 0 || idx >= len(row) {
 			return "", false, fmt.Errorf("column %q not found in result", c.column)
 		}
@@ -198,7 +199,7 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 	if col == "" {
 		col = "_value" // Flux's value column
 	}
-	idx := indexOf(header, col)
+	idx := slices.Index(header, col)
 	if idx < 0 || idx >= len(row) {
 		return "", false, fmt.Errorf("column %q not found in result", col)
 	}
@@ -224,15 +225,6 @@ func influxErrorBody(body []byte) string {
 		}
 	}
 	return strings.TrimSpace(string(body))
-}
-
-func indexOf(list []string, v string) int {
-	for i, s := range list {
-		if s == v {
-			return i
-		}
-	}
-	return -1
 }
 
 // buildInfluxCheck builds an influxdb-query check, reusing the influxdb

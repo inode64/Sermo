@@ -1,9 +1,10 @@
 package rules
 
 import (
-	"sermo/internal/cfgval"
-	"sort"
+	"slices"
 	"time"
+
+	"sermo/internal/cfgval"
 )
 
 // Backoff grows the effective cooldown after consecutive remediations (§16).
@@ -102,7 +103,7 @@ func (p Policy) rateLimitUntil(state *RemediationState, now time.Time) time.Time
 	if len(relevant) < p.MaxActions {
 		return time.Time{}
 	}
-	sort.Slice(relevant, func(i, j int) bool { return relevant[i].Before(relevant[j]) })
+	slices.SortFunc(relevant, func(a, b time.Time) int { return a.Compare(b) })
 	until := relevant[len(relevant)-p.MaxActions].Add(p.MaxActionsWindow)
 	if !now.Before(until) {
 		return time.Time{}
