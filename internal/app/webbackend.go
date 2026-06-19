@@ -1120,7 +1120,7 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	if user != "" {
 		target += " user " + user
 	}
-	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralS(len(samples)))
+	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
 	if len(samples) > 0 {
 		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
 	}
@@ -1149,9 +1149,9 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		}
 		readings = append(readings, web.WatchReading{Field: "path", Label: "Configured path", Value: path})
 		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: state})
-		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralS(len(points)))
+		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralSuffix(len(points), "mountpoint"))
 	}
-	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralS(len(points)))
+	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralSuffix(len(points), "mountpoint"))
 }
 
 func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -1371,7 +1371,7 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 			value = "none"
 		}
 		readings = append(readings, web.WatchReading{Field: "address", Label: "Addresses", Value: value})
-		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralS(len(s.Addrs))))
+		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralSuffix(len(s.Addrs), "address")))
 	}
 	return nil, readings, strings.Join(parts, " · ")
 }
@@ -1582,11 +1582,21 @@ func netErrorTotal(metrics map[string]any, counters map[string]uint64) uint64 {
 	return total
 }
 
-func pluralS(count int) string {
+// pluralSuffix returns the suffix to append to singular to form its plural for
+// count items: "" when count is 1, "es" for sibilant endings (process ->
+// processes, address -> addresses) and "s" otherwise (mountpoint -> mountpoints).
+func pluralSuffix(count int, singular string) string {
 	if count == 1 {
 		return ""
 	}
-	return "es"
+	switch {
+	case strings.HasSuffix(singular, "s"), strings.HasSuffix(singular, "x"),
+		strings.HasSuffix(singular, "z"), strings.HasSuffix(singular, "ch"),
+		strings.HasSuffix(singular, "sh"):
+		return "es"
+	default:
+		return "s"
+	}
 }
 
 func processPIDList(samples []ProcInfo) string {
