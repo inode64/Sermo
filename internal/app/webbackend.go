@@ -2051,9 +2051,14 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 	case "total_memory", "total_swap":
 		m.Unit = "bytes"
 	case "load1":
-		if ncpu := runtime.NumCPU(); ncpu > 0 {
-			m.Total = float64(ncpu)
-			m.Percent = r.Absolute / float64(ncpu) * 100
+		// Only derive the per-CPU percentage from a real reading; guarding on
+		// HasAbsolute (as watchMeter does) avoids fabricating Total/Percent when
+		// load1 has no absolute value.
+		if r.HasAbsolute {
+			if ncpu := runtime.NumCPU(); ncpu > 0 {
+				m.Total = float64(ncpu)
+				m.Percent = r.Absolute / float64(ncpu) * 100
+			}
 		}
 	}
 	return m
