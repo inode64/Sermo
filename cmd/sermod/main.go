@@ -41,8 +41,15 @@ func main() {
 }
 
 func run(args []string) int {
+	// `version` is a subcommand: honor it only as the first argument, never when
+	// it appears as a flag value (e.g. `--config version`). The flag forms may
+	// appear anywhere.
+	if len(args) > 0 && args[0] == "version" {
+		fmt.Println(buildinfo.String())
+		return 0
+	}
 	for _, a := range args {
-		if a == "version" || a == "--version" || a == "-V" {
+		if a == "--version" || a == "-V" {
 			fmt.Println(buildinfo.String())
 			return 0
 		}

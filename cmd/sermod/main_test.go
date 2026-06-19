@@ -102,6 +102,18 @@ func TestParseArgsVerbose(t *testing.T) {
 	}
 }
 
+func TestVersionSubcommandOnlyAsFirstArg(t *testing.T) {
+	// `version` as the first argument prints the build string and exits 0.
+	if code := run([]string{"version"}); code != 0 {
+		t.Fatalf("run(version) = %d, want 0", code)
+	}
+	// `version` appearing as a flag value must NOT be hijacked as the subcommand;
+	// here it is consumed as the --config value, leaving no command -> usage error.
+	if code := run([]string{"--config", "version"}); code == 0 {
+		t.Fatal("run(--config version) = 0, want non-zero (version must not be hijacked from a flag value)")
+	}
+}
+
 func TestParseArgsCatalog(t *testing.T) {
 	// Both spellings, repeatable, accumulate in order.
 	parsed, err := parseArgs([]string{"run", "--catalog", "/a", "--catalog=/b"})
