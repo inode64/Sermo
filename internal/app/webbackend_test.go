@@ -974,9 +974,9 @@ type webProcSampler struct {
 	samples []ProcInfo
 }
 
-func (s *webProcSampler) Sample(match ProcMatch) []ProcInfo {
+func (s *webProcSampler) Sample(match ProcMatch) ([]ProcInfo, bool) {
 	s.match = match
-	return s.samples
+	return s.samples, true
 }
 
 // fakeSwapReader is the minimal metrics.Reader (plus optional TotalSwap) the
