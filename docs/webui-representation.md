@@ -45,7 +45,7 @@ Keep changes concrete:
 | Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Recent activity | `GET /api/activity` | summary of recent events |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
-| Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics |
+| Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics findings (`time`, `level`, `scope`, `message`), including malformed lock files and operation-slot usage |
 | Live operations | `GET /api/ops` | active operation slots |
 
 ## Action Endpoints
