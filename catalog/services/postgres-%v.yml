@@ -8,6 +8,21 @@ service:
 apps: ["postgres-${version}"]
 variables:
   port: 5432
+  data_dir: /var/lib/postgresql/${version}/data
+
+os:
+  debian:
+    variables:
+      data_dir: /var/lib/postgresql/${version}/main
+  ubuntu:
+    variables:
+      data_dir: /var/lib/postgresql/${version}/main
+
+preflight:
+  config:
+    type: command
+    command: ["${binary}", "--check", "-D", "${data_dir}"]
+    timeout: 30s
 
 checks:
   service: { type: service, expect: active }

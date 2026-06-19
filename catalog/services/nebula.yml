@@ -13,9 +13,15 @@ service:
 
 apps: [nebula]
 variables:
+  config: /etc/nebula/config.yml
   # Probe the node's own lighthouse/listen port; the default is 4242/udp.
   host: 127.0.0.1
   port: 4242
+
+config_files: ["${config}"]
+
+preflight:
+  config: { type: command, command: ["${nebula_binary}", "-test", "-config", "${config}"], timeout: 30s }
 
 checks:
   service:

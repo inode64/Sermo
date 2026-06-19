@@ -734,6 +734,34 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			wantTool:     []string{"/usr/sbin/slaptest", "/usr/bin/slaptest", "/usr/bin/openldap/slaptest"},
 			wantContains: []string{"-Q", "-u"},
 		},
+		{
+			service:      "nebula",
+			appToolCheck: "nebula-binary",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/bin/nebula"},
+			wantContains: []string{"-test", "-config"},
+		},
+		{
+			service:      "loki",
+			appToolCheck: "loki-binary",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/bin/loki"},
+			wantContains: []string{"-verify-config", "-config.file"},
+		},
+		{
+			service:      "influxdb",
+			appToolCheck: "influxdb-binary",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/bin/influxd"},
+			wantContains: []string{"config", "validate", "--config"},
+		},
+		{
+			service:      "cloudflared",
+			appToolCheck: "cloudflared-binary",
+			toolArgIndex: 3,
+			wantTool:     []string{"/usr/bin/cloudflared"},
+			wantContains: []string{"tunnel", "validate"},
+		},
 	}
 
 	for _, tc := range tests {

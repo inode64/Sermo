@@ -9,4 +9,12 @@ variables:
   config: "/etc/openvpn/${instance}.conf"
   pidfile: "/run/openvpn.${instance}.pid"
 
+config_files: ["${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["${binary}", "--config", "${config}", "--verb", "0", "--dev", "null"]
+    timeout: 30s
+
 pidfile: "${pidfile}"
