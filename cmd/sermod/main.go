@@ -333,12 +333,24 @@ func run(args []string) int {
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	go func() {
-		for range hup {
-			monitor.Reload()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				// Ignore a SIGHUP racing shutdown: reloading against a cancelled
+				// context would spawn a fresh generation and emit a spurious
+				// "config reloaded" after the daemon reported stopped.
+				if ctx.Err() != nil {
+					return
+				}
+				monitor.Reload()
+			}
 		}
 	}()
 
 	monitor.Run(ctx)
+	signal.Stop(hup) // stop SIGHUP delivery; the goroutine exits via ctx.Done()
 	logger.Info("sermod stopped")
 	return 0
 }
