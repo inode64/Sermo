@@ -195,6 +195,7 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
+		mountedHere := false
 		if !mounted {
 			ok, err := c.inFstab(spec.Path)
 			if err != nil {
@@ -210,8 +211,16 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 				}
 				return Result{}, err
 			}
+			mountedHere = true
 		}
 		if err := c.writeState(spec, state); err != nil {
+			if mountedHere {
+				// We mounted on this call but could not persist the new refcount.
+				// Unmount so we never leave a mounted filesystem recorded as
+				// refcount 0, which a later Release would then unmount out from
+				// under a still-active user.
+				_ = c.run(ctx, "umount", spec.Path)
+			}
 			return Result{}, err
 		}
 		mounted, _ = c.isMounted(spec.Path)
