@@ -1364,8 +1364,9 @@ The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`binary`, `libraries`, `config`, `autofs`, `route`, `firewall_rules`, `sqlite`/`sqlite3`,
-`websocket`/`ws`, and connection-protocol checks such as `mysql`/`smtp`) are the
+`binary`, `pidfile`, `process`, `libraries`, `config`, `autofs`, `route`,
+`firewall_rules`, `sqlite`/`sqlite3`, `websocket`/`ws`, and connection-protocol
+checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 
