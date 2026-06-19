@@ -1830,16 +1830,17 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	out := make([]web.Application, 0, len(reports))
 	for _, r := range reports {
 		out = append(out, web.Application{
-			Name:         r.Name,
-			DisplayName:  r.DisplayName,
-			Category:     r.Category,
-			Binary:       r.Binary,
-			Permissions:  r.Permissions,
-			User:         r.User,
-			Group:        r.Group,
-			Version:      r.Version,
-			VersionShort: r.VersionShort,
-			Status:       r.Status,
+			Name:          r.Name,
+			DisplayName:   r.DisplayName,
+			Category:      r.Category,
+			Binary:        r.Binary,
+			Permissions:   r.Permissions,
+			User:          r.User,
+			Group:         r.Group,
+			Version:       r.Version,
+			VersionShort:  r.VersionShort,
+			VersionSource: r.VersionSource,
+			Status:        r.Status,
 		})
 	}
 	return b.withApplicationSLA(out)

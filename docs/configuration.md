@@ -90,6 +90,15 @@ separate daemons/apps in wizard selection lists. New configuration should use th
 canonical name. `catalog_aliases` must be a non-empty list of simple names,
 without path separators.
 
+Catalog apps may declare `version_from: <app-name>` when a different binary from
+the same package has the authoritative version probe. The app still checks its
+own `binary` for installation and health; `version_from` only fills the displayed
+version when the app has no local version result. Local `health`, `version` and
+`version_short` commands still win. The referenced app must be another catalog
+app, may be addressed by a catalog alias, and `version_from` chains must not
+cycle. This is not an operational dependency and does not inject preflight
+checks into services.
+
 When a daemon or service lists apps, every app variable is also available to that
 daemon/service with a normalized app-name prefix: an app with
 `binary: /usr/bin/cupsd` and
@@ -354,8 +363,9 @@ its exit code before the version command is considered. If no `health` command
 is configured, the `version` command is the fallback probe while fetching the
 displayed version. The list is sortable by name, category or version, and
 expanding a row reveals the full version string, the binary's file location and
-its permissions. Services and applications can be filtered and grouped by their
-top-level `category` metadata field.
+its permissions. When a version is inherited through `version_from`, the API row
+includes `version_source` with the provider app name. Services and applications
+can be filtered and grouped by their top-level `category` metadata field.
 The same data is available from `sermoctl apps` and `GET /api/applications`.
 The dashboard caches the list for up to 30 seconds, so auto-refreshes do not
 rerun every app version probe.
