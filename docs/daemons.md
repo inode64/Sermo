@@ -224,6 +224,7 @@ name: mariadb
 display_name: "MariaDB"      # pretty label; falls back to name when absent
 description: "..."           # free-text note; shown verbatim, nothing when absent
 category: "database"         # optional WebUI grouping/filter label
+type: "database"             # optional free-form classification; recorded, not acted on
 ```
 
 These fields are optional and behave differently when missing:
@@ -239,9 +240,13 @@ These fields are optional and behave differently when missing:
   a real sentence, not a restatement of the name.
 - **`category`** groups and filters Services and Installed applications in the
   WebUI. When absent or blank, services use `service` and apps use `app`.
+- **`type`** is an optional free-form classification label (e.g. `database`,
+  `cache`, `queue`, `webserver`, `appserver`, `tunnel`) used in the catalog to
+  organize entries. It is recorded but **not currently consumed** by the engine
+  and has no effect on monitoring, grouping or remediation.
 
-All metadata fields must be strings if present; validation rejects non-string
-values.
+`display_name`, `description` and `category` must be strings if present;
+validation rejects non-string values.
 
 ### Built-in variables
 
