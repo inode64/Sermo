@@ -147,9 +147,9 @@ func TestSystemdManagerActionsUseRunner(t *testing.T) {
 	}
 
 	want := []string{
-		"systemctl start nginx.service",
-		"systemctl stop nginx.service",
-		"systemctl restart nginx.service",
+		"systemctl start -- nginx.service",
+		"systemctl stop -- nginx.service",
+		"systemctl restart -- nginx.service",
 	}
 	if len(rec.calls) != len(want) {
 		t.Fatalf("calls = %v, want %v", rec.calls, want)
@@ -191,8 +191,8 @@ func TestResetStateReconcilesInitState(t *testing.T) {
 	if err := (systemdManager{runner: sysRec}).ResetState(context.Background(), "nginx"); err != nil {
 		t.Fatalf("systemd ResetState() error = %v", err)
 	}
-	if len(sysRec.calls) != 1 || sysRec.calls[0] != "systemctl reset-failed nginx.service" {
-		t.Fatalf("systemd calls = %v, want [systemctl reset-failed nginx.service]", sysRec.calls)
+	if len(sysRec.calls) != 1 || sysRec.calls[0] != "systemctl reset-failed -- nginx.service" {
+		t.Fatalf("systemd calls = %v, want [systemctl reset-failed -- nginx.service]", sysRec.calls)
 	}
 
 	rcRec := &recordRunner{}
