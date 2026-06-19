@@ -41,6 +41,11 @@ type Watch struct {
 	// Notifiers receive a notification when the watch fires (the resolved
 	// `then.notify` targets, or the inherited global default).
 	Notifiers []notify.Notifier
+	// NotifyInterval paces re-notification while the watch stays firing. Zero
+	// (the default) means notify once per firing episode, on the rising edge
+	// when the alert starts. A positive value (`then.notify_interval`) re-sends
+	// the notification as a reminder once that interval elapses.
+	NotifyInterval time.Duration
 	// DryRun keeps watch evaluation and firing events active, but reports the
 	// configured actions without executing hook, notify or expand side effects.
 	DryRun   bool
@@ -68,9 +73,10 @@ type Watch struct {
 	Expander VolumeExpander
 	Policy   rules.Policy
 
-	state       rules.WindowState
-	policyState rules.RemediationState
-	firing      bool
+	state        rules.WindowState
+	policyState  rules.RemediationState
+	firing       bool
+	lastNotifyAt time.Time // when a notification was last dispatched this firing episode
 }
 
 // RunCycle runs the check, advances the window, and fires the hook on a firing
@@ -91,10 +97,12 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if !w.state.Fires(w.Window, fired) {
 		if w.firing {
 			w.firing = false
+			w.lastNotifyAt = time.Time{}
 			w.emit(Event{Watch: w.Name, Kind: "recovered", Message: res.Message})
 		}
 		return
 	}
+	wasFiring := w.firing
 	w.firing = true
 	// Always emit a "firing" event when the `for` (or `within`) window is
 	// satisfied. This makes the alert visible in the web UI (state=failed,
@@ -118,7 +126,35 @@ func (w *Watch) RunCycle(ctx context.Context) {
 			w.emit(Event{Watch: w.Name, Kind: "hook", Message: res.Message})
 		}
 	}
-	dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	if w.shouldNotify(wasFiring) {
+		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
+	}
+}
+
+// clock returns the current time, honoring an injected w.Now for tests.
+func (w *Watch) clock() time.Time {
+	if w.Now != nil {
+		return w.Now()
+	}
+	return time.Now()
+}
+
+// shouldNotify reports whether the watch should dispatch a notification this
+// firing cycle. It notifies once on the rising edge (when the alert starts);
+// if NotifyInterval is set, it re-notifies as a reminder once that interval
+// elapses while the watch stays firing. lastNotifyAt is reset on recovery, so
+// a fresh firing episode always notifies again.
+func (w *Watch) shouldNotify(wasFiring bool) bool {
+	now := w.clock()
+	if !wasFiring {
+		w.lastNotifyAt = now
+		return true
+	}
+	if w.NotifyInterval > 0 && now.Sub(w.lastNotifyAt) >= w.NotifyInterval {
+		w.lastNotifyAt = now
+		return true
+	}
+	return false
 }
 
 // runExpand performs the native storage-expansion action on a firing cycle, gated

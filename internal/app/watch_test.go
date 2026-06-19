@@ -228,6 +228,69 @@ func TestWatchDryRunSkipsHookNotifyAndExpand(t *testing.T) {
 	}
 }
 
+func TestWatchNotifiesOnceByDefault(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	at := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	w := &Watch{
+		Name:      "disk-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
+		Notifiers: []notify.Notifier{n},
+		Now:       func() time.Time { return at },
+		Emit:      func(Event) {},
+	}
+	for i := 0; i < 3; i++ {
+		w.RunCycle(context.Background())
+	}
+	if len(n.msgs) != 1 {
+		t.Fatalf("default watch must notify once per firing episode, got %d", len(n.msgs))
+	}
+}
+
+func TestWatchReNotifiesAfterInterval(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	w := &Watch{
+		Name:           "disk-root",
+		CheckType:      "storage",
+		Check:          stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
+		Notifiers:      []notify.Notifier{n},
+		NotifyInterval: 10 * time.Minute,
+		Now:            func() time.Time { return now },
+		Emit:           func(Event) {},
+	}
+	w.RunCycle(context.Background()) // rising edge → notify (1)
+	now = now.Add(5 * time.Minute)
+	w.RunCycle(context.Background()) // within interval → no notify
+	now = now.Add(5 * time.Minute)
+	w.RunCycle(context.Background()) // interval elapsed → notify (2)
+	if len(n.msgs) != 2 {
+		t.Fatalf("expected re-notify after the interval, got %d notifications", len(n.msgs))
+	}
+}
+
+func TestWatchReNotifiesOnNewEpisode(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	at := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
+	w := &Watch{
+		Name:      "disk-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
+		Notifiers: []notify.Notifier{n},
+		Now:       func() time.Time { return at },
+		Emit:      func(Event) {},
+	}
+	w.RunCycle(context.Background()) // firing → notify (1)
+	w.RunCycle(context.Background()) // still firing → no notify
+	w.Check = stubCheck{name: "storage", ok: false}
+	w.RunCycle(context.Background()) // recovered → reset
+	w.Check = stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}}
+	w.RunCycle(context.Background()) // new episode → notify (2)
+	if len(n.msgs) != 2 {
+		t.Fatalf("a new firing episode must notify again, got %d notifications", len(n.msgs))
+	}
+}
+
 func hasEventMessage(events []Event, kind, substr string) bool {
 	for _, e := range events {
 		if e.Kind == kind && strings.Contains(e.Message, substr) {
