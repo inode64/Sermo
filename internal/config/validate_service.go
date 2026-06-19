@@ -201,13 +201,24 @@ func validatePolicyExtras(tree map[string]any, add addFunc) {
 	}
 	if bo, ok := policy["backoff"].(map[string]any); ok {
 		initial := cfgval.String(bo["initial"])
-		if !isPositiveDuration(initial) {
+		maxStr := cfgval.String(bo["max"])
+		initialOK := isPositiveDuration(initial)
+		maxOK := isPositiveDuration(maxStr)
+		if !initialOK {
 			add("policy.backoff.initial must be a valid positive duration")
 		}
-		di, _ := time.ParseDuration(initial)
-		dm, errMax := time.ParseDuration(cfgval.String(bo["max"]))
-		if errMax != nil || dm < di {
-			add("policy.backoff.max must be >= initial")
+		if !maxOK {
+			add("policy.backoff.max must be a valid positive duration")
+		}
+		// Only compare once both parse cleanly: otherwise a garbage initial
+		// (di defaulting to 0) would let any max pass, and an omitted max would
+		// report the misleading ">= initial" instead of its own parse error.
+		if initialOK && maxOK {
+			di, _ := time.ParseDuration(initial)
+			dm, _ := time.ParseDuration(maxStr)
+			if dm < di {
+				add("policy.backoff.max must be >= initial")
+			}
 		}
 	}
 }
