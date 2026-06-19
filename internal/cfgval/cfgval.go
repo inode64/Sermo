@@ -122,6 +122,28 @@ func Int(v any) (int, bool) {
 	}
 }
 
+// IntList coerces a scalar-or-list YAML field into one or more ints. A scalar
+// integer form returns a single-element list; a YAML list must contain at least
+// one integer-like scalar and every element must parse.
+func IntList(v any) ([]int, bool) {
+	if n, ok := Int(v); ok {
+		return []int{n}, true
+	}
+	list, ok := v.([]any)
+	if !ok || len(list) == 0 {
+		return nil, false
+	}
+	out := make([]int, 0, len(list))
+	for _, item := range list {
+		n, ok := Int(item)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, n)
+	}
+	return out, true
+}
+
 func int64Value(n int64) (int, bool) {
 	if n < int64(minInt) || n > int64(maxInt) {
 		return 0, false

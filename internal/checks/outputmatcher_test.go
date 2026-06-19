@@ -72,7 +72,7 @@ func TestOutputMatcherMatch(t *testing.T) {
 }
 
 func TestCommandCheckOutputExpectations(t *testing.T) {
-	mk := func(res execx.Result, expectExit int, stdout, stderr OutputMatcher) commandCheck {
+	mk := func(res execx.Result, expectExit []int, stdout, stderr OutputMatcher) commandCheck {
 		return commandCheck{
 			base:       base{name: "c", timeout: time.Second},
 			runner:     fakeRunner{res},
@@ -83,27 +83,33 @@ func TestCommandCheckOutputExpectations(t *testing.T) {
 		}
 	}
 	t.Run("non-zero exit accepted via expect_exit", func(t *testing.T) {
-		c := mk(execx.Result{ExitCode: 3}, 3, OutputMatcher{}, OutputMatcher{})
+		c := mk(execx.Result{ExitCode: 3}, []int{3}, OutputMatcher{}, OutputMatcher{})
 		if res := c.Run(context.Background()); !res.OK {
 			t.Errorf("exit 3 with expect_exit 3 should pass: %s", res.Message)
 		}
 	})
+	t.Run("one of several expected exits passes", func(t *testing.T) {
+		c := mk(execx.Result{ExitCode: 1}, []int{0, 1}, OutputMatcher{}, OutputMatcher{})
+		if res := c.Run(context.Background()); !res.OK {
+			t.Errorf("exit 1 with expect_exit [0,1] should pass: %s", res.Message)
+		}
+	})
 	t.Run("stdout substring must match", func(t *testing.T) {
-		c := mk(execx.Result{ExitCode: 0, Stdout: "all good\n"}, 0, OutputMatcher{Substring: "good"}, OutputMatcher{})
+		c := mk(execx.Result{ExitCode: 0, Stdout: "all good\n"}, []int{0}, OutputMatcher{Substring: "good"}, OutputMatcher{})
 		if res := c.Run(context.Background()); !res.OK {
 			t.Errorf("matching stdout should pass: %s", res.Message)
 		}
-		c = mk(execx.Result{ExitCode: 0, Stdout: "nope\n"}, 0, OutputMatcher{Substring: "good"}, OutputMatcher{})
+		c = mk(execx.Result{ExitCode: 0, Stdout: "nope\n"}, []int{0}, OutputMatcher{Substring: "good"}, OutputMatcher{})
 		if res := c.Run(context.Background()); res.OK {
 			t.Error("non-matching stdout should fail")
 		}
 	})
 	t.Run("stderr op value must match", func(t *testing.T) {
-		c := mk(execx.Result{ExitCode: 0, Stderr: "0\n"}, 0, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
+		c := mk(execx.Result{ExitCode: 0, Stderr: "0\n"}, []int{0}, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
 		if res := c.Run(context.Background()); !res.OK {
 			t.Errorf("matching stderr should pass: %s", res.Message)
 		}
-		c = mk(execx.Result{ExitCode: 0, Stderr: "5\n"}, 0, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
+		c = mk(execx.Result{ExitCode: 0, Stderr: "5\n"}, []int{0}, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
 		if res := c.Run(context.Background()); res.OK {
 			t.Error("non-matching stderr should fail")
 		}

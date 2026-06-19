@@ -187,6 +187,34 @@ func TestBool(t *testing.T) {
 	}
 }
 
+func TestIntList(t *testing.T) {
+	cases := []struct {
+		name   string
+		in     any
+		want   []int
+		wantOK bool
+	}{
+		{"single int", 1, []int{1}, true},
+		{"single string int", "2", []int{2}, true},
+		{"list of ints", []any{0, 1}, []int{0, 1}, true},
+		{"list of string ints", []any{"0", "1"}, []int{0, 1}, true},
+		{"empty list invalid", []any{}, nil, false},
+		{"bad scalar invalid", "bad", nil, false},
+		{"mixed list invalid", []any{0, "bad"}, nil, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, ok := IntList(c.in)
+			if ok != c.wantOK {
+				t.Fatalf("IntList(%#v) ok = %v, want %v", c.in, ok, c.wantOK)
+			}
+			if !slices.Equal(got, c.want) {
+				t.Errorf("IntList(%#v) = %#v, want %#v", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestDuration(t *testing.T) {
 	cases := []struct {
 		in   any

@@ -291,6 +291,11 @@ func validateOutputExpectation(prefix, field string, v any, add addFunc) {
 	}
 }
 
+func isExpectExit(raw any) bool {
+	_, ok := cfgval.IntList(raw)
+	return ok
+}
+
 // validateOpValue validates an {op, value} comparison mapping (shared by the
 // http response comparisons): op must be a known comparison operator, and value
 // must be numeric for ordering ops and a valid regexp for =~.
@@ -652,8 +657,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			add("%s command must be an array, not a shell string", path)
 		}
 		if v, present := entry["expect_exit"]; present {
-			if _, ok := cfgval.Int(v); !ok {
-				add("%s expect_exit must be an integer", path)
+			if !isExpectExit(v) {
+				add("%s expect_exit must be an integer or a non-empty list of integers", path)
 			}
 		}
 		validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
