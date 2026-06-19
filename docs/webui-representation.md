@@ -55,7 +55,7 @@ enabled.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
-| Service action | `POST /api/services/{name}/{action}` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`; service operations use the safe engine |
+| Service action | `POST /api/services/{name}/{action}` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; service operations use the safe engine |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
