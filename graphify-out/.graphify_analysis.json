@@ -1,0 +1,950 @@
+{
+  "communities": {
+    "0": [
+      "2026_06_06_host_watches_disk_doc",
+      "2026_06_06_icmp_host_watch_doc",
+      "2026_06_06_net_interface_watch_doc",
+      "2026_06_09_disk_auto_expand_doc",
+      "2026_06_09_https_cert_check_doc",
+      "agents_md",
+      "claude_md",
+      "cli_md",
+      "configuration_md",
+      "daemons_md",
+      "examples_sermo_yml",
+      "readme_md",
+      "rules_doc",
+      "safety_doc",
+      "sermo_all_doc",
+      "skill_config_schema",
+      "skill_go_impl",
+      "skill_process_discovery",
+      "skill_rule_engine",
+      "todo_md"
+    ],
+    "1": [
+      "dnsmasq_app",
+      "dnsmasq_daemon",
+      "glibc_lib",
+      "libidn2_lib",
+      "lzma_lib",
+      "monit_app",
+      "monit_daemon",
+      "mosquitto_app",
+      "mosquitto_daemon",
+      "nettle_lib",
+      "openssl_lib",
+      "pmcd_app",
+      "pmcd_daemon",
+      "pppd_app",
+      "pppd_daemon",
+      "systemd_libs_lib",
+      "zlib_lib"
+    ],
+    "2": [
+      "category_storage",
+      "ceph_osd_ceph_osd",
+      "common_common",
+      "glibc_glibc",
+      "smartd_smartd",
+      "smbd_smbd",
+      "sqlite3_sqlite3",
+      "syncthing_syncthing",
+      "udisks2_udisks2",
+      "zlib_zlib"
+    ],
+    "3": [
+      "2026_06_09_connection_protocol_checks_design_spec",
+      "app_mariadb_backup",
+      "daemon_mariadb",
+      "mariadb_backup_guard_mariadb_backup_guard",
+      "mariadb_main_mariadb_main",
+      "mariadb_replica_mariadb_replica"
+    ],
+    "4": [
+      "bash_bash",
+      "category_runtime",
+      "git_git",
+      "go_go",
+      "php_v_php_v",
+      "ruby_ruby"
+    ],
+    "5": [
+      "category_database",
+      "db_vsql_db_vsql",
+      "mariabackup_mariadb_backup",
+      "sqlite_sqlite",
+      "wal_g_mysql_wal_g_mysql",
+      "wal_g_pg_wal_g_pg"
+    ],
+    "6": [
+      "category_hardware",
+      "snmp_ups_snmp_ups",
+      "upsd_upsd",
+      "upsdrv_upsdrv",
+      "upsmon_upsmon",
+      "usbhid_ups_usbhid_ups"
+    ],
+    "7": [
+      "category_virtualization",
+      "qemu_qemu",
+      "virtlockd_virtlockd",
+      "virtlogd_virtlogd",
+      "virtnetworkd_virtnetworkd",
+      "virtqemud_virtqemud"
+    ],
+    "8": [
+      "2026_06_06_host_watches_disk_design_spec",
+      "2026_06_06_icmp_host_watch_design_spec",
+      "2026_06_06_net_interface_watch_design_spec",
+      "2026_06_09_check_wizard_design_spec",
+      "sermo_config"
+    ],
+    "9": [
+      "beam_v_beam_v",
+      "category_messaging",
+      "mail_mail",
+      "perl_perl",
+      "spamassassin_spamassassin"
+    ],
+    "10": [
+      "common_patterns",
+      "named_app",
+      "named_daemon",
+      "nginx_app",
+      "nginx_daemon"
+    ],
+    "11": [
+      "app_wal_g_mysql",
+      "daemon_mysql",
+      "mysql_main_mysql_main",
+      "mysql_wal_g_backup_guard_mysql_wal_g_backup_guard"
+    ],
+    "12": [
+      "category_security",
+      "certbot_certbot",
+      "nft_nft",
+      "openssl_openssl"
+    ],
+    "13": [
+      "category_system",
+      "supervisord_supervisord",
+      "systemd_systemd",
+      "tuned_tuned"
+    ],
+    "14": [
+      "category_web",
+      "squid_squid",
+      "tomcat_v_tomcat_v",
+      "varnishd_varnishd"
+    ],
+    "15": [
+      "cli_cli",
+      "configuration_configuration",
+      "daemons_daemons",
+      "rules_rules"
+    ],
+    "16": [
+      "fail2ban_app",
+      "fail2ban_daemon",
+      "homeassistant_daemon",
+      "python_n_app"
+    ],
+    "17": [
+      "java_app",
+      "kafka_app",
+      "kafka_broker_daemon",
+      "kafka_controller_daemon"
+    ],
+    "18": [
+      "java_java",
+      "mongod_mongod",
+      "tomcat_v_tomcat",
+      "unifi_unifi"
+    ],
+    "19": [
+      "nebula_app",
+      "nebula_daemon",
+      "nebula_i_app",
+      "nebula_i_daemon"
+    ],
+    "20": [
+      "openvpn_app",
+      "openvpn_daemon",
+      "openvpn_i_app",
+      "openvpn_i_daemon"
+    ],
+    "21": [
+      "2026_06_09_https_cert_check_design_spec",
+      "daemon_nginx",
+      "nginx_site_nginx_site"
+    ],
+    "22": [
+      "2026_06_12_also_service_units_design_spec",
+      "2026_06_12_cascade_actions_design_spec",
+      "index_dashboard"
+    ],
+    "23": [
+      "backrest_app",
+      "backrest_daemon",
+      "restic_app"
+    ],
+    "24": [
+      "category_network",
+      "ssh_ssh",
+      "xinetd_xinetd"
+    ],
+    "25": [
+      "category_observability",
+      "snmpd_snmpd",
+      "syslog_ng_syslog_ng"
+    ],
+    "26": [
+      "daemon_redis",
+      "redis_cache_redis_cache",
+      "redis_main_redis_main"
+    ],
+    "27": [
+      "erlang_app",
+      "rabbitmq_app",
+      "rabbitmq_daemon"
+    ],
+    "28": [
+      "firehol_app",
+      "firehol_daemon",
+      "iptables_app"
+    ],
+    "29": [
+      "lvm2_monitor_daemon",
+      "lvm_app",
+      "lvm_daemon"
+    ],
+    "30": [
+      "mdadm_app",
+      "mdadm_daemon",
+      "mdmonitor_daemon"
+    ],
+    "31": [
+      "nfs_daemon",
+      "rpc_mountd_app",
+      "rpc_mountd_daemon"
+    ],
+    "32": [
+      "salt_app",
+      "salt_daemon",
+      "salt_minion_daemon"
+    ],
+    "33": [
+      "2026_06_12_output_pattern_analysis_design_spec",
+      "2026_06_12_output_pattern_analysis_plan"
+    ],
+    "34": [
+      "acpid_app",
+      "acpid_daemon"
+    ],
+    "35": [
+      "afpd_app",
+      "afpd_daemon"
+    ],
+    "36": [
+      "alloy_app",
+      "alloy_daemon"
+    ],
+    "37": [
+      "apache_app",
+      "apache_daemon"
+    ],
+    "38": [
+      "apache_main_apache_main",
+      "daemon_apache"
+    ],
+    "39": [
+      "apcsmart_app",
+      "apcsmart_daemon"
+    ],
+    "40": [
+      "asterisk_app",
+      "asterisk_daemon"
+    ],
+    "41": [
+      "automount_app",
+      "automount_daemon"
+    ],
+    "42": [
+      "avahi_app",
+      "avahi_daemon"
+    ],
+    "43": [
+      "bacula_dir_app",
+      "bacula_dir_daemon"
+    ],
+    "44": [
+      "bacula_fd_app",
+      "bacula_fd_daemon"
+    ],
+    "45": [
+      "bacula_sd_app",
+      "bacula_sd_daemon"
+    ],
+    "46": [
+      "bareos_dir_app",
+      "bareos_dir_daemon"
+    ],
+    "47": [
+      "bareos_fd_app",
+      "bareos_fd_daemon"
+    ],
+    "48": [
+      "bareos_sd_app",
+      "bareos_sd_daemon"
+    ],
+    "49": [
+      "ceph_mds_app",
+      "ceph_mds_daemon"
+    ],
+    "50": [
+      "ceph_mgr_app",
+      "ceph_mgr_daemon"
+    ],
+    "51": [
+      "ceph_mon_app",
+      "ceph_mon_daemon"
+    ],
+    "52": [
+      "ceph_osdn_app",
+      "ceph_osdn_daemon"
+    ],
+    "53": [
+      "ci_yml",
+      "golangci_yml"
+    ],
+    "54": [
+      "clamd_app",
+      "clamd_daemon"
+    ],
+    "55": [
+      "cloudflared_app",
+      "cloudflared_daemon"
+    ],
+    "56": [
+      "cloudflared_cloudflared",
+      "daemon_cloudflared"
+    ],
+    "57": [
+      "containerd_app",
+      "containerd_daemon"
+    ],
+    "58": [
+      "cups_daemon",
+      "cupsd_app"
+    ],
+    "59": [
+      "daemon_smartd",
+      "smartd_disks_smartd_disks"
+    ],
+    "60": [
+      "dbus_app",
+      "dbus_daemon"
+    ],
+    "61": [
+      "dhclient_app",
+      "dhclient_daemon"
+    ],
+    "62": [
+      "dhcpd_app",
+      "dhcpd_daemon"
+    ],
+    "63": [
+      "dmeventd_app",
+      "dmeventd_daemon"
+    ],
+    "64": [
+      "docker_app",
+      "docker_daemon"
+    ],
+    "65": [
+      "dovecot_app",
+      "dovecot_daemon"
+    ],
+    "66": [
+      "exim_app",
+      "exim_daemon"
+    ],
+    "67": [
+      "fcron_app",
+      "fcron_daemon"
+    ],
+    "68": [
+      "fetchmail_app",
+      "fetchmail_daemon"
+    ],
+    "69": [
+      "filebeat_app",
+      "filebeat_daemon"
+    ],
+    "70": [
+      "firewalld_app",
+      "firewalld_daemon"
+    ],
+    "71": [
+      "freshclam_app",
+      "freshclam_daemon"
+    ],
+    "72": [
+      "garbd_app",
+      "garbd_daemon"
+    ],
+    "73": [
+      "glusterd_app",
+      "glusterd_daemon"
+    ],
+    "74": [
+      "go2rtc_app",
+      "go2rtc_daemon"
+    ],
+    "75": [
+      "grafana_app",
+      "grafana_daemon"
+    ],
+    "76": [
+      "guacd_app",
+      "guacd_daemon"
+    ],
+    "77": [
+      "in_tftpd_app",
+      "in_tftpd_daemon"
+    ],
+    "78": [
+      "influxdb_app",
+      "influxdb_daemon"
+    ],
+    "79": [
+      "irqbalance_app",
+      "irqbalance_daemon"
+    ],
+    "80": [
+      "keydb_app",
+      "keydb_daemon"
+    ],
+    "81": [
+      "libvirt_dbus_app",
+      "libvirt_dbus_daemon"
+    ],
+    "82": [
+      "libvirtd_app",
+      "libvirtd_daemon"
+    ],
+    "83": [
+      "listmonk_app",
+      "listmonk_daemon"
+    ],
+    "84": [
+      "lldpd_app",
+      "lldpd_daemon"
+    ],
+    "85": [
+      "lm_sensors_app",
+      "lm_sensors_daemon"
+    ],
+    "86": [
+      "loki_app",
+      "loki_daemon"
+    ],
+    "87": [
+      "lvmpolld_app",
+      "lvmpolld_daemon"
+    ],
+    "88": [
+      "mariadb_app",
+      "mariadb_daemon"
+    ],
+    "89": [
+      "memcached_app",
+      "memcached_daemon"
+    ],
+    "90": [
+      "mongod_app",
+      "mongod_daemon"
+    ],
+    "91": [
+      "mysql_app",
+      "mysql_daemon"
+    ],
+    "92": [
+      "mysqld_exporter_app",
+      "mysqld_exporter_daemon"
+    ],
+    "93": [
+      "networkmanager_app",
+      "networkmanager_daemon"
+    ],
+    "94": [
+      "nfsdcld_app",
+      "nfsdcld_daemon"
+    ],
+    "95": [
+      "nmbd_app",
+      "nmbd_daemon"
+    ],
+    "96": [
+      "node_app",
+      "node_daemon"
+    ],
+    "97": [
+      "node_exporter_app",
+      "node_exporter_daemon"
+    ],
+    "98": [
+      "ntpd_app",
+      "ntpd_daemon"
+    ],
+    "99": [
+      "numad_app",
+      "numad_daemon"
+    ],
+    "100": [
+      "ovs_vswitchd_app",
+      "ovs_vswitchd_daemon"
+    ],
+    "101": [
+      "ovsdb_client_app",
+      "ovsdb_client_daemon"
+    ],
+    "102": [
+      "ovsdb_server_app",
+      "ovsdb_server_daemon"
+    ],
+    "103": [
+      "php_fpm_v_app",
+      "php_fpm_v_daemon"
+    ],
+    "104": [
+      "pmie_app",
+      "pmie_daemon"
+    ],
+    "105": [
+      "pmie_farm_app",
+      "pmie_farm_daemon"
+    ],
+    "106": [
+      "pmlogger_app",
+      "pmlogger_daemon"
+    ],
+    "107": [
+      "pmlogger_farm_app",
+      "pmlogger_farm_daemon"
+    ],
+    "108": [
+      "polkit_app",
+      "polkit_daemon"
+    ],
+    "109": [
+      "postgres_v_app",
+      "postgres_v_daemon"
+    ],
+    "110": [
+      "pptpd_app",
+      "pptpd_daemon"
+    ],
+    "111": [
+      "proftpd_app",
+      "proftpd_daemon"
+    ],
+    "112": [
+      "prometheus_app",
+      "prometheus_daemon"
+    ],
+    "113": [
+      "qemu_ga_app",
+      "qemu_ga_daemon"
+    ],
+    "114": [
+      "rasdaemon_app",
+      "rasdaemon_daemon"
+    ],
+    "115": [
+      "redis_app",
+      "redis_daemon"
+    ],
+    "116": [
+      "rest_server_app",
+      "rest_server_daemon"
+    ],
+    "117": [
+      "rpc_idmapd_app",
+      "rpc_idmapd_daemon"
+    ],
+    "118": [
+      "rpc_statd_app",
+      "rpc_statd_daemon"
+    ],
+    "119": [
+      "rpcbind_app",
+      "rpcbind_daemon"
+    ],
+    "120": [
+      "rspamd_app",
+      "rspamd_daemon"
+    ],
+    "121": [
+      "rsync_app",
+      "rsync_daemon"
+    ],
+    "122": [
+      "slapd_app",
+      "slapd_daemon"
+    ],
+    "123": [
+      "smartctl_exporter_app",
+      "smartctl_exporter_daemon"
+    ],
+    "124": [
+      "web_index_html",
+      "webui_representation_doc"
+    ],
+    "125": [
+      "2026_06_12_global_custom_variables_design_spec"
+    ],
+    "126": [
+      "2026_06_12_stopped_state_invariants_design_spec"
+    ],
+    "127": [
+      "bitbucketrunner_daemon"
+    ],
+    "128": [
+      "bluetooth_daemon"
+    ],
+    "129": [
+      "bzip2_lib"
+    ],
+    "130": [
+      "default_alert_template"
+    ],
+    "131": [
+      "pam_lib"
+    ],
+    "132": [
+      "php_fpm_www_php_fpm_www"
+    ],
+    "133": [
+      "rngd_daemon"
+    ],
+    "134": [
+      "rpc_pipefs_daemon"
+    ],
+    "135": [
+      "rrdcached_daemon"
+    ],
+    "136": [
+      "skill_docs_writer"
+    ],
+    "137": [
+      "skill_linux_service"
+    ],
+    "138": [
+      "skill_packaging"
+    ],
+    "139": [
+      "skill_profile_author"
+    ],
+    "140": [
+      "skill_project_architect"
+    ],
+    "141": [
+      "skill_safety_review"
+    ],
+    "142": [
+      "skill_test_engineer"
+    ],
+    "143": [
+      "smartd_patterns"
+    ],
+    "144": [
+      "sqlite3_lib"
+    ],
+    "145": [
+      "udev_lib"
+    ],
+    "146": [
+      "util_linux_lib"
+    ],
+    "147": [
+      "webapp_http_webapp"
+    ],
+    "148": [
+      "wizards_doc"
+    ],
+    "149": [
+      "zigbee2mqtt_zigbee2mqtt"
+    ],
+    "150": [
+      "zstd_lib"
+    ]
+  },
+  "cohesion": {
+    "0": 0.12105263157894737,
+    "1": 0.13970588235294118,
+    "2": 0.2,
+    "3": 0.3333333333333333,
+    "4": 0.3333333333333333,
+    "5": 0.4,
+    "6": 0.5333333333333333,
+    "7": 0.6,
+    "8": 0.7,
+    "9": 0.4,
+    "10": 0.4,
+    "11": 0.5,
+    "12": 0.5,
+    "13": 0.5,
+    "14": 0.5,
+    "15": 0.6666666666666666,
+    "16": 0.5,
+    "17": 0.6666666666666666,
+    "18": 0.5,
+    "19": 0.5,
+    "20": 0.5,
+    "21": 0.6666666666666666,
+    "22": 0.6666666666666666,
+    "23": 0.6666666666666666,
+    "24": 0.6666666666666666,
+    "25": 0.6666666666666666,
+    "26": 0.6666666666666666,
+    "27": 0.6666666666666666,
+    "28": 0.6666666666666666,
+    "29": 0.6666666666666666,
+    "30": 0.6666666666666666,
+    "31": 0.6666666666666666,
+    "32": 0.6666666666666666,
+    "33": 1.0,
+    "34": 1.0,
+    "35": 1.0,
+    "36": 1.0,
+    "37": 1.0,
+    "38": 1.0,
+    "39": 1.0,
+    "40": 1.0,
+    "41": 1.0,
+    "42": 1.0,
+    "43": 1.0,
+    "44": 1.0,
+    "45": 1.0,
+    "46": 1.0,
+    "47": 1.0,
+    "48": 1.0,
+    "49": 1.0,
+    "50": 1.0,
+    "51": 1.0,
+    "52": 1.0,
+    "53": 1.0,
+    "54": 1.0,
+    "55": 1.0,
+    "56": 1.0,
+    "57": 1.0,
+    "58": 1.0,
+    "59": 1.0,
+    "60": 1.0,
+    "61": 1.0,
+    "62": 1.0,
+    "63": 1.0,
+    "64": 1.0,
+    "65": 1.0,
+    "66": 1.0,
+    "67": 1.0,
+    "68": 1.0,
+    "69": 1.0,
+    "70": 1.0,
+    "71": 1.0,
+    "72": 1.0,
+    "73": 1.0,
+    "74": 1.0,
+    "75": 1.0,
+    "76": 1.0,
+    "77": 1.0,
+    "78": 1.0,
+    "79": 1.0,
+    "80": 1.0,
+    "81": 1.0,
+    "82": 1.0,
+    "83": 1.0,
+    "84": 1.0,
+    "85": 1.0,
+    "86": 1.0,
+    "87": 1.0,
+    "88": 1.0,
+    "89": 1.0,
+    "90": 1.0,
+    "91": 1.0,
+    "92": 1.0,
+    "93": 1.0,
+    "94": 1.0,
+    "95": 1.0,
+    "96": 1.0,
+    "97": 1.0,
+    "98": 1.0,
+    "99": 1.0,
+    "100": 1.0,
+    "101": 1.0,
+    "102": 1.0,
+    "103": 1.0,
+    "104": 1.0,
+    "105": 1.0,
+    "106": 1.0,
+    "107": 1.0,
+    "108": 1.0,
+    "109": 1.0,
+    "110": 1.0,
+    "111": 1.0,
+    "112": 1.0,
+    "113": 1.0,
+    "114": 1.0,
+    "115": 1.0,
+    "116": 1.0,
+    "117": 1.0,
+    "118": 1.0,
+    "119": 1.0,
+    "120": 1.0,
+    "121": 1.0,
+    "122": 1.0,
+    "123": 1.0,
+    "124": 1.0,
+    "125": 1.0,
+    "126": 1.0,
+    "127": 1.0,
+    "128": 1.0,
+    "129": 1.0,
+    "130": 1.0,
+    "131": 1.0,
+    "132": 1.0,
+    "133": 1.0,
+    "134": 1.0,
+    "135": 1.0,
+    "136": 1.0,
+    "137": 1.0,
+    "138": 1.0,
+    "139": 1.0,
+    "140": 1.0,
+    "141": 1.0,
+    "142": 1.0,
+    "143": 1.0,
+    "144": 1.0,
+    "145": 1.0,
+    "146": 1.0,
+    "147": 1.0,
+    "148": 1.0,
+    "149": 1.0,
+    "150": 1.0
+  },
+  "gods": [
+    {
+      "id": "agents_md",
+      "label": "Sermo Agent Conventions",
+      "degree": 9
+    },
+    {
+      "id": "configuration_md",
+      "label": "Configuration Reference",
+      "degree": 6
+    },
+    {
+      "id": "glibc_lib",
+      "label": "GNU C Library",
+      "degree": 5
+    },
+    {
+      "id": "dnsmasq_daemon",
+      "label": "dnsmasq",
+      "degree": 5
+    },
+    {
+      "id": "upsd_upsd",
+      "label": "NUT UPS Daemon",
+      "degree": 5
+    },
+    {
+      "id": "virtqemud_virtqemud",
+      "label": "libvirt QEMU Daemon",
+      "degree": 5
+    },
+    {
+      "id": "monit_daemon",
+      "label": "Monit",
+      "degree": 4
+    },
+    {
+      "id": "mosquitto_daemon",
+      "label": "Eclipse Mosquitto",
+      "degree": 4
+    },
+    {
+      "id": "pmcd_daemon",
+      "label": "PCP Collector pmcd",
+      "degree": 4
+    },
+    {
+      "id": "syncthing_syncthing",
+      "label": "Syncthing",
+      "degree": 4
+    }
+  ],
+  "surprises": [
+    {
+      "source": "Sermo config schema skill",
+      "target": "Sermo Agent Conventions",
+      "source_files": [
+        ".agents/skills/sermo-config-schema/SKILL.md",
+        "AGENTS.md"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; peripheral node `Sermo config schema skill` unexpectedly reaches hub `Sermo Agent Conventions`"
+    },
+    {
+      "source": "Sermo process discovery skill",
+      "target": "Sermo Agent Conventions",
+      "source_files": [
+        ".agents/skills/sermo-process-discovery/SKILL.md",
+        "AGENTS.md"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; peripheral node `Sermo process discovery skill` unexpectedly reaches hub `Sermo Agent Conventions`"
+    },
+    {
+      "source": "Sermo README",
+      "target": "Sermo Agent Conventions",
+      "source_files": [
+        "README.md",
+        "AGENTS.md"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; connects across different repos/directories; peripheral node `Sermo README` unexpectedly reaches hub `Sermo Agent Conventions`"
+    },
+    {
+      "source": "nginx-site Service",
+      "target": "HTTPS Certificate Inspection Design",
+      "source_files": [
+        "examples/services/nginx-site.yml",
+        "docs/superpowers/specs/2026-06-09-https-cert-check-design.md"
+      ],
+      "confidence": "AMBIGUOUS",
+      "relation": "conceptually_related_to",
+      "why": "ambiguous connection - not explicitly stated in source; connects across different repos/directories"
+    },
+    {
+      "source": "Sermo Go implementation skill",
+      "target": "Sermo Agent Conventions",
+      "source_files": [
+        ".agents/skills/sermo-go-implementation/SKILL.md",
+        "AGENTS.md"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "connects across different repos/directories; peripheral node `Sermo Go implementation skill` unexpectedly reaches hub `Sermo Agent Conventions`"
+    }
+  ],
+  "tokens": {
+    "input": 26166,
+    "output": 10675
+  }
+}
