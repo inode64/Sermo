@@ -8,10 +8,11 @@ service: systemd
 # Binary + version are owned by the same-named app (systemctl --version).
 apps: [systemd]
 
-preflight:
-  # Verify ALL unit files / systemd configuration is correct. Gates
-  # start/restart/reload, so a broken unit is never applied.
-  config: { type: command, command: ["systemd-analyze", "verify"], timeout: 60s }
+# No `preflight: config` here: `systemd-analyze verify` has no "verify all units"
+# mode (it requires explicit unit arguments and errors with "Too few arguments"
+# otherwise), and scoping it to the unit directories yields host-dependent false
+# positives — e.g. it exits non-zero merely because a referenced unit is masked.
+# A preflight that can spuriously block daemon-reload is worse than none.
 
 commands:
   # Reloading systemd itself is `daemon-reload` (re-reads unit files), not a
@@ -19,19 +20,9 @@ commands:
   reload:
     command: ["systemctl", "daemon-reload"]
 
-# When unit files change, run `systemctl daemon-reload` (verified first by the
-# config preflight) instead of anything disruptive.
+# When unit files change, run `systemctl daemon-reload` (re-reads unit files)
+# instead of anything disruptive.
 reload_on_change:
   paths:
     - /etc/systemd/system
     - /lib/systemd/system
-
-rules:
-  block-reload-if-config-invalid:
-    type: guard
-    blocks: [restart, start, reload]
-    if:
-      failed: { check: config }
-    then:
-      action: block
-      message: "${display_name} configuration is invalid (systemd-analyze verify failed)"

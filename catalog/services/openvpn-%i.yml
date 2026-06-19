@@ -11,10 +11,9 @@ variables:
 
 config_files: ["${config}"]
 
-preflight:
-  config:
-    type: command
-    command: ["${binary}", "--config", "${config}", "--verb", "0", "--dev", "null"]
-    timeout: 30s
+# No `preflight: config` here: OpenVPN has no config-test-and-exit mode. Running
+# `openvpn --config <f> --dev null` parses the config but then keeps running, so a
+# *valid* config never exits and would only fail the preflight on its timeout —
+# inverted behaviour. There is no offline syntax checker to gate start/restart on.
 
 pidfile: "${pidfile}"
