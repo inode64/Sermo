@@ -42,7 +42,7 @@ func TestWebBackendDetailLocks(t *testing.T) {
 	locksDir := filepath.Join(runtime, "locks")
 	expires := time.Now().Add(time.Hour).UTC()
 
-	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "backup",
 		"reason":            "backup mysql",
@@ -144,7 +144,7 @@ func TestWebBackendViewActiveLocks(t *testing.T) {
 	locksDir := filepath.Join(runtime, "locks")
 	expires := time.Now().Add(time.Hour).UTC()
 
-	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "backup",
 		"owner_pid":         os.Getpid(),
@@ -179,7 +179,7 @@ func TestWebBackendServicesActiveLocks(t *testing.T) {
 	expires := time.Now().Add(time.Hour).UTC()
 	ticks := webLockStartTicks(t)
 
-	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "backup",
 		"owner_pid":         os.Getpid(),
@@ -192,7 +192,7 @@ func TestWebBackendServicesActiveLocks(t *testing.T) {
 		"owner_start_ticks": ticks,
 		"expires_at":        expires.Format(time.RFC3339),
 	})
-	writeWebLockFixture(t, locksDir, "redis.old.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "redis\\old.lock", map[string]any{
 		"service":    "redis",
 		"name":       "old",
 		"owner_pid":  os.Getpid(),
@@ -227,7 +227,7 @@ func TestWebBackendLocksContext(t *testing.T) {
 	locksDir := filepath.Join(runtime, "locks")
 	now := time.Now().UTC()
 
-	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "backup",
 		"reason":            "backup mysql",
@@ -236,7 +236,7 @@ func TestWebBackendLocksContext(t *testing.T) {
 		"created_at":        now.Add(-5 * time.Minute).Format(time.RFC3339),
 		"expires_at":        now.Add(time.Hour).Format(time.RFC3339),
 	})
-	writeWebLockFixture(t, locksDir, "mysql.old.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\old.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "old",
 		"owner_pid":         os.Getpid(),
@@ -290,7 +290,7 @@ func TestWebBackendLocksSeveralServices(t *testing.T) {
 		"owner_start_ticks": ticks,
 		"expires_at":        expires.Format(time.RFC3339),
 	})
-	writeWebLockFixture(t, locksDir, "redis.cache.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "redis\\cache.lock", map[string]any{
 		"service":           "redis",
 		"name":              "cache",
 		"owner_pid":         os.Getpid(),
@@ -333,14 +333,14 @@ func TestWebBackendReleaseLockOnlyInactive(t *testing.T) {
 	locksDir := filepath.Join(runtime, "locks")
 	ticks := webLockStartTicks(t)
 
-	writeWebLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "backup",
 		"owner_pid":         os.Getpid(),
 		"owner_start_ticks": ticks,
 		"expires_at":        time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
 	})
-	writeWebLockFixture(t, locksDir, "mysql.old.lock", map[string]any{
+	writeWebLockFixture(t, locksDir, "mysql\\old.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "old",
 		"owner_pid":         os.Getpid(),
@@ -359,14 +359,14 @@ func TestWebBackendReleaseLockOnlyInactive(t *testing.T) {
 	if res := b.ReleaseLock(context.Background(), "mysql", "backup"); res.OK {
 		t.Fatalf("active lock release should be blocked: %+v", res)
 	}
-	if _, err := os.Stat(filepath.Join(locksDir, "mysql.backup.lock")); err != nil {
+	if _, err := os.Stat(filepath.Join(locksDir, "mysql\\backup.lock")); err != nil {
 		t.Fatalf("active lock should remain: %v", err)
 	}
 
 	if res := b.ReleaseLock(context.Background(), "mysql", "old"); !res.OK {
 		t.Fatalf("expired lock release failed: %+v", res)
 	}
-	if _, err := os.Stat(filepath.Join(locksDir, "mysql.old.lock")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(locksDir, "mysql\\old.lock")); !os.IsNotExist(err) {
 		t.Fatalf("expired lock should be removed: %v", err)
 	}
 	if len(events) != 2 || events[0].Kind != "suppressed" || events[1].Kind != "action" {
