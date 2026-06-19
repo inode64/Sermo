@@ -5,3 +5,4 @@ category: storage
 binary:
   - /usr/sbin/nfsdcld
   - /usr/bin/nfsdcld
+version_from: rpc-mountd
