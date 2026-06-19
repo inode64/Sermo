@@ -8,6 +8,7 @@ service:
 apps: [ssh]
 
 variables:
+  user: root
   port: 22
 preflight:
   config: { type: command, command: ["${ssh_binary}","-t"], timeout: 30s }
@@ -15,6 +16,12 @@ preflight:
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/sshd.pid
+
+processes:
+  main:
+    type: command_match
+    exe: "${ssh_binary}"
+    user: "${user}"
 
 # sshd re-reads its config on SIGHUP, but its systemd unit usually defines no
 # ExecReload (so `systemctl reload` fails); OpenRC's init script does reload.

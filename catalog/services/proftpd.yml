@@ -6,6 +6,7 @@ service: proftpd
 apps: [proftpd]
 
 variables:
+  user: root
   port: 21
 preflight:
   config: { type: command, command: ["${proftpd_binary}","--configtest"], timeout: 30s }
@@ -13,6 +14,12 @@ preflight:
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/proftpd/proftpd.pid
+
+processes:
+  main:
+    type: command_match
+    exe: "${proftpd_binary}"
+    user: "${user}"
 
 # ProFTPD re-reads its config on SIGHUP; its systemd unit usually has no
 # ExecReload while OpenRC's init script reloads; the default `when: auto`

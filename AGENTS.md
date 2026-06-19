@@ -124,6 +124,35 @@ directories is a symlink (`readlink -f <path>` or `namei -l <path>`). Register
 the canonical target path, not the symlink spelling, so the catalog does not grow
 duplicate aliases for the same pidfile or socket.
 
+## Catalog init and reload fallback verification
+
+When adding or changing a catalog daemon that depends on init metadata or defines
+`reload.signal`, verify every init backend in its `service:` map and every
+fallback Sermo may use. Do not validate only the distro where the profile was
+first written.
+
+For OpenRC, inspect the real packaged `/etc/init.d/<unit>` and matching
+`/etc/conf.d/<unit>` for `reload()`, `pidfile`, `command`, `command_user`,
+`start-stop-daemon --pidfile`, supervisor settings and any `*_PIDFILE` variables.
+For systemd, inspect the unit and `systemctl show` metadata (`CanReload`,
+`MainPID`, `PIDFile`, `User`). Normalize any reported `/var/run` paths to
+canonical `/run` paths before writing catalog YAML.
+
+Any OpenRC-capable `reload.signal` must have a canonical `pidfile:` candidate
+and a `processes.command_match` selector with exact `exe` and `user`, so the
+pidfile PID can be verified before Sermo signals it. If init scripts differ by
+distro, encode the real candidates with a path list or `os:` branch. If a backend
+has no trustworthy pidfile and exact identity selector, use `reload.command` or
+rely on the backend's own reload path instead of shipping an unsafe signal
+fallback.
+
+Before finishing such a change, run the real catalog validation for both
+backends:
+
+```sh
+go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemonsResolve)$' -count=1
+```
+
 ## Service operations
 
 Application-level start, stop, restart, reload or signal actions on a service
