@@ -53,6 +53,9 @@ sermoctl apps [all] [--long]
 sermoctl libs [all] [--long]
 sermoctl patterns
 
+sermoctl sla [SERVICE]                  # service availability windows (all services, or one)
+sermoctl sla --series SERVICE [--since DURATION]  # per-minute series; --since default 24h
+
 sermoctl events [SERVICE] [--limit N]   # list recent events (global or for SERVICE)
 sermoctl events clear [--before TIME]   # omit TIME to clear all; TIME may be RFC3339 or duration (e.g. 1h)
                                         # only events strictly before the timestamp are removed
