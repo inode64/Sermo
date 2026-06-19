@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
@@ -266,8 +267,24 @@ func runWithClient[T any](ctx context.Context, m Manager, fn func(Client) (T, er
 			ch <- out{err: err}
 			return
 		}
-		defer func() { _ = client.Disconnect() }()
+		// Disconnect exactly once, and do it promptly when the caller's context
+		// ends: a cancelled or timed-out call would otherwise keep the libvirt
+		// connection (and its in-flight RPC) open until fn returned on its own,
+		// so repeated timeouts could pile up live connections. Closing the socket
+		// also interrupts the in-flight RPC, which is the intended cancellation.
+		var once sync.Once
+		disconnect := func() { once.Do(func() { _ = client.Disconnect() }) }
+		stop := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+				disconnect()
+			case <-stop:
+			}
+		}()
 		value, err := fn(client)
+		close(stop)  // release the watcher
+		disconnect() // close the connection before handing back the result
 		ch <- out{value: value, err: err}
 	}()
 	select {
