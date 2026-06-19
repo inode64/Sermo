@@ -470,8 +470,8 @@ checks:
     type: ports
     host: "${host}"
     ports: "80,443,8000-8010"
-    expect: open
-    match: any
+    expect: open                # open | closed | any
+    match: any                  # any | all | none
     connect_timeout: 500ms
     on_change: true
   http:
@@ -480,7 +480,7 @@ checks:
     proxy: "http://127.0.0.1:3128"      # route the probe via http/https/socks5 proxy
     body: "ping"                        # raw request body (string; alternative to json:)
     expect_status: 2xx
-    expect_body: ok
+    expect_body: ok                     # substring; or { op: "=~", value: "ok|ready" }
     expect_latency: { op: "<", value: 250 }
     timeout: 5s
   http-json:
@@ -554,18 +554,23 @@ checks:
     count: { op: ">=", value: 1 }
     optional: true
   load: { type: load, per_cpu: true, load1: { op: ">", value: 2 } }
-  hdparm: { type: hdparm, device: /dev/sda, read: { op: "<", value: 100 } }
+  hdparm: { type: hdparm, device: /dev/sda, read: { op: "<", value: 100 }, cached: { op: "<", value: 5000 } }
   sensors:
     type: sensors
     chip: coretemp
     label: Package
     temp: { op: ">", value: 80 }
+    fan: { op: "<", value: 500 }       # RPM
+    voltage: { op: "<", value: 11.4 }  # volts
   smart:
     type: smart
     device: /dev/sda
     temperature: { op: ">", value: 50 }
-  raid: { type: raid, degraded: { op: ">", value: 0 } }
-  edac: { type: edac, ue: { op: ">", value: 0 } }
+    reallocated: { op: ">", value: 0 }      # reallocated sectors
+    wear: { op: ">", value: 90 }            # SSD wear-level %
+    power_on_hours: { op: ">", value: 50000 }
+  raid: { type: raid, degraded: { op: ">", value: 0 }, recovering: { op: ">", value: 0 }, arrays: { op: "<", value: 1 } }
+  edac: { type: edac, ue: { op: ">", value: 0 }, ce: { op: ">", value: 100 } }
   config-watch:
     type: config
     command: ["${binary}", "--test-config"]
@@ -590,7 +595,7 @@ checks:
     host: example.com
     port: 443
     server_name: example.com
-    verify: true
+    verify: true                 # false skips chain verification (self-signed certs)
     on_algorithm_change: true
     on_issuer_change: true
   sqlite: { type: sqlite, path: /var/lib/demo/demo.db, quick: true }
