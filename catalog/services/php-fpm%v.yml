@@ -8,8 +8,8 @@ service:
   systemd: ["php-fpm", "php${version}-fpm", "php-fpm${version}"]
   openrc: ["php-fpm", "php-fpm${version}", "php${version}"]
 
-# The PHP-FPM runtime is owned by the matching `php-fpm${version}` app and linked here,
-# so its binary + version checks run in this service's preflight.
+# The PHP-FPM runtime is owned by the matching `php-fpm${version}` app and linked here.
+# That app resolves `${binary}`, validates the binary and exports version data.
 apps: ["php-fpm${version}"]
 
 variables:
@@ -23,19 +23,10 @@ variables:
 pidfile: "${pidfile}"
 
 preflight:
-  binary:
-    type: binary
-    path: "${binary}"
-
   config:
     type: command
     command: ["${binary}", "--test", "--fpm-config", "${config}", "--pid", "${pidfile}"]
     timeout: 10s
-
-  libraries:
-    type: libraries
-    binary: "${binary}"
-    optional: true
 
 processes:
   pidfile:

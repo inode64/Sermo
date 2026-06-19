@@ -343,6 +343,56 @@ func TestCommandCheck(t *testing.T) {
 	}
 }
 
+func TestCommandCheckExportsData(t *testing.T) {
+	built, warns := Build(map[string]any{
+		"version_short": map[string]any{
+			"type":    "command",
+			"command": []any{"php-fpm", "-v"},
+			"export": map[string]any{
+				"api":     map[string]any{"regex": "API ([0-9]+)"},
+				"errcode": map[string]any{"from": "stderr", "trim": false},
+				"missing": map[string]any{"regex": "missing ([0-9]+)", "default": "none"},
+			},
+		},
+	}, Deps{
+		DefaultTimeout: time.Second,
+		Runner: fakeRunner{execx.Result{
+			Stdout: "8.3\nAPI 12\n",
+			Stderr: " warn \n",
+		}},
+	})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("Build warns=%v built=%d", warns, len(built))
+	}
+	res := built[0].Check.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("command should pass: %+v", res)
+	}
+	want := map[string]any{"version_short": "8.3\nAPI 12", "api": "12", "errcode": " warn \n", "missing": "none"}
+	for k, v := range want {
+		if res.Data[k] != v {
+			t.Fatalf("data[%s] = %#v, want %#v; all=%#v", k, res.Data[k], v, res.Data)
+		}
+	}
+
+	built, warns = Build(map[string]any{
+		"version": map[string]any{
+			"type":    "command",
+			"command": []any{"php-fpm", "-v"},
+		},
+	}, Deps{
+		DefaultTimeout: time.Second,
+		Runner:         fakeRunner{execx.Result{Stdout: "PHP 8.3.6 (fpm-fcgi)\n"}},
+	})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("Build version warns=%v built=%d", warns, len(built))
+	}
+	res = built[0].Check.Run(context.Background())
+	if res.Data["version"] != "PHP 8.3.6 (fpm-fcgi)" || res.Data["version_short"] != "8.3.6" {
+		t.Fatalf("version exports = %#v", res.Data)
+	}
+}
+
 func TestServiceCheck(t *testing.T) {
 	status := func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil }
 	ok := serviceCheck{base: base{name: "s", timeout: time.Second}, expect: "active", status: status}
