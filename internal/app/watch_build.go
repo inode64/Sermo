@@ -203,18 +203,19 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		out = append(out, &Watch{
-			Name:      name,
-			CheckType: cfgval.AsString(checkEntry["type"]),
-			Check:     check,
-			Window:    rules.ParseWindowRule(mEntry),
-			Hook:      actions.hook,
-			Notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-			DryRun:    actions.dryRun,
-			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
-			Interval:  interval,
-			IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
-			Now:       deps.Now,
-			Emit:      deps.Emit,
+			Name:           name,
+			CheckType:      cfgval.AsString(checkEntry["type"]),
+			Check:          check,
+			Window:         rules.ParseWindowRule(mEntry),
+			Hook:           actions.hook,
+			Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+			NotifyInterval: actions.notifyInterval,
+			DryRun:         actions.dryRun,
+			Runner:         OSHookRunner{Runner: deps.ExecxRunner},
+			Interval:       interval,
+			IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
+			Now:            deps.Now,
+			Emit:           deps.Emit,
 		})
 	}
 	return out, warns
