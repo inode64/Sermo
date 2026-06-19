@@ -3,6 +3,7 @@ package app
 import (
 	"maps"
 	"slices"
+	"time"
 
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
@@ -10,9 +11,10 @@ import (
 
 // watchSnapshot preserves per-watch window and policy pacing state across reload.
 type watchSnapshot struct {
-	state       rules.WindowState
-	policyState *rules.RemediationState
-	firing      bool
+	state        rules.WindowState
+	policyState  *rules.RemediationState
+	firing       bool
+	lastNotifyAt time.Time
 }
 
 func captureWatchState(watches []*Watch) map[string]watchSnapshot {
@@ -21,7 +23,7 @@ func captureWatchState(watches []*Watch) map[string]watchSnapshot {
 		if w == nil {
 			continue
 		}
-		snap := watchSnapshot{firing: w.firing, policyState: cloneRemediationState(&w.policyState)}
+		snap := watchSnapshot{firing: w.firing, lastNotifyAt: w.lastNotifyAt, policyState: cloneRemediationState(&w.policyState)}
 		if cloned := w.state.Clone(); cloned != nil {
 			snap.state = *cloned
 		}
@@ -38,6 +40,7 @@ func applyWatchState(watches []*Watch, saved map[string]watchSnapshot) {
 		}
 		w.state = snap.state
 		w.firing = snap.firing
+		w.lastNotifyAt = snap.lastNotifyAt
 		if snap.policyState != nil {
 			w.policyState = *snap.policyState
 		}
