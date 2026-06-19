@@ -961,8 +961,16 @@ display_name: Backup mount
 category: storage
 path: /mnt/backup              # must exist in /etc/fstab; no source/fstype/options here
 refcount: true                 # default: only unmount when all Sermo users released it
+variables:                     # mount-scoped custom variables
+  owner: backup
 umount:
   term_timeout: 12s            # wait after SIGTERM when signalling is enabled
   kill_timeout: 5s             # wait after SIGKILL when signalling is enabled
-  allow_sigkill: false         # default; true requires stop_policy.kill_only_if
+  allow_sigkill: true          # escalate to SIGKILL; requires stop_policy.kill_only_if below
   allow_lazy: false            # default; true allows umount -l as the last fallback
+stop_policy:
+  kill_only_if:                # restrict which processes a SIGKILL may target
+    users: [root]
+    exe_any: [/usr/bin/rsync]
+os:                            # per-OS umount tuning, merged for the detected os-release ID
+  default: { umount: { allow_lazy: true } }
