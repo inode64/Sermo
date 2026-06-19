@@ -4,6 +4,14 @@ category: observability
 service: syslog-ng
 apps: [syslog-ng]
 
+variables:
+  config: /etc/syslog-ng/syslog-ng.conf
+
+preflight:
+  config: { type: command, command: ["${syslog_ng_binary}", "--syntax-only", "--cfgfile=${config}"], timeout: 30s }
+
+config_files: ["${config}", /etc/syslog-ng/conf.d]
+
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/syslog-ng.pid

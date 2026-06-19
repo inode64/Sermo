@@ -13,8 +13,14 @@ variables:
   user: prometheus
   host: 127.0.0.1
   port: 9090
+  config: /etc/prometheus/prometheus.yml
 
 pidfile: /run/prometheus.pid
+
+preflight:
+  config: { type: command, command: ["${prometheus_promtool}", "check", "config", "${config}"], timeout: 30s }
+
+config_files: ["${config}", /etc/prometheus/rules, /etc/prometheus/rules.d]
 
 processes:
   main:

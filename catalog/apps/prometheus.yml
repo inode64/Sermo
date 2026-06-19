@@ -4,6 +4,8 @@ display_name: "Prometheus"
 category: observability
 variables:
   binary: /usr/bin/prometheus
+  promtool: /usr/bin/promtool
 preflight:
   binary: { type: binary, path: "${binary}" }
+  promtool: { type: binary, path: "${promtool}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

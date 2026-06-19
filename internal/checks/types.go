@@ -327,6 +327,7 @@ type commandCheck struct {
 	expectExit int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
+	exports    []commandExport
 	analyzer   *outputAnalyzer
 	onChange   bool
 	state      *cmdState
@@ -369,7 +370,22 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 		c.state.last, c.state.primed = cur, true
 	}
-	return c.result(true, fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit), start)
+	r := c.result(true, fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit), start)
+	if data := c.exportData(res.Stdout, res.Stderr); len(data) > 0 {
+		r.Data = data
+	}
+	return r
+}
+
+func (c commandCheck) exportData(stdout, stderr string) map[string]any {
+	if len(c.exports) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(c.exports))
+	for _, e := range c.exports {
+		out[e.name] = e.value(stdout, stderr)
+	}
+	return out
 }
 
 // serviceCheck compares the service's backend status to an expected value
