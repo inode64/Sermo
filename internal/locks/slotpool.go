@@ -11,6 +11,14 @@ import (
 
 var errSlotBusy = errors.New("operation slot busy")
 
+// defaultSlotTTL is the safety-net lifetime stamped on a slot lock file. Owner
+// liveness already reclaims a slot when its holder exits; the TTL only bounds a
+// slot whose owner is alive-but-wedged (or survives a PID-reuse false positive),
+// matching the TTL the operation and named lockers set. It is deliberately far
+// larger than any real operation (themselves bounded by the operation lock TTL)
+// so a legitimately long operation is never reclaimed out from under itself.
+const defaultSlotTTL = time.Hour
+
 // SlotHandle is one acquired global operation slot.
 type SlotHandle struct {
 	ownedLock
@@ -31,6 +39,7 @@ func (h *SlotHandle) Release() error {
 type SlotPool struct {
 	Dir   string
 	Slots int
+	TTL   time.Duration // safety-net slot lifetime; <=0 uses defaultSlotTTL
 	Proc  ProcessProber
 	Now   func() time.Time
 	Self  func() (pid int, startTicks uint64)
@@ -45,6 +54,7 @@ func NewSlotPool(dir string, slots int) SlotPool {
 	return SlotPool{
 		Dir:   dir,
 		Slots: slots,
+		TTL:   defaultSlotTTL,
 		Proc:  OSProcessProber{},
 		Now:   time.Now,
 		Self:  selfIdentity,
@@ -132,31 +142,45 @@ func (p SlotPool) Acquire(ctx context.Context) (*SlotHandle, error) {
 }
 
 func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func() time.Time, self func() (int, uint64)) (*SlotHandle, error) {
+	ttl := p.TTL
+	if ttl <= 0 {
+		ttl = defaultSlotTTL
+	}
 	pid, ticks := self()
-	payload := lockFile{
-		Service:         fmt.Sprintf("slot-%d", slot),
-		OwnerPID:        pid,
-		OwnerStartTicks: ticks,
-		CreatedAt:       now(),
-	}
-	if err := writeLockFileExclusive(path, payload); err == nil {
-		return &SlotHandle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
-	} else if !errors.Is(err, os.ErrExist) {
-		return nil, fmt.Errorf("acquire %s: %w", path, err)
-	}
+	// Bounded retry (no recursion): a slot file that vanishes between create and
+	// read, or one we reclaim as stale, is retried in-place up to a fixed number
+	// of attempts before yielding errSlotBusy so the caller tries the next slot —
+	// a pathologically contended slot can no longer recurse until the stack
+	// overflows.
+	for attempt := 0; attempt < maxAcquireAttempts; attempt++ {
+		payload := lockFile{
+			Service:         fmt.Sprintf("slot-%d", slot),
+			OwnerPID:        pid,
+			OwnerStartTicks: ticks,
+			CreatedAt:       now(),
+			ExpiresAt:       now().Add(ttl),
+		}
+		if err := writeLockFileExclusive(path, payload); err == nil {
+			return &SlotHandle{ownedLock{path: path, ownerPID: pid, ownerStartTicks: ticks}}, nil
+		} else if !errors.Is(err, os.ErrExist) {
+			return nil, fmt.Errorf("acquire %s: %w", path, err)
+		}
 
-	existing, rerr := readLockFile(path)
-	if rerr != nil {
-		if os.IsNotExist(rerr) {
-			return p.tryAcquire(path, slot, proc, now, self)
+		existing, rerr := readLockFile(path)
+		if rerr != nil {
+			if os.IsNotExist(rerr) {
+				continue // vanished between create and read; retry this slot
+			}
+			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
 		}
-		return nil, fmt.Errorf("acquire %s: %w", path, rerr)
-	}
-	state, _ := classify(existing, now(), proc)
-	if state != StateActive {
-		if reclaimStale(path, existing, proc, now) {
-			return p.tryAcquire(path, slot, proc, now, self)
+		state, _ := classify(existing, now(), proc)
+		if state == StateActive {
+			return nil, errSlotBusy
 		}
+		if !reclaimStale(path, existing, proc, now) {
+			return nil, errSlotBusy
+		}
+		// reclaimed; retry the exclusive create
 	}
 	return nil, errSlotBusy
 }
