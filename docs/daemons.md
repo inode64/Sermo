@@ -178,7 +178,7 @@ Link them with `apps:`:
 
 ```yaml
 # catalog/services/tomcat-%v.yml — Tomcat runs on the JVM
-apps: [java]
+apps: [java, "tomcat-${version}"]
 ```
 
 On resolution each linked app's preflight checks are injected into the service's
