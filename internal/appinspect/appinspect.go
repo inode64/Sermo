@@ -405,7 +405,7 @@ var shortVersionSpecificREs = []*regexp.Regexp{
 	regexp.MustCompile(`\bxinetd\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
 }
 
-var ntpPatchVersionRE = regexp.MustCompile(`^([0-9]+\.[0-9]+\.[0-9]+p[0-9]+)$`)
+var ntpPatchVersionRE = regexp.MustCompile(`^([0-9]+\.[0-9]+\.[0-9]+p[0-9]+)(?:@.*)?$`)
 
 // shortIntegerVersionRE covers projects that publish integer-only releases in
 // version output, such as "pkexec version 126". It only runs after the dotted
@@ -444,14 +444,14 @@ func shortNTPVersion(s string) string {
 	if token == "" {
 		return ""
 	}
+	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > 1 {
+		return match[1]
+	}
 	if strings.Contains(token, "@") {
 		if match := shortVersionRE.FindStringSubmatch(token); len(match) > 1 {
 			return match[1]
 		}
 		return ""
-	}
-	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > 1 {
-		return match[1]
 	}
 	return ""
 }
