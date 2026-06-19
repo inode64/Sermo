@@ -23,7 +23,7 @@ config_files: ["${config}"]
 preflight:
   config:
     type: command
-    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" tunnel validate \"$1\"", "${cloudflared_binary}", "${config}"]
+    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" --config \"$1\" tunnel ingress validate", "${cloudflared_binary}", "${config}"]
     timeout: 30s
 
 processes:

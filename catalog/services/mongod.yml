@@ -9,6 +9,15 @@ apps: [mongod]
 variables:
   host: 127.0.0.1
   port: 27017
+  config: /etc/mongod.conf
+
+# `--outputConfig` parses and validates the YAML config (resolving includes and
+# expansions), prints the canonicalized config to stdout and exits without
+# starting the server (MongoDB >= 4.2), so a syntax error blocks start/restart.
+preflight:
+  config: { type: command, command: ["${mongod_binary}", "--config", "${config}", "--outputConfig"], timeout: 15s }
+
+config_files: ["${config}"]
 
 checks:
   service: { type: service, expect: active }

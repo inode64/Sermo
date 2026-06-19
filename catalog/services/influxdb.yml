@@ -18,9 +18,12 @@ variables:
 config_files: ["${config}"]
 
 preflight:
+  # influxd (v2) has no `config validate` subcommand; `print-config` loads and
+  # resolves the config (erroring on an invalid file) and reads its path from
+  # INFLUXD_CONFIG_PATH rather than a flag.
   config:
     type: command
-    command: ["${influxdb_binary}", "config", "validate", "--config", "${config}"]
+    command: ["sh", "-c", "INFLUXD_CONFIG_PATH=\"$1\" exec \"$0\" print-config", "${influxdb_binary}", "${config}"]
     timeout: 30s
 
 pidfile: /run/supervise-influxdb.pid

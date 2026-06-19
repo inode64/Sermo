@@ -10,6 +10,15 @@ apps: [containerd]
 
 variables:
   user: root
+  config: /etc/containerd/config.toml
+
+# `config dump` reads the TOML config (merged with built-in defaults) and prints
+# it, exiting non-zero on a malformed config file — a syntax check that never
+# starts the runtime.
+preflight:
+  config: { type: command, command: ["${containerd_binary}", "-c", "${config}", "config", "dump"], timeout: 15s }
+
+config_files: ["${config}"]
 
 processes:
   main:
