@@ -58,6 +58,8 @@ If `paths.includes` is omitted, Sermo falls back to `services/` and then `apps/`
 next to the loaded `sermo.yml` file. With the standard `/etc/sermo/sermo.yml`
 this means `/etc/sermo/services` and `/etc/sermo/apps`. The second path is only
 a legacy alias for existing service documents; put new files under `services/`.
+`paths.enabled` is accepted as a legacy alias for `paths.includes`, used only
+when `paths.includes` is absent; prefer `paths.includes` in new configs.
 
 If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
 `sermo.yml` file. With the standard `/etc/sermo/sermo.yml` this means
