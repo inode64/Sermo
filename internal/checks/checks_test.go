@@ -391,6 +391,40 @@ func TestCommandCheckExportsData(t *testing.T) {
 	if res.Data["version"] != "PHP 8.3.6 (fpm-fcgi)" || res.Data["version_short"] != "8.3.6" {
 		t.Fatalf("version exports = %#v", res.Data)
 	}
+
+	built, warns = Build(map[string]any{
+		"version": map[string]any{
+			"type":    "command",
+			"command": []any{"pkexec", "--version"},
+		},
+	}, Deps{
+		DefaultTimeout: time.Second,
+		Runner:         fakeRunner{execx.Result{Stdout: "pkexec version 126\n"}},
+	})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("Build integer version warns=%v built=%d", warns, len(built))
+	}
+	res = built[0].Check.Run(context.Background())
+	if res.Data["version"] != "pkexec version 126" || res.Data["version_short"] != "126" {
+		t.Fatalf("integer version exports = %#v", res.Data)
+	}
+
+	built, warns = Build(map[string]any{
+		"version": map[string]any{
+			"type":    "command",
+			"command": []any{"numad", "-V"},
+		},
+	}, Deps{
+		DefaultTimeout: time.Second,
+		Runner:         fakeRunner{execx.Result{Stdout: "/usr/bin/numad version: 20150602: compiled Sep 12 2024\n"}},
+	})
+	if len(warns) != 0 || len(built) != 1 {
+		t.Fatalf("Build numad version warns=%v built=%d", warns, len(built))
+	}
+	res = built[0].Check.Run(context.Background())
+	if res.Data["version"] != "/usr/bin/numad version: 20150602: compiled Sep 12 2024" || res.Data["version_short"] != "20150602" {
+		t.Fatalf("numad version exports = %#v", res.Data)
+	}
 }
 
 func TestServiceCheck(t *testing.T) {

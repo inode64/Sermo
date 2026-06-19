@@ -8,3 +8,4 @@ variables:
     - /usr/sbin/libvirt-dbus
 preflight:
   binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }

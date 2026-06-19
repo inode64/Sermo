@@ -398,10 +398,22 @@ func namespacedReservedCommandEntry(tree map[string]any, key string) map[string]
 // stray single digits (e.g. the `5` in perl's "perl 5, version 42 ... (v5.42.0)").
 var shortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
 
+// shortIntegerVersionRE covers projects that publish integer-only releases in
+// version output, such as "pkexec version 126". It only runs after the dotted
+// matcher misses so a line like "systemd 260 (260.1)" still reports "260.1".
+var shortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9]+)\b`)
+
 // ShortVersion reduces a raw version line (as captured in Report.Version) to
 // just its numeric version, keeping at most three components
-// (major.minor.patch). It returns the first dotted numeric token found, or ""
-// when the line carries no recognizable version.
+// (major.minor.patch). It returns the first dotted numeric token found, then a
+// guarded integer-only version token, or "" when the line carries no
+// recognizable version.
 func ShortVersion(s string) string {
-	return shortVersionRE.FindString(s)
+	if dotted := shortVersionRE.FindString(s); dotted != "" {
+		return dotted
+	}
+	if match := shortIntegerVersionRE.FindStringSubmatch(s); len(match) > 1 {
+		return match[1]
+	}
+	return ""
 }

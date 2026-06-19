@@ -10,4 +10,4 @@ variables:
     - "/usr/local/bin/wal-g"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

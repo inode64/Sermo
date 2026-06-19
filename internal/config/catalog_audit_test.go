@@ -493,6 +493,146 @@ func TestCatalogAppsUseCanonicalNames(t *testing.T) {
 	}
 }
 
+func TestCatalogAppsDeclareVersionSource(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	noLocalVersion := map[string]string{
+		"libvirt-dbus": "upstream documents no version option for libvirt-dbus",
+		"udisks2":      "upstream documents no version option for udisksd or udisksctl",
+	}
+	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+		doc := cfg.Apps[name]
+		if hasVersionProbe(doc.Body) {
+			continue
+		}
+		if source := cfgval.String(doc.Body["version_from"]); source != "" {
+			if !catalogAppProvidesVersion(cfg, source, map[string]bool{name: true}) {
+				t.Errorf("%s version_from %q does not resolve to an app with a version probe", name, source)
+			}
+			continue
+		}
+		if reason := noLocalVersion[name]; reason == "" {
+			t.Errorf("%s has no version probe, version_from, or documented exception", name)
+		}
+	}
+}
+
+func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	noSafeHealth := map[string]string{
+		"nfsdcld": "upstream documents no help/version option; version comes from rpc-mountd",
+		"rpcbind": "upstream documents version output but no separate help/health option; version comes from rpc-mountd",
+	}
+	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+		doc := cfg.Apps[name]
+		if hasHealthProbe(doc.Body) || hasVersionProbe(doc.Body) {
+			continue
+		}
+		if source := cfgval.String(doc.Body["version_from"]); source != "" {
+			if reason := noSafeHealth[name]; reason == "" {
+				t.Errorf("%s has version_from %q but no local health probe", name, source)
+			}
+			continue
+		}
+		t.Errorf("%s has no health probe, version probe, or version_from", name)
+	}
+}
+
+func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	for _, name := range cfg.DaemonsInCategory(CategoryApp) {
+		doc := cfg.Apps[name]
+		if !versionProbeOptional(doc.Body) {
+			continue
+		}
+		if !hasHealthProbe(doc.Body) {
+			t.Errorf("%s has optional version but no health probe", name)
+		}
+	}
+}
+
+func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	sharedVersions := map[string]string{
+		"pmcd":          "pcp",
+		"pmie":          "pcp",
+		"pmie_farm":     "pcp",
+		"pmlogger":      "pcp",
+		"pmlogger_farm": "pcp",
+		"rpcbind":       "rpc-mountd",
+	}
+	for app, provider := range sharedVersions {
+		doc, ok := cfg.Apps[app]
+		if !ok {
+			t.Fatalf("shared-version app %q missing", app)
+		}
+		if got := cfgval.String(doc.Body["version_from"]); got != provider {
+			t.Fatalf("%s version_from = %q, want %q", app, got, provider)
+		}
+		if hasVersionProbe(doc.Body) {
+			t.Fatalf("%s duplicates provider %s with a local version probe", app, provider)
+		}
+		providerDoc, ok := cfg.Apps[provider]
+		if !ok {
+			t.Fatalf("version provider %q for %s missing", provider, app)
+		}
+		if !hasVersionProbe(providerDoc.Body) {
+			t.Fatalf("version provider %q for %s has no version probe", provider, app)
+		}
+	}
+}
+
 func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
@@ -1022,8 +1162,8 @@ func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s lacks preflight \"version\": %v", tt.name, preflight)
 			}
-			if got := cfgval.Bool(versionPreflight["optional"]); !got {
-				t.Fatalf("%s preflight \"version\" optional = %v, want true", tt.name, got)
+			if got := cfgval.Bool(versionPreflight["optional"]); got {
+				t.Fatalf("%s preflight \"version\" optional = %v, want false", tt.name, got)
 			}
 			versionCommand, ok := nested(t, preflight, "version")["command"].([]any)
 			if !ok || len(versionCommand) == 0 {
@@ -1232,6 +1372,46 @@ func hasVersionProbe(body map[string]any) bool {
 		}
 	}
 	return false
+}
+
+func hasHealthProbe(body map[string]any) bool {
+	preflight, _ := body["preflight"].(map[string]any)
+	if preflight == nil {
+		return false
+	}
+	_, ok := preflight["health"]
+	return ok
+}
+
+func versionProbeOptional(body map[string]any) bool {
+	preflight, _ := body["preflight"].(map[string]any)
+	if preflight == nil {
+		return false
+	}
+	version, _ := preflight["version"].(map[string]any)
+	if version == nil {
+		return false
+	}
+	return cfgval.Bool(version["optional"])
+}
+
+func catalogAppProvidesVersion(cfg *Config, name string, seen map[string]bool) bool {
+	if seen[name] {
+		return false
+	}
+	seen[name] = true
+	doc, ok := cfg.Apps[name]
+	if !ok {
+		return false
+	}
+	if hasVersionProbe(doc.Body) {
+		return true
+	}
+	source := cfgval.String(doc.Body["version_from"])
+	if source == "" {
+		return false
+	}
+	return catalogAppProvidesVersion(cfg, source, seen)
 }
 
 func valueAt(t *testing.T, tree map[string]any, path ...any) any {

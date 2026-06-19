@@ -1,0 +1,9 @@
+kind: app
+name: pcp
+display_name: "Performance Co-Pilot"
+category: observability
+variables:
+  binary: /usr/bin/pcp
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
