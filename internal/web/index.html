@@ -701,7 +701,6 @@
 
 <footer id="app-footer">
   <div class="footer-actions">
-    <button id="diag-refresh">refresh</button>
     <button id="reload-btn" style="display:none">reload config</button>
     <span class="muted" style="font-size:.8rem">sermoctl daemon reload</span>
   </div>
@@ -817,6 +816,7 @@ async function load() {
   renderOpsPanel(ops);
 
   loadEvents();
+  loadDiag();
 
   lastRefresh = Date.now();
   tickRefreshAge();
@@ -916,14 +916,22 @@ function clearEventFilters() {
   loadEvents();
 }
 
+// loadDiag refreshes the Diagnostics panel. It runs on every dashboard refresh
+// (see load()), so it must not flicker: the "checking…" placeholder shows only on
+// the very first load, and a transient fetch error keeps the last good render
+// instead of replacing it — mirroring how load() degrades the other panels.
+let diagLoaded = false;
 async function loadDiag() {
   if (me.diagnostics === false) { latestDiagnostics = []; renderAttention(); return; }
-  $("#diag").innerHTML = `<tr><td class="muted">checking…</td></tr>`;
-  updateDiagnosticCleanControls([]);
+  if (!diagLoaded) {
+    $("#diag").innerHTML = `<tr><td class="muted">checking…</td></tr>`;
+    updateDiagnosticCleanControls([]);
+  }
   try {
     const res = await fetch("api/diagnostics");
     if (!res.ok) throw new Error("HTTP " + res.status);
     const findings = await res.json();
+    diagLoaded = true;
     latestDiagnostics = findings || [];
     updateDiagnosticCleanControls(latestDiagnostics);
     renderAttention();
@@ -938,10 +946,14 @@ async function loadDiag() {
       <td>${esc(f.message)}</td>
     </tr>`).join("");
   } catch (e) {
-    latestDiagnostics = [];
-    updateDiagnosticCleanControls([]);
-    renderAttention();
-    $("#diag").innerHTML = `<tr><td class="muted">Failed to run diagnostics: ${esc(e.message)}</td></tr>`;
+    // On auto-refresh keep the last good render; only surface the failure on the
+    // initial load, when there is nothing else to show.
+    if (!diagLoaded) {
+      latestDiagnostics = [];
+      updateDiagnosticCleanControls([]);
+      renderAttention();
+      $("#diag").innerHTML = `<tr><td class="muted">Failed to run diagnostics: ${esc(e.message)}</td></tr>`;
+    }
   }
 }
 
@@ -4441,13 +4453,6 @@ function initStaticHandlers() {
   const confirmPreflight = $("#confirm-preflight-btn");
   if (confirmPreflight) confirmPreflight.addEventListener("click", runConfirmPreflight);
 
-  const diagRefresh = $("#diag-refresh");
-  if (diagRefresh) {
-    diagRefresh.addEventListener("click", (e) => {
-      e.stopPropagation();
-      loadDiag();
-    });
-  }
   const diagClean = $("#diag-clean");
   if (diagClean) {
     diagClean.addEventListener("click", (e) => {
@@ -4547,7 +4552,7 @@ function initDelegatedHandlers() {
 
 initStaticHandlers();
 initDelegatedHandlers();
-loadMe().then(() => { load(); loadDiag(); });
+loadMe().then(() => { load(); });
 
 // Manual refresh + a once-per-second "updated Xs ago" readout. The readout is
 // independent of the auto-refresh interval, so it keeps counting up even when
