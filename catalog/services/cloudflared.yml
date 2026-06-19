@@ -16,6 +16,15 @@ variables:
   user: cloudflared
   host: 127.0.0.1
   port: 60123
+  config: /etc/cloudflared/config.yml
+
+config_files: ["${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" tunnel validate \"$1\"", "${cloudflared_binary}", "${config}"]
+    timeout: 30s
 
 processes:
   main:
