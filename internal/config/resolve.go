@@ -445,16 +445,20 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 			continue // expandApps reports the missing app in the usual place.
 		}
 		appVars := collectVariablesForKind(stripMeta(doc.Body), doc.Kind)
+		// Iterate variable names in sorted order so conflict errors surface in a
+		// stable, reproducible order (map ranging is randomized).
+		varNames := slices.Sorted(maps.Keys(appVars))
 		if exposeDefaults {
-			for varName, value := range appVars {
-				errs = append(errs, addAppVariable(out, source, varName, name, value)...)
+			for _, varName := range varNames {
+				errs = append(errs, addAppVariable(out, source, varName, name, appVars[varName])...)
 			}
 		}
 		prefixes := []string{appVariablePrefix(name)}
 		if doc.Name != name {
 			prefixes = append(prefixes, appVariablePrefix(doc.Name))
 		}
-		for varName, value := range appVars {
+		for _, varName := range varNames {
+			value := appVars[varName]
 			for _, prefix := range prefixes {
 				key := appVariableKey(prefix, varName)
 				errs = append(errs, addAppVariable(out, source, key, name, value)...)
