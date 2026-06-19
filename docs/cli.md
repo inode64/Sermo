@@ -10,9 +10,10 @@ or `--help` for the command index, and use `sermoctl help COMMAND` or
 --config /etc/sermo/sermo.yml
 --backend auto|systemd|openrc
 --json
---quiet
+--quiet / -q
 --timeout duration
 --version / -V
+--help / -h
 ```
 
 Global flags may be placed before or after the command. Command-specific flags
