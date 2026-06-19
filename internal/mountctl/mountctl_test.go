@@ -2,6 +2,7 @@ package mountctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -194,6 +195,25 @@ func TestReleaseBusyWithoutLazyReportsBlockers(t *testing.T) {
 	}
 	if len(res.Blockers) != 1 || !mounted {
 		t.Fatalf("Release = %+v mounted=%t, want blocker and mounted", res, mounted)
+	}
+}
+
+func TestReleaseBusySurfacesDiscoveryError(t *testing.T) {
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted, busy: true}
+	c := testController(t, &mounted, runner)
+	c.DiscoverUsers = func(string) ([]process.Process, error) {
+		return nil, errors.New("read /proc: permission denied")
+	}
+	spec := EphemeralSpec("/mnt/backup")
+	spec.Umount.AllowSIGKILL = true
+
+	res, err := c.Release(context.Background(), spec)
+	if err == nil {
+		t.Fatal("Release busy mount succeeded")
+	}
+	if !strings.Contains(res.Message, "could not enumerate blockers") {
+		t.Fatalf("Release message = %q, want it to surface the discovery error", res.Message)
 	}
 }
 
