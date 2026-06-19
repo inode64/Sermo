@@ -7,5 +7,5 @@ variables:
   binary_offline: /usr/bin/firewall-offline-cmd
 preflight:
   binary: { type: binary, path: "${binary}" }
+  binary_offline: { type: binary, path: "${binary_offline}" }
   version: { type: command, command: ["${binary_offline}", "--version"], timeout: 10s }
-  

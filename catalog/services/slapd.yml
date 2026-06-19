@@ -9,6 +9,20 @@ variables:
   host: 127.0.0.1
   port: 389
   tls_port: 636
+  config_dir:
+    - /etc/ldap/slapd.d
+    - /etc/openldap/slapd.d
+  config:
+    - /etc/ldap/slapd.conf
+    - /etc/openldap/slapd.conf
+
+config_files: ["${config_dir}", "${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["sh", "-c", "if [ -d \"$1\" ]; then exec \"$0\" -Q -u -F \"$1\"; else exec \"$0\" -Q -u -f \"$2\"; fi", "${slapd_slaptest}", "${config_dir}", "${config}"]
+    timeout: 30s
 
 checks:
   service: { type: service, expect: active }

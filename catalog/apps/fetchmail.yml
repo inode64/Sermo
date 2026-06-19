@@ -3,7 +3,9 @@ name: fetchmail
 display_name: "Fetchmail"
 category: messaging
 variables:
-  binary: "/usr/bin/fetchmail"
+  binary:
+    - /usr/bin/fetchmail
+    - /usr/sbin/fetchmail
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

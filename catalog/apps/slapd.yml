@@ -3,7 +3,14 @@ name: slapd
 display_name: "OpenLDAP (slapd)"
 category: identity
 variables:
-  binary: "/usr/bin/openldap/slapd"
+  binary:
+    - /usr/sbin/slapd
+    - /usr/bin/openldap/slapd
+  slaptest:
+    - /usr/sbin/slaptest
+    - /usr/bin/slaptest
+    - /usr/bin/openldap/slaptest
 preflight:
   binary: { type: binary, path: "${binary}" }
+  slaptest: { type: binary, path: "${slaptest}" }
   version: { type: command, command: ["${binary}","-VVV"], expect_exit: 1, timeout: 10s }

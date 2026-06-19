@@ -537,6 +537,93 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	}
 }
 
+func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
+	root := repoRoot(t)
+	catalogDir := filepath.Join(root, "catalog")
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	tests := []struct {
+		service      string
+		appToolCheck string
+		toolArgIndex int
+		wantTool     []string
+		wantContains []string
+	}{
+		{
+			service:      "docker",
+			appToolCheck: "docker-daemon",
+			toolArgIndex: 3,
+			wantTool:     []string{"/usr/bin/dockerd", "/usr/sbin/dockerd"},
+			wantContains: []string{"--validate", "--config-file"},
+		},
+		{
+			service:      "firewalld",
+			appToolCheck: "firewalld-binary_offline",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/bin/firewall-offline-cmd"},
+			wantContains: []string{"--check-config", "--system-config", "/etc/firewalld"},
+		},
+		{
+			service:      "fetchmail",
+			appToolCheck: "fetchmail-binary",
+			toolArgIndex: 3,
+			wantTool:     []string{"/usr/bin/fetchmail", "/usr/sbin/fetchmail"},
+			wantContains: []string{"--configdump", "-f"},
+		},
+		{
+			service:      "nmbd",
+			appToolCheck: "nmbd-testparm",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/bin/testparm", "/usr/sbin/testparm"},
+			wantContains: []string{"-s"},
+		},
+		{
+			service:      "slapd",
+			appToolCheck: "slapd-slaptest",
+			toolArgIndex: 3,
+			wantTool:     []string{"/usr/sbin/slaptest", "/usr/bin/slaptest", "/usr/bin/openldap/slaptest"},
+			wantContains: []string{"-Q", "-u"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.service, func(t *testing.T) {
+			resolved, errs := cfg.ResolveCatalog(CategoryService, tc.service)
+			if len(errs) != 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tc.service, errs)
+			}
+			preflight := nested(t, resolved.Tree, "preflight")
+			tool := cfgval.String(nested(t, preflight, tc.appToolCheck)["path"])
+			if !slices.Contains(tc.wantTool, tool) {
+				t.Fatalf("%s app tool path = %q, want one of %v", tc.service, tool, tc.wantTool)
+			}
+			command := nested(t, preflight, "config")["command"].([]any)
+			if tc.toolArgIndex >= len(command) {
+				t.Fatalf("%s config command = %v, missing tool arg index %d", tc.service, command, tc.toolArgIndex)
+			}
+			if got := cfgval.String(command[tc.toolArgIndex]); got != tool {
+				t.Fatalf("%s config command tool = %q, want resolved app tool %q in %v", tc.service, got, tool, command)
+			}
+			joined := strings.Join(cfgval.StringList(command), " ")
+			for _, want := range tc.wantContains {
+				if !strings.Contains(joined, want) {
+					t.Fatalf("%s config command = %v, want token %q", tc.service, command, want)
+				}
+			}
+		})
+	}
+}
+
 func TestCatalogNamedDNSCheckIsHostOverrideFriendly(t *testing.T) {
 	root := repoRoot(t)
 	path := filepath.Join(root, "catalog", "services", "named.yml")

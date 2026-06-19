@@ -4,6 +4,10 @@ display_name: "Docker Engine"
 category: virtualization
 variables:
   binary: /usr/bin/docker
+  daemon:
+    - /usr/bin/dockerd
+    - /usr/sbin/dockerd
 preflight:
   binary: { type: binary, path: "${binary}" }
+  daemon: { type: binary, path: "${daemon}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

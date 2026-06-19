@@ -7,5 +7,16 @@ service:
   systemd: [firewalld]
 apps: [firewalld]
 
+variables:
+  config_dir: /etc/firewalld
+
+config_files: ["${config_dir}"]
+
+preflight:
+  config:
+    type: command
+    command: ["${firewalld_binary_offline}", "--check-config", "--system-config", "${config_dir}"]
+    timeout: 30s
+
 checks:
   service: { type: service, expect: active }

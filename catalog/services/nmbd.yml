@@ -6,5 +6,15 @@ description: "Servidor de ficheros Windows - NMB"
 service: nmbd
 apps: [nmbd]
 
+preflight:
+  config:
+    type: command
+    command: ["${nmbd_testparm}", "-s"]
+    timeout: 30s
+    analyze:
+      use: [common]
+      rules:
+        - { id: dir-artifact, match: '(?i)(lock|pid) directory .* does not exist', severity: ok }
+
 checks:
   service: { type: service, expect: active }
