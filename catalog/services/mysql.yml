@@ -16,11 +16,14 @@ variables:
   host: 127.0.0.1
   port: 3306
   pidfile: /run/mysqld/mysqld.pid
+  config:
+    - /etc/mysql/my.cnf
+    - /etc/my.cnf
 
 preflight:
   config:
     type: command
-    command: ["${mysql_binary}", "--validate-config"]
+    command: ["${mysql_binary}", "--defaults-file=${config}", "--validate-config"]
     timeout: 15s
 
 processes:
@@ -33,7 +36,7 @@ processes:
     exe: "${mysql_binary}"
     user: "${user}"
 
-config_files: [/etc/mysql/my.cnf, /etc/my.cnf]
+config_files: ["${config}"]
 
 checks:
   service:

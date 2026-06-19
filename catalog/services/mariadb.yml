@@ -15,6 +15,9 @@ variables:
   user: mysql
   host: 127.0.0.1
   port: 3306
+  config:
+    - /etc/mysql/my.cnf
+    - /etc/my.cnf
 
 pidfile:
   - /run/mysqld/mariadb.pid
@@ -23,7 +26,7 @@ pidfile:
 preflight:
   config:
     type: command
-    command: ["${mariadb_binary}", "--help", "--verbose"]
+    command: ["${mariadb_binary}", "--defaults-file=${config}", "--help", "--verbose"]
     timeout: 15s
 
 processes:
@@ -32,7 +35,7 @@ processes:
     exe: "${mariadb_binary}"
     user: "${user}"
 
-config_files: [/etc/mysql/my.cnf, /etc/my.cnf]
+config_files: ["${config}"]
 
 checks:
   service:
