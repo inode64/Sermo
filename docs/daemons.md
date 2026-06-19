@@ -812,8 +812,8 @@ its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). For `sermoctl services`, versio
 commands are best-effort inventory data: a failed distro-specific version probe
 leaves the version unknown instead of marking the installed service as an error.
 `--json` is unaffected by `--long` — it always emits both, with the structured
-`name`, `display_name`, `binary`, `version`, `version_short`, `installed`, `ok`
-and `status`.
+`name`, `display_name`, `binary`, `version`, `version_short`,
+`version_source`, `installed`, `ok` and `status`.
 
 When an app declares `health`, Sermo uses it as the preferred health probe for
 `sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit
@@ -821,6 +821,10 @@ code is evaluated (`expect_exit`, default `0`); stdout/stderr matchers and the
 printed output are ignored for health. The `version` command is only used as a
 fallback health probe when no `health` command exists; when `health` exists,
 `version` reports display data and a version failure does not override health.
+For catalog apps that are separate binaries from the same package, `version_from`
+can point at another catalog app whose version probe supplies the displayed
+version. The app still checks its own binary and health; `version_from` only
+sets `version`/`version_short` when the app has no local version result.
 
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at

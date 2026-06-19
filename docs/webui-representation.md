@@ -197,6 +197,7 @@ Row expansion:
 | Field | Meaning |
 | --- | --- |
 | Version | full version output |
+| Version source | provider app name when `version_from` supplied the version |
 | Category | YAML category or fallback |
 | Location | resolved binary path |
 | Permissions | mode string |

@@ -836,6 +836,15 @@ commands:
   version_short: { command: ["${binary}", "--version-short"], timeout: 10s }
 
 ---
+kind: app
+name: demo-helper
+display_name: "Demo Helper"
+description: "Sibling binary from the same package; it reuses demo-app's version probe."
+category: app
+binary: /usr/bin/demo-helper
+version_from: demo-app
+
+---
 # ---------------------------------------------------------------------------
 # 4. kind: lib — a shared library tracked for restart_on_change (catalog)
 # ---------------------------------------------------------------------------

@@ -3,3 +3,4 @@ name: rpcbind
 display_name: "RPC Bind"
 category: storage
 binary: "/usr/bin/rpcbind"
+version_from: rpc-mountd

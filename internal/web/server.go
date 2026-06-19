@@ -75,17 +75,18 @@ type Service struct {
 // the dashboard: its name, version and where its binary lives. It mirrors the
 // sermoctl `apps` report so both surfaces agree.
 type Application struct {
-	Name         string      `json:"name"`
-	DisplayName  string      `json:"display_name"`
-	Category     string      `json:"category,omitempty"`
-	Binary       string      `json:"binary"`                // resolved binary path (file location)
-	Permissions  string      `json:"permissions,omitempty"` // binary mode, e.g. "-rwxr-xr-x (0755)"
-	User         string      `json:"user,omitempty"`        // owner username of the binary
-	Group        string      `json:"group,omitempty"`       // owner group of the binary
-	Version      string      `json:"version"`               // raw first line of the version command
-	VersionShort string      `json:"version_short"`         // numeric version, at most the patchlevel
-	Status       string      `json:"status"`                // ok, or an error description
-	SLA          []SLAWindow `json:"sla,omitempty"`         // service SLA when this app maps to a monitored service
+	Name          string      `json:"name"`
+	DisplayName   string      `json:"display_name"`
+	Category      string      `json:"category,omitempty"`
+	Binary        string      `json:"binary"`                   // resolved binary path (file location)
+	Permissions   string      `json:"permissions,omitempty"`    // binary mode, e.g. "-rwxr-xr-x (0755)"
+	User          string      `json:"user,omitempty"`           // owner username of the binary
+	Group         string      `json:"group,omitempty"`          // owner group of the binary
+	Version       string      `json:"version"`                  // raw first line of the version command
+	VersionShort  string      `json:"version_short"`            // numeric version, at most the patchlevel
+	VersionSource string      `json:"version_source,omitempty"` // app whose version probe supplied this version
+	Status        string      `json:"status"`                   // ok, or an error description
+	SLA           []SLAWindow `json:"sla,omitempty"`            // service SLA when this app maps to a monitored service
 }
 
 // Watch is a view of a host watch for the dashboard (when services=0

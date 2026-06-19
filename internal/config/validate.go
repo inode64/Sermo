@@ -174,6 +174,7 @@ func validateDocuments(cfg *Config) []Issue {
 		}
 		issues = append(issues, validateTopLevelBinary(doc, scope)...)
 		issues = append(issues, validateCatalogAliases(doc, scope)...)
+		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
 		case "":
@@ -201,6 +202,63 @@ func validateDocuments(cfg *Config) []Issue {
 		}
 	}
 	return issues
+}
+
+func validateVersionFrom(cfg *Config, doc *Document, scope string) []Issue {
+	raw, present := doc.Body["version_from"]
+	if !present {
+		return nil
+	}
+	var issues []Issue
+	if doc.Kind != kindApp {
+		issues = append(issues, Issue{Scope: scope, Msg: "version_from is only supported on app catalog documents"})
+	}
+	source, ok := raw.(string)
+	if !ok || source == "" {
+		return append(issues, Issue{Scope: scope, Msg: "version_from must be a non-empty app name"})
+	}
+	if !validDocumentName(source) {
+		return append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("version_from %q must be a simple name without path separators", source)})
+	}
+	if doc.Kind != kindApp {
+		return issues
+	}
+	provider, ok := cfg.Apps[source]
+	if !ok {
+		return append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("version_from references unknown app %q", source)})
+	}
+	if provider.Name == doc.Name {
+		return append(issues, Issue{Scope: scope, Msg: "version_from must not reference itself"})
+	}
+	if cycle := versionFromCycle(cfg, doc.Name); len(cycle) > 0 {
+		issues = append(issues, Issue{Scope: scope, Msg: "version_from cycle detected: " + strings.Join(cycle, " -> ")})
+	}
+	return issues
+}
+
+func versionFromCycle(cfg *Config, start string) []string {
+	seen := map[string]int{}
+	var chain []string
+	for name := start; ; {
+		if idx, ok := seen[name]; ok {
+			return append(chain[idx:], name)
+		}
+		seen[name] = len(chain)
+		chain = append(chain, name)
+		doc := cfg.Apps[name]
+		if doc == nil {
+			return nil
+		}
+		source := cfgval.String(doc.Body["version_from"])
+		if source == "" {
+			return nil
+		}
+		provider := cfg.Apps[source]
+		if provider == nil {
+			return nil
+		}
+		name = provider.Name
+	}
 }
 
 func validateTopLevelBinary(doc *Document, scope string) []Issue {

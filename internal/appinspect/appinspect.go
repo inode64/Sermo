@@ -27,18 +27,19 @@ const probeTimeout = 5 * time.Second
 
 // Report is one application's installed/version/health summary.
 type Report struct {
-	Name         string `json:"name"`
-	DisplayName  string `json:"display_name"`
-	Category     string `json:"category,omitempty"`
-	Binary       string `json:"binary"`
-	Permissions  string `json:"permissions,omitempty"`
-	User         string `json:"user,omitempty"`
-	Group        string `json:"group,omitempty"`
-	Version      string `json:"version"`
-	VersionShort string `json:"version_short"`
-	Installed    bool   `json:"installed"`
-	OK           bool   `json:"ok"`
-	Status       string `json:"status"`
+	Name          string `json:"name"`
+	DisplayName   string `json:"display_name"`
+	Category      string `json:"category,omitempty"`
+	Binary        string `json:"binary"`
+	Permissions   string `json:"permissions,omitempty"`
+	User          string `json:"user,omitempty"`
+	Group         string `json:"group,omitempty"`
+	Version       string `json:"version"`
+	VersionShort  string `json:"version_short"`
+	VersionSource string `json:"version_source,omitempty"`
+	Installed     bool   `json:"installed"`
+	OK            bool   `json:"ok"`
+	Status        string `json:"status"`
 }
 
 type options struct {
@@ -70,15 +71,58 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 		return nil
 	}
 	var reports []Report
+	cache := map[string]Report{}
 	for _, name := range cfg.DaemonsInCategory(category) {
-		resolved, _ := cfg.ResolveCatalog(category, name)
-		r := Inspect(ctx, runner, name, resolved, opts...)
+		r := inspectCatalog(ctx, runner, cfg, category, name, cache, map[string]bool{}, opts...)
 		if !r.Installed && !includeMissing {
 			continue
 		}
 		reports = append(reports, r)
 	}
 	return reports
+}
+
+func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, cache map[string]Report, chain map[string]bool, opts ...Option) Report {
+	if category != config.CategoryApp {
+		resolved, _ := cfg.ResolveCatalog(category, name)
+		return Inspect(ctx, runner, name, resolved, opts...)
+	}
+	if doc, ok := cfg.Apps[name]; ok {
+		name = doc.Name
+	}
+	if cached, ok := cache[name]; ok {
+		return cached
+	}
+	if chain[name] {
+		return Report{Name: name, Status: "version_from cycle"}
+	}
+	chain[name] = true
+	resolved, _ := cfg.ResolveCatalog(category, name)
+	r := Inspect(ctx, runner, name, resolved, opts...)
+	if r.Installed && r.OK && r.Version == "" {
+		fillVersionFrom(ctx, runner, cfg, &r, resolved.Tree, cache, chain, opts...)
+	}
+	delete(chain, name)
+	cache[name] = r
+	return r
+}
+
+func fillVersionFrom(ctx context.Context, runner execx.Runner, cfg *config.Config, r *Report, tree map[string]any, cache map[string]Report, chain map[string]bool, opts ...Option) {
+	source := cfgval.String(tree["version_from"])
+	if source == "" {
+		return
+	}
+	provider, ok := cfg.Apps[source]
+	if !ok || provider.Name == r.Name {
+		return
+	}
+	report := inspectCatalog(ctx, runner, cfg, config.CategoryApp, provider.Name, cache, chain, opts...)
+	if report.Version == "" {
+		return
+	}
+	r.Version = report.Version
+	r.VersionShort = report.VersionShort
+	r.VersionSource = provider.Name
 }
 
 // Inspect probes a single resolved daemon: it stats the binary, runs health to
