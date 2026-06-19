@@ -459,7 +459,13 @@ checks:
   # skip_when_changed. Disable inherited entries with enabled:false; delete:true
   # removes an inherited map entry during merge.
   service: { type: service, expect: active }
-  tcp:     { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
+  tcp:
+    type: tcp
+    host: "${host}"
+    port: "${port}"
+    timeout: 3s
+    interface: [eth0, 192.168.1.10]    # bind the probe to an egress NIC: name | IP | MAC
+    interface_match: any               # any | all (shared by tcp/http/ports/icmp)
   ports:
     type: ports
     host: "${host}"
