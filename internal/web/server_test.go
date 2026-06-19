@@ -288,7 +288,7 @@ func TestListApplications(t *testing.T) {
 		Name: "nginx", DisplayName: "Nginx", Category: "web", Binary: "/usr/bin/nginx",
 		Permissions: "-rwxr-xr-x (0755)", User: "root", Group: "root",
 		Version:      "nginx version: nginx/1.30.2",
-		VersionShort: "1.30.2", Status: "ok",
+		VersionShort: "1.30.2", VersionSource: "nginx-bin", Status: "ok",
 	}}}
 	rec := httptest.NewRecorder()
 	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/applications", nil))
@@ -301,7 +301,8 @@ func TestListApplications(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "nginx" || got[0].VersionShort != "1.30.2" ||
 		got[0].Binary != "/usr/bin/nginx" || got[0].Permissions != "-rwxr-xr-x (0755)" ||
-		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" {
+		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" ||
+		got[0].VersionSource != "nginx-bin" {
 		t.Fatalf("unexpected applications: %+v", got)
 	}
 }

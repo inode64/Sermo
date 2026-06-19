@@ -40,6 +40,20 @@ func commandKey(name string, args ...string) string {
 	return strings.Join(append([]string{name}, args...), "\x00")
 }
 
+type countingRunner struct {
+	byCommand map[string]execx.Result
+	calls     map[string]int
+}
+
+func (r *countingRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	key := commandKey(name, args...)
+	r.calls[key]++
+	if res, ok := r.byCommand[key]; ok {
+		return res, nil
+	}
+	return execx.Result{ExitCode: 127, Stderr: "not found"}, fmt.Errorf("%s: not found", name)
+}
+
 // tree builds a resolved daemon tree around one binary path and optional
 // version-command entry.
 func tree(binary string, version map[string]any) map[string]any {
@@ -258,6 +272,93 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 	}
 	if List(context.Background(), fakeRunner{}, nil, config.CategoryApp, true) != nil {
 		t.Fatal("nil config must yield nil")
+	}
+}
+
+func TestListAppVersionFromProvider(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name string) string {
+		t.Helper()
+		path := filepath.Join(binDir, name)
+		if err := os.WriteFile(path, []byte("#!/bin/true\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	rpcbind := write("rpcbind")
+	nfsdcld := write("nfsdcld")
+	rpcmountd := write("rpc.mountd")
+	local := write("local")
+
+	for dir, content := range map[string]string{
+		"catalog/apps/rpcbind.yml": fmt.Sprintf(`kind: app
+name: rpcbind
+binary: %q
+version_from: rpc-mountd
+`, rpcbind),
+		"catalog/apps/nfsdcld.yml": fmt.Sprintf(`kind: app
+name: nfsdcld
+binary: %q
+version_from: rpc-mountd
+`, nfsdcld),
+		"catalog/apps/rpc-mountd.yml": fmt.Sprintf(`kind: app
+name: rpc-mountd
+binary: %q
+preflight:
+  version: { type: command, command: [%q, "-v"] }
+`, rpcmountd, rpcmountd),
+		"catalog/apps/local.yml": fmt.Sprintf(`kind: app
+name: local
+binary: %q
+version_from: rpc-mountd
+preflight:
+  version: { type: command, command: [%q, "--version"] }
+`, local, local),
+		"enabled/.keep": "",
+		"sermo.yml": "engine: { backend: systemd }\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"defaults:\n  policy: { cooldown: 5m }\n",
+	} {
+		path := filepath.Join(root, dir)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	runner := &countingRunner{
+		byCommand: map[string]execx.Result{
+			commandKey(rpcmountd, "-v"):    {Stdout: "rpc.mountd version 2.8.5\n", ExitCode: 0},
+			commandKey(local, "--version"): {Stdout: "Local 9.1.0\n", ExitCode: 0},
+		},
+		calls: map[string]int{},
+	}
+
+	reports := List(context.Background(), runner, cfg, config.CategoryApp, false)
+	byName := map[string]Report{}
+	for _, report := range reports {
+		byName[report.Name] = report
+	}
+	for _, name := range []string{"rpcbind", "nfsdcld"} {
+		report := byName[name]
+		if report.Version != "rpc.mountd version 2.8.5" || report.VersionShort != "2.8.5" || report.VersionSource != "rpc-mountd" {
+			t.Fatalf("%s inherited version = %+v, want rpc-mountd 2.8.5", name, report)
+		}
+	}
+	if report := byName["local"]; report.Version != "Local 9.1.0" || report.VersionSource != "" {
+		t.Fatalf("local version should win over version_from: %+v", report)
+	}
+	if got := runner.calls[commandKey(rpcmountd, "-v")]; got != 1 {
+		t.Fatalf("provider version command ran %d times, want 1", got)
 	}
 }
 
