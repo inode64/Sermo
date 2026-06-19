@@ -48,6 +48,11 @@ func (c *Config) applyOSSelectors() {
 	for _, doc := range c.docs {
 		doc.Body = collapseOS(doc.Body, detectedOS).(map[string]any)
 	}
+	// The global document (defaults, watches, …) lives in Global.Raw, not c.docs,
+	// so collapse os: selectors there too.
+	if c.Global.Raw != nil {
+		c.Global.Raw = collapseOS(c.Global.Raw, detectedOS).(map[string]any)
+	}
 }
 
 func collapseOS(v any, osID string) any {
