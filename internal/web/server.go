@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	htmlpkg "html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"sermo/internal/buildinfo"
 )
 
 //go:embed index.html
@@ -889,7 +892,8 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "dashboard unavailable", http.StatusInternalServerError)
 		return
 	}
-	page = []byte(strings.ReplaceAll(string(page), "{{CSP_NONCE}}", cspNonceFrom(r.Context())))
+	html := strings.ReplaceAll(string(page), "{{CSP_NONCE}}", cspNonceFrom(r.Context()))
+	page = []byte(strings.ReplaceAll(html, "{{VERSION}}", htmlpkg.EscapeString(buildinfo.Short())))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// The dashboard markup/JS is embedded in the binary and changes across
 	// versions (new sections like host watches are added over time). Without a
