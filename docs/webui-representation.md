@@ -135,7 +135,7 @@ Section id: `services-section`
 | Title | `Services` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
-| Status filters | all, disabled, running, stopped, unmonitorized, monitorized, failed |
+| Status filters | all, disabled, running, paused, stopped, unmonitorized, monitorized, failed |
 | Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
@@ -274,6 +274,10 @@ Editable notes:
   matching the services and watches panels; Enter applies immediately, Escape
   clears. The `only errors` checkbox refetches on change. Grouping stays
   client-side and optional; raw chronology is still useful.
+- The `kind` filter covers the emitted event kinds: `cycle`, `action`,
+  `suppressed`, `shadow`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
+  and `cascade` (a service operation triggered through a cascade action).
 
 ## Notifiers panel
 
