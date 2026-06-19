@@ -2773,6 +2773,17 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
+	// Bound the whole operation — including the wait for a global operation slot —
+	// so a web action can never block its handler goroutine indefinitely when the
+	// slots are saturated. The engine applies its own timeout only once it runs,
+	// which does not cover slot acquisition. (ExpandWatch bounds the same way.)
+	timeout := b.operationTimeout
+	if timeout <= 0 {
+		timeout = operation.DefaultOperationTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	run := func(ctx context.Context) operation.Result {
 		return e.engine.Do(ctx, action)
 	}
