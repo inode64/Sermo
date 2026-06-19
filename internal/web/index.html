@@ -207,6 +207,12 @@
   .panel-tools { margin-left: auto; display: inline-flex; gap: .3rem; align-items: center; }
   .icon-btn { width: 1.85rem; height: 1.85rem; display: inline-grid; place-items: center; padding: 0; font-size: .95rem; line-height: 1; }
   .icon-btn[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line-2)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  #app-footer {
+    display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1rem;
+    margin-top: 1.5rem; padding-top: .9rem; border-top: 1px solid var(--line);
+  }
+  #app-footer .footer-actions { display: inline-flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+  #app-footer .footer-version { margin-left: auto; font-size: .8rem; white-space: nowrap; }
   section#locks-section { padding-top: .15rem; }
   section#locks-section h2 { font-size: .98rem; margin: .55rem 0 .5rem; }
   .service-detail h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-2); margin: 1.15rem 0 .45rem; }
@@ -687,14 +693,20 @@
 
 <details id="diag-section">
   <summary>Diagnostics
-    <button id="diag-refresh">refresh</button>
     <button id="diag-clean" class="danger-btn" style="display:none">clean stale data</button>
-    <button id="reload-btn" style="display:none">reload config</button>
-    <span class="muted" style="font-weight:400; font-size:.8rem; margin-left:.5rem">sermoctl daemon reload</span>
     <span id="diag-clean-note" class="muted" style="display:none; font-weight:400; font-size:.8rem; margin-left:.5rem">removes stale control state for unconfigured targets; metric/SLA/event history is kept</span>
   </summary>
   <table class="events"><tbody id="diag"></tbody></table>
 </details>
+
+<footer id="app-footer">
+  <div class="footer-actions">
+    <button id="diag-refresh">refresh</button>
+    <button id="reload-btn" style="display:none">reload config</button>
+    <span class="muted" style="font-size:.8rem">sermoctl daemon reload</span>
+  </div>
+  <div class="footer-version muted">sermo {{VERSION}}</div>
+</footer>
 
 <script nonce="{{CSP_NONCE}}">
 const $ = (s) => document.querySelector(s);

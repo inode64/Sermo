@@ -17,13 +17,10 @@ import (
 // tagged build, otherwise the module version from build info is used.
 var Version = ""
 
-// String returns a multi-line, human-readable version banner, e.g.:
-//
-//	sermo 1.2.0 (a1b2c3d4e5f6, 2026-06-08T10:00:00Z)
-//	  go1.26.3, linux/amd64
-func String() string {
-	version := Version
-	var revision, date string
+// resolve returns the display version plus the (short) VCS revision and build
+// date, applying the same fallbacks used by both String and Short.
+func resolve() (version, revision, date string) {
+	version = Version
 	if bi, ok := debug.ReadBuildInfo(); ok {
 		if version == "" {
 			version = bi.Main.Version
@@ -43,6 +40,25 @@ func String() string {
 	if len(revision) > 12 {
 		revision = revision[:12]
 	}
+	return version, revision, date
+}
+
+// Short returns a concise version string for compact display (e.g. a web
+// footer): "1.2.0 (a1b2c3d4e5f6)", or just "dev" when no revision is embedded.
+func Short() string {
+	version, revision, _ := resolve()
+	if revision != "" {
+		return version + " (" + revision + ")"
+	}
+	return version
+}
+
+// String returns a multi-line, human-readable version banner, e.g.:
+//
+//	sermo 1.2.0 (a1b2c3d4e5f6, 2026-06-08T10:00:00Z)
+//	  go1.26.3, linux/amd64
+func String() string {
+	version, revision, date := resolve()
 
 	var meta []string
 	if revision != "" {
