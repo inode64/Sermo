@@ -19,6 +19,7 @@ type fakeClient struct {
 	dom     libvirt.Domain
 	calls   []string
 	uri     libvirt.ConnectURI
+	disc    chan struct{} // closed by Disconnect when non-nil
 }
 
 func (c *fakeClient) ConnectToURI(uri libvirt.ConnectURI) error {
@@ -29,6 +30,9 @@ func (c *fakeClient) ConnectToURI(uri libvirt.ConnectURI) error {
 
 func (c *fakeClient) Disconnect() error {
 	c.calls = append(c.calls, "disconnect")
+	if c.disc != nil {
+		close(c.disc)
+	}
 	return nil
 }
 
@@ -247,5 +251,33 @@ func TestFirstExistingLocalSocket(t *testing.T) {
 				t.Fatalf("FirstExistingLocalSocket() = %q, %v; want %q, %v", got, ok, tt.want, tt.wantOK)
 			}
 		})
+	}
+}
+
+// TestRunWithClientDisconnectsOnContextCancel verifies that cancelling the
+// context tears the libvirt connection down promptly, rather than leaving it
+// open until fn returns on its own (which would let repeated timeouts pile up
+// live connections).
+func TestRunWithClientDisconnectsOnContextCancel(t *testing.T) {
+	client := &fakeClient{disc: make(chan struct{})}
+	mgr := managerFor(client, Spec{URI: "qemu:///system", Domain: "vm01"})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	go func() {
+		_, _ = runWithClient(ctx, mgr, func(Client) (struct{}, error) {
+			close(started)
+			<-ctx.Done() // simulate a long/blocked RPC
+			return struct{}{}, ctx.Err()
+		})
+	}()
+
+	<-started
+	cancel()
+	select {
+	case <-client.disc:
+		// disconnected promptly after cancellation
+	case <-time.After(2 * time.Second):
+		t.Fatal("connection was not disconnected promptly after context cancel")
 	}
 }
