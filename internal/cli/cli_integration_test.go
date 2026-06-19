@@ -138,7 +138,7 @@ service: { name: svc }
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	log := calls(t, logPath)
-	if !strings.Contains(log, "stop svc.service") || !strings.Contains(log, "start svc.service") {
+	if !strings.Contains(log, "stop -- svc.service") || !strings.Contains(log, "start -- svc.service") {
 		t.Fatalf("expected stop then start of svc.service, calls=\n%s", log)
 	}
 }
@@ -181,7 +181,7 @@ rules:
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	// The guard blocks before any backend action: no stop/start must occur.
-	if log := calls(t, logPath); strings.Contains(log, "stop svc.service") || strings.Contains(log, "start svc.service") {
+	if log := calls(t, logPath); strings.Contains(log, "stop -- svc.service") || strings.Contains(log, "start -- svc.service") {
 		t.Fatalf("guard-blocked restart must not touch the backend, calls=\n%s", log)
 	}
 }
