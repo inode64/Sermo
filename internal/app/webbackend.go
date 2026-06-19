@@ -1084,7 +1084,7 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	if sampler == nil {
 		sampler = osProcSampler{userLookup: b.userLookup}
 	}
-	samples := sampler.Sample(ProcMatch{Name: name, User: user})
+	samples, _ := sampler.Sample(ProcMatch{Name: name, User: user})
 	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
 
 	var rssTotal, cpuTicksTotal, ioTotal uint64
