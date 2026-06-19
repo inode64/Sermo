@@ -247,6 +247,33 @@ func TestServiceCleanupDirsIncludesLegacyAppsOnlyWhenLoaded(t *testing.T) {
 	}
 }
 
+func TestEnsureIncludesPathRecognizesAbsoluteIncludeForRelativeTarget(t *testing.T) {
+	tmp := t.TempDir()
+	t.Chdir(tmp)
+	root := map[string]any{
+		"paths": map[string]any{
+			"includes": []any{filepath.Join(tmp, servicesIncludeDir)},
+		},
+	}
+
+	changed, err := ensureIncludesPath(root, ".", servicesIncludeDir, servicesIncludeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed {
+		t.Fatal("ensureIncludesPath changed config despite existing absolute include")
+	}
+	paths := root["paths"].(map[string]any)
+	got, err := yamlStringList(paths["includes"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join(tmp, servicesIncludeDir)}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("paths.includes = %v, want %v", got, want)
+	}
+}
+
 func TestDetectedServiceTargetKeysIncludeControlledServices(t *testing.T) {
 	env := assist.Env{
 		Daemons: func() ([]assist.DaemonCandidate, error) {

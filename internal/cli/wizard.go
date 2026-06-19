@@ -828,11 +828,16 @@ func sameConfigPath(base, item, target string) bool {
 	if item == "" {
 		return false
 	}
-	p := item
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(base, p)
+	normalize := func(path string) string {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(base, path)
+		}
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+		return filepath.Clean(path)
 	}
-	return filepath.Clean(p) == filepath.Clean(target)
+	return normalize(item) == normalize(target)
 }
 
 func safeConfigPathName(name string) string {
