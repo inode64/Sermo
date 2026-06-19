@@ -115,6 +115,52 @@ func TestSlotPoolReclaimsDeadOwner(t *testing.T) {
 	_ = h.Release()
 }
 
+// TestSlotPoolReclaimsExpiredSlot covers the TTL safety net: a slot whose owner
+// is still alive but whose ExpiresAt has elapsed must be reclaimable, otherwise
+// a wedged owner would hold the slot forever and shrink global concurrency.
+func TestSlotPoolReclaimsExpiredSlot(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Unix(10_000, 0)
+	proc := fakeProc{
+		alive: map[int]bool{4242: true, 7000: true},
+		ticks: map[int]uint64{4242: 1, 7000: 9},
+	}
+	pool := SlotPool{
+		Dir:   dir,
+		Slots: 1,
+		TTL:   time.Hour,
+		Proc:  proc,
+		Now:   func() time.Time { return now },
+		Self:  func() (int, uint64) { return 7000, 9 },
+		Sleep: time.Sleep,
+	}
+	// Existing slot: live owner 4242, but already expired an hour ago.
+	writeLock(t, dir, "0.slot", lockFile{
+		Service: "slot-0", OwnerPID: 4242, OwnerStartTicks: 1,
+		CreatedAt: now.Add(-2 * time.Hour), ExpiresAt: now.Add(-time.Hour),
+	})
+
+	h, err := pool.Acquire(context.Background())
+	if err != nil {
+		t.Fatalf("acquire expired slot: %v", err)
+	}
+	defer h.Release()
+
+	got, err := readLockFile(h.path)
+	if err != nil {
+		t.Fatalf("read reclaimed slot: %v", err)
+	}
+	if got.OwnerPID != 7000 {
+		t.Fatalf("slot owner = %d, want 7000 (reclaimed)", got.OwnerPID)
+	}
+	if got.ExpiresAt.IsZero() {
+		t.Fatal("reclaimed slot has no ExpiresAt; TTL safety net not stamped")
+	}
+	if want := now.Add(time.Hour); !got.ExpiresAt.Equal(want) {
+		t.Fatalf("slot ExpiresAt = %v, want %v", got.ExpiresAt, want)
+	}
+}
+
 // TestSlotHandleReleaseLeavesForeignSlot locks the owner-checked release on
 // the slot side: a slot file rewritten by another owner (reclaim) must be
 // left untouched, and a nil handle must release as a no-op.

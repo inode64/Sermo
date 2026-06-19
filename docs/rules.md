@@ -121,7 +121,7 @@ matches no process. Numeric UID/GID values avoid host identity-service ambiguity
 The `command` check asserts the command's outcome: `expect_exit` (default 0) and
 optional `expect_stdout` / `expect_stderr` matchers — a plain string requires that
 substring, or an `{op, value}` mapping compares the trimmed output (`== != > >= <
-<= =~`):
+<= contains =~`):
 
 ```yaml
 checks:
@@ -413,9 +413,9 @@ equality check (compared as a string); a `{op, value}` mapping uses an operator 
 
 **Response comparisons.** Beyond the substring shorthand, `expect_status`,
 `expect_body` and `expect_latency` accept an `{op, value}` mapping using the
-shared operator set `== != > >= < <=` (numeric, or string for `==`/`!=`) and
-`=~` (Go/RE2 regular expression) — the same operators as the [`sql`](#sql-query-sql)
-check:
+shared operator set `== != > >= < <=` (numeric, or string for `==`/`!=`),
+`contains` (substring) and `=~` (Go/RE2 regular expression) — the same operators
+as the [`sql`](#sql-query-sql) check:
 
 - `expect_status: { op: "<", value: 500 }` — compare the status code numerically
   (in addition to the code/class/list forms).
@@ -1080,7 +1080,7 @@ checks:
     password: "${env:PGPASS}"
     database: app
     query: "SELECT count(*) FROM jobs WHERE state = 'queued'"
-    op: ">"                     # == | != | > | >= | < | <= | =~
+    op: ">"                     # == | != | > | >= | < | <= | contains | =~
     value: "100"
   schema-version:
     type: sql
@@ -1122,7 +1122,7 @@ checks:
     database: app
     collection: jobs
     filter: '{"status":"failed"}' # optional JSON filter; default {} (count all)
-    op: "<"                       # == | != | > | >= | < | <= | =~
+    op: "<"                       # == | != | > | >= | < | <= | contains | =~
     value: "10"
   queued-jobs:                    # 2) aggregation pipeline (scalar at `result`)
     type: mongodb-query
@@ -1149,7 +1149,7 @@ checks:
   JSON** (so `$oid`, `$date`, etc. work). A collection query requires a
   `database`; `command` defaults to `admin`.
 - **Operators** behave exactly as the `sql` check's (`>` `>=` `<` `<=` numeric;
-  `==`/`!=` numeric-or-string; `=~` RE2 regexp).
+  `==`/`!=` numeric-or-string; `contains` substring; `=~` RE2 regexp).
 - **Auth:** with a `user`, credentials are checked against `auth_source` (default
   `database`, then `admin`). The check only reads — point it at a read-only user.
 - Result data carries `mode`, `op`, `threshold`, the raw `result` and, when
@@ -1175,7 +1175,7 @@ checks:
     password: "${env:INFLUXPW}"
     database: telegraf          # required for influxql
     query: "SELECT mean(usage_user) FROM cpu WHERE time > now() - 5m"
-    op: "<"                     # == | != | > | >= | < | <= | =~
+    op: "<"                     # == | != | > | >= | < | <= | contains | =~
     value: "80"
   disk-flux:                    # Flux (2.x)
     type: influxdb-query
@@ -1200,7 +1200,7 @@ checks:
   **`column`** to read a named column in either mode. A query that matches nothing
   fails the check ("no value").
 - **Operators** behave exactly as the `sql` check's (`>` `>=` `<` `<=` numeric;
-  `==`/`!=` numeric-or-string; `=~` RE2 regexp).
+  `==`/`!=` numeric-or-string; `contains` substring; `=~` RE2 regexp).
 - **Auth.** *InfluxQL:* a `user`/`password` is sent as HTTP Basic auth; an
   optional `token` (1.8+/2.x compatibility) is sent as `Authorization: Token …`
   and takes precedence. *Flux:* the `token` is required. The check only reads —
@@ -1296,7 +1296,8 @@ result data (e.g. `answers`/`rcode` for `dns`, `stratum`/`offset_seconds` for
 `ntp`, `sys_object_id` for `snmp`, `offered_ip`/`lease_seconds` for `dhcp`,
 `ipp_version` for `ipp`, …). `expect` is a mapping of field → value (equality) or
 field → `{op, value}` using the shared operators `== != > >= < <=` (numeric, or
-string for `==`/`!=`) and `=~` (Go/RE2 regex). All assertions must hold, **in
+string for `==`/`!=`), `contains` (substring) and `=~` (Go/RE2 regex). All
+assertions must hold, **in
 addition** to the probe succeeding:
 
 ```yaml
@@ -1363,8 +1364,9 @@ The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`binary`, `libraries`, `config`, `autofs`, `route`, `firewall_rules`, `sqlite`/`sqlite3`,
-`websocket`/`ws`, and connection-protocol checks such as `mysql`/`smtp`) are the
+`binary`, `pidfile`, `process`, `libraries`, `config`, `autofs`, `route`,
+`firewall_rules`, `sqlite`/`sqlite3`, `websocket`/`ws`, and connection-protocol
+checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 
@@ -1584,7 +1586,7 @@ machine. `value` is a number with an optional trailing `%`.
 
 ```
 scope: service   memory, swap, cpu, cpu_thread, process_count, io, io_read, io_write, fds, threads
-scope: system    total_memory, total_cpu, load1, load5, load15
+scope: system    total_memory, total_swap, total_cpu, load1, load5, load15
 ```
 
 **A `scope: system` metric may only drive `alert` rules, never remediation.** It
@@ -1628,8 +1630,8 @@ thread: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`
 threshold needs a metric with a percentage form (`memory`, `swap`, `cpu`,
-`cpu_thread`, `total_memory`, `total_cpu`; `swap`/`memory` also have an absolute
-byte form); a bare number needs an absolute form (everything else, including
+`cpu_thread`, `total_memory`, `total_swap`, `total_cpu`;
+`swap`/`memory`/`total_memory`/`total_swap` also have an absolute byte form); a bare number needs an absolute form (everything else, including
 `io*`/`fds`/`threads`, which are absolute only). Reading another process's I/O or fd count
 requires privilege, so those sum only the processes the daemon can read.
 

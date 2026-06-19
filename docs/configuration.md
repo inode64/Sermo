@@ -54,13 +54,18 @@ per lock named `<service>[.<name>].lock`) and internal operation locks
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
 stale-reclaim semantics.
 
-If `paths.includes` is omitted, Sermo falls back to `/etc/sermo/services` and
-then `/etc/sermo/apps`. The second path is only a legacy alias for existing
-service documents; put new files under `services/`.
+If `paths.includes` is omitted, Sermo falls back to `services/` and then `apps/`
+next to the loaded `sermo.yml` file. With the standard `/etc/sermo/sermo.yml`
+this means `/etc/sermo/services` and `/etc/sermo/apps`. The second path is only
+a legacy alias for existing service documents; put new files under `services/`.
+`paths.enabled` is accepted as a legacy alias for `paths.includes`, used only
+when `paths.includes` is absent; prefer `paths.includes` in new configs.
 
-If `paths.mounts` is omitted, Sermo falls back to `/etc/sermo/mounts`. Mount
-documents are intentionally separate from service documents and watch fragments
-because they are operator actions, not monitored services.
+If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
+`sermo.yml` file. With the standard `/etc/sermo/sermo.yml` this means
+`/etc/sermo/mounts`. Mount documents are intentionally separate from service
+documents and watch fragments because they are operator actions, not monitored
+services.
 
 Use `/run` for runtime paths in Sermo configuration and examples. `/var/run` is
 the historical compatibility alias for `/run`; do not write new `/var/run`
@@ -84,6 +89,15 @@ in `apps:`, but aliases are compatibility entries only and are not shown as
 separate daemons/apps in wizard selection lists. New configuration should use the
 canonical name. `catalog_aliases` must be a non-empty list of simple names,
 without path separators.
+
+Catalog apps may declare `version_from: <app-name>` when a different binary from
+the same package has the authoritative version probe. The app still checks its
+own `binary` for installation and health; `version_from` only fills the displayed
+version when the app has no local version result. Local `health`, `version` and
+`version_short` commands still win. The referenced app must be another catalog
+app, may be addressed by a catalog alias, and `version_from` chains must not
+cycle. This is not an operational dependency and does not inject preflight
+checks into services.
 
 When a daemon or service lists apps, every app variable is also available to that
 daemon/service with a normalized app-name prefix: an app with
@@ -349,8 +363,9 @@ its exit code before the version command is considered. If no `health` command
 is configured, the `version` command is the fallback probe while fetching the
 displayed version. The list is sortable by name, category or version, and
 expanding a row reveals the full version string, the binary's file location and
-its permissions. Services and applications can be filtered and grouped by their
-top-level `category` metadata field.
+its permissions. When a version is inherited through `version_from`, the API row
+includes `version_source` with the provider app name. Services and applications
+can be filtered and grouped by their top-level `category` metadata field.
 The same data is available from `sermoctl apps` and `GET /api/applications`.
 The dashboard caches the list for up to 30 seconds, so auto-refreshes do not
 rerun every app version probe.
@@ -614,7 +629,7 @@ Web-triggered monitor changes are recorded with source `web` in the state store
 `monitor_changed_at` so a running/paused/stopped unmonitored service or an
 unmonitorized watch shows who paused it and when. Host watches do not have
 service-manager `running` or `stopped` states; the dashboard filters them as
-`ok`, `failed`, `monitorized`, `unmonitorized` or `disabled`.
+`ok`, `failed`, `unmonitorized` or `disabled`.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service.
 
@@ -899,6 +914,33 @@ Use `notify: [none]` (in an explicit `then`) to suppress notifications: alongsid
 another action (for example `expand`), or on its own as a monitor-only watch
 (state and events without delivery). It is always valid, whether or not a
 global `notify` default is configured.
+
+**Notification cadence.** A firing watch delivers its `notify` **once**, on the
+rising edge — when the alert starts. It does not re-notify every cycle while the
+condition persists (the `firing` event is still recorded each cycle for the web
+UI, and the `hook` still runs each cycle). When the watch clears and later fires
+again, the next episode notifies afresh. To get a periodic **reminder** while a
+watch stays firing, set `then.notify_interval` to a positive duration: the
+notification is re-sent once that interval elapses. It only affects delivery, so
+it requires `notify` targets. Both the edge-triggered default and
+`notify_interval` apply to the standard watch types (`storage`/`disk`, the
+single-shot service checks, and the `net`/`icmp`/`swap` metric watches). The
+`file` and `process` watches have their own notification model — one event per
+changed path or matching pid — and ignore `notify_interval`.
+
+```yaml
+watches:
+  disk-root:
+    monitor: previous
+    check:
+      type: storage
+      path: /
+      used_pct: { op: ">=", value: "90%" }
+    for: { cycles: 3 }
+    then:
+      notify: [ops-email]
+      notify_interval: 30m     # re-notify every 30m while still firing
+```
 
 Use `then.dry_run: true` when you want to keep the watch and its actions wired
 for a trial run, but you do not want any side effects yet. The watch still runs

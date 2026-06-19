@@ -104,10 +104,17 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	})
 
 	var rss, ticks, ioRead, ioWrite, fds, threads, swap uint64
+	// Track how many processes actually contributed a successful read per metric,
+	// so a gauge that summed nothing (every /proc read failed because the tree
+	// exited or is unreadable) is reported as not-ready rather than a measured 0.
+	// Otherwise a threshold like `fds < N` would fire spuriously and `fds > N`
+	// could never fire. `present` (RSS-readable PIDs) is the alive-process count.
+	var present, fdsOK, threadsOK int
 	curTicks := make(map[int]uint64, len(pids)) // per-process CPU jiffies this cycle
 	for _, pid := range pids {
 		if v, ok := c.Reader.ProcessRSS(pid); ok {
 			rss += v
+			present++
 		}
 		if v, ok := c.Reader.ProcessCPU(pid); ok {
 			ticks += v
@@ -124,13 +131,20 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		}
 		if v, ok := c.Reader.ProcessFDs(pid); ok {
 			fds += v
+			fdsOK++
 		}
 		if v, ok := c.Reader.ProcessThreads(pid); ok {
 			threads += v
+			threadsOK++
 		}
 	}
 
-	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: true}
+	// A per-process gauge is ready when at least one process contributed, or when
+	// the tree is genuinely empty (no PIDs to read — a true zero). It is not ready
+	// when PIDs were requested but none could be read (measurement failure).
+	measured := func(ok bool) bool { return len(pids) == 0 || ok }
+
+	mem := Reading{Absolute: float64(rss), HasAbsolute: true, Ready: measured(present > 0)}
 	totals := readerMemoryTotals(c.Reader, hasSwap)
 	if totals.memoryOK && totals.memoryTotal > 0 {
 		mem.Percent = float64(rss) / float64(totals.memoryTotal) * 100
@@ -141,7 +155,7 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 	// Per-service swap: total swapped-out memory of the process tree (bytes), and
 	// — when a swap device exists — its share of total swap.
 	if hasSwap {
-		sw := Reading{Absolute: float64(swap), HasAbsolute: true, Ready: true}
+		sw := Reading{Absolute: float64(swap), HasAbsolute: true, Ready: measured(present > 0)}
 		if totals.swapOK && totals.swapTotal > 0 {
 			sw.Percent = float64(swap) / float64(totals.swapTotal) * 100
 			sw.HasPercent = true
@@ -149,9 +163,11 @@ func (c *Collector) SampleService(service string, pids []int) Snapshot {
 		snap["swap"] = sw
 	}
 
-	snap["process_count"] = Reading{Absolute: float64(len(pids)), HasAbsolute: true, Ready: true}
-	snap["fds"] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: true}
-	snap["threads"] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: true}
+	// process_count is the number of processes actually found alive this sample,
+	// not the count of PIDs handed in (some may have exited since discovery).
+	snap["process_count"] = Reading{Absolute: float64(present), HasAbsolute: true, Ready: measured(present > 0)}
+	snap["fds"] = Reading{Absolute: float64(fds), HasAbsolute: true, Ready: measured(fdsOK > 0)}
+	snap["threads"] = Reading{Absolute: float64(threads), HasAbsolute: true, Ready: measured(threadsOK > 0)}
 
 	cur := cpuSample{ticks: ticks, at: now}
 	cpu := Reading{HasPercent: true}

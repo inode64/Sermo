@@ -95,7 +95,13 @@ func (c connCheck) Run(ctx context.Context) Result {
 		t0 := time.Now()
 		r, e := probe(ctx, cfg)
 		if e == nil {
-			res, elapsed = trimConnResult(r), time.Since(t0)
+			took := time.Since(t0)
+			// any-match returns on the first success, so there is only one. all-match
+			// runs every interface; report the worst (slowest) path, mirroring the
+			// icmp check's "report the worst path" so latency reflects the bottleneck.
+			if !c.ifaceAll || took >= elapsed {
+				res, elapsed = trimConnResult(r), took
+			}
 		}
 		return e
 	})

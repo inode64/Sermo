@@ -72,8 +72,9 @@ The automatic-remediation rate-limit state is stored in `paths.state`, so a
 `sermoctl unmonitor SERVICE` pauses monitoring for a service; `monitor SERVICE`
 resumes it. While paused, the daemon runs no checks, rules or remediation for that
 service — useful during maintenance so a deliberate stop is not "remediated" by an
-automatic restart. The pause is a marker file under `<paths.runtime>/paused`, so
-it persists across daemon restarts until cleared. `sermoctl status SERVICE` shows
+automatic restart. The pause is recorded in the persistent state store under
+`paths.state` (the `monitor_state` table), so it persists across daemon
+restarts and reboots until cleared. `sermoctl status SERVICE` shows
 the single operator state `running` or `stopped` while monitoring is paused
 (`"state": "running"`/`"stopped"` and `"paused": true` in `--json`). Pausing only
 affects Sermo's monitoring; it does not stop the service itself, and manual

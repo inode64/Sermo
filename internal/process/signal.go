@@ -69,10 +69,9 @@ func (r Reaper) Reap(ctx context.Context, residuals []Process, policy KillPolicy
 	if resolve == nil {
 		resolve = DefaultUserLookup().ResolveUser
 	}
+	// Leave sleep nil when unset so Wait uses its cancellable timer in production;
+	// tests inject a fake to control timing. (Reap uses sleep only for Wait.)
 	sleep := r.Sleep
-	if sleep == nil {
-		sleep = time.Sleep
-	}
 	signaler := r.Signaler
 	if signaler == nil {
 		signaler = OSSignaler{}
@@ -123,7 +122,18 @@ func Wait(ctx context.Context, sleep func(time.Duration), d time.Duration) error
 		return err
 	}
 	if sleep == nil {
-		sleep = time.Sleep
+		// Default: a stoppable timer so a cancelled Wait leaks no goroutine. An
+		// injected sleep (tests) takes the goroutine path below, where the fake
+		// returns promptly and so cannot leak — unlike a real time.Sleep, which
+		// is not cancellable and would block until d elapsed.
+		timer := time.NewTimer(d)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return ctx.Err()
+		}
 	}
 	done := make(chan struct{})
 	go func() {

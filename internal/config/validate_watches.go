@@ -96,6 +96,16 @@ func validateHookBlock(prefix string, block map[string]any, allowExpand bool, de
 			add("%s.then.dry_run must be a boolean", prefix)
 		}
 	}
+	if v, present := then["notify_interval"]; present {
+		// notify_interval re-sends the notification as a reminder while the watch
+		// stays firing; absent means notify once on the rising edge. It only
+		// affects delivery, so it is meaningless without notify targets.
+		if !isPositiveDuration(cfgval.String(v)) {
+			add("%s.then.notify_interval %q must be a valid positive duration", prefix, cfgval.String(v))
+		} else if !HasEffectiveNotifyAction(notify, defaultNotify) {
+			add("%s.then.notify_interval has no effect without notify targets", prefix)
+		}
+	}
 	rawExpand, expandPresent := then["expand"]
 	expand, hasExpand := rawExpand.(map[string]any)
 	switch {

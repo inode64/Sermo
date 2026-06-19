@@ -3279,10 +3279,14 @@ function renderAppExpansion(a) {
   const perm = a.permissions ? `<code>${esc(a.permissions)}</code>` : '<span class="muted">—</span>';
   const usr = a.user ? esc(a.user) : '<span class="muted">—</span>';
   const grp = a.group ? esc(a.group) : '<span class="muted">—</span>';
+  const source = a.version_source
+    ? `<code>${esc(a.version_source)}</code>`
+    : (a.version ? '<span class="muted">local</span>' : '<span class="muted">—</span>');
   const category = categoryOf(a, "app");
   const sla = renderSLAWindows(a.sla, true);
   return `<div class="watch-grid">
     <div><span class="muted">Version</span><br>${esc(a.version || "—")}</div>
+    <div><span class="muted">Version source</span><br>${source}</div>
     <div><span class="muted">Category</span><br>${esc(category)}</div>
     <div><span class="muted">Location</span><br>${bin}</div>
     <div><span class="muted">Permissions</span><br>${perm}</div>

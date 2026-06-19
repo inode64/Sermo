@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sermo/internal/config"
+	"sermo/internal/execx"
 	"sermo/internal/servicemgr"
 )
 
@@ -238,6 +239,70 @@ func TestStatusCommandJSON(t *testing.T) {
 	}
 }
 
+func TestStatusCommandUsesResolvedConfiguredUnit(t *testing.T) {
+	root := t.TempDir()
+	mustWrite(t, filepath.Join(root, "sermo.yml"), `
+paths:
+  catalog: [`+filepath.Join(root, "catalog")+`]
+  includes: [`+filepath.Join(root, "services")+`]
+defaults:
+  policy: { cooldown: 5m }
+`)
+	mustWrite(t, filepath.Join(root, "catalog", "services", "rpc-mountd.yml"), `
+kind: daemon
+name: rpc-mountd
+service:
+  systemd: [nfs-mountd, rpc-mountd]
+checks:
+  service: { type: service, expect: active }
+`)
+	mustWrite(t, filepath.Join(root, "services", "rpc-mountd.yml"), `
+kind: service
+name: rpc-mountd
+uses: rpc-mountd
+`)
+	cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var statusCalls []string
+	app := App{
+		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{
+				status: servicemgr.ServiceStatus{
+					Service: "rpc-mountd", Backend: servicemgr.BackendSystemd,
+					Unit: "nfs-mountd.service", Status: servicemgr.StatusActive,
+				},
+				statusCalls: &statusCalls,
+			}, nil
+		},
+		LoadConfig: func(string, ...config.Option) (*config.Config, error) { return cfg, nil },
+		Runner:     statusUnitRunner{known: "nfs-mountd.service"},
+		Env:        func(string) string { return "" },
+		Stdout:     &stdout,
+		Stderr:     &bytes.Buffer{},
+	}
+
+	code := app.Run(context.Background(), []string{"status", "rpc-mountd"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if len(statusCalls) == 0 {
+		t.Fatal("manager Status was not called")
+	}
+	for _, call := range statusCalls {
+		if call == "rpc-mountd" || call == "rpc-mountd.service" {
+			t.Fatalf("Status called with unresolved unit %q; calls=%v", call, statusCalls)
+		}
+	}
+	if got := statusCalls[len(statusCalls)-1]; got != "nfs-mountd.service" {
+		t.Fatalf("last Status call = %q, want nfs-mountd.service; calls=%v", got, statusCalls)
+	}
+}
+
 func TestStatusRequiresService(t *testing.T) {
 	var stderr bytes.Buffer
 	app := statusApp(servicemgr.ServiceStatus{}, nil, nil, &stderr)
@@ -331,6 +396,17 @@ func statusApp(status servicemgr.ServiceStatus, statusErr error, stdout, stderr 
 	}
 }
 
+type statusUnitRunner struct {
+	known string
+}
+
+func (r statusUnitRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
+	if name == "systemctl" && len(args) == 3 && args[0] == "cat" && args[1] == "--" && args[2] == r.known {
+		return execx.Result{ExitCode: 0}, nil
+	}
+	return execx.Result{ExitCode: 1}, nil
+}
+
 type fakeBackendDetector struct {
 	detection servicemgr.Detection
 	err       error
@@ -341,13 +417,17 @@ func (d fakeBackendDetector) Detect(context.Context, servicemgr.Backend) (servic
 }
 
 type fakeManager struct {
-	status    servicemgr.ServiceStatus
-	err       error
-	actionErr error
-	actions   *[]string
+	status      servicemgr.ServiceStatus
+	err         error
+	actionErr   error
+	actions     *[]string
+	statusCalls *[]string
 }
 
-func (m fakeManager) Status(context.Context, string) (servicemgr.ServiceStatus, error) {
+func (m fakeManager) Status(_ context.Context, service string) (servicemgr.ServiceStatus, error) {
+	if m.statusCalls != nil {
+		*m.statusCalls = append(*m.statusCalls, service)
+	}
 	return m.status, m.err
 }
 

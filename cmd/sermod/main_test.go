@@ -44,18 +44,18 @@ defaults:
 	}
 }
 
-// TestRepoDefaultConfigHasMonitorTargets guards the acceptance path
-// `sermod run --config ./examples/sermo.yml`. The shipped config deliberately
-// enables no services (operators add their own under an include dir such as
-// `apps`), so the host watches are what must load, validate and build — they
-// are the daemon's out-of-the-box monitor targets.
+// TestRepoDefaultConfigHasMonitorTargets guards the installed sample config.
+// The installed config deliberately enables no services (operators add their
+// own with the wizard), so the host watches are what must load, validate and
+// build: they are the daemon's out-of-the-box monitor targets.
 func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
-	global := repoConfigPath(t)
+	root := repoRoot(t)
+	global := copiedRepoConfig(t, root)
 
 	// The shipped config points paths.catalog at the installed /usr/share/sermo
 	// location, so override it to the source tree's catalog for this test —
 	// exactly what `sermod run --catalog ./catalog` does.
-	catalog := filepath.Join(filepath.Dir(filepath.Dir(global)), "catalog")
+	catalog := filepath.Join(root, "catalog")
 	cfg, err := config.Load(global, config.WithCatalogDirs(catalog))
 	if err != nil {
 		t.Fatalf("Load(%q): %v", global, err)
@@ -99,6 +99,18 @@ func TestParseArgsVerbose(t *testing.T) {
 	// Verbose defaults off.
 	if parsed, err := parseArgs([]string{"run"}); err != nil || parsed.verbose {
 		t.Fatalf("parseArgs(run) verbose = %v, err = %v; want false, nil", parsed.verbose, err)
+	}
+}
+
+func TestVersionSubcommandOnlyAsFirstArg(t *testing.T) {
+	// `version` as the first argument prints the build string and exits 0.
+	if code := run([]string{"version"}); code != 0 {
+		t.Fatalf("run(version) = %d, want 0", code)
+	}
+	// `version` appearing as a flag value must NOT be hijacked as the subcommand;
+	// here it is consumed as the --config value, leaving no command -> usage error.
+	if code := run([]string{"--config", "version"}); code == 0 {
+		t.Fatal("run(--config version) = 0, want non-zero (version must not be hijacked from a flag value)")
 	}
 }
 
@@ -181,7 +193,7 @@ func TestWebListenAddr(t *testing.T) {
 	}
 }
 
-func repoConfigPath(t *testing.T) string {
+func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {
@@ -189,11 +201,7 @@ func repoConfigPath(t *testing.T) string {
 	}
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			p := filepath.Join(dir, "examples", "sermo.yml")
-			if _, err := os.Stat(p); err == nil {
-				return p
-			}
-			t.Fatalf("examples/sermo.yml not found under module root %s", dir)
+			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -201,6 +209,20 @@ func repoConfigPath(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+func copiedRepoConfig(t *testing.T, root string) string {
+	t.Helper()
+	src := filepath.Join(root, "examples", "sermo.yml")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatalf("read %s: %v", src, err)
+	}
+	dst := filepath.Join(t.TempDir(), "sermo.yml")
+	if err := os.WriteFile(dst, data, 0o644); err != nil {
+		t.Fatalf("write %s: %v", dst, err)
+	}
+	return dst
 }
 
 func TestWebAuthFromConfig(t *testing.T) {

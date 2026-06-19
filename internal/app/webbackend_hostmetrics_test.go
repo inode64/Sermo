@@ -23,6 +23,15 @@ func TestHostMetricLoad1Saturation(t *testing.T) {
 	}
 }
 
+func TestHostMetricLoad1NoReading(t *testing.T) {
+	// Without an absolute reading load1 must not fabricate a per-CPU percentage
+	// or a CPU-count capacity — it leaves Total/Percent at zero.
+	m := hostMetric("load1", metrics.Reading{Ready: false})
+	if m.Total != 0 || m.Percent != 0 {
+		t.Fatalf("load1 with no absolute reading must not set Total/Percent, got Total=%v Percent=%v", m.Total, m.Percent)
+	}
+}
+
 func TestCountMeter(t *testing.T) {
 	m := countMeter("fds", 8000, 10000)
 	if m == nil || m.Kind != "fds" || m.Count != 8000 || m.Max != 10000 || m.UsedPct != 80 {

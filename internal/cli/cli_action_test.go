@@ -149,6 +149,53 @@ func TestActionFailedExit2(t *testing.T) {
 	}
 }
 
+// writeCascadeConfig sets up a primary `web` that cascades to `db` via
+// also_apply, so restart web runs both services through Operate.
+func writeCascadeConfig(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, `
+paths:
+  includes: [ `+root+`/enabled ]
+  runtime: `+root+`/run
+defaults:
+  policy:
+    cooldown: 5m
+`)
+	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
+kind: service
+name: web
+service: { name: web }
+also_apply: [db]
+`)
+	mustWrite(t, filepath.Join(root, "enabled", "db.yml"), `
+kind: service
+name: db
+service: { name: db }
+`)
+	return global
+}
+
+// TestCascadeTargetErrorDowngradesPrimary verifies that a cascade target whose
+// Operate returns an error (not just a failed result) downgrades the primary so
+// the exit code reflects the failure.
+func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
+	global := writeCascadeConfig(t)
+	app := actionApp(operation.Result{}, nil, nil, nil)
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		if service == "db" {
+			return operation.Result{}, errors.New("db: engine boom")
+		}
+		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
+	if code != exitRuntimeError {
+		t.Fatalf("Run() exit = %d, want %d (cascade target error must downgrade primary)", code, exitRuntimeError)
+	}
+}
+
 func TestActionJSON(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
