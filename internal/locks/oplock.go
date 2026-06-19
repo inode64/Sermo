@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // maxAcquireAttempts bounds the reclaim/retry loop so a heavily contended lock
@@ -170,7 +172,18 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 // unlinks it. It returns false if the lock changed or turned active between the
 // classify and the unlink (section 20: abort and treat as held). Shared by the
 // operation and named lockers.
+//
+// The re-read → classify → unlink runs under an advisory lock on the containing
+// directory so two contenders can never both reclaim the same stale lock. Without
+// it, the unlink was unconditional: process A could classify a stale lock, then —
+// after B reclaimed it and created a fresh lock at the same path — delete B's live
+// lock, leaving both A and B believing they held it (mutual exclusion violated).
+// The exclusive create (O_EXCL) outside this section stays safe: a remove only
+// happens here, after verifying the file is still the expected stale lock.
 func reclaimStale(path string, expected lockFile, proc ProcessProber, now func() time.Time) bool {
+	if unlock, err := lockReclaimDir(path); err == nil {
+		defer unlock()
+	}
 	current, err := readLockFile(path)
 	if err != nil {
 		return os.IsNotExist(err)
@@ -187,6 +200,26 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 		return os.IsNotExist(err)
 	}
 	return true
+}
+
+// lockReclaimDir takes an exclusive advisory lock on the directory holding path
+// for the duration of a reclaim. flock is per-open-file-description and works
+// across processes; the lock directory lives on tmpfs. Best-effort: if the
+// directory cannot be opened or locked, reclaim proceeds unserialized (the prior
+// behavior) rather than failing the acquire.
+func lockReclaimDir(path string) (func(), error) {
+	d, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	if err := unix.Flock(int(d.Fd()), unix.LOCK_EX); err != nil {
+		d.Close()
+		return nil, err
+	}
+	return func() {
+		_ = unix.Flock(int(d.Fd()), unix.LOCK_UN)
+		d.Close()
+	}, nil
 }
 
 // writeLockFileExclusive creates path with O_CREAT|O_EXCL, writes the payload
