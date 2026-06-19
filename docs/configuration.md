@@ -54,13 +54,16 @@ per lock named `<service>[.<name>].lock`) and internal operation locks
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
 stale-reclaim semantics.
 
-If `paths.includes` is omitted, Sermo falls back to `/etc/sermo/services` and
-then `/etc/sermo/apps`. The second path is only a legacy alias for existing
-service documents; put new files under `services/`.
+If `paths.includes` is omitted, Sermo falls back to `services/` and then `apps/`
+next to the loaded `sermo.yml` file. With the standard `/etc/sermo/sermo.yml`
+this means `/etc/sermo/services` and `/etc/sermo/apps`. The second path is only
+a legacy alias for existing service documents; put new files under `services/`.
 
-If `paths.mounts` is omitted, Sermo falls back to `/etc/sermo/mounts`. Mount
-documents are intentionally separate from service documents and watch fragments
-because they are operator actions, not monitored services.
+If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
+`sermo.yml` file. With the standard `/etc/sermo/sermo.yml` this means
+`/etc/sermo/mounts`. Mount documents are intentionally separate from service
+documents and watch fragments because they are operator actions, not monitored
+services.
 
 Use `/run` for runtime paths in Sermo configuration and examples. `/var/run` is
 the historical compatibility alias for `/run`; do not write new `/var/run`
