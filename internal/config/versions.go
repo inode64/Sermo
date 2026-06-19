@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sermo/internal/cfgval"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -107,9 +108,35 @@ func materializedVersionValues(discoverPaths []string, options map[string]any, t
 		}
 	}
 	if len(values) > 0 {
-		sort.Strings(values)
+		sort.Slice(values, func(i, j int) bool { return versionLess(values[i], values[j]) })
 	}
 	return values
+}
+
+// versionLess orders discovered version values numerically by their
+// dot-separated segments, so `8.3` < `8.11` < `10.0` instead of the
+// lexicographic `10.0` < `8.11` < `8.3` that `sort.Strings` would yield.
+// Non-numeric segments (e.g. an `8.3-rc1` suffix) fall back to a string
+// compare, and the empty active-slot value sorts first.
+func versionLess(a, b string) bool {
+	if a == "" || b == "" {
+		return a == "" && b != ""
+	}
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < len(as) && i < len(bs); i++ {
+		an, aerr := strconv.Atoi(as[i])
+		bn, berr := strconv.Atoi(bs[i])
+		if aerr == nil && berr == nil {
+			if an != bn {
+				return an < bn
+			}
+			continue
+		}
+		if as[i] != bs[i] {
+			return as[i] < bs[i]
+		}
+	}
+	return len(as) < len(bs)
 }
 
 type versionDiscovery struct {
