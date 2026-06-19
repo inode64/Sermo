@@ -842,18 +842,19 @@ preflight:
 ```
 
 A daemon template may `uses` a base daemon to inherit its checks, processes and
-rules, while the linked app supplies the version-specific binary. The packaged
-`php-fpm%v` daemon builds on `php-fpm` and links `php-fpm${version}`:
+rules, while a linked app supplies the instance- or version-specific binary. The
+packaged `nebula-%i` daemon builds on the base `nebula` daemon and links the
+`nebula-${instance}` app:
 
 ```yaml
 kind: daemon
-name: php-fpm%v
-uses: php-fpm
-display_name: "PHP-FPM ${version}"
-apps: ["php-fpm${version}"]
+name: nebula-%i
+uses: nebula
+display_name: "Nebula ${instance}"
+apps: ["nebula-${instance}"]
 ```
 
-A service then targets a concrete version, e.g. `uses: php-fpm-8.3`.
+A service then targets a concrete instance, e.g. `uses: nebula-vpn0`.
 
 ## Service unit
 
