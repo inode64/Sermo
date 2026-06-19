@@ -408,6 +408,19 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		}
 	}
 
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "rpc-mountd")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(rpc-mountd): %v", errs)
+	}
+	systemdCandidates, trust := ServiceCandidates(resolved.Tree, "systemd", "rpc-mountd")
+	if trust {
+		t.Fatalf("ServiceCandidates(rpc-mountd systemd) trust = true, want explicit aliases")
+	}
+	wantSystemdCandidates := []string{"nfs-mountd", "rpc-mountd"}
+	if strings.Join(systemdCandidates, ",") != strings.Join(wantSystemdCandidates, ",") {
+		t.Fatalf("ServiceCandidates(rpc-mountd systemd) = %v, want %v", systemdCandidates, wantSystemdCandidates)
+	}
+
 	legacy := map[string]string{
 		"avahi-daemon":    "avahi",
 		"cups-config":     "cups",

@@ -1039,14 +1039,6 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
-	if status, code, ok := a.configuredServiceStatus(ctx, opts); ok {
-		return status, code
-	}
-	if a.serviceNameRejectedByConfig(opts) {
-		a.reportError(opts, fmt.Sprintf("unknown service %q", opts.service()))
-		return servicemgr.ServiceStatus{}, exitRuntimeError
-	}
-
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
@@ -1059,62 +1051,34 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 
-	status, err := manager.Status(ctx, opts.service())
+	target := control.Target{Unit: opts.service(), Backend: detection.Backend, Manager: manager}
+	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
+		if _, ok := cfg.Services[opts.service()]; ok {
+			resolved, errs := cfg.Resolve(opts.service())
+			if len(errs) > 0 {
+				a.reportError(opts, fmt.Sprintf("config resolve failed: %v", errs[0]))
+				return servicemgr.ServiceStatus{}, exitRuntimeError
+			}
+			resolver := servicemgr.NewUnitResolver()
+			resolver.Runner = a.Runner
+			resolver.Manager = manager
+			target, err = control.Resolve(ctx, opts.service(), resolved.Tree, detection.Backend, manager, resolver)
+			if err != nil {
+				a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
+				return servicemgr.ServiceStatus{}, exitRuntimeError
+			}
+		} else if len(cfg.Services) > 0 {
+			a.reportError(opts, fmt.Sprintf("unknown service %q", opts.service()))
+			return servicemgr.ServiceStatus{}, exitRuntimeError
+		}
+	}
+
+	status, err := target.Manager.Status(ctx, target.Unit)
 	if err != nil {
 		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 	return status, exitSuccess
-}
-
-func (a App) serviceNameRejectedByConfig(opts options) bool {
-	cfg, err := a.LoadConfig(opts.globalPath())
-	if err != nil {
-		return false
-	}
-	_, ok := cfg.Services[opts.service()]
-	return len(cfg.Services) > 0 && !ok
-}
-
-func (a App) configuredServiceStatus(ctx context.Context, opts options) (servicemgr.ServiceStatus, int, bool) {
-	cfg, err := a.LoadConfig(opts.globalPath())
-	if err != nil {
-		return servicemgr.ServiceStatus{}, 0, false
-	}
-	if _, ok := cfg.Services[opts.service()]; !ok {
-		return servicemgr.ServiceStatus{}, 0, false
-	}
-	resolved, errs := cfg.Resolve(opts.service())
-	if len(errs) > 0 {
-		a.reportError(opts, fmt.Sprintf("config resolve failed: %v", errs[0]))
-		return servicemgr.ServiceStatus{}, exitRuntimeError, true
-	}
-	if _, controlled := resolved.Tree["control"]; !controlled {
-		return servicemgr.ServiceStatus{}, 0, false
-	}
-	detection, err := a.Detector.Detect(ctx, opts.backend)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("backend detection failed: %v", err))
-		return servicemgr.ServiceStatus{}, exitRuntimeError, true
-	}
-	manager, err := a.NewManager(detection.Backend)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("service manager unavailable: %v", err))
-		return servicemgr.ServiceStatus{}, exitRuntimeError, true
-	}
-	resolver := servicemgr.NewUnitResolver()
-	resolver.Manager = manager
-	target, err := control.Resolve(ctx, opts.service(), resolved.Tree, detection.Backend, manager, resolver)
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
-		return servicemgr.ServiceStatus{}, exitRuntimeError, true
-	}
-	status, err := target.Manager.Status(ctx, opts.service())
-	if err != nil {
-		a.reportError(opts, fmt.Sprintf("status query failed: %v", err))
-		return servicemgr.ServiceStatus{}, exitRuntimeError, true
-	}
-	return status, exitSuccess, true
 }
 
 func (a App) reportError(opts options, msg string) {

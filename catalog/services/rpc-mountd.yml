@@ -2,12 +2,11 @@ kind: daemon
 name: rpc-mountd
 display_name: "NFS Mount Daemon"
 category: storage
-description: "RPC.mountd"
+description: "RPC.mountd. The mountd RPC port is commonly dynamic, so the standalone daemon monitors init state; the fixed-port mountd probe can be added per service when the host pins a port."
 service:
-  systemd: [rpc-mountd, nfs-mountd]
+  systemd: [nfs-mountd, rpc-mountd]
   openrc: [rpc-mountd, nfs-mountd]
 apps: [rpc-mountd]
 
 checks:
   service: { type: service, expect: active }
-  mountd: { type: mountd, timeout: 3s }
