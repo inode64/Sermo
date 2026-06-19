@@ -31,7 +31,7 @@ sermoctl is-active SERVICE
 sermoctl start SERVICE [--no-cascade]
 sermoctl stop SERVICE [--no-cascade]
 sermoctl restart SERVICE [--no-cascade]
-sermoctl resume SERVICE [--no-cascade]
+sermoctl resume SERVICE
 sermoctl reload SERVICE
 
 sermoctl mount TARGET                 # TARGET is a configured mount name or absolute path
