@@ -809,6 +809,14 @@ rules:
     type: remediation
     if: { changed: { library: demo-lib } }    # library resolves to its binary path
     then: { action: restart }
+  reload-on-secret-change:
+    type: remediation
+    if: { changed: { path: /etc/demo/secrets.env } }  # direct path form (library: desugars to this)
+    then: { action: reload }
+  resume-after-maintenance:
+    type: remediation
+    if: { file: { path: /run/demo/maintenance.flag, exists: false } }
+    then: { action: resume }                  # un-pause a service the engine paused
 
 ---
 # ---------------------------------------------------------------------------
@@ -884,6 +892,7 @@ checks:
 rules:
   restart-if-http-failed:       # override one inherited rule field
     for: { cycles: 5 }
+  stop-if-process-gone: { enabled: false }   # disable an inherited rule
 
 ---
 # ---------------------------------------------------------------------------
