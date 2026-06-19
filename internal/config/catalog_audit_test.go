@@ -762,6 +762,20 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			wantTool:     []string{"/usr/bin/cloudflared"},
 			wantContains: []string{"tunnel", "validate"},
 		},
+		{
+			service:      "mysql",
+			appToolCheck: "mysql-binary",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/sbin/mysqld", "/usr/bin/mysqld"},
+			wantContains: []string{"--defaults-file=", "--validate-config"},
+		},
+		{
+			service:      "mariadb",
+			appToolCheck: "mariadb-binary",
+			toolArgIndex: 0,
+			wantTool:     []string{"/usr/sbin/mariadbd", "/usr/bin/mariadbd"},
+			wantContains: []string{"--defaults-file=", "--help", "--verbose"},
+		},
 	}
 
 	for _, tc := range tests {
