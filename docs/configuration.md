@@ -907,7 +907,11 @@ UI, and the `hook` still runs each cycle). When the watch clears and later fires
 again, the next episode notifies afresh. To get a periodic **reminder** while a
 watch stays firing, set `then.notify_interval` to a positive duration: the
 notification is re-sent once that interval elapses. It only affects delivery, so
-it requires `notify` targets.
+it requires `notify` targets. Both the edge-triggered default and
+`notify_interval` apply to the standard watch types (`storage`/`disk`, the
+single-shot service checks, and the `net`/`icmp`/`swap` metric watches). The
+`file` and `process` watches have their own notification model — one event per
+changed path or matching pid — and ignore `notify_interval`.
 
 ```yaml
 watches:
