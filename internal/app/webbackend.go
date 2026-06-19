@@ -1850,7 +1850,7 @@ func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Applicatio
 		return apps
 	}
 	out := slices.Clone(apps)
-	now := time.Now()
+	now := b.webNow()
 	for i := range out {
 		if b.entries[out[i].Name] != nil {
 			out[i].SLA = b.serviceSLAWindows(out[i].Name, now)
