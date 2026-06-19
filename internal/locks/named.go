@@ -110,7 +110,11 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 func (l NamedLocker) path(service, name string) string {
 	file := service
 	if name != "" {
-		file = service + "." + name
+		// Use a separator that validateIdentifier forbids in both a service and a
+		// lock name ('\'), so (service, name) maps to a unique file. A '.'
+		// separator collides: lock name "x" on service "a.b" and a bare lock for a
+		// service literally named "a.b.x" would both resolve to a.b.x.lock.
+		file = service + lockNameSep + name
 	}
 	return filepath.Join(l.Dir, file+lockSuffix)
 }

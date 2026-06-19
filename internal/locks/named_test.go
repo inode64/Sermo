@@ -100,7 +100,7 @@ func TestNamedHoldBlocksSecond(t *testing.T) {
 
 func TestNamedReclaimsExpired(t *testing.T) {
 	l := namedLocker(t.TempDir(), fakeProc{})
-	writeLock(t, l.Dir, "mysql.backup.lock", lockFile{
+	writeLock(t, l.Dir, "mysql\\backup.lock", lockFile{
 		Service: "mysql", Name: "backup", ExpiresAt: fixedNow.Add(-time.Hour), // expired
 	})
 	path, err := l.Pin("mysql", "backup", "again", time.Hour)
@@ -122,7 +122,7 @@ func TestNamedReleaseInactiveRemovesExpiredAndStale(t *testing.T) {
 	}{
 		{
 			name: "expired",
-			file: "mysql.backup.lock",
+			file: "mysql\\backup.lock",
 			payload: lockFile{
 				Service: "mysql", Name: "backup", OwnerPID: 100, OwnerStartTicks: 1,
 				ExpiresAt: fixedNow.Add(-time.Minute),
@@ -162,7 +162,7 @@ func TestNamedReleaseInactiveRemovesExpiredAndStale(t *testing.T) {
 
 func TestNamedReleaseInactiveRefusesActive(t *testing.T) {
 	l := namedLocker(t.TempDir(), fakeProc{alive: map[int]bool{100: true}, ticks: map[int]uint64{100: 1}})
-	writeLock(t, l.Dir, "mysql.backup.lock", lockFile{
+	writeLock(t, l.Dir, "mysql\\backup.lock", lockFile{
 		Service: "mysql", Name: "backup", OwnerPID: 100, OwnerStartTicks: 1,
 		ExpiresAt: fixedNow.Add(time.Hour),
 	})
@@ -174,7 +174,7 @@ func TestNamedReleaseInactiveRefusesActive(t *testing.T) {
 	if lk.State != StateActive {
 		t.Fatalf("lock state = %q, want active", lk.State)
 	}
-	if _, statErr := os.Stat(filepath.Join(l.Dir, "mysql.backup.lock")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(l.Dir, "mysql\\backup.lock")); statErr != nil {
 		t.Fatalf("active lock should remain: %v", statErr)
 	}
 }
