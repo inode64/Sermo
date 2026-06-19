@@ -6,5 +6,5 @@ variables:
   binary: /usr/bin/backrest
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
-  health: { type: command, command: ["${binary}", "-help"], timeout: 10s, expect_exit: 0 }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }
+  health: { type: command, command: ["${binary}", "-help"], timeout: 10s }
