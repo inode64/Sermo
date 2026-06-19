@@ -5,5 +5,18 @@ category: messaging
 service: fetchmail
 apps: [fetchmail]
 
+variables:
+  config:
+    - /etc/fetchmailrc
+    - /etc/fetchmail/fetchmailrc
+
+config_files: ["${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" --configdump -f \"$1\"", "${fetchmail_binary}", "${config}"]
+    timeout: 30s
+
 checks:
   service: { type: service, expect: active }
