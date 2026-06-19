@@ -206,6 +206,49 @@ func TestServiceMemoryAndCount(t *testing.T) {
 	}
 }
 
+func TestServiceGaugesNotReadyWhenAllReadsFail(t *testing.T) {
+	// PIDs were discovered but every /proc read fails (they exited or are
+	// unreadable). The summed gauges must be not-ready rather than a measured 0,
+	// so a `fds < N` / `threads < N` threshold does not fire spuriously.
+	reader := fakeReader{hz: 100, ncpu: 1} // all maps nil -> every read returns ok=false
+	c := New(reader)
+	snap := c.SampleService("svc", []int{10, 20})
+
+	for _, name := range []string{"memory", "fds", "threads", "process_count"} {
+		if snap[name].Ready {
+			t.Errorf("%s must not be ready when no process could be read: %+v", name, snap[name])
+		}
+	}
+	if snap["process_count"].Absolute != 0 {
+		t.Fatalf("process_count = %v, want 0 found", snap["process_count"].Absolute)
+	}
+}
+
+func TestServiceGaugesReadyZeroOnEmptyTree(t *testing.T) {
+	// An empty process set is a genuine zero (the service has no processes), so
+	// the gauges are ready, allowing a `process_count < 1` alert to fire.
+	c := New(fakeReader{hz: 100, ncpu: 1})
+	snap := c.SampleService("svc", nil)
+
+	if !snap["process_count"].Ready || snap["process_count"].Absolute != 0 {
+		t.Fatalf("process_count on empty tree = %+v, want ready 0", snap["process_count"])
+	}
+	if !snap["memory"].Ready || snap["memory"].Absolute != 0 {
+		t.Fatalf("memory on empty tree = %+v, want ready 0", snap["memory"])
+	}
+}
+
+func TestServiceProcessCountReflectsAlive(t *testing.T) {
+	// Three PIDs handed in but only two are still readable; process_count must
+	// report the two alive, not the three discovered.
+	reader := fakeReader{rss: map[int]uint64{10: 100, 12: 50}, hz: 100, ncpu: 1}
+	c := New(reader)
+	snap := c.SampleService("svc", []int{10, 11, 12})
+	if !snap["process_count"].Ready || snap["process_count"].Absolute != 2 {
+		t.Fatalf("process_count = %+v, want ready 2 (11 exited)", snap["process_count"])
+	}
+}
+
 func TestServiceSwapAggregatesOverTree(t *testing.T) {
 	// Per-service swap must sum the parent and all children (like RSS), and report
 	// its share of total swap. swapReader supplies the optional TotalSwap.
