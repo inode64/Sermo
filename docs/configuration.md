@@ -619,7 +619,7 @@ Web-triggered monitor changes are recorded with source `web` in the state store
 `monitor_changed_at` so a running/paused/stopped unmonitored service or an
 unmonitorized watch shows who paused it and when. Host watches do not have
 service-manager `running` or `stopped` states; the dashboard filters them as
-`ok`, `failed`, `monitorized`, `unmonitorized` or `disabled`.
+`ok`, `failed`, `unmonitorized` or `disabled`.
 Operations take the per-service operation lock, so they never overlap a worker's
 action on the same service.
 
