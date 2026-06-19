@@ -543,7 +543,10 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 			primary, primaryErr = out, err
 			continue
 		}
-		if err == nil && app.CascadeTargetFailed(out) {
+		// A cascade target counts as failed both when its operation returns an
+		// error and when it completes with a failed result; either way the
+		// primary must be downgraded so the exit code reflects the failure.
+		if err != nil || app.CascadeTargetFailed(out) {
 			cascadeFailed = true
 		}
 		if err != nil {
