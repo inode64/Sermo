@@ -2,9 +2,11 @@ package servicemgr
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -381,8 +383,12 @@ func firstResolvedArg(text string, vars map[string]string, exprs ...*regexp.Rege
 }
 
 func suffixVar(vars map[string]string, suffix string) string {
-	for name, value := range vars {
-		if strings.HasSuffix(name, suffix) && value != "" {
+	// Iterate keys in sorted order: map ranging is randomized, so when more than
+	// one variable ends with suffix (e.g. several *_PIDFILE) the chosen value
+	// would otherwise vary between runs and a daemon could be matched to the
+	// wrong pidfile non-reproducibly.
+	for _, name := range slices.Sorted(maps.Keys(vars)) {
+		if value := vars[name]; strings.HasSuffix(name, suffix) && value != "" {
 			return value
 		}
 	}
