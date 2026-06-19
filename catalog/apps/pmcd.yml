@@ -3,4 +3,7 @@ name: pmcd
 display_name: "PCP Collector (pmcd)"
 category: observability
 # pmcd ships under PCP's libexec tree; override if your distribution differs.
-binary: /usr/libexec/pcp/bin/pmcd
+variables:
+  binary: /usr/libexec/pcp/bin/pmcd
+preflight:
+  binary: { type: binary, path: "${binary}" }

@@ -2,6 +2,8 @@ kind: app
 name: salt
 display_name: "Salt"
 category: system
-binary: "/usr/bin/salt"
+variables:
+  binary: "/usr/bin/salt"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

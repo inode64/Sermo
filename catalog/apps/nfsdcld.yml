@@ -2,7 +2,10 @@ kind: app
 name: nfsdcld
 display_name: "NFS client tracking daemon"
 category: storage
-binary:
-  - /usr/sbin/nfsdcld
-  - /usr/bin/nfsdcld
 version_from: rpc-mountd
+variables:
+  binary:
+    - /usr/sbin/nfsdcld
+    - /usr/bin/nfsdcld
+preflight:
+  binary: { type: binary, path: "${binary}" }

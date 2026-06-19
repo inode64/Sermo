@@ -3,6 +3,8 @@ name: freshclam
 display_name: "FreshClam"
 category: security
 description: "ClamAV virus database updater"
-binary: "/usr/bin/freshclam"
+variables:
+  binary: "/usr/bin/freshclam"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

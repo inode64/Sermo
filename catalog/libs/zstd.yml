@@ -2,4 +2,7 @@ kind: lib
 name: zstd
 display_name: "Zstandard"
 description: "Zstandard compression library; a change triggers a restart of dependent services"
-binary: "/usr/lib64/libzstd.so.1"
+variables:
+  binary: "/usr/lib64/libzstd.so.1"
+preflight:
+  file: { type: file, path: "${binary}" }

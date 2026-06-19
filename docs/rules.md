@@ -18,8 +18,10 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `config`      | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
 | `service`     | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
+| `file`        | a path exists and is a regular file                                |
 | `binary`      | a path exists and is executable                                    |
 | `pidfile`     | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
+| `socket`      | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
 | `libraries`   | all DT_NEEDED shared libraries of the binary can be resolved (native debug/elf, no ldd) |
 | `process`     | a process matching `exe`/`user` is in `state` (running/zombie/absent)|
 | `metric`      | a sampled metric satisfies `op value` (see Metrics)                |
@@ -633,9 +635,10 @@ Protocols, in the order of the table above:
   probe asks the first `nameserver` of `/etc/resolv.conf` — the server the
   system would ask first; with pppd's `usepeerdns`, the provider's
   resolver, which is how the `pppd` catalog daemon verifies resolution through
-  the uplink. If that resolver is loopback (`127.0.0.0/8` or `::1`), an
-  `interface` pin is ignored for the DNS packet because the local resolver must
-  be reached through loopback. RFC 1035.
+  the uplink. If that resolver is local to the host (loopback such as
+  `127.0.0.0/8`/`::1`, or any address assigned to a local interface), an
+  `interface` pin is ignored for the DNS packet because the resolver must be
+  reached locally. RFC 1035.
 - `ntp` — default port 123 (UDP). No auth. Sends a client request and verifies the
   server answers in **server mode** with a synchronized **stratum (1–15)**; a
   kiss-o'-death (stratum 0) or unsynchronized (stratum 16) reply fails. Result
@@ -1364,9 +1367,9 @@ The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`binary`, `pidfile`, `process`, `libraries`, `config`, `autofs`, `route`,
-`firewall_rules`, `sqlite`/`sqlite3`, `websocket`/`ws`, and connection-protocol
-checks such as `mysql`/`smtp`) are the
+`file`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
+`autofs`, `route`, `firewall_rules`, `sqlite`/`sqlite3`, `websocket`/`ws`, and
+connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 

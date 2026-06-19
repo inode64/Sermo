@@ -372,11 +372,47 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 	if res := (fileExistsCheck{base: base{name: "f"}, path: filepath.Join(dir, "absent")}).Run(context.Background()); res.OK {
 		t.Errorf("absent file should fail")
 	}
+	if res := (fileCheck{base: base{name: "file"}, path: flag}).Run(context.Background()); !res.OK {
+		t.Errorf("regular file should pass")
+	}
+	if res := (fileCheck{base: base{name: "file"}, path: dir}).Run(context.Background()); res.OK {
+		t.Errorf("directory should fail a regular file check")
+	}
 	if res := (binaryCheck{base: base{name: "b"}, path: bin}).Run(context.Background()); !res.OK {
 		t.Errorf("executable should pass")
 	}
 	if res := (binaryCheck{base: base{name: "b"}, path: flag}).Run(context.Background()); res.OK {
 		t.Errorf("non-executable file should fail")
+	}
+
+	sock := filepath.Join(dir, "svc.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if res := (socketCheck{base: base{name: "sock"}, paths: []string{filepath.Join(dir, "absent.sock"), sock}}).Run(context.Background()); !res.OK {
+		t.Fatalf("socket candidate should pass: %s", res.Message)
+	} else if res.Data["path"] != sock {
+		t.Fatalf("socket data path = %v, want %s", res.Data["path"], sock)
+	}
+	if res := (socketCheck{base: base{name: "sock"}, paths: []string{flag}}).Run(context.Background()); res.OK {
+		t.Errorf("regular file should fail a socket check")
+	}
+}
+
+func TestBuildFileAndSocketChecksNeedPath(t *testing.T) {
+	if _, warn := buildFileCheck(base{}, map[string]any{}); warn == "" {
+		t.Fatal("file check without a path must warn")
+	}
+	if c, warn := buildFileCheck(base{}, map[string]any{"path": "/etc/passwd"}); warn != "" || c == nil {
+		t.Fatalf("valid file check should build: warn=%q", warn)
+	}
+	if _, warn := buildSocketCheck(base{}, map[string]any{}); warn == "" {
+		t.Fatal("socket check without a path must warn")
+	}
+	if c, warn := buildSocketCheck(base{}, map[string]any{"path": []any{"/run/a.sock", "/run/b.sock"}}); warn != "" || c == nil {
+		t.Fatalf("valid socket candidate list should build: warn=%q", warn)
 	}
 }
 

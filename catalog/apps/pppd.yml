@@ -2,6 +2,8 @@ kind: app
 name: pppd
 display_name: "PPP Daemon"
 category: network
-binary: "/usr/bin/pppd"
+variables:
+  binary: "/usr/bin/pppd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s, optional: true }

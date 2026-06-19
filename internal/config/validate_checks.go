@@ -568,6 +568,55 @@ func validateAnalyze(path string, entry map[string]any, add addFunc) {
 	}
 }
 
+func validateCommandExport(path string, entry map[string]any, add addFunc) {
+	raw, present := entry["export"]
+	if !present {
+		return
+	}
+	exports, ok := raw.(map[string]any)
+	if !ok {
+		add("%s.export must be a mapping of variable name -> export rule", path)
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(exports)) {
+		if !validVariableName(name) {
+			add("%s.export variable %q must be a simple variable name", path, name)
+		}
+		switch spec := exports[name].(type) {
+		case nil:
+		case map[string]any:
+			if from := cfgval.String(spec["from"]); from != "" && from != "stdout" && from != "stderr" {
+				add("%s.export.%s.from must be stdout or stderr", path, name)
+			}
+			if v, present := spec["trim"]; present {
+				if _, ok := v.(bool); !ok {
+					add("%s.export.%s.trim must be a boolean", path, name)
+				}
+			}
+			if rawRegex, present := spec["regex"]; present {
+				if _, err := regexp.Compile(cfgval.String(rawRegex)); err != nil {
+					add("%s.export.%s.regex is invalid: %v", path, name, err)
+				}
+			}
+		default:
+			add("%s.export.%s must be a mapping", path, name)
+		}
+	}
+}
+
+func validVariableName(name string) bool {
+	if name == "" || strings.Contains(name, ".") {
+		return false
+	}
+	for _, r := range name {
+		if r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
 func validateSingleShotCheckFields(path, typ string, entry map[string]any, locksDir string, add addFunc) bool {
 	if !checks.IsSingleShotType(typ) {
 		// A connection-protocol check (mysql, …): the type names a protocol in
@@ -610,6 +659,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
 		validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
 		validateAnalyze(path, entry, add)
+		validateCommandExport(path, entry, add)
 	case "service":
 		st := cfgval.String(entry["expect"])
 		if st == "" {
@@ -635,6 +685,10 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		} else if underDir(p, locksDir) {
 			add("%s file_exists must not point under the runtime lock dir %s", path, locksDir)
 		}
+	case "file":
+		if cfgval.String(entry["path"]) == "" {
+			add("%s.path is required for a file check", path)
+		}
 	case "binary":
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a binary check", path)
@@ -642,6 +696,10 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "pidfile":
 		if len(cfgval.StringList(entry["path"])) == 0 {
 			add("%s.path is required for a pidfile check", path)
+		}
+	case "socket":
+		if len(cfgval.StringList(entry["path"])) == 0 {
+			add("%s.path is required for a socket check", path)
 		}
 	case "libraries":
 		if cfgval.String(entry["binary"]) == "" {

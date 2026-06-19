@@ -1036,50 +1036,58 @@ func TestValidateAppVersionFrom(t *testing.T) {
 		"catalog/apps/consumer.yml": `
 kind: app
 name: consumer
-binary: /usr/bin/consumer
+variables:
+  binary: /usr/bin/consumer
 version_from: provider
 `,
 		"catalog/apps/provider.yml": `
 kind: app
 name: provider
-binary: /usr/bin/provider
+variables:
+  binary: /usr/bin/provider
 preflight:
   version: { type: command, command: ["/usr/bin/provider", "--version"] }
 `,
 		"catalog/apps/missing.yml": `
 kind: app
 name: missing
-binary: /usr/bin/missing
+variables:
+  binary: /usr/bin/missing
 version_from: ghost
 `,
 		"catalog/apps/self.yml": `
 kind: app
 name: self
-binary: /usr/bin/self
+variables:
+  binary: /usr/bin/self
 version_from: self
 `,
 		"catalog/apps/a.yml": `
 kind: app
 name: a
-binary: /usr/bin/a
+variables:
+  binary: /usr/bin/a
 version_from: b
 `,
 		"catalog/apps/b.yml": `
 kind: app
 name: b
-binary: /usr/bin/b
+variables:
+  binary: /usr/bin/b
 version_from: a
 `,
 		"catalog/apps/bad-name.yml": `
 kind: app
 name: bad-name
-binary: /usr/bin/bad-name
+variables:
+  binary: /usr/bin/bad-name
 version_from: ../provider
 `,
 		"catalog/apps/bad-type.yml": `
 kind: app
 name: bad-type
-binary: /usr/bin/bad-type
+variables:
+  binary: /usr/bin/bad-type
 version_from: [provider]
 `,
 		"catalog/not-app.yml": `
@@ -1299,6 +1307,18 @@ checks:
   pid: { type: pidfile }
 `)
 	mustHave(t, issues, "path is required for a pidfile check")
+}
+
+func TestValidateSocketCheckRequiresPath(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: { name: x }
+policy: { cooldown: 5m }
+checks:
+  sock: { type: socket }
+`)
+	mustHave(t, issues, "path is required for a socket check")
 }
 
 func TestValidatePercentBound(t *testing.T) {

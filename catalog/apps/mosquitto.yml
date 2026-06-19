@@ -2,8 +2,10 @@ kind: app
 name: mosquitto
 display_name: "Eclipse Mosquitto"
 category: messaging
-binary: /usr/bin/mosquitto
+variables:
+  binary: /usr/bin/mosquitto
 preflight:
+  binary: { type: binary, path: "${binary}" }
   # mosquitto has no --version flag; -h prints the usage with
   # "mosquitto version 2.0.22" as its first line and exits 1.
   version: { type: command, command: ["${binary}", "-h"], timeout: 10s }

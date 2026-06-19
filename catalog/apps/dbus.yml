@@ -3,6 +3,8 @@ name: dbus
 catalog_aliases: [dbus-daemon]
 display_name: "D-Bus"
 category: system
-binary: "/usr/bin/dbus-daemon"
+variables:
+  binary: "/usr/bin/dbus-daemon"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

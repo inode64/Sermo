@@ -2,6 +2,8 @@ kind: app
 name: java
 display_name: "Java"
 category: runtime
-binary: "/usr/bin/java"
+variables:
+  binary: "/usr/bin/java"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-version"], timeout: 10s }

@@ -2,4 +2,7 @@ kind: lib
 name: sqlite3
 display_name: "SQLite library"
 description: "SQLite embedded database library; a change triggers a restart of dependent services"
-binary: "/usr/lib64/libsqlite3.so.0"
+variables:
+  binary: "/usr/lib64/libsqlite3.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

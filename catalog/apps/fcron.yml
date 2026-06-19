@@ -2,6 +2,8 @@ kind: app
 name: fcron
 display_name: "Fcron"
 category: system
-binary: "/usr/libexec/fcron"
+variables:
+  binary: "/usr/libexec/fcron"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

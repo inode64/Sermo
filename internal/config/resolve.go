@@ -28,8 +28,9 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 
-	vars, errs := c.expansionVariables(merged, name)
-	errs = append(errs, expandBinary(merged, cfgval.String(merged["kind"]))...)
+	errs := prepareExpansionInputs(merged)
+	vars, varErrs := c.expansionVariables(merged, name)
+	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandRestartOnChange(expanded)...)
@@ -38,6 +39,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, c.expandApps(expanded)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
+	errs = append(errs, expandSocket(expanded)...)
 
 	return Resolved{Name: name, Tree: expanded}, errs
 }
@@ -78,50 +80,6 @@ func cleanMountPath(path string) string {
 		return ""
 	}
 	return filepath.Clean(path)
-}
-
-// expandBinary desugars a top-level `binary` declaration into the legacy
-// ${binary} variable plus a required binary preflight check for executable
-// service/app binaries. Library catalog documents only use ${binary} as the
-// watched file path, so they do not get an executable preflight.
-func expandBinary(tree map[string]any, kind string) []string {
-	raw, present := tree["binary"]
-	if !present {
-		return nil
-	}
-	candidates := cfgval.StringList(raw)
-	if len(candidates) == 0 {
-		delete(tree, "binary")
-		return []string{"binary must be a non-empty path string or list"}
-	}
-	binary := topLevelBinaryForKind(tree, kind)
-	delete(tree, "binary")
-	if binary == "" {
-		return []string{"binary must contain at least one non-empty path"}
-	}
-
-	vars, _ := tree["variables"].(map[string]any)
-	if vars == nil {
-		vars = map[string]any{}
-	}
-	vars["binary"] = binary
-	tree["variables"] = vars
-
-	if kind == kindLibrary {
-		return nil
-	}
-
-	preflight, _ := tree["preflight"].(map[string]any)
-	if preflight == nil {
-		preflight = map[string]any{}
-	}
-	if _, exists := preflight["binary"]; !exists {
-		preflight["binary"] = map[string]any{"type": "binary", "path": "${binary}"}
-	}
-	if len(preflight) > 0 {
-		tree["preflight"] = preflight
-	}
-	return nil
 }
 
 // expandPidfile desugars a top-level `pidfile: <path>` or candidate list into
@@ -175,6 +133,52 @@ func expandPidfile(tree map[string]any) []string {
 			"path":     pathValue,
 			"requires": []any{"service"},
 		}
+	}
+	tree["checks"] = checksMap
+	return errs
+}
+
+// expandSocket desugars a top-level `socket:` declaration into a gated health
+// check. A service-created runtime socket should not block start/restart
+// preflight: it is checked while the service is active, like pidfiles.
+func expandSocket(tree map[string]any) []string {
+	raw, present := tree["socket"]
+	if !present {
+		return nil
+	}
+	delete(tree, "socket")
+
+	pathRaw := raw
+	optional := false
+	if m, ok := raw.(map[string]any); ok {
+		pathRaw = m["path"]
+		optional = cfgval.Bool(m["optional"])
+	}
+	paths := cfgval.StringList(pathRaw)
+	if len(paths) == 0 {
+		return []string{"socket must be a non-empty path string, list or {path: ...} mapping"}
+	}
+	var errs []string
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			errs = append(errs, fmt.Sprintf("socket path %q must be absolute", path))
+		}
+	}
+
+	checksMap, _ := tree["checks"].(map[string]any)
+	if checksMap == nil {
+		checksMap = map[string]any{}
+	}
+	if _, exists := checksMap["socket"]; !exists {
+		entry := map[string]any{
+			"type":     "socket",
+			"path":     pidfilePathValue(paths),
+			"requires": []any{"service"},
+		}
+		if optional {
+			entry["optional"] = true
+		}
+		checksMap["socket"] = entry
 	}
 	tree["checks"] = checksMap
 	return errs
@@ -444,7 +448,9 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 		if !ok {
 			continue // expandApps reports the missing app in the usual place.
 		}
-		appVars := collectVariablesForKind(stripMeta(doc.Body), doc.Kind)
+		body := stripMeta(doc.Body)
+		errs = append(errs, prepareExpansionInputs(body)...)
+		appVars := collectVariablesForKind(body, doc.Kind)
 		// Iterate variable names in sorted order so conflict errors surface in a
 		// stable, reproducible order (map ranging is randomized).
 		varNames := slices.Sorted(maps.Keys(appVars))
@@ -751,13 +757,15 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 // detect a cyclic apps: linkage instead of recursing into a stack overflow.
 func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
-	vars, errs := c.expansionVariablesForKind(body, name, doc.Kind)
-	errs = append(errs, expandBinary(body, doc.Kind)...)
+	errs := prepareExpansionInputs(body)
+	vars, varErrs := c.expansionVariablesForKind(body, name, doc.Kind)
+	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(body, vars)
 	errs = append(errs, expErrs...)
 	errs = append(errs, c.expandAppsChain(expanded, appChain)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
+	errs = append(errs, expandSocket(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 

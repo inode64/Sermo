@@ -2,10 +2,12 @@ kind: app
 name: wal-g-mysql
 display_name: "WAL-G MySQL"
 category: database
-binary:
-  - "/usr/bin/wal-g-mysql"
-  - "/usr/local/bin/wal-g-mysql"
-  - "/usr/bin/wal-g"
-  - "/usr/local/bin/wal-g"
+variables:
+  binary:
+    - "/usr/bin/wal-g-mysql"
+    - "/usr/local/bin/wal-g-mysql"
+    - "/usr/bin/wal-g"
+    - "/usr/local/bin/wal-g"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

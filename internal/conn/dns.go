@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
 )
@@ -32,6 +33,23 @@ func (dnsProtocol) RequiresUser() bool { return false }
 // resolvConfPath is the resolver configuration consulted by `resolvconf:
 // true`; a variable so tests can point it at a fixture.
 var resolvConfPath = "/etc/resolv.conf"
+
+// dnsInterfaceAddrs is a seam for tests; production uses the host's assigned
+// interface addresses to avoid binding local-resolver probes to an egress NIC.
+var dnsInterfaceAddrs = net.InterfaceAddrs
+
+const dnsLocalRouteTimeout = 100 * time.Millisecond
+
+var dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), dnsLocalRouteTimeout)
+	defer cancel()
+	c, err := (&net.Dialer{}).DialContext(ctx, "udp", net.JoinHostPort(host, "53"))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = c.Close() }()
+	return c.LocalAddr(), c.RemoteAddr(), nil
+}
 
 func (dnsProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	host := cfg.Host
@@ -111,11 +129,50 @@ func firstNameserver(path string) (string, error) {
 }
 
 func dnsProbeInterface(host, iface string) string {
+	if iface == "" {
+		return ""
+	}
 	ip := net.ParseIP(strings.Trim(host, "[]"))
-	if ip != nil && ip.IsLoopback() {
+	if ip != nil && (ip.IsLoopback() || dnsNameserverIsLocal(ip) || dnsNameserverRoutesToSelf(ip)) {
 		return ""
 	}
 	return iface
+}
+
+func dnsNameserverIsLocal(ip net.IP) bool {
+	addrs, err := dnsInterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, addr := range addrs {
+		switch a := addr.(type) {
+		case *net.IPNet:
+			if a.IP.Equal(ip) {
+				return true
+			}
+		case *net.IPAddr:
+			if a.IP.Equal(ip) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func dnsNameserverRoutesToSelf(ip net.IP) bool {
+	local, remote, err := dnsRouteAddrs(ip.String())
+	if err != nil {
+		return false
+	}
+	localUDP, ok := local.(*net.UDPAddr)
+	if !ok {
+		return false
+	}
+	remoteUDP, ok := remote.(*net.UDPAddr)
+	if !ok {
+		return false
+	}
+	return localUDP.IP.Equal(remoteUDP.IP)
 }
 
 // dnsResponseOK reports whether an rcode means the server answered healthily: a

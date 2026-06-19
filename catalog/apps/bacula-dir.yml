@@ -2,6 +2,8 @@ kind: app
 name: bacula-dir
 display_name: "Bacula Director"
 category: storage
-binary: "/usr/bin/bacula-dir"
+variables:
+  binary: "/usr/bin/bacula-dir"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

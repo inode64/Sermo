@@ -2,8 +2,10 @@ kind: app
 name: apache
 display_name: "Apache HTTP Server"
 category: web
-binary: /usr/bin/apache2
+variables:
+  binary: /usr/bin/apache2
 preflight:
+  binary: { type: binary, path: "${binary}" }
   # Use the configured binary directly (httpd/apache2 -v), not `apachectl`: the
   # control wrapper is named differently per distro (apachectl vs apache2ctl) and
   # may be absent, whereas `${binary} -v` prints "Server version: Apache/X.Y.Z"

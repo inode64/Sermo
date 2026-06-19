@@ -278,10 +278,14 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildServiceCheck(b, entry, deps)
 	case "file_exists":
 		return buildFileExistsCheck(b, entry)
+	case "file":
+		return buildFileCheck(b, entry)
 	case "binary":
 		return buildBinaryCheck(b, entry)
 	case "pidfile":
 		return buildPidfileCheck(b, entry, deps)
+	case "socket":
+		return buildSocketCheck(b, entry)
 	case "libraries":
 		return buildLibrariesCheck(b, entry)
 	case "metric":
@@ -566,6 +570,15 @@ func buildFileExistsCheck(b base, entry map[string]any) (Check, string) {
 	return fileExistsCheck{base: b, path: path}, ""
 }
 
+// buildFileCheck builds a check that a path exists and is a regular file.
+func buildFileCheck(b base, entry map[string]any) (Check, string) {
+	path := cfgval.AsString(entry["path"])
+	if path == "" {
+		return nil, "file check requires a path"
+	}
+	return fileCheck{base: b, path: path}, ""
+}
+
 // buildPidfileCheck builds a check that a pidfile exists and references a running
 // process. Gate it with `requires: [service]` so it only errors while the service
 // is active.
@@ -575,6 +588,15 @@ func buildPidfileCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 		return nil, "pidfile check requires a path"
 	}
 	return pidfileCheck{base: b, paths: paths, fallbackPIDs: deps.PidfileFallbackPIDs}, ""
+}
+
+// buildSocketCheck builds a check that one Unix socket candidate exists.
+func buildSocketCheck(b base, entry map[string]any) (Check, string) {
+	paths := cfgval.StringList(entry["path"])
+	if len(paths) == 0 {
+		return nil, "socket check requires a path"
+	}
+	return socketCheck{base: b, paths: paths}, ""
 }
 
 // buildBinaryCheck builds a check on a binary's fingerprint.

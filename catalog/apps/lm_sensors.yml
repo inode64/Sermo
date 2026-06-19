@@ -3,8 +3,10 @@ name: lm_sensors
 catalog_aliases: [lm-sensors]
 display_name: "lm_sensors"
 category: hardware
-binary:
-  - /usr/bin/sensors
-  - /bin/sensors
+variables:
+  binary:
+    - /usr/bin/sensors
+    - /bin/sensors
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"], timeout: 10s, optional: true }

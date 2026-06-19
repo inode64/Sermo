@@ -2,6 +2,8 @@ kind: app
 name: qemu
 display_name: "QEMU"
 category: virtualization
-binary: "/usr/bin/qemu-system-${arch}"
+variables:
+  binary: "/usr/bin/qemu-system-${arch}"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

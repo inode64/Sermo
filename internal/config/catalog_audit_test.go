@@ -910,7 +910,8 @@ func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 			if !ok {
 				t.Fatalf("app %q not found", tt.name)
 			}
-			if got := cfgval.StringList(doc.Body["binary"]); !slices.Equal(got, tt.binaries) {
+			vars, _ := doc.Body["variables"].(map[string]any)
+			if got := cfgval.StringList(vars["binary"]); !slices.Equal(got, tt.binaries) {
 				t.Fatalf("%s binary candidates = %v, want %v", tt.name, got, tt.binaries)
 			}
 			resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name)

@@ -2,6 +2,8 @@ kind: app
 name: rasdaemon
 display_name: "RAS daemon"
 category: hardware
-binary: /usr/bin/rasdaemon
+variables:
+  binary: /usr/bin/rasdaemon
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

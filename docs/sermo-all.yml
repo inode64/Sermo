@@ -368,13 +368,13 @@ also_service:                  # auxiliary init units of this same service
 
 apps: [demo-app]               # injects app preflight and exposes ${demo_app_binary}
 
-binary: [/usr/bin/demo, /usr/local/bin/demo] # first executable path becomes ${binary}
-
 variables:                     # flat strings or first-existing path lists
+  binary: [/usr/bin/demo, /usr/local/bin/demo] # preflight.binary selects the executable candidate
   user: demo
   group: demo
   host: 127.0.0.1
   port: 8080
+  socket: /run/demo.sock
   health_path: /health
   data_dir: /var/lib/demo
   plugin_dir: /usr/lib/demo/${arch}     # ${arch} (uname -m): x86_64, aarch64, …
@@ -409,9 +409,14 @@ commands:                      # informational or reserved names such as version
 # a list when a daemon has several distro-specific pidfile candidates.
 pidfile: /run/demo.pid
 
+# socket auto-wires a requires:[service] health check. It may reference a
+# variable and may be optional for socket-activated or distro-specific daemons.
+socket: { path: "${socket}", optional: true }
+
 config_files: [/etc/demo/demo.conf, /etc/demo/conf.d]
 
 preflight:                     # gate start/restart/reload/resume
+  binary: { type: binary, path: "${binary}" }
   config:
     type: command
     command: ["${binary}", "--test-config"]
@@ -828,10 +833,18 @@ catalog_aliases: [demo-app-legacy] # old app names still accepted by services' a
 display_name: "Demo Server"
 description: "Runtime/tool dependency injected into services that list apps: [demo-app]."
 category: app
-binary: /usr/bin/demo
+variables:
+  binary: /usr/bin/demo
 preflight:
+  binary: { type: binary, path: "${binary}" }
   health: { type: command, command: ["${binary}", "--help"], timeout: 10s, expect_exit: 0 }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  api:
+    type: command
+    command: ["${binary}", "api-version"]
+    optional: true
+    export:
+      api: { regex: "API ([0-9]+)", default: "" }
 commands:
   version_short: { command: ["${binary}", "--version-short"], timeout: 10s }
 
@@ -841,7 +854,10 @@ name: demo-helper
 display_name: "Demo Helper"
 description: "Sibling binary from the same package; it reuses demo-app's version probe."
 category: app
-binary: /usr/bin/demo-helper
+variables:
+  binary: /usr/bin/demo-helper
+preflight:
+  binary: { type: binary, path: "${binary}" }
 version_from: demo-app
 
 ---
@@ -853,8 +869,10 @@ name: demo-lib
 display_name: "Demo Library"
 description: "Shared object whose file changes can restart linked services."
 category: library
-binary: /usr/lib/libdemo.so.1
+variables:
+  binary: /usr/lib/libdemo.so.1
 preflight:
+  file: { type: file, path: "${binary}" }
   version: { type: command, command: ["/usr/bin/strings", "${binary}"], timeout: 10s, optional: true }
 
 ---

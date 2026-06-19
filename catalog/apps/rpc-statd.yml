@@ -2,6 +2,8 @@ kind: app
 name: rpc-statd
 display_name: "NFS Status Monitor"
 category: storage
-binary: "/usr/bin/rpc.statd"
+variables:
+  binary: "/usr/bin/rpc.statd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

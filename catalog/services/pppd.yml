@@ -62,14 +62,14 @@ checks:
     expect: up
     timeout: 5s
 
-  # Layer 4 — name resolution works through the uplink: ask the first
-  # resolv.conf nameserver (with usepeerdns, the provider's resolver) bound to
-  # the PPP interface, and require an actual answer for a stable public name.
+  # Layer 4 — name resolution works through the system resolver selected in
+  # resolv.conf and require an actual answer for a stable public name. Route and
+  # ping checks above already verify the PPP egress; do not bind this DNS packet
+  # because resolv.conf may point at a local caching resolver.
   dns:
     type: dns
     resolvconf: true
     query: "${probe_name}"
-    interface: "${ppp_iface}"
     expect:
       rcode: NOERROR
       answers: { op: ">", value: 0 }
