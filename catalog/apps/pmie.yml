@@ -7,4 +7,4 @@ variables:
   binary: /usr/bin/pmie
 preflight:
   binary: { type: binary, path: "${binary}" }
-  health: { type: command, command: ["${binary}", "-?"], timeout: 10s }
+  health: { type: command, command: ["${binary}", "-?"], timeout: 10s, expect_exit: [0, 1] }

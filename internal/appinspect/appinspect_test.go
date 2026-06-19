@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"sermo/internal/config"
@@ -104,8 +105,8 @@ func TestProbeCommandFor(t *testing.T) {
 	if len(vc.argv) != 2 || vc.argv[0] != "/bin/tool" {
 		t.Fatalf("argv = %v", vc.argv)
 	}
-	if vc.expectExit != 3 {
-		t.Errorf("expectExit = %d, want 3", vc.expectExit)
+	if !slices.Equal(vc.expectExit, []int{3}) {
+		t.Errorf("expectExit = %v, want [3]", vc.expectExit)
 	}
 	if vc.stdout.Substring != "v1." {
 		t.Errorf("stdout matcher = %+v, want substring v1.", vc.stdout)

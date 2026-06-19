@@ -527,8 +527,8 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if len(argv) == 0 {
 		return nil, "command check requires a non-empty command array"
 	}
-	expect := 0
-	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
+	expect := []int{0}
+	if v, ok := cfgval.IntList(entry["expect_exit"]); ok {
 		expect = v
 	}
 	stdout, warn := ParseOutputMatcher(entry["expect_stdout"])

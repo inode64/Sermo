@@ -1123,11 +1123,13 @@ service: { name: x }
 preflight:
   cfg: { type: command, command: ["check"], expect_exit: notanint }
   ok: { type: command, command: ["check"], expect_exit: 1 }
+  ok-list: { type: command, command: ["check"], expect_exit: [0, 1] }
+  bad-list: { type: command, command: ["check"], expect_exit: [0, nope] }
 `)
 	mustHave(t, issues, "expect_exit must be an integer")
 	for _, is := range issues {
-		if strings.Contains(is.Msg, "preflight.ok") {
-			t.Fatalf("integer expect_exit wrongly flagged: %v", is)
+		if strings.Contains(is.Msg, "preflight.ok ") || strings.Contains(is.Msg, "preflight.ok-list") {
+			t.Fatalf("valid expect_exit wrongly flagged: %v", is)
 		}
 	}
 }

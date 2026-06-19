@@ -324,7 +324,7 @@ type commandCheck struct {
 	base
 	runner     execx.Runner
 	argv       []string
-	expectExit int
+	expectExit []int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
 	exports    []commandExport
@@ -339,8 +339,8 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	defer cancel()
 
 	res, _ := c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
-	if res.ExitCode != c.expectExit {
-		msg := fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit)
+	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
+		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
 		if stderr := FirstNonEmptyLine(res.Stderr); stderr != "" {
 			msg += ": " + stderr
 		}
@@ -370,11 +370,37 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 		c.state.last, c.state.primed = cur, true
 	}
-	r := c.result(true, fmt.Sprintf("exit %d (want %d)", res.ExitCode, c.expectExit), start)
+	r := c.result(true, fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit)), start)
 	if data := c.exportData(res.Stdout, res.Stderr); len(data) > 0 {
 		r.Data = data
 	}
 	return r
+}
+
+// ExitCodeExpected reports whether got matches one of the expected command exit
+// codes. A nil or empty expected list means the default success code, 0.
+func ExitCodeExpected(got int, want []int) bool {
+	if len(want) == 0 {
+		want = []int{0}
+	}
+	for _, n := range want {
+		if got == n {
+			return true
+		}
+	}
+	return false
+}
+
+// ExpectExitText formats expected exit codes for operator-facing messages.
+func ExpectExitText(want []int) string {
+	if len(want) == 0 {
+		return "0"
+	}
+	parts := make([]string, 0, len(want))
+	for _, n := range want {
+		parts = append(parts, strconv.Itoa(n))
+	}
+	return strings.Join(parts, " or ")
 }
 
 func (c commandCheck) exportData(stdout, stderr string) map[string]any {

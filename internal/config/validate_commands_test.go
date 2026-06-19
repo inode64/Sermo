@@ -24,7 +24,7 @@ func TestValidateCommandsExpectations(t *testing.T) {
 
 	joined := strings.Join(issues, "\n")
 	for _, want := range []string{
-		"commands.version expect_exit must be an integer",
+		"commands.version expect_exit must be an integer or a non-empty list of integers",
 		"commands.version.expect_stdout op",
 		"commands.version.expect_stderr must be a string substring or an {op, value} mapping",
 	} {
@@ -42,7 +42,7 @@ func TestValidateCommandsValid(t *testing.T) {
 	tree := map[string]any{"commands": map[string]any{
 		"version": map[string]any{
 			"command":       []any{"/bin/tool", "--version"},
-			"expect_exit":   0,
+			"expect_exit":   []any{0, 1},
 			"expect_stdout": "v1.",
 			"expect_stderr": map[string]any{"op": "==", "value": ""},
 			"export": map[string]any{

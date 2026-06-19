@@ -120,10 +120,10 @@ from `/proc/<pid>/status`. A configured `user:` or `group:` name is resolved
 through `engine.user_lookup`; if the name cannot be resolved it fails closed and
 matches no process. Numeric UID/GID values avoid host identity-service ambiguity.
 
-The `command` check asserts the command's outcome: `expect_exit` (default 0) and
-optional `expect_stdout` / `expect_stderr` matchers — a plain string requires that
-substring, or an `{op, value}` mapping compares the trimmed output (`== != > >= <
-<= contains =~`):
+The `command` check asserts the command's outcome: `expect_exit` (default 0,
+or a list such as `[0, 1]`) and optional `expect_stdout` / `expect_stderr`
+matchers — a plain string requires that substring, or an `{op, value}` mapping
+compares the trimmed output (`== != > >= < <= contains =~`):
 
 ```yaml
 checks:
@@ -135,8 +135,8 @@ checks:
     expect_stderr: ""                         # nothing written to stderr
 ```
 
-The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available on
-a watch hook (`then.hook`) to validate the hook command's result.
+The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available
+on a watch hook (`then.hook`) to validate the hook command's result.
 
 #### Grading output with `analyze:` (pattern sets)
 
