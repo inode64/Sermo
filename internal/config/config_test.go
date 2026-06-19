@@ -782,12 +782,13 @@ defaults:
 
 func TestDefaultIncludeDirsPreferServicesAndKeepAppsAlias(t *testing.T) {
 	want := []string{"/etc/sermo/services", "/etc/sermo/apps"}
-	if strings.Join(defaultIncludeDirs, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("defaultIncludeDirs = %v, want %v", defaultIncludeDirs, want)
+	got := defaultConfigDirs(DefaultGlobalPath, defaultIncludeDirs)
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("default include dirs = %v, want %v", got, want)
 	}
 }
 
-func TestLoadUsesDefaultIncludeDirsWhenIncludesOmitted(t *testing.T) {
+func TestLoadUsesConfigRelativeDefaultIncludeDirsWhenIncludesOmitted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
@@ -800,19 +801,45 @@ name: web
 `,
 	})
 	root := filepath.Dir(global)
-	oldDefaultIncludeDirs := defaultIncludeDirs
-	defaultIncludeDirs = []string{filepath.Join(root, "services"), filepath.Join(root, "apps")}
-	t.Cleanup(func() { defaultIncludeDirs = oldDefaultIncludeDirs })
+	wantIncludes := []string{filepath.Join(root, "services"), filepath.Join(root, "apps")}
 
 	cfg, err := Load(global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := strings.Join(cfg.Global.Includes, "\n"); got != strings.Join(defaultIncludeDirs, "\n") {
-		t.Fatalf("Global.Includes = %v, want %v", cfg.Global.Includes, defaultIncludeDirs)
+	if got := strings.Join(cfg.Global.Includes, "\n"); got != strings.Join(wantIncludes, "\n") {
+		t.Fatalf("Global.Includes = %v, want %v", cfg.Global.Includes, wantIncludes)
 	}
 	if _, ok := cfg.Services["web"]; !ok {
 		t.Fatalf("service from default services include was not loaded")
+	}
+}
+
+func TestLoadUsesConfigRelativeDefaultMountDirsWhenMountsOmitted(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  catalog: [ @ROOT@/catalog ]
+  runtime: /run/sermo
+`,
+		"mounts/data.yml": `
+kind: mount
+name: mount-data
+path: /data
+`,
+	})
+	root := filepath.Dir(global)
+	wantMounts := []string{filepath.Join(root, "mounts")}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if got := strings.Join(cfg.Global.Mounts, "\n"); got != strings.Join(wantMounts, "\n") {
+		t.Fatalf("Global.Mounts = %v, want %v", cfg.Global.Mounts, wantMounts)
+	}
+	if _, ok := cfg.Mounts["mount-data"]; !ok {
+		t.Fatalf("mount from default mounts dir was not loaded")
 	}
 }
 
