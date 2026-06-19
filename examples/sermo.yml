@@ -39,7 +39,7 @@ paths:
     # - apps
     # - storage
     # - network
-  # If omitted, Sermo falls back to /etc/sermo/services and then /etc/sermo/apps.
+  # If omitted, Sermo falls back to services/ and then apps/ next to this file.
   # First-class mount units live separately from services and watch fragments.
   mounts:
     - /etc/sermo/mounts
