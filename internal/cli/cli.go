@@ -1529,8 +1529,11 @@ func parseArgs(args []string) (options, error) {
 	if err := fs.Parse(flagArgs); err != nil {
 		return opts, normalizePflagError(err)
 	}
-	if opts.eventLimit < 0 {
-		return opts, fmt.Errorf("--limit must be a non-negative integer")
+	// --limit defaults to 0 (unset → runEvents applies its default). An explicit
+	// 0 or negative is rejected rather than silently falling back to the default,
+	// which the bare `> 0` guard could not distinguish from "unset".
+	if fs.Changed("limit") && opts.eventLimit < 1 {
+		return opts, fmt.Errorf("--limit must be a positive integer")
 	}
 	if backend != "" {
 		parsedBackend, err := servicemgr.ParseBackend(backend)

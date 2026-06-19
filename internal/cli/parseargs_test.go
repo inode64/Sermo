@@ -70,6 +70,16 @@ func TestParseArgsSuccess(t *testing.T) {
 				t.Fatal("help not set")
 			}
 		}},
+		{"--limit positive", []string{"events", "--limit", "10"}, func(t *testing.T, o options) {
+			if o.eventLimit != 10 {
+				t.Fatalf("eventLimit = %d, want 10", o.eventLimit)
+			}
+		}},
+		{"--limit unset stays default sentinel", []string{"events"}, func(t *testing.T, o options) {
+			if o.eventLimit != 0 {
+				t.Fatalf("eventLimit = %d, want 0 (unset)", o.eventLimit)
+			}
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -90,6 +100,8 @@ func TestParseArgsErrors(t *testing.T) {
 		{"--timeout", "nope"}, // bad duration
 		{"--backend", "nope"}, // bad backend
 		{"--bogus"},           // unknown flag
+		{"--limit", "0"},      // explicit zero is not a valid count
+		{"--limit", "-3"},     // negative
 	}
 	for _, args := range cases {
 		if _, err := parseArgs(args); err == nil {
