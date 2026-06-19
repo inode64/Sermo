@@ -830,7 +830,12 @@ func (s *Store) slaTimelines(query string, keyArgs []any, now time.Time) ([]SLAW
 		}
 		spanSec := int64(w.Span / time.Second)
 		startBucket := minuteBucket(now.Add(-w.Span))
-		endBucket := startBucket + spanSec
+		// Include the current (partial) minute so the window total matches SLA(),
+		// which lower-bounds on the same start bucket but has no upper bound. Using
+		// startBucket+spanSec would stop one bucket short and exclude the current
+		// minute, making SLAWindowTimeline.Up/Total disagree with SLAReport for the
+		// same window. The current minute clamps into the last segment below.
+		endBucket := minuteBucket(now) + 60
 		segSpan := spanSec / int64(segCount)
 		if segSpan <= 0 {
 			segSpan = 1
