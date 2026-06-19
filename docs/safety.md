@@ -235,6 +235,11 @@ Kill decisions depend on how process facts are read, so this is fixed:
   resolves to a `(deleted)` path (binary replaced by an upgrade), the process
   matches no exe selector — it is reported as a residual with exe unknown and
   is never signaled.
+- **Native signal reloads use the same identity model.** On OpenRC, or any
+  service with no backend `MainPID`, the pidfile PID is signaled only after it
+  matches a `command_match` selector with exact `exe` and `user`. Catalog authors
+  must verify each shipped init script, pidfile fallback and identity selector
+  together before declaring `reload.signal`.
 
 Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
 → configured pidfiles → `command_match` selectors → child process tree from

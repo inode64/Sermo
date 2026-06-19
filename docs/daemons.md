@@ -164,6 +164,51 @@ reload:
   without pidfiles reload by signal only on systemd; on OpenRC they rely on the
   init script's own `reload` (`when: auto`).
 
+#### Catalog author checklist: init scripts and fallbacks
+
+Before shipping or changing a catalog daemon with `reload.signal`, verify every
+init backend listed in `service:` and every fallback Sermo may use. Do not check
+only the platform where the profile was first written.
+
+1. Inspect the real packaged init definitions. For OpenRC, read
+   `/etc/init.d/<unit>` and the matching `/etc/conf.d/<unit>`; for systemd, read
+   the unit and its reported reload/PID metadata.
+2. Record whether the init backend can reload by itself. With `when: auto`, Sermo
+   prefers the backend reload when systemd reports `CanReload=yes` or the OpenRC
+   script defines `reload()`. If a host lacks that path, Sermo's native fallback
+   must still be safe.
+3. For any OpenRC-capable `reload.signal`, declare a canonical `/run/...`
+   `pidfile:` candidate and a `processes.command_match` selector with exact
+   `exe` and `user`. The executable must be the resolved `/proc/<pid>/exe` path
+   (usually through the linked app's binary variable), and the user should be a
+   service variable so local packaging differences can override it.
+4. If OpenRC scripts differ by distribution, encode the real pidfile candidates
+   as a list or an `os:` branch. Do not ship a single path that was verified on
+   only one distro.
+5. If a backend has no pidfile or no trustworthy `exe` plus `user` identity, do
+   not rely on `reload.signal` for that backend. Use an argv `reload.command`, or
+   rely only on the init backend's reload when every configured backend validates.
+6. Run the catalog validation tests for both init backends before release.
+
+Useful host checks:
+
+```bash
+sermoctl backend
+systemctl cat <unit>
+systemctl show -p CanReload -p MainPID -p PIDFile -p User <unit>
+sed -n '/^reload()/,/^}/p' /etc/init.d/<unit>
+grep -E '^(command|command_user|pidfile|.*PIDFILE)=' /etc/init.d/<unit> /etc/conf.d/<unit>
+readlink -f /usr/sbin/<daemon>
+namei -l /run/<daemon>.pid
+sermoctl diagnose
+```
+
+Useful catalog audit while developing:
+
+```bash
+go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemonsResolve)$' -count=1
+```
+
 The reload that `reload:` produces is what the **`reload` action**,
 `reload_on_change`, the `sermoctl reload <svc>` command and the web UI reload
 button all run. It is a service-control concept: it applies to service daemons
