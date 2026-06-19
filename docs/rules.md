@@ -1629,8 +1629,8 @@ thread: `metric` `scope: service`, `metric: cpu_thread`, `op: ">"`, `value:
 `cpu`/`cpu_thread`/`total_cpu` and the `io*` metrics are rates: they are **not
 ready** on the first cycle and a condition over a not-ready value is false. A `%`
 threshold needs a metric with a percentage form (`memory`, `swap`, `cpu`,
-`cpu_thread`, `total_memory`, `total_swap`, `total_cpu`; `swap`/`memory`/`total_swap`
-also have an absolute byte form); a bare number needs an absolute form (everything else, including
+`cpu_thread`, `total_memory`, `total_swap`, `total_cpu`;
+`swap`/`memory`/`total_memory`/`total_swap` also have an absolute byte form); a bare number needs an absolute form (everything else, including
 `io*`/`fds`/`threads`, which are absolute only). Reading another process's I/O or fd count
 requires privilege, so those sum only the processes the daemon can read.
 
