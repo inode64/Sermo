@@ -108,10 +108,12 @@ named `version` or `version_short` also declare `${cupsd_version}` and
 `${cupsd_version_short}` with empty defaults; an explicit command `export:` may
 declare additional variables. At runtime, successful command checks publish the
 same exported names in the check result `data`; a `version` command also derives
-`version_short` from its stdout. Dashes and other non-alphanumeric characters
-become underscores. This lets a service reuse binary paths owned by one or more
-apps without naming collisions. When exactly one app is linked, its variables
-are also exposed without the prefix as defaults, so a service can use
+`version_short` from its stdout, preferring `major.minor[.patch]` and accepting
+guarded integer-only `version N` output, including date-coded releases, when no
+dotted version is present. Dashes and other non-alphanumeric characters become
+underscores. This lets a service reuse binary paths owned by one or more apps
+without naming collisions. When exactly one app is linked, its variables are also
+exposed without the prefix as defaults, so a service can use
 `${binary}` while the app remains the owner of the binary path. A local
 `variables:` entry with the same prefixed or unprefixed name still wins for
 host-specific overrides. When several apps are linked, use the prefixed names to

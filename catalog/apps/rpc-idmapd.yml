@@ -7,3 +7,4 @@ variables:
   binary: "/usr/bin/rpc.idmapd"
 preflight:
   binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "-h"], timeout: 10s }

@@ -901,6 +901,8 @@ code is evaluated (`expect_exit`, default `0`); stdout/stderr matchers and the
 printed output are ignored for health. The `version` command is only used as a
 fallback health probe when no `health` command exists; when `health` exists,
 `version` reports display data and a version failure does not override health.
+Do not mark an app `version` probe optional unless the app also has a `health`
+probe; otherwise Sermo can only prove that the binary exists, not that it can run.
 For catalog apps that are separate binaries from the same package, `version_from`
 can point at another catalog app whose version probe supplies the displayed
 version. The app still checks its own `variables.binary` and health;
@@ -911,8 +913,10 @@ sets `version`/`version_short` when the app has no local version result.
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
 most the patchlevel (`1.30.2`), taking the first `major.minor[.patch]` token and
 dropping any further build components and suffixes (so `2.8.4.1-0+g…` becomes
-`2.8.4` and `4.2.8p18` becomes `4.2.8`). It is empty when the version line
-carries no recognizable number.
+`2.8.4` and `4.2.8p18` becomes `4.2.8`). If there is no dotted token, a guarded
+integer-only `version N` token is accepted for projects such as polkit and
+date-coded numad releases. It is empty when the version line carries no
+recognizable number.
 
 A daemon may instead declare a dedicated `version_short` command (under
 `preflight` or `commands`, alongside `version`) that prints the bare version

@@ -6,3 +6,4 @@ variables:
   binary: /usr/libexec/udisks2/udisksd
 preflight:
   binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }
