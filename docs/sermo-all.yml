@@ -347,20 +347,10 @@ service:                       # scalar, legacy {name: ...}, or per-backend map
   systemd: [demo, demo-server]
   openrc: [demo]
 
-# Optional non-init control target. For libvirt/QEMU VMs, `domain` is the
-# libvirt domain Sermo starts/stops/restarts/resumes through the safe engine.
-# For Docker containers, `container` is the name or id Sermo controls.
-# control:
-#   type: libvirt
-#   uri: qemu:///system
-#   domain: demo-vm
-#   socket: /run/libvirt/libvirt-sock
-#   # socket: /run/libvirt/virtqemud-sock  # modular libvirt/QEMU daemon
-#   # uuid: 2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4
-# control:
-#   type: docker
-#   container: demo
-#   socket: /run/docker.sock
+# A service may replace its init `service:` block with a non-init `control:`
+# target — a libvirt/QEMU VM or a Docker container driven through the safe
+# engine. See the demo-vm and demo-container service documents below for live
+# examples.
 
 also_service:                  # auxiliary init units of this same service
   systemd: [demo.socket]
@@ -902,7 +892,36 @@ variables:
 
 ---
 # ---------------------------------------------------------------------------
-# 9. kind: mount — fstab-backed mount unit (paths.mounts)
+# 9. kind: service with control: libvirt — a VM driven through the safe engine
+# ---------------------------------------------------------------------------
+kind: service
+name: demo-vm
+display_name: "Demo VM"
+description: "VM target controlled through libvirt instead of an init unit."
+control:
+  type: libvirt
+  uri: qemu:///system
+  domain: demo-vm
+  socket: /run/libvirt/virtqemud-sock   # modular libvirt/QEMU daemon socket
+  # uuid: 2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4
+
+---
+# ---------------------------------------------------------------------------
+# 10. kind: service with control: docker — a container driven through the engine
+# ---------------------------------------------------------------------------
+kind: service
+name: demo-container
+display_name: "Demo container"
+description: "Container target controlled through the Docker API instead of an init unit."
+control:
+  type: docker
+  container: demo
+  socket: /run/docker.sock
+  tls: false                            # true | false | required | skip-verify
+
+---
+# ---------------------------------------------------------------------------
+# 11. kind: mount — fstab-backed mount unit (paths.mounts)
 # ---------------------------------------------------------------------------
 kind: mount
 name: mount-backup
