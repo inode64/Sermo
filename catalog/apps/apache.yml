@@ -3,7 +3,11 @@ name: apache
 display_name: "Apache HTTP Server"
 category: web
 variables:
-  binary: /usr/bin/apache2
+  binary:
+    - /usr/sbin/apache2
+    - /usr/sbin/httpd
+    - /usr/bin/apache2
+    - /usr/bin/httpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   # Use the configured binary directly (httpd/apache2 -v), not `apachectl`: the
@@ -11,3 +15,4 @@ preflight:
   # may be absent, whereas `${binary} -v` prints "Server version: Apache/X.Y.Z"
   # to stdout on every distro, root-free.
   version: { type: command, command: ["${binary}", "-v"], timeout: 10s }
+  libraries: { type: libraries, binary: "${binary}", optional: true }

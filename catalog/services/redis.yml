@@ -17,11 +17,6 @@ variables:
   port: 6379
   pidfile: /run/redis/redis.pid
 
-preflight:
-  libraries:
-    type: libraries
-    binary: "${redis_binary}"
-
 processes:
   pidfile:
     type: pidfile

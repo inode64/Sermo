@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -542,11 +543,126 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check " + warn
 	}
-	c := commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr, analyzer: analyzer}
+	exports, warn := parseCommandExports(b.name, entry["export"])
+	if warn != "" {
+		return nil, "command check " + warn
+	}
+	c := commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr, exports: exports, analyzer: analyzer}
 	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
 		c.state = &cmdState{}
 	}
 	return c, ""
+}
+
+type commandExport struct {
+	name         string
+	from         string
+	trim         bool
+	defaultValue string
+	regex        *regexp.Regexp
+	shortVersion bool
+}
+
+func parseCommandExports(checkName string, raw any) ([]commandExport, string) {
+	exports := map[string]commandExport{}
+	switch checkName {
+	case "version":
+		exports["version"] = defaultCommandExport("version")
+		short := defaultCommandExport("version_short")
+		short.shortVersion = true
+		exports["version_short"] = short
+	case "version_short":
+		exports[checkName] = defaultCommandExport(checkName)
+	}
+	if raw == nil {
+		return sortedCommandExports(exports), ""
+	}
+	specs, ok := raw.(map[string]any)
+	if !ok {
+		return nil, "export must be a mapping of variable name -> export rule"
+	}
+	for _, name := range slices.Sorted(maps.Keys(specs)) {
+		spec, ok := specs[name].(map[string]any)
+		if !ok {
+			return nil, "export." + name + " must be a mapping"
+		}
+		e := defaultCommandExport(name)
+		if from := cfgval.String(spec["from"]); from != "" {
+			e.from = from
+		}
+		switch e.from {
+		case "stdout", "stderr":
+		default:
+			return nil, "export." + name + ".from must be stdout or stderr"
+		}
+		if rawTrim, present := spec["trim"]; present {
+			v, ok := rawTrim.(bool)
+			if !ok {
+				return nil, "export." + name + ".trim must be a boolean"
+			}
+			e.trim = v
+		}
+		if rawDefault, present := spec["default"]; present {
+			e.defaultValue = cfgval.String(rawDefault)
+		}
+		if rawRegex, present := spec["regex"]; present {
+			re, err := regexp.Compile(cfgval.String(rawRegex))
+			if err != nil {
+				return nil, "export." + name + ".regex is invalid: " + err.Error()
+			}
+			e.regex = re
+		}
+		exports[name] = e
+	}
+	return sortedCommandExports(exports), ""
+}
+
+func defaultCommandExport(name string) commandExport {
+	return commandExport{name: name, from: "stdout", trim: true}
+}
+
+var commandShortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
+
+func commandShortVersion(s string) string {
+	return commandShortVersionRE.FindString(s)
+}
+
+func sortedCommandExports(exports map[string]commandExport) []commandExport {
+	if len(exports) == 0 {
+		return nil
+	}
+	out := make([]commandExport, 0, len(exports))
+	for _, name := range slices.Sorted(maps.Keys(exports)) {
+		out = append(out, exports[name])
+	}
+	return out
+}
+
+func (e commandExport) value(stdout, stderr string) string {
+	source := stdout
+	if e.from == "stderr" {
+		source = stderr
+	}
+	value := source
+	if e.regex != nil {
+		match := e.regex.FindStringSubmatch(source)
+		if match == nil {
+			value = e.defaultValue
+		} else if len(match) > 1 {
+			value = match[1]
+		} else {
+			value = match[0]
+		}
+	} else if e.shortVersion {
+		value = commandShortVersion(source)
+		if value == "" {
+			value = e.defaultValue
+		}
+	}
+	if e.trim {
+		value = strings.TrimSpace(value)
+	}
+	return value
 }
 
 // buildServiceCheck builds a check on a service-manager unit's expected state.

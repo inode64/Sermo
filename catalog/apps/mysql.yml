@@ -3,7 +3,10 @@ name: mysql
 display_name: "MySQL"
 category: database
 variables:
-  binary: /usr/bin/mysqld
+  binary:
+    - /usr/sbin/mysqld
+    - /usr/bin/mysqld
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  libraries: { type: libraries, binary: "${binary}" }

@@ -106,14 +106,16 @@ daemon/service with a normalized app-name prefix: an app with
 exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Command preflight entries
 named `version` or `version_short` also declare `${cupsd_version}` and
 `${cupsd_version_short}` with empty defaults; an explicit command `export:` may
-declare additional variables. Dashes and other non-alphanumeric characters become
-underscores. This lets a service reuse binary paths owned by one or more apps
-without naming collisions. When exactly one app is linked, its variables are
-also exposed without the prefix as defaults, so a service can use `${binary}`
-while the app remains the owner of the binary path. A local `variables:` entry
-with the same prefixed or unprefixed name still wins for host-specific
-overrides. When several apps are linked, use the prefixed names to avoid
-ambiguity.
+declare additional variables. At runtime, successful command checks publish the
+same exported names in the check result `data`; a `version` command also derives
+`version_short` from its stdout. Dashes and other non-alphanumeric characters
+become underscores. This lets a service reuse binary paths owned by one or more
+apps without naming collisions. When exactly one app is linked, its variables
+are also exposed without the prefix as defaults, so a service can use
+`${binary}` while the app remains the owner of the binary path. A local
+`variables:` entry with the same prefixed or unprefixed name still wins for
+host-specific overrides. When several apps are linked, use the prefixed names to
+avoid ambiguity.
 
 `paths.state` (default `/var/lib/sermo`) is the root for the persistent state
 database `sermo.db` (SQLite). Unlike `paths.runtime`, it survives reboots, which
@@ -1775,9 +1777,11 @@ preflight:
 ```
 
 Command checks can declare variables too. `from: stdout` and `trim: true` are the
-defaults; `default` is optional and otherwise empty. The built-in `version` and
-`version_short` command names already export `version` and `version_short`, so
-only special values need an explicit `export:`:
+defaults; `default` is optional and otherwise empty. When the command succeeds,
+those values are also attached to the result `data`. The built-in `version` and
+`version_short` command names already export `version` and `version_short`; a
+`version` command also derives `version_short` from stdout, so only special
+values need an explicit `export:`:
 
 ```yaml
 preflight:
