@@ -900,6 +900,29 @@ another action (for example `expand`), or on its own as a monitor-only watch
 (state and events without delivery). It is always valid, whether or not a
 global `notify` default is configured.
 
+**Notification cadence.** A firing watch delivers its `notify` **once**, on the
+rising edge — when the alert starts. It does not re-notify every cycle while the
+condition persists (the `firing` event is still recorded each cycle for the web
+UI, and the `hook` still runs each cycle). When the watch clears and later fires
+again, the next episode notifies afresh. To get a periodic **reminder** while a
+watch stays firing, set `then.notify_interval` to a positive duration: the
+notification is re-sent once that interval elapses. It only affects delivery, so
+it requires `notify` targets.
+
+```yaml
+watches:
+  disk-root:
+    monitor: previous
+    check:
+      type: storage
+      path: /
+      used_pct: { op: ">=", value: "90%" }
+    for: { cycles: 3 }
+    then:
+      notify: [ops-email]
+      notify_interval: 30m     # re-notify every 30m while still firing
+```
+
 Use `then.dry_run: true` when you want to keep the watch and its actions wired
 for a trial run, but you do not want any side effects yet. The watch still runs
 its check and window, emits the normal `firing` event when it would fire, then
