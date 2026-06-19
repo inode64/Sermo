@@ -121,8 +121,13 @@ watches:
     for: { cycles: 3 }                       # debounce: N consecutive cycles
     then:
       notify: [team-slack]
+      notify_interval: 2h                    # re-send a reminder while it stays firing
       expand: { by: 5G }                     # storage-only action
-    policy: { cooldown: 30m }                # pace the expand action
+    policy:                                  # pace the expand action (full policy extras)
+      cooldown: 30m
+      max_actions: 3
+      max_actions_window: 24h
+      backoff: { initial: 1h, factor: 2, max: 12h }
 
   # -- single-shot checks as host watches -----------------------------------
   webapp-health:
@@ -189,6 +194,11 @@ watches:
     check: { type: firewall_rules, backend: auto, min_rules: 1 }
     then: { notify: [ops-email] }
 
+  decommissioned-check:
+    enabled: false              # omitted entirely from the running config (vs monitor: disabled)
+    check: { type: file, path: /var/lib/legacy, existence: { on: delete } }
+    then: { notify: [none] }
+
   # -- multi-metric icmp: per-metric conditions, each with its own then -----
   ping-gw:
     monitor: disabled
@@ -243,7 +253,7 @@ watches:
 
   # -- host levels: one compact example per family --------------------------
   load:
-    monitor: disabled
+    monitor: previous           # restore the persisted monitor state from paths.state
     check: { type: load, per_cpu: true, load5: { op: ">", value: 1.5 } }
     for: { cycles: 3 }
     then: { notify: [ops-email] }
