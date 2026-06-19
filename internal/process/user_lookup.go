@@ -33,12 +33,21 @@ const (
 type idLookupResult struct {
 	id uint32
 	ok bool
+	at time.Time // when resolved; negative results expire after negativeCacheTTL
 }
 
 type nameLookupResult struct {
 	name string
 	ok   bool
+	at   time.Time
 }
+
+// negativeCacheTTL bounds how long a failed (ok=false) lookup is cached. Positive
+// results are cached for the lookup's lifetime, but caching a miss forever means
+// a user created after the first probe — e.g. one named in kill_only_if or a
+// command_match selector — would never be recognized until the daemon restarts,
+// silently weakening a force_kill safety decision.
+const negativeCacheTTL = 30 * time.Second
 
 // UserLookupConfig configures user/group lookup behavior.
 type UserLookupConfig struct {
@@ -52,6 +61,9 @@ type UserLookup struct {
 	mode    string
 	timeout time.Duration
 	runner  execx.Runner
+
+	now    func() time.Time // injectable clock (defaults to time.Now)
+	negTTL time.Duration    // negative-result TTL (defaults to negativeCacheTTL)
 
 	mu         sync.Mutex
 	users      map[string]idLookupResult
@@ -102,6 +114,8 @@ func NewUserLookup(cfg UserLookupConfig) *UserLookup {
 		mode:       mode,
 		timeout:    timeout,
 		runner:     runner,
+		now:        time.Now,
+		negTTL:     negativeCacheTTL,
 		users:      map[string]idLookupResult{},
 		groups:     map[string]idLookupResult{},
 		userNames:  map[uint32]nameLookupResult{},
@@ -276,11 +290,15 @@ func cachedID(l *UserLookup, cache map[string]idLookupResult, key string) (idLoo
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	got, ok := cache[key]
-	return got, ok
+	if !ok || l.negativeExpired(got.ok, got.at) {
+		return idLookupResult{}, false
+	}
+	return got, true
 }
 
 func storeID(l *UserLookup, cache map[string]idLookupResult, key string, value idLookupResult) {
 	l.mu.Lock()
+	value.at = l.clock()
 	cache[key] = value
 	l.mu.Unlock()
 }
@@ -289,13 +307,38 @@ func cachedName(l *UserLookup, cache map[uint32]nameLookupResult, key uint32) (n
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	got, ok := cache[key]
-	return got, ok
+	if !ok || l.negativeExpired(got.ok, got.at) {
+		return nameLookupResult{}, false
+	}
+	return got, true
 }
 
 func storeName(l *UserLookup, cache map[uint32]nameLookupResult, key uint32, value nameLookupResult) {
 	l.mu.Lock()
+	value.at = l.clock()
 	cache[key] = value
 	l.mu.Unlock()
+}
+
+// clock returns the current time via the injectable hook, defaulting to time.Now.
+func (l *UserLookup) clock() time.Time {
+	if l.now != nil {
+		return l.now()
+	}
+	return time.Now()
+}
+
+// negativeExpired reports whether a cached miss (ok=false) has outlived negTTL
+// and must be re-resolved. Positive results never expire.
+func (l *UserLookup) negativeExpired(ok bool, at time.Time) bool {
+	if ok {
+		return false
+	}
+	ttl := l.negTTL
+	if ttl <= 0 {
+		ttl = negativeCacheTTL
+	}
+	return l.clock().Sub(at) >= ttl
 }
 
 func (l *UserLookup) getentUserID(name string) (uint32, bool) {
