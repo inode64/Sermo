@@ -56,6 +56,55 @@ defaults:
 	}
 }
 
+func TestValidateBackoffDurations(t *testing.T) {
+	// A garbage initial must not let a valid max slip through (the old code left
+	// the parsed initial at 0, so any max compared >= 0 and passed).
+	badInitial := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: nonsense, max: 10s }
+`)
+	mustHave(t, badInitial, "policy.backoff.initial")
+
+	// An omitted max reports its own parse error, not the misleading ">= initial".
+	missingMax := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: 5s }
+`)
+	mustHave(t, missingMax, "policy.backoff.max must be a valid positive duration")
+
+	// max < initial is still rejected with the ordering message.
+	maxBelow := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: 30s, max: 5s }
+`)
+	mustHave(t, maxBelow, "policy.backoff.max must be >= initial")
+
+	// A valid pair produces no backoff issue.
+	ok := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: 5s, max: 1m }
+`)
+	if hasIssue(ok, "backoff") {
+		t.Fatalf("valid backoff flagged: %v", ok)
+	}
+}
+
 func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
 	global := writeConfig(t, map[string]string{"sermo.yml": `
 engine:
