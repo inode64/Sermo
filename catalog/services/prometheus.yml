@@ -10,10 +10,17 @@ service:
 
 apps: [prometheus]
 variables:
+  user: prometheus
   host: 127.0.0.1
   port: 9090
 
 pidfile: /run/prometheus.pid
+
+processes:
+  main:
+    type: command_match
+    exe: "${prometheus_binary}"
+    user: "${user}"
 
 # Prometheus reloads its config and rule files on SIGHUP. Its systemd unit
 # commonly defines no ExecReload, so Sermo signals MainPID; OpenRC's init script

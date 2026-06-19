@@ -6,11 +6,18 @@ service: snmpd
 apps: [snmpd]
 
 variables:
+  user: root
   port: 161
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/snmpd.pid
+
+processes:
+  main:
+    type: command_match
+    exe: "${snmpd_binary}"
+    user: "${user}"
 
 # Net-SNMP reloads its config on SIGHUP; the systemd unit usually has no
 # ExecReload while OpenRC's init script reloads; the default `when: auto`
