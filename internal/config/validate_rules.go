@@ -181,6 +181,15 @@ func validateRules(tree map[string]any, notifiers map[string]struct{}, add addFu
 			if !hasBlock {
 				add("%s guard rules must use action block", path)
 			}
+			// A guard is evaluated on demand during an operation and blocks the
+			// instant its condition holds; for/within windows are never advanced
+			// for guards, so they would be silently ignored. Reject them.
+			if _, ok := entry["for"]; ok {
+				add("%s guard rules do not support a for window", path)
+			}
+			if _, ok := entry["within"]; ok {
+				add("%s guard rules do not support a within window", path)
+			}
 		} else if len(blocks) > 0 {
 			add("%s only guard rules may set blocks", path)
 		}
