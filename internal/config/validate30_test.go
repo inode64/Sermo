@@ -447,6 +447,32 @@ rules:
 	}
 }
 
+// TestValidateExpectStatusShapes documents that scalar and list expect_status
+// values are validated (element-by-element) by the resolved-tree scalar walk,
+// while the {op,value} mapping form is validated in validateHTTPFields — the two
+// paths together cover every shape parseStatusMatcher accepts.
+func TestValidateExpectStatusShapes(t *testing.T) {
+	check := func(expect string) []Issue {
+		return validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy: { cooldown: 5m }
+checks:
+  - { name: h, type: http, url: "http://x", expect_status: `+expect+` }
+`)
+	}
+	// Valid shapes produce no expect_status issue.
+	for _, ok := range []string{`200`, `"2xx"`, `[200, "3xx"]`, `{op: "<", value: 500}`} {
+		if hasIssue(check(ok), "expect_status") {
+			t.Fatalf("valid expect_status %q wrongly flagged", ok)
+		}
+	}
+	// Invalid scalar and invalid list element are caught via the scalar walk.
+	mustHave(t, check(`999nope`), "expect_status")
+	mustHave(t, check(`[200, bogus]`), "expect_status")
+}
+
 func TestValidateInlineProbeConnectionProtocols(t *testing.T) {
 	issues := validateService(t, `
 kind: service
