@@ -622,9 +622,16 @@ func defaultCommandExport(name string) commandExport {
 }
 
 var commandShortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
+var commandShortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9]+)\b`)
 
 func commandShortVersion(s string) string {
-	return commandShortVersionRE.FindString(s)
+	if dotted := commandShortVersionRE.FindString(s); dotted != "" {
+		return dotted
+	}
+	if match := commandShortIntegerVersionRE.FindStringSubmatch(s); len(match) > 1 {
+		return match[1]
+	}
+	return ""
 }
 
 func sortedCommandExports(exports map[string]commandExport) []commandExport {

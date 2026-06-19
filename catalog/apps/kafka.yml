@@ -16,6 +16,7 @@ variables:
 
 preflight:
   binary: { type: binary, path: "${binary}" }
+  topics: { type: binary, path: "${topics}" }
   # kafka-topics.sh --version prints e.g. "3.9.0 (Commit:...)" — the canonical
   # way to read the installed Kafka version without a running broker.
-  version: { type: command, command: ["${topics}", "--version"], timeout: 10s, optional: true }
+  version: { type: command, command: ["${topics}", "--version"], timeout: 10s }

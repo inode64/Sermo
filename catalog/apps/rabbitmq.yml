@@ -7,4 +7,5 @@ variables:
   ctl: /usr/bin/rabbitmqctl
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${ctl}", "version"], timeout: 10s, optional: true }
+  ctl: { type: binary, path: "${ctl}" }
+  version: { type: command, command: ["${ctl}", "version"], timeout: 10s }
