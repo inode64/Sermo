@@ -47,10 +47,9 @@ type Config struct {
 // closures, residual discovery, the kill policy and the reaper from the resolved
 // config tree (sections 12, 14, 17, 19, 21, 22).
 func New(c Config) Engine {
+	// Leave sleep nil when unset so process.Wait uses its cancellable timer in
+	// production (no goroutine leak on a cancelled stop); tests inject a fake.
 	sleep := c.Sleep
-	if sleep == nil {
-		sleep = time.Sleep
-	}
 
 	deps := c.CheckDeps
 	deps.Service = c.Service
