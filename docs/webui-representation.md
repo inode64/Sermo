@@ -276,6 +276,7 @@ Editable notes:
   client-side and optional; raw chronology is still useful.
 - The `kind` filter covers the emitted event kinds: `cycle`, `action`,
   `suppressed`, `shadow`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `reload` (a successful config reload of the running daemon),
   `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
   and `cascade` (a service operation triggered through a cascade action).
 
