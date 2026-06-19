@@ -1084,7 +1084,7 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	if sampler == nil {
 		sampler = osProcSampler{userLookup: b.userLookup}
 	}
-	samples := sampler.Sample(ProcMatch{Name: name, User: user})
+	samples, _ := sampler.Sample(ProcMatch{Name: name, User: user})
 	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
 
 	var rssTotal, cpuTicksTotal, ioTotal uint64
@@ -1120,7 +1120,7 @@ func (b *WebBackend) processWatchView(w *webWatch) (*web.WatchMeter, []web.Watch
 	if user != "" {
 		target += " user " + user
 	}
-	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralS(len(samples)))
+	summary := fmt.Sprintf("%s: %d matching process%s", target, len(samples), pluralSuffix(len(samples), "process"))
 	if len(samples) > 0 {
 		summary += fmt.Sprintf(", rss %d bytes", rssTotal)
 	}
@@ -1149,9 +1149,9 @@ func (b *WebBackend) autofsWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 		}
 		readings = append(readings, web.WatchReading{Field: "path", Label: "Configured path", Value: path})
 		readings = append(readings, web.WatchReading{Field: "state", Label: "State", Value: state})
-		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralS(len(points)))
+		return nil, readings, fmt.Sprintf("autofs %s %s (%d mountpoint%s)", path, state, len(points), pluralSuffix(len(points), "mountpoint"))
 	}
-	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralS(len(points)))
+	return nil, readings, fmt.Sprintf("%d autofs mountpoint%s active", len(points), pluralSuffix(len(points), "mountpoint"))
 }
 
 func (b *WebBackend) diskIOWatchView(w *webWatch) (*web.WatchMeter, []web.WatchReading, string) {
@@ -1371,7 +1371,7 @@ func (b *WebBackend) netWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRead
 			value = "none"
 		}
 		readings = append(readings, web.WatchReading{Field: "address", Label: "Addresses", Value: value})
-		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralS(len(s.Addrs))))
+		parts = append(parts, fmt.Sprintf("%d address%s", len(s.Addrs), pluralSuffix(len(s.Addrs), "address")))
 	}
 	return nil, readings, strings.Join(parts, " · ")
 }
@@ -1582,11 +1582,21 @@ func netErrorTotal(metrics map[string]any, counters map[string]uint64) uint64 {
 	return total
 }
 
-func pluralS(count int) string {
+// pluralSuffix returns the suffix to append to singular to form its plural for
+// count items: "" when count is 1, "es" for sibilant endings (process ->
+// processes, address -> addresses) and "s" otherwise (mountpoint -> mountpoints).
+func pluralSuffix(count int, singular string) string {
 	if count == 1 {
 		return ""
 	}
-	return "es"
+	switch {
+	case strings.HasSuffix(singular, "s"), strings.HasSuffix(singular, "x"),
+		strings.HasSuffix(singular, "z"), strings.HasSuffix(singular, "ch"),
+		strings.HasSuffix(singular, "sh"):
+		return "es"
+	default:
+		return "s"
+	}
 }
 
 func processPIDList(samples []ProcInfo) string {
@@ -1820,16 +1830,17 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	out := make([]web.Application, 0, len(reports))
 	for _, r := range reports {
 		out = append(out, web.Application{
-			Name:         r.Name,
-			DisplayName:  r.DisplayName,
-			Category:     r.Category,
-			Binary:       r.Binary,
-			Permissions:  r.Permissions,
-			User:         r.User,
-			Group:        r.Group,
-			Version:      r.Version,
-			VersionShort: r.VersionShort,
-			Status:       r.Status,
+			Name:          r.Name,
+			DisplayName:   r.DisplayName,
+			Category:      r.Category,
+			Binary:        r.Binary,
+			Permissions:   r.Permissions,
+			User:          r.User,
+			Group:         r.Group,
+			Version:       r.Version,
+			VersionShort:  r.VersionShort,
+			VersionSource: r.VersionSource,
+			Status:        r.Status,
 		})
 	}
 	return b.withApplicationSLA(out)
@@ -1840,7 +1851,7 @@ func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Applicatio
 		return apps
 	}
 	out := slices.Clone(apps)
-	now := time.Now()
+	now := b.webNow()
 	for i := range out {
 		if b.entries[out[i].Name] != nil {
 			out[i].SLA = b.serviceSLAWindows(out[i].Name, now)
@@ -2041,9 +2052,14 @@ func hostMetric(name string, r metrics.Reading) web.HostMetric {
 	case "total_memory", "total_swap":
 		m.Unit = "bytes"
 	case "load1":
-		if ncpu := runtime.NumCPU(); ncpu > 0 {
-			m.Total = float64(ncpu)
-			m.Percent = r.Absolute / float64(ncpu) * 100
+		// Only derive the per-CPU percentage from a real reading; guarding on
+		// HasAbsolute (as watchMeter does) avoids fabricating Total/Percent when
+		// load1 has no absolute value.
+		if r.HasAbsolute {
+			if ncpu := runtime.NumCPU(); ncpu > 0 {
+				m.Total = float64(ncpu)
+				m.Percent = r.Absolute / float64(ncpu) * 100
+			}
 		}
 	}
 	return m
@@ -2757,6 +2773,17 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
+	// Bound the whole operation — including the wait for a global operation slot —
+	// so a web action can never block its handler goroutine indefinitely when the
+	// slots are saturated. The engine applies its own timeout only once it runs,
+	// which does not cover slot acquisition. (ExpandWatch bounds the same way.)
+	timeout := b.operationTimeout
+	if timeout <= 0 {
+		timeout = operation.DefaultOperationTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	run := func(ctx context.Context) operation.Result {
 		return e.engine.Do(ctx, action)
 	}

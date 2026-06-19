@@ -3,3 +3,8 @@ name: firewalld
 display_name: "firewalld"
 category: security
 binary: /usr/bin/firewalld
+variables:
+  binary_offline: /usr/bin/firewall-offline-cmd
+preflight:
+  version: { type: command, command: ["${binary_offline}", "--version"], timeout: 10s }
+  

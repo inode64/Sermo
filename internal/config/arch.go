@@ -55,4 +55,15 @@ func (c *Config) bakeBuiltins() {
 	for _, doc := range c.docs {
 		doc.Body = bindTokens(doc.Body, repl).(map[string]any)
 	}
+	// The global document (defaults.variables, watches, …) lives in Global.Raw,
+	// not c.docs. Bake there too so ${arch}/${os} work consistently everywhere
+	// instead of surviving as literal tokens that later trip variable validation.
+	if c.Global.Raw != nil {
+		c.Global.Raw = bindTokens(c.Global.Raw, repl).(map[string]any)
+		// collapseOS/bindTokens build fresh maps, so re-point the extracted
+		// Defaults view (it aliased the pre-bake Raw["defaults"] sub-map).
+		if defaults, ok := c.Global.Raw["defaults"].(map[string]any); ok {
+			c.Global.Defaults = defaults
+		}
+	}
 }

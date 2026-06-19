@@ -14,8 +14,8 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
-var defaultIncludeDirs = []string{"/etc/sermo/services", "/etc/sermo/apps"}
-var defaultMountDirs = []string{"/etc/sermo/mounts"}
+var defaultIncludeDirs = []string{"services", "apps"}
+var defaultMountDirs = []string{"mounts"}
 
 // Option customizes Load.
 type Option func(*loadOptions)
@@ -58,12 +58,12 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	includeDirs := global.Includes
 	if len(includeDirs) == 0 {
-		includeDirs = append([]string(nil), defaultIncludeDirs...)
+		includeDirs = defaultConfigDirs(globalPath, defaultIncludeDirs)
 		global.Includes = append([]string(nil), includeDirs...)
 	}
 	mountDirs := global.Mounts
 	if len(mountDirs) == 0 {
-		mountDirs = append([]string(nil), defaultMountDirs...)
+		mountDirs = defaultConfigDirs(globalPath, defaultMountDirs)
 		global.Mounts = append([]string(nil), mountDirs...)
 	}
 
@@ -192,6 +192,10 @@ func resolveConfigPath(base, p string) string {
 		return p
 	}
 	return filepath.Clean(filepath.Join(base, p))
+}
+
+func defaultConfigDirs(globalPath string, dirs []string) []string {
+	return resolvePathList(filepath.Dir(filepath.Clean(globalPath)), dirs)
 }
 
 // loadDir reads every *.yml/*.yaml document in dir, recursing into

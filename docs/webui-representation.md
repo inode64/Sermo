@@ -45,7 +45,7 @@ Keep changes concrete:
 | Events | `GET /api/events` | service/watch activity; supports `limit`, `service`, `watch`, `kind`, `status`, `only_errors` |
 | Recent activity | `GET /api/activity` | summary of recent events |
 | Monitoring counts | `GET /api/monitoring` | monitored vs paused service counts |
-| Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics |
+| Diagnostics | `GET /api/diagnostics` | backend/runtime diagnostics findings (`time`, `level`, `scope`, `message`), including malformed lock files and operation-slot usage |
 | Live operations | `GET /api/ops` | active operation slots |
 
 ## Action Endpoints
@@ -55,7 +55,7 @@ enabled.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
-| Service action | `POST /api/services/{name}/{action}` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`; service operations use the safe engine |
+| Service action | `POST /api/services/{name}/{action}` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; service operations use the safe engine |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
@@ -135,7 +135,7 @@ Section id: `services-section`
 | Title | `Services` plus total count |
 | Title icons | group by category, collapse/expand all groups |
 | Controls | search, category select, status filters, showing count |
-| Status filters | all, disabled, running, stopped, unmonitorized, monitorized, failed |
+| Status filters | all, disabled, running, paused, stopped, unmonitorized, monitorized, failed |
 | Sorting | Service, Category, State |
 | Grouping | category group rows, collapsible |
 
@@ -197,6 +197,7 @@ Row expansion:
 | Field | Meaning |
 | --- | --- |
 | Version | full version output |
+| Version source | provider app name when `version_from` supplied the version |
 | Category | YAML category or fallback |
 | Location | resolved binary path |
 | Permissions | mode string |
@@ -274,6 +275,11 @@ Editable notes:
   matching the services and watches panels; Enter applies immediately, Escape
   clears. The `only errors` checkbox refetches on change. Grouping stays
   client-side and optional; raw chronology is still useful.
+- The `kind` filter covers the emitted event kinds: `cycle`, `action`,
+  `suppressed`, `shadow`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
+  `reload` (a successful config reload of the running daemon),
+  `hook`/`hook-failed`, `notify`/`notify-failed`, `expand`/`expand-skipped`/`expand-failed`,
+  and `cascade` (a service operation triggered through a cascade action).
 
 ## Notifiers panel
 

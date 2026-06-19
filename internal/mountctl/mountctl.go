@@ -195,6 +195,7 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
+		mountedHere := false
 		if !mounted {
 			ok, err := c.inFstab(spec.Path)
 			if err != nil {
@@ -210,8 +211,16 @@ func (c Controller) Acquire(ctx context.Context, spec Spec) (Result, error) {
 				}
 				return Result{}, err
 			}
+			mountedHere = true
 		}
 		if err := c.writeState(spec, state); err != nil {
+			if mountedHere {
+				// We mounted on this call but could not persist the new refcount.
+				// Unmount so we never leave a mounted filesystem recorded as
+				// refcount 0, which a later Release would then unmount out from
+				// under a still-active user.
+				_ = c.run(ctx, "umount", spec.Path)
+			}
 			return Result{}, err
 		}
 		mounted, _ = c.isMounted(spec.Path)
@@ -304,8 +313,14 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		return Result{Name: spec.Name, Path: spec.Path, Action: "umount", Status: "ok", Message: "unmounted", Mounted: false}, nil
 	}
 
-	blockers, _ := c.discoverUsers(ctx, spec.Path)
+	blockers, derr := c.discoverUsers(ctx, spec.Path)
 	result := Result{Name: spec.Name, Path: spec.Path, Action: "umount", Status: "failed", Message: "mount is busy", Mounted: true, Blockers: blockers}
+	if derr != nil {
+		// A discovery failure must not masquerade as "no blockers": surface it so
+		// the operator knows escalation could not be attempted, rather than
+		// silently reporting a clean busy mount.
+		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %v)", derr)
+	}
 	if spec.Umount.AllowSIGKILL && len(blockers) > 0 {
 		reaper := process.Reaper{
 			Rediscover: func() []process.Process {

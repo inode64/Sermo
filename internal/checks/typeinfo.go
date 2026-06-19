@@ -41,7 +41,7 @@ var typeInfos = []TypeInfo{
 	{Name: "entropy"},
 	{Name: "zombies"},
 	{Name: "oom"},
-	{Name: "cert"},
+	{Name: "cert", Health: true},
 	{Name: "sqlite", Health: true},
 	{Name: "sqlite3", Health: true},
 	{Name: "sql"},

@@ -46,6 +46,23 @@ func TestSSHSucceeds(t *testing.T) {
 	}
 }
 
+func TestSSHRequireAuth(t *testing.T) {
+	// Only a configured password forces authentication; a user alone must not,
+	// otherwise key-less probes always fail against a healthy server.
+	if sshRequireAuth(Config{User: "ops"}) {
+		t.Fatal("user without password must not require auth")
+	}
+	if !sshRequireAuth(Config{Password: "secret"}) {
+		t.Fatal("password must require auth")
+	}
+	if !sshRequireAuth(Config{User: "ops", Password: "secret"}) {
+		t.Fatal("user+password must require auth")
+	}
+	if sshRequireAuth(Config{}) {
+		t.Fatal("anonymous probe must not require auth")
+	}
+}
+
 func TestPrefixConnReplaysThenReadsConn(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()

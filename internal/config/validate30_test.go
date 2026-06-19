@@ -56,6 +56,55 @@ defaults:
 	}
 }
 
+func TestValidateBackoffDurations(t *testing.T) {
+	// A garbage initial must not let a valid max slip through (the old code left
+	// the parsed initial at 0, so any max compared >= 0 and passed).
+	badInitial := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: nonsense, max: 10s }
+`)
+	mustHave(t, badInitial, "policy.backoff.initial")
+
+	// An omitted max reports its own parse error, not the misleading ">= initial".
+	missingMax := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: 5s }
+`)
+	mustHave(t, missingMax, "policy.backoff.max must be a valid positive duration")
+
+	// max < initial is still rejected with the ordering message.
+	maxBelow := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: 30s, max: 5s }
+`)
+	mustHave(t, maxBelow, "policy.backoff.max must be >= initial")
+
+	// A valid pair produces no backoff issue.
+	ok := validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy:
+  cooldown: 5m
+  backoff: { initial: 5s, max: 1m }
+`)
+	if hasIssue(ok, "backoff") {
+		t.Fatalf("valid backoff flagged: %v", ok)
+	}
+}
+
 func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
 	global := writeConfig(t, map[string]string{"sermo.yml": `
 engine:
@@ -396,6 +445,32 @@ rules:
 			t.Fatalf("valid inline http probe wrongly flagged: %v", is)
 		}
 	}
+}
+
+// TestValidateExpectStatusShapes documents that scalar and list expect_status
+// values are validated (element-by-element) by the resolved-tree scalar walk,
+// while the {op,value} mapping form is validated in validateHTTPFields — the two
+// paths together cover every shape parseStatusMatcher accepts.
+func TestValidateExpectStatusShapes(t *testing.T) {
+	check := func(expect string) []Issue {
+		return validateService(t, `
+kind: service
+name: svc
+service: { name: svc }
+policy: { cooldown: 5m }
+checks:
+  - { name: h, type: http, url: "http://x", expect_status: `+expect+` }
+`)
+	}
+	// Valid shapes produce no expect_status issue.
+	for _, ok := range []string{`200`, `"2xx"`, `[200, "3xx"]`, `{op: "<", value: 500}`} {
+		if hasIssue(check(ok), "expect_status") {
+			t.Fatalf("valid expect_status %q wrongly flagged", ok)
+		}
+	}
+	// Invalid scalar and invalid list element are caught via the scalar walk.
+	mustHave(t, check(`999nope`), "expect_status")
+	mustHave(t, check(`[200, bogus]`), "expect_status")
 }
 
 func TestValidateInlineProbeConnectionProtocols(t *testing.T) {
@@ -953,6 +1028,83 @@ service: { name: x }
 `)
 	mustHave(t, issues, `catalog_aliases entry "../stale" must be a simple name`)
 	mustHave(t, issues, "catalog_aliases entries must be non-empty strings")
+}
+
+func TestValidateAppVersionFrom(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/consumer.yml": `
+kind: app
+name: consumer
+binary: /usr/bin/consumer
+version_from: provider
+`,
+		"catalog/apps/provider.yml": `
+kind: app
+name: provider
+binary: /usr/bin/provider
+preflight:
+  version: { type: command, command: ["/usr/bin/provider", "--version"] }
+`,
+		"catalog/apps/missing.yml": `
+kind: app
+name: missing
+binary: /usr/bin/missing
+version_from: ghost
+`,
+		"catalog/apps/self.yml": `
+kind: app
+name: self
+binary: /usr/bin/self
+version_from: self
+`,
+		"catalog/apps/a.yml": `
+kind: app
+name: a
+binary: /usr/bin/a
+version_from: b
+`,
+		"catalog/apps/b.yml": `
+kind: app
+name: b
+binary: /usr/bin/b
+version_from: a
+`,
+		"catalog/apps/bad-name.yml": `
+kind: app
+name: bad-name
+binary: /usr/bin/bad-name
+version_from: ../provider
+`,
+		"catalog/apps/bad-type.yml": `
+kind: app
+name: bad-type
+binary: /usr/bin/bad-type
+version_from: [provider]
+`,
+		"catalog/not-app.yml": `
+kind: daemon
+name: not-app
+version_from: provider
+service: not-app
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	for _, issue := range issues {
+		if issue.Scope == "app consumer" {
+			t.Fatalf("valid version_from flagged: %v", issues)
+		}
+	}
+	mustHave(t, issues, `version_from references unknown app "ghost"`)
+	mustHave(t, issues, "version_from must not reference itself")
+	mustHave(t, issues, "version_from cycle detected")
+	mustHave(t, issues, `version_from "../provider" must be a simple name`)
+	mustHave(t, issues, "version_from must be a non-empty app name")
+	mustHave(t, issues, "version_from is only supported on app catalog documents")
 }
 
 func TestValidateCommandExpectExit(t *testing.T) {

@@ -3,3 +3,4 @@ name: rpc-idmapd
 display_name: "NFS idmapd"
 category: storage
 binary: "/usr/bin/rpc.idmapd"
+version_from: rpc-mountd

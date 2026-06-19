@@ -50,7 +50,7 @@ A library daemon describes a shared library so services can restart when it is
 upgraded. It only needs identity plus the file to watch:
 
 ```yaml
-kind: daemon
+kind: lib
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc)"
@@ -223,7 +223,7 @@ Link them with `apps:`:
 
 ```yaml
 # catalog/services/tomcat-%v.yml — Tomcat runs on the JVM
-apps: [java]
+apps: [java, "tomcat-${version}"]
 ```
 
 On resolution each linked app's preflight checks are injected into the service's
@@ -269,6 +269,7 @@ name: mariadb
 display_name: "MariaDB"      # pretty label; falls back to name when absent
 description: "..."           # free-text note; shown verbatim, nothing when absent
 category: "database"         # optional WebUI grouping/filter label
+type: "database"             # optional free-form classification; recorded, not acted on
 ```
 
 These fields are optional and behave differently when missing:
@@ -284,9 +285,13 @@ These fields are optional and behave differently when missing:
   a real sentence, not a restatement of the name.
 - **`category`** groups and filters Services and Installed applications in the
   WebUI. When absent or blank, services use `service` and apps use `app`.
+- **`type`** is an optional free-form classification label (e.g. `database`,
+  `cache`, `queue`, `webserver`, `appserver`, `tunnel`) used in the catalog to
+  organize entries. It is recorded but **not currently consumed** by the engine
+  and has no effect on monitoring, grouping or remediation.
 
-All metadata fields must be strings if present; validation rejects non-string
-values.
+`display_name`, `description` and `category` must be strings if present;
+validation rejects non-string values.
 
 ### Built-in variables
 
@@ -852,8 +857,8 @@ its own row (e.g. `PHP-FPM 8.3`, `PHP-FPM 7.4`). For `sermoctl services`, versio
 commands are best-effort inventory data: a failed distro-specific version probe
 leaves the version unknown instead of marking the installed service as an error.
 `--json` is unaffected by `--long` — it always emits both, with the structured
-`name`, `display_name`, `binary`, `version`, `version_short`, `installed`, `ok`
-and `status`.
+`name`, `display_name`, `binary`, `version`, `version_short`,
+`version_source`, `installed`, `ok` and `status`.
 
 When an app declares `health`, Sermo uses it as the preferred health probe for
 `sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit
@@ -861,6 +866,10 @@ code is evaluated (`expect_exit`, default `0`); stdout/stderr matchers and the
 printed output are ignored for health. The `version` command is only used as a
 fallback health probe when no `health` command exists; when `health` exists,
 `version` reports display data and a version failure does not override health.
+For catalog apps that are separate binaries from the same package, `version_from`
+can point at another catalog app whose version probe supplies the displayed
+version. The app still checks its own binary and health; `version_from` only
+sets `version`/`version_short` when the app has no local version result.
 
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
@@ -887,18 +896,19 @@ preflight:
 ```
 
 A daemon template may `uses` a base daemon to inherit its checks, processes and
-rules, while the linked app supplies the version-specific binary. The packaged
-`php-fpm%v` daemon builds on `php-fpm` and links `php-fpm${version}`:
+rules, while a linked app supplies the instance- or version-specific binary. The
+packaged `nebula-%i` daemon builds on the base `nebula` daemon and links the
+`nebula-${instance}` app:
 
 ```yaml
 kind: daemon
-name: php-fpm%v
-uses: php-fpm
-display_name: "PHP-FPM ${version}"
-apps: ["php-fpm${version}"]
+name: nebula-%i
+uses: nebula
+display_name: "Nebula ${instance}"
+apps: ["nebula-${instance}"]
 ```
 
-A service then targets a concrete version, e.g. `uses: php-fpm-8.3`.
+A service then targets a concrete instance, e.g. `uses: nebula-vpn0`.
 
 ## Service unit
 

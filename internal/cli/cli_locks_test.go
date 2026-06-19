@@ -57,7 +57,7 @@ func writeLockFixture(t *testing.T, dir, fileName string, payload map[string]any
 func TestLocksReportsActiveLock(t *testing.T) {
 	root := t.TempDir()
 	global, locksDir := writeLocksConfig(t, root)
-	writeLockFixture(t, locksDir, "mysql.backup.lock", map[string]any{
+	writeLockFixture(t, locksDir, "mysql\\backup.lock", map[string]any{
 		"service":           "mysql",
 		"name":              "backup",
 		"reason":            "backup mysql",

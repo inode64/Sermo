@@ -12,6 +12,12 @@ import (
 
 const lockSuffix = ".lock"
 
+// lockNameSep joins a service and a named-lock name into one filename. It is a
+// backslash because validateIdentifier rejects '\' in both service and lock
+// names, so the encoding is unambiguous (unlike a '.', which is legal in a
+// service name and so could collide a named lock with a bare service lock).
+const lockNameSep = "\\"
+
 // Report is the result of scanning one service's named runtime locks.
 type Report struct {
 	Service  string
@@ -149,14 +155,15 @@ func (s Scanner) ScanDir() ([]string, error) {
 // <service>[.<name>].lock (section 20).
 func matchService(fileName, service string) (string, bool) {
 	base := strings.TrimSuffix(fileName, lockSuffix)
-	switch {
-	case base == service:
+	if base == service {
 		return "", true
-	case strings.HasPrefix(base, service+"."):
-		return base[len(service)+1:], true
-	default:
-		return "", false
 	}
+	// Named locks are <service><sep><name>; neither segment can contain the
+	// separator, so the first (only) split is unambiguous.
+	if s, n, ok := strings.Cut(base, lockNameSep); ok && s == service && n != "" {
+		return n, true
+	}
+	return "", false
 }
 
 type lockServiceMatch struct {

@@ -45,17 +45,17 @@ func TestScanClassifiesStates(t *testing.T) {
 	future := fixedNow.Add(time.Hour)
 	past := fixedNow.Add(-time.Hour)
 
-	writeLock(t, dir, "mysql.backup.lock", lockFile{
+	writeLock(t, dir, "mysql\\backup.lock", lockFile{
 		Service: "mysql", Name: "backup", Reason: "backup mysql",
 		OwnerPID: 100, OwnerStartTicks: 884512, ExpiresAt: future,
 	})
-	writeLock(t, dir, "mysql.expired.lock", lockFile{
+	writeLock(t, dir, "mysql\\expired.lock", lockFile{
 		Service: "mysql", Name: "expired", OwnerPID: 100, OwnerStartTicks: 884512, ExpiresAt: past,
 	})
-	writeLock(t, dir, "mysql.dead.lock", lockFile{
+	writeLock(t, dir, "mysql\\dead.lock", lockFile{
 		Service: "mysql", Name: "dead", OwnerPID: 200, OwnerStartTicks: 884512, ExpiresAt: future,
 	})
-	writeLock(t, dir, "mysql.reused.lock", lockFile{
+	writeLock(t, dir, "mysql\\reused.lock", lockFile{
 		Service: "mysql", Name: "reused", OwnerPID: 100, OwnerStartTicks: 111111, ExpiresAt: future,
 	})
 
@@ -119,7 +119,7 @@ func TestScanServicesClassifiesSeveralServices(t *testing.T) {
 	dir := t.TempDir()
 	future := fixedNow.Add(time.Hour)
 	past := fixedNow.Add(-time.Hour)
-	writeLock(t, dir, "mysql.backup.lock", lockFile{Service: "mysql", Name: "backup", OwnerPID: 1, ExpiresAt: future})
+	writeLock(t, dir, "mysql\\backup.lock", lockFile{Service: "mysql", Name: "backup", OwnerPID: 1, ExpiresAt: future})
 	writeLock(t, dir, "redis.lock", lockFile{Service: "redis", OwnerPID: 1, ExpiresAt: past})
 	writeLock(t, dir, "other.lock", lockFile{Service: "other", OwnerPID: 1, ExpiresAt: future})
 

@@ -383,6 +383,30 @@ func TestBuildWatchesExpandsSwap(t *testing.T) {
 	}
 }
 
+func TestBuildWatchesMetricHonorsNotifyInterval(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"swap": map[string]any{
+			"check": map[string]any{"type": "swap"},
+			"metrics": map[string]any{
+				"usage": map[string]any{
+					"used_pct": map[string]any{"op": ">=", "value": 80},
+					"then":     map[string]any{"notify": []any{"ops"}, "notify_interval": "30m"},
+				},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, GlobalNotify: []string{"ops"}}, 30*time.Second)
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	if len(watches) != 1 {
+		t.Fatalf("expected 1 watch, got %d", len(watches))
+	}
+	if watches[0].NotifyInterval != 30*time.Minute {
+		t.Fatalf("metric watch must honor notify_interval, got %v", watches[0].NotifyInterval)
+	}
+}
+
 func TestBuildWatchesServiceCheckAsWatch(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"health": map[string]any{

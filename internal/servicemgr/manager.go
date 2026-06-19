@@ -167,7 +167,7 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 	unit := systemdUnit(service)
 	// `systemctl is-active` exits non-zero when the unit is not active but still
 	// prints the state, so a non-zero exit is not a failure to query.
-	result, err := m.runner.Run(ctx, "systemctl", "is-active", unit)
+	result, err := m.runner.Run(ctx, "systemctl", "is-active", "--", unit)
 	state := strings.TrimSpace(result.Stdout)
 	if state == "" && result.ExitCode < 0 {
 		return ServiceStatus{}, fmt.Errorf("query systemd status for %s: %w", unit, err)
@@ -213,7 +213,7 @@ func (m systemdManager) SupportsReload(ctx context.Context, service string) (boo
 
 func (m systemdManager) action(ctx context.Context, verb, service string) error {
 	unit := systemdUnit(service)
-	result, err := m.runner.Run(ctx, "systemctl", verb, unit)
+	result, err := m.runner.Run(ctx, "systemctl", verb, "--", unit)
 	if err != nil {
 		return actionError(fmt.Sprintf("systemctl %s %s", verb, unit), result, err)
 	}

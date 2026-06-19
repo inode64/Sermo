@@ -118,8 +118,9 @@ settings in this shared/per-target shape.
 
 ## PID detection (services)
 
-`servicemgr.DetectProc` derives a stable pidfile path and main executable from
-the service's init definition, best-effort (unknown fields come back `""`):
+`servicemgr.DetectProcInfo` derives a stable pidfile path, main executable,
+command line and user from the service's init definition, best-effort (unknown
+fields come back `""`):
 
 - **systemd**: `systemctl show` `PIDFile` and `ExecStart` (the `path=` token).
 - **OpenRC**: the init script and its `conf.d` override — `pidfile=`, a

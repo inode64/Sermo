@@ -41,8 +41,15 @@ func main() {
 }
 
 func run(args []string) int {
+	// `version` is a subcommand: honor it only as the first argument, never when
+	// it appears as a flag value (e.g. `--config version`). The flag forms may
+	// appear anywhere.
+	if len(args) > 0 && args[0] == "version" {
+		fmt.Println(buildinfo.String())
+		return 0
+	}
 	for _, a := range args {
-		if a == "version" || a == "--version" || a == "-V" {
+		if a == "--version" || a == "-V" {
 			fmt.Println(buildinfo.String())
 			return 0
 		}
@@ -326,12 +333,24 @@ func run(args []string) int {
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	go func() {
-		for range hup {
-			monitor.Reload()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-hup:
+				// Ignore a SIGHUP racing shutdown: reloading against a cancelled
+				// context would spawn a fresh generation and emit a spurious
+				// "config reloaded" after the daemon reported stopped.
+				if ctx.Err() != nil {
+					return
+				}
+				monitor.Reload()
+			}
 		}
 	}()
 
 	monitor.Run(ctx)
+	signal.Stop(hup) // stop SIGHUP delivery; the goroutine exits via ctx.Done()
 	logger.Info("sermod stopped")
 	return 0
 }
