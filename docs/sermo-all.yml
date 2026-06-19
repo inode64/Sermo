@@ -377,6 +377,15 @@ variables:                     # flat strings or first-existing path lists
   port: 8080
   health_path: /health
   data_dir: /var/lib/demo
+  plugin_dir: /usr/lib/demo/${arch}     # ${arch} (uname -m): x86_64, aarch64, …
+  os_profile: /etc/demo/profiles/${os}  # ${os} (os-release ID): debian, gentoo, …
+
+# OS-conditional overrides: the branch for the detected os-release ID (or
+# `default`) is merged in at load. Works at any depth (here it adds a variable).
+os:
+  debian:  { variables: { libexec_dir: /usr/lib/demo } }
+  gentoo:  { variables: { libexec_dir: /usr/libexec/demo } }
+  default: { variables: { libexec_dir: /usr/lib/demo } }
 
 commands:                      # informational or reserved names such as version
   health:
