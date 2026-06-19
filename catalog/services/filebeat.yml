@@ -6,5 +6,13 @@ description: "Lightweight log shipper for Logstash and Elasticsearch"
 service: filebeat
 apps: [filebeat]
 
+variables:
+  config: /etc/filebeat/filebeat.yml
+
+preflight:
+  config: { type: command, command: ["${filebeat_binary}", "test", "config", "-c", "${config}"], timeout: 30s }
+
+config_files: ["${config}", /etc/filebeat/modules.d]
+
 checks:
   service: { type: service, expect: active }

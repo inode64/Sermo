@@ -12,13 +12,19 @@ apps: [dnsmasq]
 variables:
   host: 127.0.0.1
   port: 53
+  config: /etc/dnsmasq.conf
   # Name resolved to prove the resolver answers; override per deployment.
   query: localhost
+
+preflight:
+  config: { type: command, command: ["${dnsmasq_binary}", "--test", "--conf-file=${config}"], timeout: 30s }
 
 restart_on_change:
   # Restart when a linked critical library changes on disk (e.g. an
   # OpenSSL CVE update), so the service picks up the new code.
   libraries: [glibc, systemd-libs, nettle, libidn2]
+
+config_files: ["${config}", /etc/dnsmasq.d]
 
 checks:
   service:

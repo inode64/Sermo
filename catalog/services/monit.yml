@@ -11,13 +11,19 @@ service:
 apps: [monit]
 variables:
   host: 127.0.0.1
+  config: /etc/monitrc
   # Monit's HTTP interface (set httpd in monitrc). Default 2812.
   port: 2812
+
+preflight:
+  config: { type: command, command: ["${monit_binary}", "-t", "-c", "${config}"], timeout: 30s }
 
 restart_on_change:
   # Restart when a linked critical library changes on disk (e.g. an
   # OpenSSL CVE update), so the service picks up the new code.
   libraries: [glibc, openssl, zlib]
+
+config_files: ["${config}", /etc/monit/conf.d, /etc/monit.d]
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
