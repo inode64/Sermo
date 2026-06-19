@@ -50,7 +50,7 @@ A library daemon describes a shared library so services can restart when it is
 upgraded. It only needs identity plus the file to watch:
 
 ```yaml
-kind: daemon
+kind: lib
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc)"
