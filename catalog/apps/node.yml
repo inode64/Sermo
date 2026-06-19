@@ -2,7 +2,9 @@ kind: app
 name: node
 display_name: "Node.js"
 category: runtime
-binary: "/usr/bin/node"
+variables:
+  binary: "/usr/bin/node"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }
   version_short: { type: command, command: ["${binary}","-p","process.versions.node"], timeout: 10s }

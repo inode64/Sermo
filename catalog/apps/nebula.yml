@@ -2,6 +2,8 @@ kind: app
 name: nebula
 display_name: "Nebula"
 category: network
-binary: /usr/bin/nebula
+variables:
+  binary: /usr/bin/nebula
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-version"], timeout: 10s }

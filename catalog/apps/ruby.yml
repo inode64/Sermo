@@ -3,7 +3,9 @@ name: ruby
 display_name: "Ruby"
 category: runtime
 description: "An object-oriented scripting language"
-binary: "/usr/bin/ruby"
+variables:
+  binary: "/usr/bin/ruby"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
   version_short: { type: command, command: ["${binary}","-e","print RUBY_VERSION"], timeout: 10s }

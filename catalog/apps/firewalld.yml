@@ -2,9 +2,10 @@ kind: app
 name: firewalld
 display_name: "firewalld"
 category: security
-binary: /usr/bin/firewalld
 variables:
+  binary: /usr/bin/firewalld
   binary_offline: /usr/bin/firewall-offline-cmd
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary_offline}", "--version"], timeout: 10s }
   

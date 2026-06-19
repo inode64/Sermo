@@ -29,11 +29,12 @@ defaults:
 kind: service
 name: apache-main
 service: { name: apache2 }
-binary: `+binPath+`
+variables:
+  binary: `+binPath+`
 preflight:
   binary:
     type: binary
-    path: ${binary}
+    path: "${binary}"
   optional-flag:
     type: file_exists
     path: /definitely/missing/flag

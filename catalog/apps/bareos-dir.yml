@@ -2,6 +2,8 @@ kind: app
 name: bareos-dir
 display_name: "Bareos Director"
 category: storage
-binary: "/usr/bin/bareos-dir"
+variables:
+  binary: "/usr/bin/bareos-dir"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

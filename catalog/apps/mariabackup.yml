@@ -2,8 +2,10 @@ kind: app
 name: mariadb-backup
 display_name: "MariaDB Backup"
 category: database
-binary:
-  - "/usr/bin/mariadb-backup"
-  - "/usr/bin/mariadbbackup"
+variables:
+  binary:
+    - "/usr/bin/mariadb-backup"
+    - "/usr/bin/mariadbbackup"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

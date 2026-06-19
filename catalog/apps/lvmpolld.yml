@@ -3,6 +3,8 @@ name: lvmpolld
 display_name: "LVM poll daemon"
 category: storage
 description: "Monitors long-running LVM operations (pvmove, lvconvert)"
-binary: /usr/bin/lvmpolld
+variables:
+  binary: /usr/bin/lvmpolld
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

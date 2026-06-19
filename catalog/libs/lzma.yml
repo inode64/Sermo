@@ -2,4 +2,7 @@ kind: lib
 name: lzma
 display_name: "liblzma (xz)"
 description: "XZ/LZMA compression library; a change triggers a restart of dependent services"
-binary: "/usr/lib64/liblzma.so.5"
+variables:
+  binary: "/usr/lib64/liblzma.so.5"
+preflight:
+  file: { type: file, path: "${binary}" }

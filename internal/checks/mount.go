@@ -43,8 +43,7 @@ func parseMountCond(entry map[string]any) mountCond {
 func (m mountCond) evaluate(mounts []Mount, path string) (mounted, problem bool, reason string, info *Mount) {
 	for i := range mounts {
 		if mounts[i].MountPoint == path {
-			info = &mounts[i]
-			break
+			info = betterMount(info, &mounts[i])
 		}
 	}
 	mounted = info != nil
@@ -101,9 +100,23 @@ func MountForPath(mounts []Mount, path string) *Mount {
 		}
 		if best == nil || len(mp) > len(filepath.Clean(best.MountPoint)) {
 			best = &mounts[i]
+			continue
+		}
+		if len(mp) == len(filepath.Clean(best.MountPoint)) {
+			best = betterMount(best, &mounts[i])
 		}
 	}
 	return best
+}
+
+func betterMount(current, candidate *Mount) *Mount {
+	if current == nil {
+		return candidate
+	}
+	if current.FSType == "autofs" && candidate.FSType != "autofs" {
+		return candidate
+	}
+	return current
 }
 
 func pathUnderMount(path, mountPoint string) bool {

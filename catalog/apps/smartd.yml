@@ -2,6 +2,8 @@ kind: app
 name: smartd
 display_name: "S.M.A.R.T. Daemon"
 category: storage
-binary: "/usr/bin/smartd"
+variables:
+  binary: "/usr/bin/smartd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

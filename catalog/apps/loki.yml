@@ -2,6 +2,8 @@ kind: app
 name: loki
 display_name: "Grafana Loki"
 category: observability
-binary: /usr/bin/loki
+variables:
+  binary: /usr/bin/loki
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

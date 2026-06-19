@@ -2,6 +2,8 @@ kind: app
 name: go2rtc
 display_name: "go2rtc"
 category: web
-binary: /usr/bin/go2rtc
+variables:
+  binary: /usr/bin/go2rtc
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

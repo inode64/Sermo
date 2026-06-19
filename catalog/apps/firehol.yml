@@ -2,7 +2,9 @@ kind: app
 name: firehol
 display_name: "FireHOL"
 category: security
-binary: "/usr/bin/firehol"
+variables:
+  binary: "/usr/bin/firehol"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}"], expect_exit: 1, timeout: 10s }
 

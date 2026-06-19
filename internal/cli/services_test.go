@@ -38,7 +38,8 @@ func TestServicesCommand(t *testing.T) {
 name: nginx
 display_name: "Nginx"
 service: { name: nginx }
-binary: %q
+variables:
+  binary: %q
 preflight: { binary: { type: binary, path: "${binary}" } }
 `, nginx))
 	write(filepath.Join(daemonsDir, "linked.yml"), `kind: daemon
@@ -49,11 +50,13 @@ apps: [linked]
 `)
 	write(filepath.Join(appsDir, "linked.yml"), fmt.Sprintf(`kind: app
 name: linked
-binary: %q
+variables:
+  binary: %q
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["/definitely-missing-sermo-version-probe"], timeout: 10s }
 `, linked))
-	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nbinary: /bin/git\n")
+	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }

@@ -2,8 +2,10 @@ kind: lib
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc); a change triggers a restart of dependent services"
-binary: "/lib64/libc.so.6"
+variables:
+  binary: "/lib64/libc.so.6"
 preflight:
+  file: { type: file, path: "${binary}" }
   # Clean version string (e.g. "glibc 2.42") vs. running the .so, which prints a
   # long sentence. getconf ships with glibc, so it is always present.
   version: { type: command, command: ["getconf", "GNU_LIBC_VERSION"], timeout: 10s }

@@ -411,6 +411,27 @@ func (c fileExistsCheck) Run(_ context.Context) Result {
 	return c.result(true, c.path+" exists", start)
 }
 
+// fileCheck passes when a path exists and is a regular file.
+type fileCheck struct {
+	base
+	path string
+}
+
+func (c fileCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	info, err := os.Stat(c.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return c.result(false, c.path+" does not exist", start)
+		}
+		return c.result(false, fmt.Sprintf("stat %s: %v", c.path, err), start)
+	}
+	if !info.Mode().IsRegular() {
+		return c.result(false, c.path+" is not a regular file", start)
+	}
+	return c.result(true, c.path+" is a regular file", start)
+}
+
 // binaryCheck passes when a path exists and is an executable file (section 19).
 type binaryCheck struct {
 	base
@@ -430,6 +451,44 @@ func (c binaryCheck) Run(_ context.Context) Result {
 		return c.result(false, c.path+" is not executable", start)
 	}
 	return c.result(true, c.path+" is executable", start)
+}
+
+// socketCheck passes when any configured candidate exists and is a Unix socket.
+type socketCheck struct {
+	base
+	paths []string
+}
+
+func (c socketCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	if len(c.paths) == 0 {
+		return c.result(false, "socket check has no path candidates", start)
+	}
+	var failures []string
+	for _, path := range c.paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		if info.Mode()&os.ModeSocket == 0 {
+			failures = append(failures, path+" is not a socket")
+			continue
+		}
+		r := c.result(true, path+" is a socket", start)
+		r.Data = map[string]any{"path": path}
+		return r
+	}
+	if len(failures) > 0 {
+		return c.result(false, strings.Join(failures, "; "), start)
+	}
+	if len(c.paths) == 1 {
+		return c.result(false, c.paths[0]+" does not exist", start)
+	}
+	return c.result(false, fmt.Sprintf("none of socket candidates exist (%s)", strings.Join(c.paths, ", ")), start)
 }
 
 // metricCheck reads a sampled metric and compares it to a threshold (section

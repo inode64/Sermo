@@ -54,7 +54,10 @@ kind: lib
 name: glibc
 display_name: "GNU C Library"
 description: "Standard C library (libc)"
-binary: "/lib64/libc.so.6"          # the file watched for changes (and its version)
+variables:
+  binary: "/lib64/libc.so.6"        # the file watched for changes (and its version)
+preflight:
+  file: { type: file, path: "${binary}" }
 ```
 
 A service (or daemon definition) opts in with `restart_on_change`:
@@ -228,7 +231,8 @@ apps: [java, "tomcat-${version}"]
 
 On resolution each linked app's preflight checks are injected into the service's
 preflight under keys namespaced by the app name (`<app>-<check>`), carrying the
-app's own binary path, health probe and version command. When a service links
+app's own `variables.binary` path, health probe and version command. When a
+service links
 several apps, each one's checks stay distinct — e.g. `backrest`'s
 `apps: [backrest, restic]`
 yields `backrest-binary`, `backrest-health`, `backrest-version`,
@@ -255,9 +259,9 @@ service's preflight, which **blocks start/restart/reload/resume** (a preflight-f
 operation never executes the action) — you do not start, restart or reload a
 service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
-every service that lists it. The service keeps its own `binary`, `version` and
-`config` checks (the **config** test is always service-specific, never moved to
-an app). Referenced names must be `app` daemons.
+every service that lists it. The service keeps its own `variables.binary`,
+`version` and `config` checks (the **config** test is always service-specific,
+never moved to an app). Referenced names must be `app` daemons.
 
 ## Metadata fields
 
@@ -307,7 +311,10 @@ rules:
     then:
       action: block
       message: "${display_name} maintenance is active" # → "MariaDB maintenance is active"
-binary: "/usr/bin/qemu-system-${arch}"               # → /usr/bin/qemu-system-x86_64
+variables:
+  binary: "/usr/bin/qemu-system-${arch}"             # → /usr/bin/qemu-system-x86_64
+preflight:
+  binary: { type: binary, path: "${binary}" }
 ```
 
 An explicit `variables` entry of the same name always takes precedence over a
@@ -721,6 +728,23 @@ reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
 order and pass on the first live pidfile; if none exists, the backend PID
 fallback can still satisfy the gated health check.
 
+### `socket:` shorthand (gated health check)
+
+A daemon can declare a top-level Unix socket path when the active service should
+leave a socket behind:
+
+```yaml
+variables:
+  socket: /run/cups/cups.sock
+socket: { path: "${socket}", optional: true }
+```
+
+On resolution this creates a `socket` health check gated by `requires: [service]`
+and removes the top-level key. Like `pidfile:`, `socket:` accepts a scalar path,
+a candidate list, or `{path: ..., optional: true}`. Use it for runtime sockets
+owned by the daemon; protocol checks such as `redis`, `dbus` or `libvirt` still
+use their own `socket` field inside the check body.
+
 ## Versioned daemons
 
 Some applications ship one binary per version and several can be installed at
@@ -733,8 +757,10 @@ the same token links that app.
 kind: app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+variables:
+  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 
 ---
@@ -746,7 +772,7 @@ apps: ["postgres-${version}"]
 ```
 
 On load, Sermo discovers installed versions by globbing the linked app's
-`binary` path with `${version}` wildcarded (here
+`variables.binary` path with `${version}` wildcarded (here
 `/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. A
 candidate list is checked as a list, so distro-specific locations can stay in
 one app template. Each match becomes a concrete app and concrete daemon with
@@ -761,7 +787,7 @@ Keep application discovery in `catalog/apps`. A versioned or instanced daemon
 that links a matching app, such as `apps: ["postgres-${version}"]`,
 `apps: ["php-fpm${version}"]` or `apps: ["openvpn-${instance}"]`, must not
 declare its own `versions:` block. If discovery cannot come from a versioned
-binary path, put `versions.from` on the app template.
+`variables.binary` path, put `versions.from` on the app template.
 
 For example, an init instance template discovers instances from init files in the
 app, then the daemon links the materialized app:
@@ -771,7 +797,10 @@ kind: app
 name: openvpn-%i
 versions:
   from: "/etc/init.d/openvpn.${instance}"
-binary: /usr/bin/openvpn
+variables:
+  binary: /usr/bin/openvpn
+preflight:
+  binary: { type: binary, path: "${binary}" }
 
 ---
 kind: daemon
@@ -786,7 +815,7 @@ apps or daemons.
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
 for versions. Even so, a placeholder bounded on both sides (e.g.
-`/usr/lib64/php${version}/bin/php-fpm`, in the app binary path) discovers most
+`/usr/lib64/php${version}/bin/php-fpm`, in the app `variables.binary` path) discovers most
 precisely.
 
 ### Integer and instance placeholders
@@ -799,7 +828,10 @@ numbers, otherwise working exactly like `%v`:
 kind: app
 name: python%n
 display_name: "Python ${n}"
-binary: "/usr/bin/python${n}"
+variables:
+  binary: "/usr/bin/python${n}"
+preflight:
+  binary: { type: binary, path: "${binary}" }
 ```
 
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
@@ -821,7 +853,10 @@ display_name: "Python ${n}"
 versions:
   unversioned:
     description: "Active Python interpreter"
-binary: "/usr/bin/python${n}"
+variables:
+  binary: "/usr/bin/python${n}"
+preflight:
+  binary: { type: binary, path: "${binary}" }
 ```
 
 Use `%i`/`${instance}` for named init instances discovered from a bounded app
@@ -868,7 +903,8 @@ fallback health probe when no `health` command exists; when `health` exists,
 `version` reports display data and a version failure does not override health.
 For catalog apps that are separate binaries from the same package, `version_from`
 can point at another catalog app whose version probe supplies the displayed
-version. The app still checks its own binary and health; `version_from` only
+version. The app still checks its own `variables.binary` and health;
+`version_from` only
 sets `version`/`version_short` when the app has no local version result.
 
 `version` is the raw first line the version command prints (e.g. `nginx version:
@@ -1058,6 +1094,11 @@ checks, but the **reserved names** are consumed by features:
   `services` listings to report a daemon's version, and **each cycle** by the
   `version.on_change` monitor (see [Service health conditions](rules.md#service-health-conditions-version--state--config)).
   When both exist, `preflight.version` takes precedence over `commands.version`.
+  They also declare `version` and `version_short` variables with empty defaults
+  for expansion; linked apps expose them to services as `${app_version}` and
+  `${app_version_short}`. Other command-derived values can be declared with
+  `export:`, whose default source is trimmed stdout and whose default value is
+  empty.
 - **`reload`** — run by the safe reload operation (`sermoctl reload <service>`
   and `reload_on_change` rules) when the daemon reloads via a command rather
   than its init unit.

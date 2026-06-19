@@ -263,23 +263,25 @@ func versionFromCycle(cfg *Config, start string) []string {
 
 func validateTopLevelBinary(doc *Document, scope string) []Issue {
 	var issues []Issue
+	if _, present := doc.Body["binary"]; present {
+		issues = append(issues, Issue{Scope: scope, Msg: "binary is not supported; use variables.binary with preflight.binary"})
+	}
 	if vars, ok := doc.Body["variables"].(map[string]any); ok {
-		if _, exists := vars["binary"]; exists {
-			issues = append(issues, Issue{Scope: scope, Msg: "variables.binary is not supported; use top-level binary"})
+		raw := vars["binary"]
+		if raw == nil {
+			return issues
 		}
-	}
-	raw, present := doc.Body["binary"]
-	if !present {
+		candidates := cfgval.StringList(raw)
+		if len(candidates) == 0 {
+			issues = append(issues, Issue{Scope: scope, Msg: "variables.binary must be a non-empty path string or list"})
+		}
+		for _, path := range candidates {
+			if !filepath.IsAbs(path) {
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("variables.binary path %q must be absolute", path)})
+			}
+		}
+	} else {
 		return issues
-	}
-	candidates := cfgval.StringList(raw)
-	if len(candidates) == 0 {
-		issues = append(issues, Issue{Scope: scope, Msg: "binary must be a non-empty path string or list"})
-	}
-	for _, path := range candidates {
-		if !filepath.IsAbs(path) {
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("binary path %q must be absolute", path)})
-		}
 	}
 	return issues
 }

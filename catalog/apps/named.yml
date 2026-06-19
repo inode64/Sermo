@@ -2,6 +2,8 @@ kind: app
 name: named
 display_name: "BIND (named)"
 category: network
-binary: "/usr/bin/named"
+variables:
+  binary: "/usr/bin/named"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

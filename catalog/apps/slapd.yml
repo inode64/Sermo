@@ -2,6 +2,8 @@ kind: app
 name: slapd
 display_name: "OpenLDAP (slapd)"
 category: identity
-binary: "/usr/bin/openldap/slapd"
+variables:
+  binary: "/usr/bin/openldap/slapd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-VVV"], expect_exit: 1, timeout: 10s }

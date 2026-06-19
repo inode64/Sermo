@@ -3,6 +3,8 @@ name: fail2ban
 catalog_aliases: [fail2ban-server]
 display_name: "Fail2ban"
 category: security
-binary: "/usr/bin/fail2ban-server"
+variables:
+  binary: "/usr/bin/fail2ban-server"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

@@ -2,6 +2,8 @@ kind: app
 name: bareos-sd
 display_name: "Bareos Storage Daemon"
 category: storage
-binary: "/usr/bin/bareos-sd"
+variables:
+  binary: "/usr/bin/bareos-sd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

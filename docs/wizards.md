@@ -150,10 +150,11 @@ while those files exist. The wizard preserves any loaded `apps/` include and
 appends `services/` instead of moving or deleting legacy files.
 
 The volume wizard generates storage **watch fragments** under the `storage/`
-include directory. First-class mount units are different: `sermoctl wizard
-mount` reads `/etc/fstab`, writes `kind: mount` files under `paths.mounts`
-(default `/etc/sermo/mounts`) and they are operated with `sermoctl
-mount|umount`.
+include directory for mounted storage filesystems, including local block devices
+and network/distributed filesystems such as NFS, Ceph and ZFS. First-class mount
+units are different: `sermoctl wizard mount` reads `/etc/fstab`, writes `kind:
+mount` files under `paths.mounts` (default `/etc/sermo/mounts`) and they are
+operated with `sermoctl mount|umount`.
 
 ## Adding a new wizard
 

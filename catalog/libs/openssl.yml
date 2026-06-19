@@ -2,4 +2,7 @@ kind: lib
 name: openssl
 display_name: "OpenSSL libcrypto"
 description: "OpenSSL cryptography/TLS library (libcrypto/libssl); a change triggers a restart of dependent services"
-binary: "/usr/lib64/libcrypto.so.3"
+variables:
+  binary: "/usr/lib64/libcrypto.so.3"
+preflight:
+  file: { type: file, path: "${binary}" }

@@ -3,6 +3,8 @@ name: go
 display_name: "Go"
 category: runtime
 description: "A concurrent garbage collected and typesafe programming language"
-binary: "/usr/bin/go"
+variables:
+  binary: "/usr/bin/go"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","version"], timeout: 10s }

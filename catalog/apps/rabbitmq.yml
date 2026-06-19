@@ -2,8 +2,9 @@ kind: app
 name: rabbitmq
 display_name: "RabbitMQ"
 category: messaging
-binary: /usr/bin/rabbitmq-server
 variables:
+  binary: /usr/bin/rabbitmq-server
   ctl: /usr/bin/rabbitmqctl
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${ctl}", "version"], timeout: 10s, optional: true }

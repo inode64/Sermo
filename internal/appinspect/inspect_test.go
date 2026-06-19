@@ -297,23 +297,27 @@ func TestListAppVersionFromProvider(t *testing.T) {
 	for dir, content := range map[string]string{
 		"catalog/apps/rpcbind.yml": fmt.Sprintf(`kind: app
 name: rpcbind
-binary: %q
+variables:
+  binary: %q
 version_from: rpc-mountd
 `, rpcbind),
 		"catalog/apps/nfsdcld.yml": fmt.Sprintf(`kind: app
 name: nfsdcld
-binary: %q
+variables:
+  binary: %q
 version_from: rpc-mountd
 `, nfsdcld),
 		"catalog/apps/rpc-mountd.yml": fmt.Sprintf(`kind: app
 name: rpc-mountd
-binary: %q
+variables:
+  binary: %q
 preflight:
   version: { type: command, command: [%q, "-v"] }
 `, rpcmountd, rpcmountd),
 		"catalog/apps/local.yml": fmt.Sprintf(`kind: app
 name: local
-binary: %q
+variables:
+  binary: %q
 version_from: rpc-mountd
 preflight:
   version: { type: command, command: [%q, "--version"] }
@@ -377,7 +381,8 @@ func TestListIncludesUnversionedTemplateApp(t *testing.T) {
 		"catalog/apps/php%v.yml": fmt.Sprintf(`kind: app
 name: php%%v
 display_name: "PHP ${version}"
-binary: %q
+variables:
+  binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
 `, filepath.Join(binDir, "php${version}")),

@@ -2,6 +2,8 @@ kind: app
 name: upsd
 display_name: "NUT UPS Daemon"
 category: hardware
-binary: "/usr/bin/upsd"
+variables:
+  binary: "/usr/bin/upsd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -2,6 +2,8 @@ kind: app
 name: rest-server
 display_name: "Restic REST Server"
 category: storage
-binary: /usr/bin/rest-server
+variables:
+  binary: /usr/bin/rest-server
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -153,7 +153,27 @@ func TestFirstNameserver(t *testing.T) {
 	}
 }
 
-func TestDNSProbeInterfaceIgnoresLoopbackNameserver(t *testing.T) {
+func TestDNSProbeInterfaceIgnoresLocalNameserver(t *testing.T) {
+	oldAddrs := dnsInterfaceAddrs
+	oldRouteAddrs := dnsRouteAddrs
+	dnsInterfaceAddrs = func() ([]net.Addr, error) {
+		return []net.Addr{
+			&net.IPNet{IP: net.ParseIP("192.168.2.254"), Mask: net.CIDRMask(24, 32)},
+			&net.IPAddr{IP: net.ParseIP("2001:db8::53")},
+		}, nil
+	}
+	dnsRouteAddrs = func(host string) (net.Addr, net.Addr, error) {
+		if host == "192.168.5.254" {
+			ip := net.ParseIP(host)
+			return &net.UDPAddr{IP: ip, Port: 42300}, &net.UDPAddr{IP: ip, Port: 53}, nil
+		}
+		return &net.UDPAddr{IP: net.ParseIP("203.0.113.10"), Port: 42300}, &net.UDPAddr{IP: net.ParseIP(host), Port: 53}, nil
+	}
+	defer func() {
+		dnsInterfaceAddrs = oldAddrs
+		dnsRouteAddrs = oldRouteAddrs
+	}()
+
 	tests := []struct {
 		name  string
 		host  string
@@ -163,6 +183,10 @@ func TestDNSProbeInterfaceIgnoresLoopbackNameserver(t *testing.T) {
 		{name: "ipv4 loopback", host: "127.0.0.1", iface: "br0"},
 		{name: "ipv6 loopback", host: "::1", iface: "br0"},
 		{name: "bracketed ipv6 loopback", host: "[::1]", iface: "br0"},
+		{name: "local ipv4", host: "192.168.2.254", iface: "ppp0"},
+		{name: "local ipv6", host: "2001:db8::53", iface: "ppp0"},
+		{name: "bracketed local ipv6", host: "[2001:db8::53]", iface: "ppp0"},
+		{name: "local by route", host: "192.168.5.254", iface: "ppp0"},
 		{name: "remote nameserver", host: "192.0.2.53", iface: "br0", want: "br0"},
 		{name: "empty interface", host: "192.0.2.53"},
 	}

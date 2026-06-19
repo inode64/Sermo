@@ -2,6 +2,8 @@ kind: app
 name: automount
 display_name: "Automount"
 category: system
-binary: "/usr/bin/automount"
+variables:
+  binary: "/usr/bin/automount"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }
