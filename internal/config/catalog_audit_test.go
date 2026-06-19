@@ -986,6 +986,33 @@ func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 	}
 }
 
+func TestCatalogServicesDoNotOwnRuntimeResourcePreflight(t *testing.T) {
+	root := repoRoot(t)
+	files, err := yamlFiles(filepath.Join(root, "catalog", "services"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		path := filepath.Join(root, "catalog", "services", file)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var doc map[string]any
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		preflight, _ := doc["preflight"].(map[string]any)
+		for name, raw := range preflight {
+			entry, _ := raw.(map[string]any)
+			switch cfgval.String(entry["type"]) {
+			case "binary", "libraries":
+				t.Errorf("%s preflight.%s uses runtime resource type %q; move it to catalog/apps", path, name, entry["type"])
+			}
+		}
+	}
+}
+
 func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")

@@ -26,10 +26,6 @@ preflight:
     command: ["${mariadb_binary}", "--help", "--verbose"]
     timeout: 15s
 
-  libraries:
-    type: libraries
-    binary: "${mariadb_binary}"
-
 processes:
   mariadbd:
     type: command_match

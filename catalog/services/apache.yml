@@ -24,11 +24,6 @@ preflight:
     command: ["sh", "-c", "if command -v apache2ctl >/dev/null 2>&1; then exec apache2ctl configtest; else exec apachectl configtest; fi"]
     timeout: 10s
 
-  libraries:
-    type: libraries
-    binary: "${apache_binary}"
-    optional: true
-
 processes:
   main:
     type: command_match

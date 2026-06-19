@@ -23,10 +23,6 @@ preflight:
     command: ["${mysql_binary}", "--validate-config"]
     timeout: 15s
 
-  libraries:
-    type: libraries
-    binary: "${mysql_binary}"
-
 processes:
   pidfile:
     type: pidfile
