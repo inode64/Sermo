@@ -179,10 +179,7 @@ var commandUsages = []commandUsage{
 		Name:    "resume",
 		Summary: "Resume a paused service target through the safe operation engine.",
 		Usage: []string{
-			"sermoctl resume SERVICE [--no-cascade]",
-		},
-		Flags: []string{
-			"--no-cascade  operate only the named service",
+			"sermoctl resume SERVICE",
 		},
 		Examples: []string{
 			"sermoctl resume vm-web01",

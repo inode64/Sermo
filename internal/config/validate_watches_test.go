@@ -45,6 +45,51 @@ func TestValidateWatchesGood(t *testing.T) {
 	}
 }
 
+func TestValidateWatchesNotifyIntervalBadDuration(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"storage-root": map[string]any{
+				"monitor": "previous",
+				"check":   map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"then": map[string]any{
+					"hook":            map[string]any{"command": []any{"/usr/local/bin/alert.sh"}},
+					"notify_interval": "soon",
+				},
+			},
+		},
+	})
+	if !hasIssueContaining(watchIssues(issues), "notify_interval") {
+		t.Fatalf("expected a notify_interval duration issue, got %v", watchIssues(issues))
+	}
+}
+
+func TestValidateWatchesNotifyIntervalWithoutTargets(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"watches": map[string]any{
+			"storage-root": map[string]any{
+				"monitor": "previous",
+				"check":   map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"then": map[string]any{
+					"hook":            map[string]any{"command": []any{"/usr/local/bin/alert.sh"}},
+					"notify_interval": "30m",
+				},
+			},
+		},
+	})
+	if !hasIssueContaining(watchIssues(issues), "no effect without notify targets") {
+		t.Fatalf("expected a 'no notify targets' issue, got %v", watchIssues(issues))
+	}
+}
+
+func hasIssueContaining(issues []Issue, substr string) bool {
+	for _, i := range issues {
+		if strings.Contains(i.Msg, substr) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestValidateWatchesSingleShotParity(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{

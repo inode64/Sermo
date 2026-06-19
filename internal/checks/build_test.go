@@ -105,7 +105,7 @@ func TestIsHealthType(t *testing.T) {
 		{"mariadb", true},
 		{"storage", false},
 		{"disk", false},
-		{"cert", false},
+		{"cert", true}, // health-style: OK means the certificate is acceptable
 		{"count", false},
 		{"sql", false},
 		{"mongodb-query", false},
@@ -120,7 +120,7 @@ func TestIsHealthType(t *testing.T) {
 
 func TestBuildMarksConditionChecks(t *testing.T) {
 	built, warnings := Build(map[string]any{
-		"cert": map[string]any{"type": "cert", "path": "/definitely/missing.pem"},
+		"load": map[string]any{"type": "load", "load1": map[string]any{"op": ">", "value": 1}},
 		"tcp":  map[string]any{"type": "tcp", "host": "127.0.0.1", "port": 1},
 	}, Deps{})
 	if len(warnings) != 0 || len(built) != 2 {
@@ -130,8 +130,8 @@ func TestBuildMarksConditionChecks(t *testing.T) {
 	for _, b := range built {
 		got[b.Check.Name()] = b.Check.Run(context.Background()).Condition
 	}
-	if !got["cert"] || got["tcp"] {
-		t.Fatalf("condition flags = %+v, want cert=true tcp=false", got)
+	if !got["load"] || got["tcp"] {
+		t.Fatalf("condition flags = %+v, want load=true tcp=false", got)
 	}
 }
 

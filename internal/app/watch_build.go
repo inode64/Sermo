@@ -110,19 +110,20 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		return nil, "watch " + name + ": " + err.Error()
 	}
 	w := &Watch{
-		Name:       name,
-		CheckType:  typ,
-		Check:      check,
-		Window:     rules.ParseWindowRule(entry),
-		Hook:       actions.hook,
-		Notifiers:  resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-		DryRun:     actions.dryRun,
-		Runner:     OSHookRunner{Runner: deps.ExecxRunner},
-		Interval:   interval,
-		IsPaused:   monitorPaused(deps.Monitor, watchMonitorKey(name)),
-		FireOnFail: checks.IsHealthType(typ),
-		Now:        deps.Now,
-		Emit:       deps.Emit,
+		Name:           name,
+		CheckType:      typ,
+		Check:          check,
+		Window:         rules.ParseWindowRule(entry),
+		Hook:           actions.hook,
+		Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+		NotifyInterval: actions.notifyInterval,
+		DryRun:         actions.dryRun,
+		Runner:         OSHookRunner{Runner: deps.ExecxRunner},
+		Interval:       interval,
+		IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
+		FireOnFail:     checks.IsHealthType(typ),
+		Now:            deps.Now,
+		Emit:           deps.Emit,
 	}
 	if actions.expand != nil {
 		w.Expand = actions.expand
@@ -202,18 +203,19 @@ func buildMetricWatches(name string, entry, checkEntry map[string]any, deps Deps
 			continue
 		}
 		out = append(out, &Watch{
-			Name:      name,
-			CheckType: cfgval.AsString(checkEntry["type"]),
-			Check:     check,
-			Window:    rules.ParseWindowRule(mEntry),
-			Hook:      actions.hook,
-			Notifiers: resolveNotifiers(actions.effectiveNames, deps.Notifiers),
-			DryRun:    actions.dryRun,
-			Runner:    OSHookRunner{Runner: deps.ExecxRunner},
-			Interval:  interval,
-			IsPaused:  monitorPaused(deps.Monitor, watchMonitorKey(name)),
-			Now:       deps.Now,
-			Emit:      deps.Emit,
+			Name:           name,
+			CheckType:      cfgval.AsString(checkEntry["type"]),
+			Check:          check,
+			Window:         rules.ParseWindowRule(mEntry),
+			Hook:           actions.hook,
+			Notifiers:      resolveNotifiers(actions.effectiveNames, deps.Notifiers),
+			NotifyInterval: actions.notifyInterval,
+			DryRun:         actions.dryRun,
+			Runner:         OSHookRunner{Runner: deps.ExecxRunner},
+			Interval:       interval,
+			IsPaused:       monitorPaused(deps.Monitor, watchMonitorKey(name)),
+			Now:            deps.Now,
+			Emit:           deps.Emit,
 		})
 	}
 	return out, warns
@@ -456,6 +458,7 @@ type watchActions struct {
 	effectiveNames []string
 	dryRun         bool
 	expand         *ExpandSpec
+	notifyInterval time.Duration
 }
 
 type watchActionOptions struct {
@@ -488,6 +491,7 @@ func resolveWatchActions(entry map[string]any, deps Deps, opts watchActionOption
 		effectiveNames: effectiveNames,
 		dryRun:         dryRunEnabled(thenBlock),
 		expand:         expand,
+		notifyInterval: cfgval.Duration(thenBlock["notify_interval"]),
 	}, nil
 }
 

@@ -93,7 +93,7 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		// talk to, or the transport handshake failed.
 		return Result{}, fmt.Errorf("ssh handshake: %v", hsErr)
 	}
-	requireAuth := cfg.User != "" || cfg.Password != ""
+	requireAuth := sshRequireAuth(cfg)
 	if !sshSucceeds(true, authed, requireAuth) {
 		return Result{}, fmt.Errorf("authentication failed: %v", hsErr)
 	}
@@ -109,6 +109,13 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		},
 	}, nil
 }
+
+// sshRequireAuth reports whether the probe must authenticate to count the
+// server healthy. Authentication is only attempted when a password is
+// configured (the sole auth method here), so gating on user as well would make
+// a user-without-password probe always fail "authentication failed" against a
+// perfectly healthy server when it should just verify the host key (server up).
+func sshRequireAuth(cfg Config) bool { return cfg.Password != "" }
 
 // sshSucceeds reports the overall outcome: the host key must be captured (the
 // server is up and speaking SSH), and when credentials are required the

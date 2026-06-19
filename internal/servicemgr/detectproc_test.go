@@ -326,3 +326,19 @@ var errNotFound = &fakeFSError{}
 type fakeFSError struct{}
 
 func (*fakeFSError) Error() string { return "not found" }
+
+func TestSuffixVarPicksSortedFirstOnMultipleMatches(t *testing.T) {
+	// Several variables share the suffix; the result must be the alphabetically
+	// first key's value, deterministically, regardless of map ordering.
+	vars := map[string]string{
+		"ZEBRA_PIDFILE":  "/run/zebra.pid",
+		"ALPHA_PIDFILE":  "/run/alpha.pid",
+		"MIDDLE_PIDFILE": "/run/middle.pid",
+		"OTHER":          "ignored",
+	}
+	for i := 0; i < 20; i++ {
+		if got := suffixVar(vars, "_PIDFILE"); got != "/run/alpha.pid" {
+			t.Fatalf("suffixVar = %q, want /run/alpha.pid (deterministic sorted pick)", got)
+		}
+	}
+}

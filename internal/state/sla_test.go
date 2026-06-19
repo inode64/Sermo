@@ -269,6 +269,33 @@ func TestSLATimelinesBucketsSegmentsIntoSubSpans(t *testing.T) {
 	}
 }
 
+// TestSLATimelinesIncludeCurrentMinuteMatchingSLA pins the window total of the
+// timeline to SLA() for the same span: both must count the current partial
+// minute, otherwise the strip and the report disagree.
+func TestSLATimelinesIncludeCurrentMinuteMatchingSLA(t *testing.T) {
+	s := openTemp(t)
+	now := time.Date(2026, 6, 7, 12, 30, 30, 0, time.UTC) // mid-minute
+
+	mustRecord(t, s, "web", true, now) // current (partial) minute
+	mustRecord(t, s, "web", false, now.Add(-10*time.Minute))
+
+	tls, err := s.SLATimelines("web", now)
+	if err != nil {
+		t.Fatalf("SLATimelines: %v", err)
+	}
+	hourWin := SLAWindows[0]
+	up, total, err := s.SLA("web", hourWin.Span, now)
+	if err != nil {
+		t.Fatalf("SLA: %v", err)
+	}
+	if total != 2 {
+		t.Fatalf("SLA hour total=%d, want 2 (current minute must be counted)", total)
+	}
+	if tls[0].Up != up || tls[0].Total != total {
+		t.Fatalf("timeline hour up=%d total=%d disagrees with SLA up=%d total=%d", tls[0].Up, tls[0].Total, up, total)
+	}
+}
+
 func TestCheckSLATimelinesScopeToCheck(t *testing.T) {
 	s := openTemp(t)
 	now := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)

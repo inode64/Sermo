@@ -40,9 +40,12 @@ type ProcInfo struct {
 
 // ProcSampler lists the processes matching a selector and reads each one's
 // current counters. Injected so the process watch can be tested without /proc;
-// nil uses the host /proc implementation.
+// nil uses the host /proc implementation. The bool reports whether the process
+// list could be read at all: false signals a transient failure (e.g. /proc
+// unreadable), which must be distinguished from "no process matched" so the
+// watch does not mistake a read error for every tracked PID disappearing.
 type ProcSampler interface {
-	Sample(match ProcMatch) []ProcInfo
+	Sample(match ProcMatch) ([]ProcInfo, bool)
 }
 
 // procCond is the set of per-process conditions a process watch evaluates. An
@@ -112,7 +115,14 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		sampler = osProcSampler{}
 	}
 
-	samples := sampler.Sample(w.match)
+	samples, ok := sampler.Sample(w.match)
+	if !ok {
+		// Could not read the process list this cycle (transient /proc failure).
+		// Treating the empty result as "all matching PIDs vanished" would fire a
+		// spurious `gone` for every tracked PID and discard their state; instead
+		// keep the previous state untouched and retry next cycle.
+		return
+	}
 	sort.Slice(samples, func(i, j int) bool { return samples[i].PID < samples[j].PID })
 
 	t := now()
@@ -281,7 +291,7 @@ type osProcSampler struct {
 	userLookup *process.UserLookup
 }
 
-func (s osProcSampler) Sample(m ProcMatch) []ProcInfo {
+func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	lookup := s.userLookup
 	if lookup == nil {
 		lookup = process.DefaultUserLookup()
@@ -289,7 +299,7 @@ func (s osProcSampler) Sample(m ProcMatch) []ProcInfo {
 	pr := process.OSReader{LookupUserName: lookup.Username}
 	pids, err := pr.PIDs()
 	if err != nil {
-		return nil
+		return nil, false
 	}
 	mr := metrics.OSReader{}
 
@@ -311,7 +321,7 @@ func (s osProcSampler) Sample(m ProcMatch) []ProcInfo {
 		}
 		out = append(out, info)
 	}
-	return out
+	return out, true
 }
 
 // procMatches reports whether a process matches the selector: its name against
