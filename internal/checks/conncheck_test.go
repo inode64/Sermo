@@ -45,6 +45,33 @@ func TestConnCheckRunOKWithVersion(t *testing.T) {
 	}
 }
 
+func TestConnCheckAllMatchReportsWorstPath(t *testing.T) {
+	// In interface_match: all every interface must succeed; the reported
+	// latency/version should reflect the worst (slowest) path, not whichever
+	// interface happened to be probed last.
+	c := connCheck{
+		base:  base{name: "db", timeout: time.Second},
+		proto: fakeProto{},
+		cfg:   conn.Config{Host: "127.0.0.1", Port: 3306, User: "monitor"},
+		probe: func(_ context.Context, cfg conn.Config) (conn.Result, error) {
+			if cfg.Interface == "eth0" {
+				time.Sleep(20 * time.Millisecond)
+				return conn.Result{Version: "slow-path"}, nil
+			}
+			return conn.Result{Version: "fast-path"}, nil
+		},
+		ifaces:   []string{"eth0", "eth1"},
+		ifaceAll: true,
+	}
+	res := c.Run(context.Background())
+	if !res.OK {
+		t.Fatalf("expected OK, got %q", res.Message)
+	}
+	if res.Data["version"] != "slow-path" {
+		t.Fatalf("all-match should report the slowest path, got version %v", res.Data["version"])
+	}
+}
+
 func TestConnCheckTrimsCapturedText(t *testing.T) {
 	c := connCheck{
 		base:  base{name: "db", timeout: time.Second},
