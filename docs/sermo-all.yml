@@ -70,10 +70,6 @@ defaults:                      # merged into every service as the base layer
   remediation:
     shadow: false              # service remediation shadow; watch actions use then.dry_run
 
-logging:
-  level: info
-  format: text
-
 # Security invariants are hard-coded. Config keys such as
 # security.allow_sigkill_by_default are rejected rather than honored.
 
