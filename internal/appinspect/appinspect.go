@@ -390,13 +390,22 @@ func namespacedReservedCommandEntry(tree map[string]any, key string) map[string]
 	return nil
 }
 
-// shortVersionRE matches the first dotted numeric version in a raw version line:
-// a `major.minor` with an optional `.patch`. By stopping at three components it
-// excludes any further build numbers (e.g. the `.1` in `2.8.4.1`) and trailing
-// suffixes (`p18`, `-P1`, `(2)`, `-MariaDB`), which keeps only the version and
-// at most the patchlevel. Requiring at least `major.minor` avoids latching onto
-// stray single digits (e.g. the `5` in perl's "perl 5, version 42 ... (v5.42.0)").
-var shortVersionRE = regexp.MustCompile(`[0-9]+\.[0-9]+(?:\.[0-9]+)?`)
+// shortVersionRE captures the first dotted numeric version in a raw version
+// line: a `major.minor` with an optional `.patch`. The first capture group is
+// the normalized value; the surrounding match may include a non-version prefix
+// character so formats such as `go1.26.2` still parse while suffixes and extra
+// build components are left out.
+var shortVersionRE = regexp.MustCompile(`(?:^|[^0-9.])([0-9]+\.[0-9]+(?:\.[0-9]+)?)`)
+
+var shortVersionSpecificREs = []*regexp.Regexp{
+	regexp.MustCompile(`\bisc-dh(?:client|cpd)-([0-9]+\.[0-9]+\.[0-9]+-P[0-9]+)\b`),
+	regexp.MustCompile(`\bOpenSSH[_ ]([0-9]+\.[0-9]+p[0-9]+)\b`),
+	regexp.MustCompile(`\bNET-SNMP version:\s*([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+|\.pre[0-9]*)?)\b`),
+	regexp.MustCompile(`\bNetwork UPS Tools (?:upsd|upsmon)\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
+	regexp.MustCompile(`\bxinetd\s+([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\b`),
+}
+
+var ntpPatchVersionRE = regexp.MustCompile(`^([0-9]+\.[0-9]+\.[0-9]+p[0-9]+)$`)
 
 // shortIntegerVersionRE covers projects that publish integer-only releases in
 // version output, such as "pkexec version 126". It only runs after the dotted
@@ -409,10 +418,39 @@ var shortIntegerVersionRE = regexp.MustCompile(`(?i)\b(?:version|v)\s*:?\s*([0-9
 // guarded integer-only version token, or "" when the line carries no
 // recognizable version.
 func ShortVersion(s string) string {
-	if dotted := shortVersionRE.FindString(s); dotted != "" {
-		return dotted
+	if v := shortNTPVersion(s); v != "" {
+		return v
+	}
+	for _, re := range shortVersionSpecificREs {
+		if match := re.FindStringSubmatch(s); len(match) > 1 {
+			return match[1]
+		}
+	}
+	if match := shortVersionRE.FindStringSubmatch(s); len(match) > 1 {
+		return match[1]
 	}
 	if match := shortIntegerVersionRE.FindStringSubmatch(s); len(match) > 1 {
+		return match[1]
+	}
+	return ""
+}
+
+func shortNTPVersion(s string) string {
+	const prefix = "ntpd "
+	if !strings.HasPrefix(s, prefix) {
+		return ""
+	}
+	token, _, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(s, prefix)), " ")
+	if token == "" {
+		return ""
+	}
+	if strings.Contains(token, "@") {
+		if match := shortVersionRE.FindStringSubmatch(token); len(match) > 1 {
+			return match[1]
+		}
+		return ""
+	}
+	if match := ntpPatchVersionRE.FindStringSubmatch(token); len(match) > 1 {
 		return match[1]
 	}
 	return ""
