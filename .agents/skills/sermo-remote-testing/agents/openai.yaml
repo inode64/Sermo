@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sermo Remote Testing"
+  short_description: "Run safe Sermo checks on remote hosts"
+  default_prompt: "Use $sermo-remote-testing to run safe Sermo validation on the hosts in .env.ssh."
