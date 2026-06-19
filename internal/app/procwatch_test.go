@@ -9,22 +9,29 @@ import (
 	"sermo/internal/notify"
 )
 
-// fakeProcSampler returns a scripted sequence of samples, one per cycle.
+// fakeProcSampler returns a scripted sequence of samples, one per cycle. An
+// entry in failCycles (aligned with cycles) marks a cycle whose process list
+// could not be read, exercising the transient-failure path.
 type fakeProcSampler struct {
-	cycles [][]ProcInfo
-	i      int
+	cycles     [][]ProcInfo
+	failCycles []bool
+	i          int
 }
 
-func (f *fakeProcSampler) Sample(ProcMatch) []ProcInfo {
+func (f *fakeProcSampler) Sample(ProcMatch) ([]ProcInfo, bool) {
 	if f.i >= len(f.cycles) {
 		if len(f.cycles) == 0 {
-			return nil
+			return nil, true
 		}
-		return f.cycles[len(f.cycles)-1]
+		return f.cycles[len(f.cycles)-1], true
 	}
-	out := f.cycles[f.i]
+	idx := f.i
+	out := f.cycles[idx]
 	f.i++
-	return out
+	if idx < len(f.failCycles) && f.failCycles[idx] {
+		return nil, false
+	}
+	return out, true
 }
 
 type procHarness struct {
@@ -243,6 +250,29 @@ func TestProcWatchGone(t *testing.T) {
 		t.Fatalf("gone fired %d times, want 2", len(h.fired))
 	}
 	if h.fired[0]["SERMO_CHANGE"] != "gone" || h.fired[0]["SERMO_PID"] != "11" {
+		t.Fatalf("unexpected gone env: %v", h.fired[0])
+	}
+}
+
+func TestProcWatchUnreadableSampleDoesNotFireGone(t *testing.T) {
+	h := &procHarness{clock: time.Unix(1_000_000, 0)}
+	s := &fakeProcSampler{
+		cycles: [][]ProcInfo{
+			{{PID: 11}}, // present, adopt
+			{},          // /proc unreadable this cycle -> must NOT fire gone
+			{{PID: 11}}, // readable again, still present -> no fire
+			{},          // genuinely gone -> fire once
+		},
+		failCycles: []bool{false, true, false, false},
+	}
+	w := h.watcher(procCond{onGone: true}, s)
+	for i := 0; i < 4; i++ {
+		h.tick(w, time.Second)
+	}
+	if len(h.fired) != 1 {
+		t.Fatalf("gone fired %d times, want 1 (transient read failure must not fire gone)", len(h.fired))
+	}
+	if h.fired[0]["SERMO_PID"] != "11" {
 		t.Fatalf("unexpected gone env: %v", h.fired[0])
 	}
 }
