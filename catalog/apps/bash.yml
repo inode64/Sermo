@@ -2,6 +2,8 @@ kind: app
 name: bash
 display_name: "Bash"
 category: runtime
-binary: "/bin/bash"
+variables:
+  binary: "/bin/bash"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

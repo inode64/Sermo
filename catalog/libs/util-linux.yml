@@ -2,4 +2,7 @@ kind: lib
 name: util-linux
 display_name: "util-linux libblkid"
 description: "util-linux block-device id library (libblkid); a change triggers a restart of dependent services"
-binary: "/usr/lib64/libblkid.so.1"
+variables:
+  binary: "/usr/lib64/libblkid.so.1"
+preflight:
+  file: { type: file, path: "${binary}" }

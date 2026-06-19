@@ -92,7 +92,8 @@ without path separators.
 
 Catalog apps may declare `version_from: <app-name>` when a different binary from
 the same package has the authoritative version probe. The app still checks its
-own `binary` for installation and health; `version_from` only fills the displayed
+own `variables.binary` for installation and health; `version_from` only fills
+the displayed
 version when the app has no local version result. Local `health`, `version` and
 `version_short` commands still win. The referenced app must be another catalog
 app, may be addressed by a catalog alias, and `version_from` chains must not
@@ -101,9 +102,11 @@ checks into services.
 
 When a daemon or service lists apps, every app variable is also available to that
 daemon/service with a normalized app-name prefix: an app with
-`binary: /usr/bin/cupsd` and
-`variables: { cups_config: /usr/bin/cups-config }` exposes `${cupsd_binary}` and
-`${cupsd_cups_config}`. Dashes and other non-alphanumeric characters become
+`variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`
+exposes `${cupsd_binary}` and `${cupsd_cups_config}`. Command preflight entries
+named `version` or `version_short` also declare `${cupsd_version}` and
+`${cupsd_version_short}` with empty defaults; an explicit command `export:` may
+declare additional variables. Dashes and other non-alphanumeric characters become
 underscores. This lets a service reuse binary paths owned by one or more apps
 without naming collisions. When exactly one app is linked, its variables are
 also exposed without the prefix as defaults, so a service can use `${binary}`
@@ -849,12 +852,14 @@ a service.
 > (`mount`) lists `/etc/fstab` mount points and writes safe `kind: mount` files
 > under `paths.mounts`; it does not mount or unmount while generating config.
 >
-> `sermoctl wizard volume` creates storage checks (threshold as a percent or
-> size, optional auto-expand). `sermoctl wizard net` covers interface state,
+> `sermoctl wizard volume` creates storage checks for mounted local and
+> network/distributed filesystems (threshold as a percent or size, optional
+> auto-expand for LVM-backed filesystems). `sermoctl wizard net` covers interface state,
 > errors, speed and address; type `active` to pick currently up non-loopback
 > interfaces. `sermoctl wizard uplink` generates the layered internet-uplink set
 > for an interface: link state, assigned address, default route, bound ping and
-> DNS resolution; type `default` to use the detected default-route interface.
+> DNS resolution through the system resolver; type `default` to use the detected
+> default-route interface.
 > `sermoctl wizard service` detects installed catalog daemons and enables them
 > with `kind: service` files (see [daemons](daemons.md)); when several services
 > are selected, port overrides are skipped unless explicitly reviewed, and known
@@ -1106,8 +1111,9 @@ receives.
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `firewall_rules`, `entropy`, `zombies`, `oom`, `cert`) *and* the service
 checks (`tcp`, `ports`, `http`,
-`command`, `file_exists`, `binary`, `libraries`, `config`, `autofs`, `route`,
-`sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
+`command`, `file_exists`, `file`, `binary`, `pidfile`, `socket`, `libraries`,
+`config`, `autofs`, `route`, `sqlite`/`sqlite3`, `websocket`/`ws`, `count`,
+and connection-protocol checks
 such as `mysql`/`smtp`) — can be used as a watch here, and
 the host-resource ones can equally be used in a service's `checks:`/rules (see
 [Checks](rules.md#checks)). A watch fires its hook on the check's **alert**
@@ -1734,28 +1740,53 @@ such as `php` next to `php8.4` or `python` next to `python3`, Sermo materializes
 that unversioned entry automatically. Set `versions.unversioned: false` on the
 app template only when the marker-less binary should be ignored.
 
-## Binary shorthand
+## Binary resource variables
 
-Declare an executable path with top-level `binary:`:
+Declare executable candidates as a normal variable and select them through
+`preflight.binary`:
 
 ```yaml
-binary:
-  - /usr/bin/php-fpm${version}
-  - /usr/sbin/php-fpm${version}
+variables:
+  binary:
+    - /usr/bin/php-fpm${version}
+    - /usr/sbin/php-fpm${version}
+preflight:
+  binary: { type: binary, path: "${binary}" }
 ```
 
-The first regular executable candidate becomes `${binary}`. If none is
-executable yet, Sermo keeps the first existing candidate, or finally the first
-non-empty candidate, so the generated binary preflight reports the bad path
-explicitly instead of expanding to an empty string. Paths must be absolute after
-templating. Do not declare `variables.binary`; validation rejects it. `${binary}`
-is generated from the top-level `binary:` declaration.
+The resource preflight entry narrows `${binary}` to the first candidate matching
+the declared type. `binary` requires a regular executable file; `file` requires
+a regular file; `pidfile` requires a regular file; `socket` requires a Unix
+socket. If none currently matches, Sermo keeps the first non-empty candidate so
+the runtime preflight reports the bad path explicitly instead of expanding to an
+empty string. Paths must be absolute after templating.
 
-For `kind: app`, `kind: daemon` and service documents, `binary:` also creates a
-required `preflight.binary` check when the document did not define one. For
-`kind: lib`, `binary:` is the watched library file used by
-`restart_on_change.libraries`; it feeds `${binary}` but does not create an
-executable preflight.
+There is no top-level `binary:` compatibility path. Use `variables.binary` plus
+an explicit preflight entry for apps, daemons and services. Libraries use the
+same pattern with `type: file`:
+
+```yaml
+kind: lib
+name: glibc
+variables:
+  binary: /lib64/libc.so.6
+preflight:
+  file: { type: file, path: "${binary}" }
+```
+
+Command checks can declare variables too. `from: stdout` and `trim: true` are the
+defaults; `default` is optional and otherwise empty. The built-in `version` and
+`version_short` command names already export `version` and `version_short`, so
+only special values need an explicit `export:`:
+
+```yaml
+preflight:
+  api:
+    type: command
+    command: ["/usr/bin/tool", "api-version"]
+    export:
+      api: { regex: "API ([0-9]+)", default: "" }
+```
 
 ## Variables
 
@@ -1770,7 +1801,9 @@ checks:
 ```
 
 - Variables are flat literal strings; a value must not itself contain another
-  `${var}` (but `${env:...}` is allowed — see below).
+  `${var}` (but `${env:...}` is allowed — see below). Catalog version/instance
+  templates may use their template placeholders such as `${version}` or `${n}`
+  in path variables before materialization.
 - Expansion is a single pass: any `${...}` left afterward is an undefined
   variable and a validation error.
 - Numeric fields (`port`, `expect_status`) accept an int, a quoted string, or a
@@ -1810,9 +1843,9 @@ defaults:
   its own.
 - **Names:** must be unique (a duplicated YAML key is a load error) and must not
   be a **reserved name** — the selection keywords `all`/`none`/`default` and the
-  runtime tokens `date`/`event`/`action` are rejected. `binary` is also reserved:
-  use top-level `binary:` on each catalog app, daemon or service instead. Builtin names (`host`,
-  `port`, …) are allowed and override the builtin (see precedence).
+  runtime tokens `date`/`event`/`action` are rejected. `binary` is allowed and is
+  resolved through `preflight.binary` when it carries path candidates. Builtin
+  names (`host`, `port`, …) are allowed and override the builtin (see precedence).
 - Values support `${env:...}` and list-first-existing exactly like per-service
   variables. They cannot contain another `${var}` (no nesting), like any variable.
 - An undefined `${custom_x}` is a validation error in services **and** watches.

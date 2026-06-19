@@ -93,7 +93,7 @@ func buildUplinkWatches(iface string, s uplinkSettings) map[string]any {
 		},
 		"uplink-" + iface + "-dns": debounce(map[string]any{
 			"check": map[string]any{
-				"type": "dns", "resolvconf": true, "query": s.probeName, "interface": iface,
+				"type": "dns", "resolvconf": true, "query": s.probeName,
 				"expect":  map[string]any{"rcode": "NOERROR", "answers": map[string]any{"op": ">", "value": 0}},
 				"timeout": "5s",
 			},

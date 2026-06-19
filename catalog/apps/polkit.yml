@@ -2,4 +2,7 @@ kind: app
 name: polkit
 display_name: "Polkit"
 category: system
-binary: /usr/lib/polkit-1/polkitd
+variables:
+  binary: /usr/lib/polkit-1/polkitd
+preflight:
+  binary: { type: binary, path: "${binary}" }

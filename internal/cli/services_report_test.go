@@ -67,7 +67,8 @@ func TestServicesCommandNotifySendsReport(t *testing.T) {
 kind: daemon
 name: nginx
 display_name: "Nginx"
-binary: `+binary+`
+variables:
+  binary: `+binary+`
 preflight: { binary: { type: binary, path: "`+binary+`" } }
 `), 0o644); err != nil {
 		t.Fatal(err)

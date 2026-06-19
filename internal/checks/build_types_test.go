@@ -37,7 +37,7 @@ func TestTypeInfoCapabilities(t *testing.T) {
 		// cert returns OK=true when the certificate is healthy (health-style),
 		// like the http cert path; it must fire on failure, not on success.
 		{typ: "cert", wantKnown: true, wantHealth: true, wantWatchable: true},
-		{typ: "file", wantKnown: false},
+		{typ: "file", wantKnown: true, wantHealth: true, wantWatchable: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.typ, func(t *testing.T) {

@@ -2,6 +2,8 @@ kind: app
 name: ovsdb-client
 display_name: "Open vSwitch Database"
 category: virtualization
-binary: "/usr/bin/ovsdb-client"
+variables:
+  binary: "/usr/bin/ovsdb-client"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

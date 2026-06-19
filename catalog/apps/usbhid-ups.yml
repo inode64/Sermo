@@ -2,6 +2,8 @@ kind: app
 name: usbhid-ups
 display_name: "USB HID UPS Driver"
 category: hardware
-binary: "/lib/nut/usbhid-ups"
+variables:
+  binary: "/lib/nut/usbhid-ups"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

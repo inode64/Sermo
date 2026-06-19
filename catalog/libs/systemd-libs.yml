@@ -2,4 +2,7 @@ kind: lib
 name: systemd-libs
 display_name: "systemd libraries"
 description: "systemd shared library (libsystemd); a change triggers a restart of dependent services"
-binary: "/usr/lib64/libsystemd.so.0"
+variables:
+  binary: "/usr/lib64/libsystemd.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

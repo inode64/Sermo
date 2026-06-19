@@ -54,8 +54,11 @@ func TestUplinkAssistant(t *testing.T) {
 
 	dns := res.Watches["uplink-eth0-dns"].(map[string]any)
 	check := dns["check"].(map[string]any)
-	if check["resolvconf"] != true || check["query"] != "example.com" || check["interface"] != "eth0" {
+	if check["resolvconf"] != true || check["query"] != "example.com" {
 		t.Fatalf("dns check = %v", check)
+	}
+	if _, bound := check["interface"]; bound {
+		t.Fatalf("dns check must use the system resolver without an interface pin: %v", check)
 	}
 	if dns["for"].(map[string]any)["cycles"] != 3 {
 		t.Fatalf("dns = %v, want the 3-cycle debounce", dns)

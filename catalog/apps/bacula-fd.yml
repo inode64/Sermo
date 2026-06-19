@@ -2,6 +2,8 @@ kind: app
 name: bacula-fd
 display_name: "Bacula File Daemon"
 category: storage
-binary: "/usr/bin/bacula-fd"
+variables:
+  binary: "/usr/bin/bacula-fd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

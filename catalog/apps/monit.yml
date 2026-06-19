@@ -2,6 +2,8 @@ kind: app
 name: monit
 display_name: "Monit"
 category: observability
-binary: /usr/bin/monit
+variables:
+  binary: /usr/bin/monit
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

@@ -2,4 +2,7 @@ kind: lib
 name: pam
 display_name: "Linux-PAM"
 description: "Pluggable Authentication Modules; a change triggers a restart of dependent services"
-binary: "/lib64/libpam.so.0"
+variables:
+  binary: "/lib64/libpam.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

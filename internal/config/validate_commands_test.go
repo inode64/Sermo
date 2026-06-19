@@ -45,10 +45,45 @@ func TestValidateCommandsValid(t *testing.T) {
 			"expect_exit":   0,
 			"expect_stdout": "v1.",
 			"expect_stderr": map[string]any{"op": "==", "value": ""},
+			"export": map[string]any{
+				"raw": map[string]any{"from": "stdout", "trim": true, "regex": `([0-9.]+)`, "default": "unknown"},
+			},
 		},
 	}}
 	validateCommands(tree, add)
 	if len(issues) != 0 {
 		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
+
+func TestValidateCommandsExport(t *testing.T) {
+	var issues []string
+	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
+
+	tree := map[string]any{"commands": map[string]any{
+		"version": map[string]any{
+			"command": []any{"/bin/tool", "--version"},
+			"export": map[string]any{
+				"bad.name": map[string]any{},
+				"stderr":   map[string]any{"from": "log"},
+				"trim":     map[string]any{"trim": "yes"},
+				"regex":    map[string]any{"regex": "["},
+				"shape":    "stdout",
+			},
+		},
+	}}
+	validateCommands(tree, add)
+
+	joined := strings.Join(issues, "\n")
+	for _, want := range []string{
+		`commands.version.export variable "bad.name" must be a simple variable name`,
+		"commands.version.export.stderr.from must be stdout or stderr",
+		"commands.version.export.trim.trim must be a boolean",
+		"commands.version.export.regex.regex is invalid",
+		"commands.version.export.shape must be a mapping",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing issue %q in:\n%s", want, joined)
+		}
 	}
 }

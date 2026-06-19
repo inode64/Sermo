@@ -84,8 +84,11 @@ func TestListFiltersPseudoFilesystems(t *testing.T) {
 	src := staticMounts(
 		Mount{Device: "proc", Mountpoint: "/proc", FSType: "proc"},
 		Mount{Device: "tmpfs", Mountpoint: "/run", FSType: "tmpfs"},
+		Mount{Device: "systemd-1", Mountpoint: "/var/lib/libvirt/images", FSType: "autofs"},
 		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"},
 		Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/mnt/backup", FSType: "ext4"},
+		Mount{Device: "172.31.27.102:/srv/backup/kvm", Mountpoint: "/srv/backup/kvm", FSType: "nfs4"},
+		Mount{Device: "172.31.27.100:/", Mountpoint: "/var/lib/libvirt/images", FSType: "ceph"},
 		Mount{Device: "/dev/sda1", Mountpoint: "/", FSType: "ext4"}, // dup mountpoint
 		Mount{Device: "/dev/sda1", Mountpoint: "/srv/workspace/project", FSType: "ext4"},
 	)
@@ -93,10 +96,29 @@ func TestListFiltersPseudoFilesystems(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("got %d mounts, want 2 (real /dev devices, deduped): %+v", len(got), got)
+	if len(got) != 4 {
+		t.Fatalf("got %d mounts, want 4 (real storage mounts, deduped): %+v", len(got), got)
 	}
-	if got[0].Mountpoint != "/" || got[1].Mountpoint != "/mnt/backup" {
+	want := []string{"/", "/mnt/backup", "/srv/backup/kvm", "/var/lib/libvirt/images"}
+	for i := range want {
+		if got[i].Mountpoint != want[i] {
+			t.Fatalf("mount[%d] = %q, want %q; got %+v", i, got[i].Mountpoint, want[i], got)
+		}
+	}
+}
+
+func TestListRejectsNonStorageMounts(t *testing.T) {
+	src := staticMounts(
+		Mount{Device: "none", Mountpoint: "/run/credentials/x.service", FSType: "tmpfs"},
+		Mount{Device: "systemd-1", Mountpoint: "/proc/sys/fs/binfmt_misc", FSType: "autofs"},
+		Mount{Device: "systemd-1", Mountpoint: "/mnt/placeholder", FSType: "autofs"},
+		Mount{Device: "rpc_pipefs", Mountpoint: "/run/rpc_pipefs", FSType: "rpc_pipefs"},
+	)
+	got, err := List(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 0 {
 		t.Fatalf("unexpected mounts: %+v", got)
 	}
 }

@@ -2,4 +2,7 @@ kind: lib
 name: libidn2
 display_name: "libidn2"
 description: "GNU libidn2 internationalized-domain library; a change triggers a restart of dependent services"
-binary: "/usr/lib64/libidn2.so.0"
+variables:
+  binary: "/usr/lib64/libidn2.so.0"
+preflight:
+  file: { type: file, path: "${binary}" }

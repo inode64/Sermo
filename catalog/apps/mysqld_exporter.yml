@@ -2,6 +2,8 @@ kind: app
 name: mysqld_exporter
 display_name: "Prometheus MySQL Exporter"
 category: observability
-binary: /usr/bin/mysqld_exporter
+variables:
+  binary: /usr/bin/mysqld_exporter
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

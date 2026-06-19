@@ -2,6 +2,8 @@ kind: app
 name: grafana
 display_name: "Grafana"
 category: observability
-binary: /usr/bin/grafana
+variables:
+  binary: /usr/bin/grafana
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -1,6 +1,8 @@
 kind: app
 name: mdadm
 category: storage
-binary: "/usr/bin/mdadm"
+variables:
+  binary: "/usr/bin/mdadm"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

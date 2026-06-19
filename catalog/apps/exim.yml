@@ -2,6 +2,8 @@ kind: app
 name: exim
 display_name: "Exim"
 category: messaging
-binary: "/usr/bin/exim"
+variables:
+  binary: "/usr/bin/exim"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-bV"], timeout: 10s, optional: true }

@@ -2,6 +2,8 @@ kind: app
 name: apcsmart
 display_name: "APC Smart UPS Driver"
 category: hardware
-binary: "/lib/nut/apcsmart"
+variables:
+  binary: "/lib/nut/apcsmart"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -2,6 +2,8 @@ kind: app
 name: asterisk
 display_name: "Asterisk PBX"
 category: messaging
-binary: "/usr/bin/asterisk"
+variables:
+  binary: "/usr/bin/asterisk"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

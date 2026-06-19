@@ -2,6 +2,8 @@ kind: app
 name: virtlogd
 display_name: "libvirt Log Daemon"
 category: virtualization
-binary: "/usr/bin/virtlogd"
+variables:
+  binary: "/usr/bin/virtlogd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

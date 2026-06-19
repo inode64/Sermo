@@ -2,6 +2,8 @@ kind: app
 name: ntpd
 display_name: "NTP Daemon"
 category: network
-binary: "/usr/bin/ntpd"
+variables:
+  binary: "/usr/bin/ntpd"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

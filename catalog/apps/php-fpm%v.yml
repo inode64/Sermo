@@ -3,6 +3,8 @@ name: php-fpm%v
 display_name: "PHP-FPM ${version}"
 category: runtime
 description: "PHP-FPM interpreter"
-binary: "/usr/bin/php-fpm${version}"
+variables:
+  binary: "/usr/bin/php-fpm${version}"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"], timeout: 10s }

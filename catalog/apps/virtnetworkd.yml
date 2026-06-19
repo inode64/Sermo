@@ -2,6 +2,8 @@ kind: app
 name: virtnetworkd
 display_name: "libvirt Network Daemon"
 category: virtualization
-binary: /usr/bin/virtnetworkd
+variables:
+  binary: /usr/bin/virtnetworkd
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

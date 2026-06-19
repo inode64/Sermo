@@ -211,10 +211,10 @@ func containingMount(mounts []Mount, path string) (Mount, bool) {
 	return best, bestLen >= 0
 }
 
-// List returns the real disk-backed mounts (those whose source is a /dev/
-// device), skipping pseudo filesystems (tmpfs, proc, sysfs, cgroup, …) and
-// duplicate mount points. It is the candidate list the volume wizard offers.
-// mounts is injectable for tests; nil reads /proc/mounts.
+// List returns real storage mounts, skipping pseudo filesystems (tmpfs, proc,
+// sysfs, cgroup, ...), autofs placeholders and duplicate mount points. It is
+// the candidate list the volume wizard offers. mounts is injectable for tests;
+// nil reads /proc/mounts.
 func List(mounts MountSource) ([]Mount, error) {
 	if mounts == nil {
 		mounts = procMounts
@@ -226,13 +226,48 @@ func List(mounts MountSource) ([]Mount, error) {
 	seen := map[string]bool{}
 	var out []Mount
 	for _, m := range all {
-		if !strings.HasPrefix(m.Device, "/dev/") || seen[m.Mountpoint] {
+		if !isStorageMount(m) || seen[m.Mountpoint] {
 			continue
 		}
 		seen[m.Mountpoint] = true
 		out = append(out, m)
 	}
 	return pruneNestedSameDeviceMounts(out), nil
+}
+
+func isStorageMount(m Mount) bool {
+	if m.Mountpoint == "" || m.FSType == "" {
+		return false
+	}
+	if pseudoFilesystem(m.FSType) {
+		return false
+	}
+	if strings.HasPrefix(m.Device, "/dev/") {
+		return true
+	}
+	return storageFilesystem(m.FSType)
+}
+
+func pseudoFilesystem(fstype string) bool {
+	switch fstype {
+	case "autofs", "binfmt_misc", "bpf", "cgroup", "cgroup2", "configfs",
+		"debugfs", "devpts", "devtmpfs", "efivarfs", "fusectl", "hugetlbfs",
+		"mqueue", "nsfs", "proc", "pstore", "ramfs", "rpc_pipefs",
+		"securityfs", "sysfs", "tracefs", "tmpfs":
+		return true
+	default:
+		return false
+	}
+}
+
+func storageFilesystem(fstype string) bool {
+	switch fstype {
+	case "ceph", "cifs", "glusterfs", "gfs2", "lustre", "nfs", "nfs4",
+		"ocfs2", "smb3", "zfs":
+		return true
+	default:
+		return strings.HasPrefix(fstype, "fuse.")
+	}
 }
 
 func pruneNestedSameDeviceMounts(mounts []Mount) []Mount {

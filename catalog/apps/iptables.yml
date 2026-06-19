@@ -2,6 +2,8 @@ kind: app
 name: iptables
 display_name: "IPtables"
 category: security
-binary: "/usr/bin/iptables"
+variables:
+  binary: "/usr/bin/iptables"
 preflight:
+  binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
