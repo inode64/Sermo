@@ -16,6 +16,15 @@ variables:
   # The engine API on its local Unix socket; set `host` (and tls for 2376) for a
   # TCP daemon instead.
   socket: /run/docker.sock
+  config: /etc/docker/daemon.json
+
+config_files: ["${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" --validate --config-file=\"$1\"", "${docker_daemon}", "${config}"]
+    timeout: 30s
 
 checks:
   service:
