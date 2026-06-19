@@ -779,6 +779,12 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 
 	var merged map[string]any
 	if clone := cfgval.String(doc.Body["clone"]); clone != "" {
+		// clone and uses are mutually exclusive: the clone branch ignores uses
+		// entirely, so accepting both would silently drop the daemon the author
+		// asked to inherit. Surface it instead.
+		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
+			return nil, fmt.Errorf("service %q sets both clone and uses, which are mutually exclusive", name)
+		}
 		src, err := c.mergedService(clone, append(chain, name))
 		if err != nil {
 			return nil, err
