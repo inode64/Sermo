@@ -13,6 +13,15 @@ apps: [influxdb]
 variables:
   host: 127.0.0.1
   port: 8086
+  config: /etc/influxdb2/config.toml
+
+config_files: ["${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["${influxdb_binary}", "config", "validate", "--config", "${config}"]
+    timeout: 30s
 
 pidfile: /run/supervise-influxdb.pid
 

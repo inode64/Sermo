@@ -13,6 +13,15 @@ variables:
   user: loki
   host: 127.0.0.1
   port: 3100
+  config: /etc/loki/config.yml
+
+config_files: ["${config}"]
+
+preflight:
+  config:
+    type: command
+    command: ["${loki_binary}", "-verify-config", "-config.file=${config}"]
+    timeout: 30s
 
 pidfile: /run/loki.pid
 
