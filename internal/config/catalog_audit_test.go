@@ -39,9 +39,9 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
 
-	writeGlobal := func(dir, enabled string) string {
+	writeGlobal := func(dir, enabled, backend string) string {
 		global := filepath.Join(dir, "sermo.yml")
-		body := "engine: { backend: systemd }\n" +
+		body := "engine: { backend: " + backend + " }\n" +
 			"paths:\n  catalog: [" + catalogDir + "]\n  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n"
 		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
@@ -56,7 +56,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	if err := os.MkdirAll(emptyEnabled, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	probe, err := Load(writeGlobal(probeDir, emptyEnabled))
+	probe, err := Load(writeGlobal(probeDir, emptyEnabled, "systemd"))
 	if err != nil {
 		t.Fatalf("Load (probe): %v", err)
 	}
@@ -81,12 +81,16 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 		t.Fatal("no instantiable catalog daemons found")
 	}
 
-	cfg, err := Load(writeGlobal(dir, enabled))
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	for _, issue := range Validate(cfg) {
-		t.Errorf("catalog daemon fails validation: %s", issue)
+	for _, backend := range []string{"systemd", "openrc"} {
+		t.Run(backend, func(t *testing.T) {
+			cfg, err := Load(writeGlobal(dir, enabled, backend))
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			for _, issue := range Validate(cfg) {
+				t.Errorf("catalog daemon fails validation: %s", issue)
+			}
+		})
 	}
 }
 
