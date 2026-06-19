@@ -20,8 +20,6 @@ func (s stubHookRunner) RunHook(context.Context, []string, map[string]string, ti
 	return s.res, s.err
 }
 
-func intp(n int) *int { return &n }
-
 func TestHookSpecRunExpectations(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -32,8 +30,9 @@ func TestHookSpecRunExpectations(t *testing.T) {
 	}{
 		{"default exit 0 ok", HookSpec{Command: []string{"x"}}, execx.Result{ExitCode: 0}, nil, false},
 		{"default exit nonzero fails", HookSpec{Command: []string{"x"}}, execx.Result{ExitCode: 1, Stderr: "boom\n"}, nil, true},
-		{"expect_exit matches nonzero", HookSpec{Command: []string{"x"}, ExpectExit: intp(2)}, execx.Result{ExitCode: 2}, nil, false},
-		{"expect_exit mismatch", HookSpec{Command: []string{"x"}, ExpectExit: intp(2)}, execx.Result{ExitCode: 0}, nil, true},
+		{"expect_exit matches nonzero", HookSpec{Command: []string{"x"}, ExpectExit: []int{2}}, execx.Result{ExitCode: 2}, nil, false},
+		{"expect_exit matches one of several exits", HookSpec{Command: []string{"x"}, ExpectExit: []int{0, 2}}, execx.Result{ExitCode: 2}, nil, false},
+		{"expect_exit mismatch", HookSpec{Command: []string{"x"}, ExpectExit: []int{2}}, execx.Result{ExitCode: 0}, nil, true},
 		{"stdout substring ok", HookSpec{Command: []string{"x"}, Stdout: checks.OutputMatcher{Substring: "done"}}, execx.Result{Stdout: "all done\n"}, nil, false},
 		{"stdout substring missing", HookSpec{Command: []string{"x"}, Stdout: checks.OutputMatcher{Substring: "done"}}, execx.Result{Stdout: "nope\n"}, nil, true},
 		{"stderr op ok", HookSpec{Command: []string{"x"}, Stderr: checks.OutputMatcher{Op: "==", Value: ""}}, execx.Result{Stderr: ""}, nil, false},

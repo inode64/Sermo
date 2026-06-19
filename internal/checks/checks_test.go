@@ -329,11 +329,11 @@ func (r fakeRunner) Run(context.Context, string, ...string) (execx.Result, error
 }
 
 func TestCommandCheck(t *testing.T) {
-	ok := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"true"}, expectExit: 0}
+	ok := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"true"}, expectExit: []int{0}}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("exit 0 should pass: %s", res.Message)
 	}
-	bad := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "boom\n"}}, argv: []string{"false"}, expectExit: 0}
+	bad := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 1, Stderr: "boom\n"}}, argv: []string{"false"}, expectExit: []int{0}}
 	res := bad.Run(context.Background())
 	if res.OK {
 		t.Errorf("exit 1 should fail")

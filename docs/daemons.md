@@ -897,10 +897,11 @@ leaves the version unknown instead of marking the installed service as an error.
 
 When an app declares `health`, Sermo uses it as the preferred health probe for
 `sermoctl apps`/`libs`/`services` and the WebUI application list. Only the exit
-code is evaluated (`expect_exit`, default `0`); stdout/stderr matchers and the
-printed output are ignored for health. The `version` command is only used as a
-fallback health probe when no `health` command exists; when `health` exists,
-`version` reports display data and a version failure does not override health.
+code is evaluated (`expect_exit`, default `0`, or a list such as `[0, 1]`);
+stdout/stderr matchers and the printed output are ignored for health. The
+`version` command is only used as a fallback health probe when no `health`
+command exists; when `health` exists, `version` reports display data and a
+version failure does not override health.
 Do not mark an app `version` probe optional unless the app also has a `health`
 probe; otherwise Sermo can only prove that the binary exists, not that it can run.
 For catalog apps that are separate binaries from the same package, `version_from`
@@ -1108,9 +1109,9 @@ checks, but the **reserved names** are consumed by features:
   than its init unit.
 
 Any other entry is informational only. A run can assert its outcome, the same
-way a watch hook or `command` check does: `expect_exit` (default 0) and optional
-`expect_stdout`/`expect_stderr` matchers — a substring or an `{op, value}`
-comparison (`== != > >= < <= contains =~`).
+way a watch hook or `command` check does: `expect_exit` (default 0, or a list
+such as `[0, 1]`) and optional `expect_stdout`/`expect_stderr` matchers — a
+substring or an `{op, value}` comparison (`== != > >= < <= contains =~`).
 
 ```yaml
 commands:

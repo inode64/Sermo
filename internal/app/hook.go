@@ -13,14 +13,14 @@ import (
 
 // HookSpec is a watch's hook action: a local command (argv, never a shell) run
 // with a timeout when the watch condition fires (section 16, extension). Beyond
-// running the command it can assert the outcome: the exit status (ExpectExit,
+// running the command it can assert the outcome: the exit statuses (ExpectExit,
 // default 0) and the captured stdout/stderr (Stdout/Stderr matchers). A failed
 // assertion turns the hook into a "hook-failed" event, the same as a command
 // that could not run.
 type HookSpec struct {
 	Command    []string
 	Timeout    time.Duration
-	ExpectExit *int // nil means "expect 0"
+	ExpectExit []int // nil means "expect 0"
 	Stdout     checks.OutputMatcher
 	Stderr     checks.OutputMatcher
 }
@@ -54,12 +54,8 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 	if err != nil {
 		return err
 	}
-	want := 0
-	if h.ExpectExit != nil {
-		want = *h.ExpectExit
-	}
-	if res.ExitCode != want {
-		detail := fmt.Sprintf("exit %d (want %d)", res.ExitCode, want)
+	if !checks.ExitCodeExpected(res.ExitCode, h.ExpectExit) {
+		detail := fmt.Sprintf("exit %d (want %s)", res.ExitCode, checks.ExpectExitText(h.ExpectExit))
 		if s := checks.FirstNonEmptyLine(res.Stderr); s != "" {
 			detail += ": " + s
 		}

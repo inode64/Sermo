@@ -1035,12 +1035,13 @@ These conventions keep the per-type sections below short:
   `SERMO_<UPPER_KEY>`** (non-alphanumeric characters become `_`). Each type lists
   only its notable extra keys as *Hook extras*.
 - **Hook outcome.** A hook can assert what its command returned. By default a
-  non-zero exit makes the hook fail (a `hook-failed` event); set `expect_exit` to
-  treat another code as success. `expect_stdout` / `expect_stderr` additionally
-  check the captured output — a plain string requires that substring, or an
-  `{op, value}` mapping compares the trimmed output with the same operators as an
-  http check's `expect_body` (`== != > >= < <= contains =~`). A failed assertion is a
-  `hook-failed` event with the mismatch detail.
+  non-zero exit makes the hook fail (a `hook-failed` event); set `expect_exit`
+  to treat another code, or a list of codes such as `[0, 1]`, as success.
+  `expect_stdout` / `expect_stderr` additionally check the captured output — a
+  plain string requires that substring, or an `{op, value}` mapping compares the
+  trimmed output with the same operators as an http check's `expect_body`
+  (`== != > >= < <= contains =~`). A failed assertion is a `hook-failed` event
+  with the mismatch detail.
 
   ```yaml
   then:

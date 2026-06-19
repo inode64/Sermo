@@ -437,8 +437,8 @@ func parseActions(then map[string]any) (HookSpec, []string, error) {
 			return HookSpec{}, nil, fmt.Errorf("hook requires a non-empty command")
 		}
 		hook = HookSpec{Command: cmd, Timeout: cfgval.Duration(h["timeout"])}
-		if v, ok := cfgval.Int(h["expect_exit"]); ok {
-			hook.ExpectExit = &v
+		if v, ok := cfgval.IntList(h["expect_exit"]); ok {
+			hook.ExpectExit = v
 		}
 		stdout, warn := checks.ParseOutputMatcher(h["expect_stdout"])
 		if warn != "" {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -242,7 +243,7 @@ func TestBuildWatchesBuildsStorage(t *testing.T) {
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
 			"for":  map[string]any{"cycles": 3},
-			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
+			"then": map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}, "expect_exit": []any{0, 1}}},
 		},
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, 30*time.Second)
@@ -261,6 +262,9 @@ func TestBuildWatchesBuildsStorage(t *testing.T) {
 	}
 	if len(w.Hook.Command) != 1 {
 		t.Fatalf("hook command not parsed: %+v", w.Hook)
+	}
+	if !slices.Equal(w.Hook.ExpectExit, []int{0, 1}) {
+		t.Fatalf("hook expect_exit not parsed: %+v", w.Hook.ExpectExit)
 	}
 }
 

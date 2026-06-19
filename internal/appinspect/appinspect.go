@@ -229,8 +229,8 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 	switch {
 	case err != nil && res.ExitCode == 0:
 		return false, "error: " + err.Error()
-	case res.ExitCode != cmd.expectExit:
-		return false, fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, cmd.expectExit)
+	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
+		return false, fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit))
 	default:
 		return true, "ok"
 	}
@@ -241,8 +241,8 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 	switch {
 	case err != nil && res.ExitCode == 0:
 		return false, "error: " + err.Error(), "", ""
-	case res.ExitCode != cmd.expectExit:
-		status := fmt.Sprintf("error: exit %d (want %d)", res.ExitCode, cmd.expectExit)
+	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
+		status := fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit))
 		if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
 			status += ": " + line
 		}
@@ -348,7 +348,7 @@ func namespacedBinaryPrefixes(preflight map[string]any) []string {
 // its result must meet: the exit code and optional stdout/stderr matchers.
 type probeCommand struct {
 	argv       []string
-	expectExit int
+	expectExit []int
 	optional   bool
 	stdout     checks.OutputMatcher
 	stderr     checks.OutputMatcher
@@ -366,8 +366,8 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 	if entry == nil {
 		return probeCommand{}
 	}
-	vc := probeCommand{argv: cfgval.StringList(entry["command"])}
-	if v, ok := cfgval.Int(entry["expect_exit"]); ok {
+	vc := probeCommand{argv: cfgval.StringList(entry["command"]), expectExit: []int{0}}
+	if v, ok := cfgval.IntList(entry["expect_exit"]); ok {
 		vc.expectExit = v
 	}
 	vc.optional = cfgval.Bool(entry["optional"])
