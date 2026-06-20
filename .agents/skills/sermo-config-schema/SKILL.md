@@ -297,7 +297,7 @@ SIGKILL without explicit permission
 rules with both for and within if unsupported
 guards without blocks
 display_name, description and category, if present, are strings (all optional; display_name falls back to name, description has no fallback, category groups WebUI services/apps)
-service without service.name
+service must be scalar `service: <unit>` or a per-init map; `service.name` is unsupported
 service expect/state in {active, inactive, failed, unknown}; process state in {running, zombie, absent}
 metric scope is service or system, and name exists in that scope's catalog
 scope: system metric used in a remediation rule (must be alert only)

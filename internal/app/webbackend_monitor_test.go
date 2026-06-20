@@ -173,7 +173,7 @@ func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {
 	b := &WebBackend{
 		watchOrder: []string{"disk-root"},
 		watches: map[string]*webWatch{
-			"disk-root": {name: "disk-root", checkType: "disk", monitorMode: "previous"},
+			"disk-root": {name: "disk-root", checkType: "storage", monitorMode: "previous"},
 		},
 		store: store,
 	}

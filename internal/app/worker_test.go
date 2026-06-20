@@ -284,7 +284,7 @@ func TestBlockedOperationDoesNotRecordCooldown(t *testing.T) {
 func TestPreflightFailedOperationDoesNotRecordCooldown(t *testing.T) {
 	h := &workerHarness{
 		cache:    failedCache("http"),
-		opResult: operation.Result{Status: operation.ResultPreflightFailed, Message: "disk check failed"},
+		opResult: operation.Result{Status: operation.ResultPreflightFailed, Message: "storage check failed"},
 	}
 	w := h.worker(remediationTree("restart-if-down", "http", "restart"), rules.Policy{Cooldown: time.Minute}, nil)
 

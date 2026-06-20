@@ -11,13 +11,13 @@ func fakeMounts(ms ...Mount) MountSamplerFunc {
 
 var dataMount = Mount{Device: "/dev/sdb1", MountPoint: "/data", FSType: "ext4", Options: []string{"rw", "noatime"}}
 
-// diskMount builds a disk check with a mount condition (and optional space preds)
+// diskMount builds a storage check with a mount condition (and optional space preds)
 // for the integrated mount tests.
 func diskMount(m mountCond, sampler MountSamplerFunc, preds ...levelPred) diskCheck {
 	return diskCheck{base: base{name: "fs"}, path: "/data", preds: preds, mount: m, mountSampler: sampler}
 }
 
-func TestDiskMountedOK(t *testing.T) {
+func TestStorageMountedOK(t *testing.T) {
 	c := diskMount(mountCond{active: true, expectMount: true}, fakeMounts(dataMount))
 	res := c.Run(context.Background())
 	if res.OK { // mounted as expected, no space pred -> not an alert
@@ -28,7 +28,7 @@ func TestDiskMountedOK(t *testing.T) {
 	}
 }
 
-func TestDiskMountedPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
+func TestStorageMountedPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 	c := diskCheck{
 		base:  base{name: "fs"},
 		path:  "/var/lib/libvirt/images",
@@ -47,7 +47,7 @@ func TestDiskMountedPrefersRealMountOverAutofsPlaceholder(t *testing.T) {
 	}
 }
 
-func TestDiskNotMountedAlerts(t *testing.T) {
+func TestStorageNotMountedAlerts(t *testing.T) {
 	c := diskMount(mountCond{active: true, expectMount: true}, fakeMounts())
 	res := c.Run(context.Background())
 	if !res.OK {
@@ -58,7 +58,7 @@ func TestDiskNotMountedAlerts(t *testing.T) {
 	}
 }
 
-func TestDiskExpectUnmounted(t *testing.T) {
+func TestStorageExpectUnmounted(t *testing.T) {
 	mountedNow := diskMount(mountCond{active: true, expectMount: false}, fakeMounts(dataMount))
 	if !mountedNow.Run(context.Background()).OK {
 		t.Fatal("expected-unmounted must alert when mounted")
@@ -69,7 +69,7 @@ func TestDiskExpectUnmounted(t *testing.T) {
 	}
 }
 
-func TestDiskMountTakesPrecedenceOverSpace(t *testing.T) {
+func TestStorageMountTakesPrecedenceOverSpace(t *testing.T) {
 	// Not mounted: the space predicate must be skipped (statfs would read the
 	// parent fs); the check alerts on the mount problem, and usage is never called.
 	usageCalled := false
@@ -90,8 +90,8 @@ func TestDiskMountTakesPrecedenceOverSpace(t *testing.T) {
 	}
 }
 
-func TestBuildDiskMountCheck(t *testing.T) {
-	// Mount-only disk check (no space predicate) builds and runs.
+func TestBuildStorageMountCheck(t *testing.T) {
+	// Mount-only storage check (no space predicate) builds and runs.
 	built, warns := Build(map[string]any{
 		"data": map[string]any{"type": "storage", "path": "/data", "mounted": true},
 	}, Deps{MountSampler: fakeMounts(dataMount)})
@@ -99,11 +99,11 @@ func TestBuildDiskMountCheck(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 	if len(built) != 1 || built[0].Check.Run(context.Background()).OK {
-		t.Fatal("mounted-as-expected disk check should build and not alert")
+		t.Fatal("mounted-as-expected storage check should build and not alert")
 	}
-	// A disk check with neither space predicate nor mount condition is rejected.
+	// A storage check with neither space predicate nor mount condition is rejected.
 	if _, warns := Build(map[string]any{"d": map[string]any{"type": "storage", "path": "/data"}}, Deps{}); len(warns) == 0 {
-		t.Fatal("a disk check with no predicate and no mount condition should warn")
+		t.Fatal("a storage check with no predicate and no mount condition should warn")
 	}
 }
 
