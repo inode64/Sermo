@@ -315,7 +315,7 @@ type cmdState struct {
 // stdout/stderr, to expectations. With on_change it also alerts when
 // the command's stdout changes between cycles (e.g. a `version` command whose
 // output changed). The command is always an argv array, never a shell string
-//.
+// .
 type commandCheck struct {
 	base
 	runner     execx.Runner
@@ -421,7 +421,7 @@ func (c commandCheck) exportData(stdout, stderr string) map[string]any {
 }
 
 // serviceCheck compares the service's backend status to an expected value
-//. The status function is injected so the check stays single-shot.
+// . The status function is injected so the check stays single-shot.
 type serviceCheck struct {
 	base
 	expect string
@@ -442,7 +442,7 @@ func (c serviceCheck) Run(ctx context.Context) Result {
 }
 
 // fileExistsCheck passes when a path exists. It must point at a
-// foreign flag/lock file, never Sermo's own runtime locks (enforced in §30).
+// foreign flag/lock file, never Sermo's own runtime locks.
 type fileExistsCheck struct {
 	base
 	path string
@@ -539,8 +539,8 @@ func (c socketCheck) Run(_ context.Context) Result {
 	return c.result(false, fmt.Sprintf("none of socket candidates exist (%s)", strings.Join(c.paths, ", ")), start)
 }
 
-// metricCheck reads a sampled metric and compares it to a threshold (section
-// 12/14). Its OK is the comparison result (the threshold being met), so
+// metricCheck reads a sampled metric and compares it to a threshold. Its OK is
+// the comparison result (the threshold being met), so
 // `active: {check: ...}` is true when the threshold is breached.
 type metricCheck struct {
 	base
