@@ -67,29 +67,6 @@ func TestMySQLDSNDefaultsAndEscaping(t *testing.T) {
 	}
 }
 
-func TestNamesSortedAndRegistered(t *testing.T) {
-	names := Names()
-	if len(names) == 0 {
-		t.Fatal("no protocols registered")
-	}
-	for i := 1; i < len(names); i++ {
-		if names[i-1] >= names[i] {
-			t.Fatalf("Names not sorted/unique: %q >= %q", names[i-1], names[i])
-		}
-	}
-	for _, want := range []string{"mysql", "smtp", "postgres"} {
-		found := false
-		for _, n := range names {
-			if n == want {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("protocol %q missing from Names() = %v", want, names)
-		}
-	}
-}
-
 func TestPostgresRequiresUser(t *testing.T) {
 	p, ok := Lookup("postgres")
 	if !ok {

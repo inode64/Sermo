@@ -36,15 +36,6 @@ func writeConfig(t *testing.T, files map[string]string) string {
 	return global
 }
 
-func issuesContain(issues []Issue, want string) bool {
-	for _, issue := range issues {
-		if strings.Contains(issue.String(), want) {
-			return true
-		}
-	}
-	return false
-}
-
 const baseGlobal = `
 engine:
   backend: auto

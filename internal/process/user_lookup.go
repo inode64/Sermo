@@ -72,11 +72,6 @@ type UserLookup struct {
 	groupNames map[uint32]nameLookupResult
 }
 
-// CGOEnabled reports whether this binary was built with the cgo build tag.
-func CGOEnabled() bool {
-	return cgoEnabled
-}
-
 // ValidUserLookupMode reports whether mode is accepted by NewUserLookup.
 func ValidUserLookupMode(mode string) bool {
 	switch NormalizeUserLookupMode(mode) {

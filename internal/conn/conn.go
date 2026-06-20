@@ -11,7 +11,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"io"
-	"sort"
 	"strings"
 	"sync"
 )
@@ -61,20 +60,18 @@ type Protocol interface {
 
 // registry maps protocol names (canonical and aliases) to protocols.
 type registry struct {
-	mu        sync.RWMutex
-	byName    map[string]Protocol
-	canonical map[string]bool
+	mu     sync.RWMutex
+	byName map[string]Protocol
 }
 
 func newRegistry() *registry {
-	return &registry{byName: map[string]Protocol{}, canonical: map[string]bool{}}
+	return &registry{byName: map[string]Protocol{}}
 }
 
 func (r *registry) register(p Protocol, aliases ...string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.byName[p.Name()] = p
-	r.canonical[p.Name()] = true
 	for _, a := range aliases {
 		r.byName[a] = p
 	}
@@ -87,17 +84,6 @@ func (r *registry) lookup(name string) (Protocol, bool) {
 	return p, ok
 }
 
-func (r *registry) names() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]string, 0, len(r.canonical))
-	for n := range r.canonical {
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // defaultRegistry holds the protocols compiled into the binary.
 var defaultRegistry = newRegistry()
 
@@ -106,9 +92,6 @@ func Register(p Protocol, aliases ...string) { defaultRegistry.register(p, alias
 
 // Lookup returns the protocol registered under name (canonical or alias).
 func Lookup(name string) (Protocol, bool) { return defaultRegistry.lookup(name) }
-
-// Names returns the registered canonical protocol names, sorted.
-func Names() []string { return defaultRegistry.names() }
 
 // readCRLFLine reads one CRLF/LF-terminated line, trimmed — the line shape
 // every text protocol probe (redis RESP, imap, nut, …) reads.
