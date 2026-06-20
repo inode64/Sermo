@@ -2695,7 +2695,7 @@
     "semantic_hash": ""
   },
   ".agents/skills/sermo-remote-testing/SKILL.md": {
-    "mtime": 1781948300.4835625,
+    "mtime": 1781951010.9618955,
     "ast_hash": "7399aeb1a89c3d919153e6b8e23c37ad",
     "semantic_hash": ""
   },
@@ -4305,8 +4305,8 @@
     "semantic_hash": ""
   },
   "catalog/services/zigbee2mqtt.yml": {
-    "mtime": 1781916262.0914204,
-    "ast_hash": "4986074eb2571e97557b52817619c0c8",
+    "mtime": 1781950785.959057,
+    "ast_hash": "8d055054b20e9ce159290def13e22f2e",
     "semantic_hash": ""
   },
   "docs/cli.md": {
