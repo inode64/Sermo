@@ -2227,7 +2227,7 @@ function renderSLAWindows(wins, compact) {
   return `<div class="sla-windows${compact ? " sla-compact" : ""}">${rows}</div>`;
 }
 
-// renderSLAFill is the legacy single-fill bar, kept for windows without segments.
+// renderSLAFill is the single-fill bar used when a window has no segment data.
 function renderSLAFill(pct) {
   const width = pct == null ? 0 : pctClamp(pct);
   const empty = pct == null ? " sla-empty" : "";
