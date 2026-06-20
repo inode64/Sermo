@@ -507,7 +507,7 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 	}
 }
 
-func TestWizardCleanupDirsIncludesLegacyAssistantDir(t *testing.T) {
+func TestWizardCleanupDirsUsesCurrentOutputDirOnly(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	tests := []struct {
@@ -517,20 +517,20 @@ func TestWizardCleanupDirsIncludesLegacyAssistantDir(t *testing.T) {
 		want     []string
 	}{
 		{
-			name:   "volume checks storages and legacy dirs",
+			name:   "volume checks storages dir",
 			wizard: "volume",
 			fragment: map[string]any{
 				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
 			},
-			want: []string{filepath.Join(tmp, "storages"), filepath.Join(tmp, "storage"), filepath.Join(tmp, "volume")},
+			want: []string{filepath.Join(tmp, "storages")},
 		},
 		{
-			name:   "net checks networks and legacy dirs",
+			name:   "net checks networks dir",
 			wizard: "net",
 			fragment: map[string]any{
 				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
 			},
-			want: []string{filepath.Join(tmp, "networks"), filepath.Join(tmp, "network"), filepath.Join(tmp, "net")},
+			want: []string{filepath.Join(tmp, "networks")},
 		},
 	}
 	for _, tt := range tests {
@@ -546,11 +546,11 @@ func TestWizardCleanupDirsIncludesLegacyAssistantDir(t *testing.T) {
 func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	storageDir := filepath.Join(tmp, "storage")
+	storageDir := filepath.Join(tmp, "storages")
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cfgPath, []byte("paths:\n  storages: [storage]\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  storages: [storages]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// An existing managed watch for /old — a mountpoint the env no longer detects
