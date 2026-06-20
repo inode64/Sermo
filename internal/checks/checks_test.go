@@ -208,7 +208,7 @@ func TestHTTPCheckPostHeadersJSON(t *testing.T) {
 			"data.count": 3,    // number compared as string
 			"data.ready": true, // bool compared as string
 		},
-		"expect_body": "ready",
+		"expect_body": map[string]any{"op": "contains", "value": "ready"},
 	})
 	if warn != "" {
 		t.Fatalf("build warn: %s", warn)

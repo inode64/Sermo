@@ -242,13 +242,10 @@ func validateHTTPFields(prefix string, fields map[string]any, add addFunc) {
 		}
 	}
 	if v, present := fields["expect_body"]; present {
-		switch m := v.(type) {
-		case string:
-			// substring match
-		case map[string]any:
+		if m, ok := v.(map[string]any); ok {
 			validateOpValue(prefix, "expect_body", m, add)
-		default:
-			add("%s.expect_body must be a string or an {op, value} mapping", prefix)
+		} else {
+			add("%s.expect_body must be an {op, value} mapping", prefix)
 		}
 	}
 	if m, ok := fields["expect_status"].(map[string]any); ok {

@@ -50,7 +50,7 @@ clone cycle detection
 variable expansion; nested variable (value with ${...}) rejected
 flexible scalar parsing (port/expect_status as int, string or ${var})
 invalid YAML
-backend detection; alias resolution picks first existing unit
+backend detection; service candidate resolution picks first existing unit
 systemd status parsing
 OpenRC status parsing
 command timeout

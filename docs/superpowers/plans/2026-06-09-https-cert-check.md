@@ -434,7 +434,7 @@ Select the request client (add right after `defer cancel()`):
 Replace `resp, err := c.client.Do(req)` with `resp, err := client.Do(req)`.
 
 Replace the two HTTP success returns with calls to the new helper:
-- The early one (`if c.expectBody == "" && len(c.expectJSON) == 0 { return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start) }`) → `return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)`.
+- The early one (`if c.bodyOp == "" && len(c.expectJSON) == 0 { return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start) }`) → `return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)`.
 - The final `return c.result(true, fmt.Sprintf("status %d", resp.StatusCode), start)` → `return c.success(resp, fmt.Sprintf("status %d", resp.StatusCode), start)`.
 
 (Leave all failure returns as `c.result(false, ...)` — a failed HTTP assertion is the primary problem and short-circuits certificate inspection.)
@@ -573,7 +573,6 @@ Rename the local `url` variable to `rawURL` (it would otherwise shadow the `net/
 			body:        body,
 			contentType: contentType,
 			expect:      expect,
-			expectBody:  asString(entry["expect_body"]),
 			expectJSON:  parseJSONAssertions(entry["expect_json"]),
 		}
 		if warn := configureHTTPCert(hc, entry, rawURL); warn != "" {

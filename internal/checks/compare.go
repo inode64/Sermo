@@ -67,7 +67,7 @@ func validCompareOp(op string) bool {
 // OutputMatcher matches captured command/hook output (stdout or stderr) against
 // an expectation declared in YAML: a plain string is a substring requirement; an
 // {op, value} mapping is an operator comparison (==, !=, >, >=, <, <=, contains,
-// =~) on the trimmed output, the same grammar as an http check's expect_body.
+// =~) on the trimmed output, using the same operator set as http expect_body.
 // The zero value is inactive and matches anything.
 type OutputMatcher struct {
 	Substring string // non-empty: output must contain this

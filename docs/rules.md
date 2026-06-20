@@ -385,7 +385,7 @@ checks:
     json:                              # request body as JSON (sets Content-Type
       probe: true                      # automatically; or use `body:` for raw text)
     expect_status: 200                 # code, class (2xx), list, or { op, value }
-    expect_body: "ready"               # substring, or { op, value } (see below)
+    expect_body: { op: contains, value: "ready" } # body comparison (see below)
     expect_latency: { op: "<", value: 800 }   # optional: response time in ms
     proxy: "http://user:pass@squid:3128"   # optional: route the request through a proxy (Squid)
     expect_json:                       # optional: response JSON must match (dotted paths)
@@ -413,18 +413,17 @@ response is only read when `expect_body`/`expect_json` is set (capped at 1 MiB).
 equality check (compared as a string); a `{op, value}` mapping uses an operator —
 `>`, `>=`, `<`, `<=` (numeric), `==`, `!=`, `contains` (string), or `=~` (regex).
 
-**Response comparisons.** Beyond the substring shorthand, `expect_status`,
-`expect_body` and `expect_latency` accept an `{op, value}` mapping using the
-shared operator set `== != > >= < <=` (numeric, or string for `==`/`!=`),
-`contains` (substring) and `=~` (Go/RE2 regular expression) — the same operators
-as the [`sql`](#sql-query-sql) check:
+**Response comparisons.** `expect_body` and `expect_latency` use an `{op, value}`
+mapping. `expect_status` accepts either a code/class/list form or the same
+`{op, value}` mapping. Operators are `== != > >= < <=` (numeric, or string for
+`==`/`!=`), `contains` (substring) and `=~` (Go/RE2 regular expression) — the
+same operators as the [`sql`](#sql-query-sql) check:
 
 - `expect_status: { op: "<", value: 500 }` — compare the status code numerically
   (in addition to the code/class/list forms).
 - `expect_body: { op: "=~", value: "^OK" }` — compare the **trimmed** response
   body: numeric when both sides parse as numbers (`>`, `<`, …), otherwise string
-  equality, or a regex with `=~`. The plain string form (`expect_body: "ready"`)
-  is still a substring match.
+  equality, `contains` substring matching, or a regex with `=~`.
 - `expect_latency: { op: "<", value: 800 }` — fail when the response time in
   milliseconds does not satisfy the comparison.
 
