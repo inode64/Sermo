@@ -318,31 +318,56 @@ func (c *Config) mergeIncludedGlobalFragment(doc *Document) (bool, error) {
 	if doc.Kind != "" {
 		return false, nil
 	}
-	raw, present := doc.Body["watches"]
-	if !present {
+	section := ""
+	if _, present := doc.Body["watches"]; present {
+		section = "watches"
+	} else if _, present := doc.Body["notifiers"]; present {
+		section = "notifiers"
+	} else {
 		return false, nil
 	}
+
 	for key := range doc.Body {
-		if key != "watches" {
-			return true, fmt.Errorf("%s: enabled watch fragments only support top-level watches, got %q", doc.Path, key)
+		if key != section {
+			return true, fmt.Errorf("%s: include fragments only support one top-level section (watches or notifiers), got %q with %q", doc.Path, key, section)
 		}
 	}
-	watches, ok := raw.(map[string]any)
+	return c.mergeIncludedGlobalMap(doc, section)
+}
+
+func (c *Config) mergeIncludedGlobalMap(doc *Document, section string) (bool, error) {
+	raw := expandEnvTree(doc.Body[section])
+	entries, ok := raw.(map[string]any)
 	if !ok {
-		return true, fmt.Errorf("%s: watches must be a mapping", doc.Path)
+		return true, fmt.Errorf("%s: %s must be a mapping", doc.Path, section)
 	}
-	dst, _ := c.Global.Raw["watches"].(map[string]any)
+	if len(entries) != 1 {
+		return true, fmt.Errorf("%s: %s fragments must contain exactly one entry", doc.Path, section)
+	}
+	dst, _ := c.Global.Raw[section].(map[string]any)
 	if dst == nil {
 		dst = map[string]any{}
 	}
-	for name, entry := range watches {
+	label := includedGlobalSectionLabel(section)
+	for name, entry := range entries {
 		if _, exists := dst[name]; exists {
-			return true, fmt.Errorf("%s: watch %q is already defined", doc.Path, name)
+			return true, fmt.Errorf("%s: %s %q is already defined", doc.Path, label, name)
 		}
 		dst[name] = entry
 	}
-	c.Global.Raw["watches"] = dst
+	c.Global.Raw[section] = dst
 	return true, nil
+}
+
+func includedGlobalSectionLabel(section string) string {
+	switch section {
+	case "watches":
+		return "watch"
+	case "notifiers":
+		return "notifier"
+	default:
+		return strings.TrimSuffix(section, "s")
+	}
 }
 
 func effectiveCategory(category string) string {

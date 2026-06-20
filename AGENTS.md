@@ -128,9 +128,10 @@ duplicate aliases for the same pidfile or socket.
 
 Use one YAML file per configured target. Catalog profiles keep one daemon, app,
 lib or pattern per file. Runtime configuration keeps one `kind: service` per
-file, one `kind: mount` per file and one host watch per file (`storage`,
-`network`, `uplink`, `load`, etc.). A watch fragment still uses a top-level
-`watches:` map, but that map should contain exactly one named watch.
+file, one `kind: mount` per file, one notifier per file and one host watch per
+file (`storage`, `network`, `uplink`, `load`, etc.). Watch and notifier
+fragments still use a top-level `watches:` or `notifiers:` map, but that map
+must contain exactly one named entry.
 
 Do not add new examples, wizard output, remote-test config or operational docs
 that group several apps, services, mounts, storage entries, interfaces, VMs,

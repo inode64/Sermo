@@ -960,6 +960,99 @@ watches:
 	}
 }
 
+func TestLoadIncludedNotifierFragments(t *testing.T) {
+	t.Setenv("SMTP_DSN", "smtp://user:pw@mail.example.com:587")
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  includes: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+notify: [ops]
+`,
+		"enabled/notifiers/ops.yml": `
+notifiers:
+  ops:
+    type: email
+    dsn: "${env:SMTP_DSN}"
+    from: "Sermo <sermo@example.com>"
+    to: [ops@example.com]
+`,
+		"enabled/storage/disk-root.yml": `
+watches:
+  disk-root:
+    check: { type: disk, path: /, used_pct: { op: ">=", value: "90%" } }
+    then:
+      notify: [ops]
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	notifier := cfg.Notifiers()["ops"].(map[string]any)
+	if notifier["dsn"] != "smtp://user:pw@mail.example.com:587" {
+		t.Fatalf("included notifier env not expanded: %v", notifier["dsn"])
+	}
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	if _, ok := watches["disk-root"]; !ok {
+		t.Fatalf("watch fragment not loaded: %v", watches)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("included notifier/watch config should validate, got %v", issues)
+	}
+}
+
+func TestLoadIncludedNotifierFragmentRejectsDuplicate(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  includes: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+notifiers:
+  ops:
+    enabled: false
+    type: email
+`,
+		"enabled/notifiers/ops.yml": `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+`,
+	})
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `notifier "ops" is already defined`) {
+		t.Fatalf("Load() error = %v, want duplicate notifier", err)
+	}
+}
+
+func TestLoadIncludedNotifierFragmentRequiresSingleEntry(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  includes: [ @ROOT@/enabled ]
+defaults:
+  policy: { cooldown: 5m }
+`,
+		"enabled/notifiers/multi.yml": `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+  pager:
+    enabled: false
+    type: email
+`,
+	})
+
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "notifiers fragments must contain exactly one entry") {
+		t.Fatalf("Load() error = %v, want one-notifier-per-file error", err)
+	}
+}
+
 func TestValidateGlobalErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
