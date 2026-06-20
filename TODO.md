@@ -76,6 +76,11 @@ a configtest CLI, `redis` / `keydb`, `mosquitto`, `supervisord`, `udisks2`,
 
 ## Engine and config
 
+- [ ] Service priorities: configurable per-service `priority` (integer or named
+      tier), validation and defaults; use in remediation/operation ordering when
+      multiple services compete for the global semaphore; expose in `sermoctl
+      services` (sort/filter), the web UI services table and detail panel, and
+      the service wizard.
 - [ ] `exec` rule action: the `ActionExec` type is reserved in the rule model but
   not implemented — `then: {action: exec, command: [...], timeout: ...}` (array
   form, never a shell string).
