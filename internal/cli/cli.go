@@ -462,7 +462,7 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 }
 
 // runAction performs a start/stop/restart/reload/resume through the safe operation engine
-//: the resolved service is run under the internal operation lock,
+// : the resolved service is run under the internal operation lock,
 // active named runtime locks, required preflight, guards, residual-process
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
 // fully guarded.
@@ -652,7 +652,7 @@ func (a App) printOperation(r operation.Result) {
 	}
 }
 
-// operationExit maps an operation result status to a process exit code (§23).
+// operationExit maps an operation result status to a process exit code.
 func operationExit(status operation.ResultStatus) int {
 	switch status {
 	case operation.ResultOK:
@@ -921,7 +921,7 @@ func formatLock(lock locks.Lock) string {
 }
 
 // runProcesses discovers and reports the processes belonging to a service
-//, reading the service's `processes` selectors from resolved config.
+// , reading the service's `processes` selectors from resolved config.
 func (a App) runProcesses(opts options) int {
 	if opts.service() == "" {
 		return a.commandUsageError("processes", "processes requires a service name")

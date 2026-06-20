@@ -45,7 +45,7 @@ type Config struct {
 
 // New builds an Engine from real components, deriving preflight/postflight/guard
 // closures, residual discovery, the kill policy and the reaper from the resolved
-// config tree (sections 12, 14, 17, 19, 21, 22).
+// config tree.
 func New(c Config) Engine {
 	// Leave sleep nil when unset so process.Wait uses its cancellable timer in
 	// production (no goroutine leak on a cancelled stop); tests inject a fake.
@@ -387,7 +387,7 @@ func sectionRunner(tree map[string]any, section string, deps checks.Deps, sample
 }
 
 // guardClosure runs the service's named checks once, caches them, and evaluates
-// the guard rules against that cache plus inline probes (sections 14, 17).
+// the guard rules against that cache plus inline probes.
 func guardClosure(tree map[string]any, deps checks.Deps, sample func(context.Context) checks.MetricReader, changed func(string) (bool, error)) func(context.Context, string) (bool, string, error) {
 	return func(ctx context.Context, action string) (bool, string, error) {
 		runDeps := checkDepsForEval(ctx, deps, sample)
