@@ -133,6 +133,12 @@ type Global struct {
 	Raw       map[string]any
 	Defaults  map[string]any
 	Catalog   []string
+	Services  []string
+	Apps      []string
+	Notifiers []string
+	Storages  []string
+	Networks  []string
+	Watches   []string
 	Includes  []string
 	Mounts    []string
 	Runtime   string

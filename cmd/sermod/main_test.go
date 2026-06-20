@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -213,16 +214,49 @@ func repoRoot(t *testing.T) string {
 
 func copiedRepoConfig(t *testing.T, root string) string {
 	t.Helper()
+	dir := t.TempDir()
 	src := filepath.Join(root, "examples", "sermo.yml")
 	data, err := os.ReadFile(src)
 	if err != nil {
 		t.Fatalf("read %s: %v", src, err)
 	}
-	dst := filepath.Join(t.TempDir(), "sermo.yml")
-	if err := os.WriteFile(dst, data, 0o644); err != nil {
+	body := string(data)
+	for _, name := range []string{"notifiers", "storages", "networks", "watches"} {
+		dstDir := filepath.Join(dir, name)
+		copyRepoExampleYAMLDir(t, filepath.Join(root, "examples", name), dstDir)
+		body = strings.ReplaceAll(body, "/etc/sermo/"+name, dstDir)
+	}
+	dst := filepath.Join(dir, "sermo.yml")
+	if err := os.WriteFile(dst, []byte(body), 0o644); err != nil {
 		t.Fatalf("write %s: %v", dst, err)
 	}
 	return dst
+}
+
+func copyRepoExampleYAMLDir(t *testing.T, src, dst string) {
+	t.Helper()
+	entries, err := os.ReadDir(src)
+	if os.IsNotExist(err) {
+		return
+	}
+	if err != nil {
+		t.Fatalf("read %s: %v", src, err)
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		t.Fatalf("create %s: %v", dst, err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(src, entry.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", entry.Name(), err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, entry.Name()), data, 0o644); err != nil {
+			t.Fatalf("write %s: %v", entry.Name(), err)
+		}
+	}
 }
 
 func TestWebAuthFromConfig(t *testing.T) {
