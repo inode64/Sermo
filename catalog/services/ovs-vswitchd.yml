@@ -1,8 +1,7 @@
 kind: daemon
 name: ovs-vswitchd
-display_name: "Open vSwitch"
+display_name: "Open vSwitch Server"
 category: virtualization
-description: "OpenVsiwtch Server"
 service: ovs-vswitchd
 apps: [ovs-vswitchd]
 
