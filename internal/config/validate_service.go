@@ -360,9 +360,8 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 // validateCommands checks the optional `commands` section: each entry uses array
 // form with an optional valid duration timeout and output expectations
 // (section 30). Reserved names are consumed by features — `health`, `version`
-// and `version_short` by the apps listings, `version` by the version.on_change
-// monitor, `reload` by the safe reload operation; any other entry is
-// informational.
+// and `version_short` by the apps listings, and `version` by the
+// version.on_change monitor; any other entry is informational.
 func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool {
 	if backend == "openrc" {
 		return true
@@ -412,6 +411,10 @@ func validateCommands(tree map[string]any, add addFunc) {
 		entry, ok := commands[name].(map[string]any)
 		if !ok {
 			add("commands.%s must be a mapping", name)
+			continue
+		}
+		if name == "reload" {
+			add("commands.reload is not supported; use reload.command with when: always")
 			continue
 		}
 		if !isStringArray(entry["command"]) {

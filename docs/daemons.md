@@ -92,10 +92,9 @@ changes, runs the **reload** action instead of a disruptive restart:
 
 ```yaml
 # catalog/services/systemd.yml
-preflight:
-  config: { type: command, command: ["systemd-analyze", "verify"] }   # checked first
-commands:
-  reload: { command: ["systemctl", "daemon-reload"] }   # see commands.reload below
+reload:
+  command: ["systemctl", "daemon-reload"]
+  when: always
 reload_on_change:
   paths: [/etc/systemd/system, /lib/systemd/system]
 ```
@@ -118,13 +117,14 @@ is blocked by the same guards as restart/start.
 
 **What "reload" runs.** By default it is the backend per-unit reload —
 `systemctl reload <unit>` (which runs the unit's `ExecReload`, e.g. `nginx -s
-reload`) or OpenRC's init-script `reload`. A daemon can override this with its
-own **`commands.reload`** when the reload is not a per-unit operation — systemd
+reload`) or OpenRC's init-script `reload`. A daemon can override this with
+**`reload.command`** when the reload is not a per-unit operation — systemd
 itself reloads with `systemctl daemon-reload`, not `systemctl reload systemd`:
 
 ```yaml
-commands:
-  reload: { command: ["systemctl", "daemon-reload"] }
+reload:
+  command: ["systemctl", "daemon-reload"]
+  when: always
 ```
 
 ### Native reload (`reload:`) — when the init can't, Sermo can
@@ -155,11 +155,9 @@ reload:
   native reload. So the *same* daemon definition reloads correctly on a host
   whose unit exposes reload **and** on one whose unit doesn't.
 - **`when: always`** always runs the native reload and never the init's — the
-  signal/command equivalent of `commands.reload` (which is still accepted and
-  behaves as `when: always`). **Migrating `commands.reload` → `reload.command`:**
-  a bare `reload: { command: [...] }` defaults to `when: auto` (it prefers the
-  init reload where one exists), so set `when: always` to keep the old
-  always-run-the-command behavior.
+  right choice for reloads that are not per-unit operations. A bare
+  `reload: { command: [...] }` defaults to `when: auto`, so set `when: always`
+  when the command must always run.
 - **Signal target.** The signal goes to systemd's `MainPID`, or — on OpenRC, or
   any unit with no MainPID — to the PID in the service's `pidfile:`. The pidfile
   fallback is only used when that PID also matches a `processes:` `command_match`
@@ -1105,9 +1103,6 @@ checks, but the **reserved names** are consumed by features:
   `${app_version_short}`. Other command-derived values can be declared with
   `export:`, whose default source is trimmed stdout and whose default value is
   empty.
-- **`reload`** — run by the safe reload operation (`sermoctl reload <service>`
-  and `reload_on_change` rules) when the daemon reloads via a command rather
-  than its init unit.
 
 Any other entry is informational only. A run can assert its outcome, the same
 way a watch hook or `command` check does: `expect_exit` (default 0, or a list
