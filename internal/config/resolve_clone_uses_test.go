@@ -15,7 +15,7 @@ kind: service
 name: svc
 clone: other
 uses: somedaemon
-service: { name: x }
+service: x
 `)
 	_, errs := cfg.Resolve("svc")
 	if len(errs) == 0 {

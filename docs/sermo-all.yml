@@ -364,7 +364,7 @@ type: webserver
 #   demo-%v      -> ${version}, discovered from a linked app
 #   demo%n       -> ${n}, numeric only
 #   demo-%i      -> ${instance}, named init instances
-service:                       # scalar, legacy {name: ...}, or per-backend map
+service:                       # scalar or per-backend map
   systemd: [demo, demo-server]
   openrc: [demo]
 

@@ -37,7 +37,7 @@ func TestServicesCommand(t *testing.T) {
 	write(filepath.Join(daemonsDir, "nginx.yml"), fmt.Sprintf(`kind: daemon
 name: nginx
 display_name: "Nginx"
-service: { name: nginx }
+service: nginx
 variables:
   binary: %q
 preflight: { binary: { type: binary, path: "${binary}" } }
@@ -45,7 +45,7 @@ preflight: { binary: { type: binary, path: "${binary}" } }
 	write(filepath.Join(daemonsDir, "linked.yml"), `kind: daemon
 name: linked
 display_name: "Linked Service"
-service: { name: linked }
+service: linked
 apps: [linked]
 `)
 	write(filepath.Join(appsDir, "linked.yml"), fmt.Sprintf(`kind: app

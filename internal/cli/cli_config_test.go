@@ -25,7 +25,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "redis-main.yml"), `
 kind: service
 name: redis-main
-service: { name: redis }
+service: redis
 variables:
   port: 6379
 checks:

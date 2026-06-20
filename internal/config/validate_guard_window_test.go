@@ -9,7 +9,7 @@ func TestValidateGuardRejectsWindow(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: x
-service: { name: x }
+service: x
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
 rules:

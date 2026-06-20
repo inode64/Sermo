@@ -24,7 +24,7 @@ func TestServiceCheckUsesEnvSecret(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   api:
@@ -39,7 +39,7 @@ checks:
 	cfg := loadServiceConfig(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   api: { type: http, url: "https://api/health", headers: { Authorization: "Bearer ${env:API_TOKEN}" } }
@@ -59,7 +59,7 @@ func TestEnvSecretMissingDoesNotError(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   api: { type: http, url: "https://api/health", headers: { Authorization: "Bearer ${env:DEFINITELY_UNSET_TOKEN}" } }

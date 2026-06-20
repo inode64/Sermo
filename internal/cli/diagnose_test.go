@@ -27,7 +27,7 @@ watches:
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
 name: web
-service: { name: nginx }
+service: nginx
 policy: { cooldown: 5m }
 checks:
   api: { type: tcp, host: 127.0.0.1, port: 80, interval: 40s }
@@ -58,7 +58,7 @@ defaults: { policy: { cooldown: 5m } }
 	mustWrite(t, filepath.Join(root, "enabled", "bad.yml"), `
 kind: service
 name: web
-service: { name: nginx }
+service: nginx
 policy: { cooldown: 5m }
 checks:
   api: { type: http }
@@ -91,7 +91,7 @@ watches:
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
 name: web
-service: { name: nginx }
+service: nginx
 policy: { cooldown: 5m }
 checks:
   service: { type: service, expect: active }

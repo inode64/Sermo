@@ -30,7 +30,7 @@ func TestSLACommandReportsWindows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: { name: nginx }\n")
+	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
@@ -113,7 +113,7 @@ func TestSLASeriesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: { name: nginx }\n")
+	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }

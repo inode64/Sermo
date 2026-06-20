@@ -6,7 +6,7 @@ func TestValidateMySQLCheckValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   conn: { type: mysql, user: monitor, password: secret, port: 3306, tls: false }
 `)
@@ -22,7 +22,7 @@ func TestValidateMySQLCheckNoUserOK(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   conn: { type: mysql, port: 3306 }
 `)
@@ -37,7 +37,7 @@ func TestValidatePostgresCheckRequiresUser(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   conn: { type: postgres }
 `), "user is required")
@@ -47,7 +47,7 @@ func TestValidatePostgresSSLModeAccepted(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   conn: { type: postgres, user: monitor, tls: verify-full }
 `)
@@ -62,7 +62,7 @@ func TestValidateCloudflaredCheckValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: tunnel
-service: { name: cloudflared }
+service: cloudflared
 checks:
   protocol: { type: cloudflared, host: 127.0.0.1, port: 60123, tls: false }
 `)
@@ -77,7 +77,7 @@ func TestValidateDHClientCheckValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: dhclient
-service: { name: dhclient }
+service: dhclient
 checks:
   protocol: { type: dhclient, host: 0.0.0.0, port: 68, lease_file: /var/lib/dhcp/dhclient.leases }
 `)
@@ -92,7 +92,7 @@ func TestValidateMySQLCheckBadTLS(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   conn: { type: mariadb, user: u, tls: maybe }
 `), "tls")
@@ -102,7 +102,7 @@ func TestValidateConnExpectValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: dns
-service: { name: x }
+service: x
 checks:
   resolver:
     type: dns
@@ -122,7 +122,7 @@ func TestValidateConnExpectErrors(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: dns
-service: { name: x }
+service: x
 checks:
   resolver:
     type: dns
@@ -132,7 +132,7 @@ checks:
 	mustHave(t, validateService(t, `
 kind: service
 name: dns
-service: { name: x }
+service: x
 checks:
   resolver:
     type: dns
@@ -142,7 +142,7 @@ checks:
 	mustHave(t, validateService(t, `
 kind: service
 name: dns
-service: { name: x }
+service: x
 checks:
   resolver:
     type: dns
@@ -154,7 +154,7 @@ func TestValidateAnalyzeRulesShape(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   config:
     type: command
@@ -165,7 +165,7 @@ checks:
 	mustHave(t, validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   config:
     type: command
@@ -177,7 +177,7 @@ checks:
 	issues := validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   config:
     type: command
@@ -196,7 +196,7 @@ func TestValidateCascadeTargets(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 also_apply: [nope]
 `), "not a configured service")
 
@@ -204,7 +204,7 @@ also_apply: [nope]
 	mustHave(t, validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 also_apply: [web]
 `), "the service itself")
 }
@@ -213,7 +213,7 @@ func TestValidateCleanOnStop(t *testing.T) {
 	bad := validateService(t, `
 kind: service
 name: s
-service: { name: x }
+service: x
 stop_policy:
   clean_on_stop:
     - relative/path
@@ -227,7 +227,7 @@ stop_policy:
 	ok := validateService(t, `
 kind: service
 name: s
-service: { name: x }
+service: x
 stop_policy:
   clean_on_stop:
     - /run/svc/foo.tmp

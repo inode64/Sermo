@@ -62,7 +62,7 @@ func TestValidateBackoffDurations(t *testing.T) {
 	badInitial := validateService(t, `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 policy:
   cooldown: 5m
   backoff: { initial: nonsense, max: 10s }
@@ -73,7 +73,7 @@ policy:
 	missingMax := validateService(t, `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 policy:
   cooldown: 5m
   backoff: { initial: 5s }
@@ -84,7 +84,7 @@ policy:
 	maxBelow := validateService(t, `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 policy:
   cooldown: 5m
   backoff: { initial: 30s, max: 5s }
@@ -95,7 +95,7 @@ policy:
 	ok := validateService(t, `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 policy:
   cooldown: 5m
   backoff: { initial: 5s, max: 1m }
@@ -287,7 +287,7 @@ func TestValidateRuleStructure(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
 rules:
@@ -320,7 +320,7 @@ func TestValidateMultiAction(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
 rules:
@@ -353,7 +353,7 @@ func TestValidateRuleWindows(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
 rules:
@@ -373,7 +373,7 @@ func TestValidateUnknownCheckReference(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
 rules:
@@ -389,7 +389,7 @@ func TestValidateConditionExactlyOneOperator(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
 rules:
@@ -407,7 +407,7 @@ func TestValidateInlineCommandConditionNeedsTimeout(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   r:
     type: remediation
@@ -423,7 +423,7 @@ func TestValidateInlineProbeFields(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   bad-http:
     type: alert
@@ -456,7 +456,7 @@ func TestValidateExpectStatusShapes(t *testing.T) {
 		return validateService(t, `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 policy: { cooldown: 5m }
 checks:
   - { name: h, type: http, url: "http://x", expect_status: `+expect+` }
@@ -477,7 +477,7 @@ func TestValidateInlineProbeConnectionProtocols(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   ok-mysql:
     type: alert
@@ -500,7 +500,7 @@ func TestValidateSystemMetricOnlyInAlert(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   bad:
     type: remediation
@@ -532,7 +532,7 @@ func TestValidateMetricFormMismatch(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   pct-on-count:
     type: alert
@@ -552,7 +552,7 @@ func TestValidateMetricFormValidCombinations(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   mem-pct: { type: alert, if: { metric: { name: memory, op: ">", value: 40% } }, then: { action: alert, message: m } }
   mem-abs: { type: alert, if: { metric: { name: memory, op: ">", value: 1000000 } }, then: { action: alert, message: m } }
@@ -570,7 +570,7 @@ func TestValidateIndirectSystemMetricInRemediation(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   machine-hot: { type: metric, scope: system, name: total_cpu, op: ">", value: 90% }
 rules:
@@ -596,7 +596,7 @@ func TestValidateMetricCatalogAndValue(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   r:
     type: alert
@@ -612,7 +612,7 @@ func TestValidateSystemTotalSwapMetric(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 rules:
   swap-alert:
     type: alert
@@ -628,7 +628,7 @@ func TestValidateStopPolicyKillSelector(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 stop_policy:
   force_kill: true
   kill_only_if:
@@ -641,7 +641,7 @@ func TestValidateForceKillRequiresSelector(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 stop_policy:
   force_kill: true
 `)
@@ -652,7 +652,7 @@ func TestValidateStopPolicyDurations(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 stop_policy:
   graceful_timeout: nope
   term_timeout: 0s
@@ -667,7 +667,7 @@ func TestValidateCheckEntrySchemas(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   cmd: { type: command, command: "echo hi" }
   svc-missing: { type: service }
@@ -691,7 +691,7 @@ func TestValidateCountCheck(t *testing.T) {
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-path: { type: count, op: ">", value: 1 }
@@ -709,7 +709,7 @@ checks:
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   tmp-files: { type: count, path: /tmp, of: file, recursive: true, op: "<=", value: 100 }
@@ -725,7 +725,7 @@ func TestValidateResourceChecksAsServiceChecks(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   rootfs: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
@@ -748,7 +748,7 @@ func TestValidateDiskMountIntegration(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   data: { type: storage, path: /data, used_pct: { op: ">=", value: 90 }, mounted: true }
@@ -761,7 +761,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   empty: { type: storage, path: /data }
@@ -779,7 +779,7 @@ func TestValidateResourceServiceCheckErrors(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   rootfs: { type: storage }
@@ -793,7 +793,7 @@ func TestValidateCheckInterval(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/health", interval: 30m }
@@ -805,7 +805,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://x/health", interval: soon }
@@ -817,7 +817,7 @@ func TestValidateCertCheck(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   api: { type: cert, host: api.example.com, port: 443, expires_in_days: 14, on_algorithm_change: true, verify: true }
@@ -829,7 +829,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-host: { type: cert }
@@ -847,7 +847,7 @@ func TestValidateHTTPFields(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   api:
@@ -867,7 +867,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-url: { type: http, method: POST }
@@ -885,7 +885,7 @@ func TestValidatePortsCheck(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   scan: { type: ports, host: 127.0.0.1, ports: "80,443,1024-4000", expect: open, match: any, on_change: true }
@@ -897,7 +897,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-ports:   { type: ports, host: x }
@@ -917,7 +917,7 @@ func TestValidateCheckGate(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   tcp:   { type: tcp, host: 127.0.0.1, port: 3306 }
@@ -930,7 +930,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   tcp:   { type: tcp, host: 127.0.0.1, port: 3306 }
@@ -947,7 +947,7 @@ func TestValidatePolicyMaxActions(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy:
   cooldown: 5m
   max_actions: 0
@@ -960,7 +960,7 @@ func TestValidateDescriptionMustBeString(t *testing.T) {
 kind: service
 name: svc
 description: [not, a, string]
-service: { name: x }
+service: x
 `)
 	mustHave(t, issues, "description must be a string")
 }
@@ -970,7 +970,7 @@ func TestValidateDescriptionStringPasses(t *testing.T) {
 kind: service
 name: svc
 description: "A friendly label"
-service: { name: x }
+service: x
 `)
 	for _, is := range issues {
 		if strings.Contains(is.Msg, "description") {
@@ -984,7 +984,7 @@ func TestValidateCategoryMustBeString(t *testing.T) {
 kind: service
 name: svc
 category: [not, a, string]
-service: { name: x }
+service: x
 `)
 	mustHave(t, issues, "category must be a string")
 }
@@ -994,7 +994,7 @@ func TestValidateCategoryStringPasses(t *testing.T) {
 kind: service
 name: svc
 category: database
-service: { name: x }
+service: x
 `)
 	for _, is := range issues {
 		if strings.Contains(is.Msg, "category") {
@@ -1008,7 +1008,7 @@ func TestValidateCatalogAliases(t *testing.T) {
 kind: service
 name: svc
 catalog_aliases: [stale]
-service: { name: x }
+service: x
 `)
 	mustHave(t, issues, "catalog_aliases is only supported on daemon and app catalog documents")
 
@@ -1016,7 +1016,7 @@ service: { name: x }
 kind: service
 name: svc
 catalog_aliases: stale
-service: { name: x }
+service: x
 `)
 	mustHave(t, issues, "catalog_aliases must be a non-empty list")
 
@@ -1024,7 +1024,7 @@ service: { name: x }
 kind: service
 name: svc
 catalog_aliases: ["../stale", 42]
-service: { name: x }
+service: x
 `)
 	mustHave(t, issues, `catalog_aliases entry "../stale" must be a simple name`)
 	mustHave(t, issues, "catalog_aliases entries must be non-empty strings")
@@ -1119,7 +1119,7 @@ func TestValidateCommandExpectExit(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 preflight:
   cfg: { type: command, command: ["check"], expect_exit: notanint }
   ok: { type: command, command: ["check"], expect_exit: 1 }
@@ -1138,7 +1138,7 @@ func TestValidateCommands(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 commands:
   reload: { command: ["reload-svc"] }
   version: { command: "apachectl -v" }
@@ -1164,25 +1164,25 @@ service:
   upstart: [foo]
   systemd: []
 `)
-	mustHave(t, issues, `service key "upstart" is not one of systemd, openrc, name`)
+	mustHave(t, issues, `service key "upstart" is not one of systemd, openrc`)
 	mustHave(t, issues, "service.systemd must be a non-empty list")
 
-	// Mixing the legacy name with per-init lists is rejected.
-	mixed := validateService(t, `
+	// service.name shorthand is not supported.
+	named := validateService(t, `
 kind: service
 name: svc
 service:
   name: x
   systemd: [x]
 `)
-	mustHave(t, mixed, "service must not mix name with systemd/openrc")
+	mustHave(t, named, "service.name is not supported; use scalar service: <unit>")
 }
 
 func TestValidateProcessSelectorsRequireExeOrCmd(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 processes:
   main: { type: command_match, user: mysql }
   badcmd: { type: command_match, cmd: "(" }
@@ -1198,7 +1198,7 @@ processes:
 	ok := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 processes:
   worker: { type: command_match, exe: /usr/sbin/mysqld }
   unifi: { type: command_match, cmd: "java .*unifi", group: unifi }
@@ -1214,7 +1214,7 @@ func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 variables:
   host: 127.0.0.1
   port: 8080
@@ -1259,7 +1259,7 @@ func TestValidateServiceInterval(t *testing.T) {
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 interval: notaduration
 policy: { cooldown: 5m }
 `)
@@ -1268,7 +1268,7 @@ policy: { cooldown: 5m }
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 interval: 10s
 policy: { cooldown: 5m }
 `)
@@ -1281,7 +1281,7 @@ func TestValidateCountCheckNestedThreshold(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   backlog: { type: count, path: /var/spool, count: { op: ">", value: 1000 } }
@@ -1293,7 +1293,7 @@ checks:
 	mixed := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   backlog: { type: count, path: /var/spool, op: ">", value: 5, count: { op: ">", value: 1000 } }
@@ -1305,7 +1305,7 @@ func TestValidatePidfileCheckRequiresPath(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   pid: { type: pidfile }
@@ -1317,7 +1317,7 @@ func TestValidateSocketCheckRequiresPath(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   sock: { type: socket }
@@ -1329,7 +1329,7 @@ func TestValidatePercentBound(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   rootfs: { type: storage, path: /, used_pct: { op: ">=", value: "150%" } }
@@ -1341,7 +1341,7 @@ func TestValidateRuleWindowMinMatchesOptional(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 rule_window: { cycles: 5, mode: within }
 checks:
@@ -1354,7 +1354,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 rule_window: { cycles: 5, mode: within, min_matches: 0 }
 checks:
@@ -1367,7 +1367,7 @@ func TestValidateCertServerNameAndFileScope(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   bad-sni:  { type: cert, host: api.example.com, server_name: 443 }
@@ -1380,7 +1380,7 @@ checks:
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   api: { type: cert, host: 10.0.0.5, port: 8443, server_name: api.example.com, expires_in_days: 14 }
@@ -1395,7 +1395,7 @@ func TestValidateContainsOp(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   q: { type: sql, engine: sqlite, path: /var/db/x.db, query: "select status from t", op: contains, value: ok }
@@ -1410,7 +1410,7 @@ func TestValidateScalarWindowRejected(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   http: { type: http, url: "http://127.0.0.1/" }
@@ -1428,7 +1428,7 @@ func TestValidateFileConditionExistsBoolean(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 rules:
   marker:
@@ -1441,7 +1441,7 @@ rules:
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 rules:
   marker:
@@ -1459,7 +1459,7 @@ func TestValidateMemoryCheckBothSurfaces(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   ram: { type: memory, used_pct: { op: ">=", value: "90%" } }
@@ -1471,7 +1471,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-pred:  { type: memory }
@@ -1485,7 +1485,7 @@ func TestValidatePressureCheck(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   mem-stall: { type: pressure, resource: memory, some_avg10: { op: ">", value: 10 } }
@@ -1497,7 +1497,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   bad-res: { type: pressure, resource: disk, some_avg10: { op: ">", value: 10 } }
@@ -1511,7 +1511,7 @@ func TestValidatePidsCheck(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   pid-table: { type: pids, used_pct: { op: ">=", value: "90%" } }
@@ -1523,7 +1523,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-pred: { type: pids }
@@ -1535,7 +1535,7 @@ func TestValidateDiskIOCheck(t *testing.T) {
 	good := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   db-disk: { type: diskio, device: nvme0n1, util_pct: { op: ">=", value: "90%" }, write_bytes: { op: ">", value: 50M } }
@@ -1547,7 +1547,7 @@ checks:
 	bad := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 checks:
   no-dev:  { type: diskio, util_pct: { op: ">=", value: 90 } }
@@ -1564,7 +1564,7 @@ func TestValidateCleanOnStopDotDotEscape(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 policy: { cooldown: 5m }
 stop_policy:
   clean_on_stop:
@@ -1579,7 +1579,7 @@ stop_policy:
 // would otherwise validate and then silently not do what it reads like.
 func TestValidateRuleTypeActionCoupling(t *testing.T) {
 	rule := func(rtype, then string) string {
-		return "kind: service\nname: svc\nservice: { name: x }\nchecks:\n  c: { type: tcp, host: 127.0.0.1, port: 80 }\nrules:\n  r:\n    type: " + rtype + "\n    if: { failed: { check: c } }\n" + then
+		return "kind: service\nname: svc\nservice: x\nchecks:\n  c: { type: tcp, host: 127.0.0.1, port: 80 }\nrules:\n  r:\n    type: " + rtype + "\n    if: { failed: { check: c } }\n" + then
 	}
 	mustHave(t, validateService(t, rule("remediation", "    then: { action: alert, message: m }\n")),
 		"remediation requires an operation action")

@@ -6,7 +6,7 @@ func TestValidateSizeCheckValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: app
-service: { name: x }
+service: x
 checks:
   log-growth: { type: size, path: /var/log/app.log, grow_by: 1GB, within: 1h }
 `)
@@ -30,7 +30,7 @@ func TestValidateSizeCheckErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			mustHave(t, validateService(t, "kind: service\nname: app\nservice: { name: x }\nchecks:\n  "+c.body+"\n"), c.want)
+			mustHave(t, validateService(t, "kind: service\nname: app\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
 		})
 	}
 }
