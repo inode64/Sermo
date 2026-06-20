@@ -84,7 +84,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 // that do not exist on this host. Shared by service checks and host watches.
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
 	switch cfgval.AsString(entry["type"]) {
-	case "storage", "disk":
+	case "storage":
 		diagDiskResources(b, scope, entry, host)
 	case "count":
 		if p := cfgval.AsString(entry["path"]); p != "" && !host.PathExists(p) {

@@ -253,7 +253,7 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 		"catalog/apps/absent.yml":  "kind: app\nname: absent\nvariables:\n  binary: /nonexistent/absent\n",
 		"enabled/.keep":            "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -331,7 +331,7 @@ preflight:
 `, local, local),
 		"enabled/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)
@@ -395,7 +395,7 @@ preflight:
 `, filepath.Join(binDir, "php${version}")),
 		"enabled/.keep": "",
 		"sermo.yml": "engine: { backend: systemd }\n" +
-			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + filepath.Join(root, "enabled") + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n",
 	} {
 		path := filepath.Join(root, dir)

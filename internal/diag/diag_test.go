@@ -63,7 +63,7 @@ func has(r Result, level Level, substr string) bool {
 
 const baseGlobal = `
 engine: { backend: auto, interval: 30s }
-paths: { includes: [ @ROOT@/enabled ], state: @ROOT@/state }
+paths: { services: [ @ROOT@/enabled ], state: @ROOT@/state }
 defaults: { policy: { cooldown: 5m } }
 `
 
@@ -124,7 +124,7 @@ watches:
     check: { type: net, interface: eth0 }
     then: { hook: { command: [/bin/true] } }
   data:
-    check: { type: disk, path: /data, used_pct: { op: ">", value: 90 }, mounted: true }
+    check: { type: storage, path: /data, used_pct: { op: ">", value: 90 }, mounted: true }
     then: { hook: { command: [/bin/true] } }
 `
 	cfg := loadCfg(t, global, "")

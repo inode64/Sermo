@@ -36,12 +36,21 @@ func writeConfig(t *testing.T, files map[string]string) string {
 	return global
 }
 
+func issuesContain(issues []Issue, want string) bool {
+	for _, issue := range issues {
+		if strings.Contains(issue.String(), want) {
+			return true
+		}
+	}
+	return false
+}
+
 const baseGlobal = `
 engine:
   backend: auto
 paths:
   catalog: [ @ROOT@/catalog ]
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
   policy:
@@ -719,9 +728,9 @@ service: { name: redis }
 func TestLoadResolvesRelativePaths(t *testing.T) {
 	root := t.TempDir()
 	configDir := filepath.Join(root, "examples")
-	enabledDir := filepath.Join(configDir, "apps")
+	serviceDir := filepath.Join(configDir, "services")
 	catalogDir := filepath.Join(root, "catalog")
-	for _, d := range []string{enabledDir, catalogDir} {
+	for _, d := range []string{serviceDir, catalogDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -733,7 +742,7 @@ variables: { port: 6379 }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(enabledDir, "redis-main.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(serviceDir, "redis-main.yml"), []byte(`
 kind: service
 name: redis-main
 uses: redis
@@ -745,14 +754,14 @@ uses: redis
 engine: { backend: auto }
 paths:
   catalog: [../catalog]
-  includes: [apps]
+  services: [services]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
 watches:
   disk:
     enabled: false
-    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+    check: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
     then:
       hook: { command: [/bin/true] }
 `), 0o644); err != nil {
@@ -763,8 +772,8 @@ watches:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := cfg.Global.Includes[0]; got != enabledDir {
-		t.Fatalf("Includes[0] = %q, want %q", got, enabledDir)
+	if got := cfg.Global.Services[0]; got != serviceDir {
+		t.Fatalf("Services[0] = %q, want %q", got, serviceDir)
 	}
 	if got := cfg.Global.Catalog[0]; got != catalogDir {
 		t.Fatalf("Catalog[0] = %q, want %q", got, catalogDir)
@@ -778,12 +787,14 @@ watches:
 	}
 }
 
-func TestLoadAcceptsLegacyProfilesCatalogPath(t *testing.T) {
+func TestValidateRejectsRemovedPathAliases(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
   profiles: [@ROOT@/profiles]
-  includes: [@ROOT@/enabled]
+  services: [@ROOT@/enabled]
+  includes: [@ROOT@/old]
+  enabled: [@ROOT@/enabled]
 defaults:
   policy: { cooldown: 5m }
 `,
@@ -794,19 +805,18 @@ defaults:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if _, ok := cfg.Daemons["demo"]; !ok {
-		t.Fatalf("legacy profiles path did not load demo daemon: %v", cfg.DaemonNames)
-	}
-	if got := cfg.Global.Catalog[0]; !strings.HasSuffix(got, "profiles") {
-		t.Fatalf("Global.Catalog[0] = %q, want legacy profiles path", got)
-	}
 }
 
-func TestDefaultIncludeDirsPreferServicesAndKeepAppsAlias(t *testing.T) {
-	want := []string{"/etc/sermo/services", "/etc/sermo/apps"}
-	got := defaultConfigDirs(DefaultGlobalPath, defaultIncludeDirs)
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("default include dirs = %v, want %v", got, want)
+func TestDefaultServiceAndAppDirs(t *testing.T) {
+	wantServices := []string{"/etc/sermo/services"}
+	gotServices := defaultConfigDirs(DefaultGlobalPath, defaultServiceDirs)
+	if strings.Join(gotServices, "\n") != strings.Join(wantServices, "\n") {
+		t.Fatalf("default service dirs = %v, want %v", gotServices, wantServices)
+	}
+	wantApps := []string{"/etc/sermo/apps"}
+	gotApps := defaultConfigDirs(DefaultGlobalPath, defaultAppDirs)
+	if strings.Join(gotApps, "\n") != strings.Join(wantApps, "\n") {
+		t.Fatalf("default app dirs = %v, want %v", gotApps, wantApps)
 	}
 }
 
@@ -827,8 +837,10 @@ name: web
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if len(cfg.Global.Includes) != 0 {
-		t.Fatalf("Global.Includes = %v, want no legacy includes stored for default service dirs", cfg.Global.Includes)
+	root := filepath.Dir(global)
+	wantServices := []string{filepath.Join(root, "services")}
+	if got := strings.Join(cfg.Global.Services, "\n"); got != strings.Join(wantServices, "\n") {
+		t.Fatalf("Global.Services = %v, want %v", cfg.Global.Services, wantServices)
 	}
 	if _, ok := cfg.Services["web"]; !ok {
 		t.Fatalf("service from default services include was not loaded")
@@ -863,49 +875,25 @@ path: /data
 	}
 }
 
-func TestLoadLegacyEnabledPathAlias(t *testing.T) {
+func TestLoadWatchFragmentsFromStorageDir(t *testing.T) {
 	root := t.TempDir()
-	includeDir := filepath.Join(root, "enabled")
-	if err := os.MkdirAll(includeDir, 0o755); err != nil {
+	storages := filepath.Join(root, "storages")
+	if err := os.MkdirAll(filepath.Join(storages, "volume"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
 paths:
-  enabled: [enabled]
+  storages: [storages]
 defaults:
   policy: { cooldown: 5m }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	if len(cfg.Global.Includes) != 1 || cfg.Global.Includes[0] != includeDir {
-		t.Fatalf("Includes = %v, want [%s]", cfg.Global.Includes, includeDir)
-	}
-}
-
-func TestLoadIncludedWatchFragments(t *testing.T) {
-	root := t.TempDir()
-	enabled := filepath.Join(root, "enabled")
-	if err := os.MkdirAll(filepath.Join(enabled, "volume"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(`
-paths:
-  includes: [enabled]
-defaults:
-  policy: { cooldown: 5m }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(enabled, "volume", "disk-root.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(storages, "volume", "storage-root.yml"), []byte(`
 watches:
-  disk-root:
-    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+  storage-root:
+    check: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
     then:
       hook: { command: [/bin/true] }
 `), 0o644); err != nil {
@@ -917,7 +905,7 @@ watches:
 		t.Fatalf("Load() error = %v", err)
 	}
 	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
-	if _, ok := watches["disk-root"]; !ok {
+	if _, ok := watches["storage-root"]; !ok {
 		t.Fatalf("watch fragment not loaded: %v", watches)
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
@@ -927,33 +915,33 @@ watches:
 
 func TestLoadIncludedWatchFragmentRejectsDuplicate(t *testing.T) {
 	root := t.TempDir()
-	enabled := filepath.Join(root, "enabled")
-	if err := os.MkdirAll(enabled, 0o755); err != nil {
+	storages := filepath.Join(root, "storages")
+	if err := os.MkdirAll(storages, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(`
 paths:
-  includes: [enabled]
+  storages: [storages]
 watches:
-  disk-root:
-    check: { type: disk, path: /, used_pct: { op: ">=", value: 90 } }
+  storage-root:
+    check: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
     then:
       hook: { command: [/bin/true] }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(enabled, "disk-root.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(storages, "storage-root.yml"), []byte(`
 watches:
-  disk-root:
-    check: { type: disk, path: /, used_pct: { op: ">=", value: 95 } }
+  storage-root:
+    check: { type: storage, path: /, used_pct: { op: ">=", value: 95 } }
     then:
       hook: { command: [/bin/true] }
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "disk-root" is already defined`) {
+	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), `watch "storage-root" is already defined`) {
 		t.Fatalf("Load() error = %v, want duplicate watch", err)
 	}
 }
@@ -963,12 +951,13 @@ func TestLoadIncludedNotifierFragments(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  includes: [ @ROOT@/enabled ]
+  notifiers: [ @ROOT@/notifiers ]
+  storages: [ @ROOT@/storages ]
 defaults:
   policy: { cooldown: 5m }
 notify: [ops]
 `,
-		"enabled/notifiers/ops.yml": `
+		"notifiers/ops.yml": `
 notifiers:
   ops:
     type: email
@@ -976,10 +965,10 @@ notifiers:
     from: "Sermo <sermo@example.com>"
     to: [ops@example.com]
 `,
-		"enabled/storage/disk-root.yml": `
+		"storages/storage-root.yml": `
 watches:
-  disk-root:
-    check: { type: disk, path: /, used_pct: { op: ">=", value: "90%" } }
+  storage-root:
+    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
     then:
       notify: [ops]
 `,
@@ -994,7 +983,7 @@ watches:
 		t.Fatalf("included notifier env not expanded: %v", notifier["dsn"])
 	}
 	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
-	if _, ok := watches["disk-root"]; !ok {
+	if _, ok := watches["storage-root"]; !ok {
 		t.Fatalf("watch fragment not loaded: %v", watches)
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
@@ -1006,7 +995,7 @@ func TestLoadIncludedNotifierFragmentRejectsDuplicate(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  includes: [ @ROOT@/enabled ]
+  notifiers: [ @ROOT@/notifiers ]
 defaults:
   policy: { cooldown: 5m }
 notifiers:
@@ -1014,7 +1003,7 @@ notifiers:
     enabled: false
     type: email
 `,
-		"enabled/notifiers/ops.yml": `
+		"notifiers/ops.yml": `
 notifiers:
   ops:
     enabled: false
@@ -1031,11 +1020,11 @@ func TestLoadIncludedNotifierFragmentRequiresSingleEntry(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
-  includes: [ @ROOT@/enabled ]
+  notifiers: [ @ROOT@/notifiers ]
 defaults:
   policy: { cooldown: 5m }
 `,
-		"enabled/notifiers/multi.yml": `
+		"notifiers/multi.yml": `
 notifiers:
   ops:
     enabled: false
@@ -1137,7 +1126,7 @@ engine:
   backend: bogus
 paths:
   catalog: [ @ROOT@/catalog ]
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
   locks: /run/sermo/locks
   runtime: relative/path
   templates: relative/templates
@@ -1171,7 +1160,7 @@ security:
 func TestValidateWebBlock(t *testing.T) {
 	goodGlobal := writeConfig(t, map[string]string{"sermo.yml": `
 web: { address: 127.0.0.1, port: 9797 }
-paths: { includes: [ @ROOT@/enabled ] }
+paths: { services: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 `})
 	cfg, err := Load(goodGlobal)
@@ -1186,7 +1175,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	badGlobal := writeConfig(t, map[string]string{"sermo.yml": `
 web: { port: 70000, address: 5 }
-paths: { includes: [ @ROOT@/enabled ] }
+paths: { services: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 `})
 	cfg, err = Load(badGlobal)
@@ -1203,7 +1192,7 @@ defaults: { policy: { cooldown: 5m } }
 
 	disabledGlobal := writeConfig(t, map[string]string{"sermo.yml": `
 web: { address: 127.0.0.1 }
-paths: { includes: [ @ROOT@/enabled ] }
+paths: { services: [ @ROOT@/enabled ] }
 defaults: { policy: { cooldown: 5m } }
 `})
 	cfg, err = Load(disabledGlobal)
@@ -2427,7 +2416,7 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -2544,7 +2533,7 @@ checks: { service: { type: service, expect: active } }
 engine: { backend: auto }
 paths:
   catalog: [ %s ]
-  includes: [ %s ]
+  services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -2637,7 +2626,7 @@ checks: { service: { type: service, expect: active } }
 engine: { backend: auto }
 paths:
   catalog: [ %s ]
-  includes: [ %s ]
+  services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -2730,7 +2719,7 @@ checks:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -2811,7 +2800,7 @@ preflight:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -3068,7 +3057,7 @@ variables:
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
@@ -3177,7 +3166,7 @@ apps: ["php-fpm-${version}"]
 engine: { backend: auto }
 paths:
   catalog: [ %s ]
-  includes: [ %s ]
+  services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -3366,7 +3355,7 @@ checks: { service: { type: service, expect: active } }
 engine: { backend: auto }
 paths:
   catalog: [ %s ]
-  includes: [ %s ]
+  services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -3453,7 +3442,7 @@ checks: { service: { type: service, expect: active } }
 engine: { backend: auto }
 paths:
   catalog: [ %s ]
-  includes: [ %s ]
+  services: [ %s ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -3767,7 +3756,7 @@ func TestGlobalCustomVariables(t *testing.T) {
 engine: { backend: auto }
 paths:
   catalog: [ @ROOT@/catalog ]
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -3817,7 +3806,7 @@ func TestGlobalBinaryVariableAllowed(t *testing.T) {
 engine: { backend: auto }
 paths:
   catalog: [ @ROOT@/catalog ]
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -3841,7 +3830,7 @@ func TestResolveWatchesExpandsCustomVars(t *testing.T) {
 engine: { backend: auto }
 paths:
   catalog: [ @ROOT@/catalog ]
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }

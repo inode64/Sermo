@@ -14,7 +14,8 @@ import (
 // DefaultGlobalPath is the standard location of the global configuration.
 const DefaultGlobalPath = "/etc/sermo/sermo.yml"
 
-var defaultIncludeDirs = []string{"services", "apps"}
+var defaultServiceDirs = []string{"services"}
+var defaultAppDirs = []string{"apps"}
 var defaultMountDirs = []string{"mounts"}
 
 // Option customizes Load.
@@ -56,14 +57,15 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	if len(catalogDirs) == 0 {
 		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
 	}
-	serviceDirs := appendPathLists(global.Services, global.Apps)
-	legacyIncludeDirs := global.Includes
-	if len(serviceDirs) == 0 && len(legacyIncludeDirs) == 0 {
-		serviceDirs = defaultConfigDirs(globalPath, defaultIncludeDirs)
-		global.Services = append([]string(nil), serviceDirs[:1]...)
-		if len(serviceDirs) > 1 {
-			global.Apps = append([]string(nil), serviceDirs[1:]...)
-		}
+	serviceDirs := global.Services
+	if len(serviceDirs) == 0 {
+		serviceDirs = defaultConfigDirs(globalPath, defaultServiceDirs)
+		global.Services = append([]string(nil), serviceDirs...)
+	}
+	appDirs := global.Apps
+	if len(appDirs) == 0 {
+		appDirs = defaultConfigDirs(globalPath, defaultAppDirs)
+		global.Apps = append([]string(nil), appDirs...)
 	}
 	notifierDirs := global.Notifiers
 	watchDirs := appendPathLists(global.Storages, global.Networks, global.Watches)
@@ -94,6 +96,11 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 			return nil, err
 		}
 	}
+	for _, dir := range uniquePathList(appDirs) {
+		if err := cfg.loadAppDir(dir); err != nil {
+			return nil, err
+		}
+	}
 	for _, dir := range uniquePathList(notifierDirs) {
 		if err := cfg.loadGlobalFragmentDir(dir, "notifiers"); err != nil {
 			return nil, err
@@ -101,11 +108,6 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	for _, dir := range uniquePathList(watchDirs) {
 		if err := cfg.loadGlobalFragmentDir(dir, "watches"); err != nil {
-			return nil, err
-		}
-	}
-	for _, dir := range uniquePathListExcluding(legacyIncludeDirs, loadedServiceDirs) {
-		if err := cfg.loadIncludeDir(dir); err != nil {
 			return nil, err
 		}
 	}
@@ -144,20 +146,13 @@ func loadGlobal(path string) (Global, error) {
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
 		g.Catalog = cfgval.StringList(paths["catalog"])
-		if len(g.Catalog) == 0 {
-			g.Catalog = cfgval.StringList(paths["profiles"])
-		}
 		g.Services = cfgval.StringList(paths["services"])
 		g.Apps = cfgval.StringList(paths["apps"])
 		g.Notifiers = cfgval.StringList(paths["notifiers"])
 		g.Storages = cfgval.StringList(paths["storages"])
 		g.Networks = cfgval.StringList(paths["networks"])
 		g.Watches = cfgval.StringList(paths["watches"])
-		g.Includes = cfgval.StringList(paths["includes"])
 		g.Mounts = cfgval.StringList(paths["mounts"])
-		if len(g.Includes) == 0 {
-			g.Includes = cfgval.StringList(paths["enabled"])
-		}
 		g.Runtime = cfgval.String(paths["runtime"])
 		g.State = cfgval.String(paths["state"])
 		g.Templates = cfgval.String(paths["templates"])
@@ -183,11 +178,10 @@ func absCatalogDirs(dirs []string) []string {
 	return out
 }
 
-// resolveConfigPaths makes catalog/includes/runtime/state/templates paths
+// resolveConfigPaths makes catalog/services/apps/runtime/state/templates paths
 // absolute. Relative entries are resolved against the global config file's
-// directory so a tree like examples/sermo.yml with `includes: [services]` loads
-// examples/services when run from the repository. `apps` remains supported as a
-// legacy include alias.
+// directory so a tree like examples/sermo.yml with `services: [services]` loads
+// examples/services when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Catalog = resolvePathList(base, g.Catalog)
@@ -197,7 +191,6 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	g.Storages = resolvePathList(base, g.Storages)
 	g.Networks = resolvePathList(base, g.Networks)
 	g.Watches = resolvePathList(base, g.Watches)
-	g.Includes = resolvePathList(base, g.Includes)
 	g.Mounts = resolvePathList(base, g.Mounts)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
@@ -256,42 +249,21 @@ func uniquePathList(list []string) []string {
 	return out
 }
 
-func uniquePathListExcluding(list, exclude []string) []string {
-	seen := map[string]struct{}{}
-	for _, dir := range exclude {
-		if dir != "" {
-			seen[dir] = struct{}{}
-		}
-	}
-	out := make([]string, 0, len(list))
-	for _, dir := range list {
-		if dir == "" {
-			continue
-		}
-		if _, ok := seen[dir]; ok {
-			continue
-		}
-		seen[dir] = struct{}{}
-		out = append(out, dir)
-	}
-	return out
-}
-
 // loadDir reads every *.yml/*.yaml document in dir, recursing into
 // subdirectories. A `services`/`apps`/`libs`/`patterns` subdirectory tags the
 // catalog documents it holds with that category; files directly in dir default
 // to CategoryService. A missing directory is not an error (a host may not have
 // user catalog documents), but an unreadable one is.
 func (c *Config) loadDir(dir string) error {
-	return c.loadCategoryDir(dir, "", false)
-}
-
-func (c *Config) loadIncludeDir(dir string) error {
-	return c.loadCategoryDir(dir, "", true)
+	return c.loadCategoryDir(dir, "")
 }
 
 func (c *Config) loadServiceDir(dir string) error {
 	return c.loadServiceDirEntries(dir)
+}
+
+func (c *Config) loadAppDir(dir string) error {
+	return c.loadAppDirEntries(dir)
 }
 
 func (c *Config) loadGlobalFragmentDir(dir string, section string) error {
@@ -343,6 +315,47 @@ func (c *Config) loadServiceDirEntries(dir string) error {
 	return nil
 }
 
+func (c *Config) loadAppDirEntries(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read app config dir %s: %w", dir, err)
+	}
+
+	var names []string
+	var subdirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			subdirs = append(subdirs, e.Name())
+			continue
+		}
+		if isYAML(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(subdirs)
+
+	for _, name := range names {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if doc.Kind != kindApp {
+			return fmt.Errorf("%s: app config directories only support kind: app", doc.Path)
+		}
+		c.add(doc)
+	}
+	for _, name := range subdirs {
+		if err := c.loadAppDirEntries(filepath.Join(dir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Config) loadGlobalFragmentDirEntries(dir string, section string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -371,7 +384,7 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string) error 
 		if err != nil {
 			return err
 		}
-		handled, err := c.mergeIncludedGlobalFragmentSection(doc, section)
+		handled, err := c.mergeGlobalFragmentSection(doc, section)
 		if err != nil {
 			return err
 		}
@@ -428,7 +441,7 @@ func (c *Config) loadMountDirEntries(dir string) error {
 	return nil
 }
 
-func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool) error {
+func (c *Config) loadCategoryDir(dir, category string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -456,22 +469,10 @@ func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool
 		if err != nil {
 			return err
 		}
-		if allowGlobalFragments {
-			handled, err := c.mergeIncludedGlobalFragment(doc)
-			if err != nil {
-				return err
-			}
-			if handled {
-				continue
-			}
-		}
 		doc.Category = effectiveCategory(category)
-		// Catalog definitions take their kind from the subdirectory (daemon/app/
-		// lib), so each lives in its own registry; included documents keep their
-		// declared kind (service instances).
-		if !allowGlobalFragments {
-			doc.Kind = kindForCategory(doc.Category)
-		}
+		// Catalog definitions take their kind from the subdirectory
+		// (daemon/app/lib/patterns), so each lives in its own registry.
+		doc.Kind = kindForCategory(doc.Category)
 		c.add(doc)
 	}
 	for _, name := range subdirs {
@@ -479,35 +480,14 @@ func (c *Config) loadCategoryDir(dir, category string, allowGlobalFragments bool
 		if sub == "" {
 			sub = categoryFromDir(name) // only the top level names a category
 		}
-		if err := c.loadCategoryDir(filepath.Join(dir, name), sub, allowGlobalFragments); err != nil {
+		if err := c.loadCategoryDir(filepath.Join(dir, name), sub); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Config) mergeIncludedGlobalFragment(doc *Document) (bool, error) {
-	if doc.Kind != "" {
-		return false, nil
-	}
-	var section string
-	if _, present := doc.Body["watches"]; present {
-		section = "watches"
-	} else if _, present := doc.Body["notifiers"]; present {
-		section = "notifiers"
-	} else {
-		return false, nil
-	}
-
-	for key := range doc.Body {
-		if key != section {
-			return true, fmt.Errorf("%s: include fragments only support one top-level section (watches or notifiers), got %q with %q", doc.Path, key, section)
-		}
-	}
-	return c.mergeIncludedGlobalMap(doc, section)
-}
-
-func (c *Config) mergeIncludedGlobalFragmentSection(doc *Document, section string) (bool, error) {
+func (c *Config) mergeGlobalFragmentSection(doc *Document, section string) (bool, error) {
 	if doc.Kind != "" {
 		return false, nil
 	}
@@ -519,10 +499,10 @@ func (c *Config) mergeIncludedGlobalFragmentSection(doc *Document, section strin
 			return true, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, section, section, key)
 		}
 	}
-	return c.mergeIncludedGlobalMap(doc, section)
+	return c.mergeGlobalMap(doc, section)
 }
 
-func (c *Config) mergeIncludedGlobalMap(doc *Document, section string) (bool, error) {
+func (c *Config) mergeGlobalMap(doc *Document, section string) (bool, error) {
 	raw := expandEnvTree(doc.Body[section])
 	entries, ok := raw.(map[string]any)
 	if !ok {

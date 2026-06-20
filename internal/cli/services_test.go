@@ -59,7 +59,7 @@ preflight:
 	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], runtime: /run/sermo }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, daemonsDir, enabledDir))
 	global := filepath.Join(root, "sermo.yml")

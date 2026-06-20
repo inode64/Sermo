@@ -27,7 +27,7 @@
 - `internal/app/watch_build_test.go` — builder tests.
 
 **Modify:**
-- `internal/checks/build.go` — add `DiskUsage` to `Deps`; add `case "disk"` to `buildCheck`.
+- `internal/checks/build.go` — add `DiskUsage` to `Deps`; add `case "storage"` to `buildCheck`.
 - `internal/app/event.go` — add `Watch` field; route `hook`/`hook-failed` kinds at Info; update `Kind` doc.
 - `internal/app/scheduler.go` — add a `cycler` interface, generalize the per-item loop, run watches.
 - `internal/app/scheduler_test.go` — add a watch-runs test.
@@ -260,7 +260,7 @@ Append to `internal/checks/disk_test.go`:
 func TestBuildDiskCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
-			"type":     "disk",
+			"type": "storage",
 			"path":     "/",
 			"used_pct": map[string]any{"op": ">=", "value": 90},
 		},
@@ -278,7 +278,7 @@ func TestBuildDiskCheck(t *testing.T) {
 }
 
 func TestBuildDiskCheckRejectsMissing(t *testing.T) {
-	_, warns := Build(map[string]any{"d": map[string]any{"type": "disk"}}, Deps{})
+	_, warns := Build(map[string]any{"d": map[string]any{"type": "storage"}}, Deps{})
 	if len(warns) == 0 {
 		t.Fatal("expected a warning for disk check without path/predicate")
 	}
@@ -299,10 +299,10 @@ In `internal/checks/build.go`, add the field to `Deps` (after `Processes`):
 	DiskUsage DiskUsageFunc
 ```
 
-Add a `case "disk"` to `buildCheck` (before `case "":`):
+Add a `case "storage"` to `buildCheck` (before `case "":`):
 
 ```go
-	case "disk":
+	case "storage":
 		path := asString(entry["path"])
 		if path == "" {
 			return nil, "disk check requires a path"
@@ -814,7 +814,7 @@ func TestBuildWatchesBuildsDisk(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
-				"type":     "disk",
+				"type": "storage",
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
@@ -843,7 +843,7 @@ func TestBuildWatchesBuildsDisk(t *testing.T) {
 
 func TestBuildWatchesSkipsDisabled(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
-		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "disk", "path": "/"}},
+		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "storage", "path": "/"}},
 	})
 	watches, _ := BuildWatches(cfg, Deps{}, time.Second)
 	if len(watches) != 0 {
@@ -854,7 +854,7 @@ func TestBuildWatchesSkipsDisabled(t *testing.T) {
 func TestBuildWatchesWarnsOnBadCheck(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad": map[string]any{
-			"check": map[string]any{"type": "disk"}, // missing path/predicate
+			"check": map[string]any{"type": "storage"}, // missing path/predicate
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 		},
 	})
@@ -1250,7 +1250,7 @@ func TestValidateWatchesGood(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"disk-root": map[string]any{
-				"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
+				"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
 			},
 		},
@@ -1263,9 +1263,9 @@ func TestValidateWatchesGood(t *testing.T) {
 func TestValidateWatchesBad(t *testing.T) {
 	cases := map[string]map[string]any{
 		"unknown type": {"check": map[string]any{"type": "bogus"}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"disk no path": {"check": map[string]any{"type": "disk", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"bad op":       {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"empty cmd":    {"check": map[string]any{"type": "disk", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
+		"disk no path": {"check": map[string]any{"type": "storage", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+		"bad op":       {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+		"empty cmd":    {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
 	}
 	for name, w := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -1279,7 +1279,7 @@ func TestValidateWatchesBad(t *testing.T) {
 
 func TestValidateWatchesMessageMentionsName(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{"disk-root": map[string]any{"check": map[string]any{"type": "disk"}}},
+		"watches": map[string]any{"disk-root": map[string]any{"check": map[string]any{"type": "storage"}}},
 	})
 	joined := ""
 	for _, i := range watchIssues(issues) {
@@ -1332,7 +1332,7 @@ func validateWatches(watches map[string]any, add func(string, ...any)) {
 			continue
 		}
 		switch scalarString(check["type"]) {
-		case "disk":
+		case "storage":
 			validateDiskCheck(name, check, add)
 		case "":
 			add("watches.%s.check.type is required", name)
@@ -1516,7 +1516,7 @@ watches:
     enabled: false
     interval: 1m
     check:
-      type: disk
+      type: storage
       path: /
       used_pct: { op: ">=", value: 90 }
     for: { cycles: 3 }
@@ -1543,7 +1543,7 @@ watches:
     enabled: true          # optional, default true
     interval: 1m           # optional, default engine.interval
     check:
-      type: disk
+      type: storage
       path: /
       used_pct: { op: ">=", value: 90 }   # check fires when crossed
     for: { cycles: 3 }     # optional window; reuses the rules engine

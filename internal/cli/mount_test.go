@@ -19,7 +19,7 @@ func writeMountConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   mounts: [ `+root+`/mounts ]
   runtime: `+root+`/run
 defaults:

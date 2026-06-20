@@ -28,7 +28,7 @@ func TestRealCatalogReloadDaemonsResolve(t *testing.T) {
 		t.Helper()
 		global := filepath.Join(dir, "sermo.yml")
 		body := "engine: { backend: " + backend + " }\n" +
-			"paths:\n  catalog: [" + catalogDir + "]\n  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + catalogDir + "]\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n"
 		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 			t.Fatal(err)

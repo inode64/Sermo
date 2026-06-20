@@ -714,7 +714,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateMetric(entry, path, true, add)
 	case "count":
 		validateCount(entry, path, add)
-	case "storage", "disk":
+	case "storage":
 		validateDiskFields(path, entry, add)
 	case "autofs":
 		validateAutofsFields(path, entry, add)

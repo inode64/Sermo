@@ -16,7 +16,7 @@ func writePostMVPConfig(t *testing.T) (global, root string) {
 	mustWrite(t, global, `
 paths:
   catalog: [ `+root+`/daemons ]
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy: { cooldown: 5m }

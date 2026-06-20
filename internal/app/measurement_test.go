@@ -58,7 +58,7 @@ func TestMeasuredCheckNames(t *testing.T) {
 		"ping":  map[string]any{"type": "tcp"},
 		"scan":  map[string]any{"type": "ports"},
 		"unit":  map[string]any{"type": "service"},
-		"space": map[string]any{"type": "disk"}, // not measured
+		"space": map[string]any{"type": "storage"}, // not measured
 		"flag":  map[string]any{"type": "file_exists"},
 	}}
 	got := measuredCheckNames(tree)
@@ -76,7 +76,7 @@ func TestMeasurementRecorderOnlyMeasuredChecks(t *testing.T) {
 	store := &fakeMeasureStore{}
 	tree := map[string]any{"checks": map[string]any{
 		"web":   map[string]any{"type": "http"},
-		"space": map[string]any{"type": "disk"},
+		"space": map[string]any{"type": "storage"},
 	}}
 	deps := Deps{SLA: store, Now: func() time.Time { return time.Unix(0, 0) }, ExecxRunner: execx.CommandRunner{}}
 
@@ -94,7 +94,7 @@ func TestMeasurementRecorderOnlyMeasuredChecks(t *testing.T) {
 
 func TestMeasurementRecorderNilWithoutMeasuredChecks(t *testing.T) {
 	store := &fakeMeasureStore{}
-	tree := map[string]any{"checks": map[string]any{"space": map[string]any{"type": "disk"}}}
+	tree := map[string]any{"checks": map[string]any{"space": map[string]any{"type": "storage"}}}
 	if measurementRecorder(Deps{SLA: store, ExecxRunner: execx.CommandRunner{}}, "svc", tree) != nil {
 		t.Fatal("expected nil recorder when no checks are measured")
 	}

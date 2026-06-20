@@ -1,7 +1,7 @@
 # Host watches: resource monitoring with `disk` check and `hook` action - historical design
 
 **Date:** 2026-06-06
-**Status:** Historical design. Host watches and storage/disk watch support are
+**Status:** Historical design. Host watches and storage watch support are
 implemented; use [`docs/configuration.md`](../../configuration.md#host-watches),
 [`docs/rules.md`](../../rules.md) and [`docs/wizards.md`](../../wizards.md) for
 current operator-facing behavior.
@@ -46,7 +46,7 @@ watches:
     enabled: true            # optional, default true
     interval: 1m             # optional, default engine.interval
     check:
-      type: disk
+      type: storage
       path: /
       used_pct: { op: ">=", value: 90 }   # check.OK = threshold crossed
     for: { cycles: 3 }       # optional window (consecutive); reuses rules engine

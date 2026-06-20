@@ -229,48 +229,41 @@ func TestCephMonIDFromSystemdUnit(t *testing.T) {
 	}
 }
 
-func TestServiceCleanupDirsIncludesLegacyAppsOnlyWhenLoaded(t *testing.T) {
+func TestServiceCleanupDirsUsesServicesDirOnly(t *testing.T) {
 	tmp := t.TempDir()
 	global := filepath.Join(tmp, "sermo.yml")
-	cfg := &config.Config{Global: config.Global{Includes: []string{filepath.Join(tmp, legacyServicesIncludeDir)}}}
 
-	got := serviceCleanupDirs(global, cfg)
-	want := []string{filepath.Join(tmp, servicesIncludeDir), filepath.Join(tmp, legacyServicesIncludeDir)}
+	got := serviceCleanupDirs(global, &config.Config{})
+	want := []string{filepath.Join(tmp, servicesIncludeDir)}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("serviceCleanupDirs() = %v, want %v", got, want)
 	}
-
-	got = serviceCleanupDirs(global, &config.Config{})
-	want = []string{filepath.Join(tmp, servicesIncludeDir)}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("serviceCleanupDirs without legacy include = %v, want %v", got, want)
-	}
 }
 
-func TestEnsureIncludesPathRecognizesAbsoluteIncludeForRelativeTarget(t *testing.T) {
+func TestEnsureConfigPathListRecognizesAbsolutePathForRelativeTarget(t *testing.T) {
 	tmp := t.TempDir()
 	t.Chdir(tmp)
 	root := map[string]any{
 		"paths": map[string]any{
-			"includes": []any{filepath.Join(tmp, servicesIncludeDir)},
+			"services": []any{filepath.Join(tmp, servicesIncludeDir)},
 		},
 	}
 
-	changed, err := ensureIncludesPath(root, ".", servicesIncludeDir, servicesIncludeDir)
+	changed, err := ensureConfigPathList(root, ".", "services", servicesIncludeDir, servicesIncludeDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if changed {
-		t.Fatal("ensureIncludesPath changed config despite existing absolute include")
+		t.Fatal("ensureConfigPathList changed config despite existing absolute path")
 	}
 	paths := root["paths"].(map[string]any)
-	got, err := yamlStringList(paths["includes"])
+	got, err := yamlStringList(paths["services"])
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []string{filepath.Join(tmp, servicesIncludeDir)}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Fatalf("paths.includes = %v, want %v", got, want)
+		t.Fatalf("paths.services = %v, want %v", got, want)
 	}
 }
 

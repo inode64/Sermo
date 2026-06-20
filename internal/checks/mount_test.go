@@ -93,7 +93,7 @@ func TestDiskMountTakesPrecedenceOverSpace(t *testing.T) {
 func TestBuildDiskMountCheck(t *testing.T) {
 	// Mount-only disk check (no space predicate) builds and runs.
 	built, warns := Build(map[string]any{
-		"data": map[string]any{"type": "disk", "path": "/data", "mounted": true},
+		"data": map[string]any{"type": "storage", "path": "/data", "mounted": true},
 	}, Deps{MountSampler: fakeMounts(dataMount)})
 	if len(warns) != 0 {
 		t.Fatalf("unexpected warnings: %v", warns)
@@ -102,7 +102,7 @@ func TestBuildDiskMountCheck(t *testing.T) {
 		t.Fatal("mounted-as-expected disk check should build and not alert")
 	}
 	// A disk check with neither space predicate nor mount condition is rejected.
-	if _, warns := Build(map[string]any{"d": map[string]any{"type": "disk", "path": "/data"}}, Deps{}); len(warns) == 0 {
+	if _, warns := Build(map[string]any{"d": map[string]any{"type": "storage", "path": "/data"}}, Deps{}); len(warns) == 0 {
 		t.Fatal("a disk check with no predicate and no mount condition should warn")
 	}
 }

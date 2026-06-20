@@ -13,9 +13,9 @@ import (
 // configuration example — through the real loader and validator, so the
 // reference file cannot drift from the schema. Each `---` document is placed
 // where it would live in a deployment: the global part as sermo.yml, catalog
-// kinds (daemon/app/lib/patterns) in a catalog dir, services in an include
-// dir, mounts in a mounts dir; the example's absolute paths are rewritten to
-// the test sandbox.
+// kinds (daemon/app/lib/patterns) in a catalog dir, services in a services dir,
+// mounts in a mounts dir; the example's absolute paths are rewritten to the
+// test sandbox.
 func TestDocsSermoAllValidates(t *testing.T) {
 	root := repoRoot(t)
 	raw, err := os.ReadFile(filepath.Join(root, "docs", "sermo-all.yml"))
@@ -25,12 +25,12 @@ func TestDocsSermoAllValidates(t *testing.T) {
 
 	dir := t.TempDir()
 	catalogExtra := filepath.Join(dir, "catalog-extra")
-	enabled := filepath.Join(dir, "enabled")
+	servicesDir := filepath.Join(dir, "services")
 	mountsDir := filepath.Join(dir, "mounts")
 	// The loader classifies catalog entries by subdirectory, mirroring the
 	// packaged layout (catalog/{services,apps,libs,patterns}).
 	subdir := map[string]string{"daemon": "services", "app": "apps", "lib": "libs", "patterns": "patterns"}
-	for _, d := range []string{enabled, catalogExtra, mountsDir} {
+	for _, d := range []string{servicesDir, catalogExtra, mountsDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 			}
 		case "service":
 			services = append(services, name)
-			if err := os.WriteFile(filepath.Join(enabled, name+".yml"), []byte(doc), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(servicesDir, name+".yml"), []byte(doc), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		case "mount":
@@ -87,7 +87,7 @@ func TestDocsSermoAllValidates(t *testing.T) {
 	}
 	global["paths"] = map[string]any{
 		"catalog":  []any{filepath.Join(root, "catalog"), catalogExtra},
-		"includes": []any{enabled},
+		"services": []any{servicesDir},
 		"mounts":   []any{mountsDir},
 		"runtime":  filepath.Join(dir, "runtime"),
 		"state":    filepath.Join(dir, "state"),
