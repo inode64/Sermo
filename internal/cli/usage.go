@@ -70,11 +70,9 @@ var commandUsages = []commandUsage{
 	},
 	{
 		Name:    "backend",
-		Aliases: []string{"init"},
 		Summary: "Detect and print the active service-manager backend.",
 		Usage: []string{
 			"sermoctl backend",
-			"sermoctl init",
 		},
 		Flags: []string{
 			"--backend auto|systemd|openrc  backend to probe; default is auto",
@@ -422,7 +420,6 @@ var commandUsages = []commandUsage{
 		Usage: []string{
 			"sermoctl diagnose",
 			"sermoctl diagnose clean",
-			"sermoctl diagnose clear",
 		},
 		Flags: []string{
 			"--json  print findings as JSON",

@@ -19,10 +19,10 @@ import (
 // reported (warnings alone exit 0).
 func (a App) runDiagnose(opts options) int {
 	if len(opts.args) > 0 {
-		if (opts.args[0] == "clean" || opts.args[0] == "clear") && len(opts.args) == 1 {
+		if opts.args[0] == "clean" && len(opts.args) == 1 {
 			return a.runDiagnoseClean(opts)
 		}
-		return a.commandUsageError("diagnose", "diagnose supports only: diagnose [--json] | diagnose clean|clear [--json]")
+		return a.commandUsageError("diagnose", "diagnose supports only: diagnose [--json] | diagnose clean [--json]")
 	}
 
 	cfg, code := a.loadConfig(opts)
@@ -79,7 +79,7 @@ func (a App) runDiagnoseClean(opts options) int {
 	}
 	fmt.Fprintf(
 		a.Stdout,
-		"cleared control state for %d unconfigured target(s): %s (%d row(s))\n",
+		"cleaned control state for %d unconfigured target(s): %s (%d row(s))\n",
 		len(result.Services),
 		strings.Join(result.Services, ", "),
 		result.Rows,

@@ -48,8 +48,8 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		want string
 	}{
 		{name: "unknown command", args: []string{"frobnicate"}, want: `unknown command "frobnicate"`},
+		{name: "init command removed", args: []string{"init"}, want: `unknown command "init"`},
 		{name: "backend extra arg", args: []string{"backend", "extra"}, want: "backend takes no arguments"},
-		{name: "init extra arg", args: []string{"init", "extra"}, want: "init takes no arguments"},
 		{name: "status extra service", args: []string{"status", "web", "extra"}, want: "status takes exactly one service name"},
 		{name: "is-active extra service", args: []string{"is-active", "web", "extra"}, want: "is-active takes exactly one service name"},
 		{name: "restart extra service", args: []string{"restart", "web", "extra"}, want: "restart takes exactly one service name"},
@@ -79,6 +79,7 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "events list extra", args: []string{"events", "web", "extra"}, want: "events accepts at most one service name"},
 		{name: "events clear extra", args: []string{"events", "clear", "extra"}, want: "events clear accepts only optional --before TIME"},
 		{name: "activity extra", args: []string{"activity", "clear", "extra"}, want: "activity clear accepts only optional --before TIME"},
+		{name: "diagnose clear removed", args: []string{"diagnose", "clear"}, want: "diagnose supports only"},
 		{name: "activity bad subcommand", args: []string{"activity", "list"}, want: "activity supports only"},
 		{name: "config validate service arg", args: []string{"config", "validate", "web"}, want: "config validate takes no service name"},
 		{name: "sla extra", args: []string{"sla", "web", "extra"}, want: "sla accepts at most one service name"},
