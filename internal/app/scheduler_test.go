@@ -147,8 +147,8 @@ func TestSchedulerStartupDelayInterruptedByShutdown(t *testing.T) {
 func TestSchedulerRunsWatches(t *testing.T) {
 	var fired int32
 	w := &Watch{
-		Name:     "disk-root",
-		Check:    stubCheck{name: "disk", ok: true},
+		Name:     "storage-root",
+		Check:    stubCheck{name: "storage", ok: true},
 		Interval: 15 * time.Millisecond,
 		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error {
 			atomic.AddInt32(&fired, 1)
@@ -259,8 +259,8 @@ func (f *fakeEnvRunnerForScheduler) RunEnv(ctx context.Context, env []string, na
 func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 	fake := &fakeEnvRunnerForScheduler{}
 	w := &Watch{
-		Name:       "disk-root",
-		Check:      stubCheck{name: "disk", ok: true},
+		Name:       "storage-root",
+		Check:      stubCheck{name: "storage", ok: true},
 		Interval:   10 * time.Millisecond,
 		Runner:     OSHookRunner{Runner: fake},
 		Hook:       HookSpec{Command: []string{"/bin/custom-hook", "--alert"}, Timeout: 5 * time.Second},
@@ -292,7 +292,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 	// Verify specific env from the stub check data
 	found := false
 	for _, e := range call.env {
-		if e == "SERMO_WATCH=disk-root" {
+		if e == "SERMO_WATCH=storage-root" {
 			found = true
 			break
 		}

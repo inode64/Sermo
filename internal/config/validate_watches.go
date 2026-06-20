@@ -42,7 +42,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		case "storage":
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
-			validateDiskFields(cp, check, add)
+			validateStorageFields(cp, check, add)
 			validateHookBlock("watches."+name, entry, true, defaultNotify, add)
 		case "net":
 			validateNetCheck(name, check, entry, defaultNotify, add)
@@ -428,7 +428,7 @@ func validateFileCheck(name string, check, entry map[string]any, defaultNotify [
 	if sz, ok := check["size"].(map[string]any); ok {
 		conds++
 		if cfgval.String(sz["on"]) != "change" {
-			if !isValidDiskOp(cfgval.String(sz["op"])) || !isNumeric(cfgval.String(sz["value"])) {
+			if !isValidCompareOp(cfgval.String(sz["op"])) || !isNumeric(cfgval.String(sz["value"])) {
 				add("watches.%s.check.size requires on: change or {op, value} with a numeric value", name)
 			}
 		}
@@ -475,7 +475,7 @@ func validateProcessWatch(name string, check, entry map[string]any, defaultNotif
 			continue
 		}
 		conds++
-		if !isValidDiskOp(cfgval.String(m["op"])) || !isNumeric(cfgval.String(m["value"])) {
+		if !isValidCompareOp(cfgval.String(m["op"])) || !isNumeric(cfgval.String(m["value"])) {
 			add("watches.%s.check.%s requires {op, value} with a numeric value", name, attr)
 		}
 	}

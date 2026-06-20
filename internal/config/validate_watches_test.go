@@ -268,10 +268,10 @@ func TestValidateProcessWatchErrors(t *testing.T) {
 	}
 }
 
-func TestValidateDiskInodesWatch(t *testing.T) {
+func TestValidateStorageInodesWatch(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-inodes": map[string]any{
+			"storage-inodes": map[string]any{
 				"check": map[string]any{
 					"type":            "storage",
 					"path":            "/",
@@ -288,21 +288,21 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-inodes": map[string]any{
+			"storage-inodes": map[string]any{
 				"check": map[string]any{"type": "storage", "path": "/", "inodes_used_pct": map[string]any{"op": "=>", "value": "lots"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.disk-inodes.check.inodes_used_pct has an invalid op") {
+	if !hasIssue(bad, "watches.storage-inodes.check.inodes_used_pct has an invalid op") {
 		t.Fatalf("expected invalid inode op issue, got %v", bad)
 	}
 }
 
-func TestValidateDiskBytePredicates(t *testing.T) {
+func TestValidateStorageBytePredicates(t *testing.T) {
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-bytes": map[string]any{
+			"storage-bytes": map[string]any{
 				"check": map[string]any{
 					"type":       "storage",
 					"path":       "/",
@@ -319,7 +319,7 @@ func TestValidateDiskBytePredicates(t *testing.T) {
 
 	percent := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-percent": map[string]any{
+			"storage-percent": map[string]any{
 				"check": map[string]any{
 					"type":     "storage",
 					"path":     "/",
@@ -335,25 +335,25 @@ func TestValidateDiskBytePredicates(t *testing.T) {
 
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-bytes": map[string]any{
+			"storage-bytes": map[string]any{
 				"check": map[string]any{"type": "storage", "path": "/", "free_bytes": map[string]any{"op": "<", "value": "lots"}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
 	})
-	if !hasIssue(bad, "watches.disk-bytes.check.free_bytes value \"lots\" must include a size suffix") {
+	if !hasIssue(bad, "watches.storage-bytes.check.free_bytes value \"lots\" must include a size suffix") {
 		t.Fatalf("expected invalid byte-size issue, got %v", bad)
 	}
 
 	unitless := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-bytes": map[string]any{
+			"storage-bytes": map[string]any{
 				"check": map[string]any{"type": "storage", "path": "/", "free_bytes": map[string]any{"op": "<", "value": 10}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
 		},
 	})
-	if !hasIssue(unitless, "watches.disk-bytes.check.free_bytes value \"10\" must include a size suffix") {
+	if !hasIssue(unitless, "watches.storage-bytes.check.free_bytes value \"10\" must include a size suffix") {
 		t.Fatalf("expected missing suffix issue, got %v", unitless)
 	}
 }
@@ -415,30 +415,30 @@ func TestValidateNotifyReferences(t *testing.T) {
 	notifiers := map[string]any{
 		"ops-email": map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y", "to": []any{"a@b"}},
 	}
-	diskCheck := map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}
+	storageCheck := map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}
 
 	good := validateRawGlobal(t, map[string]any{
 		"notifiers": notifiers,
 		"notify":    []any{"ops-email"},
 		"watches": map[string]any{
-			"disk-root": map[string]any{
-				"check": diskCheck,
+			"storage-root": map[string]any{
+				"check": storageCheck,
 				"then":  map[string]any{"notify": []any{"ops-email"}}, // notify-only, no hook
 			},
-			"disk-expand": map[string]any{
-				"check": diskCheck,
+			"storage-expand": map[string]any{
+				"check": storageCheck,
 				"then":  map[string]any{"notify": []any{"none"}, "expand": map[string]any{"by": "5G"}},
 			},
-			"disk-dry-run": map[string]any{
-				"check": diskCheck,
+			"storage-dry-run": map[string]any{
+				"check": storageCheck,
 				"then":  map[string]any{"dry_run": true, "notify": []any{"ops-email"}},
 			},
-			"disk-inherit": map[string]any{
-				"check": diskCheck,
+			"storage-inherit": map[string]any{
+				"check": storageCheck,
 				"then":  map[string]any{},
 			},
-			"disk-inherit-without-then": map[string]any{
-				"check": diskCheck,
+			"storage-inherit-without-then": map[string]any{
+				"check": storageCheck,
 			},
 		},
 	})
@@ -450,30 +450,30 @@ func TestValidateNotifyReferences(t *testing.T) {
 		"notifiers": notifiers,
 		"notify":    []any{"ops-email"},
 		"watches": map[string]any{
-			"disk-root": map[string]any{
-				"check": diskCheck,
+			"storage-root": map[string]any{
+				"check": storageCheck,
 				"then":  map[string]any{"notify": []any{"ops-email", "ghost"}},
 			},
 			"no-action": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{},
 			},
 			"no-action-none": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{"notify": []any{"none"}},
 			},
 			"bad-then": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  "notify me",
 			},
 			"bad-dry-run": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{"dry_run": "yes", "notify": []any{"none"}},
 			},
 		},
 	})
 	for _, w := range []string{
-		"watches.disk-root.then.notify references unknown notifier \"ghost\"",
+		"watches.storage-root.then.notify references unknown notifier \"ghost\"",
 		"watches.bad-then.then must be a mapping",
 		"watches.bad-dry-run.then.dry_run must be a boolean",
 	} {
@@ -491,11 +491,11 @@ func TestValidateNotifyReferences(t *testing.T) {
 		"notifiers": notifiers,
 		"watches": map[string]any{
 			"no-action": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{},
 			},
 			"dry-run-only": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{"dry_run": true},
 			},
 		},
@@ -947,7 +947,7 @@ func TestValidateSwapWatchErrors(t *testing.T) {
 func TestValidateWatchesGoodForWindow(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
-			"disk-root": map[string]any{
+			"storage-root": map[string]any{
 				"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}},
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
 				"for":   map[string]any{"cycles": 3},
@@ -962,7 +962,7 @@ func TestValidateWatchesGoodForWindow(t *testing.T) {
 func TestValidateWatchesBad(t *testing.T) {
 	cases := map[string]map[string]any{
 		"unknown type":           {"check": map[string]any{"type": "bogus"}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
-		"disk no path":           {"check": map[string]any{"type": "storage", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
+		"storage no path":        {"check": map[string]any{"type": "storage", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"bad op":                 {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"empty cmd":              {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
 		"for cycles 0":           {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 0}},
@@ -985,13 +985,13 @@ func TestValidateWatchesBad(t *testing.T) {
 
 func TestValidateWatchesMessageMentionsName(t *testing.T) {
 	issues := validateRawGlobal(t, map[string]any{
-		"watches": map[string]any{"disk-root": map[string]any{"check": map[string]any{"type": "storage"}}},
+		"watches": map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage"}}},
 	})
 	joined := ""
 	for _, i := range watchIssues(issues) {
 		joined += i.Msg
 	}
-	if !strings.Contains(joined, "disk-root") {
+	if !strings.Contains(joined, "storage-root") {
 		t.Fatalf("issue should name the watch: %v", issues)
 	}
 }
@@ -1146,19 +1146,19 @@ func TestValidateWatchPolicy(t *testing.T) {
 }
 
 func TestValidateExpandBy(t *testing.T) {
-	diskCheck := map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}}
+	storageCheck := map[string]any{"type": "storage", "path": "/data", "free_pct": map[string]any{"op": "<", "value": 10}}
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"no-by": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{"expand": map[string]any{}},
 			},
 			"unitless": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{"expand": map[string]any{"by": 1024}},
 			},
 			"bad-shape": map[string]any{
-				"check": diskCheck,
+				"check": storageCheck,
 				"then":  map[string]any{"expand": "5G"},
 			},
 		},

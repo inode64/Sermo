@@ -21,8 +21,8 @@ type levelPred struct {
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
-	// DiskPredFields are the space/inode predicates of a storage check.
-	DiskPredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
+	// StoragePredFields are the space/inode predicates of a storage check.
+	StoragePredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 	// SwapUsageFields are the predicates of a swap usage metric.
 	SwapUsageFields = []string{"used_pct", "free_pct", "free_bytes"}
 	// MemoryPredFields are the predicates of a memory check.

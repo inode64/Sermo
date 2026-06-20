@@ -54,7 +54,7 @@ func (c *scriptedCheck) Run(context.Context) checks.Result {
 func TestWatchPausedSkipsCheck(t *testing.T) {
 	check := &countingCheck{}
 	w := &Watch{
-		Name:     "disk-root",
+		Name:     "storage-root",
 		Check:    check,
 		IsPaused: func() bool { return true },
 	}
@@ -68,7 +68,7 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	var calls int
 	var env map[string]string
 	w := &Watch{
-		Name:      "disk-root",
+		Name:      "storage-root",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
 		Hook:      HookSpec{Command: []string{"/bin/true"}},
@@ -82,7 +82,7 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("expected hook to fire once, got %d", calls)
 	}
-	if env["SERMO_WATCH"] != "disk-root" || env["SERMO_PATH"] != "/" || env["SERMO_CHECK_TYPE"] != "storage" {
+	if env["SERMO_WATCH"] != "storage-root" || env["SERMO_PATH"] != "/" || env["SERMO_CHECK_TYPE"] != "storage" {
 		t.Fatalf("unexpected env: %v", env)
 	}
 }
@@ -232,7 +232,7 @@ func TestWatchNotifiesOnceByDefault(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	at := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
 	w := &Watch{
-		Name:      "disk-root",
+		Name:      "storage-root",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
 		Notifiers: []notify.Notifier{n},
@@ -251,7 +251,7 @@ func TestWatchReNotifiesAfterInterval(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	now := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
 	w := &Watch{
-		Name:           "disk-root",
+		Name:           "storage-root",
 		CheckType:      "storage",
 		Check:          stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
 		Notifiers:      []notify.Notifier{n},
@@ -273,7 +273,7 @@ func TestWatchReNotifiesOnNewEpisode(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	at := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
 	w := &Watch{
-		Name:      "disk-root",
+		Name:      "storage-root",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
 		Notifiers: []notify.Notifier{n},
@@ -355,7 +355,7 @@ func TestHookEnvMapsAllDataKeys(t *testing.T) {
 func TestHookEnvStorageKeysStillWork(t *testing.T) {
 	// Storage check data with a `value` key yields SERMO_PATH + SERMO_VALUE.
 	res := checks.Result{Data: map[string]any{"path": "/", "value": 92.0, "used_pct": 92.0}}
-	env := hookEnv("disk-root", "storage", res)
+	env := hookEnv("storage-root", "storage", res)
 	if env["SERMO_PATH"] != "/" || env["SERMO_VALUE"] != "92" {
 		t.Fatalf("storage env wrong: %v", env)
 	}
@@ -377,8 +377,8 @@ func TestHookEnvTrimsCapturedText(t *testing.T) {
 func TestWatchDoesNotFireWhenConditionFalse(t *testing.T) {
 	var calls int
 	w := &Watch{
-		Name:   "disk-root",
-		Check:  stubCheck{name: "disk", ok: false},
+		Name:   "storage-root",
+		Check:  stubCheck{name: "storage", ok: false},
 		Hook:   HookSpec{Command: []string{"/bin/true"}},
 		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error { calls++; return nil }),
 	}
@@ -391,8 +391,8 @@ func TestWatchDoesNotFireWhenConditionFalse(t *testing.T) {
 func TestWatchForWindowRequiresConsecutive(t *testing.T) {
 	var calls int
 	w := &Watch{
-		Name:   "disk-root",
-		Check:  stubCheck{name: "disk", ok: true},
+		Name:   "storage-root",
+		Check:  stubCheck{name: "storage", ok: true},
 		Window: rules.Rule{For: &rules.ForWindow{Cycles: 3}},
 		Hook:   HookSpec{Command: []string{"/bin/true"}},
 		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error { calls++; return nil }),
@@ -411,7 +411,7 @@ func TestWatchForWindowRequiresConsecutive(t *testing.T) {
 func TestWatchWithRealOSHookRunner(t *testing.T) {
 	var hookEvents []Event
 	w := &Watch{
-		Name:      "disk-root",
+		Name:      "storage-root",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
 		Hook:      HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},

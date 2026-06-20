@@ -140,9 +140,9 @@ type Deps struct {
 	// PID, cutting discovery from O(services × processes) to O(processes).
 	// Optional: nil makes each discoverer read /proc directly.
 	ProcReader process.Reader
-	// DiskUsage reports filesystem usage for storage checks and web watch summaries.
+	// StorageUsage reports filesystem usage for storage checks and web watch summaries.
 	// Optional: nil uses statfs.
-	DiskUsage checks.DiskUsageFunc
+	StorageUsage checks.StorageUsageFunc
 	// MountSampler reads the mount table for storage/autofs checks and web watch
 	// summaries. Optional: nil reads /proc/mounts.
 	MountSampler checks.MountSamplerFunc

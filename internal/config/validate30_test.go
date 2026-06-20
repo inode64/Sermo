@@ -742,7 +742,7 @@ rules:
 	}
 }
 
-func TestValidateDiskMountIntegration(t *testing.T) {
+func TestValidateStorageMountIntegration(t *testing.T) {
 	// A storage check carries space/inode predicates and/or a mounted condition in one
 	// entry (no separate mount type) — including a mount-only storage check.
 	good := validateService(t, `

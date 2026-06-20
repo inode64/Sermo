@@ -93,7 +93,7 @@ func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 
 func TestBuildWatchesRejectsRemovedDiskType(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
-		"disk-root": map[string]any{
+		"storage-root": map[string]any{
 			"check": map[string]any{
 				"type":     "disk",
 				"path":     "/",
@@ -113,7 +113,7 @@ func TestBuildWatchesRejectsRemovedDiskType(t *testing.T) {
 func TestBuildWatchesAbsentThenIsPureMonitorOnlyStorage(t *testing.T) {
 	// Bare storage watch (no then): alert-only, globals ignored.
 	cfg := cfgWithWatches(map[string]any{
-		"disk-root": map[string]any{
+		"storage-root": map[string]any{
 			"check": map[string]any{
 				"type":     "storage",
 				"path":     "/",
@@ -157,7 +157,7 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newFakeStore()
 			if tt.initialFound {
-				store.active[watchMonitorKey("disk-root")] = tt.initialActive
+				store.active[watchMonitorKey("storage-root")] = tt.initialActive
 			}
 			entry := map[string]any{
 				"check": map[string]any{
@@ -170,12 +170,12 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 			if tt.mode != nil {
 				entry["monitor"] = tt.mode
 			}
-			cfg := cfgWithWatches(map[string]any{"disk-root": entry})
+			cfg := cfgWithWatches(map[string]any{"storage-root": entry})
 			watches, warns := BuildWatches(cfg, Deps{Monitor: store, DefaultTimeout: time.Second}, 30*time.Second)
 			if len(warns) != 0 || len(watches) != 1 {
 				t.Fatalf("watches=%d warnings=%v", len(watches), warns)
 			}
-			if got := store.active[watchMonitorKey("disk-root")]; got != tt.wantActive {
+			if got := store.active[watchMonitorKey("storage-root")]; got != tt.wantActive {
 				t.Fatalf("stored active = %v, want %v", got, tt.wantActive)
 			}
 			if got := watches[0].IsPaused != nil && watches[0].IsPaused(); got != tt.wantPaused {
@@ -190,7 +190,7 @@ func TestBuildWatchesNotifyNoneIsMonitorOnly(t *testing.T) {
 	// the dashboard and events) with no notifiers and no warning — unlike an
 	// empty then, which stays rejected.
 	cfg := cfgWithWatches(map[string]any{
-		"disk-root": map[string]any{
+		"storage-root": map[string]any{
 			"check": map[string]any{
 				"type":     "storage",
 				"path":     "/",
@@ -618,7 +618,7 @@ func TestHasConfiguredTargets(t *testing.T) {
 	// A watch present but disabled still counts as configured, so the daemon
 	// starts (and can enable it later via reload/web UI) instead of erroring.
 	disabledWatch := cfgWithWatches(map[string]any{
-		"disk-root": map[string]any{
+		"storage-root": map[string]any{
 			"enabled": false,
 			"check":   map[string]any{"type": "storage", "path": "/"},
 		},

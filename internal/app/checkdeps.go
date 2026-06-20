@@ -4,7 +4,7 @@ import "sermo/internal/checks"
 
 func checkSamplersFromDeps(deps Deps) checks.Samplers {
 	return checks.Samplers{
-		DiskUsage:            deps.DiskUsage,
+		StorageUsage:         deps.StorageUsage,
 		NetSampler:           deps.NetSampler,
 		PingSampler:          deps.PingSampler,
 		SwapSampler:          deps.SwapSampler,
