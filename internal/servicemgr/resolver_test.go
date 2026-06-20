@@ -37,7 +37,7 @@ func (r scriptRunner) Run(_ context.Context, name string, args ...string) (execx
 	return execx.Result{ExitCode: res.exit}, res.err
 }
 
-func TestResolveSystemdPicksFirstKnownAlias(t *testing.T) {
+func TestResolveSystemdPicksFirstKnownCandidate(t *testing.T) {
 	// apache2.service is unknown, httpd.service is known -> pick httpd.service.
 	r := resolver(map[string]execxResultErr{
 		"systemctl cat -- apache2.service": {exit: 1},
@@ -64,9 +64,9 @@ func TestResolveSystemdNormalizesBareName(t *testing.T) {
 	}
 }
 
-func TestResolveSystemdNoAliasesTrustsName(t *testing.T) {
-	// The configured unit name is unknown to systemctl cat, but with no aliases the resolver
-	// trusts it rather than failing (sysv-generated units, etc.).
+func TestResolveSystemdNoExplicitCandidatesTrustsName(t *testing.T) {
+	// The configured unit name is unknown to systemctl cat, but when it is the
+	// trusted service name the resolver keeps it (sysv-generated units, etc.).
 	r := resolver(map[string]execxResultErr{"systemctl cat -- weird.service": {exit: 4}}, nil)
 	unit, err := r.Resolve(context.Background(), BackendSystemd, []string{"weird"}, true)
 	if err != nil {
@@ -77,7 +77,7 @@ func TestResolveSystemdNoAliasesTrustsName(t *testing.T) {
 	}
 }
 
-func TestResolveSystemdAliasesNoneResolveFails(t *testing.T) {
+func TestResolveSystemdCandidatesNoneResolveFails(t *testing.T) {
 	r := resolver(map[string]execxResultErr{
 		"systemctl cat -- apache2.service": {exit: 1},
 		"systemctl cat -- httpd.service":   {exit: 1},
@@ -173,7 +173,7 @@ func TestCgroupPIDs(t *testing.T) {
 }
 
 func TestResolveDeduplicatesCandidates(t *testing.T) {
-	// A unit name repeated in aliases is probed once.
+	// A unit name repeated in candidates is probed once.
 	rr := scriptRunner{results: map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, calls: map[string]int{}}
 	r := UnitResolver{Runner: rr, Probe: fakeProbe{}}
 	if _, err := r.Resolve(context.Background(), BackendSystemd, []string{"mysql", "mysql.service", "mysql"}, false); err != nil {
