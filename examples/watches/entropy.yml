@@ -1,0 +1,12 @@
+watches:
+  entropy:
+    # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
+    monitor: disabled
+    interval: 1m
+    check:
+      type: entropy
+      avail: { op: "<", value: 200 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-entropy-alert.sh]

@@ -89,7 +89,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 	fmt.Fprintf(a.Stdout, "\nGenerated configuration (%s):\n\n%s\n", res.Summary, data)
 
 	if !p.Confirm("Merge this into "+globalPath+"?", false) {
-		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.includes.")
+		fmt.Fprintln(a.Stdout, "Not written — paste the block above into a YAML file loaded from paths.watches/storages/networks.")
 		return exitSuccess, nil
 	}
 	var deletes []string
@@ -123,7 +123,7 @@ func (a App) runWizardSession(ctx context.Context, opts options) (code int, err 
 		return exitRuntimeError, nil
 	}
 	if merged.Backup != "" {
-		fmt.Fprintf(a.Stdout, "Updated %s paths.includes (backup: %s).\n", globalPath, merged.Backup)
+		fmt.Fprintf(a.Stdout, "Updated %s paths.%s (backup: %s).\n", globalPath, merged.PathKey, merged.Backup)
 	}
 	if len(deletes) > 0 {
 		fmt.Fprintf(a.Stdout, "Deleted %d existing watch file(s).\n", len(deletes))
@@ -353,9 +353,10 @@ func ifaceHasUsableAddress(addrs []net.Addr) bool {
 }
 
 type wizardMergeResult struct {
-	Backup string
-	Dir    string
-	Files  []string
+	Backup  string
+	Dir     string
+	Files   []string
+	PathKey string
 }
 
 func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error {
@@ -371,13 +372,14 @@ func ensureNoWatchCollisions(cfg *config.Config, fragment map[string]any) error 
 	return nil
 }
 
-// mergeWizardWatches writes one generated watch per YAML file under a directory
-// named after the generated watch type, then ensures that directory is listed in
-// paths.includes. Included watch fragments contain a top-level watches map, so the
-// loader can merge them into global watch configuration without rewriting
-// sermo.yml on every generated watch.
+// mergeWizardWatches writes one generated watch per YAML file under a typed
+// watch directory, then ensures that directory is listed in paths.storages,
+// paths.networks or paths.watches. Watch fragments contain a top-level watches
+// map, so the loader can merge them into global watch configuration without
+// rewriting sermo.yml on every generated watch.
 func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMergeResult, error) {
 	relDir, targetDir := wizardTargetDir(path, wizard, fragment)
+	pathKey := wizardPathKey(wizard, fragment)
 
 	var files []string
 	for _, name := range slices.Sorted(maps.Keys(fragment)) {
@@ -390,7 +392,7 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		files = append(files, file)
 	}
 
-	bak, err := ensureIncludeDir(path, relDir, targetDir)
+	bak, err := ensureConfigPathDir(path, pathKey, relDir, targetDir, "includes", "enabled")
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
@@ -408,7 +410,7 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 			return wizardMergeResult{}, fmt.Errorf("write %s: %w", file, err)
 		}
 	}
-	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files}, nil
+	return wizardMergeResult{Backup: bak, Dir: targetDir, Files: files, PathKey: pathKey}, nil
 }
 
 func wizardTargetDir(path, wizard string, fragment map[string]any) (string, string) {
@@ -417,18 +419,47 @@ func wizardTargetDir(path, wizard string, fragment map[string]any) (string, stri
 	return dirName, filepath.Join(base, dirName)
 }
 
+func wizardPathKey(wizard string, fragment map[string]any) string {
+	dirName := wizardConfigDirName(wizard, fragment)
+	switch dirName {
+	case "storages":
+		return "storages"
+	case "networks":
+		return "networks"
+	default:
+		return "watches"
+	}
+}
+
 func wizardCleanupDirs(path, wizard string, fragment map[string]any) []string {
 	_, targetDir := wizardTargetDir(path, wizard, fragment)
 	dirs := []string{targetDir}
-	legacyName := safeConfigPathName(wizard)
-	if legacyName == "" {
-		return dirs
-	}
-	legacyDir := filepath.Join(filepath.Dir(filepath.Clean(path)), legacyName)
-	if filepath.Clean(legacyDir) != filepath.Clean(targetDir) {
+	base := filepath.Dir(filepath.Clean(path))
+	for _, legacyName := range legacyWizardDirNames(wizard, fragment) {
+		if legacyName == "" {
+			continue
+		}
+		legacyDir := filepath.Join(base, legacyName)
+		if filepath.Clean(legacyDir) == filepath.Clean(targetDir) || slices.Contains(dirs, legacyDir) {
+			continue
+		}
 		dirs = append(dirs, legacyDir)
 	}
 	return dirs
+}
+
+func legacyWizardDirNames(wizard string, fragment map[string]any) []string {
+	names := []string{}
+	switch wizardConfigDirName(wizard, fragment) {
+	case "storages":
+		names = append(names, "storage")
+	case "networks":
+		names = append(names, "network")
+	}
+	if legacyName := safeConfigPathName(wizard); legacyName != "" {
+		names = append(names, legacyName)
+	}
+	return appendUniqueStrings(nil, names...)
 }
 
 func wizardConfigDirName(wizard string, fragment map[string]any) string {
@@ -449,10 +480,7 @@ func wizardConfigDirName(wizard string, fragment map[string]any) string {
 		}
 	}
 	if dirName == "" {
-		dirName = safeConfigPathName(wizard)
-	}
-	if dirName == "" {
-		dirName = "wizard"
+		dirName = "watches"
 	}
 	return dirName
 }
@@ -473,11 +501,11 @@ func watchFragmentCheckType(v any) string {
 func watchTypeDirName(checkType string) string {
 	switch strings.ToLower(checkType) {
 	case "storage", "disk", "mount":
-		return "storage"
+		return "storages"
 	case "net", "network", "icmp":
-		return "network"
+		return "networks"
 	default:
-		return safeConfigPathName(checkType)
+		return "watches"
 	}
 }
 
@@ -702,13 +730,12 @@ func watchConfigFileName(name string) string {
 	return base + ".yml"
 }
 
-// ensureIncludeDir makes sure targetDir (whose path relative to the config dir
-// is relDir) is listed in paths.includes of the global config, rewriting the
-// file — keeping a .bak of the original — only when a change is needed. It
-// returns the backup path written, or "" when paths.includes already covered it.
-// Shared by the watch and service writers so the read/parse/backup dance lives
-// in one place.
-func ensureIncludeDir(globalPath, relDir, targetDir string) (string, error) {
+// ensureConfigPathDir makes sure targetDir (whose path relative to the config
+// dir is relDir) is listed in paths.<pathKey> of the global config, rewriting
+// the file — keeping a .bak of the original — only when a change is needed. It
+// returns the backup path written, or "" when paths.<pathKey> already covered
+// it or a legacy list already points at the same directory.
+func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string, legacyKeys ...string) (string, error) {
 	orig, err := os.ReadFile(globalPath)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", globalPath, err)
@@ -720,7 +747,7 @@ func ensureIncludeDir(globalPath, relDir, targetDir string) (string, error) {
 	if root == nil {
 		root = map[string]any{}
 	}
-	changed, err := ensureIncludesPath(root, filepath.Dir(filepath.Clean(globalPath)), relDir, targetDir)
+	changed, err := ensureConfigPathList(root, filepath.Dir(filepath.Clean(globalPath)), pathKey, relDir, targetDir, legacyKeys...)
 	if err != nil {
 		return "", err
 	}
@@ -742,41 +769,36 @@ func ensureIncludeDir(globalPath, relDir, targetDir string) (string, error) {
 }
 
 func ensureIncludesPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
+	return ensureConfigPathList(root, base, "includes", relDir, targetDir, "enabled")
+}
+
+func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir string, legacyKeys ...string) (bool, error) {
 	paths, _ := root["paths"].(map[string]any)
 	if paths == nil {
 		paths = map[string]any{}
 		root["paths"] = paths
 	}
-	list, err := yamlStringList(paths["includes"])
+	list, err := yamlStringList(paths[pathKey])
 	if err != nil {
-		return false, fmt.Errorf("paths.includes must be a string or list before wizard can append")
-	}
-	legacy, err := yamlStringList(paths["enabled"])
-	if err != nil {
-		return false, fmt.Errorf("paths.enabled must be a string or list before wizard can migrate it to includes")
-	}
-	changed := false
-	if len(legacy) > 0 {
-		list = appendUniqueStrings(list, legacy...)
-		delete(paths, "enabled")
-		changed = true
-	}
-	if len(list) == 0 {
-		// Seeding the conventional services dir is itself a change: wizard
-		// output lives next to this config file, so the config must explicitly
-		// include that relative directory instead of relying on global fallbacks.
-		list = append(list, servicesIncludeDir)
-		changed = true
+		return false, fmt.Errorf("paths.%s must be a string or list before wizard can append", pathKey)
 	}
 	for _, item := range list {
 		if sameConfigPath(base, item, targetDir) {
-			if changed {
-				paths["includes"] = list
-			}
-			return changed, nil
+			return false, nil
 		}
 	}
-	paths["includes"] = append(list, relDir)
+	for _, legacyKey := range legacyKeys {
+		legacy, err := yamlStringList(paths[legacyKey])
+		if err != nil {
+			return false, fmt.Errorf("paths.%s must be a string or list before wizard can read it", legacyKey)
+		}
+		for _, item := range legacy {
+			if sameConfigPath(base, item, targetDir) {
+				return false, nil
+			}
+		}
+	}
+	paths[pathKey] = append(list, relDir)
 	return true, nil
 }
 

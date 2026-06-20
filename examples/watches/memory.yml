@@ -1,0 +1,14 @@
+watches:
+  memory:
+    # Watch system RAM via the kernel's MemAvailable estimate. During hook rollout,
+    # dry_run emits events but does not execute hook/notify/expand actions.
+    monitor: disabled
+    interval: 30s
+    check:
+      type: memory
+      used_pct: { op: ">=", value: "90%" }
+    for: { cycles: 3 }
+    then:
+      dry_run: true
+      hook:
+        command: [/usr/local/bin/sermo-memory-alert.sh]

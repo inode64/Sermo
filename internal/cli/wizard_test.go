@@ -150,7 +150,7 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if !strings.Contains(out.String(), "storage-mnt-backup") || !strings.Contains(out.String(), "free_pct") {
 		t.Fatalf("generated YAML not shown: %s", out.String())
 	}
-	// The global config only points paths.includes at the watch-type directory; the
+	// The global config only points paths.storages at the watch-type directory; the
 	// watch itself is written as a separate enabled fragment.
 	merged, err := os.ReadFile(cfgPath)
 	if err != nil {
@@ -159,13 +159,13 @@ func TestRunWizardVolumeMergesConfig(t *testing.T) {
 	if strings.Contains(string(merged), "storage-mnt-backup") {
 		t.Fatalf("watch should not be in global config: %s", merged)
 	}
-	if !strings.Contains(string(merged), "includes:") || !strings.Contains(string(merged), "storage") {
-		t.Fatalf("paths.includes not updated: %s", merged)
+	if !strings.Contains(string(merged), "storages:") || !strings.Contains(string(merged), "storages") {
+		t.Fatalf("paths.storages not updated: %s", merged)
 	}
 	if !strings.Contains(string(merged), "interval: 30s") {
 		t.Fatalf("merge dropped existing config: %s", merged)
 	}
-	watchPath := filepath.Join(tmp, "storage", "storage-mnt-backup.yml")
+	watchPath := filepath.Join(tmp, "storages", "storage-mnt-backup.yml")
 	watchFile, err := os.ReadFile(watchPath)
 	if err != nil {
 		t.Fatalf("watch file not written: %v", err)
@@ -430,13 +430,13 @@ func TestWizardRejectsLoadedWatchCollision(t *testing.T) {
 func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("paths:\n  includes: [storage]\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  storages: [storages]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(filepath.Join(tmp, "storage"), 0o755); err != nil {
+	if err := os.Mkdir(filepath.Join(tmp, "storages"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "storage", "storage-root.yml"), []byte("watches: {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "storages", "storage-root.yml"), []byte("watches: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage"}}}); err == nil {
@@ -444,7 +444,7 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	}
 }
 
-func TestMergeWizardWatchesMigratesLegacyEnabledPath(t *testing.T) {
+func TestMergeWizardWatchesPreservesLegacyEnabledPath(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
 	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [apps]\n"), 0o644); err != nil {
@@ -455,14 +455,14 @@ func TestMergeWizardWatchesMigratesLegacyEnabledPath(t *testing.T) {
 		t.Fatalf("mergeWizardWatches: %v", err)
 	}
 	if merged.Backup == "" {
-		t.Fatal("legacy enabled path migration should rewrite global config")
+		t.Fatal("adding paths.storages should rewrite global config")
 	}
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), "enabled:") || !strings.Contains(string(data), "includes:") || !strings.Contains(string(data), "apps") || !strings.Contains(string(data), "storage") {
-		t.Fatalf("legacy path not migrated to includes: %s", data)
+	if !strings.Contains(string(data), "enabled:") || !strings.Contains(string(data), "apps") || !strings.Contains(string(data), "storages:") || !strings.Contains(string(data), "storages") {
+		t.Fatalf("legacy path should be preserved while paths.storages is added: %s", data)
 	}
 }
 
@@ -474,28 +474,28 @@ func TestWizardConfigDirNameUsesWatchType(t *testing.T) {
 		want     string
 	}{
 		{
-			name:   "volume assistant writes storage directory",
+			name:   "volume assistant writes storages directory",
 			wizard: "volume",
 			fragment: map[string]any{
 				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
 			},
-			want: "storage",
+			want: "storages",
 		},
 		{
-			name:   "net assistant writes network directory",
+			name:   "net assistant writes networks directory",
 			wizard: "net",
 			fragment: map[string]any{
 				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
 			},
-			want: "network",
+			want: "networks",
 		},
 		{
-			name:   "missing type falls back to wizard token",
+			name:   "missing type falls back to watches directory",
 			wizard: "custom wizard",
 			fragment: map[string]any{
 				"watch": map[string]any{},
 			},
-			want: "custom-wizard",
+			want: "watches",
 		},
 	}
 	for _, tt := range tests {
@@ -517,20 +517,20 @@ func TestWizardCleanupDirsIncludesLegacyAssistantDir(t *testing.T) {
 		want     []string
 	}{
 		{
-			name:   "volume checks storage and legacy volume",
+			name:   "volume checks storages and legacy dirs",
 			wizard: "volume",
 			fragment: map[string]any{
 				"storage-root": map[string]any{"check": map[string]any{"type": "storage"}},
 			},
-			want: []string{filepath.Join(tmp, "storage"), filepath.Join(tmp, "volume")},
+			want: []string{filepath.Join(tmp, "storages"), filepath.Join(tmp, "storage"), filepath.Join(tmp, "volume")},
 		},
 		{
-			name:   "net checks network and legacy net",
+			name:   "net checks networks and legacy dirs",
 			wizard: "net",
 			fragment: map[string]any{
 				"net-eth0": map[string]any{"check": map[string]any{"type": "net"}},
 			},
-			want: []string{filepath.Join(tmp, "network"), filepath.Join(tmp, "net")},
+			want: []string{filepath.Join(tmp, "networks"), filepath.Join(tmp, "network"), filepath.Join(tmp, "net")},
 		},
 	}
 	for _, tt := range tests {
@@ -579,7 +579,7 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
 		t.Fatalf("old watch file should be deleted, stat err=%v", err)
 	}
-	newFile := filepath.Join(storageDir, "storage-mnt-backup.yml")
+	newFile := filepath.Join(tmp, "storages", "storage-mnt-backup.yml")
 	if _, err := os.Stat(newFile); err != nil {
 		t.Fatalf("new watch file not written: %v", err)
 	}

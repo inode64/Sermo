@@ -810,7 +810,7 @@ func TestDefaultIncludeDirsPreferServicesAndKeepAppsAlias(t *testing.T) {
 	}
 }
 
-func TestLoadUsesConfigRelativeDefaultIncludeDirsWhenIncludesOmitted(t *testing.T) {
+func TestLoadUsesConfigRelativeDefaultServiceDirsWhenServiceDirsOmitted(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": `
 paths:
@@ -822,15 +822,13 @@ kind: service
 name: web
 `,
 	})
-	root := filepath.Dir(global)
-	wantIncludes := []string{filepath.Join(root, "services"), filepath.Join(root, "apps")}
 
 	cfg, err := Load(global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := strings.Join(cfg.Global.Includes, "\n"); got != strings.Join(wantIncludes, "\n") {
-		t.Fatalf("Global.Includes = %v, want %v", cfg.Global.Includes, wantIncludes)
+	if len(cfg.Global.Includes) != 0 {
+		t.Fatalf("Global.Includes = %v, want no legacy includes stored for default service dirs", cfg.Global.Includes)
 	}
 	if _, ok := cfg.Services["web"]; !ok {
 		t.Fatalf("service from default services include was not loaded")
@@ -1050,6 +1048,85 @@ notifiers:
 
 	if _, err := Load(global); err == nil || !strings.Contains(err.Error(), "notifiers fragments must contain exactly one entry") {
 		t.Fatalf("Load() error = %v, want one-notifier-per-file error", err)
+	}
+}
+
+func TestLoadExplicitTargetDirectories(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
+paths:
+  services: [ @ROOT@/services ]
+  notifiers: [ @ROOT@/notifiers ]
+  storages: [ @ROOT@/storages ]
+  networks: [ @ROOT@/networks ]
+  watches: [ @ROOT@/watches ]
+  mounts: [ @ROOT@/mounts ]
+defaults:
+  policy: { cooldown: 5m }
+notify: [ops]
+`,
+		"services/web.yml": `
+kind: service
+name: web
+service: { name: web }
+checks:
+  service: { type: service, expect: active }
+`,
+		"notifiers/ops.yml": `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+`,
+		"storages/root.yml": `
+watches:
+  storage-root:
+    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
+    then: { notify: [ops] }
+`,
+		"networks/ping.yml": `
+watches:
+  ping-gw:
+    check: { type: icmp, host: 8.8.8.8 }
+    metrics:
+      state:
+        expect: up
+        then: { notify: [ops] }
+`,
+		"watches/load.yml": `
+watches:
+  load:
+    check: { type: load, load5: { op: ">", value: 2 } }
+    then: { notify: [ops] }
+`,
+		"mounts/backup.yml": `
+kind: mount
+name: backup
+path: /mnt/backup
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Services["web"]; !ok {
+		t.Fatalf("service directory was not loaded: %v", cfg.ServiceNames)
+	}
+	if _, ok := cfg.Notifiers()["ops"]; !ok {
+		t.Fatalf("notifier directory was not loaded: %v", cfg.Notifiers())
+	}
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	for _, name := range []string{"storage-root", "ping-gw", "load"} {
+		if _, ok := watches[name]; !ok {
+			t.Fatalf("watch %q was not loaded from explicit directories: %v", name, watches)
+		}
+	}
+	if _, ok := cfg.Mounts["backup"]; !ok {
+		t.Fatalf("mount directory was not loaded: %v", cfg.MountNames)
+	}
+	if issues := Validate(cfg); len(issues) != 0 {
+		t.Fatalf("explicit target directory config should validate, got %v", issues)
 	}
 }
 

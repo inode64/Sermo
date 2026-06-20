@@ -1,0 +1,12 @@
+watches:
+  fds:
+    # Watch system file descriptors against the kernel fs.file-max limit.
+    monitor: disabled
+    interval: 30s
+    check:
+      type: fds
+      used_pct: { op: ">=", value: 85 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-fds-alert.sh]

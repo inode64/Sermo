@@ -1,0 +1,6 @@
+notifiers:
+  team-slack:
+    # enabled: false  # keep configured but skip delivery attempts
+    type: slack
+    # template: default-alert
+    webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
