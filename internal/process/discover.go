@@ -170,8 +170,8 @@ const (
 	StateAbsent  = "absent"
 )
 
-// ObserveState reports the state of processes matching an exe/user selector
-//, using the exact resolved-exe and real-UID rules :
+// ObserveState reports the state of processes matching an exe/user selector,
+// using the exact resolved-exe and real-UID rules:
 //
 //   - running: at least one live (non-zombie) process matches;
 //   - zombie:  matches exist but all are defunct;

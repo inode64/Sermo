@@ -242,8 +242,8 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 	return e.Deps.Processes(cfgval.AsString(m["exe"]), cfgval.AsString(m["user"])) == want, nil
 }
 
-// evalMetric reads a sampled metric and compares it to the threshold
-//. With no metric source, or a not-ready rate metric, it is false
+// evalMetric reads a sampled metric and compares it to the threshold.
+// With no metric source, or a not-ready rate metric, it is false
 // so a remediation never fires on an unavailable value.
 func (e *Evaluator) evalMetric(v any) (bool, error) {
 	m, err := condMap(v, "metric condition")
