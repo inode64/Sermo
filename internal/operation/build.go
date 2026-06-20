@@ -174,10 +174,10 @@ func stopArtifactsFromTree(tree map[string]any) StopArtifacts {
 
 // reloadClosure builds the engine's reload step. With no native reload declared
 // it asks the backend to reload in place (systemctl reload <unit> /
-// rc-service <svc> reload). A `reload:` block (or legacy commands.reload) adds a
-// native reload — a signal to the main process or a command — that either
-// overrides the backend reload (`when: always`) or stands in for it only when the
-// init backend cannot reload the unit itself (`when: auto`, the default).
+// rc-service <svc> reload). A `reload:` block adds a native reload — a signal to
+// the main process or a command — that either overrides the backend reload
+// (`when: always`) or stands in for it only when the init backend cannot reload
+// the unit itself (`when: auto`, the default).
 func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, unit string, discoverer process.Discoverer, selectors []process.Selector) func(context.Context) error {
 	initReload := func(ctx context.Context) error { return mgr.Reload(ctx, unit) }
 
@@ -200,8 +200,8 @@ func reloadClosure(tree map[string]any, deps checks.Deps, mgr Manager, backend, 
 }
 
 // reloadSpec is the parsed native-reload declaration: exactly one of command or
-// signal, plus whether it always replaces the backend reload (legacy
-// commands.reload and `when: always`) or only fills in when the init cannot.
+// signal, plus whether it always replaces the backend reload (`when: always`) or
+// only fills in when the init cannot.
 type reloadSpec struct {
 	command []string
 	signal  syscall.Signal
@@ -209,15 +209,9 @@ type reloadSpec struct {
 	always  bool
 }
 
-// parseReloadSpec reads the native reload from the `reload:` block, falling back
-// to a legacy `commands.reload` command (treated as `when: always`). A present
-// `reload:` block fully shadows any legacy `commands.reload`: even an
-// empty/invalid block (which validation rejects, so it cannot reach runtime)
-// returns nil here rather than consulting the legacy command. It returns nil when
-// neither is present or the block is empty/invalid; the engine then uses the
-// plain backend reload. Note a bare `reload: { command: [...] }` defaults to
-// `when: auto` (prefer the init reload), unlike legacy `commands.reload` which is
-// always `when: always`.
+// parseReloadSpec reads the native reload from the `reload:` block. It returns
+// nil when the block is absent or empty/invalid; the engine then uses the plain
+// backend reload.
 // reloadConfigError reports an invalid native reload declaration that validation
 // should have rejected but must not be silently ignored at runtime.
 func reloadConfigError(tree map[string]any) error {
@@ -253,9 +247,6 @@ func parseReloadSpec(tree map[string]any) *reloadSpec {
 			return spec
 		}
 		return nil
-	}
-	if argv := reloadCommand(tree); len(argv) > 0 {
-		return &reloadSpec{command: argv, always: true}
 	}
 	return nil
 }
@@ -349,21 +340,6 @@ func reloadPidfile(tree map[string]any) string {
 		}
 	}
 	return ""
-}
-
-// reloadCommand extracts the optional `commands.reload` command array — one of
-// the reserved commands: entries features consume (see docs/daemons.md
-// "Auxiliary commands"); the `reload:` block is the other reload mechanism.
-func reloadCommand(tree map[string]any) []string {
-	cmds, _ := tree["commands"].(map[string]any)
-	if cmds == nil {
-		return nil
-	}
-	r, _ := cmds["reload"].(map[string]any)
-	if r == nil {
-		return nil
-	}
-	return cfgval.StringArray(r["command"])
 }
 
 func hasCommandMatchSelector(selectors []process.Selector) bool {

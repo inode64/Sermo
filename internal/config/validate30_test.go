@@ -1140,10 +1140,12 @@ kind: service
 name: svc
 service: { name: x }
 commands:
+  reload: { command: ["reload-svc"] }
   version: { command: "apachectl -v" }
   slow: { command: ["x"], timeout: nope }
   ok: { command: ["apachectl", "-v"], timeout: 5s }
 `)
+	mustHave(t, issues, "commands.reload is not supported; use reload.command with when: always")
 	mustHave(t, issues, "commands.version command must be an array, not a shell string")
 	mustHave(t, issues, "commands.slow timeout")
 	for _, is := range issues {
