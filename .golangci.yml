@@ -13,12 +13,26 @@ run:
 linters:
   default: none
   enable:
+    - asasalint                  # []any accidentally passed to a variadic any
     - bodyclose
     - copyloopvar
+    - durationcheck              # suspicious time.Duration multiplications
+    - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gosec
     - ineffassign
     - nilerr
+    - reassign                   # writes to other packages' package-level vars
+    - rowserrcheck               # database/sql Rows.Err() left unchecked
     - wastedassign
+  # Considered and deliberately NOT enabled:
+  #   noctx     — 129 hits; the conn/ probes dial net/http without a context by
+  #               design (tight per-probe deadlines are applied separately).
+  #   makezero  — false positives on the conn/ packet builders, where a
+  #               fixed-header make([]byte, N) followed by append(body) is intended.
+  #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
+  #               deliberate signals, not a sentinel-error case.
+  #   unconvert — flags arch-dependent syscall.Stat_t/Statfs_t conversions that
+  #               are needed on non-amd64 Linux; removing them would break ports.
   exclusions:
     generated: lax
     presets:
