@@ -11,7 +11,7 @@ variables:
 preflight:
   # `testparm -s` warns that the lock/pid dirs "do not exist" when run standalone
   # (the running smbd creates them) — whitelist that artifact so only genuine
-  # warnings (e.g. deprecated options) grade orange. Local rules win (first-match).
+  # warnings (e.g. deprecated options) stay optional. Local rules win (first-match).
   config:
     type: command
     command: ["${smbd_testparm}", "-s"]
