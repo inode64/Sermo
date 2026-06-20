@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap and /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -58,6 +58,10 @@ Use the current checkout as the source of truth. If remote findings require code
 - Treat each non-empty, non-comment line in `.env.ssh` as one SSH target.
 - Preserve the line value as provided, including user, host, port, aliases, or SSH options if present.
 - Do not invent, scan, or prompt for additional hosts while `.env.ssh` exists; if it is missing or has no usable hosts, stop and report that there are no remote targets to test.
+- When the user asks to test **all servers**, **all hosts**, **the whole `.env.ssh` list**, or similar full-fleet scope, run in two stages:
+  1. Test only the first four usable `.env.ssh` entries, end-to-end for the requested scope.
+  2. Review the first-four results before continuing. Continue with the remaining entries only when the first stage has no critical failures: SSH/preflight works, `/tmp` setup works, generated config validates, requested one-shot checks pass, and no finding indicates a project/catalog bug that would invalidate the rest of the run.
+- If the first-four stage has a critical failure, stop before touching the remaining hosts and report the exact failing host, command phase, output path, and whether any remote `/tmp/sermo-remote-test-*` directory was created. Continue anyway only when the user explicitly asks to proceed despite the failure.
 - Use batch SSH options and bounded connection timeouts:
 
 ```sh
@@ -156,8 +160,8 @@ partial test run.
   (`/proc/swaps`, `/proc/vmstat`), PID table (`/proc/loadavg`,
   `/proc/sys/kernel/pid_max`), PSI (`/proc/pressure/*`), mounted local
   filesystems (`findmnt`, `/proc/self/mountinfo`, `df -PT`), network interfaces
-  and default routes (`ip addr`, `ip route`), and any explicitly requested
-  uplink/ICMP targets.
+  and default routes (`ip addr`, `ip route`), certificate-like files under
+  `/etc/ssl`, and any explicitly requested uplink/ICMP targets.
 - Generate one fragment per host watch under the matching temporary directory
   loaded by `paths.storages`, `paths.networks` or `paths.watches`; every fragment
   must contain a top-level `watches:` map with exactly one entry.
@@ -167,16 +171,102 @@ partial test run.
   mounted local filesystems that are currently mounted and safe to monitor; skip
   pseudo filesystems, bind mounts and transient container/runtime mounts unless
   the user explicitly asks for them.
+- Include certificate watches for `/etc/ssl` on every complete config. Discover
+  candidate certificate-like files (`*.crt`, `*.cer`, `*.pem`) with read-only
+  commands, canonicalize symlinks with `readlink -f`, and generate at most one
+  watch per canonical file. Skip duplicate hashed CA-store aliases and non-certificate
+  private key material unless the user explicitly asks to monitor keys too.
+  Missing, unreadable or unparseable files must be treated as alert findings.
+  Expired certificates, not-yet-valid certificates and certificates with fewer
+  than 15 days left must notify through the selected safe notification mode.
+  Use `type: cert`, `path`, `expires_in_days: 15`, and optional stateful change
+  checks:
+
+```yaml
+watches:
+  cert-etc-ssl-example:
+    interval: 12h
+    check:
+      type: cert
+      path: /etc/ssl/certs/example.pem
+      expires_in_days: 15
+      on_algorithm_change: true
+      on_issuer_change: true
+```
+
+  Do not set `host`, `port`, `server_name` or `verify` for file-based certificate
+  checks. Add `then.notify` with the selected notifier, or omit it to inherit a
+  configured global notify, only when real delivery is part of the requested
+  remote installation. If real notification delivery was not explicitly
+  requested, keep these watches alert-only, `then.notify: [none]`, or
+  `then.dry_run: true` with the selected notifier.
 - Prefer portable, conservative thresholds suitable for validation, not
   remediation: memory available/used percentage, load with `per_cpu: true`,
   swap usage and swap IO, pids used percentage, PSI `some_avg60`, and storage
   used/free percentage. Do not add hooks. If notifications are requested only to
   test routing, use `then.dry_run: true`.
+- For complete configs that will be run under `sermod`, add monitor-only
+  sustained host checks for the validation window:
+  - load/cpu pressure signal: `type: load`, `per_cpu: true`, a `load5`
+    threshold, `interval: 30s`, and `for: { cycles: 10 }` so it represents at
+    least five minutes of sustained host load. Add a CPU PSI watch too when
+    `/proc/pressure/cpu` exists (`type: pressure`, `resource: cpu`,
+    `some_avg60`, monitor-only).
+  - low memory: `type: memory`, `available_pct` or `used_pct`,
+    `interval: 30s`, and `for: { cycles: 10 }` so it represents at least five
+    minutes of sustained low-RAM pressure. Add memory PSI when available.
+  - swap present: when swap exists, add the normal swap `usage` and `io` watches.
+    When no swap exists, do **not** fake a Sermo `swap` watch for absence: the
+    built-in swap usage check intentionally never fires on swapless hosts. Record
+    swap absence with the remote observation loop described below.
 - Validate after host watches are added, then run one-shot checks or start the
   temporary daemon only after the full generated config passes.
 - Report which host checks were generated, which were skipped, and why
   (for example: no swap configured, PSI unsupported, filesystem excluded as
   pseudo/transient, no default route).
+
+## Full Daemon Resource Observation
+
+Use this section only when the user explicitly asks to activate `sermod` with all
+features, run the full Web UI, or leave the temporary daemon active for analysis.
+It extends the complete remote installation configuration above; it does not
+apply to ordinary CLI-only validation.
+
+- Start `sermod` only after `sermoctl config validate` passes for the complete
+  temporary config. Keep it under the remote `/tmp/sermo-remote-test-*`
+  directory and record `sermod.pid`, `sermod.log`, the selected web port and the
+  full command line.
+- Observe the daemon for at least six minutes after readiness before declaring a
+  full-feature run healthy. Poll at a fixed interval such as 30s and save raw
+  samples locally:
+  - `/api/host` for host CPU, memory and load readings;
+  - `/api/daemon/metrics?since=10m` for `sermod` CPU, memory and IO history;
+  - `/api/events` or the relevant watch/event endpoint when available;
+  - `ps -p <sermod_pid> -o pid,etime,pcpu,pmem,rss,vsz,cmd` as a fallback and
+    cross-check for daemon CPU/RAM usage.
+- If host load is sustained for more than five minutes, include a CPU/load
+  report: current and peak host load, CPU count/per-core interpretation, `sermod`
+  average/peak CPU from daemon metrics or `ps`, and the top CPU processes from a
+  read-only `ps` sample. Do not run stress tools.
+- If low memory is sustained for more than five minutes, include a memory report:
+  MemTotal, MemAvailable, used/available percentage, `sermod` RSS/percentage,
+  and the top RSS processes from a read-only `ps` sample.
+- If the host has no configured swap for six continuous minutes, include a swap
+  absence report. Confirm with `/proc/swaps` at the beginning and end of the
+  six-minute window; when swap exists, report swap usage and swap IO watch data
+  instead.
+- Include `/etc/ssl` certificate watch results and related events in the
+  observation output. Report any certificate that is expired, not yet valid,
+  under the 15-day expiry threshold, missing, unreadable, unparseable, or changed
+  by issuer/signature algorithm between cycles. For obsolete-looking algorithms
+  or weak key sizes, report the `signature_algorithm`, `public_key_algorithm`
+  and `key_bits` values as review findings; do not claim Sermo blocks them unless
+  an explicit policy or check exists in the generated config.
+- Treat these reports as observation only. Do not add hooks, do not trigger
+  remediation, and do not change host swap, sysctl, service or package state.
+- Include the sustained-resource observation results in the final report even
+  when no alert fired: state whether the six-minute observation completed, which
+  sustained conditions were seen, and where the raw JSON/log samples are stored.
 
 ## Unsupported Active Services
 
@@ -235,6 +325,10 @@ Rules:
 - Use `notify: [none]` for monitor-only entries when no notification route should be tested.
 - To inherit the top-level `notify`, omit `then.notify` only when a global `notify` is configured; do not write `notify: [default]` in final YAML.
 - Use `dry_run: true` whenever a notify route is present solely to prove that an alert would fire.
+- Certificate expiry or damaged-file notifications follow the same rule: real
+  delivery is allowed only when the user explicitly requested notification
+  delivery for the remote installation; otherwise keep the watch alert-only or
+  dry-run.
 - Keep test thresholds and intervals clearly temporary; restore or delete the `/tmp` config after the run.
 
 ## Running And Observing
@@ -274,6 +368,9 @@ Summarize:
 - active services configured;
 - unsupported active services per server;
 - alerts that fired or would fire in dry-run;
+- `/etc/ssl` certificate findings: expiring within 15 days, expired, not yet
+  valid, missing/unreadable/unparseable, issuer or algorithm changes, and any
+  weak/obsolete-looking algorithm or key-size review notes;
 - `acpid` operation tests run or skipped, with reason;
 - missing paths, unsupported apps, or catalog gaps to fix locally;
 - serious errors encountered and the actions completed before stopping;
