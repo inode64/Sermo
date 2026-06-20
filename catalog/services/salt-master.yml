@@ -1,8 +1,9 @@
 kind: daemon
-name: salt
-display_name: "Salt"
+name: salt-master
+display_name: "Salt Master"
 category: system
-service: salt
+description: "Salt master controller daemon"
+service: salt-master
 apps: [salt]
 
 variables:
@@ -10,7 +11,7 @@ variables:
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
-pidfile: /run/salt-minion.pid
+pidfile: /run/salt-master.pid
 
 checks:
   service: { type: service, expect: active }
