@@ -42,7 +42,7 @@ func compareValue(result, op, value string) (bool, error) {
 	case "=~":
 		re, err := regexp.Compile(value)
 		if err != nil {
-			return false, fmt.Errorf("invalid regex %q: %v", value, err)
+			return false, fmt.Errorf("invalid regex %q: %w", value, err)
 		}
 		return re.MatchString(result), nil
 	default:

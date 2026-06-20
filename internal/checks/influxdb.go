@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -172,14 +173,14 @@ func (c influxCheck) fluxScalar(ctx context.Context, client *http.Client, base s
 	cr.Comment = '#'
 	cr.FieldsPerRecord = -1
 	header, err := cr.Read()
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return "", true, nil // no result
 	}
 	if err != nil {
 		return "", false, fmt.Errorf("invalid CSV response: %w", err)
 	}
 	row, err := cr.Read()
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		return "", true, nil // header but no data
 	}
 	if err != nil {

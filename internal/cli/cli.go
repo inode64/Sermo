@@ -563,11 +563,11 @@ func (a App) operateWithCascade(ctx context.Context, opts options, cfg *config.C
 func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Config, resolved config.Resolved, service, action string) (operation.Result, error) {
 	detection, err := a.Detector.Detect(ctx, opts.backend)
 	if err != nil {
-		return operation.Result{}, fmt.Errorf("backend detection failed: %v", err)
+		return operation.Result{}, fmt.Errorf("backend detection failed: %w", err)
 	}
 	manager, err := a.NewManager(detection.Backend)
 	if err != nil {
-		return operation.Result{}, fmt.Errorf("service manager unavailable: %v", err)
+		return operation.Result{}, fmt.Errorf("service manager unavailable: %w", err)
 	}
 
 	resolver := servicemgr.NewUnitResolver()
