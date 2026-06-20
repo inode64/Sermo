@@ -1,6 +1,7 @@
 package assist
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -177,7 +178,7 @@ func TestPromptAbortsOnExhaustedInput(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			p, _ := newTestPrompt(tc.input)
-			if err := driveWithRecover(func() { tc.drive(p) }); err != ErrInputClosed {
+			if err := driveWithRecover(func() { tc.drive(p) }); !errors.Is(err, ErrInputClosed) {
 				t.Fatalf("err = %v, want ErrInputClosed", err)
 			}
 		})

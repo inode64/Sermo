@@ -74,7 +74,7 @@ func (ldapProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 		}
 	}
 	if !ldapSucceeds(bindOK, serverResponded, requireAuth) {
-		return Result{}, fmt.Errorf("ldap bind: %v", bindErr)
+		return Result{}, fmt.Errorf("ldap bind: %w", bindErr)
 	}
 
 	extra := map[string]string{"bind": mode}

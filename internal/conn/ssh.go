@@ -91,11 +91,11 @@ func (sshProtocol) Probe(ctx context.Context, cfg Config) (Result, error) {
 	if hostKey == nil {
 		// Key exchange never reached the host-key step: not an SSH server we can
 		// talk to, or the transport handshake failed.
-		return Result{}, fmt.Errorf("ssh handshake: %v", hsErr)
+		return Result{}, fmt.Errorf("ssh handshake: %w", hsErr)
 	}
 	requireAuth := sshRequireAuth(cfg)
 	if !sshSucceeds(true, authed, requireAuth) {
-		return Result{}, fmt.Errorf("authentication failed: %v", hsErr)
+		return Result{}, fmt.Errorf("authentication failed: %w", hsErr)
 	}
 
 	proto, software := parseSSHBanner(banner)

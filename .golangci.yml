@@ -17,6 +17,7 @@ linters:
     - bodyclose
     - copyloopvar
     - durationcheck              # suspicious time.Duration multiplications
+    - errorlint                  # error wrapping (%w) and errors.Is/As correctness
     - gocheckcompilerdirectives  # malformed //go: directives (typos that silently no-op)
     - gosec
     - ineffassign
