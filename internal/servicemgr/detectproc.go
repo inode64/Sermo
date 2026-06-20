@@ -63,9 +63,9 @@ func DetectProc(ctx context.Context, runner execx.Runner, readFile func(string) 
 	return info.Pidfile, info.Exe
 }
 
-// DetectProcInfo is the richer form of DetectProc used by the wizard. It keeps
-// DetectProc's legacy pidfile/exe fields and also reports a cmdline regex and
-// user when OpenRC exposes command/command_user without a pidfile.
+// DetectProcInfo is the richer form of DetectProc used by the wizard. It reports
+// DetectProc's pidfile/exe fields and also a cmdline regex and user when OpenRC
+// exposes command/command_user without a pidfile.
 func DetectProcInfo(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ProcInfo {
 	if unit == "" {
 		return ProcInfo{}
