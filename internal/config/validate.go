@@ -25,7 +25,7 @@ func (i Issue) String() string {
 var validBackends = map[string]struct{}{"": {}, "auto": {}, "systemd": {}, "openrc": {}}
 
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
-// safety invariants and must never be honored (section 30).
+// safety invariants and must never be honored.
 var rejectedSecurityToggles = []string{
 	"require_preflight_before_restart",
 	"block_restart_on_active_lock",
@@ -83,7 +83,7 @@ func validateGlobal(cfg *Config) []Issue {
 
 	if paths, ok := raw["paths"].(map[string]any); ok {
 		if _, present := paths["locks"]; present {
-			add("paths.locks is not supported in the MVP; runtime locks derive from paths.runtime")
+			add("paths.locks is not supported; runtime locks derive from paths.runtime")
 		}
 		for _, key := range []string{"includes", "enabled", "profiles"} {
 			if _, present := paths[key]; present {

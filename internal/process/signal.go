@@ -33,11 +33,11 @@ type ReapResult struct {
 	Signalled []int     // pids that were signalled, sorted
 }
 
-// OK reports whether no residual processes remain (section 22: ok only if none
+// OK reports whether no residual processes remain (ok only if none
 // remain at all).
 func (r ReapResult) OK() bool { return len(r.Remaining) == 0 }
 
-// Reaper applies the stop/kill signal escalation policy (section 22) to residual
+// Reaper applies the stop/kill signal escalation policy to residual
 // processes. Rediscover re-reads the current residual set between steps so
 // escalation re-evaluates identity each round (defending against PID reuse).
 type Reaper struct {
@@ -47,7 +47,7 @@ type Reaper struct {
 	Sleep       func(time.Duration)
 }
 
-// Reap escalates signals against residuals according to policy (section 22):
+// Reap escalates signals against residuals according to policy:
 //
 //   - no residuals          -> ok.
 //   - force_kill=false       -> signal nothing; residuals are orphans.

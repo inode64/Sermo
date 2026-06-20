@@ -1,5 +1,5 @@
 // Package metrics samples service and system metrics for metric checks and
-// conditions (section 12). Rate metrics (cpu, total_cpu) are deltas between two
+// conditions. Rate metrics (cpu, total_cpu) are deltas between two
 // samples, so the Collector is stateful and long-lived, owned by the daemon and
 // sampled once per cycle.
 package metrics
@@ -13,7 +13,7 @@ import (
 )
 
 // Reading is one metric's sampled value. A metric may expose an absolute form,
-// a percentage form, or both (section 14). Rate metrics are not Ready on the
+// a percentage form, or both. Rate metrics are not Ready on the
 // first cycle, before a delta can be computed.
 type Reading struct {
 	Absolute    float64
@@ -31,7 +31,7 @@ type Reading struct {
 type Snapshot map[string]Reading
 
 // Compare evaluates a metric reading against a threshold and operator
-// (section 14). A not-ready reading is false (a rate metric must never fire on a
+//. A not-ready reading is false (a rate metric must never fire on a
 // value the collector could not compute yet). A "%" threshold compares against
 // the percentage form, a bare number against the absolute form; using a form the
 // metric does not expose is an error.

@@ -54,7 +54,7 @@ type sysSample struct {
 }
 
 // Collector samples service and system metrics, remembering the previous CPU
-// sample to compute rates (section 12). It is safe for concurrent use by service
+// sample to compute rates. It is safe for concurrent use by service
 // workers; system metrics are cached briefly so concurrent workers in one cycle
 // share a single system computation instead of corrupting the rate.
 type Collector struct {
@@ -380,7 +380,7 @@ func readerMemoryTotals(r Reader, needSwap bool) memoryTotals {
 	return totals
 }
 
-// Reset clears a service's CPU history (section 12: reset on reload).
+// Reset clears a service's CPU history.
 func (c *Collector) Reset(service string) {
 	c.mu.Lock()
 	delete(c.prevService, service)
@@ -431,7 +431,7 @@ func maxProcCPURate(prev, cur procCPUSample, hz float64) Reading {
 	return Reading{Percent: peak, HasPercent: true, Ready: true}
 }
 
-// cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100 (section 12). A drop
+// cpuRate computes CPU% = Δticks / hz / (Δwall * ncpu) * 100. A drop
 // in the cumulative tick count — a worker restarting, or a busy PID leaving the
 // matched set and being replaced by a fresh one starting at zero — clamps to 0
 // rather than underflowing the unsigned subtraction into a bogus huge rate (the

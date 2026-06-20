@@ -154,7 +154,7 @@ func (s Scanner) ScanDir() ([]string, error) {
 
 // matchService reports whether fileName is a lock for service, returning the
 // derived lock name ("" for the bare <service>.lock). Naming is
-// <service>[.<name>].lock (section 20).
+// <service>[.<name>].lock.
 func matchService(fileName, service string) (string, bool) {
 	base := strings.TrimSuffix(fileName, lockSuffix)
 	if base == service {

@@ -12,13 +12,13 @@ import (
 )
 
 // Discoverer finds a service's processes through its selectors and the process
-// tree (section 21).
+// tree.
 type Discoverer struct {
 	Reader       Reader
 	ResolveUser  UserResolver
 	ResolveGroup UserResolver // group-name -> GID (OSGroupResolver); for command_match group
 	// BackendPIDs reports backend-provided PIDs (systemd cgroup process set and
-	// MainPID), tried first (section 21, step 1). Optional.
+	// MainPID), tried first. Optional.
 	BackendPIDs func() []int
 }
 
@@ -63,7 +63,7 @@ func (d Discoverer) resolveGroup() UserResolver {
 }
 
 // Discover applies pidfile then command_match selectors, then adds descendants
-// from the process tree, deduplicated by PID (section 21). Non-fatal problems
+// from the process tree, deduplicated by PID. Non-fatal problems
 // (missing pidfile, dead pid) are returned as warnings.
 func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	reader := d.reader()
@@ -87,7 +87,7 @@ func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 		order = append(order, id.PID)
 	}
 
-	// 0. backend-provided PIDs (systemd cgroup + MainPID, section 21 step 1).
+	// 0. backend-provided PIDs (systemd cgroup + MainPID).
 	for _, pid := range backendPIDs {
 		if id, ok := snapshot[pid]; ok {
 			add(id, "main", sourceBackend)
@@ -163,7 +163,7 @@ func backendPIDSeeds(fn func() []int) []int {
 	return seeds
 }
 
-// Process states reported by ObserveState (section 12).
+// Process states reported by ObserveState.
 const (
 	StateRunning = "running"
 	StateZombie  = "zombie"
@@ -171,7 +171,7 @@ const (
 )
 
 // ObserveState reports the state of processes matching an exe/user selector
-// (section 12), using the exact resolved-exe and real-UID rules of section 21:
+//, using the exact resolved-exe and real-UID rules :
 //
 //   - running: at least one live (non-zombie) process matches;
 //   - zombie:  matches exist but all are defunct;

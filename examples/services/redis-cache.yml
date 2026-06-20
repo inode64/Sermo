@@ -7,7 +7,7 @@ service: redis-cache
 
 # Cloning copies redis-main BEFORE variable expansion, so overriding the `port`
 # variable alone is enough — every check that references ${port} resolves to the
-# new value after expansion (section 8/29).
+# new value after expansion.
 variables:
   port: 6380
   pidfile: /run/redis-cache/redis.pid

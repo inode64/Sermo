@@ -76,8 +76,7 @@ Conditions are read-only predicates. The evaluator runs every distinct probe (a
 declared check or an inline condition) at most once per cycle and caches the
 result, so a probe shared by several rules never executes twice in a cycle, and a
 condition must never change system state. Inline `command` conditions must be
-side-effect-free, array form, with a timeout. See `AGENTS.md`
-section 14.
+side-effect-free, array form, with a timeout. See `AGENTS.md`.
 
 ## Windows
 
@@ -97,7 +96,7 @@ within:
   min_matches: 3
 ```
 
-Do not allow ambiguous windows. If MVP does not support using `for` and `within` together, validation must reject it.
+Do not allow ambiguous windows. A rule cannot define both `for` and `within`; validation must reject it.
 
 ## Rule types
 

@@ -15,7 +15,7 @@ type Backoff struct {
 }
 
 // Policy is the resolved remediation policy that gates how often AUTOMATIC
-// actions may run for a service (section 16).
+// actions may run for a service.
 type Policy struct {
 	Cooldown         time.Duration
 	MaxActions       int // 0 means unlimited
@@ -23,14 +23,14 @@ type Policy struct {
 	Backoff          *Backoff // nil when disabled
 }
 
-// RemediationState is the per-service remediation history (section 16).
+// RemediationState is the per-service remediation history.
 type RemediationState struct {
 	LastActionAt   time.Time
 	RecentActions  []time.Time
 	CurrentBackoff time.Duration // 0 when backoff is disabled or has decayed
 }
 
-// RemediationReport is a read-only operator view of policy gating (section 16).
+// RemediationReport is a read-only operator view of policy gating.
 type RemediationReport struct {
 	Allowed           bool
 	Reason            string // cooldown | rate limit
@@ -125,7 +125,7 @@ func maxTime(a, b time.Time) time.Time {
 }
 
 // Allow decides whether an automatic action may run now, returning a reason when
-// suppressed (section 16):
+// suppressed:
 //
 //  1. within cooldown of the last action -> suppress;
 //  2. else max_actions reached inside the window -> suppress;
@@ -145,7 +145,7 @@ func (p Policy) Allow(state *RemediationState, now time.Time) (bool, string) {
 
 // Record updates the state after an executed automatic remediation: stamps the
 // time, trims the rate-limit window, and grows the backoff if enabled
-// (section 16). Blocked and preflight-failed operations must not call Record.
+//. Blocked and preflight-failed operations must not call Record.
 func (s *RemediationState) Record(now time.Time, p Policy) {
 	s.LastActionAt = now
 	s.RecentActions = append(s.RecentActions, now)
@@ -168,7 +168,7 @@ func (s *RemediationState) trimRecentActions(cutoff time.Time) {
 }
 
 // growBackoff advances the effective cooldown: initial, then ×factor each
-// consecutive remediation, capped at max (section 16).
+// consecutive remediation, capped at max.
 func (s *RemediationState) growBackoff(b *Backoff) {
 	if s.CurrentBackoff <= 0 {
 		s.CurrentBackoff = b.Initial
@@ -185,7 +185,7 @@ func (s *RemediationState) growBackoff(b *Backoff) {
 }
 
 // Recover resets the backoff after a healthy cycle with no firing rule
-// (section 16).
+//.
 func (s *RemediationState) Recover() {
 	s.CurrentBackoff = 0
 }

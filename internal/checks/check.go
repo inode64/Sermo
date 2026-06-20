@@ -20,7 +20,7 @@ import (
 	"sermo/internal/conn"
 )
 
-// Result is the observable outcome of one check (section 12).
+// Result is the observable outcome of one check.
 type Result struct {
 	Service   string         `json:"service,omitempty"`
 	Check     string         `json:"check"`
@@ -60,7 +60,7 @@ func IsHealthType(typ string) bool {
 }
 
 // Built pairs a check with whether its failure is optional (a warning) or
-// required (blocks the action), per section 19.
+// required (blocks the action), per policy.
 type Built struct {
 	Check    Check
 	Optional bool
@@ -68,7 +68,7 @@ type Built struct {
 
 // Run executes checks concurrently and returns their results in input order.
 // maxParallel bounds concurrency; 0 means unbounded (the sermoctl one-shot
-// path; the daemon's global semaphore is a separate concern, section 12).
+// path; the daemon's global semaphore is a separate concern).
 func Run(ctx context.Context, built []Built, maxParallel int) []Result {
 	results := make([]Result, len(built))
 	var sem chan struct{}

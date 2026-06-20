@@ -65,7 +65,7 @@ func newManager(backend Backend, runner execx.Runner) (Manager, error) {
 	}
 }
 
-// MainPID returns the backend's main process ID for a unit (section 21, step 1).
+// MainPID returns the backend's main process ID for a unit.
 // systemd exposes it via `systemctl show -p MainPID`; OpenRC has no uniform
 // equivalent, so it returns false there (pidfile or command_match selectors
 // cover OpenRC).
@@ -92,7 +92,7 @@ func MainPIDContext(ctx context.Context, runner execx.Runner, backend Backend, u
 	return pid, true
 }
 
-// CgroupPIDs returns every PID in a unit's control group (section 21, step 1).
+// CgroupPIDs returns every PID in a unit's control group.
 // systemd exposes the cgroup path via `systemctl show -p ControlGroup`, and all
 // processes in it belong to the service — more complete than MainPID alone.
 // readFile defaults to os.ReadFile.
@@ -130,7 +130,7 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 
 // BackendPIDsFunc returns a process.Discoverer.BackendPIDs closure for a unit: it
 // reports the cgroup process set (preferred) plus the MainPID, deduplicated,
-// backed by the real host (section 21, step 1).
+// backed by the real host.
 func BackendPIDsFunc(backend Backend, unit string) func() []int {
 	return BackendPIDsFuncWithRunner(backend, unit, execx.CommandRunner{}, os.ReadFile)
 }

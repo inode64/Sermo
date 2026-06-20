@@ -24,7 +24,7 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-// MetricReader returns a sampled metric for a scope (section 12). The daemon
+// MetricReader returns a sampled metric for a scope. The daemon
 // supplies the per-cycle sample; nil means no metric source (metric checks then
 // report unavailable).
 type MetricReader func(scope, name string) (metrics.Reading, bool)
@@ -1322,7 +1322,7 @@ func configureHTTPCert(hc *httpCheck, entry map[string]any, rawURL string) strin
 }
 
 // BuildInline builds a single check from an inline entry (type + fields), used
-// by inline rule conditions (section 14). It returns an error rather than a
+// by inline rule conditions. It returns an error rather than a
 // warning so the caller can surface a malformed inline probe.
 func BuildInline(name string, entry map[string]any, deps Deps) (Check, error) {
 	runner := deps.Runner
@@ -1354,7 +1354,7 @@ type Outcome struct {
 }
 
 // Evaluate computes the outcome: a required (non-optional) failure makes it not
-// OK; optional failures are warnings only (section 19).
+// OK; optional failures are warnings only.
 func Evaluate(results []Result) Outcome {
 	ok := true
 	for _, r := range results {
@@ -1389,7 +1389,7 @@ func parseJSONAssertions(v any) []jsonAssertion {
 }
 
 // parseStatusMatcher parses an expect_status field: a single code, a class
-// ("2xx"), or a list of either. Empty defaults to 200 (section 12).
+// ("2xx"), or a list of either. Empty defaults to 200.
 func parseStatusMatcher(v any) (statusMatcher, error) {
 	if v == nil {
 		return statusMatcher{codes: []int{200}}, nil

@@ -3,11 +3,11 @@ package config
 import "sermo/internal/cfgval"
 
 // namedSections are maps keyed by entry name where `enabled:false`/`delete:true`
-// apply (section 9).
+// apply.
 var namedSections = []string{"checks", "preflight", "postflight", "processes", "rules"}
 
 // mergeMaps merges src on top of dst and returns a new map. Scalars and lists
-// overwrite; nested maps merge recursively (section 9). Inputs are not mutated.
+// overwrite; nested maps merge recursively. Inputs are not mutated.
 func mergeMaps(dst, src map[string]any) map[string]any {
 	out := cloneMap(dst)
 	for k, sv := range src {

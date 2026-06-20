@@ -34,7 +34,7 @@ func (h *SlotHandle) Release() error {
 }
 
 // SlotPool bounds how many service operations may run at once across processes
-// (section 24). Slots live under <paths.runtime>/op-slots, separate from per-
+//. Slots live under <paths.runtime>/op-slots, separate from per-
 // service operation locks.
 type SlotPool struct {
 	Dir   string
