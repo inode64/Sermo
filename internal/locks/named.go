@@ -74,7 +74,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	path := l.path(service, name)
 	existing, err := readLockFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if isMissingLock(err) {
 			return Lock{}, fmt.Errorf("lock %s not found", lockID(service, name))
 		}
 		return Lock{}, err
@@ -95,7 +95,7 @@ func (l NamedLocker) ReleaseInactive(service, name string) (Lock, error) {
 	}
 	current, err := readLockFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if isMissingLock(err) {
 			return lock, nil
 		}
 		return lock, err
@@ -164,7 +164,7 @@ func (l NamedLocker) acquire(service, name, reason string, ttl time.Duration, ow
 
 		existing, rerr := readLockFile(path)
 		if rerr != nil {
-			if os.IsNotExist(rerr) {
+			if isRetryableLockRead(rerr) {
 				continue
 			}
 			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
