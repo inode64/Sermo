@@ -2,7 +2,6 @@ kind: daemon
 name: ovsdb-server
 display_name: "Open vSwitch Database Server"
 category: virtualization
-description: "Open vSwitch database server daemon."
 service:
   systemd: [ovsdb-server]
   openrc: [ovsdb-server]
