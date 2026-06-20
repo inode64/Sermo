@@ -116,6 +116,24 @@ func (r fakeRunner) Run(context.Context, string, ...string) (execx.Result, error
 	return execx.Result{ExitCode: r.exit}, nil
 }
 
+type fakeUserRunner struct {
+	exit int
+	user string
+	name string
+	args []string
+}
+
+func (r *fakeUserRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	return execx.Result{ExitCode: -1}, nil
+}
+
+func (r *fakeUserRunner) RunUser(_ context.Context, user string, name string, args ...string) (execx.Result, error) {
+	r.user = user
+	r.name = name
+	r.args = append([]string(nil), args...)
+	return execx.Result{ExitCode: r.exit}, nil
+}
+
 func TestEvalInlineCommand(t *testing.T) {
 	ev := &Evaluator{Deps: checks.Deps{Runner: fakeRunner{exit: 0}}}
 	node := map[string]any{"command": map[string]any{"command": []any{"can-restart"}, "expect_exit": 0}}
@@ -126,6 +144,19 @@ func TestEvalInlineCommand(t *testing.T) {
 	ev = &Evaluator{Deps: checks.Deps{Runner: fakeRunner{exit: 1}}}
 	if evalNode(t, ev, node) {
 		t.Error("command exit 1 (expect 0) should be false")
+	}
+}
+
+func TestEvalInlineCommandUser(t *testing.T) {
+	runner := &fakeUserRunner{exit: 0}
+	ev := &Evaluator{Deps: checks.Deps{Runner: runner}}
+	node := map[string]any{"command": map[string]any{"command": []any{"pg_ctl", "status"}, "user": "postgres", "expect_exit": 0}}
+
+	if !evalNode(t, ev, node) {
+		t.Fatal("command exit 0 (expect 0) should be true")
+	}
+	if runner.user != "postgres" || runner.name != "pg_ctl" || len(runner.args) != 1 || runner.args[0] != "status" {
+		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
 	}
 }
 

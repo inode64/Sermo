@@ -21,6 +21,7 @@ type configCheck struct {
 	base
 	runner   execx.Runner
 	argv     []string // config-test command (optional)
+	user     string
 	paths    []string // config file(s) to watch (optional)
 	onChange bool
 	state    *cmdState
@@ -33,13 +34,15 @@ func (c configCheck) Run(ctx context.Context) Result {
 
 	// Validity: a non-zero exit from the config-test command means invalid config.
 	if len(c.argv) > 0 {
-		res, _ := c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
+		res, err := c.runConfigCommand(ctx)
 		if res.ExitCode != 0 {
 			msg := "config invalid"
 			if s := FirstNonEmptyLine(res.Stderr); s != "" {
 				msg += ": " + s
 			} else if s := FirstNonEmptyLine(res.Stdout); s != "" {
 				msg += ": " + s
+			} else if err != nil {
+				msg += ": " + err.Error()
 			}
 			return c.result(false, msg, start)
 		}
@@ -55,6 +58,13 @@ func (c configCheck) Run(ctx context.Context) Result {
 		c.state.last, c.state.primed = fp, true
 	}
 	return c.result(true, "config ok", start)
+}
+
+func (c configCheck) runConfigCommand(ctx context.Context) (execx.Result, error) {
+	if c.user != "" {
+		return execx.RunUser(ctx, c.runner, 0, c.user, c.argv[0], c.argv[1:]...)
+	}
+	return c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 }
 
 // configFingerprint summarizes the watched paths by size and mtime so a change is

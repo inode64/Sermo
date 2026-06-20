@@ -1,0 +1,12 @@
+kind: app
+name: sudo
+display_name: "sudo"
+category: security
+description: "Run a command as another user, subject to sudoers policy"
+variables:
+  binary:
+    - /usr/bin/sudo
+    - /bin/sudo
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

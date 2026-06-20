@@ -328,6 +328,24 @@ func (r fakeRunner) Run(context.Context, string, ...string) (execx.Result, error
 	return r.result, nil
 }
 
+type recordingUserRunner struct {
+	result execx.Result
+	user   string
+	name   string
+	args   []string
+}
+
+func (r *recordingUserRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	return execx.Result{ExitCode: -1}, nil
+}
+
+func (r *recordingUserRunner) RunUser(_ context.Context, user string, name string, args ...string) (execx.Result, error) {
+	r.user = user
+	r.name = name
+	r.args = append([]string(nil), args...)
+	return r.result, nil
+}
+
 func TestCommandCheck(t *testing.T) {
 	ok := commandCheck{base: base{name: "c", timeout: time.Second}, runner: fakeRunner{execx.Result{ExitCode: 0}}, argv: []string{"true"}, expectExit: []int{0}}
 	if res := ok.Run(context.Background()); !res.OK {
@@ -340,6 +358,42 @@ func TestCommandCheck(t *testing.T) {
 	}
 	if res.Message == "" {
 		t.Errorf("failure message should include detail")
+	}
+}
+
+func TestCommandCheckUser(t *testing.T) {
+	runner := &recordingUserRunner{result: execx.Result{ExitCode: 0}}
+	check := commandCheck{
+		base:       base{name: "c", timeout: time.Second},
+		runner:     runner,
+		argv:       []string{"/usr/bin/postgres", "--check"},
+		user:       "postgres",
+		expectExit: []int{0},
+	}
+
+	if res := check.Run(context.Background()); !res.OK {
+		t.Fatalf("command check with user should pass: %s", res.Message)
+	}
+	if runner.user != "postgres" || runner.name != "/usr/bin/postgres" || len(runner.args) != 1 || runner.args[0] != "--check" {
+		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
+	}
+}
+
+func TestCommandCheckUserRequiresUserRunner(t *testing.T) {
+	check := commandCheck{
+		base:       base{name: "c", timeout: time.Second},
+		runner:     fakeRunner{execx.Result{ExitCode: 0}},
+		argv:       []string{"/usr/bin/postgres", "--check"},
+		user:       "postgres",
+		expectExit: []int{0},
+	}
+
+	res := check.Run(context.Background())
+	if res.OK {
+		t.Fatal("command check with user must fail closed when the runner cannot switch users")
+	}
+	if !strings.Contains(res.Message, "does not support user") {
+		t.Fatalf("message = %q, want missing user runner detail", res.Message)
 	}
 }
 

@@ -419,6 +419,24 @@ rules:
 	mustHave(t, issues, "command condition must declare a timeout")
 }
 
+func TestValidateInlineCommandConditionUser(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+rules:
+  r:
+    type: remediation
+    if:
+      command:
+        command: ["can-restart"]
+        user: []
+        timeout: 5s
+    then: { action: restart }
+`)
+	mustHave(t, issues, "rules.r.if.command user must be a non-empty string")
+}
+
 func TestValidateInlineProbeFields(t *testing.T) {
 	issues := validateService(t, `
 kind: service

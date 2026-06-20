@@ -21,6 +21,18 @@ func (r testRunner) Run(_ context.Context, name string, _ ...string) (execx.Resu
 	return execx.Result{ExitCode: 127}, fmt.Errorf("%s: not found", name)
 }
 
+type testUserRunner struct {
+	testRunner
+	users []string
+	names []string
+}
+
+func (r *testUserRunner) RunUser(ctx context.Context, user string, name string, args ...string) (execx.Result, error) {
+	r.users = append(r.users, user)
+	r.names = append(r.names, name)
+	return r.Run(ctx, name, args...)
+}
+
 func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "webd")
@@ -42,6 +54,29 @@ func TestInspectUsesNamespacedAppPreflight(t *testing.T) {
 	}
 	if report.Version != "Webd 1.2.3" || report.VersionShort != "1.2.3" {
 		t.Fatalf("version = %q short=%q, want Webd 1.2.3 / 1.2.3", report.Version, report.VersionShort)
+	}
+}
+
+func TestInspectCommandUser(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "postgres")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved := config.Resolved{Tree: map[string]any{
+		"preflight": map[string]any{
+			"binary":  map[string]any{"type": "binary", "path": binary},
+			"version": map[string]any{"type": "command", "user": "postgres", "command": []any{binary, "--version"}},
+		},
+	}}
+	runner := &testUserRunner{testRunner: testRunner{binary: {Stdout: "postgres 17.5\n", ExitCode: 0}}}
+
+	report := Inspect(context.Background(), runner, "postgres", resolved)
+	if !report.OK || report.VersionShort != "17.5" {
+		t.Fatalf("Inspect() = %+v, want ok postgres version", report)
+	}
+	if !slices.Equal(runner.users, []string{"postgres"}) || !slices.Equal(runner.names, []string{binary}) {
+		t.Fatalf("RunUser calls users=%v names=%v", runner.users, runner.names)
 	}
 }
 
@@ -95,6 +130,7 @@ func TestProbeCommandFor(t *testing.T) {
 		"commands": map[string]any{
 			"version": map[string]any{
 				"command":       []any{"/bin/tool", "--version"},
+				"user":          "postgres",
 				"expect_exit":   3,
 				"expect_stdout": "v1.",
 				"expect_stderr": map[string]any{"op": "==", "value": ""},
@@ -104,6 +140,9 @@ func TestProbeCommandFor(t *testing.T) {
 	vc := probeCommandFor(tree, "version")
 	if len(vc.argv) != 2 || vc.argv[0] != "/bin/tool" {
 		t.Fatalf("argv = %v", vc.argv)
+	}
+	if vc.user != "postgres" {
+		t.Errorf("user = %q, want postgres", vc.user)
 	}
 	if !slices.Equal(vc.expectExit, []int{3}) {
 		t.Errorf("expectExit = %v, want [3]", vc.expectExit)

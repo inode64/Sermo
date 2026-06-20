@@ -275,10 +275,14 @@ func validateCondition(node map[string]any, path string, checkNames, systemMetri
 			}
 		}
 	case "command":
-		m, _ := node["command"].(map[string]any)
-		if !isStringArray(m["command"]) {
-			add("%s.command must use array form, not a shell string", path)
+		m, ok := node["command"].(map[string]any)
+		if !ok {
+			add("%s.command must be a mapping", path)
+			return
 		}
+		entry := maps.Clone(m)
+		entry["type"] = "command"
+		validateSingleShotCheckFields(path+".command", "command", entry, "", add)
 		if cfgval.String(m["timeout"]) == "" {
 			add("%s.command condition must declare a timeout", path)
 		}

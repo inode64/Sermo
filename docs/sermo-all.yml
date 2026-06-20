@@ -430,6 +430,7 @@ preflight:                     # gate start/restart/reload/resume
   binary: { type: binary, path: "${binary}" }
   config:
     type: command
+    user: "${user}"
     command: ["${binary}", "--test-config"]
     timeout: 10s
     expect_exit: 0
@@ -599,6 +600,7 @@ checks:
   edac: { type: edac, ue: { op: ">", value: 0 }, ce: { op: ">", value: 100 } }
   config-watch:
     type: config
+    user: "${user}"
     command: ["${binary}", "--test-config"]
     path: [/etc/demo/demo.conf, /etc/demo/conf.d]
     on_change: true

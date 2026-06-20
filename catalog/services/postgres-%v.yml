@@ -8,6 +8,7 @@ service:
 apps: ["postgres-${version}"]
 variables:
   port: 5432
+  user: postgres
   data_dir: /var/lib/postgresql/${version}/data
 
 os:
@@ -21,6 +22,7 @@ os:
 preflight:
   config:
     type: command
+    user: "${user}"
     command: ["${binary}", "--check", "-D", "${data_dir}"]
     timeout: 30s
 

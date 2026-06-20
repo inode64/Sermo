@@ -653,6 +653,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if !isStringArray(entry["command"]) {
 			add("%s command must be an array, not a shell string", path)
 		}
+		validateCommandUser(path, entry, add)
 		if v, present := entry["expect_exit"]; present {
 			if !isExpectExit(v) {
 				add("%s expect_exit must be an integer or a non-empty list of integers", path)
@@ -738,6 +739,9 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if hasCmd && !isStringArray(entry["command"]) {
 			add("%s command must be an array, not a shell string", path)
 		}
+		if hasCmd {
+			validateCommandUser(path, entry, add)
+		}
 	case "fds":
 		validateThresholdPreds(path, entry, checks.FdsPredFields, add)
 	case "memory":
@@ -802,6 +806,17 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateWebsocketFields(path, entry, add)
 	}
 	return true
+}
+
+func validateCommandUser(path string, entry map[string]any, add addFunc) {
+	raw, present := entry["user"]
+	if !present {
+		return
+	}
+	user, ok := raw.(string)
+	if !ok || strings.TrimSpace(user) == "" {
+		add("%s user must be a non-empty string", path)
+	}
 }
 
 func validateFirewallRulesFields(prefix string, fields map[string]any, add addFunc) {

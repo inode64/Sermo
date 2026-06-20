@@ -1111,10 +1111,13 @@ Any other entry is informational only. A run can assert its outcome, the same
 way a watch hook or `command` check does: `expect_exit` (default 0, or a list
 such as `[0, 1]`) and optional `expect_stdout`/`expect_stderr` matchers — a
 substring or an `{op, value}` comparison (`== != > >= < <= contains =~`).
+Reserved commands may also set `user` (username or numeric UID) to execute the
+argv as that OS user when Sermo has permission to switch users.
 
 ```yaml
 commands:
   version:
+    user: www-data
     command: ["apachectl", "-v"]
     timeout: 5s
     expect_exit: 0                                   # optional, default 0

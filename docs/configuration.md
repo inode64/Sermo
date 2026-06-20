@@ -1078,7 +1078,8 @@ These conventions keep the per-type sections below short:
   ```
 
   The same `expect_exit` / `expect_stdout` / `expect_stderr` fields work on a
-  `command` check (see [Checks](rules.md#checks)).
+  `command` check (see [Checks](rules.md#checks)). Command checks also support
+  `user` to run the argv as a specific OS user; hook commands do not.
 - **Evaluation model.** A **level check** (`storage`, `memory`, `pressure`,
   `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, swap `usage`) fires
   when **every present predicate holds**
