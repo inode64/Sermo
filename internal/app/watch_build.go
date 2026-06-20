@@ -96,7 +96,7 @@ func BuildWatches(cfg *config.Config, deps Deps, defaultInterval time.Duration) 
 // (storage/load/…) and any single-shot service check (tcp/http/…) used as a watch.
 // Health checks fire the hook on failure; condition checks on OK (threshold met).
 func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, interval time.Duration) (*Watch, string) {
-	typ := canonicalWatchCheckType(cfgval.AsString(checkEntry["type"]))
+	typ := cfgval.AsString(checkEntry["type"])
 	check, err := checks.BuildInline(name, checkEntry, watchInlineDeps(deps))
 	if err != nil {
 		return nil, "watch " + name + ": " + err.Error()
@@ -131,13 +131,6 @@ func buildSingleWatch(name string, entry, checkEntry map[string]any, deps Deps, 
 		w.Expander = configuredVolumeExpander(deps)
 	}
 	return w, ""
-}
-
-func canonicalWatchCheckType(typ string) string {
-	if typ == "disk" {
-		return "storage"
-	}
-	return typ
 }
 
 func configuredVolumeExpander(deps Deps) VolumeExpander {
@@ -515,7 +508,7 @@ func parseExpand(then map[string]any, checkType string) (*ExpandSpec, error) {
 }
 
 func isStorageCheckType(typ string) bool {
-	return typ == "storage" || typ == "disk"
+	return typ == "storage"
 }
 
 // resolveNotifiers maps notifier names to the configured notifiers, skipping
