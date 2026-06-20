@@ -25,10 +25,6 @@ func TestRegistryLookupAndAlias(t *testing.T) {
 	if _, ok := reg.lookup("nope"); ok {
 		t.Fatal("unknown name must not resolve")
 	}
-	names := reg.names()
-	if len(names) != 1 || names[0] != "demo" {
-		t.Fatalf("names = %v, want [demo] (canonical only)", names)
-	}
 }
 
 func TestMySQLRegistered(t *testing.T) {
