@@ -30,8 +30,8 @@ type Reading struct {
 // Snapshot holds one scope's metrics for a cycle, keyed by metric name.
 type Snapshot map[string]Reading
 
-// Compare evaluates a metric reading against a threshold and operator
-//. A not-ready reading is false (a rate metric must never fire on a
+// Compare evaluates a metric reading against a threshold and operator.
+// A not-ready reading is false (a rate metric must never fire on a
 // value the collector could not compute yet). A "%" threshold compares against
 // the percentage form, a bare number against the absolute form; using a form the
 // metric does not expose is an error.

@@ -398,8 +398,8 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 }
 
 // validateCommands checks the optional `commands` section: each entry uses array
-// form with an optional valid duration timeout and output expectations
-//. Reserved names are consumed by features — `health`, `version`
+// form with an optional valid duration timeout and output expectations.
+// Reserved names are consumed by features — `health`, `version`
 // and `version_short` by the apps listings, and `version` by the
 // version.on_change monitor; any other entry is informational.
 func validateCommands(tree map[string]any, add addFunc) {
