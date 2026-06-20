@@ -106,30 +106,30 @@ func TestWebBackendSetMonitoredAppearsInEventLog(t *testing.T) {
 
 func TestWebBackendSetWatchMonitoredEmitsEvent(t *testing.T) {
 	store := newFakeStore()
-	store.active[watchMonitorKey("disk-root")] = true
+	store.active[watchMonitorKey("storage-root")] = true
 
 	var events []Event
 	b := &WebBackend{
-		watches: map[string]*webWatch{"disk-root": {name: "disk-root"}},
+		watches: map[string]*webWatch{"storage-root": {name: "storage-root"}},
 		store:   store,
 		emit:    func(e Event) { events = append(events, e) },
 	}
 
-	if err := b.SetWatchMonitored(context.Background(), "disk-root", false); err != nil {
+	if err := b.SetWatchMonitored(context.Background(), "storage-root", false); err != nil {
 		t.Fatalf("unmonitor watch: %v", err)
 	}
 	if len(events) != 1 {
 		t.Fatalf("want one event, got %+v", events)
 	}
 	if events[0].Kind != "action" || events[0].Action != "unmonitor" || events[0].Status != "ok" ||
-		events[0].Message != "monitoring paused" || events[0].Watch != "disk-root" || events[0].Service != "" {
+		events[0].Message != "monitoring paused" || events[0].Watch != "storage-root" || events[0].Service != "" {
 		t.Fatalf("unmonitor watch event = %+v", events[0])
 	}
-	if store.active[watchMonitorKey("disk-root")] {
+	if store.active[watchMonitorKey("storage-root")] {
 		t.Fatal("store should record watch paused")
 	}
 
-	if err := b.SetWatchMonitored(context.Background(), "disk-root", true); err != nil {
+	if err := b.SetWatchMonitored(context.Background(), "storage-root", true); err != nil {
 		t.Fatalf("monitor watch: %v", err)
 	}
 	if len(events) != 2 || events[1].Kind != "action" || events[1].Action != "monitor" ||
@@ -142,7 +142,7 @@ func TestWebBackendSetWatchMonitoredEmitsError(t *testing.T) {
 	store := newFakeStore()
 	var events []Event
 	b := &WebBackend{
-		watches: map[string]*webWatch{"disk-root": {name: "disk-root"}},
+		watches: map[string]*webWatch{"storage-root": {name: "storage-root"}},
 		store:   store,
 		emit:    func(e Event) { events = append(events, e) },
 	}
@@ -155,10 +155,10 @@ func TestWebBackendSetWatchMonitoredEmitsError(t *testing.T) {
 	}
 
 	store.failSet = true
-	if err := b.SetWatchMonitored(context.Background(), "disk-root", false); err == nil {
+	if err := b.SetWatchMonitored(context.Background(), "storage-root", false); err == nil {
 		t.Fatal("store failure should fail")
 	}
-	if len(events) != 2 || events[1].Kind != "error" || events[1].Action != "unmonitor" || events[1].Watch != "disk-root" {
+	if len(events) != 2 || events[1].Kind != "error" || events[1].Action != "unmonitor" || events[1].Watch != "storage-root" {
 		t.Fatalf("store failure event = %+v", events[1])
 	}
 }
@@ -167,13 +167,13 @@ func TestWebBackendWatchesIncludeMonitoringState(t *testing.T) {
 	store := newFakeStore()
 	at := time.Date(2026, 6, 10, 11, 12, 13, 0, time.UTC)
 	store.now = func() time.Time { return at }
-	if err := store.SetActive(watchMonitorKey("disk-root"), false, "web"); err != nil {
+	if err := store.SetActive(watchMonitorKey("storage-root"), false, "web"); err != nil {
 		t.Fatalf("SetActive: %v", err)
 	}
 	b := &WebBackend{
-		watchOrder: []string{"disk-root"},
+		watchOrder: []string{"storage-root"},
 		watches: map[string]*webWatch{
-			"disk-root": {name: "disk-root", checkType: "storage", monitorMode: "previous"},
+			"storage-root": {name: "storage-root", checkType: "storage", monitorMode: "previous"},
 		},
 		store: store,
 	}

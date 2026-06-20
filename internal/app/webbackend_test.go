@@ -457,12 +457,12 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 
 func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 	store := newFakeStore()
-	if err := store.SetActive(watchMonitorKey("disk-root"), false, state.SourceConfig); err != nil {
+	if err := store.SetActive(watchMonitorKey("storage-root"), false, state.SourceConfig); err != nil {
 		t.Fatalf("SetActive: %v", err)
 	}
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
-			"disk-root": map[string]any{
+			"storage-root": map[string]any{
 				"display_name": "Root disk",
 				"monitor":      config.MonitorDisabled,
 				"check":        map[string]any{"type": "storage", "path": "/"},
@@ -802,11 +802,11 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 		},
 	}}}
 	now := time.Date(2026, 6, 13, 12, 0, 0, 0, time.UTC)
-	diskSamples := []checks.DiskIOSample{
+	storageSamples := []checks.DiskIOSample{
 		{ReadsCompleted: 10, SectorsRead: 100, ReadTicksMs: 100, WritesCompleted: 10, SectorsWritten: 200, WriteTicksMs: 100, IOTicksMs: 1000},
 		{ReadsCompleted: 20, SectorsRead: 102, ReadTicksMs: 130, WritesCompleted: 20, SectorsWritten: 204, WriteTicksMs: 120, IOTicksMs: 1500},
 	}
-	diskCalls := 0
+	storageCalls := 0
 	b, warns := NewWebBackend(cfg, Deps{
 		MountSampler: func() ([]checks.Mount, error) {
 			return []checks.Mount{{MountPoint: "/net", FSType: "autofs"}}, nil
@@ -815,8 +815,8 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 			if device != "sda" {
 				t.Fatalf("diskio device = %q, want sda", device)
 			}
-			sample := diskSamples[min(diskCalls, len(diskSamples)-1)]
-			diskCalls++
+			sample := storageSamples[min(storageCalls, len(storageSamples)-1)]
+			storageCalls++
 			return sample, nil
 		},
 		EdacSampler: func() (checks.EdacCounts, error) {
@@ -1113,9 +1113,9 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	usagePath := ""
 	mountSampled := false
 	b, warns := NewWebBackend(cfg, Deps{
-		DiskUsage: func(path string) (checks.DiskStats, error) {
+		StorageUsage: func(path string) (checks.StorageStats, error) {
 			usagePath = path
-			return checks.DiskStats{
+			return checks.StorageStats{
 				UsedPct:       87.5,
 				FreePct:       12.5,
 				TotalBytes:    1000,
@@ -1297,8 +1297,8 @@ func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
 		},
 	}}}
 	b, warns := NewWebBackend(cfg, Deps{
-		DiskUsage: func(string) (checks.DiskStats, error) {
-			return checks.DiskStats{}, errors.New("statfs failed")
+		StorageUsage: func(string) (checks.StorageStats, error) {
+			return checks.StorageStats{}, errors.New("statfs failed")
 		},
 		MountSampler: func() ([]checks.Mount, error) {
 			return nil, errors.New("mount table failed")

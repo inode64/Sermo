@@ -199,7 +199,7 @@ func (f *fakeBackend) Preflight(_ context.Context, name string) (PreflightResult
 			f.preflightCalled = name
 			return PreflightResult{
 				OK:     true,
-				Checks: []Check{{Name: "disk", OK: true, Ran: true, Message: "ok"}},
+				Checks: []Check{{Name: "storage", OK: true, Ran: true, Message: "ok"}},
 			}, true
 		}
 	}
@@ -730,13 +730,13 @@ func TestWatchMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
 	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/watches/disk-root/unmonitor"))
-	if rec.Code != http.StatusOK || b.watchMonitored["disk-root"] != false {
+	h.ServeHTTP(rec, postReq("/api/watches/storage-root/unmonitor"))
+	if rec.Code != http.StatusOK || b.watchMonitored["storage-root"] != false {
 		t.Fatalf("watch unmonitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
 	}
 	rec = httptest.NewRecorder()
-	h.ServeHTTP(rec, postReq("/api/watches/disk-root/monitor"))
-	if rec.Code != http.StatusOK || b.watchMonitored["disk-root"] != true {
+	h.ServeHTTP(rec, postReq("/api/watches/storage-root/monitor"))
+	if rec.Code != http.StatusOK || b.watchMonitored["storage-root"] != true {
 		t.Fatalf("watch monitor: code=%d monitored=%v", rec.Code, b.watchMonitored)
 	}
 }
@@ -744,12 +744,12 @@ func TestWatchMonitorActions(t *testing.T) {
 func TestWatchExpandAction(t *testing.T) {
 	b := &fakeBackend{}
 	rec := httptest.NewRecorder()
-	newServer(b).ServeHTTP(rec, postReq("/api/watches/disk-root/expand"))
+	newServer(b).ServeHTTP(rec, postReq("/api/watches/storage-root/expand"))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("watch expand: code=%d body=%s", rec.Code, rec.Body.String())
 	}
-	if len(b.watchExpanded) != 1 || b.watchExpanded[0] != "disk-root" {
-		t.Fatalf("watchExpanded = %v, want disk-root", b.watchExpanded)
+	if len(b.watchExpanded) != 1 || b.watchExpanded[0] != "storage-root" {
+		t.Fatalf("watchExpanded = %v, want storage-root", b.watchExpanded)
 	}
 }
 
@@ -818,7 +818,7 @@ func TestPreflightEndpoint(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !body.OK || len(body.Checks) != 1 || body.Checks[0].Name != "disk" {
+	if !body.OK || len(body.Checks) != 1 || body.Checks[0].Name != "storage" {
 		t.Fatalf("body = %+v", body)
 	}
 }

@@ -70,10 +70,10 @@ func TestSlogEmitterLogsHookAtInfo(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	emit := SlogEmitter(logger)
 
-	emit(Event{Watch: "disk-root", Kind: "hook", Message: "fired"})
+	emit(Event{Watch: "storage-root", Kind: "hook", Message: "fired"})
 
 	out := buf.String()
-	if !strings.Contains(out, "level=INFO") || !strings.Contains(out, "watch=disk-root") {
+	if !strings.Contains(out, "level=INFO") || !strings.Contains(out, "watch=storage-root") {
 		t.Fatalf("hook event not logged at info with watch attr: %q", out)
 	}
 }

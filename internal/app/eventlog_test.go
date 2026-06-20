@@ -125,7 +125,7 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 	log.now = func() time.Time { return t0 }
 	log.Add(Event{Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restart completed"})
 	log.now = func() time.Time { return t0.Add(time.Minute) }
-	log.Add(Event{Watch: "disk-root", Kind: "hook", Message: "hook completed"})
+	log.Add(Event{Watch: "storage-root", Kind: "hook", Message: "hook completed"})
 	if err := first.Close(); err != nil {
 		t.Fatalf("close first store: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestPersistentEventLogHydratesServiceEvents(t *testing.T) {
 	}
 
 	global := hydrated.Recent("", 10)
-	if len(global) != 2 || global[0].Watch != "disk-root" || global[1].Service != "web" {
+	if len(global) != 2 || global[0].Watch != "storage-root" || global[1].Service != "web" {
 		t.Fatalf("hydrated global events = %+v", global)
 	}
 	service := hydrated.Recent("web", 10)

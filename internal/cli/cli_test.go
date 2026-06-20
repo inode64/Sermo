@@ -521,7 +521,7 @@ func TestEventsList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	sample := []event{
 		{Time: "2026-06-13T10:05:00Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "restarted"},
-		{Time: "2026-06-13T10:00:00Z", Watch: "disk-root", Kind: "alert", Message: "high usage"},
+		{Time: "2026-06-13T10:00:00Z", Watch: "storage-root", Kind: "alert", Message: "high usage"},
 	}
 	app := App{
 		FetchEvents: func(ctx context.Context, opts options, service string, limit int) ([]event, error) {
@@ -538,7 +538,7 @@ func TestEventsList(t *testing.T) {
 		t.Fatalf("events list exit=%d stderr=%s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "web") || !strings.Contains(out, "disk-root") || !strings.Contains(out, "restart") {
+	if !strings.Contains(out, "web") || !strings.Contains(out, "storage-root") || !strings.Contains(out, "restart") {
 		t.Fatalf("events list output missing data:\n%s", out)
 	}
 

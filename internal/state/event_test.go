@@ -13,7 +13,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	if err := s.RecordEvent(EventRecord{At: old, Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "old"}); err != nil {
 		t.Fatalf("RecordEvent(old): %v", err)
 	}
-	if err := s.RecordEvent(EventRecord{At: recent, Watch: "disk-root", Kind: "hook-failed", Message: "recent"}); err != nil {
+	if err := s.RecordEvent(EventRecord{At: recent, Watch: "storage-root", Kind: "hook-failed", Message: "recent"}); err != nil {
 		t.Fatalf("RecordEvent(recent): %v", err)
 	}
 
@@ -28,7 +28,7 @@ func TestStoreEventsRoundTripAndPrune(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecentEvents(limit): %v", err)
 	}
-	if len(limited) != 1 || limited[0].Watch != "disk-root" {
+	if len(limited) != 1 || limited[0].Watch != "storage-root" {
 		t.Fatalf("limited events = %+v, want newest watch event", limited)
 	}
 

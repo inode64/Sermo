@@ -36,7 +36,7 @@ func TestTeamsSendPostsAdaptiveCard(t *testing.T) {
 			return nil
 		},
 	}
-	if err := n.Send(context.Background(), Message{Subject: "[sermo] disk-root: 95% used", Body: "SERMO_PATH=/"}); err != nil {
+	if err := n.Send(context.Background(), Message{Subject: "[sermo] storage-root: 95% used", Body: "SERMO_PATH=/"}); err != nil {
 		t.Fatal(err)
 	}
 	if gotURL != "https://prod-01.westeurope.logic.azure.com/workflows/x" {
@@ -66,7 +66,7 @@ func TestTeamsSendPostsAdaptiveCard(t *testing.T) {
 		t.Fatalf("unexpected card: %s", gotPayload)
 	}
 	if len(att.Content.Body) != 2 ||
-		!strings.Contains(att.Content.Body[0].Text, "disk-root") ||
+		!strings.Contains(att.Content.Body[0].Text, "storage-root") ||
 		!strings.Contains(att.Content.Body[1].Text, "SERMO_PATH=/") {
 		t.Fatalf("unexpected card body: %s", gotPayload)
 	}

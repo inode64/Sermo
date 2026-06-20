@@ -11,11 +11,11 @@ import (
 // reminder on the first cycle after every reload (now - zero >= interval).
 func TestReloadPreservesWatchLastNotifyAt(t *testing.T) {
 	when := time.Now().Add(-30 * time.Minute)
-	old := &Watch{Name: "disk", firing: true, lastNotifyAt: when}
+	old := &Watch{Name: "storage", firing: true, lastNotifyAt: when}
 
 	saved := captureWatchState([]*Watch{old})
 
-	fresh := &Watch{Name: "disk"}
+	fresh := &Watch{Name: "storage"}
 	applyWatchState([]*Watch{fresh}, saved)
 
 	if !fresh.firing {

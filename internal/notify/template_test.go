@@ -62,11 +62,11 @@ body: '{{ .Body }} / {{ .Field "SERMO_WATCH" }}'
 	if err := notifier.Send(context.Background(), Message{
 		Subject: "watch",
 		Body:    "payload",
-		Fields:  map[string]string{"SERMO_WATCH": "disk-root"},
+		Fields:  map[string]string{"SERMO_WATCH": "storage-root"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if inner.msg.Subject != "watch / rendered" || inner.msg.Body != "payload / disk-root" {
+	if inner.msg.Subject != "watch / rendered" || inner.msg.Body != "payload / storage-root" {
 		t.Fatalf("message = %+v", inner.msg)
 	}
 }
