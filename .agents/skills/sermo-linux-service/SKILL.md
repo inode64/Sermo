@@ -86,23 +86,17 @@ For OpenRC:
 nginx -> nginx
 ```
 
-Profiles may define aliases:
+Catalog daemon definitions may define compatibility aliases:
 
 ```yaml
-aliases:
-  systemd:
-    - apache2.service
-    - httpd.service
-  openrc:
-    - apache2
-    - apache
+catalog_aliases: [apache2, httpd]
 ```
 
-Resolution (see `docs/configuration.md`): build the candidate list as
-`service.name` followed by the aliases for the active backend, normalize for the
-backend (systemd appends `.service`), pick the first candidate the backend
-actually knows, and cache it. If none resolve, fail with a clear error listing
-the candidates tried.
+Resolution (see `docs/configuration.md`): read the service unit from scalar
+`service: <unit>` or a per-init `service: { systemd: [...], openrc: [...] }` map,
+normalize for the backend (systemd appends `.service`), pick the first candidate
+the backend actually knows, and cache it. `service.name` is not supported. If no
+candidate resolves, fail with a clear error listing the candidates tried.
 
 ## Testing
 

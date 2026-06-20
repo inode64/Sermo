@@ -15,7 +15,7 @@ func TestWebBackendPreflight(t *testing.T) {
 			return checks.Outcome{
 				OK: false,
 				Results: []checks.Result{
-					{Check: "disk", OK: false, Message: "no space"},
+					{Check: "storage", OK: false, Message: "no space"},
 					{Check: "warn", OK: false, Optional: true, Message: "stale"},
 				},
 			}
@@ -35,8 +35,8 @@ func TestWebBackendPreflight(t *testing.T) {
 	if res.OK || len(res.Checks) != 2 {
 		t.Fatalf("result = %+v", res)
 	}
-	if res.Checks[0].Name != "disk" || res.Checks[0].OK {
-		t.Fatalf("disk check = %+v", res.Checks[0])
+	if res.Checks[0].Name != "storage" || res.Checks[0].OK {
+		t.Fatalf("storage check = %+v", res.Checks[0])
 	}
 }
 

@@ -27,7 +27,7 @@ func TestOperationEventEmitter(t *testing.T) {
 	}
 
 	emit(operation.Result{Service: "web", Action: "restart", Status: operation.ResultFailed, Message: "systemctl failed"})
-	emit(operation.Result{Service: "web", Action: "start", Status: operation.ResultPreflightFailed, Message: "disk check failed"})
+	emit(operation.Result{Service: "web", Action: "start", Status: operation.ResultPreflightFailed, Message: "storage check failed"})
 	emit(operation.Result{Service: "web", Action: "restart", Status: operation.ResultPostflightFailed, Message: "tcp check failed"})
 	emit(operation.Result{Service: "web", Action: "stop", Status: operation.ResultOrphanProcesses, Message: "residual remains"})
 	for i, status := range []operation.ResultStatus{

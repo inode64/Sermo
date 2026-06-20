@@ -296,7 +296,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 	case "count":
 		return buildCountCheck(b, entry)
 	case "storage":
-		return buildDiskCheck(b, entry, deps)
+		return buildStorageCheck(b, entry, deps)
 	case "autofs":
 		return buildAutofsCheck(b, entry, deps)
 	case "net":
@@ -808,8 +808,8 @@ func buildCountCheck(b base, entry map[string]any) (Check, string) {
 	return countCheck{base: b, path: path, kind: kind, recursive: cfgval.Bool(entry["recursive"]), op: op, value: val}, ""
 }
 
-// buildDiskCheck builds a storage space/inode and/or mount check.
-func buildDiskCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+// buildStorageCheck builds a storage space/inode and/or mount check.
+func buildStorageCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 	path := cfgval.AsString(entry["path"])
 	if path == "" {
 		return nil, "storage check requires a path"

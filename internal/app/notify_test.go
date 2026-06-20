@@ -29,8 +29,8 @@ func TestWatchDispatchesNotifyOnFire(t *testing.T) {
 	var events []Event
 	w := &Watch{
 		Name:      "disk-root",
-		CheckType: "disk",
-		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
 		Notifiers: []notify.Notifier{n},
 		Emit:      func(e Event) { events = append(events, e) },
 	}
