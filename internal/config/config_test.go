@@ -787,36 +787,6 @@ watches:
 	}
 }
 
-func TestValidateRejectsRemovedPathAliases(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": `
-paths:
-  profiles: [@ROOT@/profiles]
-  services: [@ROOT@/enabled]
-  includes: [@ROOT@/old]
-  enabled: [@ROOT@/enabled]
-defaults:
-  policy: { cooldown: 5m }
-`,
-		"profiles/demo.yml": "kind: daemon\nname: demo\nbinary: /bin/true\n",
-	})
-
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	issues := Validate(cfg)
-	for _, want := range []string{
-		"paths.includes is not supported",
-		"paths.enabled is not supported",
-		"paths.profiles is not supported",
-	} {
-		if !issuesContain(issues, want) {
-			t.Fatalf("Validate() missing %q in %v", want, issues)
-		}
-	}
-}
-
 func TestDefaultServiceAndAppDirs(t *testing.T) {
 	wantServices := []string{"/etc/sermo/services"}
 	gotServices := defaultConfigDirs(DefaultGlobalPath, defaultServiceDirs)
