@@ -31,6 +31,13 @@ type Runner interface {
 	Run(ctx context.Context, name string, args ...string) (Result, error)
 }
 
+// UserRunner is implemented by runners that can execute a command as a specific
+// OS user. The user value is a username or numeric UID resolved on the host.
+type UserRunner interface {
+	Runner
+	RunUser(ctx context.Context, user, name string, args ...string) (Result, error)
+}
+
 // CommandRunner executes commands through os/exec (argv only, no shell).
 type CommandRunner struct{}
 
@@ -38,6 +45,16 @@ type CommandRunner struct{}
 func (CommandRunner) Run(ctx context.Context, name string, args ...string) (Result, error) {
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
+	return runPrepared(ctx, cmd, start, name)
+}
+
+// RunUser executes name with args as user and captures stdout/stderr.
+func (CommandRunner) RunUser(ctx context.Context, user, name string, args ...string) (Result, error) {
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, name, args...)
+	if err := prepareCommandUser(cmd, user); err != nil {
+		return Result{ExitCode: -1, Duration: time.Since(start)}, err
+	}
 	return runPrepared(ctx, cmd, start, name)
 }
 
@@ -131,6 +148,18 @@ func Run(ctx context.Context, r Runner, timeout time.Duration, name string, args
 	ctx, cancel := deadline(ctx, timeout)
 	defer cancel()
 	return r.Run(ctx, name, args...)
+}
+
+// RunUser is the fortified equivalent of Run for a command that must execute as
+// a specific OS user. If the runner cannot change users, it fails closed.
+func RunUser(ctx context.Context, r Runner, timeout time.Duration, user, name string, args ...string) (Result, error) {
+	ctx, cancel := deadline(ctx, timeout)
+	defer cancel()
+
+	if ur, ok := r.(UserRunner); ok {
+		return ur.RunUser(ctx, user, name, args...)
+	}
+	return Result{ExitCode: -1}, fmt.Errorf("execx: runner does not support user %q", user)
 }
 
 // EnvRunner is an optional interface implemented by runners that can execute

@@ -46,6 +46,23 @@ func TestConfigCheckValidity(t *testing.T) {
 	}
 }
 
+func TestConfigCheckCommandUser(t *testing.T) {
+	runner := &recordingUserRunner{result: execx.Result{ExitCode: 0}}
+	check := configCheck{
+		base:   base{name: "c", timeout: time.Second},
+		runner: runner,
+		argv:   []string{"postgres", "--check"},
+		user:   "postgres",
+	}
+
+	if res := check.Run(context.Background()); !res.OK {
+		t.Fatalf("config check with user should pass: %s", res.Message)
+	}
+	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != "--check" {
+		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
+	}
+}
+
 func TestConfigCheckChange(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "nginx.conf")

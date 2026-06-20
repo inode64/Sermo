@@ -225,7 +225,7 @@ func inspectOptions(opts []Option) options {
 }
 
 func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (bool, string) {
-	res, err := execx.Run(ctx, runner, probeTimeout, cmd.argv[0], cmd.argv[1:]...)
+	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
 	case err != nil && res.ExitCode == 0:
 		return false, "error: " + err.Error()
@@ -237,7 +237,7 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 }
 
 func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) (bool, string, string, string) {
-	res, err := execx.Run(ctx, runner, probeTimeout, cmd.argv[0], cmd.argv[1:]...)
+	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
 	case err != nil && res.ExitCode == 0:
 		return false, "error: " + err.Error(), "", ""
@@ -282,7 +282,7 @@ func modeString(info os.FileInfo) string {
 // parsing the raw version line with ShortVersion.
 func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]any, rawVersion string) string {
 	if vc := probeCommandFor(tree, "version_short"); len(vc.argv) > 0 {
-		res, err := execx.Run(ctx, runner, probeTimeout, vc.argv[0], vc.argv[1:]...)
+		res, err := runProbeCommand(ctx, runner, vc)
 		if err == nil && res.ExitCode == 0 {
 			if line := checks.FirstNonEmptyLine(res.Stdout); line != "" {
 				return line
@@ -293,6 +293,13 @@ func shortVersionFor(ctx context.Context, runner execx.Runner, tree map[string]a
 		}
 	}
 	return ShortVersion(rawVersion)
+}
+
+func runProbeCommand(ctx context.Context, runner execx.Runner, cmd probeCommand) (execx.Result, error) {
+	if cmd.user != "" {
+		return execx.RunUser(ctx, runner, probeTimeout, cmd.user, cmd.argv[0], cmd.argv[1:]...)
+	}
+	return execx.Run(ctx, runner, probeTimeout, cmd.argv[0], cmd.argv[1:]...)
 }
 
 // binaryPath returns the resolved binary path of a daemon: its preflight
@@ -348,6 +355,7 @@ func namespacedBinaryPrefixes(preflight map[string]any) []string {
 // its result must meet: the exit code and optional stdout/stderr matchers.
 type probeCommand struct {
 	argv       []string
+	user       string
 	expectExit []int
 	optional   bool
 	stdout     checks.OutputMatcher
@@ -366,7 +374,7 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 	if entry == nil {
 		return probeCommand{}
 	}
-	vc := probeCommand{argv: cfgval.StringList(entry["command"]), expectExit: []int{0}}
+	vc := probeCommand{argv: cfgval.StringList(entry["command"]), user: cfgval.String(entry["user"]), expectExit: []int{0}}
 	if v, ok := cfgval.IntList(entry["expect_exit"]); ok {
 		vc.expectExit = v
 	}

@@ -320,6 +320,7 @@ type commandCheck struct {
 	base
 	runner     execx.Runner
 	argv       []string
+	user       string
 	expectExit []int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
@@ -334,11 +335,13 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	ctx, cancel := c.withTimeout(ctx)
 	defer cancel()
 
-	res, _ := c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
+	res, err := c.runCommand(ctx)
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
 		if stderr := FirstNonEmptyLine(res.Stderr); stderr != "" {
 			msg += ": " + stderr
+		} else if err != nil {
+			msg += ": " + err.Error()
 		}
 		return c.result(false, msg, start)
 	}
@@ -371,6 +374,13 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		r.Data = data
 	}
 	return r
+}
+
+func (c commandCheck) runCommand(ctx context.Context) (execx.Result, error) {
+	if c.user != "" {
+		return execx.RunUser(ctx, c.runner, 0, c.user, c.argv[0], c.argv[1:]...)
+	}
+	return c.runner.Run(ctx, c.argv[0], c.argv[1:]...)
 }
 
 // ExitCodeExpected reports whether got matches one of the expected command exit

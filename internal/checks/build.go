@@ -547,7 +547,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check " + warn
 	}
-	c := commandCheck{base: b, runner: runner, argv: argv, expectExit: expect, stdout: stdout, stderr: stderr, exports: exports, analyzer: analyzer}
+	c := commandCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry["user"]), expectExit: expect, stdout: stdout, stderr: stderr, exports: exports, analyzer: analyzer}
 	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
 		c.state = &cmdState{}
 	}
@@ -973,7 +973,7 @@ func buildConfigCheck(b base, entry map[string]any, runner execx.Runner) (Check,
 	if len(argv) == 0 && len(paths) == 0 {
 		return nil, "config check requires a command and/or path"
 	}
-	c := configCheck{base: b, runner: runner, argv: argv, paths: paths}
+	c := configCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry["user"]), paths: paths}
 	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
 		c.state = &cmdState{}
 	}

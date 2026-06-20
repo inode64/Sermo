@@ -137,6 +137,28 @@ func TestPackageRun(t *testing.T) {
 	})
 }
 
+func TestPackageRunUser(t *testing.T) {
+	t.Run("rejects runners that do not implement UserRunner", func(t *testing.T) {
+		_, err := RunUser(context.Background(), basicRunner{}, 0, "postgres", "echo", "hi")
+		if err == nil || !strings.Contains(err.Error(), "does not support user") {
+			t.Fatalf("expected missing UserRunner support, got: %v", err)
+		}
+	})
+
+	t.Run("unknown user fails before command starts", func(t *testing.T) {
+		res, err := RunUser(context.Background(), CommandRunner{}, time.Second, "sermo-no-such-user-xyz", "sh", "-c", "exit 0")
+		if err == nil {
+			t.Fatal("expected unknown user error")
+		}
+		if res.ExitCode != -1 {
+			t.Fatalf("exit code = %d, want -1", res.ExitCode)
+		}
+		if !strings.Contains(err.Error(), "command user") {
+			t.Fatalf("error = %q, want command user detail", err)
+		}
+	})
+}
+
 func TestCommandRunnerRunEnv(t *testing.T) {
 	t.Run("custom env is passed to command", func(t *testing.T) {
 		res, err := CommandRunner{}.RunEnv(context.Background(),

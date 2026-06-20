@@ -420,6 +420,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 		if !isStringArray(entry["command"]) {
 			add("commands.%s command must be an array, not a shell string", name)
 		}
+		validateCommandUser("commands."+name, entry, add)
 		if v, present := entry["timeout"]; present && !isPositiveDuration(cfgval.String(v)) {
 			add("commands.%s timeout %q must be a valid positive duration", name, cfgval.String(v))
 		}

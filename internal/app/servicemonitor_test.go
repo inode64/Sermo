@@ -1,12 +1,30 @@
 package app
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"sermo/internal/execx"
 	"sermo/internal/notify"
 )
+
+type monitorUserRunner struct {
+	user string
+	name string
+	args []string
+}
+
+func (r *monitorUserRunner) Run(context.Context, string, ...string) (execx.Result, error) {
+	return execx.Result{ExitCode: -1}, nil
+}
+
+func (r *monitorUserRunner) RunUser(_ context.Context, user string, name string, args ...string) (execx.Result, error) {
+	r.user = user
+	r.name = name
+	r.args = append([]string(nil), args...)
+	return execx.Result{ExitCode: 0, Stdout: "ok\n"}, nil
+}
 
 func monitorTestDeps() Deps {
 	return Deps{
@@ -45,6 +63,27 @@ func TestVersionMonitor(t *testing.T) {
 	}
 }
 
+func TestVersionMonitorPreservesCommandUser(t *testing.T) {
+	runner := &monitorUserRunner{}
+	tree := map[string]any{
+		"commands": map[string]any{"version": map[string]any{"command": []any{"postgres", "--version"}, "user": "postgres"}},
+		"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+	}
+	deps := monitorTestDeps()
+	deps.ExecxRunner = runner
+
+	w, warn := versionMonitor("postgres", tree, deps, time.Minute)
+	if warn != "" || w == nil {
+		t.Fatalf("warn=%q w=%v", warn, w)
+	}
+	if res := w.Check.Run(context.Background()); !res.OK {
+		t.Fatalf("version monitor check should pass: %s", res.Message)
+	}
+	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != "--version" {
+		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
+	}
+}
+
 func TestConfigMonitor(t *testing.T) {
 	tree := map[string]any{
 		"preflight": map[string]any{"config": map[string]any{"type": "command", "command": []any{"apachectl", "configtest"}}},
@@ -68,5 +107,26 @@ func TestConfigMonitor(t *testing.T) {
 	pathOnly := map[string]any{"config": map[string]any{"on_change": map[string]any{}, "path": []any{"/etc/x.conf"}}}
 	if w, warn := configMonitor("x", pathOnly, monitorTestDeps(), time.Minute); warn != "" || w == nil {
 		t.Errorf("path-only config monitor should build: %q", warn)
+	}
+}
+
+func TestConfigMonitorPreservesCommandUser(t *testing.T) {
+	runner := &monitorUserRunner{}
+	tree := map[string]any{
+		"preflight": map[string]any{"config": map[string]any{"type": "command", "command": []any{"postgres", "--check"}, "user": "postgres"}},
+		"config":    map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+	}
+	deps := monitorTestDeps()
+	deps.ExecxRunner = runner
+
+	w, warn := configMonitor("postgres", tree, deps, time.Minute)
+	if warn != "" || w == nil {
+		t.Fatalf("warn=%q w=%v", warn, w)
+	}
+	if res := w.Check.Run(context.Background()); !res.OK {
+		t.Fatalf("config monitor check should pass: %s", res.Message)
+	}
+	if runner.user != "postgres" || runner.name != "postgres" || len(runner.args) != 1 || runner.args[0] != "--check" {
+		t.Fatalf("RunUser call = user=%q name=%q args=%v", runner.user, runner.name, runner.args)
 	}
 }

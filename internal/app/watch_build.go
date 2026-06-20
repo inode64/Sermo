@@ -564,11 +564,13 @@ func versionMonitor(name string, tree map[string]any, deps Deps, interval time.D
 	if !ok {
 		return nil, ""
 	}
-	cmd := versionCommandRaw(tree)
-	if cmd == nil {
+	entry := versionCommandEntry(tree)
+	if entry == nil {
 		return nil, "service " + name + ": version monitor needs commands.version (or preflight.version) in the daemon"
 	}
-	check, err := checks.BuildInline(name+":version", map[string]any{"type": "command", "command": cmd, "on_change": true}, monitorDeps(deps))
+	entry["type"] = "command"
+	entry["on_change"] = true
+	check, err := checks.BuildInline(name+":version", entry, monitorDeps(deps))
 	if err != nil {
 		return nil, "service " + name + ": version monitor: " + err.Error()
 	}
@@ -585,8 +587,13 @@ func configMonitor(name string, tree map[string]any, deps Deps, interval time.Du
 		return nil, ""
 	}
 	entry := map[string]any{"type": "config", "on_change": true}
-	if cmd := configTestCommandRaw(tree); cmd != nil {
-		entry["command"] = cmd
+	if cmdEntry := configTestCommandEntry(tree); cmdEntry != nil {
+		if cmd := cmdEntry["command"]; cmd != nil {
+			entry["command"] = cmd
+		}
+		if user := cmdEntry["user"]; user != nil {
+			entry["user"] = user
+		}
 	}
 	if p, present := block["path"]; present {
 		entry["path"] = p
@@ -615,21 +622,21 @@ func onChangeNotify(v any) ([]string, bool) {
 	return cfgval.StringList(oc["notify"]), true
 }
 
-// versionCommandRaw returns the raw version-command argv from the resolved tree
+// versionCommandEntry returns a copy of the resolved version-command entry
 // (preflight.version then commands.version, via the shared resolver), or nil.
-func versionCommandRaw(tree map[string]any) any {
+func versionCommandEntry(tree map[string]any) map[string]any {
 	if entry := checks.VersionCommandEntry(tree, "version"); entry != nil {
-		return entry["command"]
+		return maps.Clone(entry)
 	}
 	return nil
 }
 
-// configTestCommandRaw returns the raw config-test argv from preflight.config (the
-// daemon's, or the service's custom preflight that replaced it), or nil.
-func configTestCommandRaw(tree map[string]any) any {
+// configTestCommandEntry returns a copy of preflight.config (the daemon's, or
+// the service's custom preflight that replaced it), or nil.
+func configTestCommandEntry(tree map[string]any) map[string]any {
 	if pf, ok := tree["preflight"].(map[string]any); ok {
 		if entry, ok := pf["config"].(map[string]any); ok {
-			return entry["command"]
+			return maps.Clone(entry)
 		}
 	}
 	return nil
