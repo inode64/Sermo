@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap, storage below 10% free, network/USB mount and /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap, storage below 10% free, network/USB mount and direct-file /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -21,6 +21,11 @@ web:
 ```
 
 Keep the chosen `web.port` and auth settings explicit. Prefer `9797`; if it is already used by a verified `sermod` process, terminate that Sermo process and reuse `9797`.
+When the requested run includes activating or exposing the Web UI, that request
+is explicit permission to reclaim the chosen web port from another verified
+`sermod` listener, including a non-temporary Sermo instance. Verify identity
+before signaling, record what was stopped, and never kill a non-Sermo or
+unverified listener.
 
 - Preserve remote system behavior: do not start, stop, restart, reload, kill, package-install, or write permanent host config unless the user explicitly asks.
 - When problems are discovered, fix only the local project code, catalog, docs, or tests; redeploy new `/tmp` artifacts after the local change. Do not patch remote host files to make the test pass.
@@ -83,7 +88,12 @@ Run this before copying or executing Sermo artifacts on each host:
 - Check architecture and skip hosts that cannot run the locally built `GOAMD64=v1` Linux amd64 binaries.
 - Check that `/tmp` is writable and executable, including a tiny executable probe; if `/tmp` is `noexec`, stop for that host.
 - Check free space in `/tmp`; stop for that host if there is not enough room for binaries, catalog, config, logs, and JSON outputs.
-- Check whether port `9797` is free before choosing it for the web panel. If it is occupied by another verified Sermo daemon, terminate that process and reuse `9797`. If it is occupied by anything other than Sermo, do not touch it; choose another explicit high port and report it.
+- Check whether port `9797` is free before choosing it for the web panel. If the
+  run includes activating or exposing the Web UI and the port is occupied by
+  another verified Sermo daemon, terminate that process and reuse `9797`,
+  including when the listener is not under `/tmp`. If it is occupied by anything
+  other than Sermo, do not touch it; choose another explicit high port and
+  report it.
 
 ## Port 9797 Reuse
 
@@ -91,7 +101,11 @@ When `9797` is already listening:
 
 - Identify the listener PID with `ss -ltnp` or an equivalent read-only command.
 - Verify the process before signaling it: `/proc/<pid>/exe` or `/proc/<pid>/cmdline` must identify `sermod`.
-- Prefer reclaiming only temporary test instances whose command path or working directory is under `/tmp/sermo-remote-test-*`.
+- Prefer reclaiming temporary test instances whose command path or working
+  directory is under `/tmp/sermo-remote-test-*`. When the requested scope
+  includes activating or exposing the Web UI, do not fall back to another port
+  solely because the verified `sermod` listener is non-temporary; stop that
+  verified Sermo process and reuse `9797`.
 - If the listener is a verified `sermod`, record PID, exe, cmdline, and log path when known, then send `SIGTERM` and wait briefly.
 - If the same verified `sermod` PID is still alive after the graceful wait, send `SIGKILL` only to that PID and record it in the final report.
 - If PID identity cannot be verified, or the listener is not Sermo, do not kill it; select another explicit high port and report why `9797` was not reclaimed.
@@ -162,7 +176,8 @@ partial test run.
   filesystems (`findmnt`, `/proc/self/mountinfo`, `df -PT`), mounted network
   and USB filesystems, fstab-backed network and USB mount entries, network
   interfaces and default routes (`ip addr`, `ip route`), certificate-like files
-  under `/etc/ssl`, and any explicitly requested uplink/ICMP targets.
+  directly under `/etc/ssl` only (non-recursive), and any explicitly requested
+  uplink/ICMP targets.
 - Generate one fragment per host watch under the matching temporary directory
   loaded by `paths.storages`, `paths.networks` or `paths.watches`; every fragment
   must contain a top-level `watches:` map with exactly one entry.
@@ -219,10 +234,14 @@ umount:
   skipped instead of inventing a mount unit. Pair mounted network/USB targets
   with the storage watch above when they are currently mounted.
 - Include certificate watches for `/etc/ssl` on every complete config. Discover
-  candidate certificate-like files (`*.crt`, `*.cer`, `*.pem`) with read-only
-  commands, canonicalize symlinks with `readlink -f`, and generate at most one
-  watch per canonical file. Skip duplicate hashed CA-store aliases and non-certificate
-  private key material unless the user explicitly asks to monitor keys too.
+  only candidate certificate-like regular files (`*.crt`, `*.cer`, `*.pem`) that
+  are immediate children of `/etc/ssl`, using read-only commands equivalent to
+  `find /etc/ssl -maxdepth 1 -type f` with filename filters. The certificate
+  check is non-recursive and must not descend into `/etc/ssl/certs`,
+  `/etc/ssl/private` or any other subdirectory unless the user explicitly
+  expands the scope for that run. Generate at most one watch per discovered
+  direct file. Skip non-certificate private key material unless the user
+  explicitly asks to monitor keys too.
   Missing, unreadable or unparseable files must be treated as alert findings.
   Expired certificates, not-yet-valid certificates and certificates with fewer
   than 15 days left must notify through the selected safe notification mode.
@@ -235,7 +254,7 @@ watches:
     interval: 12h
     check:
       type: cert
-      path: /etc/ssl/certs/example.pem
+      path: /etc/ssl/example.pem
       expires_in_days: 15
       on_algorithm_change: true
       on_issuer_change: true
@@ -306,8 +325,8 @@ apply to ordinary CLI-only validation.
   filesystem with less than 10% free space, any configured storage watch whose
   mount condition failed, and any generated network/USB `kind: mount` target
   that was skipped because it was not fstab-backed.
-- Include `/etc/ssl` certificate watch results and related events in the
-  observation output. Report any certificate that is expired, not yet valid,
+- Include direct-file `/etc/ssl` certificate watch results and related events in
+  the observation output. Report any certificate that is expired, not yet valid,
   under the 15-day expiry threshold, missing, unreadable, unparseable, or changed
   by issuer/signature algorithm between cycles. For obsolete-looking algorithms
   or weak key sizes, report the `signature_algorithm`, `public_key_algorithm`
@@ -421,9 +440,9 @@ Summarize:
 - alerts that fired or would fire in dry-run;
 - storage findings: filesystems below 10% free space, failed `mounted: true`
   checks, and network/USB mount units generated or skipped;
-- `/etc/ssl` certificate findings: expiring within 15 days, expired, not yet
-  valid, missing/unreadable/unparseable, issuer or algorithm changes, and any
-  weak/obsolete-looking algorithm or key-size review notes;
+- direct-file `/etc/ssl` certificate findings: expiring within 15 days,
+  expired, not yet valid, missing/unreadable/unparseable, issuer or algorithm
+  changes, and any weak/obsolete-looking algorithm or key-size review notes;
 - `acpid` operation tests run or skipped, with reason;
 - missing paths, unsupported apps, or catalog gaps to fix locally;
 - serious errors encountered and the actions completed before stopping;
