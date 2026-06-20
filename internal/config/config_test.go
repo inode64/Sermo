@@ -805,6 +805,16 @@ defaults:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	issues := Validate(cfg)
+	for _, want := range []string{
+		"paths.includes is not supported",
+		"paths.enabled is not supported",
+		"paths.profiles is not supported",
+	} {
+		if !issuesContain(issues, want) {
+			t.Fatalf("Validate() missing %q in %v", want, issues)
+		}
+	}
 }
 
 func TestDefaultServiceAndAppDirs(t *testing.T) {

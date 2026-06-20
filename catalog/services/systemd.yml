@@ -14,11 +14,11 @@ apps: [systemd]
 # positives — e.g. it exits non-zero merely because a referenced unit is masked.
 # A preflight that can spuriously block daemon-reload is worse than none.
 
-commands:
+reload:
   # Reloading systemd itself is `daemon-reload` (re-reads unit files), not a
-  # per-unit reload — so the daemon declares its own reload command.
-  reload:
-    command: ["systemctl", "daemon-reload"]
+  # per-unit reload — so the daemon declares its own native reload command.
+  command: ["systemctl", "daemon-reload"]
+  when: always
 
 # When unit files change, run `systemctl daemon-reload` (re-reads unit files)
 # instead of anything disruptive.

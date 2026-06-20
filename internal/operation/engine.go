@@ -56,10 +56,10 @@ type Engine struct {
 	Preflight   func(ctx context.Context) checks.Outcome
 	Postflight  func(ctx context.Context) checks.Outcome
 	// ReloadFunc reloads the service's config in place. When nil the engine falls
-	// back to Manager.Reload (the backend per-unit reload). A `reload:` block (or
-	// legacy commands.reload) builds a richer closure: a native signal/command that
-	// either overrides the backend reload (`when: always`) or stands in for it when
-	// the init has no reload of its own (`when: auto`).
+	// back to Manager.Reload (the backend per-unit reload). A `reload:` block
+	// builds a richer closure: a native signal/command that either overrides the
+	// backend reload (`when: always`) or stands in for it when the init has no
+	// reload of its own (`when: auto`).
 	ReloadFunc       func(ctx context.Context) error
 	ResumeFunc       func(ctx context.Context) error
 	Discover         func() ([]process.Process, error)
