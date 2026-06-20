@@ -370,9 +370,6 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 	if !ok {
 		return false
 	}
-	if _, hasName := svc["name"]; hasName {
-		return false
-	}
 	_, hasSystemd := svc["systemd"]
 	_, hasOpenrc := svc["openrc"]
 	return hasOpenrc && !hasSystemd
@@ -434,8 +431,8 @@ func validateCommands(tree map[string]any, add addFunc) {
 	}
 }
 
-// validateServiceField checks the `service` field: a scalar unit name, a per-init
-// map of systemd/openrc candidate lists, or the legacy { name: ... } shorthand.
+// validateServiceField checks the `service` field: a scalar unit name or a
+// per-init map of systemd/openrc candidate lists.
 func validateServiceField(tree map[string]any, add addFunc) {
 	s, present := tree["service"]
 	if !present {
@@ -447,25 +444,20 @@ func validateServiceField(tree map[string]any, add addFunc) {
 			add("service must not be empty")
 		}
 	case map[string]any:
-		hasInit, hasName := false, false
+		if len(v) == 0 {
+			add("service map must define systemd and/or openrc")
+		}
 		for _, k := range slices.Sorted(maps.Keys(v)) {
 			switch k {
 			case "systemd", "openrc":
-				hasInit = true
 				if len(cfgval.StringList(v[k])) == 0 {
 					add("service.%s must be a non-empty list", k)
 				}
 			case "name":
-				hasName = true
-				if cfgval.String(v["name"]) == "" {
-					add("service.name must not be empty")
-				}
+				add("service.name is not supported; use scalar service: <unit>")
 			default:
-				add("service key %q is not one of systemd, openrc, name", k)
+				add("service key %q is not one of systemd, openrc", k)
 			}
-		}
-		if hasInit && hasName {
-			add("service must not mix name with systemd/openrc")
 		}
 	default:
 		add("service must be a unit name or a per-init map (systemd/openrc)")

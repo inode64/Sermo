@@ -65,7 +65,7 @@ func TestResolveSystemdNormalizesBareName(t *testing.T) {
 }
 
 func TestResolveSystemdNoAliasesTrustsName(t *testing.T) {
-	// service.name is unknown to systemctl cat, but with no aliases the resolver
+	// The configured unit name is unknown to systemctl cat, but with no aliases the resolver
 	// trusts it rather than failing (sysv-generated units, etc.).
 	r := resolver(map[string]execxResultErr{"systemctl cat -- weird.service": {exit: 4}}, nil)
 	unit, err := r.Resolve(context.Background(), BackendSystemd, []string{"weird"}, true)
@@ -173,7 +173,7 @@ func TestCgroupPIDs(t *testing.T) {
 }
 
 func TestResolveDeduplicatesCandidates(t *testing.T) {
-	// service.name repeated in aliases is probed once.
+	// A unit name repeated in aliases is probed once.
 	rr := scriptRunner{results: map[string]execxResultErr{"systemctl cat -- mysql.service": {exit: 0}}, calls: map[string]int{}}
 	r := UnitResolver{Runner: rr, Probe: fakeProbe{}}
 	if _, err := r.Resolve(context.Background(), BackendSystemd, []string{"mysql", "mysql.service", "mysql"}, false); err != nil {

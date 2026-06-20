@@ -21,7 +21,6 @@ func TestServiceCandidates(t *testing.T) {
 		{"per-init picks the backend list (not trusted)", perInit, "systemd", []string{"nginx.service"}, false},
 		{"per-init for the other backend", perInit, "openrc", []string{"nginx"}, false},
 		{"per-init with no entry for the backend is unavailable", map[string]any{"service": map[string]any{"systemd": []any{"x"}}}, "openrc", nil, false},
-		{"legacy name form is trusted", map[string]any{"service": map[string]any{"name": "redis"}}, "systemd", []string{"redis"}, true},
 		{"empty scalar falls back to the name", map[string]any{"service": ""}, "systemd", []string{"fallback"}, true},
 		{"no service key falls back to the name", map[string]any{}, "systemd", []string{"fallback"}, true},
 	}

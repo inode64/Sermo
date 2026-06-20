@@ -6,7 +6,7 @@ func TestValidateSQLCheckValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: db
-service: { name: x }
+service: x
 checks:
   q: { type: sql, engine: sqlite, path: /var/lib/app.db, query: "SELECT count(*) FROM t", op: ">", value: "0" }
 `)
@@ -32,7 +32,7 @@ func TestValidateSQLCheckErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			mustHave(t, validateService(t, "kind: service\nname: db\nservice: { name: x }\nchecks:\n  "+c.body+"\n"), c.want)
+			mustHave(t, validateService(t, "kind: service\nname: db\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
 		})
 	}
 }

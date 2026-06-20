@@ -31,7 +31,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
 name: web
-service: { name: web }
+service: web
 `)
 	return global
 }
@@ -52,7 +52,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
 name: web
-service: { name: web }
+service: web
 `)
 	return global
 }
@@ -72,7 +72,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
 name: web
-service: { name: web }
+service: web
 reload:
   command: [reload-web, --check]
   when: always
@@ -166,13 +166,13 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
 kind: service
 name: web
-service: { name: web }
+service: web
 also_apply: [db]
 `)
 	mustWrite(t, filepath.Join(root, "enabled", "db.yml"), `
 kind: service
 name: db
-service: { name: db }
+service: db
 `)
 	return global
 }

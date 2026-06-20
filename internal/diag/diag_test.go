@@ -71,7 +71,7 @@ func TestDiagnoseOrphanedData(t *testing.T) {
 	cfg := loadCfg(t, baseGlobal, `
 kind: service
 name: web
-service: { name: nginx }
+service: nginx
 policy: { cooldown: 5m }
 checks:
   ping: { type: tcp, host: 127.0.0.1, port: 80 }
@@ -98,7 +98,7 @@ func TestDiagnoseIntervalAlignment(t *testing.T) {
 	cfg := loadCfg(t, baseGlobal, `
 kind: service
 name: web
-service: { name: nginx }
+service: nginx
 policy: { cooldown: 5m }
 checks:
   ok:    { type: tcp, host: 127.0.0.1, port: 80, interval: 5m }
@@ -204,7 +204,7 @@ func TestDiagnoseServiceCheckDeviceResources(t *testing.T) {
 	svc := `
 kind: service
 name: db
-service: { name: db }
+service: db
 checks:
   io: { type: diskio, device: sdz, util_pct: { op: ">=", value: 90 } }
 `

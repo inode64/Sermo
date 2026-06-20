@@ -713,7 +713,7 @@ func TestValidateCleanConfig(t *testing.T) {
 		"enabled/redis-main.yml": `
 kind: service
 name: redis-main
-service: { name: redis }
+service: redis
 `,
 	})
 	cfg, err := Load(global)
@@ -1067,7 +1067,7 @@ notify: [ops]
 		"services/web.yml": `
 kind: service
 name: web
-service: { name: web }
+service: web
 checks:
   service: { type: service, expect: active }
 `,
@@ -1474,13 +1474,13 @@ rules:
 kind: service
 name: db-main
 uses: db
-service: { name: db }
+service: db
 `,
 		// No display_name anywhere: ${display_name} must fall back to name.
 		"enabled/plain.yml": `
 kind: service
 name: plain
-service: { name: plain }
+service: plain
 rules:
   alert-x:
     type: alert
@@ -1495,7 +1495,7 @@ rules:
 		"enabled/custom.yml": `
 kind: service
 name: custom
-service: { name: custom }
+service: custom
 variables:
   display_name: "Overridden"
 rules:
@@ -1584,7 +1584,7 @@ func TestDescriptionHasNoFallback(t *testing.T) {
 		"enabled/plain.yml": `
 kind: service
 name: plain
-service: { name: plain }
+service: plain
 `,
 	})
 	cfg, err := Load(global)
@@ -1627,7 +1627,7 @@ func TestValidateRejectsPathLikeDocumentName(t *testing.T) {
 		"enabled/bad.yml": `
 kind: service
 name: ../escape
-service: { name: mysql }
+service: mysql
 `,
 		"catalog/bad.yml": `
 kind: daemon
@@ -1715,7 +1715,7 @@ func TestBuiltinHostServiceAndRuntimeVars(t *testing.T) {
 		"enabled/web.yml": `
 kind: service
 name: web
-service: { name: nginx }
+service: nginx
 checks:
   ping:
     type: tcp
@@ -1764,7 +1764,7 @@ func TestBuiltinInitUserPidfileVars(t *testing.T) {
 		"enabled/db.yml": `
 kind: service
 name: db
-service: { name: postgresql }
+service: postgresql
 processes:
   main: { type: pidfile, path: "${pidfile}" }
 checks:
@@ -1799,7 +1799,7 @@ func TestUserVariableOverridesBuiltinUserPidfile(t *testing.T) {
 		"enabled/db.yml": `
 kind: service
 name: db
-service: { name: postgresql }
+service: postgresql
 variables:
   user: postgres
   pidfile: /run/postgresql/main.pid
@@ -1829,7 +1829,7 @@ func TestUserHostVariableOverridesBuiltin(t *testing.T) {
 		"enabled/web.yml": `
 kind: service
 name: web
-service: { name: web }
+service: web
 variables:
   host: 127.0.0.1
 checks:
@@ -1853,7 +1853,7 @@ func TestBuiltinPortVariable(t *testing.T) {
 		"enabled/db.yml": `
 kind: service
 name: db
-service: { name: db }
+service: db
 port: 6379
 checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
@@ -1879,7 +1879,7 @@ func TestUserPortVariableOverridesBuiltin(t *testing.T) {
 		"enabled/db.yml": `
 kind: service
 name: db
-service: { name: db }
+service: db
 port: 6379
 variables: { port: 7000 }
 checks:
@@ -1903,7 +1903,7 @@ func TestUndefinedPortVariableErrors(t *testing.T) {
 		"enabled/db.yml": `
 kind: service
 name: db
-service: { name: db }
+service: db
 checks:
   ping: { type: tcp, host: "127.0.0.1", port: "${port}" }
 `,
@@ -2075,8 +2075,8 @@ preflight:
 func TestDaemonCategoryFromDirectory(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml":              baseGlobal,
-		"catalog/nginx.yml":      "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
-		"catalog/apps/git.yml":   "kind: daemon\nname: git\nservice: { name: git }\n",
+		"catalog/nginx.yml":      "kind: daemon\nname: nginx\nservice: nginx\n",
+		"catalog/apps/git.yml":   "kind: daemon\nname: git\nservice: git\n",
 		"catalog/libs/glibc.yml": "kind: daemon\nname: glibc\nbinary: /lib64/libc.so.6\n",
 	})
 	cfg, err := Load(global)
@@ -2115,12 +2115,12 @@ func TestCatalogAliasDoesNotShadowCanonicalDaemon(t *testing.T) {
 kind: daemon
 name: a
 catalog_aliases: [b]
-service: { name: a }
+service: a
 `,
 		"catalog/b.yml": `
 kind: daemon
 name: b
-service: { name: b }
+service: b
 `,
 	})
 	cfg, err := Load(global)
@@ -2149,7 +2149,7 @@ func TestReloadOnChangeDesugarsToReloadRule(t *testing.T) {
 		"enabled/udev.yml": `
 kind: service
 name: udev
-service: { name: systemd-udevd }
+service: systemd-udevd
 reload_on_change:
   paths:
     - /etc/udev/rules.d
@@ -2193,7 +2193,7 @@ variables:
 		"enabled/web.yml": `
 kind: service
 name: web
-service: { name: web }
+service: web
 restart_on_change:
   libraries: [glibc]
 `,
@@ -2223,11 +2223,11 @@ func TestRestartOnChangeUnknownLibraryErrors(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		// nginx is a service daemon, not a library: referencing it must error.
-		"catalog/nginx.yml": "kind: daemon\nname: nginx\nservice: { name: nginx }\n",
+		"catalog/nginx.yml": "kind: daemon\nname: nginx\nservice: nginx\n",
 		"enabled/web.yml": `
 kind: service
 name: web
-service: { name: web }
+service: web
 restart_on_change:
   libraries: [nginx, ghost]
 `,
@@ -3137,7 +3137,7 @@ func TestVersionTemplateMaterialization(t *testing.T) {
 kind: daemon
 name: php-fpm
 display_name: "PHP-FPM"
-service: { name: php-fpm }
+service: php-fpm
 variables:
   binary: /usr/sbin/php-fpm
   user: www-data
@@ -3226,7 +3226,7 @@ defaults:
 kind: service
 name: site
 uses: php-fpm-8.3
-service: { name: php-fpm }
+service: php-fpm
 `)
 	cfg, err = Load(global)
 	if err != nil {
@@ -3878,7 +3878,7 @@ variables:
 		"enabled/web.yml": `
 kind: service
 name: web
-service: { name: web }
+service: web
 rules:
   glibc-changed:
     type: alert
@@ -3913,7 +3913,7 @@ func TestChangedUnknownLibraryErrors(t *testing.T) {
 		"enabled/web.yml": `
 kind: service
 name: web
-service: { name: web }
+service: web
 rules:
   ghost-changed:
     type: alert

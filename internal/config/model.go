@@ -171,8 +171,8 @@ func (g Global) TemplateDir() string {
 }
 
 // ServiceUnit returns a service's primary (display/seed) unit name: the scalar
-// `service`, the first candidate of a per-init `service` map, or the legacy
-// `service.name`; falling back to the given name.
+// `service`, or the first candidate of a per-init `service` map; falling back to
+// the given name.
 func ServiceUnit(tree map[string]any, fallback string) string {
 	switch s := tree["service"].(type) {
 	case string:
@@ -180,9 +180,6 @@ func ServiceUnit(tree map[string]any, fallback string) string {
 			return s
 		}
 	case map[string]any:
-		if name, _ := s["name"].(string); name != "" { // legacy form
-			return name
-		}
 		for _, backend := range []string{"systemd", "openrc"} {
 			if list := cfgval.StringList(s[backend]); len(list) > 0 {
 				return list[0]
@@ -195,9 +192,8 @@ func ServiceUnit(tree map[string]any, fallback string) string {
 // ServiceCandidates returns the unit-name candidates to try for backend, and
 // whether to trust the first candidate when none can be probed.
 //
-//   - `service: name` (scalar) or legacy `service: { name: ... }` →
-//     a single trusted candidate (units the probe cannot surface, e.g.
-//     sysv-generated, are not rejected). trust = true.
+//   - `service: name` (scalar) → a single trusted candidate (units the probe
+//     cannot surface, e.g. sysv-generated, are not rejected). trust = true.
 //   - `service: { systemd: [...], openrc: [...] }` (per-init) → the list for
 //     backend, requiring a match (trust = false). A backend with no entry is
 //     not available: the candidate list is empty.
@@ -213,9 +209,6 @@ func ServiceCandidates(tree map[string]any, backend, fallback string) (candidate
 		}
 		if _, ok := s["openrc"]; ok {
 			return cfgval.StringList(s[backend]), false
-		}
-		if name, _ := s["name"].(string); name != "" { // legacy form
-			return []string{name}, true
 		}
 	}
 	return []string{fallback}, true

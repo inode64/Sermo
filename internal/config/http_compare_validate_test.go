@@ -6,7 +6,7 @@ func TestValidateHTTPComparisonsValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 checks:
   api:
     type: http
@@ -27,7 +27,7 @@ checks:
 func TestValidateHTTPMethods(t *testing.T) {
 	// Every standard verb (any case) validates cleanly.
 	for _, m := range []string{"GET", "head", "POST", "Put", "PATCH", "delete", "OPTIONS", "TRACE", "CONNECT"} {
-		issues := validateService(t, "kind: service\nname: web\nservice: { name: x }\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
+		issues := validateService(t, "kind: service\nname: web\nservice: x\nchecks:\n  api: { type: http, url: \"http://h/\", method: "+m+" }\n")
 		for _, is := range issues {
 			if hasIssue([]Issue{is}, "checks.api") {
 				t.Fatalf("method %q must be valid: %v", m, issues)
@@ -38,7 +38,7 @@ func TestValidateHTTPMethods(t *testing.T) {
 	mustHave(t, validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 checks:
   api: { type: http, url: "http://h/", method: GTE }
 `), "not a standard HTTP method")
@@ -49,7 +49,7 @@ func TestValidateHTTP3(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 checks:
   h3: { type: http, url: "https://h/", http3: true }
 `)
@@ -62,7 +62,7 @@ checks:
 	mustHave(t, validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 checks:
   h3: { type: http, url: "http://h/", http3: true }
 `), "http3 requires an https url")
@@ -70,7 +70,7 @@ checks:
 	mustHave(t, validateService(t, `
 kind: service
 name: web
-service: { name: x }
+service: x
 checks:
   h3: { type: http, url: "https://h/", http3: true, proxy: "http://squid:3128" }
 `), "mutually exclusive")
@@ -91,7 +91,7 @@ func TestValidateHTTPComparisonErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			yaml := "kind: service\nname: web\nservice: { name: x }\nchecks:\n  api:\n    type: http\n    url: \"http://127.0.0.1/h\"\n    " + c.field + "\n"
+			yaml := "kind: service\nname: web\nservice: x\nchecks:\n  api:\n    type: http\n    url: \"http://127.0.0.1/h\"\n    " + c.field + "\n"
 			mustHave(t, validateService(t, yaml), c.want)
 		})
 	}

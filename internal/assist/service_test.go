@@ -108,9 +108,8 @@ func TestServiceAssistantCatalogThenGenericServices(t *testing.T) {
 	if _, ok := custom["uses"]; ok {
 		t.Fatalf("generic service must not use catalog profile: %v", custom)
 	}
-	service := custom["service"].(map[string]any)
-	if service["name"] != "customd" {
-		t.Fatalf("generic service.name = %v, want customd", service["name"])
+	if custom["service"] != "customd" {
+		t.Fatalf("generic service = %v, want customd", custom["service"])
 	}
 	checks := custom["checks"].(map[string]any)
 	serviceCheck := checks["service"].(map[string]any)

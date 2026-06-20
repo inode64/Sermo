@@ -83,7 +83,7 @@ func TestGeneratedGenericServicePassesConfigValidation(t *testing.T) {
 				Name: "customd",
 				Body: map[string]any{
 					"enabled": true,
-					"service": map[string]any{"name": "customd"},
+					"service": "customd",
 					"checks": map[string]any{
 						"service": map[string]any{"type": "service", "expect": "active"},
 						"config": map[string]any{

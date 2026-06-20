@@ -161,7 +161,7 @@ func TestAppsCommand(t *testing.T) {
 		body := fmt.Sprintf(`kind: daemon
 name: %s
 display_name: %q
-service: { name: %s }
+service: %s
 variables:
   binary: %q
 preflight:

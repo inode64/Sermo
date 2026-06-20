@@ -125,7 +125,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "svc.yml"), `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 `)
 
 	var stdout bytes.Buffer
@@ -160,7 +160,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "svc.yml"), `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 checks:
   busy: { type: file_exists, path: `+flag+` }
 rules:

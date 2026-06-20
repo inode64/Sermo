@@ -37,7 +37,7 @@ defaults:
 	if err := os.WriteFile(svcPath, []byte(`
 kind: service
 name: mysql-main
-service: { name: mysql }
+service: mysql
 processes:
   pidfile:
     type: pidfile
@@ -211,7 +211,7 @@ defaults:
 	if err := os.WriteFile(filepath.Join(enabled, "firehol.yml"), []byte(`
 kind: service
 name: firehol
-service: { name: firehol }
+service: firehol
 processes: {}
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -397,7 +397,7 @@ defaults:
 	if err := os.WriteFile(filepath.Join(enabled, "web.yml"), []byte(`
 kind: service
 name: web
-service: { name: web }
+service: web
 processes:
   main:
     type: command_match

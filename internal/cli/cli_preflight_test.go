@@ -28,7 +28,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "apache-main.yml"), `
 kind: service
 name: apache-main
-service: { name: apache2 }
+service: apache2
 variables:
   binary: `+binPath+`
 preflight:
@@ -94,7 +94,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "apache-main.yml"), `
 kind: service
 name: apache-main
-service: { name: apache2 }
+service: apache2
 preflight:
   cpu:
     type: metric
