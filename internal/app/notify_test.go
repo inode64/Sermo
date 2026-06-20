@@ -28,7 +28,7 @@ func TestWatchDispatchesNotifyOnFire(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email"}
 	var events []Event
 	w := &Watch{
-		Name:      "disk-root",
+		Name:      "storage-root",
 		CheckType: "storage",
 		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
 		Notifiers: []notify.Notifier{n},
@@ -51,8 +51,8 @@ func TestWatchDispatchesNotifyOnFire(t *testing.T) {
 func TestWatchNotifyOnlyNoHook(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email"}
 	w := &Watch{
-		Name:  "disk-root",
-		Check: stubCheck{name: "disk", ok: true},
+		Name:  "storage-root",
+		Check: stubCheck{name: "storage", ok: true},
 		// no Hook, no Runner — notify-only watch must still work.
 		Notifiers: []notify.Notifier{n},
 		Emit:      func(Event) {},
@@ -67,8 +67,8 @@ func TestWatchNotifyFailureEmitsEvent(t *testing.T) {
 	n := &fakeNotifier{name: "ops-email", fail: true}
 	var events []Event
 	w := &Watch{
-		Name:      "disk-root",
-		Check:     stubCheck{name: "disk", ok: true},
+		Name:      "storage-root",
+		Check:     stubCheck{name: "storage", ok: true},
 		Notifiers: []notify.Notifier{n},
 		Emit:      func(e Event) { events = append(events, e) },
 	}

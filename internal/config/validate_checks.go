@@ -15,15 +15,15 @@ import (
 	"sermo/internal/conn"
 )
 
-// validateDiskFields validates a storage check's fields at prefix (the dotted path
+// validateStorageFields validates a storage check's fields at prefix (the dotted path
 // to the fields container, e.g. "watches.storage-root.check" or "checks.root").
 // Shared by host watches and service checks. A storage check verifies space/inodes
 // and/or whether the path is mounted, so at least one of the two must be present.
-func validateDiskFields(prefix string, fields map[string]any, add addFunc) {
+func validateStorageFields(prefix string, fields map[string]any, add addFunc) {
 	if cfgval.String(fields["path"]) == "" {
 		add("%s.path is required for a storage check", prefix)
 	}
-	preds := validatePresentThresholds(prefix, fields, checks.DiskPredFields, add)
+	preds := validatePresentThresholds(prefix, fields, checks.StoragePredFields, add)
 	hasMount := validateMountConditions(prefix, fields, add)
 	if preds == 0 && !hasMount {
 		add("%s requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted)", prefix)
@@ -52,31 +52,31 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 // disk-style comparison op and a numeric value) at the dotted label. It is the
 // shared core of every delta/threshold/predicate check.
 func validateOpNumeric(label string, m map[string]any, add addFunc) {
-	validateDiskOp(label, m, add)
+	validateCompareOp(label, m, add)
 	if !isNumeric(cfgval.String(m["value"])) {
 		add("%s value %q must be numeric", label, cfgval.String(m["value"]))
 	}
 }
 
 func validateOpByteSize(label string, m map[string]any, add addFunc) {
-	validateDiskOp(label, m, add)
+	validateCompareOp(label, m, add)
 	if _, ok := cfgval.ByteSize(m["value"]); !ok {
 		add("%s value %q must include a size suffix (K, M, G or T; e.g. 10G, 500M)", label, cfgval.String(m["value"]))
 	}
 }
 
 func validateOpPercent(label string, m map[string]any, add addFunc) {
-	validateDiskOp(label, m, add)
+	validateCompareOp(label, m, add)
 	if !isPercentValue(cfgval.String(m["value"])) {
 		add("%s value %q must be a percentage in 0..100 (e.g. 90 or 90%%)", label, cfgval.String(m["value"]))
 	}
 }
 
-// validateDiskOp adds an error when the {op} of an already-extracted threshold
+// validateCompareOp adds an error when the {op} of an already-extracted threshold
 // map is not one of the comparison operators the disk-style checks share. It is
 // the op-validation prologue every validateOp* helper repeats.
-func validateDiskOp(label string, m map[string]any, add addFunc) {
-	if op := cfgval.String(m["op"]); !isValidDiskOp(op) {
+func validateCompareOp(label string, m map[string]any, add addFunc) {
+	if op := cfgval.String(m["op"]); !isValidCompareOp(op) {
 		add("%s has an invalid op %q", label, op)
 	}
 }
@@ -401,10 +401,10 @@ func validateSmartFields(prefix string, fields map[string]any, add addFunc) {
 	validatePresentThresholds(prefix, fields, checks.SmartPredFields, add)
 }
 
-// isValidDiskOp reports whether op is one of the comparison operators shared by
+// isValidCompareOp reports whether op is one of the comparison operators shared by
 // every {op, value} threshold — the single set in cfgval, shared with the
 // runtime builders so the two grammars cannot drift apart.
-func isValidDiskOp(op string) bool {
+func isValidCompareOp(op string) bool {
 	return cfgval.IsCompareOp(op)
 }
 
@@ -712,7 +712,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 	case "count":
 		validateCount(entry, path, add)
 	case "storage":
-		validateDiskFields(path, entry, add)
+		validateStorageFields(path, entry, add)
 	case "autofs":
 		validateAutofsFields(path, entry, add)
 	case "load":
@@ -1129,7 +1129,7 @@ func validateCount(entry map[string]any, path string, add addFunc) {
 		}
 		threshold = m
 	}
-	if op := cfgval.String(threshold["op"]); !isValidDiskOp(op) {
+	if op := cfgval.String(threshold["op"]); !isValidCompareOp(op) {
 		add("%s count check requires a valid op (>=, >, <=, <, ==, !=)", path)
 	}
 	if !isNumeric(cfgval.String(threshold["value"])) {

@@ -125,7 +125,7 @@ type WebBackend struct {
 	daemonMetrics    *daemonMetricSampler
 	serviceMetrics   *ServiceMetricSampler
 	live             *LiveMetrics
-	diskUsage        checks.DiskUsageFunc
+	storageUsage     checks.StorageUsageFunc
 	mountSampler     checks.MountSamplerFunc
 	netSampler       checks.NetSamplerFunc
 	pingSampler      checks.PingSamplerFunc
@@ -202,7 +202,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		daemonMetrics:    newDaemonMetricSampler(deps.Collector, deps.Now, deps.DaemonMetrics),
 		serviceMetrics:   deps.ServiceMetrics,
 		live:             deps.Live,
-		diskUsage:        deps.DiskUsage,
+		storageUsage:     deps.StorageUsage,
 		mountSampler:     deps.MountSampler,
 		netSampler:       deps.NetSampler,
 		pingSampler:      deps.PingSampler,
@@ -923,7 +923,7 @@ func watchConditionFields(check map[string]any) []string {
 	checkType := cfgval.AsString(check["type"])
 	switch checkType {
 	case "storage":
-		return checks.DiskPredFields
+		return checks.StoragePredFields
 	case "memory":
 		return checks.MemoryPredFields
 	case "pressure":
@@ -1753,9 +1753,9 @@ func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 	}
 	info := &web.StorageWatchInfo{Path: path}
 
-	usage := b.diskUsage
+	usage := b.storageUsage
 	if usage == nil {
-		usage = checks.DefaultDiskUsage
+		usage = checks.DefaultStorageUsage
 	}
 	if st, err := usage(path); err != nil {
 		info.SampleError = err.Error()

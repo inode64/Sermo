@@ -33,7 +33,7 @@ type MetricReader func(scope, name string) (metrics.Reading, bool)
 // dependency bundle: service-specific capabilities such as Status, Metrics,
 // Processes and pidfile fallback PIDs stay on Deps.
 type Samplers struct {
-	DiskUsage            DiskUsageFunc
+	StorageUsage         StorageUsageFunc
 	NetSampler           NetSamplerFunc
 	PingSampler          PingSamplerFunc
 	SwapSampler          SwapSamplerFunc
@@ -57,7 +57,7 @@ type Samplers struct {
 
 // ApplyTo returns deps with every sampler from s copied into it.
 func (s Samplers) ApplyTo(deps Deps) Deps {
-	deps.DiskUsage = s.DiskUsage
+	deps.StorageUsage = s.StorageUsage
 	deps.NetSampler = s.NetSampler
 	deps.PingSampler = s.PingSampler
 	deps.SwapSampler = s.SwapSampler
@@ -99,8 +99,8 @@ type Deps struct {
 	// accept systemd's MainPID/cgroup process set instead of failing on an
 	// intentionally absent pidfile.
 	PidfileFallbackPIDs func() []int
-	// DiskUsage reports filesystem usage for `storage` checks. Nil uses statfs.
-	DiskUsage DiskUsageFunc
+	// StorageUsage reports filesystem usage for `storage` checks. Nil uses statfs.
+	StorageUsage StorageUsageFunc
 	// NetSampler observes a network interface for `net` checks. Nil uses /sys.
 	NetSampler NetSamplerFunc
 	// PingSampler probes a host via ICMP for `icmp` checks. Nil uses native ICMP.
@@ -814,7 +814,7 @@ func buildStorageCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	if path == "" {
 		return nil, "storage check requires a path"
 	}
-	preds, err := parseLevelPreds(entry, DiskPredFields)
+	preds, err := parseLevelPreds(entry, StoragePredFields)
 	if err != nil {
 		return nil, "storage check: " + err.Error()
 	}
@@ -822,7 +822,7 @@ func buildStorageCheck(b base, entry map[string]any, deps Deps) (Check, string) 
 	if len(preds) == 0 && !mount.active {
 		return nil, "storage check requires a space/inode predicate (used_pct/free_pct/used_bytes/free_bytes/inodes_*) and/or a mount condition (mounted)"
 	}
-	return diskCheck{base: b, path: path, preds: preds, usage: deps.DiskUsage, mount: mount, mountSampler: deps.MountSampler}, ""
+	return storageCheck{base: b, path: path, preds: preds, usage: deps.StorageUsage, mount: mount, mountSampler: deps.MountSampler}, ""
 }
 
 // buildAutofsCheck builds an autofs automounter check.

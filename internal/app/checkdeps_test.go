@@ -11,7 +11,7 @@ import (
 
 func TestCheckDepsFromAppDepsCopiesSamplers(t *testing.T) {
 	deps := Deps{
-		DiskUsage:        func(string) (checks.DiskStats, error) { return checks.DiskStats{}, nil },
+		StorageUsage:     func(string) (checks.StorageStats, error) { return checks.StorageStats{}, nil },
 		NetSampler:       func(string) (checks.NetSample, error) { return checks.NetSample{}, nil },
 		PingSampler:      func(string, string, int, time.Duration) (checks.PingSample, error) { return checks.PingSample{}, nil },
 		SwapSampler:      func() (checks.SwapSample, error) { return checks.SwapSample{}, nil },
@@ -39,7 +39,7 @@ func TestCheckDepsFromAppDepsCopiesSamplers(t *testing.T) {
 		t.Fatalf("base deps not preserved: %+v", got)
 	}
 	samplers := map[string]bool{
-		"DiskUsage":            got.DiskUsage != nil,
+		"StorageUsage":         got.StorageUsage != nil,
 		"NetSampler":           got.NetSampler != nil,
 		"PingSampler":          got.PingSampler != nil,
 		"SwapSampler":          got.SwapSampler != nil,

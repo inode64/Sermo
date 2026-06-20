@@ -59,14 +59,14 @@ func TestHookRunnerPassesArgvEnvTimeout(t *testing.T) {
 	})
 
 	spec := HookSpec{Command: []string{"/bin/echo", "hi"}, Timeout: 5 * time.Second}
-	err := spec.Run(context.Background(), runner, map[string]string{"SERMO_WATCH": "disk-root"})
+	err := spec.Run(context.Background(), runner, map[string]string{"SERMO_WATCH": "storage-root"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(gotArgv) != 2 || gotArgv[0] != "/bin/echo" {
 		t.Fatalf("argv = %v", gotArgv)
 	}
-	if gotEnv["SERMO_WATCH"] != "disk-root" {
+	if gotEnv["SERMO_WATCH"] != "storage-root" {
 		t.Fatalf("env = %v", gotEnv)
 	}
 	if gotTimeout != 5*time.Second {

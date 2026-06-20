@@ -85,7 +85,7 @@ func diagWatches(b *builder, cfg *config.Config, global time.Duration, host Host
 func diagCheckResources(b *builder, scope string, entry map[string]any, host Host) {
 	switch cfgval.AsString(entry["type"]) {
 	case "storage":
-		diagDiskResources(b, scope, entry, host)
+		diagStorageResources(b, scope, entry, host)
 	case "count":
 		if p := cfgval.AsString(entry["path"]); p != "" && !host.PathExists(p) {
 			b.add(LevelWarning, scope, "directory %q does not exist", p)
@@ -113,9 +113,9 @@ func warnMissingInterface(b *builder, scope string, entry map[string]any, host H
 	}
 }
 
-// diagDiskResources flags a storage check's path when it is missing, and a configured
+// diagStorageResources flags a storage check's path when it is missing, and a configured
 // mount that is not currently mounted.
-func diagDiskResources(b *builder, scope string, fields map[string]any, host Host) {
+func diagStorageResources(b *builder, scope string, fields map[string]any, host Host) {
 	p := cfgval.AsString(fields["path"])
 	if p == "" {
 		return

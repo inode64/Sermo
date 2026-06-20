@@ -8,12 +8,12 @@ import (
 	"time"
 )
 
-// DiskStats is one filesystem's usage, computed from statfs. Beyond block space
+// StorageStats is one filesystem's usage, computed from statfs. Beyond block space
 // it carries inode accounting, so a watch can catch "disk full" by inode
 // exhaustion (many tiny files) even when bytes are free. InodesTotal == 0 means
 // the filesystem does not report inodes (e.g. btrfs); inode predicates then never
 // fire instead of misreading 0/0.
-type DiskStats struct {
+type StorageStats struct {
 	UsedPct    float64
 	FreePct    float64
 	UsedBytes  uint64
@@ -26,25 +26,25 @@ type DiskStats struct {
 	InodesTotal   uint64
 }
 
-// DiskUsageFunc reports usage for the filesystem containing path. Injected for
+// StorageUsageFunc reports usage for the filesystem containing path. Injected for
 // tests; the default uses statfs.
-type DiskUsageFunc func(path string) (DiskStats, error)
+type StorageUsageFunc func(path string) (StorageStats, error)
 
-// diskCheck verifies a filesystem at path: optionally that it is mounted as
+// storageCheck verifies a filesystem at path: optionally that it is mounted as
 // expected, and that its space/inode predicates hold. OK=true
 // means an alert condition: a mount problem OR a crossed threshold. Folding mount
 // in here means a filesystem's mount and space are configured once, and a space
 // check is never fooled by an unmounted path reading the parent filesystem.
-type diskCheck struct {
+type storageCheck struct {
 	base
 	path         string
 	preds        []levelPred
-	usage        DiskUsageFunc
+	usage        StorageUsageFunc
 	mount        mountCond
 	mountSampler MountSamplerFunc
 }
 
-func (c diskCheck) Run(_ context.Context) Result {
+func (c storageCheck) Run(_ context.Context) Result {
 	start := time.Now()
 	data := map[string]any{"path": c.path}
 
@@ -85,7 +85,7 @@ func (c diskCheck) Run(_ context.Context) Result {
 	if err != nil {
 		return c.result(false, fmt.Sprintf("statfs %s: %v", c.path, err), start)
 	}
-	usedBytes := diskUsedBytes(st)
+	usedBytes := storageUsedBytes(st)
 	values := map[string]float64{
 		"used_pct":   st.UsedPct,
 		"free_pct":   st.FreePct,
@@ -116,7 +116,7 @@ func (c diskCheck) Run(_ context.Context) Result {
 	return res
 }
 
-func diskUsedBytes(st DiskStats) uint64 {
+func storageUsedBytes(st StorageStats) uint64 {
 	if st.UsedBytes > 0 {
 		return st.UsedBytes
 	}
@@ -126,11 +126,11 @@ func diskUsedBytes(st DiskStats) uint64 {
 	return 0
 }
 
-// statfsUsage is the default DiskUsageFunc backed by statfs(2).
-func statfsUsage(path string) (DiskStats, error) {
+// statfsUsage is the default StorageUsageFunc backed by statfs(2).
+func statfsUsage(path string) (StorageStats, error) {
 	var s syscall.Statfs_t
 	if err := syscall.Statfs(path, &s); err != nil {
-		return DiskStats{}, err
+		return StorageStats{}, err
 	}
 	bsize := uint64(s.Bsize)
 	total := s.Blocks * bsize
@@ -152,7 +152,7 @@ func statfsUsage(path string) (DiskStats, error) {
 		inFreePct = float64(inodesFree) / float64(inodesTotal) * 100
 	}
 
-	return DiskStats{
+	return StorageStats{
 		UsedPct: usedPct, FreePct: freePct,
 		UsedBytes: used, FreeBytes: free, TotalBytes: total,
 		InodesUsedPct: inUsedPct, InodesFreePct: inFreePct,
@@ -160,7 +160,7 @@ func statfsUsage(path string) (DiskStats, error) {
 	}, nil
 }
 
-// DefaultDiskUsage reports disk usage using the host statfs implementation.
-func DefaultDiskUsage(path string) (DiskStats, error) {
+// DefaultStorageUsage reports filesystem usage using the host statfs implementation.
+func DefaultStorageUsage(path string) (StorageStats, error) {
 	return statfsUsage(path)
 }
