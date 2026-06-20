@@ -40,7 +40,7 @@ func (h *ownedLock) release() error {
 	}
 	current, err := readLockFile(h.path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if isMissingLock(err) {
 			h.released = true
 			return nil
 		}
@@ -139,8 +139,8 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 
 		existing, rerr := readLockFile(path)
 		if rerr != nil {
-			if os.IsNotExist(rerr) {
-				continue // vanished between create and read; retry
+			if isRetryableLockRead(rerr) {
+				continue // vanished or still being written; retry
 			}
 			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
 		}
@@ -186,7 +186,7 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 	}
 	current, err := readLockFile(path)
 	if err != nil {
-		return os.IsNotExist(err)
+		return isMissingLock(err)
 	}
 	if current.OwnerPID != expected.OwnerPID ||
 		current.OwnerStartTicks != expected.OwnerStartTicks ||
@@ -197,7 +197,7 @@ func reclaimStale(path string, expected lockFile, proc ProcessProber, now func()
 		return false
 	}
 	if err := os.Remove(path); err != nil {
-		return os.IsNotExist(err)
+		return isMissingLock(err)
 	}
 	return true
 }

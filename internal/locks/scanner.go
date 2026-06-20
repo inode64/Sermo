@@ -2,7 +2,9 @@ package locks
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -193,6 +195,23 @@ func readLockFile(path string) (lockFile, error) {
 		return lockFile{}, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return lf, nil
+}
+
+// isMissingLock reports a lock file that is not present. Use errors.Is rather
+// than os.IsNotExist: readLockFile wraps I/O errors and os.IsNotExist does not
+// see through fmt.Errorf wrapping.
+func isMissingLock(err error) bool {
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// isRetryableLockRead reports a read/parse failure that may clear on retry.
+// Another contender may have created the path (O_EXCL) but not finished writing.
+func isRetryableLockRead(err error) bool {
+	if isMissingLock(err) {
+		return true
+	}
+	var syntax *json.SyntaxError
+	return errors.As(err, &syntax)
 }
 
 func orDefault(value, fallback string) string {

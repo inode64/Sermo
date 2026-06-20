@@ -2,6 +2,9 @@ package locks
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -212,6 +215,29 @@ func TestScanServicesMalformedFileWarnsMatchingService(t *testing.T) {
 	}
 	if len(reports["redis"].Warnings) != 0 {
 		t.Fatalf("redis warnings = %+v, want none", reports["redis"].Warnings)
+	}
+}
+
+func TestIsRetryableLockRead(t *testing.T) {
+	missing := fmt.Errorf("read /x: %w", fs.ErrNotExist)
+	if !isMissingLock(missing) {
+		t.Fatal("isMissingLock must see through readLockFile wrapping")
+	}
+	if os.IsNotExist(missing) {
+		t.Fatal("os.IsNotExist must not be used on readLockFile errors")
+	}
+	if !isRetryableLockRead(missing) {
+		t.Fatal("missing lock should be retryable")
+	}
+
+	incomplete := fmt.Errorf("parse /x: %w", &json.SyntaxError{Offset: 0})
+	if !isRetryableLockRead(incomplete) {
+		t.Fatal("incomplete JSON should be retryable")
+	}
+
+	other := errors.New("permission denied")
+	if isRetryableLockRead(other) {
+		t.Fatal("non-transient errors must not be retryable")
 	}
 }
 
