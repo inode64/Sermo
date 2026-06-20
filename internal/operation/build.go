@@ -218,7 +218,7 @@ func reloadConfigError(tree map[string]any) error {
 	}
 	if name := cfgval.AsString(r["signal"]); name != "" {
 		if _, err := process.ParseSignal(name); err != nil {
-			return fmt.Errorf("reload.signal: %v", err)
+			return fmt.Errorf("reload.signal: %w", err)
 		}
 		return nil
 	}

@@ -2,6 +2,7 @@ package conn
 
 import (
 	"bufio"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ func TestReadCRLFLine(t *testing.T) {
 		t.Fatalf("line 2 = %q, %v; want %q", s, err, "second line")
 	}
 	// The final line has no terminator: the trimmed text is returned alongside io.EOF.
-	if s, err := readCRLFLine(br); s != "no-newline-eof" || err != io.EOF {
+	if s, err := readCRLFLine(br); s != "no-newline-eof" || !errors.Is(err, io.EOF) {
 		t.Fatalf("line 3 = %q, %v; want %q + io.EOF", s, err, "no-newline-eof")
 	}
 }

@@ -89,7 +89,7 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 
 	res, err := execx.Run(ctx, e.Runner, e.timeout(), "lvs", "--noheadings", "-o", "vg_name,lv_name", "--separator", ",", m.Device)
 	if err != nil {
-		return Target{}, fmt.Errorf("%q is not an LVM volume (lvs %s: %v)", path, m.Device, err)
+		return Target{}, fmt.Errorf("%q is not an LVM volume (lvs %s: %w)", path, m.Device, err)
 	}
 	vg, lv, ok := strings.Cut(strings.TrimSpace(res.Stdout), ",")
 	if !ok || vg == "" || lv == "" {
