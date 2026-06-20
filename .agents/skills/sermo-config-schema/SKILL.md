@@ -72,6 +72,22 @@ category: "database"      # optional WebUI grouping/filter label
   services fall back to `service` and apps to `app`. All three must be strings
   if present.
 
+## File granularity
+
+Always use one YAML file per target:
+
+- one catalog daemon, app, lib or pattern per file;
+- one concrete `kind: service` per file;
+- one `kind: mount` per file;
+- one host watch per file for storage, network, uplink, load and other watch
+  fragments.
+
+Watch fragment files still use a top-level `watches:` map, but the map should
+contain exactly one named watch. Do not group several services, mounts, apps or
+watch targets into a single operational file. `docs/sermo-all.yml` is the only
+reference-style exception: it groups examples so the schema can be validated in
+one place.
+
 `clone` copies the source service in UNEXPANDED form (its fields and `variables`,
 with `${...}` still literal), so overriding a single variable in the clone changes
 what `${var}` resolves to after expansion. Same for `uses` with a catalog daemon. See

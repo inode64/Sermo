@@ -124,6 +124,20 @@ directories is a symlink (`readlink -f <path>` or `namei -l <path>`). Register
 the canonical target path, not the symlink spelling, so the catalog does not grow
 duplicate aliases for the same pidfile or socket.
 
+## Configuration file granularity
+
+Use one YAML file per configured target. Catalog profiles keep one daemon, app,
+lib or pattern per file. Runtime configuration keeps one `kind: service` per
+file, one `kind: mount` per file and one host watch per file (`storage`,
+`network`, `uplink`, `load`, etc.). A watch fragment still uses a top-level
+`watches:` map, but that map should contain exactly one named watch.
+
+Do not add new examples, wizard output, remote-test config or operational docs
+that group several apps, services, mounts, storage entries, interfaces, VMs,
+containers or other targets into one YAML file. The single exception is a
+clearly labeled reference bundle such as `docs/sermo-all.yml`, whose purpose is
+to validate and demonstrate the full schema in one file.
+
 ## Catalog init and reload fallback verification
 
 When adding or changing a catalog daemon that depends on init metadata or defines

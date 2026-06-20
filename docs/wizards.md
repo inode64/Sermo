@@ -149,12 +149,15 @@ as an include directory for concrete service files; keep that path configured
 while those files exist. The wizard preserves any loaded `apps/` include and
 appends `services/` instead of moving or deleting legacy files.
 
-The volume wizard generates storage **watch fragments** under the `storage/`
-include directory for mounted storage filesystems, including local block devices
-and network/distributed filesystems such as NFS, Ceph and ZFS. First-class mount
-units are different: `sermoctl wizard mount` reads `/etc/fstab`, writes `kind:
-mount` files under `paths.mounts` (default `/etc/sermo/mounts`) and they are
-operated with `sermoctl mount|umount`.
+All wizard output is one target per file. The volume wizard generates one
+storage **watch fragment** per mounted storage filesystem under the `storage/`
+include directory, including local block devices and network/distributed
+filesystems such as NFS, Ceph and ZFS. Each fragment keeps the top-level
+`watches:` map but contains only the generated watch for that target.
+First-class mount units are different: `sermoctl wizard mount` reads
+`/etc/fstab`, writes one `kind: mount` file per target under `paths.mounts`
+(default `/etc/sermo/mounts`) and they are operated with
+`sermoctl mount|umount`.
 
 ## Adding a new wizard
 
