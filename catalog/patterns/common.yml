@@ -7,7 +7,7 @@ rules:
   - { id: backup-now, match: 'BACK UP DATA NOW',         severity: error }
   - { id: too-many,   match: '(?i)too many connections', severity: error }
 
-  # Warnings — surfaced (orange) but not a hard failure.
+  # Warnings — surfaced but not a hard failure.
   - { id: cannot,     match: '(?i)\bcannot\b',     severity: warning }
   - { id: failed,     match: '(?i)\bfailed\b',     severity: warning }
   - { id: deprecated, match: '(?i)deprecated',     severity: warning }
