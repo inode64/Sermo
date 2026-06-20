@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap and /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap, storage below 10% free, network/USB mount and /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -159,18 +159,65 @@ partial test run.
   count/load (`nproc`, `/proc/loadavg`), memory (`/proc/meminfo`), swap
   (`/proc/swaps`, `/proc/vmstat`), PID table (`/proc/loadavg`,
   `/proc/sys/kernel/pid_max`), PSI (`/proc/pressure/*`), mounted local
-  filesystems (`findmnt`, `/proc/self/mountinfo`, `df -PT`), network interfaces
-  and default routes (`ip addr`, `ip route`), certificate-like files under
-  `/etc/ssl`, and any explicitly requested uplink/ICMP targets.
+  filesystems (`findmnt`, `/proc/self/mountinfo`, `df -PT`), mounted network
+  and USB filesystems, fstab-backed network and USB mount entries, network
+  interfaces and default routes (`ip addr`, `ip route`), certificate-like files
+  under `/etc/ssl`, and any explicitly requested uplink/ICMP targets.
 - Generate one fragment per host watch under the matching temporary directory
   loaded by `paths.storages`, `paths.networks` or `paths.watches`; every fragment
   must contain a top-level `watches:` map with exactly one entry.
 - Include baseline watches for memory, load and PID pressure on every complete
   config. Add swap only when swap exists. Add PSI cpu/memory/io only when the
-  kernel exposes the matching `/proc/pressure/*` file. Add storage only for
-  mounted local filesystems that are currently mounted and safe to monitor; skip
-  pseudo filesystems, bind mounts and transient container/runtime mounts unless
-  the user explicitly asks for them.
+  kernel exposes the matching `/proc/pressure/*` file. Add storage watches for
+  mounted local, network and USB filesystems that are currently mounted and safe
+  to monitor; skip pseudo filesystems, bind mounts and transient
+  container/runtime mounts unless the user explicitly asks for them.
+- Every generated storage watch must alert when free space is below 10%. Use
+  `free_pct: { op: "<", value: "10%" }` rather than an inverted `used_pct`
+  threshold. For paths that are expected mount points, include `mounted: true`
+  in the same `type: storage` watch so an unmounted network or USB path alerts
+  before `statfs` can report the parent filesystem. Do not configure `fstype`,
+  `device` or `options` as predicates; they are result data only.
+
+```yaml
+watches:
+  storage-mnt-backup:
+    check:
+      type: storage
+      path: /mnt/backup
+      mounted: true
+      free_pct: { op: "<", value: "10%" }
+```
+
+  If real notification delivery is part of the requested remote installation,
+  attach the selected notifier or inherit the configured global notify. If the
+  run is only validating routing, use `then.dry_run: true`; otherwise keep the
+  watch alert-only or monitor-only according to the requested mode.
+- Include `kind: mount` files for network and USB mount targets that are declared
+  in `/etc/fstab`, writing one file per target under `paths.mounts`. Detect them
+  with read-only probes (`findmnt --fstab`, `/etc/fstab`, `lsblk`, `/dev/disk/by-*`
+  and `/proc/self/mountinfo`); never mount or unmount them during discovery.
+  Network candidates include NFS/NFS4, CIFS/SMB, SSHFS/fuse.sshfs, Ceph,
+  GlusterFS and similar remote storage. USB candidates include removable devices
+  or filesystems whose source resolves through USB/removable block devices.
+  Keep the mount document fstab-backed and policy-only:
+
+```yaml
+kind: mount
+name: mount-mnt-backup
+display_name: Backup mount
+category: storage
+path: /mnt/backup
+refcount: true
+umount:
+  allow_sigkill: false
+  allow_lazy: false
+```
+
+  Do not write `source`, `fstype`, `options` or class metadata into the mount
+  YAML. If a network or USB target is not present in `/etc/fstab`, report it as
+  skipped instead of inventing a mount unit. Pair mounted network/USB targets
+  with the storage watch above when they are currently mounted.
 - Include certificate watches for `/etc/ssl` on every complete config. Discover
   candidate certificate-like files (`*.crt`, `*.cer`, `*.pem`) with read-only
   commands, canonicalize symlinks with `readlink -f`, and generate at most one
@@ -255,6 +302,10 @@ apply to ordinary CLI-only validation.
   absence report. Confirm with `/proc/swaps` at the beginning and end of the
   six-minute window; when swap exists, report swap usage and swap IO watch data
   instead.
+- Include storage and mount watch results in the observation output. Report any
+  filesystem with less than 10% free space, any configured storage watch whose
+  mount condition failed, and any generated network/USB `kind: mount` target
+  that was skipped because it was not fstab-backed.
 - Include `/etc/ssl` certificate watch results and related events in the
   observation output. Report any certificate that is expired, not yet valid,
   under the 15-day expiry threshold, missing, unreadable, unparseable, or changed
@@ -368,6 +419,8 @@ Summarize:
 - active services configured;
 - unsupported active services per server;
 - alerts that fired or would fire in dry-run;
+- storage findings: filesystems below 10% free space, failed `mounted: true`
+  checks, and network/USB mount units generated or skipped;
 - `/etc/ssl` certificate findings: expiring within 15 days, expired, not yet
   valid, missing/unreadable/unparseable, issuer or algorithm changes, and any
   weak/obsolete-looking algorithm or key-size review notes;
