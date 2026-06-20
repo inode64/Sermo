@@ -16,7 +16,7 @@ import (
 const maxAcquireAttempts = 5
 
 // HeldError is returned by Acquire when an active operation lock already exists.
-// The operation engine maps it to a blocked result (exit code 75, section 18).
+// The operation engine maps it to a blocked result (exit code 75).
 type HeldError struct {
 	Service string
 	Lock    Lock
@@ -26,7 +26,7 @@ func (e *HeldError) Error() string { return "operation in progress" }
 
 // ownedLock is the owner-checked release shared by the operation lock and the
 // slot pool: the file is removed only while it still carries this owner's
-// identity; a lock reclaimed by someone else is left untouched (section 20).
+// identity; a lock reclaimed by someone else is left untouched.
 type ownedLock struct {
 	path            string
 	ownerPID        int
@@ -73,7 +73,7 @@ func (h *Handle) Release() error {
 }
 
 // OperationLocker acquires the internal operation lock that serializes
-// start/stop/restart/reload/resume for one service (section 18). It lives under
+// start/stop/restart/reload/resume for one service. It lives under
 // <paths.runtime>/ops, separate from named runtime locks.
 type OperationLocker struct {
 	Dir  string
@@ -82,7 +82,7 @@ type OperationLocker struct {
 	// Self reports the current process identity written into the lock.
 	Self func() (pid int, startTicks uint64)
 	// OnReclaim is called after a stale lock is reclaimed, with the reason
-	// (expired, dead owner, pid reuse) so callers can log it (section 20).
+	// (expired, dead owner, pid reuse) so callers can log it.
 	OnReclaim func(service, reason string)
 }
 
@@ -95,7 +95,7 @@ func NewOperationLocker(dir string) OperationLocker {
 // Acquire atomically creates the operation lock for service with the given TTL.
 // If an active lock already exists it returns *HeldError and never waits. A
 // stale lock (expired TTL or dead/reused owner) is reclaimed and acquisition
-// proceeds (section 18/20).
+// proceeds.
 func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, error) {
 	if err := validateIdentifier("service", service, false); err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func (l OperationLocker) Acquire(service string, ttl time.Duration) (*Handle, er
 
 // reclaimStale re-reads a lock, confirms it is still the same stale lock, and
 // unlinks it. It returns false if the lock changed or turned active between the
-// classify and the unlink (section 20: abort and treat as held). Shared by the
+// classify and the unlink. Shared by the
 // operation and named lockers.
 //
 // The re-read → classify → unlink runs under an advisory lock on the containing
@@ -224,7 +224,7 @@ func lockReclaimDir(path string) (func(), error) {
 
 // writeLockFileExclusive creates path with O_CREAT|O_EXCL, writes the payload
 // and fsyncs the file and its directory so a lock that exists is always complete
-// after a crash (section 20). An existing file yields os.ErrExist.
+// after a crash. An existing file yields os.ErrExist.
 func writeLockFileExclusive(path string, lf lockFile) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {

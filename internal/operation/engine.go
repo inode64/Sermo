@@ -18,7 +18,7 @@ import (
 
 // Manager is the subset of servicemgr.Manager the engine uses. Restart is built
 // from Stop+Start (not Manager.Restart) so residual processes can be handled
-// between the two phases (section 18).
+// between the two phases.
 type Manager interface {
 	Start(ctx context.Context, service string) error
 	Stop(ctx context.Context, service string) error
@@ -101,7 +101,7 @@ type plan struct {
 }
 
 // Restart stops the service, clears residuals, starts it again and verifies
-// health (section 18).
+// health.
 func (e Engine) Restart(ctx context.Context) Result {
 	return e.run(ctx, plan{action: "restart", preflight: true, stop: true, start: true, postflight: true})
 }
@@ -112,7 +112,7 @@ func (e Engine) Start(ctx context.Context) Result {
 }
 
 // Stop stops the service and clears residuals. Stop runs no preflight or
-// postflight (section 19) but still honors locks and guards.
+// postflight but still honors locks and guards.
 func (e Engine) Stop(ctx context.Context) Result {
 	return e.run(ctx, plan{action: "stop", stop: true})
 }
@@ -453,7 +453,7 @@ func (e Engine) verifyStopped() []string {
 }
 
 // clearResiduals discovers residual processes after a stop and applies signal
-// escalation (section 22), returning whatever remains.
+// escalation, returning whatever remains.
 func (e Engine) clearResiduals(ctx context.Context) ([]process.Process, error) {
 	if e.Discover == nil {
 		return nil, nil

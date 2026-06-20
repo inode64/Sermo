@@ -1,6 +1,6 @@
 // Package app is the sermod daemon: a scheduler that runs one independent worker
 // per enabled service, each monitoring its service and driving guarded
-// remediation through the shared operation engine (section 24).
+// remediation through the shared operation engine.
 package app
 
 import (

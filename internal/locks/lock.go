@@ -1,5 +1,5 @@
 // Package locks reads and classifies Sermo named runtime locks under
-// <paths.runtime>/locks (section 20). It reports locks for `sermoctl locks
+// <paths.runtime>/locks. It reports locks for `sermoctl locks
 // SERVICE` and backs `sermoctl lock` acquire/release/wrap operations.
 //
 // The internal operation lock under <paths.runtime>/ops is a separate namespace
@@ -57,7 +57,7 @@ func validateIdentifier(kind, value string, allowEmpty bool) error {
 	return nil
 }
 
-// lockFile is the on-disk JSON payload (section 20).
+// lockFile is the on-disk JSON payload.
 type lockFile struct {
 	Service         string    `json:"service"`
 	Name            string    `json:"name,omitempty"`
@@ -95,7 +95,7 @@ func toLock(lf lockFile, path string, state State, staleReason string) Lock {
 }
 
 // classify computes a lock's state from its payload, the current time and a
-// process prober (section 20: expired by TTL, stale by dead owner or PID reuse).
+// process prober.
 func classify(lf lockFile, now time.Time, proc ProcessProber) (State, string) {
 	if !lf.ExpiresAt.IsZero() && !now.Before(lf.ExpiresAt) {
 		return StateExpired, "expired"

@@ -8,7 +8,7 @@ import (
 )
 
 // configureOperationLocker returns the per-service internal operation locker with
-// stale-lock reclaims logged through onReclaim (AGENTS.md §15 / section 20).
+// stale-lock reclaims logged through onReclaim (AGENTS.md).
 func configureOperationLocker(runtimeDir string, onReclaim func(service, reason string)) locks.OperationLocker {
 	locker := locks.NewOperationLocker(filepath.Join(runtimeDir, "ops"))
 	if onReclaim != nil {

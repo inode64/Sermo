@@ -2,9 +2,9 @@
 // configuration into flat per-service definitions.
 //
 // The pipeline is deliberately generic: documents are decoded into
-// map[string]any trees, merged recursively (section 9), resolved through the
-// defaults -> uses/clone -> overrides precedence (section 8), and finally have
-// their ${var} references expanded once (section 10). Typed extraction happens
+// map[string]any trees, merged recursively, resolved through the
+// defaults -> uses/clone -> overrides precedence, and finally have
+// their ${var} references expanded once. Typed extraction happens
 // only where validation needs it. This keeps merge semantics uniform across
 // every section instead of per-field.
 package config
@@ -83,7 +83,7 @@ var metaKeys = map[string]struct{}{
 }
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
-// service (section 8). Engine-wide settings never reach individual services.
+// service. Engine-wide settings never reach individual services.
 var perServiceDefaults = []string{"stop_policy", "policy", "rule_window", "remediation"}
 
 // Document is a single loaded daemon or service in raw, unexpanded form.

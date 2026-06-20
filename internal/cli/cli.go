@@ -462,10 +462,10 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 }
 
 // runAction performs a start/stop/restart/reload/resume through the safe operation engine
-// (section 18): the resolved service is run under the internal operation lock,
+//: the resolved service is run under the internal operation lock,
 // active named runtime locks, required preflight, guards, residual-process
 // handling and postflight. Manual sermoctl actions are not rate limited, but are
-// fully guarded (section 16).
+// fully guarded.
 func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if opts.service() == "" {
 		return a.commandUsageError(action, fmt.Sprintf("%s requires a service name", action))
@@ -742,7 +742,7 @@ func issuesJSON(issues []config.Issue) []map[string]string {
 }
 
 // runPreflight resolves a service, builds its preflight checks and runs them
-// under engine.default_timeout (section 19). A required check failure exits 1.
+// under engine.default_timeout. A required check failure exits 1.
 func (a App) runPreflight(ctx context.Context, opts options) int {
 	if opts.service() == "" {
 		return a.commandUsageError("preflight", "preflight requires a service name")
@@ -820,7 +820,7 @@ func (a App) printPreflight(service string, outcome checks.Outcome) {
 }
 
 // statusFunc builds a lazy backend status query for `service` checks; it only
-// detects the backend and resolves the unit (service candidates, section 11) when a service
+// detects the backend and resolves the unit (service candidates) when a service
 // check actually runs.
 func (a App) statusFunc(opts options, tree map[string]any, base string) func(context.Context) (servicemgr.Status, error) {
 	return func(ctx context.Context) (servicemgr.Status, error) {
@@ -858,7 +858,7 @@ func engineDefaultTimeout(cfg *config.Config) time.Duration {
 }
 
 // runLocks reports the named runtime locks for a service (active, expired and
-// stale), reading the runtime root from the loaded config (section 20).
+// stale), reading the runtime root from the loaded config.
 func (a App) runLocks(opts options) int {
 	if opts.service() == "" {
 		return a.commandUsageError("locks", "locks requires a service name")
@@ -921,7 +921,7 @@ func formatLock(lock locks.Lock) string {
 }
 
 // runProcesses discovers and reports the processes belonging to a service
-// (section 21), reading the service's `processes` selectors from resolved config.
+//, reading the service's `processes` selectors from resolved config.
 func (a App) runProcesses(opts options) int {
 	if opts.service() == "" {
 		return a.commandUsageError("processes", "processes requires a service name")

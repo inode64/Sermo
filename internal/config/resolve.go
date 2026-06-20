@@ -19,7 +19,7 @@ type Resolved struct {
 }
 
 // Resolve flattens a single service: it applies the defaults -> uses/clone ->
-// overrides precedence (section 8), then expands ${var} references once. The
+// overrides precedence, then expands ${var} references once. The
 // returned errors include undefined-variable and nested-variable problems; a
 // nil error slice means a clean resolution.
 func (c *Config) Resolve(name string) (Resolved, []string) {
@@ -771,7 +771,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 
 // mergedService returns the merged-but-unexpanded body for a service, following
 // its uses/clone layering. chain tracks the active clone path for cycle
-// detection (section 8).
+// detection.
 func (c *Config) mergedService(name string, chain []string) (map[string]any, error) {
 	for _, prev := range chain {
 		if prev == name {
@@ -815,7 +815,7 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 }
 
 // defaultsPerService returns a fresh copy of just the per-service parts of the
-// global defaults (section 8).
+// global defaults.
 func (c *Config) defaultsPerService() map[string]any {
 	out := map[string]any{}
 	for _, key := range perServiceDefaults {

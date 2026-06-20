@@ -22,7 +22,7 @@ import (
 	"sermo/internal/servicemgr"
 )
 
-// tcpCheck dials a TCP host:port (section 12), optionally egressing through one
+// tcpCheck dials a TCP host:port, optionally egressing through one
 // or more interfaces (ifaces); ifaceAll requires every one to succeed.
 type tcpCheck struct {
 	base
@@ -58,7 +58,7 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 // httpCheck issues an HTTP request and asserts the response: the status code
 // (expect), optionally the body via an operator comparison and JSON response
 // matches at dotted paths (expectJSON). The request may carry custom headers and
-// a raw or JSON body (section 12).
+// a raw or JSON body.
 type httpCheck struct {
 	base
 	client       *http.Client
@@ -312,10 +312,10 @@ type cmdState struct {
 }
 
 // commandCheck runs a command and compares its exit code, and optionally its
-// stdout/stderr, to expectations (section 12). With on_change it also alerts when
+// stdout/stderr, to expectations. With on_change it also alerts when
 // the command's stdout changes between cycles (e.g. a `version` command whose
 // output changed). The command is always an argv array, never a shell string
-// (section 30/34).
+//.
 type commandCheck struct {
 	base
 	runner     execx.Runner
@@ -421,7 +421,7 @@ func (c commandCheck) exportData(stdout, stderr string) map[string]any {
 }
 
 // serviceCheck compares the service's backend status to an expected value
-// (section 12). The status function is injected so the check stays single-shot.
+//. The status function is injected so the check stays single-shot.
 type serviceCheck struct {
 	base
 	expect string
@@ -441,7 +441,7 @@ func (c serviceCheck) Run(ctx context.Context) Result {
 	return c.result(ok, fmt.Sprintf("status %s (want %s)", status, c.expect), start)
 }
 
-// fileExistsCheck passes when a path exists (section 12). It must point at a
+// fileExistsCheck passes when a path exists. It must point at a
 // foreign flag/lock file, never Sermo's own runtime locks (enforced in §30).
 type fileExistsCheck struct {
 	base
@@ -480,7 +480,7 @@ func (c fileCheck) Run(_ context.Context) Result {
 	return c.result(true, c.path+" is a regular file", start)
 }
 
-// binaryCheck passes when a path exists and is an executable file (section 19).
+// binaryCheck passes when a path exists and is an executable file.
 type binaryCheck struct {
 	base
 	path string
@@ -571,8 +571,8 @@ func (c metricCheck) Run(_ context.Context) Result {
 }
 
 // processCheck passes when the observed state of processes matching its
-// exe/user selector equals the expected state (section 12). Matching uses the
-// exact resolved-exe and real-UID rules of section 21.
+// exe/user selector equals the expected state. Matching uses the
+// exact resolved-exe and real-UID rules .
 type processCheck struct {
 	base
 	exe     string

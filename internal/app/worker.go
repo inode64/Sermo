@@ -16,7 +16,7 @@ import (
 
 // Worker monitors one service. A cycle runs the service's checks, evaluates its
 // rules (guards gate remediation), and runs at most one remediation action
-// through the shared operation engine when policy allows (section 24).
+// through the shared operation engine when policy allows.
 type Worker struct {
 	Service   string
 	Rules     []rules.Rule
@@ -26,7 +26,7 @@ type Worker struct {
 
 	// Interval overrides how often this worker runs a cycle. <=0 means the
 	// scheduler's global interval (engine.interval). A per-service `interval`
-	// lets cheap checks run often and expensive ones run rarely (section 24).
+	// lets cheap checks run often and expensive ones run rarely.
 	Interval time.Duration
 
 	// Gates holds per-check interdependencies (by check name): a check is skipped
@@ -42,12 +42,12 @@ type Worker struct {
 	// present here so a stale cached failure cannot skip a dependent check.
 	cycleRan map[string]bool
 
-	// Checks produces this cycle's named-check cache (section 14).
+	// Checks produces this cycle's named-check cache.
 	Checks func(ctx context.Context, deps checks.Deps) map[string]checks.Result
 	// ResolveRefs returns a per-cycle resolver for named checks outside the main
 	// monitoring cache, currently preflight entries referenced from rules.
 	ResolveRefs func() rules.RefResolver
-	// Sample produces this cycle's metric reader (section 12). Nil when the
+	// Sample produces this cycle's metric reader. Nil when the
 	// service uses no metrics.
 	Sample func(ctx context.Context) checks.MetricReader
 	// LiveSample samples this cycle's live CPU readings (per-process and
@@ -104,17 +104,17 @@ type Worker struct {
 	// suppression of remediation rules that read scope: system metrics.
 	MetricChecks map[string]any
 
-	// windows holds per-rule for/within state across cycles (section 15).
+	// windows holds per-rule for/within state across cycles.
 	windows map[string]*rules.WindowState
 	// libBaseline holds the acknowledged fingerprint of each watched path (a
 	// `changed:` condition target, typically a library .so) across cycles.
 	libBaseline map[string]string
 }
 
-// RunCycle runs one monitoring cycle for the service (section 24): build the
+// RunCycle runs one monitoring cycle for the service: build the
 // check cache, evaluate remediation rules in name order, and run the first
 // firing rule whose action is not guard-blocked and is allowed by policy. Then
-// fire any alert rules. The internal operation lock (section 18) already
+// fire any alert rules. The internal operation lock already
 // prevents overlapping operations, so cycles never run concurrently per service.
 func (w *Worker) RunCycle(ctx context.Context) {
 	w.cycle++
@@ -275,7 +275,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		w.State = &rules.RemediationState{}
 	}
 	// Update every remediation rule's window this cycle, then act on the first
-	// firing rule that is not guard-blocked (section 13/15). Updating all windows
+	// firing rule that is not guard-blocked. Updating all windows
 	// keeps consecutive/sliding counts correct even when an earlier rule acts.
 	var firing []rules.Rule
 	for _, r := range w.Rules {
@@ -287,7 +287,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		}
 	}
 
-	// A healthy cycle (no remediation rule fired) decays the backoff (section 16).
+	// A healthy cycle (no remediation rule fired) decays the backoff.
 	if len(firing) == 0 {
 		w.State.Recover()
 		return
@@ -303,7 +303,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 			continue
 		}
 		action := string(op)
-		// A remediation rule must never bypass guards (section 17). If a guard
+		// A remediation rule must never bypass guards. If a guard
 		// blocks this action, try the next firing rule (first non-blocked wins).
 		blocked, reason, err := rules.Guard(ctx, w.Rules, action, ev)
 		if err != nil {
@@ -402,7 +402,7 @@ func alertMessage(service, rule, msg string) notify.Message {
 }
 
 // fires evaluates a rule's condition this cycle and advances its window state,
-// returning whether the rule fires now (section 15). An evaluation error counts
+// returning whether the rule fires now. An evaluation error counts
 // as a false cycle.
 func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) bool {
 	// Defense-in-depth for safety invariant 13: a system-scoped metric must

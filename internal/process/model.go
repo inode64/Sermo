@@ -1,4 +1,4 @@
-// Package process discovers the processes that belong to a service (section 21).
+// Package process discovers the processes that belong to a service.
 //
 // Identity is security-critical because kill decisions depend on it: Exe is the
 // resolved target of /proc/<pid>/exe, and the user match is on the real UID.
@@ -7,7 +7,7 @@
 // or "(deleted)" exe never matches an exe selector, so an unidentifiable process
 // is reported, never killed.
 //
-// The MVP reads /proc directly through the Reader interface (hermetic in tests)
+// Reads /proc directly through the Reader interface (hermetic in tests)
 // rather than pulling a procfs dependency, matching how internal/locks reads
 // /proc and keeping precise control over the fail-safe exe semantics.
 package process
@@ -27,7 +27,7 @@ type Process struct {
 	Source  string   `json:"source"`            // pidfile | command_match | child
 }
 
-// Selector kinds (section 21).
+// Selector kinds.
 const (
 	SelectorPidfile      = "pidfile"
 	SelectorCommandMatch = "command_match"

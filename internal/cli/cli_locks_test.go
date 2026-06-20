@@ -155,3 +155,60 @@ func TestLocksRequiresService(t *testing.T) {
 		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
 	}
 }
+
+func runLockCLI(t *testing.T, args ...string) (int, string, string) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	app := App{Env: func(string) string { return "" }, Stdout: &stdout, Stderr: &stderr}
+	code := app.Run(context.Background(), args)
+	return code, stdout.String(), stderr.String()
+}
+
+func TestLockAcquireListRelease(t *testing.T) {
+	root := t.TempDir()
+	global, _ := writeLocksConfig(t, root)
+
+	code, out, _ := runLockCLI(t, "--config", global, "lock", "acquire", "mysql", "--name", "backup", "--reason", "nightly", "--ttl", "1h")
+	if code != exitSuccess || !strings.Contains(out, "acquired") {
+		t.Fatalf("lock acquire: code=%d out=%q", code, out)
+	}
+
+	code, out, _ = runLockCLI(t, "--config", global, "locks", "mysql")
+	if code != exitSuccess || !strings.Contains(out, "mysql.backup active") {
+		t.Fatalf("locks after acquire: code=%d out=%q", code, out)
+	}
+
+	code, out, _ = runLockCLI(t, "--config", global, "lock", "release", "mysql", "--name", "backup")
+	if code != exitSuccess || !strings.Contains(out, "released mysql.backup") {
+		t.Fatalf("lock release: code=%d out=%q", code, out)
+	}
+
+	code, out, _ = runLockCLI(t, "--config", global, "locks", "mysql")
+	if code != exitSuccess || !strings.Contains(out, "no named runtime locks") {
+		t.Fatalf("locks after release: code=%d out=%q", code, out)
+	}
+}
+
+func TestLockAcquireRequiresReasonAndTTL(t *testing.T) {
+	root := t.TempDir()
+	global, _ := writeLocksConfig(t, root)
+	code, _, stderr := runLockCLI(t, "--config", global, "lock", "acquire", "mysql", "--reason", "x")
+	if code != exitUsage || !strings.Contains(stderr, "--ttl is required") {
+		t.Fatalf("missing ttl: code=%d stderr=%q", code, stderr)
+	}
+}
+
+func TestLockWrapHoldsDuringCommand(t *testing.T) {
+	root := t.TempDir()
+	global, locksDir := writeLocksConfig(t, root)
+	lockPath := filepath.Join(locksDir, "mysql.lock")
+
+	code, _, _ := runLockCLI(t, "--config", global, "lock", "mysql", "--reason", "work", "--ttl", "1h",
+		"--", "sh", "-c", "[ -f "+lockPath+" ]")
+	if code != exitSuccess {
+		t.Fatalf("wrap exit = %d, want 0 (lock present during command)", code)
+	}
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("lock should be released after wrapper: %v", err)
+	}
+}
