@@ -65,9 +65,7 @@ var typeInfoByName = indexTypeInfos(typeInfos)
 // host watches. Config validation consumes this list directly and
 // TestSingleShotCheckTypesAreBuildable locks it against the buildCheck dispatch,
 // so the two can never drift. Connection-protocol types (mysql, smtp, ...) are
-// intentionally absent: they come from the conn registry. The multi-target
-// watch-only type file is also absent: it fires per path state instead of
-// producing one Result.
+// intentionally absent: they come from the conn registry.
 var SingleShotCheckTypes = typeInfoNames(typeInfos)
 
 func indexTypeInfos(infos []TypeInfo) map[string]TypeInfo {
