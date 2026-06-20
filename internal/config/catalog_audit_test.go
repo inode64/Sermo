@@ -397,7 +397,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		}
 		candidates, trust := ServiceCandidates(resolved.Tree, "openrc", name)
 		if trust {
-			t.Fatalf("ServiceCandidates(%s) trust = true, want explicit aliases", name)
+			t.Fatalf("ServiceCandidates(%s) trust = true, want explicit candidates", name)
 		}
 		if strings.Join(candidates, ",") != strings.Join(openrcCandidates, ",") {
 			t.Fatalf("ServiceCandidates(%s) = %v, want %v", name, candidates, openrcCandidates)
@@ -410,7 +410,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	}
 	systemdCandidates, trust := ServiceCandidates(resolved.Tree, "systemd", "rpc-mountd")
 	if trust {
-		t.Fatalf("ServiceCandidates(rpc-mountd systemd) trust = true, want explicit aliases")
+		t.Fatalf("ServiceCandidates(rpc-mountd systemd) trust = true, want explicit candidates")
 	}
 	wantSystemdCandidates := []string{"nfs-mountd", "rpc-mountd"}
 	if strings.Join(systemdCandidates, ",") != strings.Join(wantSystemdCandidates, ",") {

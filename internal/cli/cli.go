@@ -71,14 +71,14 @@ type App struct {
 	// Runner executes external commands (e.g. an app's version command for the
 	// `apps` command). Injectable for testing; defaults to the real runner.
 	Runner execx.Runner
-	// FindPID locates running PIDs by program name, used by `reload` to find the
-	// daemon when no pidfile is present. Injectable for testing; defaults to a
-	// native /proc scan (process.PIDsByComm).
+	// FindPID locates running PIDs by program name, used by `daemon reload` to
+	// find the daemon when no pidfile is present. Injectable for testing;
+	// defaults to a native /proc scan (process.PIDsByComm).
 	FindPID func(name string) ([]int, error)
-	// pidfileFallbacks lists absolute pidfile locations `reload` searches after
-	// the configured runtime dir when resolving the daemon. nil selects the
-	// production defaults; tests set it (often empty) to keep pidfile discovery
-	// hermetic instead of reading the host's /run/sermo/sermod.pid.
+	// pidfileFallbacks lists absolute pidfile locations `daemon reload` searches
+	// after the configured runtime dir when resolving the daemon. nil selects
+	// the production defaults; tests set it (often empty) to keep pidfile
+	// discovery hermetic instead of reading the host's /run/sermo/sermod.pid.
 	pidfileFallbacks []string
 	// FetchEvents is injectable for `sermoctl events` (listing recent events via
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
@@ -1399,8 +1399,8 @@ func defaultReloadPidfileFallbacks() []string {
 
 // runReload asks the running sermod to reload its configuration (SIGHUP
 // equivalent). It prefers a pidfile written by the daemon under the configured
-// runtime dir. If no pidfile is found it falls back to pidof/pgrep discovery.
-// This works whether or not the web UI is enabled.
+// runtime dir. If no pidfile is found it falls back to a native /proc scan for
+// a running sermod process. This works whether or not the web UI is enabled.
 func (a App) runReload(ctx context.Context, opts options) int {
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {

@@ -102,22 +102,29 @@ version when several can coexist (php-fpm, postgres, tomcat, beam, db, python).
 `%v` pairs with `${version}` and accepts `8.3`/`12.0.2`; `%n` pairs with `${n}`
 and matches only whole integers (`python%n` → `python2`, `python3`, not
 `python3.11`). The placeholder may sit anywhere in the name (`db%vsql` →
-`db4.8sql`). Put the matching `${...}` in the `binary` path; on load Sermo globs that
-path with `${version}` wildcarded, extracts each installed version, and registers
-`name` with `%v`→version and every `${version}` substituted (binary, display_name).
+`db4.8sql`). Put the matching `${...}` in `variables.binary`, or in
+`versions.from` when discovery needs a path that is not the runtime executable.
+On load Sermo globs that path with `${version}` wildcarded, extracts each
+installed version, and registers `name` with `%v`→version and every `${version}`
+substituted in the body.
 The template is then dropped and yields nothing when no version is installed. Keep
 exactly one file, named to match (`postgres-%v.yml`). `%v` is substituted only in
-the name; inside the body always use `${version}` (binary, display_name, aliases).
-When the monitored `binary` is version-agnostic, point discovery at a
+the name; inside the body always use `${version}` (`variables.binary`,
+`display_name`, service candidates, commands, etc.).
+When the runtime executable is version-agnostic, point discovery at a
 version-specific path with `versions.from` (discovery-only; stripped from the
 materialized document). A template may also `uses` a base daemon to inherit
-checks/processes/rules and override only the binary.
+checks/processes/rules and override only `variables.binary`.
 
 ```yaml
-kind: daemon
+kind: app
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+variables:
+  binary: "/usr/lib64/postgresql-${version}/bin/postgres"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 ```
 
 ## Categories and library restarts
@@ -125,13 +132,14 @@ binary: "/usr/lib64/postgresql-${version}/bin/postgres"
 Catalog documents are categorized by the subdirectory under a catalog root:
 `services/`, `apps/`, `libs/`, `patterns/` (files at the root default to
 `service`). Loading recurses; the directory sets `Document.Category`. `apps` and
-`libs` are minimal catalog documents (name,
-display_name, description, binary, version) surfaced by `sermoctl apps` / `libs`.
+`libs` are minimal catalog documents (name, display_name, description,
+`variables.binary` and preflight/version entries) surfaced by `sermoctl apps` /
+`libs`.
 
-A `library` catalog document names a shared library and the file to watch (`binary`,
-e.g. `/lib64/libc.so.6`). Unlike app/service binaries, library `binary` values
-are watched files and do not generate an executable preflight. A service opts
-into library-change restarts with:
+A `library` catalog document names a shared library and the file to watch
+(`variables.binary`, e.g. `/lib64/libc.so.6`) and verifies it with
+`preflight.file`. Unlike app/service executable variables, library paths are
+watched files. A service opts into library-change restarts with:
 
 ```yaml
 restart_on_change:
@@ -227,8 +235,9 @@ literal.
 
 An `os:` key anywhere (value = map of os-id -> block) is an OS SELECTOR: at load,
 the branch for the detected OS (or a `default` branch) is merged into the parent
-and the rest discarded. It works at any depth — aliases, checks, processes,
-policy, variables — and is the structural counterpart to the `${os}` string.
+and the rest discarded. It works at any depth — service candidates, checks,
+processes, policy, variables — and is the structural counterpart to the `${os}`
+string.
 
 Validation must fail on unresolved variables.
 

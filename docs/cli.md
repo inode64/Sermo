@@ -48,8 +48,8 @@ sermoctl config validate
 
 sermoctl daemon reload                 # reload sermod config, not services
 
-sermoctl services [all] [--long] [--notify NAME[,NAME]|all]
-sermoctl apps [all] [--long]
+sermoctl services [all] [--long] [--notify NAME[,NAME]|all]   # catalog inventory, not runtime config
+sermoctl apps [all] [--long]                                  # catalog apps (see Catalog inventory)
 sermoctl libs [all] [--long]
 sermoctl patterns
 
@@ -83,6 +83,30 @@ sermoctl services --notify ops-email
 sermoctl daemon reload
 sermoctl state compact --before 720h
 ```
+
+## Catalog inventory
+
+`sermoctl services`, `sermoctl apps`, `sermoctl libs` and `sermoctl patterns`
+list **catalog definitions** shipped under `paths.catalog` (see
+[daemons.md](daemons.md)): which profiles are installed, the version their
+version command reports, and whether they resolve. Add `all` to include entries
+whose binary or library file is not present on the host.
+
+This is **not** the list of **configured runtime targets** that `sermod`
+monitors. Those are the `kind: service` files under `paths.services` (and the
+matching names in the global config tree).
+
+| Question | Where to look |
+| --- | --- |
+| Which catalog daemon profiles exist / are installed? | `sermoctl services [all]` |
+| Which catalog apps / libs / pattern sets exist? | `sermoctl apps`, `sermoctl libs`, `sermoctl patterns` |
+| Which services are enabled in *my* config right now? | YAML under `paths.services`, or the web UI **Services** panel (`GET /api/services`) |
+| One configured service's live state | `sermoctl status SERVICE`, `sermoctl is-active SERVICE` |
+| Availability history for configured services | `sermoctl sla [SERVICE]` |
+
+The web UI uses the same split: **Services** shows configured runtime services;
+**Applications** (`GET /api/applications`) is the installed-app inventory and
+aligns with `sermoctl apps`, not `sermoctl services`.
 
 ## Exit codes
 

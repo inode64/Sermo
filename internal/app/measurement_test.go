@@ -68,7 +68,7 @@ func TestMeasuredCheckNames(t *testing.T) {
 		}
 	}
 	if got["space"] || got["flag"] {
-		t.Error("disk/file_exists must not be measured")
+		t.Error("storage/file_exists must not be measured")
 	}
 }
 

@@ -91,7 +91,7 @@ func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesRejectsDiskAlias(t *testing.T) {
+func TestBuildWatchesRejectsRemovedDiskType(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
@@ -103,15 +103,15 @@ func TestBuildWatchesRejectsDiskAlias(t *testing.T) {
 	})
 	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
 	if len(watches) != 0 {
-		t.Fatalf("disk alias should not build watches, got %d", len(watches))
+		t.Fatalf("removed disk check type should not build watches, got %d", len(watches))
 	}
 	if len(warns) == 0 {
-		t.Fatal("disk alias should produce a warning")
+		t.Fatal("removed disk check type should produce a warning")
 	}
 }
 
-func TestBuildWatchesAbsentThenIsPureMonitorOnlyDisk(t *testing.T) {
-	// Bare disk watch (no then): alert-only, globals ignored.
+func TestBuildWatchesAbsentThenIsPureMonitorOnlyStorage(t *testing.T) {
+	// Bare storage watch (no then): alert-only, globals ignored.
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
