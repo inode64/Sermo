@@ -107,7 +107,7 @@ func (m *Monitor) Reload() {
 	// Stop the current generation before capturing state. This ensures no
 	// scheduler goroutines are calling RunCycle (which mutates cycle, State,
 	// windows and libBaseline) on the old workers while we snapshot them.
-	// See section 24 and reload state preservation.
+	// See reload state preservation.
 	m.stopGenerationLocked(false)
 
 	savedWorkers := captureWorkerState(oldWorkers)

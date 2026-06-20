@@ -1,4 +1,4 @@
-// Package operation is the safe start/stop/restart/reload/resume engine (section 18). It is the
+// Package operation is the safe start/stop/restart/reload/resume engine. It is the
 // single path both sermoctl and sermod use, so a manual action and an automatic
 // remediation are protected identically: internal operation lock, active named
 // runtime locks, required preflight, guards, residual-process handling with
@@ -15,10 +15,10 @@ import (
 	"sermo/internal/process"
 )
 
-// ResultStatus is the outcome of an operation (section 18).
+// ResultStatus is the outcome of an operation.
 type ResultStatus string
 
-// Operation result statuses (section 18).
+// Operation result statuses.
 const (
 	ResultOK               ResultStatus = "ok"
 	ResultBlocked          ResultStatus = "blocked"
@@ -28,7 +28,7 @@ const (
 	ResultOrphanProcesses  ResultStatus = "orphan_processes"
 )
 
-// Result is the single outcome emitted per operation (section 18).
+// Result is the single outcome emitted per operation.
 type Result struct {
 	Service   string            `json:"service"`
 	Action    string            `json:"action"`

@@ -1,5 +1,5 @@
 // Package cfgval coerces the loosely-typed values produced by decoding YAML into
-// map[string]any trees (section 8) into the concrete Go types the rest of Sermo
+// map[string]any trees into the concrete Go types the rest of Sermo
 // needs. Every package decoded config values the same way before; centralizing
 // the coercion here keeps one definition per concept so the variants cannot
 // drift apart.

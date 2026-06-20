@@ -527,7 +527,7 @@ type Finding struct {
 	Message string `json:"message"`
 }
 
-// OperationSlots is the global start/stop/restart/reload/resume concurrency pool (section 24).
+// OperationSlots is the global start/stop/restart/reload/resume concurrency pool.
 type OperationSlots struct {
 	InUse int `json:"in_use"`
 	Total int `json:"total"`

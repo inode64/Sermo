@@ -9,7 +9,7 @@ import (
 // Scheduler runs each worker on its own goroutine with an independent interval
 // timer measured from cycle completion (so overruns skip ticks, never queue
 // them), spreads worker starts with jitter, and bounds concurrent operations
-// across all services with a global semaphore (section 24).
+// across all services with a global semaphore.
 type Scheduler struct {
 	// Interval is the global default cycle interval (engine.interval) used by
 	// every worker and watch that does not set its own. <=0 means 30s.
@@ -27,7 +27,7 @@ type cycler interface {
 }
 
 // Run starts every worker and watch and blocks until ctx is cancelled and all of
-// them have returned (graceful shutdown, section 24). Each worker's Operate is
+// them have returned (graceful shutdown). Each worker's Operate is
 // wrapped so it waits for a global operation slot, pausing only that service's
 // monitoring. Watches run on their own goroutines using their own interval.
 // When finalShutdown is false (config reload), readiness is left unchanged.
@@ -90,8 +90,7 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 }
 
 // runCycler ticks a cycler from cycle completion: jitter, then cycle, then wait
-// one interval, repeat. A cancelled context stops between cycles (section 24:
-// never start a new operation during shutdown).
+// one interval, repeat. A cancelled context stops between cycles (// never start a new operation during shutdown).
 func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 	if offset > 0 {
 		if !sleepCtx(ctx, offset) {

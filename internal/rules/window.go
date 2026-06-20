@@ -8,7 +8,7 @@ import (
 )
 
 // WindowState tracks a rule's condition history across cycles so for/within
-// windows can be evaluated (section 15). One instance per rule per service,
+// windows can be evaluated. One instance per rule per service,
 // persisted by the worker between cycles.
 type WindowState struct {
 	consecutive int
@@ -183,7 +183,7 @@ func ParseWindowRule(entry map[string]any) Rule {
 
 // ParseRuleWindow parses the global/per-service `rule_window` fallback block
 // ({cycles, mode, min_matches}) into the equivalent for/within window, applied by
-// ParseRules to any rule that declares neither `for` nor `within` (section 13).
+// ParseRules to any rule that declares neither `for` nor `within`.
 // `mode: consecutive` (the default) yields a for window; `mode: within` yields
 // a within window whose min_matches defaults to 1. The built-in
 // default — fire on the first true cycle — is "1 consecutive", so a fallback that

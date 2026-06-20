@@ -7,13 +7,13 @@ import (
 
 // KillSelector is a stop_policy.kill_only_if selector. A process is killable
 // only if its real UID matches one of Users AND its resolved exe exactly matches
-// one of ExeAny (section 21/34).
+// one of ExeAny.
 type KillSelector struct {
 	Users  []string
 	ExeAny []string
 }
 
-// KillPolicy is the resolved stop_policy governing signal escalation (section 22).
+// KillPolicy is the resolved stop_policy governing signal escalation.
 type KillPolicy struct {
 	GracefulTimeout time.Duration
 	TermTimeout     time.Duration
@@ -25,7 +25,7 @@ type KillPolicy struct {
 // Killable reports whether p may be signalled. It requires a resolved exe that
 // exactly matches an exe_any entry AND a real UID matching a users entry. A
 // process with an unresolvable exe is never killable, and an empty selector
-// (no users or no exe) matches nothing — both fail-safe (section 21/34).
+// (no users or no exe) matches nothing — both fail-safe.
 func (s KillSelector) Killable(p Process, resolve UserResolver) bool {
 	if !p.ExeOK {
 		return false

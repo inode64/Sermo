@@ -24,7 +24,7 @@ any `security:` toggle that tries to disable them.
 ## The operation engine
 
 Every start/stop/restart/reload/resume — manual (`sermoctl`) or automatic (`sermod`) —
-runs through the same engine (section 18):
+runs through the same engine:
 
 1. Acquire the internal operation lock (`<runtime>/ops/<service>.lock`); a live
    holder fails fast with exit `75` ("operation in progress").

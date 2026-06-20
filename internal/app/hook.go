@@ -12,7 +12,7 @@ import (
 )
 
 // HookSpec is a watch's hook action: a local command (argv, never a shell) run
-// with a timeout when the watch condition fires (section 16, extension). Beyond
+// with a timeout when the watch condition fires. Beyond
 // running the command it can assert the outcome: the exit statuses (ExpectExit,
 // default 0) and the captured stdout/stderr (Stdout/Stderr matchers). A failed
 // assertion turns the hook into a "hook-failed" event, the same as a command

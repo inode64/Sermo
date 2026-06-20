@@ -12,8 +12,7 @@ import (
 )
 
 // Evaluator evaluates condition trees against the per-cycle check cache and, for
-// inline conditions, runs probes at most once each (memoized for the cycle, per
-// section 14).
+// inline conditions, runs probes at most once each (memoized for the cycle).
 type Evaluator struct {
 	// Cache holds the results of the service's named checks for this cycle,
 	// keyed by check name (for failed/active references). ResolveRef may add
@@ -26,7 +25,7 @@ type Evaluator struct {
 	// Deps builds inline probes (tcp/command/service/file).
 	Deps checks.Deps
 	// Changed reports whether the file at the given path differs from a baseline
-	// tracked across cycles (section 14, library-change restarts). Injected by the
+	// tracked across cycles. Injected by the
 	// worker; nil makes every `changed:` condition false.
 	Changed func(path string) (bool, error)
 
@@ -226,7 +225,7 @@ func (e *Evaluator) evalService(ctx context.Context, v any) (bool, error) {
 }
 
 // evalProcess is true when the observed state of processes matching the
-// exe/user selector equals the requested state (default running, section 14).
+// exe/user selector equals the requested state (default running).
 // With no process source it is false.
 func (e *Evaluator) evalProcess(v any) (bool, error) {
 	m, err := condMap(v, "process condition")
@@ -244,7 +243,7 @@ func (e *Evaluator) evalProcess(v any) (bool, error) {
 }
 
 // evalMetric reads a sampled metric and compares it to the threshold
-// (section 14). With no metric source, or a not-ready rate metric, it is false
+//. With no metric source, or a not-ready rate metric, it is false
 // so a remediation never fires on an unavailable value.
 func (e *Evaluator) evalMetric(v any) (bool, error) {
 	m, err := condMap(v, "metric condition")
@@ -266,7 +265,7 @@ func (e *Evaluator) evalMetric(v any) (bool, error) {
 }
 
 // evalChanged is true when the watched file's fingerprint differs from the
-// baseline (section 14). With no Changed source it is false, so a remediation
+// baseline. With no Changed source it is false, so a remediation
 // never fires on an unavailable signal.
 func (e *Evaluator) evalChanged(v any) (bool, error) {
 	m, err := condMap(v, "changed condition")
@@ -301,7 +300,7 @@ func (e *Evaluator) evalInline(ctx context.Context, typ string, v any) (bool, er
 }
 
 // runInline builds, runs and memoizes an inline check keyed by its normalized
-// parameters so identical probes run at most once per cycle (section 14).
+// parameters so identical probes run at most once per cycle.
 func (e *Evaluator) runInline(ctx context.Context, name string, entry map[string]any, keyParams map[string]any) (checks.Result, error) {
 	key := name + ":" + normalizeKey(keyParams)
 	if res, ok := e.memo[key]; ok {
@@ -347,7 +346,7 @@ func normalizeKey(m map[string]any) string {
 }
 
 // Guard reports whether any guard rule blocks action, returning the blocking
-// rule's message (section 17). Guards are evaluated in name order; the first
+// rule's message. Guards are evaluated in name order; the first
 // blocking guard wins. An evaluation error is returned so the caller can fail
 // safe rather than silently proceed.
 func Guard(ctx context.Context, ruleSet []Rule, action string, ev *Evaluator) (blocked bool, reason string, err error) {

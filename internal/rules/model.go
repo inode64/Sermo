@@ -11,20 +11,20 @@ import (
 	"slices"
 )
 
-// RuleType classifies a rule (section 16).
+// RuleType classifies a rule.
 type RuleType string
 
-// Rule types (section 16).
+// Rule types.
 const (
 	RuleRemediation RuleType = "remediation"
 	RuleGuard       RuleType = "guard"
 	RuleAlert       RuleType = "alert"
 )
 
-// ActionType is a rule's then.action (section 16).
+// ActionType is a rule's then.action.
 type ActionType string
 
-// Rule action types (section 16).
+// Rule action types.
 const (
 	ActionRestart ActionType = "restart"
 	ActionStart   ActionType = "start"
@@ -41,13 +41,13 @@ type Action struct {
 	Message string
 }
 
-// ForWindow requires the condition to hold for N consecutive cycles (section 15).
+// ForWindow requires the condition to hold for N consecutive cycles.
 type ForWindow struct {
 	Cycles int
 }
 
 // WithinWindow requires the condition to be true at least MinMatches times in the
-// last Cycles cycles (sliding window, section 15).
+// last Cycles cycles (sliding window).
 type WithinWindow struct {
 	Cycles     int
 	MinMatches int
@@ -109,7 +109,7 @@ func (r Rule) AlertMessages() []string {
 
 // parseActions parses a `then` block into one or more actions. The single form
 // `then: {action, message}` and the multi form `then: {actions: [...]}` are both
-// accepted (section 16).
+// accepted.
 func parseActions(then map[string]any) []Action {
 	if list, ok := then["actions"].([]any); ok {
 		var out []Action
@@ -189,7 +189,7 @@ func ReferencedChecks(tree map[string]any) map[string]any {
 
 // ParseRules extracts the resolved `rules` section into Rules, skipping
 // `enabled: false` entries and reporting malformed ones as warnings. Rules are
-// returned in name order (guards are evaluated in this order, section 13).
+// returned in name order (guards are evaluated in this order).
 func ParseRules(tree map[string]any) ([]Rule, []string) {
 	raw, ok := tree["rules"].(map[string]any)
 	if !ok {
@@ -197,7 +197,7 @@ func ParseRules(tree map[string]any) ([]Rule, []string) {
 	}
 
 	// Fallback window applied to any rule that declares neither `for` nor
-	// `within`, from the merged `rule_window` block (section 13). Absent or
+	// `within`, from the merged `rule_window` block. Absent or
 	// default-equivalent, both are nil and rules keep the built-in immediate
 	// default.
 	fbFor, fbWithin := ParseRuleWindow(tree["rule_window"])

@@ -251,7 +251,7 @@ type Deps struct {
 }
 
 // BuildWorkers resolves every enabled service and wires a Worker for it: a check
-// cache producer and an operation-engine Operate closure (section 24). Services
+// cache producer and an operation-engine Operate closure. Services
 // that are disabled or fail to resolve are skipped with a warning.
 func BuildWorkers(cfg *config.Config, deps Deps, collector *metrics.Collector) ([]*Worker, []string) {
 	var workers []*Worker

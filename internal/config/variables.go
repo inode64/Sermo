@@ -11,7 +11,7 @@ import (
 )
 
 // varRef matches a single ${name} reference. There is no escape syntax in the
-// MVP: `${` always begins a reference (section 10).
+// `${` always begins a reference.
 var varRef = regexp.MustCompile(`\$\{([^}]*)\}`)
 
 // collectVariables reads the merged `variables` section into a flat string map.
@@ -87,7 +87,7 @@ func documentBinaryCandidates(tree map[string]any) []string {
 }
 
 // validateVariableValues rejects variable values that themselves contain
-// ${...} (no nested variables in the MVP, section 10).
+// ${...} (no nested variables).
 func validateVariableValues(vars map[string]string) []string {
 	var errs []string
 	for _, name := range slices.Sorted(maps.Keys(vars)) {

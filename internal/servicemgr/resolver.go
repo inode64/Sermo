@@ -10,7 +10,7 @@ import (
 )
 
 // UnitResolver resolves a service to the concrete unit name the active backend
-// knows, trying the per-backend candidate names in order (section 11).
+// knows, trying the per-backend candidate names in order.
 type UnitResolver struct {
 	Runner  execx.Runner
 	Probe   Probe
@@ -24,7 +24,7 @@ func NewUnitResolver() UnitResolver {
 }
 
 // Resolve picks the first candidate the backend actually knows, normalizing
-// systemd unit names (section 11). With trust=true (a scalar/shorthand service)
+// systemd unit names. With trust=true (a scalar/shorthand service)
 // the first candidate is returned as-is when none can be probed, so units the
 // probe cannot surface (e.g. sysv-generated) are not wrongly rejected. With
 // trust=false (an explicit per-init list) it requires a match and otherwise

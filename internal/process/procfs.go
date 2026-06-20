@@ -111,7 +111,7 @@ func readStatus(pid int) (ppid int, uid, gid uint32, state string, ok bool) {
 
 // readExe resolves /proc/<pid>/exe. It returns ok=false when the link cannot be
 // read or points at a deleted binary, so such a process never matches an exe
-// selector (section 21 fail-safe).
+// selector.
 func readExe(pid int) (string, bool) {
 	target, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/exe")
 	if err != nil {

@@ -61,7 +61,7 @@ var metricCatalog = map[string]map[string]struct{}{
 	"system":  set("total_memory", "total_swap", "total_cpu", "load1", "load5", "load15"),
 }
 
-// metricForms records which value forms each metric exposes (section 12/14), so
+// metricForms records which value forms each metric exposes, so
 // a threshold's form can be checked against the metric.
 type metricForm struct{ absolute, percent bool }
 
@@ -84,7 +84,7 @@ var metricForms = map[string]metricForm{
 	"load15":        {absolute: true},
 }
 
-// validateRuleWindow checks the merged `rule_window` fallback block (section 13):
+// validateRuleWindow checks the merged `rule_window` fallback block:
 // a positive cycles count, a known mode, and — for the within mode — an optional
 // min_matches (default 1) that is positive and no larger than cycles when
 // declared.
@@ -377,7 +377,7 @@ func validateMetric(entry map[string]any, path string, allowSystem bool, add add
 		add("%s value %q must be a number with an optional trailing %%", path, value)
 	} else if known {
 		// Form must match: a "%" threshold needs a percentage form, a bare number
-		// an absolute form (section 14).
+		// an absolute form.
 		form := metricForms[name]
 		if strings.HasSuffix(strings.TrimSpace(value), "%") {
 			if !form.percent {
@@ -426,7 +426,7 @@ func collectCheckNames(tree map[string]any) map[string]struct{} {
 
 // collectSystemMetricChecks returns the names of checks that are scope:system
 // metrics, so a remediation rule referencing one (via failed/active) can be
-// flagged (section 30).
+// flagged.
 func collectSystemMetricChecks(tree map[string]any) map[string]struct{} {
 	names := map[string]struct{}{}
 	for _, section := range []string{"checks", "preflight"} {

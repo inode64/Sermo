@@ -175,7 +175,7 @@ daemon or service may omit `policy.cooldown` only when it inherits that value;
 any explicit override must also be positive.
 `paths.runtime` is the single runtime root. Named runtime locks are derived from
 `<paths.runtime>/locks`, and operation locks from `<paths.runtime>/ops`.
-`paths.locks` and `/etc/sermo/locks.d` are not supported in the MVP.
+`paths.locks` and `/etc/sermo/locks.d` are not supported.
 
 Prefer this:
 
@@ -295,11 +295,11 @@ unknown rule condition types (and/or/not/failed/active/metric/service/process/fi
 changed condition requires a path; restart_on_change references must be library catalog documents
 unknown actions
 missing variables
-nested variable (a variable value containing ${...}) — rejected in MVP
+nested variable (a variable value containing ${...}) — rejected
 invalid durations
 invalid percentages
 invalid units
-security toggles that disable hard safety invariants (preflight, locks, SIGKILL default, kill selector) — rejected in MVP
+security toggles that disable hard safety invariants (preflight, locks, SIGKILL default, kill selector) — rejected
 force_kill without kill_only_if
 kill_only_if without both exe_any and users
 SIGKILL without explicit permission
@@ -312,7 +312,7 @@ metric scope is service or system, and name exists in that scope's catalog
 scope: system metric used in a remediation rule (must be alert only)
 typed fields (port, expect_status) parse to their target type after expansion
 paths.runtime, if set, is an absolute directory
-paths.locks rejected in MVP; locks/ops directories derive from paths.runtime
+paths.locks rejected; locks/ops directories derive from paths.runtime
 /etc/sermo/locks.d not scanned for active locks
 defaults.policy.cooldown present and positive
 resolved service policy.cooldown present and positive; daemon/service omissions are allowed only when inherited

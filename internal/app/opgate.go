@@ -12,7 +12,7 @@ import (
 )
 
 // OpGate serializes service operations across workers, the web UI and sermoctl
-// using the global operation semaphore (section 24).
+// using the global operation semaphore.
 type OpGate struct {
 	pool locks.SlotPool
 	mem  chan struct{} // non-nil when runtimeDir was empty (tests)
