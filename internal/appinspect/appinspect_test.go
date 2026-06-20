@@ -80,6 +80,80 @@ func TestInspectCommandUser(t *testing.T) {
 	}
 }
 
+func TestListPolkitVersionFromPkexecIntegerOutput(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	catalogDir := filepath.Join(root, "catalog")
+	servicesDir := filepath.Join(root, "services")
+	for _, dir := range []string{binDir, filepath.Join(catalogDir, "apps"), filepath.Join(catalogDir, "services"), servicesDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	polkitd := filepath.Join(binDir, "polkitd")
+	pkexec := filepath.Join(binDir, "pkexec")
+	for _, path := range []string{polkitd, pkexec} {
+		if err := os.WriteFile(path, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "polkit.yml"), []byte(fmt.Sprintf(`kind: app
+name: polkit
+display_name: "Polkit"
+category: system
+variables:
+  binary: %q
+  pkexec: %q
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  pkexec: { type: binary, path: "${pkexec}" }
+  version: { type: command, command: ["${pkexec}", "--version"], timeout: 10s }
+`, polkitd, pkexec)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "services", "polkit.yml"), []byte(`kind: daemon
+name: polkit
+display_name: "Polkit"
+category: system
+service:
+  systemd: [polkit]
+apps: [polkit]
+checks:
+  service: { type: service, expect: active }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: systemd }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, servicesDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	runner := testRunner{pkexec: {Stdout: "pkexec version 126\n", ExitCode: 0}}
+
+	apps := List(context.Background(), runner, cfg, config.CategoryApp, false)
+	if len(apps) != 1 {
+		t.Fatalf("app reports = %+v, want one installed polkit app", apps)
+	}
+	if apps[0].Version != "pkexec version 126" || apps[0].VersionShort != "126" {
+		t.Fatalf("polkit app version = %q short=%q, want pkexec version 126 / 126", apps[0].Version, apps[0].VersionShort)
+	}
+
+	services := List(context.Background(), runner, cfg, config.CategoryService, false, WithOptionalVersion())
+	if len(services) != 1 {
+		t.Fatalf("service reports = %+v, want one installed polkit service", services)
+	}
+	if services[0].Version != "pkexec version 126" || services[0].VersionShort != "126" {
+		t.Fatalf("polkit service version = %q short=%q, want pkexec version 126 / 126", services[0].Version, services[0].VersionShort)
+	}
+}
+
 func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "webd")
