@@ -424,8 +424,8 @@ func TestGlobalEventsFilters(t *testing.T) {
 	events := []Event{
 		{Time: "2026-06-07T10:00:04Z", Service: "web", Kind: "action", Action: "restart", Status: "ok", Message: "done"},
 		{Time: "2026-06-07T10:00:03Z", Service: "db", Kind: "error", Action: "restart", Status: "failed", Message: "blocked"},
-		{Time: "2026-06-07T10:00:02Z", Watch: "disk", Kind: "hook-failed", Status: "failed", Message: "hook failed"},
-		{Time: "2026-06-07T10:00:01Z", Watch: "disk", Kind: "hook", Status: "ok", Message: "hook ok"},
+		{Time: "2026-06-07T10:00:02Z", Watch: "storage-root", Kind: "hook-failed", Status: "failed", Message: "hook failed"},
+		{Time: "2026-06-07T10:00:01Z", Watch: "storage-root", Kind: "hook", Status: "ok", Message: "hook ok"},
 	}
 	tests := []struct {
 		name       string
@@ -436,7 +436,7 @@ func TestGlobalEventsFilters(t *testing.T) {
 		wantStatus string
 	}{
 		{name: "service", query: "?service=db", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "db"},
-		{name: "watch kind", query: "?watch=disk&kind=hook-failed", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "disk"},
+		{name: "watch kind", query: "?watch=storage-root&kind=hook-failed", wantLimit: maxEventLimit, wantCount: 1, wantFirst: "storage-root"},
 		{name: "status", query: "?status=failed", wantLimit: maxEventLimit, wantCount: 2, wantStatus: "failed"},
 		{name: "only errors", query: "?only_errors=1", wantLimit: maxEventLimit, wantCount: 2},
 		{name: "filtered limit", query: "?only_errors=true&limit=1", wantLimit: maxEventLimit, wantCount: 1},
