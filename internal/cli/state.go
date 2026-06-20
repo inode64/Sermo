@@ -9,8 +9,6 @@ import (
 	"sermo/internal/state"
 )
 
-const stateHistoryRetention = 366 * 24 * time.Hour
-
 // runState dispatches persistent state-store maintenance commands.
 func (a App) runState(ctx context.Context, opts options) int {
 	if len(opts.args) == 0 {
@@ -35,7 +33,7 @@ func (a App) runStateCompact(ctx context.Context, opts options) int {
 		return a.fail(opts, err.Error())
 	}
 	if before.IsZero() {
-		before = time.Now().Add(-stateHistoryRetention)
+		before = time.Now().Add(-state.DefaultHistoryRetention)
 	}
 
 	store, err := state.Open(filepath.Join(cfg.Global.StateDir(), state.Filename))

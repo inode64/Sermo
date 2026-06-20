@@ -95,8 +95,8 @@ type Deps struct {
 	// matching an exe/user selector, for `process` checks.
 	Processes func(exe, user string) string
 	// PidfileFallbackPIDs reports backend-native service PIDs when the active
-	// init system does not publish a PIDFile. It lets legacy catalog pidfile
-	// checks accept systemd's MainPID/cgroup process set instead of failing on an
+	// init system does not publish a PIDFile. It lets catalog pidfile checks
+	// accept systemd's MainPID/cgroup process set instead of failing on an
 	// intentionally absent pidfile.
 	PidfileFallbackPIDs func() []int
 	// DiskUsage reports filesystem usage for `storage` checks. Nil uses statfs.

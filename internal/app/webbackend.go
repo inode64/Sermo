@@ -56,6 +56,7 @@ type webEntry struct {
 	selectors         []process.Selector
 	processWarnings   []string
 	noResidentProcess bool
+	alsoApply         []string
 	disabled          bool // true when the service had `enabled: false` (still listed for visibility)
 
 	statusMu     sync.Mutex
@@ -91,6 +92,11 @@ type webNotifier struct {
 
 type diagnosticCleaner interface {
 	PruneUnconfiguredControlStates(configured []string) (state.PruneUnconfiguredControlStatesResult, error)
+}
+
+type stateMaintainer interface {
+	PruneHistory(before time.Time) (state.PruneHistoryResult, error)
+	Compact(ctx context.Context) error
 }
 
 // WebBackend implements web.Backend over the daemon's services: status from the
@@ -263,6 +269,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			interval:          iv,
 			policyCooldown:    rules.ParsePolicy(resolved.Tree).Cooldown,
 			noResidentProcess: noResidentProcess(resolved.Tree),
+			alsoApply:         config.CascadeTargets(resolved.Tree),
 		}
 		if disabled {
 			entry.disabled = true
@@ -430,6 +437,9 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	}
 	b.decorateRemediation(name, &svc)
 	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth)
+	if len(e.alsoApply) > 0 {
+		svc.AlsoApply = slices.Clone(e.alsoApply)
+	}
 	b.decorateServiceRuntime(name, e, &svc)
 	return svc
 }
@@ -593,12 +603,12 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			continue
 		}
 		iv := formatInterval(w.interval)
-		var disk *web.DiskWatchInfo
+		var storage *web.StorageWatchInfo
 		// A disabled watch is config, not a live concern: skip the statfs/mount
 		// sampling so the UI never surfaces sample errors (or pays the probe)
 		// for something the operator has switched off.
 		if isStorageCheckType(w.checkType) && !w.disabled {
-			disk = diskWatchInfo(w, b)
+			storage = storageWatchInfo(w, b)
 		}
 		var swap *web.SwapWatchInfo
 		if w.checkType == "swap" && !w.disabled {
@@ -621,7 +631,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			Name:          w.name,
 			DisplayName:   w.displayName,
 			CheckType:     w.checkType,
-			Summary:       watchSummary(w, disk, liveSummary),
+			Summary:       watchSummary(w, storage, liveSummary),
 			Interval:      iv,
 			Enabled:       !w.disabled,
 			Monitor:       monitorMode,
@@ -633,7 +643,7 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			NotifierCount: w.notifierCount,
 			DryRun:        w.dryRun,
 			Conditions:    watchConditions(w.check, w.metrics),
-			Disk:          disk,
+			Storage:       storage,
 			Swap:          swap,
 			Meter:         meter,
 			Readings:      readings,
@@ -737,7 +747,7 @@ func watchViewFailed(w web.Watch) bool {
 	if WatchActivityFailed(w.LastActivityKind) && watchActivityCurrent(w.LastActivity, w.MonitorChangedAt) {
 		return true
 	}
-	return (w.Disk != nil && (w.Disk.SampleError != "" || w.Disk.MountSampleError != "")) || watchReadingsFailed(w.Readings)
+	return (w.Storage != nil && (w.Storage.SampleError != "" || w.Storage.MountSampleError != "")) || watchReadingsFailed(w.Readings)
 }
 
 func watchActivityCurrent(activity, changed string) bool {
@@ -783,19 +793,19 @@ func metricsMap(entry map[string]any) map[string]any {
 	return metrics
 }
 
-func watchSummary(w *webWatch, disk *web.DiskWatchInfo, liveSummary string) string {
+func watchSummary(w *webWatch, storage *web.StorageWatchInfo, liveSummary string) string {
 	if w == nil {
 		return ""
 	}
-	if isStorageCheckType(w.checkType) && disk != nil {
-		if disk.SampleError != "" {
-			return disk.Path + ": " + disk.SampleError
+	if isStorageCheckType(w.checkType) && storage != nil {
+		if storage.SampleError != "" {
+			return storage.Path + ": " + storage.SampleError
 		}
-		fs := disk.FileSystem
+		fs := storage.FileSystem
 		if fs == "" {
 			fs = "filesystem"
 		}
-		return fmt.Sprintf("%s: %.1f%% free (%d bytes) on %s", disk.Path, disk.FreePct, disk.FreeBytes, fs)
+		return fmt.Sprintf("%s: %.1f%% free (%d bytes) on %s", storage.Path, storage.FreePct, storage.FreeBytes, fs)
 	}
 	if liveSummary != "" {
 		return liveSummary
@@ -1733,7 +1743,7 @@ func (b *WebBackend) monitorView(key string) (active bool, source, changedAt str
 	return rec.Active, rec.Source, changed, true
 }
 
-func diskWatchInfo(w *webWatch, b *WebBackend) *web.DiskWatchInfo {
+func storageWatchInfo(w *webWatch, b *WebBackend) *web.StorageWatchInfo {
 	if w == nil || w.check == nil {
 		return nil
 	}
@@ -1741,7 +1751,7 @@ func diskWatchInfo(w *webWatch, b *WebBackend) *web.DiskWatchInfo {
 	if path == "" {
 		return nil
 	}
-	info := &web.DiskWatchInfo{Path: path}
+	info := &web.StorageWatchInfo{Path: path}
 
 	usage := b.diskUsage
 	if usage == nil {
@@ -2757,7 +2767,7 @@ func (b *WebBackend) lastServiceEvent(name string) *web.Event {
 }
 
 // Operate runs a start/stop/restart/reload/resume action on a service.
-func (b *WebBackend) Operate(ctx context.Context, name, action string) web.ActionResult {
+func (b *WebBackend) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	e := b.entries[name]
 	if e == nil {
 		msg := "unknown service " + name
@@ -2773,10 +2783,51 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 		}
 		return web.ActionResult{OK: false, Message: msg}
 	}
-	// Bound the whole operation — including the wait for a global operation slot —
-	// so a web action can never block its handler goroutine indefinitely when the
-	// slots are saturated. The engine applies its own timeout only once it runs,
-	// which does not cover slot acquisition. (ExpandWatch bounds the same way.)
+
+	var r operation.Result
+	if opts.NoCascade || action == "reload" || action == "resume" || len(e.alsoApply) == 0 {
+		r = b.operationResult(ctx, name, action)
+	} else {
+		lookup := func(svc string) []string {
+			ent := b.entries[svc]
+			if ent == nil {
+				return nil
+			}
+			return ent.alsoApply
+		}
+		c := cascader{
+			op:     b.operationResult,
+			lookup: lookup,
+			emit:   b.emit,
+			sleep:  time.Sleep,
+		}
+		r = c.run(ctx, name, action)
+	}
+	return webActionResultFrom(r, name, action)
+}
+
+func webActionResultFrom(r operation.Result, name, action string) web.ActionResult {
+	if r.Action == "" && action != "" {
+		r.Action = action
+	}
+	if r.Service == "" {
+		r.Service = name
+	}
+	msg := r.Message
+	if msg == "" {
+		msg = string(r.Status)
+	}
+	return web.ActionResult{OK: r.OK(), Message: msg}
+}
+
+func (b *WebBackend) operationResult(ctx context.Context, name, action string) operation.Result {
+	e := b.entries[name]
+	if e == nil {
+		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "unknown service " + name}
+	}
+	if e.disabled {
+		return operation.Result{Service: name, Action: action, Status: operation.ResultFailed, Message: "service " + name + " is disabled in configuration"}
+	}
 	timeout := b.operationTimeout
 	if timeout <= 0 {
 		timeout = operation.DefaultOperationTimeout
@@ -2800,11 +2851,48 @@ func (b *WebBackend) Operate(ctx context.Context, name, action string) web.Actio
 		r.Service = name
 	}
 	e.invalidateStatusCache()
-	msg := r.Message
-	if msg == "" {
-		msg = string(r.Status)
+	return r
+}
+
+// CompactState prunes old persisted history and vacuums the state database.
+func (b *WebBackend) CompactState(ctx context.Context, before time.Time) web.StateCompactResult {
+	maint, ok := b.store.(stateMaintainer)
+	if !ok || maint == nil {
+		return web.StateCompactResult{OK: false, Message: "state store unavailable"}
 	}
-	return web.ActionResult{OK: r.OK(), Message: msg}
+	now := b.webNow()
+	if before.IsZero() {
+		before = now.Add(-state.DefaultHistoryRetention)
+	}
+	timeout := b.operationTimeout
+	if timeout <= 0 {
+		timeout = b.defaultTimeout
+	}
+	if timeout <= 0 {
+		timeout = operation.DefaultOperationTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	result, err := maint.PruneHistory(before)
+	if err != nil {
+		return web.StateCompactResult{OK: false, Message: "prune state history: " + err.Error()}
+	}
+	if err := maint.Compact(ctx); err != nil {
+		return web.StateCompactResult{OK: false, Message: "compact state database: " + err.Error()}
+	}
+	return web.StateCompactResult{
+		OK:             true,
+		Pruned:         result.Rows,
+		Before:         before.UTC().Format(time.RFC3339),
+		SLA:            result.SLA,
+		Measurements:   result.Measurements,
+		Metrics:        result.Metrics,
+		DaemonMetrics:  result.DaemonMetrics,
+		ServiceMetrics: result.ServiceMetrics,
+		Events:         result.Events,
+		Vacuum:         true,
+	}
 }
 
 // ExpandWatch runs a configured storage watch's then.expand action on demand.

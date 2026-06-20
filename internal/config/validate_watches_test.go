@@ -693,8 +693,8 @@ func TestValidateEntropyWatch(t *testing.T) {
 	}
 }
 
-func TestValidateDiskMountWatch(t *testing.T) {
-	// A disk watch can carry a mount condition (mount + space in one entry).
+func TestValidateStorageMountWatch(t *testing.T) {
+	// A storage watch can carry a mount condition (mount + space in one entry).
 	good := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"data-mount": map[string]any{

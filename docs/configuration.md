@@ -511,10 +511,13 @@ Read-only endpoints:
   show a **Starting** or **Shutting down** banner while monitoring is not active
   yet.
 - `GET /api/whoami` — caller role, permissions and feature visibility.
-- `GET /api/services` — service list: name, `state` (`disabled`, `running`,
+- `GET /api/services` — **configured runtime** service list (the `kind: service`
+  files under `paths.services`): name, `state` (`disabled`, `running`,
   `paused`, `stopped`, `monitorized`, `failed`), backend status, `check_health`,
   `checks_failing`, active locks, monitor state/source/timestamp, backend, unit,
-  cooldown, remediation state, next eligible action and last event.
+  cooldown, remediation state, next eligible action and last event. This is not
+  `sermoctl services`, which lists catalog daemon profiles — see
+  [cli.md](cli.md#catalog-inventory).
 - `GET /api/services/{name}` — service detail: latest checks, rolling SLA, named
   runtime locks, discovered processes, automatic remediation policy state and
   rule window progress.

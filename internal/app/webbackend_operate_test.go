@@ -10,6 +10,7 @@ import (
 	"sermo/internal/locks"
 	"sermo/internal/operation"
 	"sermo/internal/servicemgr"
+	"sermo/internal/web"
 )
 
 type fakeManager struct{}
@@ -54,7 +55,7 @@ func TestWebBackendOperateEmitsEvent(t *testing.T) {
 		emit: func(e Event) { events = append(events, e) },
 	}
 
-	res := b.Operate(context.Background(), "web", "start")
+	res := b.Operate(context.Background(), "web", "start", web.OperateOpts{})
 	if !res.OK {
 		t.Fatalf("operate: %+v", res)
 	}
@@ -65,7 +66,7 @@ func TestWebBackendOperateEmitsEvent(t *testing.T) {
 		t.Fatalf("event = %+v", events[0])
 	}
 
-	b.Operate(context.Background(), "missing", "stop")
+	b.Operate(context.Background(), "missing", "stop", web.OperateOpts{})
 	if len(events) != 2 || events[1].Kind != "error" {
 		t.Fatalf("unknown service should emit error: %+v", events[1:])
 	}

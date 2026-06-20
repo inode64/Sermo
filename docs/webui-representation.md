@@ -29,7 +29,7 @@ Keep changes concrete:
 | --- | --- | --- |
 | Current user | `GET /api/whoami` | role and action permissions |
 | Readiness | `GET /readyz?verbose` | startup / shutdown banner |
-| Services | `GET /api/services` | main service list |
+| Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory) |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | latency chart when `metric` is omitted; named numeric metric series when present |
 | Service runtime metrics | `GET /api/services/{name}/runtime` | persisted service CPU/memory/IO history sampled by worker cycles |
@@ -55,11 +55,12 @@ enabled.
 
 | Area | Endpoint | Notes |
 | --- | --- | --- |
-| Service action | `POST /api/services/{name}/{action}` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; service operations use the safe engine |
+| Service action | `POST /api/services/{name}/{action}[?no_cascade=1]` | `monitor`, `unmonitor`, `start`, `stop`, `restart`, `reload`, `resume`; `no_cascade` skips `also_apply` targets on start/stop/restart |
 | Service preflight | `POST /api/services/{name}/preflight` | run preflight checks without changing service state |
 | Watch action | `POST /api/watches/{name}/{action}` | `monitor`, `unmonitor`, `expand` |
 | Lock release | `POST /api/locks/{service}/release?name=NAME` | releases inactive stale/expired named locks; active locks are refused |
 | Events clear | `POST /api/events/clear?before=TIME` | clears persisted event/activity rows; `before` accepts RFC3339 or duration |
+| State compact | `POST /api/state/compact?before=TIME` | prunes old SLA/metrics/event history and vacuums the state database; matches `sermoctl state compact` |
 | Diagnostics clean | `POST /api/diagnostics/clean` | removes stale control state for unconfigured targets; metric/SLA/event history is kept; returns 404 when diagnostics are disabled |
 | Daemon reload | `POST /api/reload` | requests a `sermod` configuration reload |
 
@@ -94,7 +95,7 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 | Alerts | errors / critical signals |
 | Monitored | monitored vs unmonitored services |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
-| Volumes | one gauge per mounted disk/volume watch, crit when its watch is firing |
+| Volumes | one gauge per mounted storage watch, crit when its watch is firing |
 
 Editable notes:
 
@@ -130,6 +131,11 @@ Session-local for operations started from the current browser; enriched with
 
 Section id: `services-section`
 
+Lists **configured** `kind: service` entries from the loaded config — state,
+checks, remediation and actions for what `sermod` monitors now. This is not
+`sermoctl services`, which inventories **catalog** daemon profiles under
+`catalog/services`. See [cli.md](cli.md#catalog-inventory).
+
 | Part | Current representation |
 | --- | --- |
 | Title | `Services` plus total count |
@@ -145,12 +151,12 @@ Columns:
 | --- | --- |
 | Service | display name, falling back to name, capitalized |
 | Category | YAML category or fallback |
-| State | normalized state plus monitor hint |
+| State | normalized state; enabled-but-unmonitored services show an **unmonitored** badge (with running/stopped hint when the unit is active/inactive) plus monitor hint |
 | Uptime | age of the oldest discovered service process, when available |
 | CPU total | latest whole process-tree CPU usage |
 | Memory | latest process-tree resident memory |
 | IO R/W | cumulative process-tree disk read/write bytes |
-| Actions | start, stop, restart, reload, resume, monitor/unmonitor |
+| Actions | start, **start only** (when `also_apply` is set), stop, restart, reload, resume, monitor/unmonitor; stop/restart confirm dialog offers **skip also_apply** |
 
 Row expansion:
 
@@ -265,7 +271,7 @@ Section id: `events-section`
 | Part | Current representation |
 | --- | --- |
 | Title | `Events` plus shadow-event note |
-| Controls | service, watch, kind, status, only errors, group actions, clear |
+| Controls | service, watch, kind, status, only errors, group actions, reset filters, optional `before` cutoff, clear log (admin) |
 | Table | event rows grouped by action when enabled |
 | Limit | latest matching events |
 
@@ -273,8 +279,12 @@ Editable notes:
 
 - Service/watch/kind/status filter live as the operator types (300ms debounce),
   matching the services and watches panels; Enter applies immediately, Escape
-  clears. The `only errors` checkbox refetches on change. Grouping stays
-  client-side and optional; raw chronology is still useful.
+  or **reset filters** clears the filter fields. The `only errors` checkbox
+  refetches on change. Grouping stays client-side and optional; raw chronology
+  is still useful.
+- **clear log** (admin only) calls `POST /api/events/clear` after confirmation,
+  matching `sermoctl events clear`. An optional **before** field passes
+  `?before=TIME` (duration or RFC3339) to prune only older rows.
 - The `kind` filter covers the emitted event kinds: `cycle`, `action`,
   `suppressed`, `shadow`, `alert`, `error`, `firing`, `recovered`, `dry-run`,
   `reload` (a successful config reload of the running daemon),
@@ -309,8 +319,8 @@ Section id: `daemon-section`
 
 Editable notes:
 
-- This panel is informational. Avoid action buttons here except config reload,
-  which currently lives in Diagnostics.
+- This panel is informational. Config reload and **compact state** live in the
+  page footer (admin only).
 
 ## Recent activity panel
 
@@ -323,6 +333,7 @@ Section id: `activity-section`
 | Watch notifies | recent notifier count |
 | Errors | recent error count |
 | Last activity | newest activity summary |
+| Actions | **clear log** (admin) — same `POST /api/events/clear` path as the Events panel |
 
 ## Runtime locks panel
 

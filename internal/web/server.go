@@ -17,6 +17,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	htmlpkg "html"
 	"io"
 	"log/slog"
@@ -59,19 +60,20 @@ type Service struct {
 	// Current process-tree runtime summary. These fields intentionally mirror
 	// ProcessTotals so the service list and detail expansion use the same
 	// semantics: matched processes plus their child/descendant processes.
-	StartedAt     string  `json:"started_at,omitempty"` // oldest discovered process start time, RFC3339
-	Uptime        string  `json:"uptime,omitempty"`     // display-ready age of StartedAt
-	UptimeSeconds int64   `json:"uptime_seconds,omitempty"`
-	ProcessCount  int     `json:"process_count,omitempty"`
-	RSS           int64   `json:"rss,omitempty"`
-	IORead        int64   `json:"io_read,omitempty"`  // cumulative disk read bytes
-	IOWrite       int64   `json:"io_write,omitempty"` // cumulative disk write bytes
-	FDs           int64   `json:"fds,omitempty"`
-	Threads       int64   `json:"threads,omitempty"`
-	CPU           float64 `json:"cpu,omitempty"`        // live CPU %, all host CPUs
-	CPUThread     float64 `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
-	NumCPU        int     `json:"num_cpu,omitempty"`
-	CPUReady      bool    `json:"cpu_ready,omitempty"`
+	StartedAt     string   `json:"started_at,omitempty"` // oldest discovered process start time, RFC3339
+	Uptime        string   `json:"uptime,omitempty"`     // display-ready age of StartedAt
+	UptimeSeconds int64    `json:"uptime_seconds,omitempty"`
+	ProcessCount  int      `json:"process_count,omitempty"`
+	RSS           int64    `json:"rss,omitempty"`
+	IORead        int64    `json:"io_read,omitempty"`  // cumulative disk read bytes
+	IOWrite       int64    `json:"io_write,omitempty"` // cumulative disk write bytes
+	FDs           int64    `json:"fds,omitempty"`
+	Threads       int64    `json:"threads,omitempty"`
+	CPU           float64  `json:"cpu,omitempty"`        // live CPU %, all host CPUs
+	CPUThread     float64  `json:"cpu_thread,omitempty"` // busiest process, single-core normalized
+	NumCPU        int      `json:"num_cpu,omitempty"`
+	CPUReady      bool     `json:"cpu_ready,omitempty"`
+	AlsoApply     []string `json:"also_apply,omitempty"` // also_apply cascade targets
 }
 
 // Application is a view of one installed application (a catalog app daemon) for
@@ -96,31 +98,31 @@ type Application struct {
 // the watches section is the main thing to show). Enriched with useful
 // runtime/config info for operators.
 type Watch struct {
-	Name             string           `json:"name"`
-	DisplayName      string           `json:"display_name,omitempty"`
-	CheckType        string           `json:"check_type,omitempty"`
-	Summary          string           `json:"summary,omitempty"`
-	Interval         string           `json:"interval,omitempty"`
-	State            string           `json:"state"`
-	Enabled          bool             `json:"enabled"`
-	Monitor          string           `json:"monitor,omitempty"` // enabled | disabled | previous
-	Monitored        bool             `json:"monitored"`
-	MonitorSource    string           `json:"monitor_source,omitempty"`
-	MonitorChangedAt string           `json:"monitor_changed_at,omitempty"`
-	FireOnFail       bool             `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/storage)
-	HasHook          bool             `json:"has_hook"`
-	HookCommand      []string         `json:"hook_command,omitempty"`
-	Notifiers        []string         `json:"notifiers,omitempty"`
-	NotifierCount    int              `json:"notifier_count"`
-	DryRun           bool             `json:"dry_run"`
-	Conditions       []WatchCondition `json:"conditions,omitempty"`
-	Disk             *DiskWatchInfo   `json:"disk,omitempty"`
-	Swap             *SwapWatchInfo   `json:"swap,omitempty"`
-	Meter            *WatchMeter      `json:"meter,omitempty"`
-	Readings         []WatchReading   `json:"readings,omitempty"`
-	Expand           *WatchExpand     `json:"expand,omitempty"`
-	LastActivity     string           `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
-	LastActivityKind string           `json:"last_activity_kind,omitempty"`
+	Name             string            `json:"name"`
+	DisplayName      string            `json:"display_name,omitempty"`
+	CheckType        string            `json:"check_type,omitempty"`
+	Summary          string            `json:"summary,omitempty"`
+	Interval         string            `json:"interval,omitempty"`
+	State            string            `json:"state"`
+	Enabled          bool              `json:"enabled"`
+	Monitor          string            `json:"monitor,omitempty"` // enabled | disabled | previous
+	Monitored        bool              `json:"monitored"`
+	MonitorSource    string            `json:"monitor_source,omitempty"`
+	MonitorChangedAt string            `json:"monitor_changed_at,omitempty"`
+	FireOnFail       bool              `json:"fire_on_fail"` // true = fires when check fails (e.g. health checks); false = fires on condition (e.g. load/storage)
+	HasHook          bool              `json:"has_hook"`
+	HookCommand      []string          `json:"hook_command,omitempty"`
+	Notifiers        []string          `json:"notifiers,omitempty"`
+	NotifierCount    int               `json:"notifier_count"`
+	DryRun           bool              `json:"dry_run"`
+	Conditions       []WatchCondition  `json:"conditions,omitempty"`
+	Storage          *StorageWatchInfo `json:"storage,omitempty"`
+	Swap             *SwapWatchInfo    `json:"swap,omitempty"`
+	Meter            *WatchMeter       `json:"meter,omitempty"`
+	Readings         []WatchReading    `json:"readings,omitempty"`
+	Expand           *WatchExpand      `json:"expand,omitempty"`
+	LastActivity     string            `json:"last_activity,omitempty"` // RFC3339 of last watch activity, if any
+	LastActivityKind string            `json:"last_activity_kind,omitempty"`
 }
 
 // WatchCondition is one configured watch predicate, rendered in the WebUI.
@@ -145,7 +147,7 @@ type WatchExpand struct {
 }
 
 // SwapWatchInfo is live swap usage for a swap host watch, mirroring the
-// volume-style used/free rendering of DiskWatchInfo.
+// volume-style used/free rendering of StorageWatchInfo.
 type SwapWatchInfo struct {
 	TotalBytes uint64  `json:"total_bytes"`
 	UsedBytes  uint64  `json:"used_bytes"`
@@ -155,7 +157,7 @@ type SwapWatchInfo struct {
 
 // WatchMeter is a generic 0-100% usage gauge for a host watch that has a
 // natural capacity (memory, load, fds, pids, conntrack), giving those watches the same
-// progress-bar rendering as swap/disk. UsedPct always drives the bar; the
+// progress-bar rendering as swap/storage. UsedPct always drives the bar; the
 // kind-specific fields below carry the human-readable detail (bytes for
 // memory, counts for fds/pids/conntrack, raw load vs CPU count for load).
 type WatchMeter struct {
@@ -173,8 +175,8 @@ type WatchMeter struct {
 	NumCPU int     `json:"num_cpu,omitempty"`
 }
 
-// DiskWatchInfo is live filesystem data for a storage host watch.
-type DiskWatchInfo struct {
+// StorageWatchInfo is live filesystem data for a storage host watch.
+type StorageWatchInfo struct {
 	Path             string   `json:"path"`
 	Mounted          bool     `json:"mounted"`
 	MountPoint       string   `json:"mount_point,omitempty"`
@@ -308,6 +310,27 @@ type HostMetric struct {
 type ActionResult struct {
 	OK      bool   `json:"ok"`
 	Message string `json:"message,omitempty"`
+}
+
+// OperateOpts controls optional service-operation behavior from the web API.
+type OperateOpts struct {
+	NoCascade bool // skip also_apply cascade targets
+}
+
+// StateCompactResult is the outcome of pruning old persisted history and
+// vacuuming the SQLite state database.
+type StateCompactResult struct {
+	OK             bool   `json:"ok"`
+	Message        string `json:"message,omitempty"`
+	Pruned         int64  `json:"pruned"`
+	Before         string `json:"before,omitempty"` // RFC3339 cutoff
+	SLA            int64  `json:"sla,omitempty"`
+	Measurements   int64  `json:"measurements,omitempty"`
+	Metrics        int64  `json:"metrics,omitempty"`
+	DaemonMetrics  int64  `json:"daemon_metrics,omitempty"`
+	ServiceMetrics int64  `json:"service_metrics,omitempty"`
+	Events         int64  `json:"events,omitempty"`
+	Vacuum         bool   `json:"vacuum"`
 }
 
 // DiagnosticCleanResult is the outcome of pruning stale control state found
@@ -587,7 +610,10 @@ type Backend interface {
 	// Intended for the `sermoctl events clear` command.
 	PruneEvents(ctx context.Context, before time.Time) int
 	// Operate runs start|stop|restart|reload|resume on a service through the safe engine.
-	Operate(ctx context.Context, name, action string) ActionResult
+	Operate(ctx context.Context, name, action string, opts OperateOpts) ActionResult
+	// CompactState prunes persisted history older than before and vacuums the
+	// state database. Zero before selects the normal retention window.
+	CompactState(ctx context.Context, before time.Time) StateCompactResult
 	// Preflight runs a service's preflight checks on demand; ok is false for
 	// unknown names.
 	Preflight(ctx context.Context, name string) (PreflightResult, bool)
@@ -647,8 +673,6 @@ type Server struct {
 
 	// Reload, if set, is called for admin POST /api/reload requests. It should
 	// trigger a configuration reload (equivalent to SIGHUP on the daemon).
-	// Used by both the web UI button and (indirectly) sermoctl daemon reload
-	// when the web UI is reachable.
 	Reload func() error
 
 	// DiagnosticsDisabled hides the Diagnostics panel in the dashboard and makes
@@ -691,6 +715,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/services/{name}/events", s.handleServiceEvents)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/events/clear", s.handleEventsClear)
+	mux.HandleFunc("POST /api/state/compact", s.handleStateCompact)
 	mux.HandleFunc("GET /api/diagnostics", s.handleDiagnostics)
 	mux.HandleFunc("POST /api/diagnostics/clean", s.handleDiagnosticsClean)
 	mux.HandleFunc("GET /api/ops", s.handleOperations)
@@ -1022,24 +1047,49 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 // handleEventsClear supports `sermoctl events clear [--before TIME]`.
 // TIME may be RFC3339 or a duration (e.g. "2h" means "before now-2h").
+func queryBool(r *http.Request, key string) bool {
+	v := strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key)))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func parseBeforeQuery(beforeStr string) (time.Time, error) {
+	if beforeStr == "" {
+		return time.Time{}, nil
+	}
+	if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
+		return t, nil
+	}
+	if d, err := time.ParseDuration(beforeStr); err == nil {
+		return time.Now().Add(-d), nil
+	}
+	return time.Time{}, fmt.Errorf("bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)")
+}
+
 func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
-	beforeStr := r.URL.Query().Get("before")
-	var before time.Time
-	if beforeStr != "" {
-		if t, err := time.Parse(time.RFC3339, beforeStr); err == nil {
-			before = t
-		} else if d, err := time.ParseDuration(beforeStr); err == nil {
-			before = time.Now().Add(-d)
-		} else {
-			writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: "bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)"})
-			return
-		}
+	before, err := parseBeforeQuery(r.URL.Query().Get("before"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ActionResult{OK: false, Message: err.Error()})
+		return
 	}
 	n := s.Backend.PruneEvents(r.Context(), before)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":     true,
 		"pruned": n,
 	})
+}
+
+func (s *Server) handleStateCompact(w http.ResponseWriter, r *http.Request) {
+	before, err := parseBeforeQuery(r.URL.Query().Get("before"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, StateCompactResult{OK: false, Message: err.Error()})
+		return
+	}
+	res := s.Backend.CompactState(s.operateContext(), before)
+	status := http.StatusOK
+	if !res.OK {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, res)
 }
 
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
@@ -1158,7 +1208,8 @@ func (s *Server) handleAction(w http.ResponseWriter, r *http.Request) {
 	action := r.PathValue("action")
 	switch {
 	case operateActions[action]:
-		res := s.Backend.Operate(s.operateContext(), name, action)
+		opts := OperateOpts{NoCascade: queryBool(r, "no_cascade")}
+		res := s.Backend.Operate(s.operateContext(), name, action, opts)
 		status := http.StatusOK
 		if !res.OK {
 			status = http.StatusConflict
