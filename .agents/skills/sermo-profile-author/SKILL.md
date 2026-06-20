@@ -13,7 +13,7 @@ Each daemon should define:
 
 ```text
 service name
-backend aliases
+per-init service candidates
 variables
 version command
 config/preflight checks

@@ -498,17 +498,17 @@ func buildHTTPCheck(b base, entry map[string]any, client *http.Client) (Check, s
 		expect:      expect,
 		expectJSON:  parseJSONAssertions(entry["expect_json"]),
 	}
-	// expect_body is either a substring (string form) or an {op, value}
-	// operator comparison against the trimmed body.
-	switch eb := entry["expect_body"].(type) {
-	case string:
-		hc.expectBody = eb
-	case map[string]any:
-		op := cfgval.AsString(eb["op"])
-		if !validCompareOp(op) {
-			return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, =~"
+	// expect_body is an {op, value} operator comparison against the trimmed body.
+	if eb, present := entry["expect_body"]; present {
+		bodyMatch, ok := eb.(map[string]any)
+		if !ok {
+			return nil, "http expect_body must be an {op, value} mapping"
 		}
-		hc.bodyOp, hc.bodyValue = op, cfgval.String(eb["value"])
+		op := cfgval.AsString(bodyMatch["op"])
+		if !validCompareOp(op) {
+			return nil, "http expect_body op must be one of ==, !=, >, >=, <, <=, contains, =~"
+		}
+		hc.bodyOp, hc.bodyValue = op, cfgval.String(bodyMatch["value"])
 	}
 	lop, lval, lwarn := parseExpectLatency(entry)
 	if lwarn != "" {

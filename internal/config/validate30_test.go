@@ -858,7 +858,7 @@ checks:
     json: { ping: true }
     expect_status: 200
     expect_json: { status: ok }
-    expect_body: "ok"
+    expect_body: { op: contains, value: ok }
 `)
 	if hasIssue(good, "checks.api") {
 		t.Fatalf("a valid http check was flagged: %v", good)

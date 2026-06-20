@@ -94,9 +94,22 @@ func TestHTTPBodyOperators(t *testing.T) {
 	if res := runHTTP(t, srv, map[string]any{"url": srv.URL + "/ver", "expect_body": map[string]any{"op": "=~", "value": `^v[0-9]+\.[0-9]+`}}); !res.OK {
 		t.Fatalf("regex on body should match: %s", res.Message)
 	}
-	// The legacy substring form still works.
-	if res := runHTTP(t, srv, map[string]any{"url": srv.URL + "/ver", "expect_body": "1.2"}); !res.OK {
-		t.Fatalf("substring expect_body should still pass: %s", res.Message)
+	if res := runHTTP(t, srv, map[string]any{"url": srv.URL + "/ver", "expect_body": map[string]any{"op": "contains", "value": "1.2"}}); !res.OK {
+		t.Fatalf("contains expect_body should pass: %s", res.Message)
+	}
+}
+
+func TestHTTPBodyStringExpectationRejected(t *testing.T) {
+	srv := httpCompareServer(t)
+	defer srv.Close()
+
+	_, warn := buildHTTP(t, srv, map[string]any{
+		"type":        "http",
+		"url":         srv.URL + "/ver",
+		"expect_body": "1.2",
+	})
+	if warn != `check "h": http expect_body must be an {op, value} mapping` {
+		t.Fatalf("warn = %q, want expect_body shape error", warn)
 	}
 }
 
