@@ -54,11 +54,11 @@ func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesLegacyDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
+func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{
 			"check": map[string]any{
-				"type": "storage",
+				"type":     "storage",
 				"path":     "/mnt/backup",
 				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
@@ -84,10 +84,29 @@ func TestBuildWatchesLegacyDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
 		t.Fatalf("expand not parsed: %+v", watches[0])
 	}
 	if watches[0].CheckType != "storage" {
-		t.Fatalf("legacy disk type should be canonicalized to storage, got %q", watches[0].CheckType)
+		t.Fatalf("check type = %q, want storage", watches[0].CheckType)
 	}
 	if len(watches[0].Notifiers) != 0 {
 		t.Fatalf("notify none must suppress global default, got %v", watches[0].Notifiers)
+	}
+}
+
+func TestBuildWatchesRejectsDiskAlias(t *testing.T) {
+	cfg := cfgWithWatches(map[string]any{
+		"disk-root": map[string]any{
+			"check": map[string]any{
+				"type":     "disk",
+				"path":     "/",
+				"used_pct": map[string]any{"op": ">=", "value": 90},
+			},
+		},
+	})
+	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
+	if len(watches) != 0 {
+		t.Fatalf("disk alias should not build watches, got %d", len(watches))
+	}
+	if len(warns) == 0 {
+		t.Fatal("disk alias should produce a warning")
 	}
 }
 
@@ -96,7 +115,7 @@ func TestBuildWatchesAbsentThenIsPureMonitorOnlyDisk(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
-				"type": "storage",
+				"type":     "storage",
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
@@ -142,7 +161,7 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 			}
 			entry := map[string]any{
 				"check": map[string]any{
-					"type": "storage",
+					"type":     "storage",
 					"path":     "/",
 					"used_pct": map[string]any{"op": ">=", "value": 90},
 				},
@@ -173,7 +192,7 @@ func TestBuildWatchesNotifyNoneIsMonitorOnly(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
-				"type": "storage",
+				"type":     "storage",
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
