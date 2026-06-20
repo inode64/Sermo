@@ -14,7 +14,7 @@ type EntropySamplerFunc func() (uint64, bool)
 // entropyCheck watches the kernel entropy pool against a threshold (typically
 // `avail < N`). Low entropy makes reads from /dev/random block and slows crypto
 // and TLS handshakes — most visible on VMs and headless/embedded hosts. Like
-// disk it is a level check: OK==true means the threshold holds.
+// storage it is a level check: OK==true means the threshold holds.
 type entropyCheck struct {
 	base
 	op      string

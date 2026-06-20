@@ -180,7 +180,7 @@ func byteSizeSuffixes() [13]byteSizeSuffix {
 
 // ByteSize parses a scalar byte size. It requires an explicit suffix using
 // binary units: K/M/G/T, with optional trailing B or iB ("5G", "5GB", "5GiB").
-// Unitless values are rejected so disk thresholds cannot be confused with
+// Unitless values are rejected so storage thresholds cannot be confused with
 // percentage thresholds.
 func ByteSize(v any) (uint64, bool) {
 	s := strings.TrimSpace(String(v))
