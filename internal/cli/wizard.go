@@ -433,33 +433,7 @@ func wizardPathKey(wizard string, fragment map[string]any) string {
 
 func wizardCleanupDirs(path, wizard string, fragment map[string]any) []string {
 	_, targetDir := wizardTargetDir(path, wizard, fragment)
-	dirs := []string{targetDir}
-	base := filepath.Dir(filepath.Clean(path))
-	for _, legacyName := range legacyWizardDirNames(wizard, fragment) {
-		if legacyName == "" {
-			continue
-		}
-		legacyDir := filepath.Join(base, legacyName)
-		if filepath.Clean(legacyDir) == filepath.Clean(targetDir) || slices.Contains(dirs, legacyDir) {
-			continue
-		}
-		dirs = append(dirs, legacyDir)
-	}
-	return dirs
-}
-
-func legacyWizardDirNames(wizard string, fragment map[string]any) []string {
-	names := []string{}
-	switch wizardConfigDirName(wizard, fragment) {
-	case "storages":
-		names = append(names, "storage")
-	case "networks":
-		names = append(names, "network")
-	}
-	if legacyName := safeConfigPathName(wizard); legacyName != "" {
-		names = append(names, legacyName)
-	}
-	return appendUniqueStrings(nil, names...)
+	return []string{targetDir}
 }
 
 func wizardConfigDirName(wizard string, fragment map[string]any) string {
