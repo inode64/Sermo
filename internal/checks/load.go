@@ -19,7 +19,7 @@ type LoadSample struct {
 // reads /proc/loadavg and runtime.NumCPU().
 type LoadSamplerFunc func() (LoadSample, error)
 
-// loadCheck watches the system load averages against thresholds (like disk, a
+// loadCheck watches the system load averages against thresholds (like storage, a
 // level check: OK==true means every predicate holds). With perCPU the loads are
 // divided by the CPU count first, so a threshold expresses load per core (1.0 ==
 // fully utilized) regardless of machine size.

@@ -21,7 +21,7 @@ type ConntrackSample struct {
 type ConntrackSamplerFunc func() (ConntrackSample, error)
 
 // conntrackCheck watches the netfilter conntrack table against its maximum. Like
-// disk it is a level check: OK==true means every predicate holds. A full table
+// storage it is a level check: OK==true means every predicate holds. A full table
 // drops new connections (and logs "nf_conntrack: table full"), so catching it
 // approaching the limit is valuable on busy gateways/proxies.
 type conntrackCheck struct {
