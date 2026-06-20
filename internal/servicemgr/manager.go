@@ -128,15 +128,10 @@ func CgroupPIDs(runner execx.Runner, readFile func(string) ([]byte, error), back
 	return pids, len(pids) > 0
 }
 
-// BackendPIDsFunc returns a process.Discoverer.BackendPIDs closure for a unit: it
-// reports the cgroup process set (preferred) plus the MainPID, deduplicated,
-// backed by the real host.
-func BackendPIDsFunc(backend Backend, unit string) func() []int {
-	return BackendPIDsFuncWithRunner(backend, unit, execx.CommandRunner{}, os.ReadFile)
-}
-
-// BackendPIDsFuncWithRunner is BackendPIDsFunc with injectable command and file
-// readers, used by app tests and by callers that already carry an execx runner.
+// BackendPIDsFuncWithRunner returns a process.Discoverer.BackendPIDs closure for
+// a unit: it reports the cgroup process set (preferred) plus the MainPID,
+// deduplicated. The command and file readers are injectable for tests and for
+// callers that already carry an execx runner.
 func BackendPIDsFuncWithRunner(backend Backend, unit string, runner execx.Runner, readFile func(string) ([]byte, error)) func() []int {
 	return func() []int {
 		seen := map[int]bool{}
