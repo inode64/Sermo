@@ -1,5 +1,5 @@
-// Package rules models and evaluates Sermo's guard/remediation/alert rules
-// (sections 13-17): the condition tree (and/or/not; failed/active over named
+// Package rules models and evaluates Sermo's guard/remediation/alert rules:
+// the condition tree (and/or/not; failed/active over named
 // checks or inline probes; file/command/service/process/metric leaves), guard
 // evaluation, for/within windows, the remediation policy (cooldown, rate limit,
 // backoff), and single- or multi-action `then` blocks.

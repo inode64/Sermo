@@ -221,8 +221,7 @@ func validateIgnoredWatchEntryFields(name, typ string, entry map[string]any, key
 }
 
 // validateNetCheck validates a net interface watch: an interface and a non-empty
-// metrics map, each metric with a valid condition and its own hook
-// (spec 2026-06-06-net-interface-watch §4).
+// metrics map, each metric with a valid condition and its own hook.
 func validateNetCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
 	if cfgval.String(check["interface"]) == "" {
@@ -351,7 +350,7 @@ func validateStateMetric(prefix string, m map[string]any, add func(string, ...an
 
 // validateICMPCheck validates an icmp host watch: a host (+ optional positive
 // count) and a non-empty metrics map, each metric with a valid condition and its
-// own hook (spec 2026-06-06-icmp-host-watch §3).
+// own hook.
 func validateICMPCheck(name string, check, entry map[string]any, defaultNotify []string, add func(string, ...any)) {
 	validateMetricWatchEntry(name, entry, add)
 	if cfgval.String(check["host"]) == "" {
