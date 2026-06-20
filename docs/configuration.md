@@ -314,8 +314,7 @@ process logs a warning, exits with status **1**, and does not start a second
 monitor loop.
 
 The daemon writes `<paths.runtime>/sermod.pid` (default `/run/sermo/sermod.pid`)
-at startup to make `sermoctl daemon reload` reliable (it also checks the legacy
-`/run/sermod.pid` used by the OpenRC packaging). If no pidfile is present,
+at startup to make `sermoctl daemon reload` reliable. If no pidfile is present,
 `sermoctl daemon reload` falls back to locating the running `sermod` process by
 name — a native scan of `/proc`, no external `pidof`/`pgrep` needed.
 

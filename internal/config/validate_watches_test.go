@@ -273,7 +273,7 @@ func TestValidateDiskInodesWatch(t *testing.T) {
 		"watches": map[string]any{
 			"disk-inodes": map[string]any{
 				"check": map[string]any{
-					"type": "storage",
+					"type":            "storage",
 					"path":            "/",
 					"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
 					"inodes_free":     map[string]any{"op": "<", "value": 10000},
@@ -304,7 +304,7 @@ func TestValidateDiskBytePredicates(t *testing.T) {
 		"watches": map[string]any{
 			"disk-bytes": map[string]any{
 				"check": map[string]any{
-					"type": "storage",
+					"type":       "storage",
 					"path":       "/",
 					"free_bytes": map[string]any{"op": "<", "value": "10G"},
 					"used_bytes": map[string]any{"op": ">=", "value": "100G"},
@@ -321,7 +321,7 @@ func TestValidateDiskBytePredicates(t *testing.T) {
 		"watches": map[string]any{
 			"disk-percent": map[string]any{
 				"check": map[string]any{
-					"type": "storage",
+					"type":     "storage",
 					"path":     "/",
 					"used_pct": map[string]any{"op": ">=", "value": "90%"},
 				},
