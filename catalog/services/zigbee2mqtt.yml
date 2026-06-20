@@ -4,8 +4,18 @@ display_name: "Zigbee2MQTT"
 category: web
 description: "Zigbee to MQTT bridge."
 service: zigbee2mqtt
+apps: [node]
 
 pidfile: /run/zigbee2mqtt.pid
 
 checks:
   service: { type: service, expect: active }
+
+rules:
+  restart-if-node-binary-changed:
+    type: remediation
+    if:
+      changed:
+        path: "${node_binary}"
+    then:
+      action: restart
