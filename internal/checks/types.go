@@ -56,9 +56,9 @@ func (c tcpCheck) Run(ctx context.Context) Result {
 }
 
 // httpCheck issues an HTTP request and asserts the response: the status code
-// (expect), optionally that the body contains a substring (expectBody) and that
-// the JSON response matches key/value pairs at dotted paths (expectJSON). The
-// request may carry custom headers and a raw or JSON body (section 12).
+// (expect), optionally the body via an operator comparison and JSON response
+// matches at dotted paths (expectJSON). The request may carry custom headers and
+// a raw or JSON body (section 12).
 type httpCheck struct {
 	base
 	client       *http.Client
@@ -68,7 +68,6 @@ type httpCheck struct {
 	body         []byte
 	contentType  string // set when the body is JSON, unless headers override it
 	expect       statusMatcher
-	expectBody   string // substring the body must contain
 	bodyOp       string // when set, compare the (trimmed) body via compareValue
 	bodyValue    string
 	expectJSON   []jsonAssertion
@@ -140,14 +139,11 @@ func (c *httpCheck) Run(ctx context.Context) Result {
 			return c.result(false, fmt.Sprintf("status %d; latency %sms not %s %s", resp.StatusCode, ms, c.latencyOp, c.latencyValue), start)
 		}
 	}
-	if c.expectBody == "" && c.bodyOp == "" && len(c.expectJSON) == 0 {
+	if c.bodyOp == "" && len(c.expectJSON) == 0 {
 		return c.success(resp, elapsed, fmt.Sprintf("status %d", resp.StatusCode), start)
 	}
 
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxHTTPBody))
-	if c.expectBody != "" && !strings.Contains(string(data), c.expectBody) {
-		return c.result(false, fmt.Sprintf("status %d; body does not contain %q", resp.StatusCode, c.expectBody), start)
-	}
 	if c.bodyOp != "" {
 		ok, err := compareValue(strings.TrimSpace(string(data)), c.bodyOp, c.bodyValue)
 		if err != nil {

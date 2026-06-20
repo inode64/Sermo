@@ -506,7 +506,7 @@ checks:
     proxy: "http://127.0.0.1:3128"      # route the probe via http/https/socks5 proxy
     body: "ping"                        # raw request body (string; alternative to json:)
     expect_status: 2xx
-    expect_body: ok                     # substring; or { op: "=~", value: "ok|ready" }
+    expect_body: { op: "=~", value: "ok|ready" }
     expect_latency: { op: "<", value: 250 }
     timeout: 5s
   http-json:

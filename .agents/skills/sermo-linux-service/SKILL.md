@@ -14,7 +14,7 @@ systemd
 OpenRC
 backend autodetection
 status normalization
-service name aliases
+service unit candidates
 systemd unit naming
 OpenRC service naming
 containers and chroots
@@ -111,7 +111,7 @@ both present
 neither present
 systemd degraded
 service name normalization
-alias resolution picks first existing unit; clear error when none resolve
+service candidate resolution picks first existing unit; clear error when none resolve
 status parsing
 command timeout
 ```
