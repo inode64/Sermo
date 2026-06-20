@@ -3043,7 +3043,7 @@ function renderWatchReadings(readings) {
 // Host watches table below. Matches the backend isStorageCheckType.
 function isStorageWatch(w) {
   const t = ((w && w.check_type) || "").toLowerCase();
-  return t === "storage" || t === "disk";
+  return t === "storage";
 }
 
 // isNetworkWatch reports whether a watch is a network/connectivity check. These
