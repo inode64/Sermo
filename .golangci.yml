@@ -24,6 +24,7 @@ linters:
     - nilerr
     - reassign                   # writes to other packages' package-level vars
     - rowserrcheck               # database/sql Rows.Err() left unchecked
+    - usestdlibvars              # prefer stdlib constants (http.StatusOK, ...)
     - wastedassign
   # Considered and deliberately NOT enabled:
   #   noctx     — 129 hits; the conn/ probes dial net/http without a context by
@@ -32,6 +33,9 @@ linters:
   #               fixed-header make([]byte, N) followed by append(body) is intended.
   #   nilnil    — the (nil, nil) "nothing to build" returns in watch_build are
   #               deliberate signals, not a sentinel-error case.
+  #   sqlclosecheck — its one hit is a loop-scoped rows.Close() that is correct
+  #               (a defer would leak handles across iterations); rowserrcheck
+  #               already covers the Rows.Err() case.
   #   unconvert — flags arch-dependent syscall.Stat_t/Statfs_t conversions that
   #               are needed on non-amd64 Linux; removing them would break ports.
   exclusions:

@@ -52,10 +52,10 @@ func TestTCPCheck(t *testing.T) {
 func TestHTTPCheck(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
-			w.WriteHeader(200)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
-		w.WriteHeader(503)
+		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	defer srv.Close()
 
@@ -122,7 +122,7 @@ func hostOf(t *testing.T, raw string) string {
 
 func TestHTTPCheckCertExpiry(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
@@ -145,7 +145,7 @@ func TestHTTPCheckCertExpiry(t *testing.T) {
 
 func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
@@ -166,7 +166,7 @@ func TestHTTPCheckCertVerifyDisabledPasses(t *testing.T) {
 
 func TestHTTPCheckCertVerifyFails(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 	insecure := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}} //nolint:gosec // test client must read the test server's self-signed cert
@@ -190,7 +190,7 @@ func TestHTTPCheckPostHeadersJSON(t *testing.T) {
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","data":{"count":3,"ready":true}}`))
 	}))
 	defer srv.Close()
@@ -719,7 +719,7 @@ func TestHTTPCheckThroughProxy(t *testing.T) {
 		if r.URL.IsAbs() {
 			gotProxied = true
 		}
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 	}))
 	defer proxy.Close()
 
