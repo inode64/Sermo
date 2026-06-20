@@ -125,7 +125,7 @@ func parseDeltaThreshold(raw any, label string) (op string, value float64, errs 
 }
 
 // levelPredsHold reports whether every predicate holds against values — the
-// level-check AND. A field absent from values can never hold (how disk treats
+// level-check AND. A field absent from values can never hold (how storage treats
 // inode predicates on an inode-less filesystem, and fds/pids treat an unknown
 // kernel limit).
 func levelPredsHold(preds []levelPred, values map[string]float64) bool {

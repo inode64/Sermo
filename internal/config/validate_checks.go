@@ -49,7 +49,7 @@ func validateMountConditions(prefix string, fields map[string]any, add addFunc) 
 }
 
 // validateOpNumeric validates an already-extracted {op, value} threshold map (a
-// disk-style comparison op and a numeric value) at the dotted label. It is the
+// storage-style comparison op and a numeric value) at the dotted label. It is the
 // shared core of every delta/threshold/predicate check.
 func validateOpNumeric(label string, m map[string]any, add addFunc) {
 	validateCompareOp(label, m, add)
@@ -73,7 +73,7 @@ func validateOpPercent(label string, m map[string]any, add addFunc) {
 }
 
 // validateCompareOp adds an error when the {op} of an already-extracted threshold
-// map is not one of the comparison operators the disk-style checks share. It is
+// map is not one of the comparison operators the storage-style checks share. It is
 // the op-validation prologue every validateOp* helper repeats.
 func validateCompareOp(label string, m map[string]any, add addFunc) {
 	if op := cfgval.String(m["op"]); !isValidCompareOp(op) {

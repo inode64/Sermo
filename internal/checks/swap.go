@@ -23,7 +23,7 @@ type SwapSample struct {
 type SwapSamplerFunc func() (SwapSample, error)
 
 // swapCheck watches one swap metric. `usage` is a level check over
-// used_pct/free_pct/free_bytes (like disk); `io` is the per-cycle delta of pages
+// used_pct/free_pct/free_bytes (like storage); `io` is the per-cycle delta of pages
 // swapped in+out (like net errors), so it is stateful and a pointer type. A watch
 // ticks sequentially on its own goroutine, so the state needs no locking.
 // OK==true means "fire".
