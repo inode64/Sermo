@@ -175,6 +175,10 @@ type PruneUnconfiguredControlStatesResult struct {
 	Rows     int64
 }
 
+// DefaultHistoryRetention is the normal SLA/metrics/event history window kept
+// unless an operator runs state compact with an explicit --before cutoff.
+const DefaultHistoryRetention = 366 * 24 * time.Hour
+
 // PruneHistoryResult summarizes old persisted history removed from time-series
 // and event tables.
 type PruneHistoryResult struct {

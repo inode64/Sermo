@@ -156,12 +156,24 @@ func (f *fakeBackend) CleanDiagnostics(context.Context) DiagnosticCleanResult {
 	return DiagnosticCleanResult{OK: true, Message: "no unconfigured control state found"}
 }
 func (f *fakeBackend) Operations(context.Context) OperationSlots { return f.opsSlots }
-func (f *fakeBackend) Operate(_ context.Context, name, action string) ActionResult {
-	f.operated = append(f.operated, name+"/"+action)
+func (f *fakeBackend) Operate(_ context.Context, name, action string, opts OperateOpts) ActionResult {
+	suffix := ""
+	if opts.NoCascade {
+		suffix = "?no_cascade"
+	}
+	f.operated = append(f.operated, name+"/"+action+suffix)
 	if f.failOp {
 		return ActionResult{OK: false, Message: "blocked"}
 	}
 	return ActionResult{OK: true, Message: "ok"}
+}
+func (f *fakeBackend) CompactState(_ context.Context, before time.Time) StateCompactResult {
+	return StateCompactResult{
+		OK:     true,
+		Pruned: 3,
+		Before: before.UTC().Format(time.RFC3339),
+		Vacuum: true,
+	}
 }
 func (f *fakeBackend) SetMonitored(_ context.Context, name string, monitored bool) error {
 	if f.monitored == nil {
@@ -221,13 +233,13 @@ func TestServesDashboard(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `<script nonce="`) || !strings.Contains(rec.Body.String(), `<style nonce="`) {
 		t.Fatalf("dashboard did not receive CSP nonce attributes")
 	}
-	for _, want := range []string{"usagebar-fill", "usagebar-label", "function diskUsedPct", `style="--usage-pct:${p.toFixed(2)}%"`, "usage-crit", `data-watch-action="expand"`, "confirmWatchExpand"} {
+	for _, want := range []string{"usagebar-fill", "usagebar-label", "function storageUsedPct", `style="--usage-pct:${p.toFixed(2)}%"`, "usage-crit", `data-watch-action="expand"`, "confirmWatchExpand"} {
 		if !strings.Contains(rec.Body.String(), want) {
-			t.Fatalf("dashboard missing disk usage UI marker %q", want)
+			t.Fatalf("dashboard missing storage usage UI marker %q", want)
 		}
 	}
 	if strings.Contains(rec.Body.String(), "transform:scaleX") {
-		t.Fatal("dashboard disk usage bar should use width growth, not transform growth")
+		t.Fatal("dashboard storage usage bar should use width growth, not transform growth")
 	}
 	for _, inlineHandler := range []string{"onclick=", "onchange=", "oninput=", "onkeydown="} {
 		if strings.Contains(rec.Body.String(), inlineHandler) {
@@ -672,6 +684,33 @@ func TestOperateActions(t *testing.T) {
 	}
 }
 
+func TestOperateNoCascadeQuery(t *testing.T) {
+	b := &fakeBackend{}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, postReq("/api/services/web/restart?no_cascade=1"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("restart no_cascade = %d", rec.Code)
+	}
+	if len(b.operated) != 1 || b.operated[0] != "web/restart?no_cascade" {
+		t.Fatalf("operated = %v, want web/restart?no_cascade", b.operated)
+	}
+}
+
+func TestStateCompact(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/state/compact?before=720h"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("state compact = %d body=%s", rec.Code, rec.Body.String())
+	}
+	var out StateCompactResult
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !out.OK || out.Pruned != 3 || !out.Vacuum {
+		t.Fatalf("compact result = %+v", out)
+	}
+}
+
 func TestMonitorActions(t *testing.T) {
 	b := &fakeBackend{}
 	h := newServer(b)
@@ -808,7 +847,7 @@ type ctxCapturingBackend struct {
 	operCtx context.Context
 }
 
-func (b *ctxCapturingBackend) Operate(ctx context.Context, name, action string) ActionResult {
+func (b *ctxCapturingBackend) Operate(ctx context.Context, name, action string, _ OperateOpts) ActionResult {
 	b.operCtx = ctx
 	timer := time.NewTimer(b.delay)
 	defer timer.Stop()

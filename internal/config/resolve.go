@@ -583,7 +583,7 @@ func (c *Config) libraryPath(lib string) (path string, known bool) {
 	if !ok {
 		return "", false
 	}
-	return daemonBinary(doc.Body), true
+	return DocumentBinary(doc.Body), true
 }
 
 // resolveChangedLibraries fills the `path` of a hand-written

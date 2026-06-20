@@ -235,11 +235,6 @@ func (c *Config) templateBody(tmpl *Document, kind string) map[string]any {
 	return body
 }
 
-// daemonBinary returns the raw (unexpanded) binary path of a daemon body.
-func daemonBinary(body map[string]any) string {
-	return DocumentBinary(body)
-}
-
 // discoverVersions globs the discovery path with the token's `${...}` replaced by
 // a filesystem wildcard and extracts the value that filled it from each match.
 // Values are de-duplicated and sorted for stable ordering.
@@ -275,7 +270,7 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 
 // instantiateVersion bakes a concrete value into a copy of the template body: the
 // token placeholder in the name becomes the value, and every `${...}` reference
-// for that token in the body (binary path, display_name, service, ...) is
+// for that token in the body (variables.binary, display_name, service, ...) is
 // substituted. Other `${var}` references are left for normal resolution.
 func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path, kind string) *Document {
 	name := strings.TrimSpace(strings.ReplaceAll(templateName, tok.placeholder, value))

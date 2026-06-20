@@ -2024,7 +2024,7 @@ variables:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if got := daemonBinary(cfg.Daemons["app"].Body); got != "/opt/debian/bin/app" {
+	if got := DocumentBinary(cfg.Daemons["app"].Body); got != "/opt/debian/bin/app" {
 		t.Errorf("baked binary = %q, want /opt/debian/bin/app", got)
 	}
 }
@@ -2059,7 +2059,7 @@ preflight:
 	}
 	// ${arch} is baked into the variable value (so the no-nested-variables rule
 	// never sees it) and flows through expansion.
-	if got := daemonBinary(cfg.Daemons["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
+	if got := DocumentBinary(cfg.Daemons["qemu"].Body); got != "/usr/bin/qemu-system-aarch64" {
 		t.Errorf("baked binary = %q, want /usr/bin/qemu-system-aarch64", got)
 	}
 	resolved, errs := cfg.ResolveDaemon("qemu")
@@ -2373,7 +2373,7 @@ func TestMaterializedVersionValuesUsesAllBinaryCandidates(t *testing.T) {
 
 // TestDaemonVersionTemplateDiscoversFromLinkedApp covers a daemon template whose
 // monitored binary is generic (no ${version}); installed versions come from the
-// linked app template, and ${version} is baked into daemon aliases.
+// linked app template, and ${version} is baked into the daemon body.
 func TestDaemonVersionTemplateDiscoversFromLinkedApp(t *testing.T) {
 	root := t.TempDir()
 	slots := filepath.Join(root, "lib")
@@ -2442,7 +2442,7 @@ defaults: { policy: { cooldown: 5m } }
 			t.Fatalf("expected materialized daemon php-fpm%s", v)
 		}
 		// Generic binary is preserved; version did not leak into it.
-		if got := daemonBinary(doc.Body); got != "/usr/sbin/php-fpm" {
+		if got := DocumentBinary(doc.Body); got != "/usr/sbin/php-fpm" {
 			t.Errorf("php-fpm%s binary = %q, want /usr/sbin/php-fpm", v, got)
 		}
 		// ${version} baked into the service unit candidate.
@@ -2843,7 +2843,7 @@ defaults: { policy: { cooldown: 5m } }
 			if _, present := doc.Body["versions"]; present {
 				t.Fatalf("%s still carries versions block", tt.name)
 			}
-			if got := daemonBinary(doc.Body); got != tt.binary {
+			if got := DocumentBinary(doc.Body); got != tt.binary {
 				t.Fatalf("%s binary = %q, want %q", tt.name, got, tt.binary)
 			}
 			if got := DisplayName(doc.Body, tt.name); got != tt.displayName {
@@ -3205,14 +3205,14 @@ defaults:
 		}
 		// Inherited the base rule; the versioned binary belongs to the linked app.
 		wantBin := fmt.Sprintf("%s/php%s/bin/php-fpm", binRoot, v)
-		if got := daemonBinary(doc.Body); got != "/usr/sbin/php-fpm" {
+		if got := DocumentBinary(doc.Body); got != "/usr/sbin/php-fpm" {
 			t.Errorf("%s binary = %q, want inherited /usr/sbin/php-fpm", name, got)
 		}
 		appDoc, ok := cfg.Apps[name]
 		if !ok {
 			t.Fatalf("expected materialized app %q", name)
 		}
-		if got := daemonBinary(appDoc.Body); got != wantBin {
+		if got := DocumentBinary(appDoc.Body); got != wantBin {
 			t.Errorf("%s app binary = %q, want %q", name, got, wantBin)
 		}
 		if _, ok := nested(t, doc.Body, "rules")["block-bad-config"]; !ok {

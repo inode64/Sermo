@@ -49,7 +49,7 @@ func TestWebBackendOperateBoundsSlotWait(t *testing.T) {
 
 	done := make(chan web.ActionResult, 1)
 	start := time.Now()
-	go func() { done <- b.Operate(context.Background(), "web", "start") }()
+	go func() { done <- b.Operate(context.Background(), "web", "start", web.OperateOpts{}) }()
 
 	select {
 	case res := <-done:

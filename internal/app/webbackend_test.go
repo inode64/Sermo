@@ -1177,14 +1177,14 @@ func TestWebBackendStorageWatchIncludesFilesystemDetails(t *testing.T) {
 	if cond["mounted"].Op != "==" || cond["mounted"].Value != "true" {
 		t.Fatalf("mounted condition = %+v", cond["mounted"])
 	}
-	if w.Disk == nil {
+	if w.Storage == nil {
 		t.Fatal("storage watch should include live filesystem info")
 	}
-	if w.Disk.MountPoint != "/data" || w.Disk.Device != "/dev/mapper/data" || w.Disk.FileSystem != "xfs" {
-		t.Fatalf("disk mount info = %+v", w.Disk)
+	if w.Storage.MountPoint != "/data" || w.Storage.Device != "/dev/mapper/data" || w.Storage.FileSystem != "xfs" {
+		t.Fatalf("storage mount info = %+v", w.Storage)
 	}
-	if w.Disk.FreeBytes != 125 || w.Disk.UsedBytes != 875 || w.Disk.FreePct != 12.5 || w.Disk.InodesFree != 20 {
-		t.Fatalf("disk usage info = %+v", w.Disk)
+	if w.Storage.FreeBytes != 125 || w.Storage.UsedBytes != 875 || w.Storage.FreePct != 12.5 || w.Storage.InodesFree != 20 {
+		t.Fatalf("storage usage info = %+v", w.Storage)
 	}
 	if w.Expand == nil || w.Expand.ByBytes != 5<<30 {
 		t.Fatalf("expand info = %+v, want 5G", w.Expand)
@@ -1309,11 +1309,11 @@ func TestWebBackendStorageWatchReportsSamplerErrors(t *testing.T) {
 	}
 
 	watches := b.Watches(context.Background())
-	if len(watches) != 1 || watches[0].Disk == nil {
-		t.Fatalf("watch disk info = %+v", watches)
+	if len(watches) != 1 || watches[0].Storage == nil {
+		t.Fatalf("watch storage info = %+v", watches)
 	}
-	if watches[0].Disk.SampleError != "statfs failed" || watches[0].Disk.MountSampleError != "mount table failed" {
-		t.Fatalf("disk errors = %+v", watches[0].Disk)
+	if watches[0].Storage.SampleError != "statfs failed" || watches[0].Storage.MountSampleError != "mount table failed" {
+		t.Fatalf("storage errors = %+v", watches[0].Storage)
 	}
 	if !strings.Contains(watches[0].Summary, "statfs failed") {
 		t.Fatalf("summary = %q, want statfs error", watches[0].Summary)
@@ -1427,7 +1427,7 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 
 	// Operate must be rejected for disabled
-	res := b.Operate(context.Background(), "mysql", "restart")
+	res := b.Operate(context.Background(), "mysql", "restart", web.OperateOpts{})
 	if res.OK {
 		t.Fatal("operate on disabled must fail")
 	}

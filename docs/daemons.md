@@ -37,6 +37,9 @@ Use one YAML file per catalog document: one daemon, app, lib or pattern in each
 file. `sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
 showing which are installed, the version their version command reports, and
 whether they resolve without error (add `all` to include the not-installed).
+Configured service instances (`kind: service` under `paths.services`) are listed
+by the web UI and `GET /api/services`, not by `sermoctl services` — see
+[cli.md](cli.md#catalog-inventory).
 `sermoctl patterns` lists the pattern sets and their rule counts (see the
 `analyze:` block in [rules.md](rules.md)).
 

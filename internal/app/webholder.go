@@ -214,11 +214,19 @@ func (h *WebBackendHolder) PruneEvents(ctx context.Context, before time.Time) in
 }
 
 // Operate runs a start/stop/restart/reload/resume action through the active backend.
-func (h *WebBackendHolder) Operate(ctx context.Context, name, action string) web.ActionResult {
+func (h *WebBackendHolder) Operate(ctx context.Context, name, action string, opts web.OperateOpts) web.ActionResult {
 	if b := h.backend(); b != nil {
-		return b.Operate(ctx, name, action)
+		return b.Operate(ctx, name, action, opts)
 	}
 	return web.ActionResult{OK: false, Message: "web backend unavailable"}
+}
+
+// CompactState prunes old persisted history through the active backend.
+func (h *WebBackendHolder) CompactState(ctx context.Context, before time.Time) web.StateCompactResult {
+	if b := h.backend(); b != nil {
+		return b.CompactState(ctx, before)
+	}
+	return web.StateCompactResult{OK: false, Message: "web backend unavailable"}
 }
 
 // Preflight runs a service's preflight checks through the active backend.
@@ -245,7 +253,7 @@ func (h *WebBackendHolder) SetWatchMonitored(ctx context.Context, name string, m
 	return nil
 }
 
-// ExpandWatch runs a configured disk-watch expansion through the active backend.
+// ExpandWatch runs a configured storage-watch expansion through the active backend.
 func (h *WebBackendHolder) ExpandWatch(ctx context.Context, name string) web.ActionResult {
 	if b := h.backend(); b != nil {
 		return b.ExpandWatch(ctx, name)

@@ -142,7 +142,10 @@
   #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
   #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover { background: var(--panel-2); color: var(--text); }
   #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
-  #err { color: var(--crit); min-height: 1.2rem; }
+  #err { min-height: 1.2rem; }
+  #err.status-err { color: var(--crit); }
+  #err.status-ok { color: var(--ok); }
+  #err.status-warn { color: var(--warn); }
   body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
@@ -589,7 +592,9 @@
     <input id="event-status" type="text" placeholder="status">
     <label class="muted"><input id="event-errors" type="checkbox"> only errors</label>
     <label class="muted"><input id="event-group" type="checkbox" checked> group actions</label>
-    <button id="event-clear">clear</button>
+    <button id="event-reset-filters" type="button">reset filters</button>
+    <input id="event-before" type="text" placeholder="before (e.g. 720h)" title="Optional: clear only events older than this duration or RFC3339 timestamp">
+    <button id="event-clear" class="danger-btn" type="button" style="display:none">clear log</button>
     <span id="event-count" class="muted"></span>
   </div>
   <table class="events">
@@ -664,8 +669,9 @@
     <div>Service actions: <b id="act-service"></b></div>
     <div>Watch hooks: <b id="act-hooks"></b></div>
     <div>Watch notifies: <b id="act-notify"></b></div>
-    <div>Errors: <b id="act-errors" style="color:#cf222e"></b></div>
+    <div>Errors: <b id="act-errors" class="bad"></b></div>
     <div id="act-last" class="muted" style="flex:1; min-width:180px;"></div>
+    <button id="activity-clear" class="danger-btn" type="button" style="display:none">clear log</button>
   </div>
 </details>
 
@@ -684,6 +690,9 @@
     <div id="confirm-subtitle" class="muted" style="font-size:.85rem; margin-top:.15rem"></div>
   </div>
   <div id="confirm-body" class="modal-body"></div>
+  <label id="confirm-no-cascade-wrap" class="muted" style="display:none; font-size:.85rem; margin:.35rem 0 .15rem;">
+    <input id="confirm-no-cascade" type="checkbox"> operate only this service (skip <code>also_apply</code>)
+  </label>
   <div class="modal-foot">
     <button data-confirm-result="false">cancel</button>
     <button id="confirm-preflight-btn">run preflight</button>
@@ -702,13 +711,23 @@
 <footer id="app-footer">
   <div class="footer-actions">
     <button id="reload-btn" style="display:none">reload config</button>
-    <span class="muted" style="font-size:.8rem">sermoctl daemon reload</span>
+    <button id="state-compact-btn" class="danger-btn" style="display:none">compact state</button>
+    <input id="state-before" type="text" placeholder="before (e.g. 720h)" title="Optional state compact cutoff: duration or RFC3339 timestamp" style="display:none; max-width:11rem">
+    <span class="muted" style="font-size:.8rem">sermoctl daemon reload · state compact</span>
   </div>
   <div class="footer-version muted">sermo {{VERSION}}</div>
 </footer>
 
 <script nonce="{{CSP_NONCE}}">
 const $ = (s) => document.querySelector(s);
+
+function setStatus(msg, kind) {
+  const el = $("#err");
+  if (!el) return;
+  el.textContent = msg || "";
+  el.classList.remove("status-err", "status-ok", "status-warn");
+  if (msg) el.classList.add(kind === "ok" ? "status-ok" : kind === "warn" ? "status-warn" : "status-err");
+}
 
 let me = { can_act: true, role: "admin", auth: false, diagnostics: true };
 
@@ -720,11 +739,14 @@ async function loadMe() {
   if (!me.auth) { $("#me").innerHTML = ""; }
   else if (me.role === "admin") { $("#me").textContent = "(admin)"; }
   else { $("#me").innerHTML = 'read-only &middot; <a href="login">log in</a>'; }
-  // Show admin-only controls (reload config button).
+  // Show admin-only controls (reload config, clear event log).
   const reloadBtn = $("#reload-btn");
   if (reloadBtn) {
     reloadBtn.style.display = (me.can_act ? "inline-block" : "none");
   }
+  updateEventAdminControls();
+  updateActivityAdminControls();
+  updateStateCompactControls();
   updateDiagnosticCleanControls(latestDiagnostics || []);
   // Hide the Diagnostics panel entirely when disabled via web.disable_diagnostics.
   const diagSection = $("#diag-section");
@@ -761,7 +783,7 @@ let lastLoadOk = Date.now();
 function showDisconnected() {
   document.body.classList.add("disconnected");
   const age = lastLoadOk ? ` (last update ${fmtSince(Date.now() - lastLoadOk)} ago)` : "";
-  $("#err").textContent = "⚠ Disconnected — retrying…" + age;
+  setStatus("⚠ Disconnected — retrying…" + age, "warn");
 }
 
 // load refreshes every panel in one parallel burst: the services fetch is the
@@ -790,7 +812,7 @@ async function load() {
     connOK = true;
     lastLoadOk = Date.now();
     document.body.classList.remove("disconnected");
-    $("#err").textContent = "";
+    setStatus("");
   } else {
     connOK = false;
     showDisconnected();
@@ -823,7 +845,7 @@ async function load() {
 }
 
 async function reloadConfig() {
-  $("#err").textContent = "";
+  setStatus("");
   const btn = $("#reload-btn");
   if (btn) btn.disabled = true;
   try {
@@ -835,11 +857,11 @@ async function reloadConfig() {
     if (!res.ok || body.ok === false) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
-    $("#err").textContent = "config reload requested";
+    setStatus("config reload requested", "ok");
     // next auto-refresh (or manual load) will pick up any service changes
     setTimeout(load, 800);
   } catch (e) {
-    $("#err").textContent = "reload failed: " + e.message;
+    setStatus("reload failed: " + e.message, "err");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -916,6 +938,83 @@ function clearEventFilters() {
   loadEvents();
 }
 
+function updateEventAdminControls() {
+  const show = !!me.can_act;
+  const btn = $("#event-clear");
+  const before = $("#event-before");
+  if (btn) btn.style.display = show ? "inline-block" : "none";
+  if (before) before.style.display = show ? "inline-block" : "none";
+}
+
+function updateActivityAdminControls() {
+  const btn = $("#activity-clear");
+  if (btn) btn.style.display = (me.can_act ? "inline-block" : "none");
+}
+
+function updateStateCompactControls() {
+  const show = !!me.can_act;
+  const btn = $("#state-compact-btn");
+  const before = $("#state-before");
+  if (btn) btn.style.display = show ? "inline-block" : "none";
+  if (before) before.style.display = show ? "inline-block" : "none";
+}
+
+async function clearEventLog(beforeValue) {
+  if (!me.can_act) return;
+  const before = (beforeValue != null ? beforeValue : ($("#event-before")?.value || "")).trim();
+  const msg = before
+    ? `Clear persisted events older than ${before}? This cannot be undone.`
+    : "Clear all persisted events from the activity log? This cannot be undone.";
+  if (!confirm(msg)) return;
+  setStatus("");
+  const btn = $("#event-clear");
+  if (btn) btn.disabled = true;
+  try {
+    const q = before ? `?before=${encodeURIComponent(before)}` : "";
+    const res = await fetch(`api/events/clear${q}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const n = Number(body.pruned) || 0;
+    setStatus(n ? `cleared ${n} event${n === 1 ? "" : "s"}` : "no events to clear", "ok");
+    await load();
+  } catch (e) {
+    setStatus(`events clear: ${e.message}`, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function compactState() {
+  if (!me.can_act) return;
+  const before = ($("#state-before")?.value || "").trim();
+  const msg = before
+    ? `Compact state history older than ${before} and vacuum the database?`
+    : "Compact state history using the normal retention window and vacuum the database?";
+  if (!confirm(msg)) return;
+  setStatus("");
+  const btn = $("#state-compact-btn");
+  if (btn) btn.disabled = true;
+  try {
+    const q = before ? `?before=${encodeURIComponent(before)}` : "";
+    const res = await fetch(`api/state/compact${q}`, {
+      method: "POST",
+      headers: { "X-Sermo-CSRF": "1" },
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    const n = Number(body.pruned) || 0;
+    setStatus(n ? `compacted state: pruned ${n} row${n === 1 ? "" : "s"}` : (body.message || "state compact completed"), "ok");
+    await load();
+  } catch (e) {
+    setStatus(`state compact: ${e.message}`, "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // loadDiag refreshes the Diagnostics panel. It runs on every dashboard refresh
 // (see load()), so it must not flicker: the "checking…" placeholder shows only on
 // the very first load, and a transient fetch error keeps the last good render
@@ -936,7 +1035,7 @@ async function loadDiag() {
     updateDiagnosticCleanControls(latestDiagnostics);
     renderAttention();
     if (!findings || !findings.length) {
-      $("#diag").innerHTML = `<tr><td style="color:#1a7f37">ok — no problems found</td></tr>`;
+      $("#diag").innerHTML = `<tr><td class="ok">ok — no problems found</td></tr>`;
       return;
     }
     $("#diag").innerHTML = findings.map((f) => `<tr>
@@ -971,7 +1070,7 @@ function updateDiagnosticCleanControls(findings) {
 
 async function cleanDiagnostics() {
   if (!confirm("Clean stale control state for services/watches that are no longer configured? Metric, SLA and event history is kept.")) return;
-  $("#err").textContent = "";
+  setStatus("");
   const btn = $("#diag-clean");
   if (btn) btn.disabled = true;
   try {
@@ -982,12 +1081,12 @@ async function cleanDiagnostics() {
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
     const services = (body.services || []).join(", ");
-    $("#err").textContent = body.pruned
+    setStatus(body.pruned
       ? `cleaned stale control state: ${body.pruned} row${body.pruned === 1 ? "" : "s"}${services ? " (" + services + ")" : ""}`
-      : (body.message || "no stale control state found");
+      : (body.message || "no stale control state found"), body.pruned ? "ok" : "ok");
     await loadDiag();
   } catch (e) {
-    $("#err").textContent = `diagnostics clean: ${e.message}`;
+    setStatus(`diagnostics clean: ${e.message}`, "err");
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -1266,6 +1365,18 @@ function serviceState(s) {
 
 function serviceUnmonitorized(s) {
   return !!(s && s.enabled && !s.monitored);
+}
+
+function serviceStateBadge(s) {
+  if (serviceUnmonitorized(s)) {
+    const backend = serviceState(s);
+    let label = "unmonitored";
+    if (backend === "running") label += " · running";
+    else if (backend === "stopped") label += " · stopped";
+    else if (backend === "paused") label += " · paused";
+    return stateBadgeLabel("unmonitorized", label);
+  }
+  return stateBadge(serviceState(s));
 }
 
 function isFailing(s) { return serviceState(s) === "failed"; }
@@ -1645,8 +1756,10 @@ function serviceRowParts(s) {
   } else {
     const stopped = st === "inactive" || st === "failed";
     const paused = st === "paused";
+    const alsoApply = (s.also_apply || []).length;
     actions = me.can_act ? `
-        <button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start">start</button>
+        <button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start"${alsoApply ? ` title="also applies to: ${esc(s.also_apply.join(", "))}"` : ""}>start</button>
+        ${alsoApply ? `<button ${busy || st === "active" || paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="start" data-no-cascade="1" title="start only ${esc(s.name)}">start only</button>` : ""}
         <button ${busy || stopped ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="stop">stop</button>
         <button ${busy ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="restart">restart</button>
         <button ${busy || !paused ? "disabled" : ""} data-service="${esc(s.name)}" data-service-action="resume">resume</button>
@@ -1665,7 +1778,7 @@ function serviceRowParts(s) {
   const main = `<tr id="svc-row-${esc(s.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
     <td><div class="svc-main">${chev}${name}</div>${busyText}</td>
     <td>${categoryBadge(category)}</td>
-    <td>${stateBadge(state)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : ""}</td>
+    <td>${serviceStateBadge(s)}${state === "running" || state === "paused" || state === "stopped" ? monitorHint(s) : ""}</td>
     <td>${serviceUptimeCell(s)}</td>
     <td>${serviceCpuCell(s)}</td>
     <td>${serviceMemCell(s)}</td>
@@ -2442,11 +2555,11 @@ function renderServiceDetail(d) {
 
   const st = serviceState(d);
   const disabledNote = !d.enabled
-    ? `<p class="muted" style="color:#cf222e">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
+    ? `<p class="muted bad">This service is disabled in configuration (enabled: false). Edit its YAML file and reload the daemon to activate it.</p>`
     : "";
   const general = `<h2>General data</h2>
     <div class="runtime-grid">
-      <div><span class="muted">State</span><br>${stateBadge(st)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</div>
+      <div><span class="muted">State</span><br>${serviceStateBadge(d)}${st === "running" || st === "stopped" ? monitorHint(d) : ""}</div>
       <div><span class="muted">Category</span><br>${categoryBadge(categoryOf(d, "service"))}</div>
       <div><span class="muted">Unit</span><br>${unitCell(d)}</div>
       <div><span class="muted">Backend</span><br>${esc(d.backend || "—")}</div>
@@ -2613,10 +2726,10 @@ function cpuTotalsLine(pt) {
   return ` · cpu <b>${fmtPct(machine)}</b> ${machineBar}`;
 }
 
-// diskUsedPct returns the used percentage 0..100, or null when the volume
+// storageUsedPct returns the used percentage 0..100, or null when the volume
 // reports no usable figures — so callers render "—" instead of a misleading
 // 0% (empty/healthy-looking) bar for missing data.
-function diskUsedPct(d) {
+function storageUsedPct(d) {
   if (!d) return null;
   const used = Number(d.used_bytes);
   const total = Number(d.total_bytes);
@@ -2703,14 +2816,14 @@ function watchSummaryCell(w) {
   if (meterCell) return meterCell;
   const readingCell = readingsSummaryCell(w);
   if (readingCell) return readingCell;
-  const d = w.disk;
+  const d = w.storage;
   if (d) {
     if (d.sample_error) {
       return `<span class="bad">${esc(d.path || "")}: ${esc(d.sample_error)}</span>`;
     }
     const fs = d.filesystem ? ` · ${esc(d.filesystem)}` : "";
     const mount = d.mount_point && d.mount_point !== d.path ? ` · ${esc(d.mount_point)}` : "";
-    const usedPct = diskUsedPct(d);
+    const usedPct = storageUsedPct(d);
     const bar = usedPct == null ? '<span class="muted">—</span>' : usageBar(usedPct);
     return `<div>${esc(d.path || "")}<span class="muted">${fs}${mount}</span></div>
       <div>${bar} <span class="muted">· ${fmtBytes(d.used_bytes)} used · ${fmtBytes(d.free_bytes)} free</span></div>`;
@@ -2768,7 +2881,7 @@ function watchSummaryText(w) {
     return ["swap", fmtBytes(sw.used_bytes) + " used", fmtBytes(sw.free_bytes) + " free",
       fmtPct(sw.used_pct) + " used"].join(" ");
   }
-  const d = w.disk;
+  const d = w.storage;
   if (d) {
     return [
       d.path,
@@ -2779,7 +2892,7 @@ function watchSummaryText(w) {
       d.sample_error,
       d.mount_sample_error,
       d.free_bytes != null ? fmtBytes(d.free_bytes) + " free" : "",
-      diskUsedPct(d) == null ? "" : fmtPct(diskUsedPct(d)) + " used",
+      storageUsedPct(d) == null ? "" : fmtPct(storageUsedPct(d)) + " used",
     ].filter(Boolean).join(" ");
   }
   const parts = meterParts(w.meter);
@@ -2967,9 +3080,9 @@ function renderConditionRows(conditions) {
     </table>`;
 }
 
-function renderDiskWatch(d) {
+function renderStorageWatch(d) {
   if (!d) return "";
-  const usedPct = diskUsedPct(d);
+  const usedPct = storageUsedPct(d);
   const fs = d.filesystem || "unknown";
   const mount = d.mounted
     ? `<code>${esc(d.mount_point || "")}</code>`
@@ -2999,7 +3112,7 @@ function renderDiskWatch(d) {
 }
 
 // renderMeterWatch shows a memory/load/fds/pids/conntrack watch's live gauge in
-// the expansion detail, reusing the watch-grid layout that renderDiskWatch uses.
+// the expansion detail, reusing the watch-grid layout that renderStorageWatch uses.
 function renderMeterWatch(m) {
   if (!m) return "";
   const usedPct = pctClamp(m.used_pct || 0);
@@ -3345,7 +3458,7 @@ function renderWatchExpansion(w, events) {
     <div><span class="muted">Notifies</span><br>${notifiers}</div>
     <div><span class="muted">Dry run</span><br><b>${w.dry_run ? "yes" : "no"}</b></div>
   </div>`;
-  const live = renderDiskWatch(w.disk) + renderMeterWatch(w.meter) + renderWatchReadings(w.readings);
+  const live = renderStorageWatch(w.storage) + renderMeterWatch(w.meter) + renderWatchReadings(w.readings);
   const conditions = renderConditionRows(w.conditions || []);
   if (!events || !events.length) return cfg + live + conditions + '<div class="muted">No recent activity.</div>';
   const rows = events.slice(0, 50).map((e) => {
@@ -3484,7 +3597,7 @@ function lockServiceLink(l) {
 async function releaseLock(service, name) {
   const label = name ? `${service}.${name}` : service;
   if (!confirm(`release inactive lock "${label}"?`)) return;
-  $("#err").textContent = "";
+  setStatus("");
   const qs = name ? `?name=${encodeURIComponent(name)}` : "";
   try {
     const res = await fetch(`api/locks/${encodeURIComponent(service)}/release${qs}`, {
@@ -3493,9 +3606,10 @@ async function releaseLock(service, name) {
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok || body.ok === false) throw new Error(body.message || ("HTTP " + res.status));
+    setStatus(`released lock ${label}`, "ok");
     await load();
   } catch (e) {
-    $("#err").textContent = `release ${label}: ${e.message}`;
+    setStatus(`release ${label}: ${e.message}`, "err");
   }
 }
 
@@ -3756,13 +3870,19 @@ function renderStatus(ctx) {
   }
 }
 
-async function act(name, action) {
+async function act(name, action, opts = {}) {
+  let noCascade = !!opts.noCascade;
   if ((action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
-  $("#err").textContent = "";
+  if (!opts.noCascade && (action === "stop" || action === "restart")) {
+    noCascade = confirmNoCascade;
+    confirmNoCascade = false;
+  }
+  setStatus("");
   const tracked = isTrackedOperation(action);
   if (tracked) beginOperation(name, action);
   try {
-    const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}`, {
+    const q = noCascade ? "?no_cascade=1" : "";
+    const res = await fetch(`api/services/${encodeURIComponent(name)}/${action}${q}`, {
       method: "POST",
       headers: { "X-Sermo-CSRF": "1" },
     });
@@ -3773,14 +3893,14 @@ async function act(name, action) {
     if (tracked) finishOperation(name, true, body.message || body.status || "operation completed");
   } catch (e) {
     if (tracked) finishOperation(name, false, e.message);
-    $("#err").textContent = `${action} ${name}: ${e.message}`;
+    setStatus(`${action} ${name}: ${e.message}`, "err");
   }
   load();
 }
 
 async function actWatch(name, action) {
   if (action === "expand" && !confirmWatchExpand(name)) return;
-  $("#err").textContent = "";
+  setStatus("");
   try {
     const res = await fetch(`api/watches/${encodeURIComponent(name)}/${action}`, {
       method: "POST",
@@ -3791,7 +3911,7 @@ async function actWatch(name, action) {
       throw new Error(body.message || ("HTTP " + res.status));
     }
   } catch (e) {
-    $("#err").textContent = `${action} watch ${name}: ${e.message}`;
+    setStatus(`${action} watch ${name}: ${e.message}`, "err");
   }
   load();
 }
@@ -3799,12 +3919,13 @@ async function actWatch(name, action) {
 function confirmWatchExpand(name) {
   const w = (allWatches || []).find((item) => item && item.name === name) || {};
   const by = w.expand && Number(w.expand.by_bytes) > 0 ? fmtBytes(w.expand.by_bytes) : "the configured amount";
-  const path = w.disk && w.disk.path ? ` on ${w.disk.path}` : "";
+  const path = w.storage && w.storage.path ? ` on ${w.storage.path}` : "";
   return confirm(`Expand "${name}"${path} by ${by}?`);
 }
 
 let confirmResolve = null;
 let confirmCtx = null;
+let confirmNoCascade = false;
 
 async function confirmAction(name, action) {
   const dlg = $("#action-confirm");
@@ -3812,11 +3933,16 @@ async function confirmAction(name, action) {
     return confirm(`${action} "${name}"?`);
   }
   confirmCtx = { name, action, detail: null, lastEvent: null, preflight: null };
+  confirmNoCascade = false;
   $("#confirm-title").textContent = `${action.toUpperCase()} ${name}`;
   $("#confirm-subtitle").textContent = "Review the current service context before sending the operation.";
   $("#confirm-body").innerHTML = '<span class="muted">loading…</span>';
   $("#confirm-action-btn").textContent = `${action} ${name}`;
   $("#confirm-preflight-btn").disabled = true;
+  const cascadeWrap = $("#confirm-no-cascade-wrap");
+  const cascadeBox = $("#confirm-no-cascade");
+  if (cascadeWrap) cascadeWrap.style.display = "none";
+  if (cascadeBox) cascadeBox.checked = false;
 
   try {
     const [detailRes, eventRes] = await Promise.all([
@@ -3830,6 +3956,9 @@ async function confirmAction(name, action) {
       confirmCtx.lastEvent = (events || [])[0] || null;
     }
     $("#confirm-preflight-btn").disabled = action !== "restart";
+    const alsoApply = (confirmCtx.detail?.also_apply || []);
+    const showCascade = alsoApply.length > 0 && (action === "stop" || action === "restart");
+    if (cascadeWrap) cascadeWrap.style.display = showCascade ? "block" : "none";
     renderActionConfirm();
   } catch (e) {
     $("#confirm-body").innerHTML = `<span class="bad">Failed to load context: ${esc(e.message)}</span>`;
@@ -3843,6 +3972,7 @@ async function confirmAction(name, action) {
 }
 
 function closeActionConfirm(ok) {
+  if (ok) confirmNoCascade = !!($("#confirm-no-cascade")?.checked);
   const dlg = $("#action-confirm");
   if (dlg && dlg.open) dlg.close();
   const resolve = confirmResolve;
@@ -3886,9 +4016,14 @@ function renderActionConfirm() {
   const warning = ctx.action === "restart"
     ? "A safe restart stops the unit, verifies residual processes, then starts only if the stop phase is clean."
     : "Stop will run through locks, guards and residual-process handling. It will not start the service again.";
+  const cascadeTargets = (d.also_apply || []).filter(Boolean);
+  const cascadeLine = cascadeTargets.length
+    ? `<p class="muted" style="margin-top:.5rem">also_apply: <code>${esc(cascadeTargets.join(", "))}</code></p>`
+    : "";
 
   $("#confirm-body").innerHTML = `
     <p style="margin-top:0">${esc(warning)}</p>
+    ${cascadeLine}
     <div class="modal-grid">
       <div class="muted">Unit</div><div><code>${esc(d.unit || "")}</code></div>
       <div class="muted">State</div><div>${stateBadge(serviceState(d))}</div>
@@ -4444,8 +4579,15 @@ function initStaticHandlers() {
   if (onlyErrors) onlyErrors.addEventListener("change", flushLoadEvents);
   const groupEvents = $("#event-group");
   if (groupEvents) groupEvents.addEventListener("change", renderGlobalEvents);
+  const eventResetFilters = $("#event-reset-filters");
+  if (eventResetFilters) eventResetFilters.addEventListener("click", clearEventFilters);
   const eventClear = $("#event-clear");
-  if (eventClear) eventClear.addEventListener("click", clearEventFilters);
+  if (eventClear) {
+    eventClear.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearEventLog();
+    });
+  }
 
   document.querySelectorAll("[data-confirm-result]").forEach((btn) => {
     btn.addEventListener("click", () => closeActionConfirm(btn.dataset.confirmResult === "true"));
@@ -4467,6 +4609,20 @@ function initStaticHandlers() {
       reloadConfig();
     });
   }
+  const activityClear = $("#activity-clear");
+  if (activityClear) {
+    activityClear.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearEventLog($("#event-before")?.value || "");
+    });
+  }
+  const stateCompactBtn = $("#state-compact-btn");
+  if (stateCompactBtn) {
+    stateCompactBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      compactState();
+    });
+  }
 }
 
 function initDelegatedHandlers() {
@@ -4485,7 +4641,9 @@ function initDelegatedHandlers() {
 
     const serviceAction = closestFrom(e, "[data-service-action][data-service]");
     if (serviceAction) {
-      act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "");
+      act(serviceAction.dataset.service || "", serviceAction.dataset.serviceAction || "", {
+        noCascade: serviceAction.dataset.noCascade === "1",
+      });
       return;
     }
 
