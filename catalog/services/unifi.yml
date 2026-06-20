@@ -22,8 +22,8 @@ variables:
 pidfile: /run/unifi.pid
 
 # The controller is a JVM process (shared `java` exe) plus its bundled mongod, so
-# match the controller by cmdline and the db by exe+user — the way the legacy
-# per-service kill lists did. These also feed the residual reaper on stop.
+# match the controller by cmdline and the db by exe+user when one java binary
+# serves several JVM apps. These also feed the residual reaper on stop.
 processes:
   controller: { type: command_match, cmd: "java .*unifi", user: unifi }
   mongo: { type: command_match, exe: "${mongod_binary}", user: unifi }
