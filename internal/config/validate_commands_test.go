@@ -15,6 +15,7 @@ func TestValidateCommandsExpectations(t *testing.T) {
 	tree := map[string]any{"commands": map[string]any{
 		"version": map[string]any{
 			"command":       []any{"/bin/tool"},
+			"user":          "",
 			"expect_exit":   "nope",                                   // not an int
 			"expect_stdout": map[string]any{"op": "=>", "value": "1"}, // invalid op
 			"expect_stderr": 42,                                       // wrong shape
@@ -24,6 +25,7 @@ func TestValidateCommandsExpectations(t *testing.T) {
 
 	joined := strings.Join(issues, "\n")
 	for _, want := range []string{
+		"commands.version user must be a non-empty string",
 		"commands.version expect_exit must be an integer or a non-empty list of integers",
 		"commands.version.expect_stdout op",
 		"commands.version.expect_stderr must be a string substring or an {op, value} mapping",
@@ -42,6 +44,7 @@ func TestValidateCommandsValid(t *testing.T) {
 	tree := map[string]any{"commands": map[string]any{
 		"version": map[string]any{
 			"command":       []any{"/bin/tool", "--version"},
+			"user":          "postgres",
 			"expect_exit":   []any{0, 1},
 			"expect_stdout": "v1.",
 			"expect_stderr": map[string]any{"op": "==", "value": ""},
@@ -53,6 +56,21 @@ func TestValidateCommandsValid(t *testing.T) {
 	validateCommands(tree, add)
 	if len(issues) != 0 {
 		t.Errorf("expected no issues, got: %v", issues)
+	}
+}
+
+func TestValidateCommandCheckUser(t *testing.T) {
+	var issues []string
+	add := func(format string, args ...any) { issues = append(issues, fmt.Sprintf(format, args...)) }
+
+	tree := map[string]any{"checks": map[string]any{
+		"config": map[string]any{"type": "command", "command": []any{"/bin/tool"}, "user": []any{"postgres"}},
+	}}
+	validateCheckSection(tree, "checks", "/run/sermo/locks", add)
+
+	joined := strings.Join(issues, "\n")
+	if !strings.Contains(joined, "checks.config user must be a non-empty string") {
+		t.Fatalf("missing command user issue in:\n%s", joined)
 	}
 }
 

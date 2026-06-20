@@ -14,7 +14,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `tcp`         | a TCP connection to `host:port` succeeds                           |
 | `ports`       | a set of `host` ports satisfy an open/closed expectation (see Ports)|
 | `http`        | the response matches `expect_status` (and optional headers/body/JSON, see HTTP)|
-| `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; `on_change` alerts when its output changes (e.g. a version), array form only |
+| `command`     | the command exits with `expect_exit` (default 0) and its output matches optional `expect_stdout`/`expect_stderr`; optional `user` runs it as a specific OS user; `on_change` alerts when its output changes (e.g. a version), array form only |
 | `config`      | a config-test command (`apachectl configtest`, `nginx -t`, …) passes, and (with `on_change`) the config `path` is unchanged (see Service health conditions)|
 | `service`     | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
@@ -129,14 +129,21 @@ compares the trimmed output (`== != > >= < <= contains =~`):
 checks:
   queue-drained:
     type: command
+    user: appqueue             # optional: username or numeric UID on the host
     command: [/usr/local/bin/queue-depth]
     expect_exit: 0
     expect_stdout: { op: "<", value: 100 }   # fewer than 100 items queued
     expect_stderr: ""                         # nothing written to stderr
 ```
 
+`user` runs the command as that OS user (Linux only). Sermo still executes the
+argv directly, never through a shell; the daemon/CLI process must have permission
+to switch user (normally by running as root), and an unresolved user or unsupported
+runner fails the check closed.
+
 The same `expect_exit` / `expect_stdout` / `expect_stderr` fields are available
-on a watch hook (`then.hook`) to validate the hook command's result.
+on a watch hook (`then.hook`) to validate the hook command's result, but
+`then.hook` does not use `user`.
 
 #### Grading output with `analyze:` (pattern sets)
 
@@ -218,7 +225,7 @@ config:
   `preflight.config` test and alerts when it **fails** (invalid config); with a
   `path` it also alerts when a config file changes. A **custom `preflight:`** on
   the service replaces the daemon's `preflight.config`, and the monitor then uses
-  that command.
+  that command, including its `user` field when present.
 - **State not errored** — the existing `service` check covers this: it alerts when
   the unit is not in the expected state (`failed`/`unknown`) or the backend cannot
   be queried.
@@ -1677,7 +1684,7 @@ if:
     - failed: { check: http }      # a named check failed
     - active: { check: backup-flag } # a named check passed
     - file: { path: /run/x, exists: true }
-    - command: { command: ["/usr/local/bin/can-restart", "${service}"], timeout: 5s, expect_exit: 0 }
+    - command: { user: postgres, command: ["/usr/local/bin/can-restart", "${service}"], timeout: 5s, expect_exit: 0 }
     - service: { state: active }
     - process: { exe: /usr/bin/mysqld, user: mysql, state: running }
     - metric: { scope: service, name: cpu, op: ">", value: 30% }
@@ -1686,8 +1693,9 @@ if:
 
 `command` is a direct condition leaf whose truth is the same as a command check:
 exit status/output expectations pass. It must use array argv form and declare a
-`timeout`; it is run without a shell, cached for the cycle like other inline
-probes, and must be side-effect-free. `failed`/`active` may also take an inline
+`timeout`; `user` is available with the same meaning as on a command check. It is
+run without a shell, cached for the cycle like other inline probes, and must be
+side-effect-free. `failed`/`active` may also take an inline
 probe (`tcp`, `command`, ...) instead of a `check:` reference when you need the
 named success/failure polarity.
 

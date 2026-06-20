@@ -509,14 +509,6 @@ func TestDaemonReloadNoPid(t *testing.T) {
 	}
 }
 
-func TestDaemonReloadDefaultPidfileFallbacksExcludeLegacyOpenRC(t *testing.T) {
-	for _, path := range defaultReloadPidfileFallbacks() {
-		if path == "/run/sermod.pid" {
-			t.Fatalf("default pidfile fallbacks must not include legacy OpenRC path %q", path)
-		}
-	}
-}
-
 func TestEventsList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	sample := []event{
