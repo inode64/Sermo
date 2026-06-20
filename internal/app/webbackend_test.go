@@ -279,15 +279,15 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 	}
 	add(t0, Event{Service: "web", Kind: "action", Action: "start", Status: "ok"})
 	add(t0.Add(time.Minute), Event{Service: "db", Kind: "action", Action: "restart", Status: "ok"})
-	add(t0.Add(2*time.Minute), Event{Watch: "disk", Kind: "notify", Message: "sent"})
-	add(t0.Add(3*time.Minute), Event{Watch: "disk", Kind: "error", Message: "ignored"})
+	add(t0.Add(2*time.Minute), Event{Watch: "storage-root", Kind: "notify", Message: "sent"})
+	add(t0.Add(3*time.Minute), Event{Watch: "storage-root", Kind: "error", Message: "ignored"})
 	add(t0.Add(4*time.Minute), Event{Service: "web", Kind: "action", Action: "restart", Status: "blocked"})
-	add(t0.Add(5*time.Minute), Event{Watch: "disk", Kind: "hook-failed", Message: "failed"})
+	add(t0.Add(5*time.Minute), Event{Watch: "storage-root", Kind: "hook-failed", Message: "failed"})
 
 	b := &WebBackend{
 		events:     events,
 		order:      []string{"web", "db"},
-		watchOrder: []string{"disk"},
+		watchOrder: []string{"storage-root"},
 	}
 
 	services := b.lastServiceEvents()
@@ -300,8 +300,8 @@ func TestWebBackendLastEventIndexes(t *testing.T) {
 
 	activities := b.lastWatchActivities()
 	wantAt := t0.Add(5 * time.Minute).Format(time.RFC3339)
-	if got := activities["disk"]; got.Kind != "hook-failed" || got.At != wantAt {
-		t.Fatalf("disk activity = %+v, want hook-failed at %s", got, wantAt)
+	if got := activities["storage-root"]; got.Kind != "hook-failed" || got.At != wantAt {
+		t.Fatalf("storage-root activity = %+v, want hook-failed at %s", got, wantAt)
 	}
 }
 
@@ -310,8 +310,8 @@ func TestWebBackendActivitySummaryCountsAllServiceOperations(t *testing.T) {
 	for _, action := range serviceOperationActionList() {
 		events.Add(Event{Service: "web", Kind: "action", Action: action, Status: "ok"})
 	}
-	events.Add(Event{Watch: "disk", Kind: "hook", Status: "ok"})
-	events.Add(Event{Watch: "disk", Kind: "notify", Status: "ok"})
+	events.Add(Event{Watch: "storage-root", Kind: "hook", Status: "ok"})
+	events.Add(Event{Watch: "storage-root", Kind: "notify", Status: "ok"})
 	events.Add(Event{Kind: "error", Message: "boom"})
 
 	b := &WebBackend{events: events}

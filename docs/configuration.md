@@ -961,7 +961,7 @@ changed path or matching pid — and ignore `notify_interval`.
 
 ```yaml
 watches:
-  disk-root:
+  storage-root:
     monitor: previous
     check:
       type: storage

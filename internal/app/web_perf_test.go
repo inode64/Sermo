@@ -110,11 +110,11 @@ func TestEventLogLastServiceAndWatchIndexes(t *testing.T) {
 	l.now = func() time.Time { return t0 }
 	l.Add(Event{Service: "web", Kind: "action", Action: "start"})
 	l.now = func() time.Time { return t0.Add(time.Minute) }
-	l.Add(Event{Watch: "disk", Kind: "notify"})
+	l.Add(Event{Watch: "storage-root", Kind: "notify"})
 	l.now = func() time.Time { return t0.Add(2 * time.Minute) }
 	l.Add(Event{Service: "web", Kind: "action", Action: "restart"})
 	l.now = func() time.Time { return t0.Add(3 * time.Minute) }
-	l.Add(Event{Watch: "disk", Kind: "hook-failed"})
+	l.Add(Event{Watch: "storage-root", Kind: "hook-failed"})
 
 	ev, ok := l.LastService("web")
 	if !ok || ev.Action != "restart" {
@@ -123,9 +123,9 @@ func TestEventLogLastServiceAndWatchIndexes(t *testing.T) {
 	if _, ok := l.LastService("db"); ok {
 		t.Fatal("LastService(db) should be missing")
 	}
-	watch, ok := l.LastWatchActivity("disk")
+	watch, ok := l.LastWatchActivity("storage-root")
 	if !ok || watch.Kind != "hook-failed" {
-		t.Fatalf("LastWatchActivity(disk) = %+v ok=%v", watch, ok)
+		t.Fatalf("LastWatchActivity(storage-root) = %+v ok=%v", watch, ok)
 	}
 }
 

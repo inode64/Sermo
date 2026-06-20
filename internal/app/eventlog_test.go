@@ -27,7 +27,7 @@ func TestEventLogRecentNewestFirst(t *testing.T) {
 func TestEventLogPerService(t *testing.T) {
 	l := NewEventLog(10)
 	l.Add(Event{Service: "a", Message: "a1"})
-	l.Add(Event{Watch: "disk", Message: "w1"}) // host watch, no service
+	l.Add(Event{Watch: "storage-root", Message: "w1"}) // host watch, no service
 	l.Add(Event{Service: "b", Message: "b1"})
 	l.Add(Event{Service: "a", Message: "a2"})
 
