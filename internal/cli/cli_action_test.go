@@ -22,7 +22,7 @@ func writeActionConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy:
@@ -42,7 +42,7 @@ func writeInvalidActionConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   runtime: `+root+`/run
   locks: `+root+`/locks
 defaults:
@@ -63,7 +63,7 @@ func writeReloadCommandConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy:
@@ -157,7 +157,7 @@ func writeCascadeConfig(t *testing.T) string {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   runtime: `+root+`/run
 defaults:
   policy:

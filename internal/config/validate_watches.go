@@ -39,7 +39,7 @@ func validateWatches(watches map[string]any, locksDir string, notifiers map[stri
 		}
 		cp := "watches." + name + ".check"
 		switch cfgval.String(check["type"]) {
-		case "storage", "disk":
+		case "storage":
 			// The one single-shot type with its own case: a storage watch may carry
 			// a then.expand action, so its hook block allows expand.
 			validateDiskFields(cp, check, add)

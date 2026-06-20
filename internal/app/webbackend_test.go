@@ -465,7 +465,7 @@ func TestWebBackendWatchesExposeMonitorMode(t *testing.T) {
 			"disk-root": map[string]any{
 				"display_name": "Root disk",
 				"monitor":      config.MonitorDisabled,
-				"check":        map[string]any{"type": "disk", "path": "/"},
+				"check":        map[string]any{"type": "storage", "path": "/"},
 			},
 		},
 	}}}
@@ -1468,7 +1468,7 @@ func TestWebBackendPropagatesCustomExecxRunnerToWatchHooks(t *testing.T) {
 	cfgContent := `
 paths:
   catalog: []
-  includes: []
+  services: []
   runtime: /tmp
 defaults:
   policy:

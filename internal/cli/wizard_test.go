@@ -444,10 +444,10 @@ func TestMergeWizardWatchesRejectsExistingFile(t *testing.T) {
 	}
 }
 
-func TestMergeWizardWatchesPreservesLegacyEnabledPath(t *testing.T) {
+func TestMergeWizardWatchesAddsStoragesPath(t *testing.T) {
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "sermo.yml")
-	if err := os.WriteFile(cfgPath, []byte("paths:\n  enabled: [apps]\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  services: [services]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	merged, err := mergeWizardWatches(cfgPath, "volume", map[string]any{"storage-root": map[string]any{"check": map[string]any{"type": "storage"}, "then": map[string]any{"notify": []any{"ops"}}}})
@@ -461,8 +461,8 @@ func TestMergeWizardWatchesPreservesLegacyEnabledPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "enabled:") || !strings.Contains(string(data), "apps") || !strings.Contains(string(data), "storages:") || !strings.Contains(string(data), "storages") {
-		t.Fatalf("legacy path should be preserved while paths.storages is added: %s", data)
+	if !strings.Contains(string(data), "services:") || !strings.Contains(string(data), "storages:") || !strings.Contains(string(data), "storages") {
+		t.Fatalf("paths.services should be preserved while paths.storages is added: %s", data)
 	}
 }
 
@@ -550,7 +550,7 @@ func TestRunWizardVolumeCanDeleteExistingWatchFilesIndividually(t *testing.T) {
 	if err := os.Mkdir(storageDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cfgPath, []byte("paths:\n  includes: [storage]\n"), 0o644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("paths:\n  storages: [storage]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// An existing managed watch for /old — a mountpoint the env no longer detects

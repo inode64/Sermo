@@ -10,7 +10,7 @@ import (
 )
 
 // levelPred is one {op, value} threshold predicate on a named field of a level
-// check (disk, swap usage, fds, conntrack, load, sensors, hdparm, smart, raid,
+// check (storage, swap usage, fds, conntrack, load, sensors, hdparm, smart, raid,
 // edac). Every level check shares this type and the parse grammar below.
 type levelPred struct {
 	field string
@@ -21,7 +21,7 @@ type levelPred struct {
 // Predicate field lists, one per level check. They are exported so config
 // validation walks the same lists and both layers stay in step by construction.
 var (
-	// DiskPredFields are the space/inode predicates of a storage/disk check.
+	// DiskPredFields are the space/inode predicates of a storage check.
 	DiskPredFields = []string{"used_pct", "free_pct", "used_bytes", "free_bytes", "inodes_used_pct", "inodes_free_pct", "inodes_free"}
 	// SwapUsageFields are the predicates of a swap usage metric.
 	SwapUsageFields = []string{"used_pct", "free_pct", "free_bytes"}

@@ -295,7 +295,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildProcessCheck(b, entry, deps)
 	case "count":
 		return buildCountCheck(b, entry)
-	case "disk", "storage":
+	case "storage":
 		return buildDiskCheck(b, entry, deps)
 	case "autofs":
 		return buildAutofsCheck(b, entry, deps)

@@ -244,7 +244,7 @@ func TestStatusCommandUsesResolvedConfiguredUnit(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 paths:
   catalog: [`+filepath.Join(root, "catalog")+`]
-  includes: [`+filepath.Join(root, "services")+`]
+  services: [`+filepath.Join(root, "services")+`]
 defaults:
   policy: { cooldown: 5m }
 `)

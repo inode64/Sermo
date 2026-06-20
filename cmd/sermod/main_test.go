@@ -31,7 +31,7 @@ func TestRunRejectsInvalidConfig(t *testing.T) {
   interval: notaduration
 paths:
   catalog: [%s]
-  includes: [%s]
+  services: [%s]
   runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
@@ -347,7 +347,7 @@ func TestRunSmokeLifecycle(t *testing.T) {
   interval: 1s
 paths:
   catalog: [%s]
-  includes: [%s]
+  services: [%s]
   runtime: %s
   state: %s
 defaults:

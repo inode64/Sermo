@@ -10,7 +10,7 @@ engine:
   backend: auto
 paths:
   catalog: [ @ROOT@/catalog ]
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
   mounts: [ @ROOT@/mounts ]
   runtime: /run/sermo
 defaults:

@@ -19,8 +19,7 @@ import (
 // subdirectory — `daemon` (services), `app` (tools/runtimes), `lib` (shared
 // libraries) — so they live in separate registries and a service may share a
 // name with the app that owns its binary (e.g. `apache` daemon + `apache` app).
-// `service` is an enabled instance (usually under an include dir such as
-// services/) that `uses` a daemon.
+// `service` is a configured instance under paths.services that `uses` a daemon.
 const (
 	kindDaemon   = "daemon"
 	kindApp      = "app"
@@ -139,7 +138,6 @@ type Global struct {
 	Storages  []string
 	Networks  []string
 	Watches   []string
-	Includes  []string
 	Mounts    []string
 	Runtime   string
 	State     string

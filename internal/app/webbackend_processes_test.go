@@ -26,7 +26,7 @@ func writeWebProcessConfig(t *testing.T, pidfile string) *config.Config {
 	globalPath := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(globalPath, []byte(`
 paths:
-  includes: [`+enabled+`]
+  services: [`+enabled+`]
 defaults:
   policy:
     cooldown: 5m
@@ -201,7 +201,7 @@ func TestWebBackendDetailNoResidentProcess(t *testing.T) {
 	globalPath := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(globalPath, []byte(`
 paths:
-  includes: [`+enabled+`]
+  services: [`+enabled+`]
 defaults:
   policy:
     cooldown: 5m
@@ -387,7 +387,7 @@ func TestWebBackendDetailIncludesProcessSelectorWarnings(t *testing.T) {
 	globalPath := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(globalPath, []byte(`
 paths:
-  includes: [`+enabled+`]
+  services: [`+enabled+`]
 defaults:
   policy:
     cooldown: 5m

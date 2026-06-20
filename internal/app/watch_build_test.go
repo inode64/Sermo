@@ -58,7 +58,7 @@ func TestBuildWatchesLegacyDiskExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{
 			"check": map[string]any{
-				"type":     "disk",
+				"type": "storage",
 				"path":     "/mnt/backup",
 				"free_pct": map[string]any{"op": "<", "value": 10},
 			},
@@ -96,7 +96,7 @@ func TestBuildWatchesAbsentThenIsPureMonitorOnlyDisk(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
-				"type":     "disk",
+				"type": "storage",
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
@@ -142,7 +142,7 @@ func TestBuildWatchesAppliesWatchMonitorMode(t *testing.T) {
 			}
 			entry := map[string]any{
 				"check": map[string]any{
-					"type":     "disk",
+					"type": "storage",
 					"path":     "/",
 					"used_pct": map[string]any{"op": ">=", "value": 90},
 				},
@@ -173,7 +173,7 @@ func TestBuildWatchesNotifyNoneIsMonitorOnly(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"check": map[string]any{
-				"type":     "disk",
+				"type": "storage",
 				"path":     "/",
 				"used_pct": map[string]any{"op": ">=", "value": 90},
 			},
@@ -481,7 +481,7 @@ func TestWatchFireOnFailInvertsTrigger(t *testing.T) {
 
 func TestBuildWatchesSkipsDisabled(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
-		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "disk", "path": "/"}},
+		"off": map[string]any{"enabled": false, "check": map[string]any{"type": "storage", "path": "/"}},
 	})
 	watches, _ := BuildWatches(cfg, Deps{}, time.Second)
 	if len(watches) != 0 {
@@ -492,7 +492,7 @@ func TestBuildWatchesSkipsDisabled(t *testing.T) {
 func TestBuildWatchesWarnsOnBadCheck(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"bad": map[string]any{
-			"check": map[string]any{"type": "disk"}, // missing path/predicate
+			"check": map[string]any{"type": "storage"}, // missing path/predicate
 			"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 		},
 	})
@@ -601,7 +601,7 @@ func TestHasConfiguredTargets(t *testing.T) {
 	disabledWatch := cfgWithWatches(map[string]any{
 		"disk-root": map[string]any{
 			"enabled": false,
-			"check":   map[string]any{"type": "disk", "path": "/"},
+			"check":   map[string]any{"type": "storage", "path": "/"},
 		},
 	})
 	watches, _ := BuildWatches(disabledWatch, Deps{DefaultTimeout: time.Second, ExecxRunner: execx.CommandRunner{}}, time.Second)

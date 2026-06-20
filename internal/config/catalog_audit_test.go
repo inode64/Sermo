@@ -42,7 +42,7 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	writeGlobal := func(dir, enabled, backend string) string {
 		global := filepath.Join(dir, "sermo.yml")
 		body := "engine: { backend: " + backend + " }\n" +
-			"paths:\n  catalog: [" + catalogDir + "]\n  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
+			"paths:\n  catalog: [" + catalogDir + "]\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
 			"defaults:\n  policy: { cooldown: 5m }\n"
 		if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 			t.Fatal(err)
@@ -116,9 +116,8 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "sermo.yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The shipped config enables no services out of the box; when bundled
-	// target dirs reappear, copy them so their entries validate too. `apps`
-	// is a legacy service-file alias for concrete service files.
+	// The shipped config enables no services out of the box; when bundled target
+	// dirs reappear, copy them so their entries validate too.
 	for _, include := range []string{"services", "apps", "notifiers", "storages", "networks", "watches", "mounts"} {
 		if bundled := filepath.Join(root, "examples", include); dirExists(bundled) {
 			copyYAMLDir(t, bundled, filepath.Join(dir, include))
@@ -148,17 +147,7 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 		t.Fatalf("examples/services has no service examples")
 	}
 
-	appsDir := filepath.Join(root, "examples", "apps")
-	if !dirExists(appsDir) {
-		return
-	}
-	apps, err := yamlFiles(appsDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(apps) > 0 {
-		t.Fatalf("examples/apps is a legacy alias; move service YAML examples to examples/services: %s", strings.Join(apps, ", "))
-	}
+	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "apps"), kindApp)
 }
 
 func TestShippedServiceConfigExamplesValidate(t *testing.T) {
@@ -170,7 +159,7 @@ func TestShippedServiceConfigExamplesValidate(t *testing.T) {
 
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -240,7 +229,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 	}
 	global := filepath.Join(dir, "sermo.yml")
 	body := "engine: { backend: openrc }\n" +
-		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: [" + enabled + "]\n  runtime: /run/sermo\n" +
+		"paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: [" + enabled + "]\n  runtime: /run/sermo\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -336,7 +325,7 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -374,7 +363,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -458,7 +447,7 @@ func TestCatalogAppsUseCanonicalNames(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -501,7 +490,7 @@ func TestCatalogAppsDeclareVersionSource(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -537,7 +526,7 @@ func TestCatalogAppsDeclareHealthOrVersionSource(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -571,7 +560,7 @@ func TestCatalogOptionalAppVersionsRequireHealth(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -597,7 +586,7 @@ func TestCatalogAppsUseSharedVersionProviders(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -641,7 +630,7 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -685,7 +674,7 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -868,7 +857,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -989,7 +978,7 @@ func TestCatalogServicesUseAppVariablesForBinaryRefs(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -1101,7 +1090,7 @@ func TestDatabaseCatalogDaemonsAreBackupToolNeutral(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -1154,7 +1143,7 @@ func TestWALGBackupAppsResolveRequiredBinaryPreflight(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n"
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1226,7 +1215,7 @@ func TestCatalogServicesReuseLinkedAppBinaries(t *testing.T) {
 	catalogDir := filepath.Join(root, "catalog")
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	body := "paths:\n  catalog: [" + catalogDir + "]\n  includes: []\n" +
+	body := "paths:\n  catalog: [" + catalogDir + "]\n  services: []\n" +
 		"defaults:\n  policy: { cooldown: 5m }\n"
 	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -1502,6 +1491,26 @@ func yamlFiles(dir string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+func assertExampleDocsHaveKind(t *testing.T, dir, kind string) {
+	t.Helper()
+	if !dirExists(dir) {
+		return
+	}
+	files, err := yamlFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range files {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.Kind != kind {
+			t.Fatalf("%s must use kind: %s, got %q", doc.Path, kind, doc.Kind)
+		}
+	}
 }
 
 func collectForbiddenKeys(node any, keyPath string, forbidden map[string]struct{}, found *[]string) {
