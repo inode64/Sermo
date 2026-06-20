@@ -16,9 +16,9 @@ func fakeDisk(usedPct, freePct float64, freeBytes, totalBytes uint64) func(strin
 	}
 }
 
-func TestDiskCheckUsedPctBreached(t *testing.T) {
+func TestStorageCheckUsedPctBreached(t *testing.T) {
 	c := diskCheck{
-		base:  base{name: "disk", service: ""},
+		base:  base{name: "storage", service: ""},
 		path:  "/",
 		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}},
 		usage: fakeDisk(92, 8, 100, 1000),
@@ -32,9 +32,9 @@ func TestDiskCheckUsedPctBreached(t *testing.T) {
 	}
 }
 
-func TestDiskCheckUsedPctNotBreached(t *testing.T) {
+func TestStorageCheckUsedPctNotBreached(t *testing.T) {
 	c := diskCheck{
-		base:  base{name: "disk"},
+		base:  base{name: "storage"},
 		path:  "/",
 		preds: []levelPred{{field: "used_pct", op: ">=", value: 90}},
 		usage: fakeDisk(50, 50, 500, 1000),
@@ -44,10 +44,10 @@ func TestDiskCheckUsedPctNotBreached(t *testing.T) {
 	}
 }
 
-func TestDiskCheckMultiPredAnd(t *testing.T) {
+func TestStorageCheckMultiPredAnd(t *testing.T) {
 	// used_pct >= 90 AND free_pct < 5 -> only both true fires.
 	c := diskCheck{
-		base:  base{name: "disk"},
+		base:  base{name: "storage"},
 		path:  "/",
 		preds: []levelPred{{"used_pct", ">=", 90}, {"free_pct", "<", 5}},
 		usage: fakeDisk(92, 8, 80, 1000), // used crossed, free not (8 !< 5)
@@ -57,9 +57,9 @@ func TestDiskCheckMultiPredAnd(t *testing.T) {
 	}
 }
 
-func TestDiskCheckFreeBytesBreached(t *testing.T) {
+func TestStorageCheckFreeBytesBreached(t *testing.T) {
 	c := diskCheck{
-		base:  base{name: "disk"},
+		base:  base{name: "storage"},
 		path:  "/",
 		preds: []levelPred{{field: "free_bytes", op: "<", value: float64(10 << 30)}},
 		usage: fakeDisk(92, 8, 9<<30, 100<<30),
@@ -73,9 +73,9 @@ func TestDiskCheckFreeBytesBreached(t *testing.T) {
 	}
 }
 
-func TestDiskCheckUsedBytesBreached(t *testing.T) {
+func TestStorageCheckUsedBytesBreached(t *testing.T) {
 	c := diskCheck{
-		base:  base{name: "disk"},
+		base:  base{name: "storage"},
 		path:  "/",
 		preds: []levelPred{{field: "used_bytes", op: ">=", value: float64(90 << 30)}},
 		usage: fakeDisk(92, 8, 8<<30, 100<<30),
@@ -89,35 +89,15 @@ func TestDiskCheckUsedBytesBreached(t *testing.T) {
 	}
 }
 
-func TestDiskCheckStatError(t *testing.T) {
+func TestStorageCheckStatError(t *testing.T) {
 	c := diskCheck{
-		base:  base{name: "disk"},
+		base:  base{name: "storage"},
 		path:  "/nope",
 		preds: []levelPred{{"used_pct", ">=", 90}},
 		usage: func(string) (DiskStats, error) { return DiskStats{}, context.DeadlineExceeded },
 	}
 	if c.Run(context.Background()).OK {
 		t.Fatal("expected not OK on stat error")
-	}
-}
-
-func TestBuildDiskCheck(t *testing.T) {
-	section := map[string]any{
-		"d": map[string]any{
-			"type":     "storage",
-			"path":     "/",
-			"used_pct": map[string]any{"op": ">=", "value": 90},
-		},
-	}
-	built, warns := Build(section, Deps{DiskUsage: fakeDisk(92, 8, 80, 1000)})
-	if len(warns) != 0 {
-		t.Fatalf("unexpected warnings: %v", warns)
-	}
-	if len(built) != 1 {
-		t.Fatalf("expected 1 built check, got %d", len(built))
-	}
-	if !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("expected disk check to fire above threshold")
 	}
 }
 
@@ -141,7 +121,7 @@ func TestBuildStorageCheck(t *testing.T) {
 	}
 }
 
-func TestBuildDiskByteSizeCheck(t *testing.T) {
+func TestBuildStorageByteSizeCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
 			"type":       "storage",
@@ -154,11 +134,11 @@ func TestBuildDiskByteSizeCheck(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("byte-sized disk check should build and fire below threshold")
+		t.Fatal("byte-sized storage check should build and fire below threshold")
 	}
 }
 
-func TestBuildDiskPercentSuffixCheck(t *testing.T) {
+func TestBuildStoragePercentSuffixCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
 			"type":     "storage",
@@ -171,11 +151,11 @@ func TestBuildDiskPercentSuffixCheck(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("percent-suffixed disk check should build and fire above threshold")
+		t.Fatal("percent-suffixed storage check should build and fire above threshold")
 	}
 }
 
-func TestBuildDiskByteSizeCheckRejectsUnitless(t *testing.T) {
+func TestBuildStorageByteSizeCheckRejectsUnitless(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
 			"type":       "storage",
@@ -192,10 +172,10 @@ func TestBuildDiskByteSizeCheckRejectsUnitless(t *testing.T) {
 	}
 }
 
-func TestBuildDiskCheckRejectsMissing(t *testing.T) {
+func TestBuildStorageCheckRejectsMissing(t *testing.T) {
 	_, warns := Build(map[string]any{"d": map[string]any{"type": "storage"}}, Deps{})
 	if len(warns) == 0 {
-		t.Fatal("expected a warning for disk check without path/predicate")
+		t.Fatal("expected a warning for storage check without path/predicate")
 	}
 }
 
@@ -203,7 +183,7 @@ func fakeDiskStats(s DiskStats) func(string) (DiskStats, error) {
 	return func(string) (DiskStats, error) { return s, nil }
 }
 
-func TestDiskCheckInodesUsedPct(t *testing.T) {
+func TestStorageCheckInodesUsedPct(t *testing.T) {
 	// 9500/10000 inodes used = 95%.
 	stats := DiskStats{TotalBytes: 1000, FreeBytes: 900, InodesTotal: 10000, InodesFree: 500, InodesUsedPct: 95, InodesFreePct: 5}
 	breach := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"inodes_used_pct", ">=", 90}}, usage: fakeDiskStats(stats)}
@@ -220,7 +200,7 @@ func TestDiskCheckInodesUsedPct(t *testing.T) {
 	}
 }
 
-func TestDiskCheckInodesUnavailableNeverFires(t *testing.T) {
+func TestStorageCheckInodesUnavailableNeverFires(t *testing.T) {
 	// A filesystem that reports no inodes (InodesTotal == 0) must not misfire an
 	// inode predicate (e.g. inodes_free < N would otherwise see 0 < N and fire).
 	stats := DiskStats{TotalBytes: 1000, FreeBytes: 900, InodesTotal: 0}
@@ -230,7 +210,7 @@ func TestDiskCheckInodesUnavailableNeverFires(t *testing.T) {
 	}
 }
 
-func TestBuildDiskInodeCheck(t *testing.T) {
+func TestBuildStorageInodeCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
 			"type":            "storage",
@@ -243,11 +223,11 @@ func TestBuildDiskInodeCheck(t *testing.T) {
 		t.Fatalf("unexpected warnings: %v", warns)
 	}
 	if len(built) != 1 || !built[0].Check.Run(context.Background()).OK {
-		t.Fatal("inode disk check should build and fire above threshold")
+		t.Fatal("inode storage check should build and fire above threshold")
 	}
 }
 
-func TestDiskCheckDataHasValueKey(t *testing.T) {
+func TestStorageCheckDataHasValueKey(t *testing.T) {
 	// used_pct predicate -> value is used_pct.
 	c := diskCheck{base: base{name: "d"}, path: "/", preds: []levelPred{{"used_pct", ">=", 90}}, usage: fakeDisk(92, 8, 80, 1000)}
 	if v := c.Run(context.Background()).Data["value"]; v != 92.0 {

@@ -69,8 +69,8 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	var env map[string]string
 	w := &Watch{
 		Name:      "disk-root",
-		CheckType: "disk",
-		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/", "used_pct": 92.0}},
 		Hook:      HookSpec{Command: []string{"/bin/true"}},
 		Runner: HookRunnerFunc(func(_ context.Context, _ []string, e map[string]string, _ time.Duration) error {
 			calls++
@@ -82,7 +82,7 @@ func TestWatchFiresHookWhenConditionTrue(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("expected hook to fire once, got %d", calls)
 	}
-	if env["SERMO_WATCH"] != "disk-root" || env["SERMO_PATH"] != "/" || env["SERMO_CHECK_TYPE"] != "disk" {
+	if env["SERMO_WATCH"] != "disk-root" || env["SERMO_PATH"] != "/" || env["SERMO_CHECK_TYPE"] != "storage" {
 		t.Fatalf("unexpected env: %v", env)
 	}
 }
@@ -132,8 +132,8 @@ func TestWatchExpandFiresOnceThenCooldown(t *testing.T) {
 	var events []Event
 	w := &Watch{
 		Name:      "expand-backup",
-		CheckType: "disk",
-		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/mnt/backup", "free_pct": 5.0}},
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/mnt/backup", "free_pct": 5.0}},
 		Expand:    &ExpandSpec{By: 5 << 30},
 		Expander:  exp,
 		Policy:    rules.Policy{Cooldown: 30 * time.Minute},
@@ -171,8 +171,8 @@ func TestWatchExpandFailureEmitsEvent(t *testing.T) {
 	var events []Event
 	w := &Watch{
 		Name:      "expand-backup",
-		CheckType: "disk",
-		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/mnt/backup"}},
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/mnt/backup"}},
 		Expand:    &ExpandSpec{By: 1 << 30},
 		Expander:  exp,
 		Emit:      func(e Event) { events = append(events, e) },
@@ -352,12 +352,12 @@ func TestHookEnvMapsAllDataKeys(t *testing.T) {
 	}
 }
 
-func TestHookEnvDiskKeysStillWork(t *testing.T) {
-	// Disk Data with a `value` key (set by the disk check) yields SERMO_PATH + SERMO_VALUE.
+func TestHookEnvStorageKeysStillWork(t *testing.T) {
+	// Storage check data with a `value` key yields SERMO_PATH + SERMO_VALUE.
 	res := checks.Result{Data: map[string]any{"path": "/", "value": 92.0, "used_pct": 92.0}}
-	env := hookEnv("disk-root", "disk", res)
+	env := hookEnv("disk-root", "storage", res)
 	if env["SERMO_PATH"] != "/" || env["SERMO_VALUE"] != "92" {
-		t.Fatalf("disk env wrong: %v", env)
+		t.Fatalf("storage env wrong: %v", env)
 	}
 }
 
@@ -412,8 +412,8 @@ func TestWatchWithRealOSHookRunner(t *testing.T) {
 	var hookEvents []Event
 	w := &Watch{
 		Name:      "disk-root",
-		CheckType: "disk",
-		Check:     stubCheck{name: "disk", ok: true, data: map[string]any{"path": "/"}},
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
 		Hook:      HookSpec{Command: []string{"/bin/true"}, Timeout: time.Second},
 		// Use the real OSHookRunner (which now goes through execx) instead of mock Func.
 		// This exercises defaultHookRunner path + real execution in a Watch context.

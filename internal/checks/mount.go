@@ -18,7 +18,7 @@ type Mount struct {
 // default reads /proc/mounts.
 type MountSamplerFunc func() ([]Mount, error)
 
-// mountCond are the optional mount expectations folded into a disk check, so a
+// mountCond are the optional mount expectations folded into a storage check, so a
 // filesystem's mount and its space are checked from one entry (no duplicated
 // path). active is true when any condition was configured.
 type mountCond struct {
@@ -26,7 +26,7 @@ type mountCond struct {
 	expectMount bool // require mounted; when false, require NOT mounted
 }
 
-// parseMountCond reads the mount expectation from a disk check entry. Only the
+// parseMountCond reads the mount expectation from a storage check entry. Only the
 // `mounted` predicate is configurable; filesystem type, source device and
 // options are reported as data but do not control the check.
 func parseMountCond(entry map[string]any) mountCond {
@@ -88,7 +88,7 @@ func DefaultMounts() ([]Mount, error) {
 }
 
 // MountForPath returns the deepest mount containing path, or nil when none is
-// known. It is useful for operator views where a disk check points at a
+// known. It is useful for operator views where a storage check points at a
 // directory below the actual mountpoint.
 func MountForPath(mounts []Mount, path string) *Mount {
 	cleanPath := filepath.Clean(path)

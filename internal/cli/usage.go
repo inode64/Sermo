@@ -3,13 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
-	"strings"
 	"text/tabwriter"
 )
 
 type commandUsage struct {
 	Name     string
-	Aliases  []string
 	Summary  string
 	Usage    []string
 	Flags    []string
@@ -484,7 +482,7 @@ func writeUsage(w io.Writer) {
 		tw = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 		for _, name := range group.Commands {
 			help, _ := lookupCommandUsage(name)
-			fmt.Fprintf(tw, "    %s\t%s\n", commandLabel(help), help.Summary)
+			fmt.Fprintf(tw, "    %s\t%s\n", help.Name, help.Summary)
 		}
 		_ = tw.Flush()
 	}
@@ -498,9 +496,6 @@ func writeCommandUsage(w io.Writer, topic string) bool {
 		return false
 	}
 	fmt.Fprintf(w, "Command: sermoctl %s\n", help.Name)
-	if len(help.Aliases) > 0 {
-		fmt.Fprintf(w, "Aliases: %s\n", strings.Join(help.Aliases, ", "))
-	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, help.Summary)
 	fmt.Fprintln(w)
@@ -539,20 +534,8 @@ func lookupCommandUsage(topic string) (commandUsage, bool) {
 		if help.Name == topic {
 			return help, true
 		}
-		for _, alias := range help.Aliases {
-			if alias == topic {
-				return help, true
-			}
-		}
 	}
 	return commandUsage{}, false
-}
-
-func commandLabel(help commandUsage) string {
-	if len(help.Aliases) == 0 {
-		return help.Name
-	}
-	return help.Name + " (" + strings.Join(help.Aliases, ", ") + ")"
 }
 
 func (a App) commandUsageError(command, msg string) int {
