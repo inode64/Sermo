@@ -910,7 +910,7 @@ monitor: previous              # enabled | disabled | previous
 enabled: true                  # false keeps it configured but no worker is built
 also_apply: [demo-sidecar]     # cascade start/stop/restart to other services
 
-service: demo-main             # scalar override; legacy map form is {name: demo-main}
+service: demo-main             # scalar unit override
 
 variables:
   health_path: /status         # changes every ${health_path} use at once

@@ -296,7 +296,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 			disabled := cfgval.Disabled(entry)
 			ctype := ""
 			if ce, ok := entry["check"].(map[string]any); ok {
-				ctype = canonicalWatchCheckType(cfgval.AsString(ce["type"]))
+				ctype = cfgval.AsString(ce["type"])
 			}
 			fireOnFail := checks.IsHealthType(ctype)
 			iv := cfgval.Duration(entry["interval"])
@@ -833,7 +833,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 			Value: cfgval.String(m["value"]),
 		})
 	}
-	switch canonicalWatchCheckType(cfgval.AsString(check["type"])) {
+	switch cfgval.AsString(check["type"]) {
 	case "autofs":
 		if path := cfgval.AsString(check["path"]); path != "" {
 			out = append(out, web.WatchCondition{Field: "path", Op: "==", Value: path})
@@ -900,7 +900,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 	if v, ok := check["mounted"].(bool); ok {
 		out = append(out, web.WatchCondition{Field: "mounted", Op: "==", Value: fmt.Sprintf("%t", v)})
 	}
-	if canonicalWatchCheckType(cfgval.AsString(check["type"])) == "oom" {
+	if cfgval.AsString(check["type"]) == "oom" {
 		if _, ok := check["delta"].(map[string]any); !ok {
 			out = append(out, web.WatchCondition{Field: "delta", Op: ">", Value: "0"})
 		}
@@ -910,7 +910,7 @@ func watchConditions(check, metrics map[string]any) []web.WatchCondition {
 }
 
 func watchConditionFields(check map[string]any) []string {
-	checkType := canonicalWatchCheckType(cfgval.AsString(check["type"]))
+	checkType := cfgval.AsString(check["type"])
 	switch checkType {
 	case "storage":
 		return checks.DiskPredFields
