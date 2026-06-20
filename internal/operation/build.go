@@ -209,9 +209,6 @@ type reloadSpec struct {
 	always  bool
 }
 
-// parseReloadSpec reads the native reload from the `reload:` block. It returns
-// nil when the block is absent or empty/invalid; the engine then uses the plain
-// backend reload.
 // reloadConfigError reports an invalid native reload declaration that validation
 // should have rejected but must not be silently ignored at runtime.
 func reloadConfigError(tree map[string]any) error {
@@ -231,6 +228,9 @@ func reloadConfigError(tree map[string]any) error {
 	return fmt.Errorf("reload: block declares no command or signal")
 }
 
+// parseReloadSpec reads the native reload from the `reload:` block. It returns
+// nil when the block is absent or empty/invalid; the engine then uses the plain
+// backend reload.
 func parseReloadSpec(tree map[string]any) *reloadSpec {
 	if r, ok := tree["reload"].(map[string]any); ok {
 		spec := &reloadSpec{always: cfgval.AsString(r["when"]) == "always"}

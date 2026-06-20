@@ -1045,8 +1045,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, filterEvents(s.Backend.Events(r.Context(), fetchLimit), filter, limit))
 }
 
-// handleEventsClear supports `sermoctl events clear [--before TIME]`.
-// TIME may be RFC3339 or a duration (e.g. "2h" means "before now-2h").
+// queryBool reports whether the query parameter key is set to a truthy value
+// ("1", "true" or "yes", case-insensitive).
 func queryBool(r *http.Request, key string) bool {
 	v := strings.ToLower(strings.TrimSpace(r.URL.Query().Get(key)))
 	return v == "1" || v == "true" || v == "yes"
@@ -1065,6 +1065,8 @@ func parseBeforeQuery(beforeStr string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("bad before: RFC3339 timestamp or duration (e.g. 1h, 30m)")
 }
 
+// handleEventsClear supports `sermoctl events clear [--before TIME]`.
+// TIME may be RFC3339 or a duration (e.g. "2h" means "before now-2h").
 func (s *Server) handleEventsClear(w http.ResponseWriter, r *http.Request) {
 	before, err := parseBeforeQuery(r.URL.Query().Get("before"))
 	if err != nil {
@@ -1132,10 +1134,8 @@ func (s *Server) handleOperations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Operations(r.Context()))
 }
 
-// handleLivez is the liveness probe: if the daemon's web server can answer, the
-// process is alive, so it always returns 200. Plain requests get "ok"; `?verbose`
-// returns JSON with uptime, the number of services and the runtime version. It is
-// served without authentication (see withAuth) so probes need no credentials.
+// readyReport builds the readiness report: it delegates to the configured
+// Readiness probe when present, otherwise reports ready with the service count.
 func (s *Server) readyReport(ctx context.Context) ReadyReport {
 	if s.Readiness != nil {
 		return s.Readiness.Report(ctx)
@@ -1165,6 +1165,10 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, rep)
 }
 
+// handleLivez is the liveness probe: if the daemon's web server can answer, the
+// process is alive, so it always returns 200. Plain requests get "ok"; `?verbose`
+// returns JSON with uptime, the number of services and the runtime version. It is
+// served without authentication (see withAuth) so probes need no credentials.
 func (s *Server) handleLivez(w http.ResponseWriter, r *http.Request) {
 	if !r.URL.Query().Has("verbose") {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
