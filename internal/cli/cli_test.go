@@ -155,20 +155,21 @@ func TestBackendCommandPrintsDetectedBackend(t *testing.T) {
 	}
 }
 
-func TestInitAliasPrintsDetectedBackend(t *testing.T) {
-	var stdout bytes.Buffer
+func TestInitCommandIsRemoved(t *testing.T) {
+	var stderr bytes.Buffer
 	app := App{
 		Detector: fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendOpenRC}},
 		Env:      func(string) string { return "" },
-		Stdout:   &stdout,
+		Stdout:   &bytes.Buffer{},
+		Stderr:   &stderr,
 	}
 
 	code := app.Run(context.Background(), []string{"init"})
-	if code != exitSuccess {
-		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	if code != exitUsage {
+		t.Fatalf("Run() exit = %d, want %d", code, exitUsage)
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "openrc" {
-		t.Fatalf("stdout = %q, want openrc", got)
+	if got := stderr.String(); !strings.Contains(got, `unknown command "init"`) {
+		t.Fatalf("stderr = %q, want unknown command", got)
 	}
 }
 

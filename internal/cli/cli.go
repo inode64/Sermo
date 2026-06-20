@@ -247,7 +247,7 @@ func (a App) Run(ctx context.Context, args []string) int {
 	case "version":
 		fmt.Fprintln(a.Stdout, buildinfo.String())
 		return exitSuccess
-	case "backend", "init":
+	case "backend":
 		return a.runBackend(ctx, opts)
 	case "status":
 		return a.runStatus(ctx, opts)
@@ -1139,7 +1139,7 @@ func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 
 // runEvents dispatches the events subcommands.
 // - `sermoctl events [SERVICE] [--limit N]` lists recent events (global or for a service) via the daemon's web API.
-// - `sermoctl events clear [--before TIME]` clears (all or events before a given time).
+// - `sermoctl events clear [--before TIME]` clears all events or events before a given time.
 func (a App) runEvents(ctx context.Context, opts options) int {
 	args := opts.args
 	if len(args) > 0 && args[0] == "clear" {
