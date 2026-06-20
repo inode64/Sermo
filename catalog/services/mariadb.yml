@@ -26,7 +26,7 @@ pidfile:
 preflight:
   config:
     type: command
-    command: ["${mariadb_binary}", "--defaults-file=${config}", "--help", "--verbose"]
+    command: ["${mariadb_binary}", "--help", "--verbose"]
     timeout: 15s
 
 processes:

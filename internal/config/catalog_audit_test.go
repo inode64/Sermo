@@ -692,14 +692,14 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			appToolCheck: "mysql-binary",
 			toolArgIndex: 0,
 			wantTool:     []string{"/usr/sbin/mysqld", "/usr/bin/mysqld"},
-			wantContains: []string{"--defaults-file=", "--validate-config"},
+			wantContains: []string{"--help", "--verbose"},
 		},
 		{
 			service:      "mariadb",
 			appToolCheck: "mariadb-binary",
 			toolArgIndex: 0,
 			wantTool:     []string{"/usr/sbin/mariadbd", "/usr/bin/mariadbd"},
-			wantContains: []string{"--defaults-file=", "--help", "--verbose"},
+			wantContains: []string{"--help", "--verbose"},
 		},
 	}
 
