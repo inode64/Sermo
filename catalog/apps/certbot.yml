@@ -2,7 +2,7 @@ kind: app
 name: certbot
 display_name: "Certbot"
 category: security
-description: "Generador de certificados"
+description: "Let's Encrypt client for obtaining SSL/TLS certificates"
 variables:
   binary: "/usr/bin/certbot"
 preflight:

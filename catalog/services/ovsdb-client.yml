@@ -1,8 +1,7 @@
 kind: daemon
 name: ovsdb-client
-display_name: "Open vSwitch Database"
+display_name: "Open vSwitch Client"
 category: virtualization
-description: "OpenVsiwtch Database"
 service: ovsdb-client
 apps: [ovsdb-client]
 

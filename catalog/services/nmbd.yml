@@ -2,7 +2,6 @@ kind: daemon
 name: nmbd
 display_name: "Samba NMB"
 category: storage
-description: "Servidor de ficheros Windows - NMB"
 service: nmbd
 apps: [nmbd]
 

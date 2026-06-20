@@ -2,7 +2,6 @@ kind: daemon
 name: dhcpd
 display_name: "DHCP Server"
 category: network
-description: "Servidor DHCP"
 service: dhcpd
 apps: [dhcpd]
 

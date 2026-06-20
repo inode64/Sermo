@@ -3,7 +3,6 @@ name: cups
 catalog_aliases: [cups-config]
 display_name: "CUPS"
 category: system
-description: "CUPS"
 service:
   systemd: [cups]
   openrc: [cupsd]

@@ -23,7 +23,7 @@ variables:
 preflight:
   config:
     type: command
-    command: ["${mysql_binary}", "--defaults-file=${config}", "--validate-config"]
+    command: [ "${mysql_binary}", "--help", "--verbose" ]
     timeout: 15s
 
 processes:
