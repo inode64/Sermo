@@ -1,0 +1,13 @@
+watches:
+  pid-table:
+    # Watch the kernel PID table (threads vs kernel.pid_max). A full table makes
+    # every fork()/clone() fail host-wide.
+    monitor: disabled
+    interval: 30s
+    check:
+      type: pids
+      used_pct: { op: ">=", value: 90 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-pids-alert.sh]

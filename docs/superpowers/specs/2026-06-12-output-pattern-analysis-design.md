@@ -6,13 +6,6 @@ implemented; use [`docs/rules.md`](../../rules.md) and
 
 ## Goal
 
-Classify the textual output of a check (or hook) into three states — **ok**
-(green), **warning** (orange), **error** (red) — by matching it against ordered,
-reusable, named pattern sets. Replaces the hard-coded token scanning of the
-legacy `verifica_sistema.py` (`warnings()`/`errors()`/`warnings2()`), where a
-service's version/config-test output was escalated to orange/red by substring
-hits.
-
 Patterns live in a new catalog category `catalog/patterns/` (reusable), and any
 check/hook references them and can **add** local rules and **silence** inherited
 ones by id.

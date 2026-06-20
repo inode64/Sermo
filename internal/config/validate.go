@@ -94,9 +94,21 @@ func validateGlobal(cfg *Config) []Issue {
 		if templateDir := cfgval.String(paths["templates"]); templateDir != "" && !filepath.IsAbs(templateDir) {
 			add("paths.templates %q must be an absolute directory", templateDir)
 		}
-		for _, dir := range cfg.Global.Mounts {
-			if dir != "" && !filepath.IsAbs(dir) {
-				add("paths.mounts entry %q must be an absolute directory", dir)
+		pathLists := map[string][]string{
+			"apps":      cfg.Global.Apps,
+			"includes":  cfg.Global.Includes,
+			"mounts":    cfg.Global.Mounts,
+			"networks":  cfg.Global.Networks,
+			"notifiers": cfg.Global.Notifiers,
+			"services":  cfg.Global.Services,
+			"storages":  cfg.Global.Storages,
+			"watches":   cfg.Global.Watches,
+		}
+		for name, dirs := range pathLists {
+			for _, dir := range dirs {
+				if dir != "" && !filepath.IsAbs(dir) {
+					add("paths.%s entry %q must be an absolute directory", name, dir)
+				}
 			}
 		}
 	}

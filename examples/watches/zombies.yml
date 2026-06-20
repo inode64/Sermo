@@ -1,0 +1,12 @@
+watches:
+  zombies:
+    # Watch for accumulating zombie processes (a parent not reaping its children).
+    monitor: disabled
+    interval: 1m
+    check:
+      type: zombies
+      count: { op: ">", value: 20 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-zombies-alert.sh]

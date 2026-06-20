@@ -103,20 +103,23 @@ func TestShippedGlobalConfigValidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	dir := t.TempDir()
 	body := strings.ReplaceAll(string(src), "/usr/share/sermo/catalog", filepath.Join(root, "catalog"))
 	body = strings.ReplaceAll(body, "    - /etc/sermo/catalog-available\n", "")
 	if body == string(src) {
 		t.Fatal("examples/sermo.yml no longer lists the packaged catalog paths; update this rewrite")
 	}
+	for _, name := range []string{"services", "apps", "notifiers", "storages", "networks", "watches", "mounts"} {
+		body = strings.ReplaceAll(body, "/etc/sermo/"+name, filepath.Join(dir, name))
+	}
 
-	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "sermo.yml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// The shipped config enables no services out of the box; when bundled
-	// include dirs reappear, copy them so their services validate too. `apps`
-	// is a legacy include alias for concrete service files.
-	for _, include := range []string{"services", "apps"} {
+	// target dirs reappear, copy them so their entries validate too. `apps`
+	// is a legacy service-file alias for concrete service files.
+	for _, include := range []string{"services", "apps", "notifiers", "storages", "networks", "watches", "mounts"} {
 		if bundled := filepath.Join(root, "examples", include); dirExists(bundled) {
 			copyYAMLDir(t, bundled, filepath.Join(dir, include))
 		}

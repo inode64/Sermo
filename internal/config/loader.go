@@ -56,11 +56,17 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	if len(catalogDirs) == 0 {
 		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
 	}
-	includeDirs := global.Includes
-	if len(includeDirs) == 0 {
-		includeDirs = defaultConfigDirs(globalPath, defaultIncludeDirs)
-		global.Includes = append([]string(nil), includeDirs...)
+	serviceDirs := appendPathLists(global.Services, global.Apps)
+	legacyIncludeDirs := global.Includes
+	if len(serviceDirs) == 0 && len(legacyIncludeDirs) == 0 {
+		serviceDirs = defaultConfigDirs(globalPath, defaultIncludeDirs)
+		global.Services = append([]string(nil), serviceDirs[:1]...)
+		if len(serviceDirs) > 1 {
+			global.Apps = append([]string(nil), serviceDirs[1:]...)
+		}
 	}
+	notifierDirs := global.Notifiers
+	watchDirs := appendPathLists(global.Storages, global.Networks, global.Watches)
 	mountDirs := global.Mounts
 	if len(mountDirs) == 0 {
 		mountDirs = defaultConfigDirs(globalPath, defaultMountDirs)
@@ -82,7 +88,23 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 			return nil, err
 		}
 	}
-	for _, dir := range includeDirs {
+	loadedServiceDirs := uniquePathList(serviceDirs)
+	for _, dir := range loadedServiceDirs {
+		if err := cfg.loadServiceDir(dir); err != nil {
+			return nil, err
+		}
+	}
+	for _, dir := range uniquePathList(notifierDirs) {
+		if err := cfg.loadGlobalFragmentDir(dir, "notifiers"); err != nil {
+			return nil, err
+		}
+	}
+	for _, dir := range uniquePathList(watchDirs) {
+		if err := cfg.loadGlobalFragmentDir(dir, "watches"); err != nil {
+			return nil, err
+		}
+	}
+	for _, dir := range uniquePathListExcluding(legacyIncludeDirs, loadedServiceDirs) {
 		if err := cfg.loadIncludeDir(dir); err != nil {
 			return nil, err
 		}
@@ -125,6 +147,12 @@ func loadGlobal(path string) (Global, error) {
 		if len(g.Catalog) == 0 {
 			g.Catalog = cfgval.StringList(paths["profiles"])
 		}
+		g.Services = cfgval.StringList(paths["services"])
+		g.Apps = cfgval.StringList(paths["apps"])
+		g.Notifiers = cfgval.StringList(paths["notifiers"])
+		g.Storages = cfgval.StringList(paths["storages"])
+		g.Networks = cfgval.StringList(paths["networks"])
+		g.Watches = cfgval.StringList(paths["watches"])
 		g.Includes = cfgval.StringList(paths["includes"])
 		g.Mounts = cfgval.StringList(paths["mounts"])
 		if len(g.Includes) == 0 {
@@ -163,6 +191,12 @@ func absCatalogDirs(dirs []string) []string {
 func resolveConfigPaths(globalPath string, g *Global) {
 	base := filepath.Dir(filepath.Clean(globalPath))
 	g.Catalog = resolvePathList(base, g.Catalog)
+	g.Services = resolvePathList(base, g.Services)
+	g.Apps = resolvePathList(base, g.Apps)
+	g.Notifiers = resolvePathList(base, g.Notifiers)
+	g.Storages = resolvePathList(base, g.Storages)
+	g.Networks = resolvePathList(base, g.Networks)
+	g.Watches = resolvePathList(base, g.Watches)
 	g.Includes = resolvePathList(base, g.Includes)
 	g.Mounts = resolvePathList(base, g.Mounts)
 	if g.Runtime != "" {
@@ -198,6 +232,51 @@ func defaultConfigDirs(globalPath string, dirs []string) []string {
 	return resolvePathList(filepath.Dir(filepath.Clean(globalPath)), dirs)
 }
 
+func appendPathLists(lists ...[]string) []string {
+	var out []string
+	for _, list := range lists {
+		out = append(out, list...)
+	}
+	return out
+}
+
+func uniquePathList(list []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(list))
+	for _, dir := range list {
+		if dir == "" {
+			continue
+		}
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		out = append(out, dir)
+	}
+	return out
+}
+
+func uniquePathListExcluding(list, exclude []string) []string {
+	seen := map[string]struct{}{}
+	for _, dir := range exclude {
+		if dir != "" {
+			seen[dir] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(list))
+	for _, dir := range list {
+		if dir == "" {
+			continue
+		}
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		out = append(out, dir)
+	}
+	return out
+}
+
 // loadDir reads every *.yml/*.yaml document in dir, recursing into
 // subdirectories. A `services`/`apps`/`libs`/`patterns` subdirectory tags the
 // catalog documents it holds with that category; files directly in dir default
@@ -211,8 +290,101 @@ func (c *Config) loadIncludeDir(dir string) error {
 	return c.loadCategoryDir(dir, "", true)
 }
 
+func (c *Config) loadServiceDir(dir string) error {
+	return c.loadServiceDirEntries(dir)
+}
+
+func (c *Config) loadGlobalFragmentDir(dir string, section string) error {
+	return c.loadGlobalFragmentDirEntries(dir, section)
+}
+
 func (c *Config) loadMountDir(dir string) error {
 	return c.loadMountDirEntries(dir)
+}
+
+func (c *Config) loadServiceDirEntries(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read service config dir %s: %w", dir, err)
+	}
+
+	var names []string
+	var subdirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			subdirs = append(subdirs, e.Name())
+			continue
+		}
+		if isYAML(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(subdirs)
+
+	for _, name := range names {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		if doc.Kind != kindService {
+			return fmt.Errorf("%s: service config directories only support kind: service", doc.Path)
+		}
+		c.add(doc)
+	}
+	for _, name := range subdirs {
+		if err := c.loadServiceDirEntries(filepath.Join(dir, name)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Config) loadGlobalFragmentDirEntries(dir string, section string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read %s config dir %s: %w", section, dir, err)
+	}
+
+	var names []string
+	var subdirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			subdirs = append(subdirs, e.Name())
+			continue
+		}
+		if isYAML(e.Name()) {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(subdirs)
+
+	for _, name := range names {
+		doc, err := loadDocument(filepath.Join(dir, name))
+		if err != nil {
+			return err
+		}
+		handled, err := c.mergeIncludedGlobalFragmentSection(doc, section)
+		if err != nil {
+			return err
+		}
+		if !handled {
+			return fmt.Errorf("%s: %s config directories only support top-level %s", doc.Path, section, section)
+		}
+	}
+	for _, name := range subdirs {
+		if err := c.loadGlobalFragmentDirEntries(filepath.Join(dir, name), section); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *Config) loadMountDirEntries(dir string) error {
@@ -318,7 +490,7 @@ func (c *Config) mergeIncludedGlobalFragment(doc *Document) (bool, error) {
 	if doc.Kind != "" {
 		return false, nil
 	}
-	section := ""
+	var section string
 	if _, present := doc.Body["watches"]; present {
 		section = "watches"
 	} else if _, present := doc.Body["notifiers"]; present {
@@ -330,6 +502,21 @@ func (c *Config) mergeIncludedGlobalFragment(doc *Document) (bool, error) {
 	for key := range doc.Body {
 		if key != section {
 			return true, fmt.Errorf("%s: include fragments only support one top-level section (watches or notifiers), got %q with %q", doc.Path, key, section)
+		}
+	}
+	return c.mergeIncludedGlobalMap(doc, section)
+}
+
+func (c *Config) mergeIncludedGlobalFragmentSection(doc *Document, section string) (bool, error) {
+	if doc.Kind != "" {
+		return false, nil
+	}
+	if _, present := doc.Body[section]; !present {
+		return false, nil
+	}
+	for key := range doc.Body {
+		if key != section {
+			return true, fmt.Errorf("%s: %s fragments only support top-level %s, got %q", doc.Path, section, section, key)
 		}
 	}
 	return c.mergeIncludedGlobalMap(doc, section)

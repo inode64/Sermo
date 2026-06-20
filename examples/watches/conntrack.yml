@@ -1,0 +1,12 @@
+watches:
+  conntrack:
+    # Watch the netfilter conntrack table (drops new connections when full).
+    monitor: disabled
+    interval: 30s
+    check:
+      type: conntrack
+      used_pct: { op: ">=", value: 90 }
+    for: { cycles: 3 }
+    then:
+      hook:
+        command: [/usr/local/bin/sermo-conntrack-alert.sh]

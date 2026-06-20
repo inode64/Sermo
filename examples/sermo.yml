@@ -28,26 +28,25 @@ engine:
   user_lookup_timeout: 250ms
 
 paths:
-  # Packaged catalog directory — the service/app/library definitions, installed by
-  # `make install`. When running from the source tree, point this elsewhere without
-  # editing the file via `sermod run --catalog ./catalog` (repeatable for multiple dirs).
   catalog:
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
-  includes:
-    # One target per file: services/*.yml for kind: service documents,
-    # notifiers/*.yml for one notifier each, storage/*.yml for one storage watch
-    # each, network/*.yml for one network watch each. `apps` is a legacy
-    # service-file include alias.
-    # - services
-    # - apps
-    # - notifiers
-    # - storage
-    # - network
-  # If omitted, Sermo falls back to services/ and then apps/ next to this file.
-  # First-class mount units live separately from services and watch fragments.
+
+  services:
+    - /etc/sermo/services
+  apps:
+    - /etc/sermo/apps
+  notifiers:
+    - /etc/sermo/notifiers
+  storages:
+    - /etc/sermo/storages
+  networks:
+    - /etc/sermo/networks
+  watches:
+    - /etc/sermo/watches
   mounts:
     - /etc/sermo/mounts
+
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
   # Persistent state database (monitoring/remediation/rule-window control state,
@@ -103,184 +102,3 @@ web:
   # guest_password: "read-only"  # optional read-only login
   # guest: false                 # set true to allow anonymous read-only access
   # disable_diagnostics: false   # set true to hide the Diagnostics panel from the web UI
-
-# Named notification targets, referenced by name from a watch's then.notify.
-# Pluggable by type (email, slack and teams are built in; new transports can be
-# added). Used only when referenced; enabled defaults to true.
-notifiers:
-  ops-email:
-    type: email
-    # template: default-alert
-    dsn: "smtp://user:pass@smtp.example.com:587"   # smtp:// (STARTTLS) or smtps:// (implicit TLS)
-    from: "Sermo <sermo@example.com>"
-    to: [ops@example.com, oncall@example.com]
-  team-slack:
-    # enabled: false  # keep configured but skip delivery attempts
-    type: slack
-    # template: default-alert
-    webhook: "https://hooks.slack.com/services/T0000/B0000/XXXXXXXX"
-
-# Default notification targets for watches/rules that omit notify. Uncomment to
-# avoid repeating then.notify everywhere. Use per-watch notify: [none] to suppress.
-# notify: [ops-email]
-
-# Per-service (or defaults) remediation mode.
-# shadow: true  evaluates every remediation rule + its for/within windows +
-# guards + cooldown/policy exactly as normal and emits "shadow" events with
-# precise "would restart (suppressed: cooldown)" style messages, but performs
-# zero operations and does not advance any live timers. Use it to audit what
-# Sermo would do before flipping to active (the default).
-#   remediation:
-#     shadow: true
-# Services in shadow mode still run all their checks and host watches normally.
-# To rehearse a host watch without executing hook/notify/expand actions, add
-# dry_run: true inside that watch's then block.
-
-# Host watches: monitor host resources (storage, …) independently of services and,
-# when a threshold is crossed, run a hook command and/or notify named targets.
-# Paused by default: each watch is built and visible in the web UI, but it does
-# not run until an admin monitors it or the YAML changes to `monitor: enabled`.
-watches:
-  ping-gw:
-    monitor: disabled
-    interval: 30s
-    check: { type: icmp, host: 8.8.8.8, count: 3 }
-    metrics:
-      state:
-        on: change
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-host-state.sh, "8.8.8.8"]
-      latency:
-        threshold: { op: ">", value: 100 }
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-host-latency.sh, "8.8.8.8"]
-  # Watch system load average (per-core, so the thresholds are machine-agnostic).
-  load:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: load
-      per_cpu: true
-      load5: { op: ">", value: 1.5 }
-      load15: { op: ">", value: 1.0 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-load-alert.sh]
-  # Watch system RAM via the kernel's MemAvailable estimate (page cache and
-  # reclaimable buffers never read as "used"). During hook rollout, dry_run keeps
-  # the watch active and emits "firing" + "dry-run" events, but does not execute
-  # the configured hook/notify/expand actions. Remove dry_run when ready to act.
-  memory:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: memory
-      used_pct: { op: ">=", value: "90%" }
-    for: { cycles: 3 }
-    then:
-      dry_run: true
-      hook:
-        command: [/usr/local/bin/sermo-memory-alert.sh]
-  # Watch kernel PSI: % of wall time tasks stalled waiting on memory. The
-  # kernel's own pressure signal — catches thrashing load/memory can miss.
-  mem-pressure:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: pressure
-      resource: memory
-      some_avg60: { op: ">", value: 10 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-pressure-alert.sh]
-  # Watch system file descriptors against the kernel fs.file-max limit.
-  fds:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: fds
-      used_pct: { op: ">=", value: 85 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-fds-alert.sh]
-  # Watch the kernel PID table (threads vs kernel.pid_max). A full table makes
-  # every fork()/clone() fail host-wide — where a fork loop or zombie leak ends.
-  pid-table:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: pids
-      used_pct: { op: ">=", value: 90 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-pids-alert.sh]
-  # Watch for accumulating zombie processes (a parent not reaping its children).
-  zombies:
-    monitor: disabled
-    interval: 1m
-    check:
-      type: zombies
-      count: { op: ">", value: 20 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-zombies-alert.sh]
-  # Watch the kernel entropy pool (low entropy stalls crypto / TLS).
-  entropy:
-    monitor: disabled
-    interval: 1m
-    check:
-      type: entropy
-      avail: { op: "<", value: 200 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-entropy-alert.sh]
-  # Watch the netfilter conntrack table (drops new connections when full).
-  conntrack:
-    monitor: disabled
-    interval: 30s
-    check:
-      type: conntrack
-      used_pct: { op: ">=", value: 90 }
-    for: { cycles: 3 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-conntrack-alert.sh]
-  # Watch that nftables/iptables still has rules loaded (useful for firewall loaders).
-  firewall-rules:
-    monitor: disabled
-    interval: 30s
-    check: { type: firewall_rules, backend: auto, min_rules: 1 }
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-firewall-alert.sh]
-  oom:
-    monitor: disabled
-    interval: 30s
-    check: { type: oom }          # no delta -> fires on any kill (> 0)
-    then:
-      hook:
-        command: [/usr/local/bin/sermo-oom-alert.sh]
-  # Watch system swap: usage filling up and/or heavy paging (thrashing).
-  swap:
-    monitor: disabled
-    interval: 30s
-    check: { type: swap }
-    metrics:
-      usage:
-        used_pct: { op: ">=", value: 80 }
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-swap-usage.sh]
-      io:
-        delta: { op: ">", value: 1000 }   # pages swapped in+out per cycle
-        then:
-          hook:
-            command: [/usr/local/bin/sermo-swap-io.sh]

@@ -106,9 +106,9 @@ func TestWriteServiceFiles(t *testing.T) {
 	if err != nil || !strings.Contains(string(written), "uses: nginx") {
 		t.Fatalf("service file = %q, err %v", written, err)
 	}
-	// The includes list was extended, with the original config backed up first.
+	// The services list was extended, with the original config backed up first.
 	updated, err := os.ReadFile(global)
-	if err != nil || !strings.Contains(string(updated), servicesIncludeDir) {
+	if err != nil || !strings.Contains(string(updated), "services:") || !strings.Contains(string(updated), servicesIncludeDir) {
 		t.Fatalf("global after write = %q, err %v", updated, err)
 	}
 	if _, err := os.Stat(global + ".bak"); err != nil {
@@ -146,7 +146,7 @@ func TestWriteServiceFilesPreservesLegacyAppsInclude(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(data)
-	if !strings.Contains(body, "apps") || !strings.Contains(body, "services") {
-		t.Fatalf("legacy apps include must be preserved while services is added: %s", body)
+	if !strings.Contains(body, "includes:") || !strings.Contains(body, "apps") || !strings.Contains(body, "services:") {
+		t.Fatalf("legacy apps include must be preserved while paths.services is added: %s", body)
 	}
 }
