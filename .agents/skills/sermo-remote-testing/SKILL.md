@@ -120,7 +120,7 @@ Use Sermo wizards and tools for configuration generation:
 
 - Prefer `sermoctl wizard service` for active services, and the matching Sermo wizard/tool for other explicitly requested target types.
 - Do not hand-write the initial service set when a Sermo wizard can generate it.
-- Keep generated config granular: one file per service, mount, storage watch, network watch, interface, VM, container, app or other target. Watch fragment files may contain `watches:`, but only one named watch.
+- Keep generated config granular: one file per service, mount, notifier, storage watch, network watch, interface, VM, container, app or other target. Watch and notifier fragment files may contain `watches:` or `notifiers:`, but only one named entry.
 - If the wizard output needs adjustment, edit only the generated files under the remote `/tmp/sermo-remote-test-*` directory, then run `sermoctl config validate` again.
 - If an adjustment reveals a project/catalog bug, fix the local project and redeploy new `/tmp` artifacts instead of patching permanent remote host files.
 
