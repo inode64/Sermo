@@ -10,20 +10,26 @@ variables:
   port: 5432
   user: postgres
   data_dir: /var/lib/postgresql/${version}/data
+  config_dir: /var/lib/postgresql/${version}/data
 
 os:
   debian:
     variables:
       data_dir: /var/lib/postgresql/${version}/main
+      config_dir: /etc/postgresql/${version}/main
   ubuntu:
     variables:
       data_dir: /var/lib/postgresql/${version}/main
+      config_dir: /etc/postgresql/${version}/main
+  gentoo:
+    variables:
+      config_dir: /etc/postgresql-${version}
 
 preflight:
   config:
     type: command
     user: "${user}"
-    command: ["${binary}", "--check", "-D", "${data_dir}"]
+    command: ["${binary}", "-D", "${config_dir}", "-C", "config_file", "--data-directory=${data_dir}"]
     timeout: 30s
 
 checks:
