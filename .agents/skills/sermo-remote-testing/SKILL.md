@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, Sermo wizards/tools for temporary setup, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, and safe alert/notification checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -142,6 +142,41 @@ When the task asks to add remote targets:
 - Prefer detected names. Do not ask the operator to invent service, volume, interface, or VM names when discovery provides candidates.
 - If a generated path does not exist on a host, record the host, app/service, expected path, and observed alternative. Fix the local project catalog/config generation, then redeploy.
 - Do not let the wizard create host hooks. Choose monitor-only, default notification, or dry-run notification options depending on the test objective.
+
+## Complete Remote Installation Configuration
+
+Only when the user explicitly asks for a remote installation or a complete remote
+configuration, expand discovery beyond active services and add host-resource
+watches that match the server. Do not add these host-resource watches during
+ordinary remote validation, service-specific checks, catalog/app probes, or any
+partial test run.
+
+- Discover host resources with read-only probes before generating YAML: CPU
+  count/load (`nproc`, `/proc/loadavg`), memory (`/proc/meminfo`), swap
+  (`/proc/swaps`, `/proc/vmstat`), PID table (`/proc/loadavg`,
+  `/proc/sys/kernel/pid_max`), PSI (`/proc/pressure/*`), mounted local
+  filesystems (`findmnt`, `/proc/self/mountinfo`, `df -PT`), network interfaces
+  and default routes (`ip addr`, `ip route`), and any explicitly requested
+  uplink/ICMP targets.
+- Generate one fragment per host watch under the matching temporary directory
+  loaded by `paths.storages`, `paths.networks` or `paths.watches`; every fragment
+  must contain a top-level `watches:` map with exactly one entry.
+- Include baseline watches for memory, load and PID pressure on every complete
+  config. Add swap only when swap exists. Add PSI cpu/memory/io only when the
+  kernel exposes the matching `/proc/pressure/*` file. Add storage only for
+  mounted local filesystems that are currently mounted and safe to monitor; skip
+  pseudo filesystems, bind mounts and transient container/runtime mounts unless
+  the user explicitly asks for them.
+- Prefer portable, conservative thresholds suitable for validation, not
+  remediation: memory available/used percentage, load with `per_cpu: true`,
+  swap usage and swap IO, pids used percentage, PSI `some_avg60`, and storage
+  used/free percentage. Do not add hooks. If notifications are requested only to
+  test routing, use `then.dry_run: true`.
+- Validate after host watches are added, then run one-shot checks or start the
+  temporary daemon only after the full generated config passes.
+- Report which host checks were generated, which were skipped, and why
+  (for example: no swap configured, PSI unsupported, filesystem excluded as
+  pseudo/transient, no default route).
 
 ## Unsupported Active Services
 
