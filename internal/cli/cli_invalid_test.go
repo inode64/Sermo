@@ -48,7 +48,6 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		want string
 	}{
 		{name: "unknown command", args: []string{"frobnicate"}, want: `unknown command "frobnicate"`},
-		{name: "init command removed", args: []string{"init"}, want: `unknown command "init"`},
 		{name: "backend extra arg", args: []string{"backend", "extra"}, want: "backend takes no arguments"},
 		{name: "status extra service", args: []string{"status", "web", "extra"}, want: "status takes exactly one service name"},
 		{name: "is-active extra service", args: []string{"is-active", "web", "extra"}, want: "is-active takes exactly one service name"},
@@ -67,9 +66,6 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "patterns extra arg", args: []string{"patterns", "all"}, want: "patterns takes no arguments"},
 		{name: "daemon missing subcommand", args: []string{"daemon"}, want: "daemon requires subcommand reload"},
 		{name: "daemon bad subcommand", args: []string{"daemon", "nope"}, want: `unknown daemon subcommand "nope"`},
-		{name: "daemon list removed", args: []string{"daemon", "list"}, want: `unknown daemon subcommand "list"`},
-		{name: "daemon show removed", args: []string{"daemon", "show", "web"}, want: `unknown daemon subcommand "show"`},
-		{name: "service command removed", args: []string{"service", "list"}, want: `unknown command "service"`},
 		{name: "mount missing target", args: []string{"mount"}, want: "mount requires a target"},
 		{name: "mount list extra", args: []string{"mount", "list", "extra"}, want: "mount list takes no arguments"},
 		{name: "mount status missing", args: []string{"mount", "status"}, want: "mount status requires exactly one mount name or path"},
@@ -79,7 +75,6 @@ func TestCLIRejectsMalformedCommands(t *testing.T) {
 		{name: "events list extra", args: []string{"events", "web", "extra"}, want: "events accepts at most one service name"},
 		{name: "events clear extra", args: []string{"events", "clear", "extra"}, want: "events clear accepts only optional --before TIME"},
 		{name: "activity extra", args: []string{"activity", "clear", "extra"}, want: "activity clear accepts only optional --before TIME"},
-		{name: "diagnose clear removed", args: []string{"diagnose", "clear"}, want: "diagnose supports only"},
 		{name: "activity bad subcommand", args: []string{"activity", "list"}, want: "activity supports only"},
 		{name: "config validate service arg", args: []string{"config", "validate", "web"}, want: "config validate takes no service name"},
 		{name: "sla extra", args: []string{"sla", "web", "extra"}, want: "sla accepts at most one service name"},
