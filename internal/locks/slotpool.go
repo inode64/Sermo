@@ -168,8 +168,8 @@ func (p SlotPool) tryAcquire(path string, slot int, proc ProcessProber, now func
 
 		existing, rerr := readLockFile(path)
 		if rerr != nil {
-			if os.IsNotExist(rerr) {
-				continue // vanished between create and read; retry this slot
+			if isRetryableLockRead(rerr) {
+				continue // vanished or still being written; retry this slot
 			}
 			return nil, fmt.Errorf("acquire %s: %w", path, rerr)
 		}
