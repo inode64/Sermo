@@ -91,7 +91,6 @@ func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 }
 
-
 func TestBuildWatchesAbsentThenIsPureMonitorOnlyStorage(t *testing.T) {
 	// Bare storage watch (no then): alert-only, globals ignored.
 	cfg := cfgWithWatches(map[string]any{
