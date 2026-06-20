@@ -213,8 +213,8 @@ Empty state:
 
 Section ids: `storage-section`, `network-section`, `watches-section`
 
-`Storage` contains `storage`/`disk` watches, `Network` contains `net`/`icmp`
-watches, and `Host watches` contains the remaining host watch types.
+`Storage` contains `storage` watches, `Network` contains `net`/`icmp` watches,
+and `Host watches` contains the remaining host watch types.
 
 | Part | Current representation |
 | --- | --- |
