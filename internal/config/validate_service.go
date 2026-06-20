@@ -357,11 +357,9 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 	}
 }
 
-// validateCommands checks the optional `commands` section: each entry uses array
-// form with an optional valid duration timeout and output expectations
-// (section 30). Reserved names are consumed by features — `health`, `version`
-// and `version_short` by the apps listings, and `version` by the
-// version.on_change monitor; any other entry is informational.
+// reloadSignalNeedsPidfileIdentity reports whether a signal-based reload requires
+// pidfile-identity verification: always for an OpenRC backend, and for a service
+// that declares an `openrc` block without a `systemd` one.
 func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool {
 	if backend == "openrc" {
 		return true
@@ -399,6 +397,11 @@ func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
 	return pidfile, identity
 }
 
+// validateCommands checks the optional `commands` section: each entry uses array
+// form with an optional valid duration timeout and output expectations
+// (section 30). Reserved names are consumed by features — `health`, `version`
+// and `version_short` by the apps listings, and `version` by the
+// version.on_change monitor; any other entry is informational.
 func validateCommands(tree map[string]any, add addFunc) {
 	commands, ok := tree["commands"].(map[string]any)
 	if !ok {
