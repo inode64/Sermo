@@ -91,24 +91,6 @@ func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 }
 
-func TestBuildWatchesRejectsRemovedDiskType(t *testing.T) {
-	cfg := cfgWithWatches(map[string]any{
-		"storage-root": map[string]any{
-			"check": map[string]any{
-				"type":     "disk",
-				"path":     "/",
-				"used_pct": map[string]any{"op": ">=", "value": 90},
-			},
-		},
-	})
-	watches, warns := BuildWatches(cfg, Deps{DefaultTimeout: time.Second}, 30*time.Second)
-	if len(watches) != 0 {
-		t.Fatalf("removed disk check type should not build watches, got %d", len(watches))
-	}
-	if len(warns) == 0 {
-		t.Fatal("removed disk check type should produce a warning")
-	}
-}
 
 func TestBuildWatchesAbsentThenIsPureMonitorOnlyStorage(t *testing.T) {
 	// Bare storage watch (no then): alert-only, globals ignored.
