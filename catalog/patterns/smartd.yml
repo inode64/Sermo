@@ -1,7 +1,7 @@
 kind: patterns
 name: smartd
 display_name: "S.M.A.R.T. disk signals"
-description: "Disk-health signals for smartctl/smartd output (see verifica_sistema.py)."
+description: "Disk-health signals for smartctl/smartd output."
 rules:
   # A failing self-assessment with the vendor's data-loss warning is critical.
   - { id: smart-backup-now, match: 'BACK UP DATA NOW',          severity: error }

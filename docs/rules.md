@@ -148,9 +148,7 @@ on a watch hook (`then.hook`) to validate the hook command's result, but
 #### Grading output with `analyze:` (pattern sets)
 
 `expect_*` is a single pass/fail assertion. To grade an *otherwise-passing*
-command's output into **warning** or **error** — the way the
-legacy `verifica_sistema.py` scanned config-test/version output — add an
-`analyze:` block. It references reusable rule sets from `catalog/patterns/`
+command's output into **warning** or **error**, add an `analyze:` block. It references reusable rule sets from `catalog/patterns/`
 (category `patterns`, `sermoctl patterns`) and can add or silence rules per
 check:
 
@@ -190,7 +188,6 @@ rules:
   and line are in the result data.
 - **Precedence:** exit-code → `expect_*` → `analyze`. The analyzer only grades a
   command that already passed its exit-code and `expect_*` checks.
-- v1 covers the `command` check only; hooks are a documented follow-up.
 
 ### Service health conditions (version / state / config)
 
