@@ -9,7 +9,7 @@ func TestValidateSingleShotNetICMPSwapValid(t *testing.T) {
 	issues := validateService(t, `
 kind: service
 name: svc
-service: { name: x }
+service: x
 checks:
   link: { type: net, interface: ppp0, metric: state, expect: up }
   errs: { type: net, interface: eth0, metric: errors, delta: { op: ">", value: 100 } }
@@ -54,7 +54,7 @@ func TestValidateSingleShotNetICMPSwapErrors(t *testing.T) {
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			mustHave(t, validateService(t, "kind: service\nname: svc\nservice: { name: x }\nchecks:\n  "+c.body+"\n"), c.want)
+			mustHave(t, validateService(t, "kind: service\nname: svc\nservice: x\nchecks:\n  "+c.body+"\n"), c.want)
 		})
 	}
 }

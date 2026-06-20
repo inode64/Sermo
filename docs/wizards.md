@@ -139,9 +139,9 @@ Before storing a newly detected path, resolve symlinks on the target host
 `DaemonCandidate.Pidfile`/`Exe`/`Cmd`/`User`. Catalog services use those facts to
 improve the catalog daemon definition, not the generated `kind: service` entry:
 they write `uses:` and inherit PID/process selectors from `catalog/services`.
-Uncataloged active units write `service.name` plus a basic `checks.service`, and
-their PID question is prefilled from detection and only accepts absolute pidfile
-paths.
+Uncataloged active units write scalar `service: <unit>` plus a basic
+`checks.service`, and their PID question is prefilled from detection and only
+accepts absolute pidfile paths.
 
 The service, Docker and VM wizards write new generated `kind: service` files
 under a `services/` directory loaded by `paths.services`.

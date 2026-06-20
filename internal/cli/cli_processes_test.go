@@ -28,7 +28,7 @@ defaults:
 	mustWrite(t, filepath.Join(root, "enabled", "mysql-main.yml"), `
 kind: service
 name: mysql-main
-service: { name: mysql }
+service: mysql
 processes:
   pidfile:
     type: pidfile

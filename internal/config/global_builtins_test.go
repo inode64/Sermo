@@ -24,7 +24,7 @@ defaults:
 		"enabled/svc.yml": `
 kind: service
 name: svc
-service: { name: svc }
+service: svc
 `,
 	})
 	cfg, err := Load(global)

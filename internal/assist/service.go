@@ -200,7 +200,7 @@ func askServiceProps(p *Prompt, env Env, c DaemonCandidate, reviewPort bool) (st
 		if unit == "" {
 			unit = c.Name
 		}
-		body["service"] = map[string]any{"name": unit}
+		body["service"] = unit
 		body["checks"] = map[string]any{"service": map[string]any{"type": "service", "expect": "active"}}
 	} else {
 		body["uses"] = c.Name
