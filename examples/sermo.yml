@@ -35,6 +35,9 @@ paths:
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
   includes:
+    # One target per file: services/*.yml for kind: service documents,
+    # storage/*.yml for one storage watch each, network/*.yml for one network
+    # watch each. `apps` is a legacy service-file include alias.
     # - services
     # - apps
     # - storage

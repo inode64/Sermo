@@ -5,11 +5,19 @@ in the catalog, **services** as concrete monitored instances, and **mounts** as
 fstab-backed mount units. Include directories may also contain watch fragments
 with a top-level `watches:` map; those fragments do not use `kind:`.
 
+New configuration must use one YAML file per target. That means one catalog app,
+daemon, lib or pattern per file; one `kind: service` per file; one `kind: mount`
+per file; and one host watch per file (`storage`, `network`, `uplink`, `load`,
+and other watch fragments). A watch fragment still has the top-level `watches:`
+map, but that map should contain exactly one named watch. This keeps generated
+configuration easy to diff, replace and clean up per target.
+
 > **Complete annotated example.** [`docs/sermo-all.yml`](sermo-all.yml) shows
 > every configuration surface in one place — global config, watches, and one
 > document of each kind (daemon, app, lib, patterns, service, mount), plus a
 > cloned service example — and is validated by the test suite, so it cannot
-> drift from the schema. The shipped operational config is `examples/sermo.yml`.
+> drift from the schema. It is a reference bundle only; real deployments keep
+> one target per file. The shipped operational config is `examples/sermo.yml`.
 
 ## Layout
 
@@ -59,7 +67,9 @@ next to the loaded `sermo.yml` file. With the standard `/etc/sermo/sermo.yml`
 this means `/etc/sermo/services` and `/etc/sermo/apps`. The second path is only
 a legacy alias for existing service documents; put new files under `services/`.
 `paths.enabled` is accepted as a legacy alias for `paths.includes`, used only
-when `paths.includes` is absent; prefer `paths.includes` in new configs.
+when `paths.includes` is absent; prefer `paths.includes` in new configs. Every
+new service or watch fragment under these directories should be isolated in its
+own `.yml` file, even when several targets are generated in the same wizard run.
 
 If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
 `sermo.yml` file. With the standard `/etc/sermo/sermo.yml` this means
@@ -846,7 +856,7 @@ a service.
 
 > **Tip — generate configuration interactively.** `sermoctl wizard` can write
 > three different surfaces. Watch assistants (`volume`, `net`, `uplink`) print a
-> `watches:` fragment and, if accepted, write one watch per file under a
+> `watches:` preview and, if accepted, write one watch per file under a
 > watch-type include directory such as `/etc/sermo/storage` or
 > `/etc/sermo/network`; the wizard adds that directory to `paths.includes`
 > (writing a `.bak` first). Service assistants (`service`, `docker`, `vm`) write

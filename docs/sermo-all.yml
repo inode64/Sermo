@@ -2,13 +2,14 @@
 # =================================================
 #
 # Every configuration surface in one place, as YAML documents separated by
-# `---`. In a real deployment each document lives in its own file:
+# `---`. In a real deployment each target lives in its own file:
 #
 #   document 1 (global)          -> /etc/sermo/sermo.yml
 #   kind: daemon / app / lib /
 #   kind: patterns               -> a catalog dir (paths.catalog)
 #   kind: service                -> an include dir (paths.includes)
 #   kind: mount                  -> a mount document under paths.mounts
+#   each watches.<name> entry    -> one watch fragment under a watch include dir
 #
 # This file is validated by the test suite (internal/config), so it cannot
 # drift from the real schema. The shipped operational config is
@@ -105,8 +106,10 @@ notifiers:
 # delivery per site (a watch whose only action is [none] is monitor-only).
 notify: [ops-email]
 
-# Host watches: one entry per concern; `enabled: false` omits the watch entirely,
-# while `monitor: disabled` builds it paused. `monitor: previous` restores the
+# Host watches: one entry per concern. This reference groups several examples
+# only to keep the schema readable; real config stores each watch in its own
+# include file. `enabled: false` omits the watch entirely, while
+# `monitor: disabled` builds it paused. `monitor: previous` restores the
 # persisted state from paths.state.
 watches:
   # -- storage with auto-expand (LVM) ---------------------------------------
