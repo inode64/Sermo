@@ -1414,7 +1414,7 @@ function openPanelTarget(target) {
   el.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 // setFavicon reflects overall health in the browser tab: green = ok,
-// orange = warning, red = something malfunctioning.
+// warning = degraded health, critical = malfunctioning.
 function setFavicon(status) {
   const color = status === "critical" ? "#cf222e" : status === "warning" ? "#e8830c" : "#1a7f37";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
