@@ -104,7 +104,7 @@ func TestDiskCheckStatError(t *testing.T) {
 func TestBuildDiskCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
-			"type": "storage",
+			"type":     "storage",
 			"path":     "/",
 			"used_pct": map[string]any{"op": ">=", "value": 90},
 		},
@@ -144,7 +144,7 @@ func TestBuildStorageCheck(t *testing.T) {
 func TestBuildDiskByteSizeCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
-			"type": "storage",
+			"type":       "storage",
 			"path":       "/",
 			"free_bytes": map[string]any{"op": "<", "value": "10G"},
 		},
@@ -161,7 +161,7 @@ func TestBuildDiskByteSizeCheck(t *testing.T) {
 func TestBuildDiskPercentSuffixCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
-			"type": "storage",
+			"type":     "storage",
 			"path":     "/",
 			"used_pct": map[string]any{"op": ">=", "value": "90%"},
 		},
@@ -178,7 +178,7 @@ func TestBuildDiskPercentSuffixCheck(t *testing.T) {
 func TestBuildDiskByteSizeCheckRejectsUnitless(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
-			"type": "storage",
+			"type":       "storage",
 			"path":       "/",
 			"free_bytes": map[string]any{"op": "<", "value": 10},
 		},
@@ -233,7 +233,7 @@ func TestDiskCheckInodesUnavailableNeverFires(t *testing.T) {
 func TestBuildDiskInodeCheck(t *testing.T) {
 	section := map[string]any{
 		"d": map[string]any{
-			"type": "storage",
+			"type":            "storage",
 			"path":            "/",
 			"inodes_used_pct": map[string]any{"op": ">=", "value": 90},
 		},

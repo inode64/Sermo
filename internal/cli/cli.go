@@ -1390,10 +1390,17 @@ func webAPIBase(cfg *config.Config) (string, error) {
 	return fmt.Sprintf("http://%s:%d", addr, port), nil
 }
 
+// defaultReloadPidfileFallbacks are the absolute pidfiles `daemon reload` checks
+// after the configured runtime dir. Keep this list restricted to current
+// supported paths; old package locations are intentionally not searched.
+func defaultReloadPidfileFallbacks() []string {
+	return []string{"/run/sermo/sermod.pid"}
+}
+
 // runReload asks the running sermod to reload its configuration (SIGHUP
 // equivalent). It prefers a pidfile written by the daemon under the configured
-// runtime dir (or the legacy OpenRC location). If no pidfile is found it falls
-// back to pidof/pgrep discovery. This works whether or not the web UI is enabled.
+// runtime dir. If no pidfile is found it falls back to pidof/pgrep discovery.
+// This works whether or not the web UI is enabled.
 func (a App) runReload(ctx context.Context, opts options) int {
 	cfg, code := a.loadConfig(opts)
 	if cfg == nil {
@@ -1407,10 +1414,7 @@ func (a App) runReload(ctx context.Context, opts options) int {
 
 	fallbacks := a.pidfileFallbacks
 	if fallbacks == nil {
-		fallbacks = []string{
-			"/run/sermo/sermod.pid",
-			"/run/sermod.pid", // legacy from OpenRC packaging
-		}
+		fallbacks = defaultReloadPidfileFallbacks()
 	}
 	candidates := append([]string{filepath.Join(runtimeDir, "sermod.pid")}, fallbacks...)
 
