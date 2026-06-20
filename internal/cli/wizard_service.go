@@ -578,11 +578,6 @@ func pathExists(p string) bool {
 // writes kind:service files into.
 const servicesIncludeDir = "services"
 
-// legacyServicesIncludeDir is the pre-services include directory. Keep it
-// active when an operator already lists it so existing service files are not
-// silently orphaned.
-const legacyServicesIncludeDir = "apps"
-
 // writeWizardServices renders the generated services, confirms, then writes one
 // `kind: service` file per service into the services directory and ensures that
 // directory is listed in paths.services.
@@ -639,18 +634,7 @@ func (a App) writeWizardServices(p *assist.Prompt, opts options, globalPath stri
 
 func serviceCleanupDirs(globalPath string, cfg *config.Config) []string {
 	base := filepath.Dir(filepath.Clean(globalPath))
-	dirs := []string{filepath.Join(base, servicesIncludeDir)}
-	if cfg == nil {
-		return dirs
-	}
-	legacy := filepath.Join(base, legacyServicesIncludeDir)
-	for _, include := range append(cfg.Global.Includes, cfg.Global.Apps...) {
-		if filepath.Clean(include) == filepath.Clean(legacy) {
-			dirs = append(dirs, legacy)
-			break
-		}
-	}
-	return dirs
+	return []string{filepath.Join(base, servicesIncludeDir)}
 }
 
 // planStaleServiceDeletes offers to delete managed `kind: service` files under
@@ -748,7 +732,7 @@ func writeServiceFiles(globalPath string, docs map[string]map[string]any) (strin
 	if err != nil {
 		return "", 0, err
 	}
-	if _, err := ensureConfigPathDir(globalPath, "services", servicesIncludeDir, targetDir, "includes", "enabled"); err != nil {
+	if _, err := ensureConfigPathDir(globalPath, "services", servicesIncludeDir, targetDir); err != nil {
 		return "", 0, err
 	}
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {

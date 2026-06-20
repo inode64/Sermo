@@ -36,7 +36,7 @@ engine:
   max_parallel_checks: 0
   max_parallel_operations: -1
 paths:
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -110,7 +110,7 @@ func TestValidateEngineOperationTimeoutAcceptsPositive(t *testing.T) {
 engine:
   operation_timeout: 90s
 paths:
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -131,7 +131,7 @@ engine:
   user_lookup: ldap
   user_lookup_timeout: 0s
 paths:
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
 defaults:
   policy: { cooldown: 5m }
 `})
@@ -152,7 +152,7 @@ engine:
   user_lookup: ` + mode + `
   user_lookup_timeout: 250ms
 paths:
-  includes: [ @ROOT@/enabled ]
+  services: [ @ROOT@/enabled ]
 defaults:
   policy: { cooldown: 5m }
 `})

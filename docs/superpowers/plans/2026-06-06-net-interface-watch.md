@@ -874,7 +874,7 @@ func validateHookBlock(prefix string, block map[string]any, add func(string, ...
 
 ```go
 		switch scalarString(check["type"]) {
-		case "disk":
+		case "storage":
 			validateDiskCheck(name, check, add)
 			validateHookBlock("watches."+name, entry, add)
 		case "net":

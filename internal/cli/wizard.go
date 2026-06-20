@@ -392,7 +392,7 @@ func mergeWizardWatches(path, wizard string, fragment map[string]any) (wizardMer
 		files = append(files, file)
 	}
 
-	bak, err := ensureConfigPathDir(path, pathKey, relDir, targetDir, "includes", "enabled")
+	bak, err := ensureConfigPathDir(path, pathKey, relDir, targetDir)
 	if err != nil {
 		return wizardMergeResult{}, err
 	}
@@ -500,7 +500,7 @@ func watchFragmentCheckType(v any) string {
 
 func watchTypeDirName(checkType string) string {
 	switch strings.ToLower(checkType) {
-	case "storage", "disk", "mount":
+	case "storage", "mount":
 		return "storages"
 	case "net", "network", "icmp":
 		return "networks"
@@ -733,9 +733,8 @@ func watchConfigFileName(name string) string {
 // ensureConfigPathDir makes sure targetDir (whose path relative to the config
 // dir is relDir) is listed in paths.<pathKey> of the global config, rewriting
 // the file — keeping a .bak of the original — only when a change is needed. It
-// returns the backup path written, or "" when paths.<pathKey> already covered
-// it or a legacy list already points at the same directory.
-func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string, legacyKeys ...string) (string, error) {
+// returns the backup path written, or "" when paths.<pathKey> already covered it.
+func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string) (string, error) {
 	orig, err := os.ReadFile(globalPath)
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", globalPath, err)
@@ -747,7 +746,7 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string, legacyKe
 	if root == nil {
 		root = map[string]any{}
 	}
-	changed, err := ensureConfigPathList(root, filepath.Dir(filepath.Clean(globalPath)), pathKey, relDir, targetDir, legacyKeys...)
+	changed, err := ensureConfigPathList(root, filepath.Dir(filepath.Clean(globalPath)), pathKey, relDir, targetDir)
 	if err != nil {
 		return "", err
 	}
@@ -768,11 +767,7 @@ func ensureConfigPathDir(globalPath, pathKey, relDir, targetDir string, legacyKe
 	return bak, nil
 }
 
-func ensureIncludesPath(root map[string]any, base, relDir, targetDir string) (bool, error) {
-	return ensureConfigPathList(root, base, "includes", relDir, targetDir, "enabled")
-}
-
-func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir string, legacyKeys ...string) (bool, error) {
+func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir string) (bool, error) {
 	paths, _ := root["paths"].(map[string]any)
 	if paths == nil {
 		paths = map[string]any{}
@@ -785,17 +780,6 @@ func ensureConfigPathList(root map[string]any, base, pathKey, relDir, targetDir 
 	for _, item := range list {
 		if sameConfigPath(base, item, targetDir) {
 			return false, nil
-		}
-	}
-	for _, legacyKey := range legacyKeys {
-		legacy, err := yamlStringList(paths[legacyKey])
-		if err != nil {
-			return false, fmt.Errorf("paths.%s must be a string or list before wizard can read it", legacyKey)
-		}
-		for _, item := range legacy {
-			if sameConfigPath(base, item, targetDir) {
-				return false, nil
-			}
 		}
 	}
 	paths[pathKey] = append(list, relDir)

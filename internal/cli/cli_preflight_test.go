@@ -20,7 +20,7 @@ func writePreflightConfig(t *testing.T, binPath string) string {
 engine:
   default_timeout: 3s
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
 defaults:
   policy:
     cooldown: 5m
@@ -86,7 +86,7 @@ func TestPreflightFailsOnRequiredBuildWarning(t *testing.T) {
 	global := filepath.Join(root, "sermo.yml")
 	mustWrite(t, global, `
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
 defaults:
   policy:
     cooldown: 5m

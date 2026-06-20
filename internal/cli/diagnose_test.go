@@ -17,7 +17,7 @@ func TestDiagnoseReportsFindings(t *testing.T) {
 engine: { backend: auto, interval: 30s }
 paths:
   catalog: [ `+root+`/daemons ]
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   state: `+root+`/state
 defaults: { policy: { cooldown: 5m } }
 watches:
@@ -51,7 +51,7 @@ func TestDiagnoseInvalidConfigExitsNonZero(t *testing.T) {
 	root := t.TempDir()
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 engine: { backend: auto, interval: 30s }
-paths: { includes: [ `+root+`/enabled ], state: `+root+`/state }
+paths: { services: [ `+root+`/enabled ], state: `+root+`/state }
 defaults: { policy: { cooldown: 5m } }
 `)
 	// a watch missing its required hook/notify -> config error finding
@@ -81,7 +81,7 @@ func TestDiagnoseCleanPrunesOnlyUnconfiguredMonitorState(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "sermo.yml"), `
 engine: { backend: auto, interval: 30s }
 paths:
-  includes: [ `+root+`/enabled ]
+  services: [ `+root+`/enabled ]
   state: `+root+`/state
 defaults: { policy: { cooldown: 5m } }
 watches:

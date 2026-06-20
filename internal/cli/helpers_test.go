@@ -85,7 +85,7 @@ func TestWizardDaemonHelpers(t *testing.T) {
 func TestWriteServiceFiles(t *testing.T) {
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	if err := os.WriteFile(global, []byte("paths:\n  includes: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(global, []byte("paths:\n  services: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	docs := map[string]map[string]any{
@@ -121,10 +121,10 @@ func TestWriteServiceFiles(t *testing.T) {
 	}
 }
 
-func TestWriteServiceFilesPreservesLegacyAppsInclude(t *testing.T) {
+func TestWriteServiceFilesPreservesAppsPath(t *testing.T) {
 	dir := t.TempDir()
 	global := filepath.Join(dir, "sermo.yml")
-	if err := os.WriteFile(global, []byte("paths:\n  includes: [apps]\n"), 0o644); err != nil {
+	if err := os.WriteFile(global, []byte("paths:\n  apps: [apps]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	docs := map[string]map[string]any{
@@ -139,14 +139,14 @@ func TestWriteServiceFilesPreservesLegacyAppsInclude(t *testing.T) {
 		t.Fatalf("target dir = %q, want services", target)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "apps")); !os.IsNotExist(err) {
-		t.Fatalf("legacy apps dir should not be created or removed, stat err=%v", err)
+		t.Fatalf("apps dir should not be created or removed, stat err=%v", err)
 	}
 	data, err := os.ReadFile(global)
 	if err != nil {
 		t.Fatal(err)
 	}
 	body := string(data)
-	if !strings.Contains(body, "includes:") || !strings.Contains(body, "apps") || !strings.Contains(body, "services:") {
-		t.Fatalf("legacy apps include must be preserved while paths.services is added: %s", body)
+	if !strings.Contains(body, "apps:") || !strings.Contains(body, "services:") {
+		t.Fatalf("paths.apps must be preserved while paths.services is added: %s", body)
 	}
 }

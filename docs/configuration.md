@@ -29,7 +29,7 @@ diff, replace and clean up per target.
 /usr/share/sermo/examples/        packaged examples operators may copy/adapt
 /etc/sermo/catalog-available/*.yml   user catalog definitions
 /etc/sermo/services/*.yml concrete service documents
-/etc/sermo/apps/*.yml     legacy service-document alias
+/etc/sermo/apps/*.yml     host-specific app documents
 /etc/sermo/mounts/*.yml   fstab-backed mount documents
 /etc/sermo/notifiers/*.yml notifier fragments
 /etc/sermo/storages/*.yml storage watch fragments
@@ -48,7 +48,7 @@ paths:
   services:
     - /etc/sermo/services
   apps:
-    - /etc/sermo/apps            # legacy service-file alias; keep only while old files live there
+    - /etc/sermo/apps
   notifiers:
     - /etc/sermo/notifiers
   storages:
@@ -64,28 +64,20 @@ paths:
   templates: /etc/sermo/templates
 ```
 
-Older installations may still have `paths.profiles`. Sermo accepts it as a
-legacy alias only when `paths.catalog` is absent; new configs should use
-`paths.catalog`.
-
 `paths.runtime` is the root for named runtime locks (`<runtime>/locks`, one file
 per lock named `<service>[.<name>].lock`) and internal operation locks
 (`<runtime>/ops/<service>.lock`). It lives on tmpfs and is wiped on reboot.
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
 stale-reclaim semantics.
 
-If no service directory is configured (`paths.services`, `paths.apps`,
-`paths.includes` and legacy `paths.enabled` are all absent), Sermo falls back to
-`services/` and then `apps/` next to the loaded `sermo.yml` file. With the
-standard `/etc/sermo/sermo.yml` this means `/etc/sermo/services` and
-`/etc/sermo/apps`. `paths.apps`, `paths.includes` and `paths.enabled` are legacy
-service-file aliases; put new service files under `paths.services`.
+If `paths.services` is omitted, Sermo falls back to `services/` next to the
+loaded `sermo.yml` file. If `paths.apps` is omitted, Sermo falls back to `apps/`
+next to that same file. With the standard `/etc/sermo/sermo.yml` this means
+`/etc/sermo/services` and `/etc/sermo/apps`.
 
 Every new service, notifier or watch fragment under these directories should be
 isolated in its own `.yml` file, even when several targets are generated in the
-same wizard run. `paths.includes` is still accepted for older mixed directories
-that contain service documents and/or `watches:`/`notifiers:` fragments, but new
-configs should prefer the explicit target directories above.
+same wizard run.
 
 If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
 `sermo.yml` file. With the standard `/etc/sermo/sermo.yml` this means
@@ -899,9 +891,7 @@ a service.
 > with `kind: service` files (see [daemons](daemons.md)); when several services
 > are selected, port overrides are skipped unless explicitly reviewed, and known
 > config files can be added as a periodic `checks.config` entry with a default
-> `60m` interval. Older `apps/` include directories remain valid as a legacy service-file
-> alias; the wizard preserves them and appends `services/` instead of moving or
-> deleting old files. Run with no argument to choose from the list.
+> `60m` interval. Run with no argument to choose from the list.
 >
 > On finishing, the wizard offers to delete managed files whose target is no
 > longer detected. For watch fragments it also checks older assistant-named
@@ -1189,9 +1179,6 @@ predicate holds (`op ∈ >=,>,<=,<,==,!=`). Predicates cover **block space** —
 `B`/`iB`), e.g. `10G`; unitless byte values such as `10` are rejected.
 Inode predicates catch the "disk full" that `df` hides: a filesystem out of
 inodes (millions of tiny files) rejects new files while bytes are still free.
-Older configs may still use `type: disk`; Sermo treats it as a legacy alias for
-`type: storage`.
-
 ```yaml
 watches:
   storage-root:

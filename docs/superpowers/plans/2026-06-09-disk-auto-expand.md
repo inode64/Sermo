@@ -63,7 +63,7 @@ small `internal/app/size.go`).
   ```yaml
   watches:
     expand-backup:
-      check: { type: disk, path: /mnt/backup, free_pct: { op: "<", value: 10 } }
+      check: { type: storage, path: /mnt/backup, free_pct: { op: "<", value: 10 } }
       for: { cycles: 3 }
       policy: { cooldown: 30m, backoff: { initial: 30m, factor: 2, max: 6h } }
       then:

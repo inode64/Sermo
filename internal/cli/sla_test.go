@@ -34,7 +34,7 @@ func TestSLACommandReportsWindows(t *testing.T) {
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], runtime: %s, state: %s }
+paths: { catalog: [ %s ], services: [ %s ], runtime: %s, state: %s }
 defaults: { policy: { cooldown: 5m } }
 `, daemonsDir, enabledDir, runDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
@@ -117,7 +117,7 @@ func TestSLASeriesCommand(t *testing.T) {
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
-paths: { catalog: [ %s ], includes: [ %s ], state: %s }
+paths: { catalog: [ %s ], services: [ %s ], state: %s }
 defaults: { policy: { cooldown: 5m } }
 `, daemonsDir, enabledDir, stateDir))
 	global := filepath.Join(root, "sermo.yml")
@@ -186,7 +186,7 @@ func TestSLACommandUnknownService(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(root, "sermo.yml"), []byte(fmt.Sprintf(`
 engine: { backend: auto }
-paths: { includes: [ %s ], state: %s }
+paths: { services: [ %s ], state: %s }
 defaults: { policy: { cooldown: 5m } }
 `, enabledDir, stateDir)), 0o644); err != nil {
 		t.Fatal(err)

@@ -103,7 +103,6 @@ For each host:
 ```yaml
 paths:
   catalog: [/tmp/sermo-remote-test-XXX/catalog]
-  includes: []
   runtime: /tmp/sermo-remote-test-XXX/run
 
 defaults:

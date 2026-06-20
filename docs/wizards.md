@@ -144,10 +144,7 @@ their PID question is prefilled from detection and only accepts absolute pidfile
 paths.
 
 The service, Docker and VM wizards write new generated `kind: service` files
-under a `services/` directory loaded by `paths.services`. Older installs may
-already load `apps/` as a legacy directory for concrete service files; keep that
-path configured while those files exist. The wizard preserves any loaded `apps/`
-path and appends `services/` instead of moving or deleting legacy files.
+under a `services/` directory loaded by `paths.services`.
 
 All wizard output is one target per file. The volume wizard generates one
 storage **watch fragment** per mounted storage filesystem under the `storages/`
