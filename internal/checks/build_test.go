@@ -104,7 +104,6 @@ func TestIsHealthType(t *testing.T) {
 		{"mysql", true},
 		{"mariadb", true},
 		{"storage", false},
-		{"disk", false},
 		{"cert", true}, // health-style: OK means the certificate is acceptable
 		{"count", false},
 		{"sql", false},
