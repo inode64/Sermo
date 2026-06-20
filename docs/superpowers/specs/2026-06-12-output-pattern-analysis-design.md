@@ -73,11 +73,6 @@ can re-flag that line.
 
 ## Wiring — the `analyze:` block
 
-**v1 surface: the `command` check only.** This fully covers the legacy
-`verifica_sistema.py` use case (version + config-test output). Orthogonal to
-`expect_exit` / `expect_stdout` (those stay; `analyze` adds severity-graded
-classification).
-
 **Hooks are a documented v1 limitation (not a free rider).** Although hooks also
 capture stdout/stderr (`internal/app/hook.go`), they are **two-state** (`Run`
 returns `error`; no `Optional`/warning lane) and live **outside** the
