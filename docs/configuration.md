@@ -894,9 +894,8 @@ a service.
 > `60m` interval. Run with no argument to choose from the list.
 >
 > On finishing, the wizard offers to delete managed files whose target is no
-> longer detected. For watch fragments it also checks older assistant-named
-> directories (`volume`, `net`) during migration. New assistant types can be
-> added over time. At any multi-select prompt you can
+> longer detected from the current generated output directories. New assistant
+> types can be added over time. At any multi-select prompt you can
 > type item numbers (`1,3`), the keyword `all`, or an option's name. When asked
 > for notification targets the numbered list shows only the notifiers defined in
 > the config; the reserved answers `all` / `none` / `default` are offered in the
