@@ -1,7 +1,7 @@
 kind: patterns
 name: common
 display_name: "Common output signals"
-description: "Generic command-output signals (migrated from verifica_sistema.py): escalate a command's output to warning/error even when it exits 0."
+description: "Generic command-output signals: escalate a command's output to warning/error even when it exits 0."
 rules:
   # Errors — the command answered but reports a serious condition.
   - { id: backup-now, match: 'BACK UP DATA NOW',         severity: error }
