@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"sermo/internal/app"
 	"sermo/internal/config"
 	"sermo/internal/execx"
-	"sermo/internal/metrics"
 	"sermo/internal/servicemgr"
 )
 
@@ -45,19 +43,14 @@ defaults:
 	}
 }
 
-// TestRepoDefaultConfigHasMonitorTargets guards the installed sample config.
-// The installed config deliberately enables no services (operators add their
-// own with the wizard), so the host watches are what must load, validate and
-// build: they are the daemon's out-of-the-box monitor targets.
-func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
+// TestRepoDevConfigHasMonitorTargets guards the source-tree development config.
+// It loads the example target directories directly, without rewriting paths, so
+// developers can validate the same tree with examples/sermo-dev.yml.
+func TestRepoDevConfigHasMonitorTargets(t *testing.T) {
 	root := repoRoot(t)
-	global := copiedRepoConfig(t, root)
+	global := filepath.Join(root, "examples", "sermo-dev.yml")
 
-	// The shipped config points paths.catalog at the installed /usr/share/sermo
-	// location, so override it to the source tree's catalog for this test —
-	// exactly what `sermod run --catalog ./catalog` does.
-	catalog := filepath.Join(root, "catalog")
-	cfg, err := config.Load(global, config.WithCatalogDirs(catalog))
+	cfg, err := config.Load(global)
 	if err != nil {
 		t.Fatalf("Load(%q): %v", global, err)
 	}
@@ -65,24 +58,25 @@ func TestRepoDefaultConfigHasMonitorTargets(t *testing.T) {
 		t.Fatalf("Validate: %v", issues)
 	}
 
+	if len(cfg.Services) == 0 {
+		t.Fatal("expected dev config to load service examples")
+	}
 	watchesRaw, ok := cfg.Global.Raw["watches"].(map[string]any)
 	if !ok || len(watchesRaw) == 0 {
-		t.Fatal("expected non-empty watches section in repo default config")
+		t.Fatal("expected non-empty watches section in dev config")
 	}
-	collector := metrics.New(metrics.OSReader{})
 	deps := app.Deps{
 		DefaultTimeout: 10 * time.Second,
 		Interval:       30 * time.Second,
 		ExecxRunner:    execx.CommandRunner{},
 	}
-	workers, workerWarns := app.BuildWorkers(cfg, deps, collector)
 	watches, watchWarns := app.BuildWatches(cfg, deps, deps.Interval)
-	if len(watchWarns) != 0 || len(workerWarns) != 0 {
-		t.Fatalf("shipped config must build without warnings: worker_warns=%v watch_warns=%v", workerWarns, watchWarns)
+	if len(watchWarns) != 0 {
+		t.Fatalf("dev config watches must build without warnings: %v", watchWarns)
 	}
 	if len(watches) == 0 {
-		t.Fatalf("no runnable watches from the shipped config: services=%d watches_in_cfg=%d workers=%d",
-			len(cfg.Services), len(watchesRaw), len(workers))
+		t.Fatalf("no runnable watches from the dev config: services=%d watches_in_cfg=%d",
+			len(cfg.Services), len(watchesRaw))
 	}
 }
 
@@ -209,53 +203,6 @@ func repoRoot(t *testing.T) string {
 			t.Fatal("go.mod not found")
 		}
 		dir = parent
-	}
-}
-
-func copiedRepoConfig(t *testing.T, root string) string {
-	t.Helper()
-	dir := t.TempDir()
-	src := filepath.Join(root, "examples", "sermo.yml")
-	data, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatalf("read %s: %v", src, err)
-	}
-	body := string(data)
-	for _, name := range []string{"notifiers", "storages", "networks", "watches"} {
-		dstDir := filepath.Join(dir, name)
-		copyRepoExampleYAMLDir(t, filepath.Join(root, "examples", name), dstDir)
-		body = strings.ReplaceAll(body, "/etc/sermo/"+name, dstDir)
-	}
-	dst := filepath.Join(dir, "sermo.yml")
-	if err := os.WriteFile(dst, []byte(body), 0o644); err != nil {
-		t.Fatalf("write %s: %v", dst, err)
-	}
-	return dst
-}
-
-func copyRepoExampleYAMLDir(t *testing.T, src, dst string) {
-	t.Helper()
-	entries, err := os.ReadDir(src)
-	if os.IsNotExist(err) {
-		return
-	}
-	if err != nil {
-		t.Fatalf("read %s: %v", src, err)
-	}
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		t.Fatalf("create %s: %v", dst, err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(src, entry.Name()))
-		if err != nil {
-			t.Fatalf("read %s: %v", entry.Name(), err)
-		}
-		if err := os.WriteFile(filepath.Join(dst, entry.Name()), data, 0o644); err != nil {
-			t.Fatalf("write %s: %v", entry.Name(), err)
-		}
 	}
 }
 

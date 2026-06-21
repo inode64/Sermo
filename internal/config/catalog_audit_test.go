@@ -94,42 +94,52 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	}
 }
 
-// TestShippedGlobalConfigValidates points the shipped examples/sermo.yml at the
-// repo catalog and validates it with its bundled apps services.
+// TestShippedGlobalConfigValidates validates the installed sample config as an
+// installed config. It deliberately points at /etc/sermo target directories;
+// source-tree examples are covered by TestRepoDevConfigLoadsExampleTree.
 func TestShippedGlobalConfigValidates(t *testing.T) {
 	root := repoRoot(t)
 
-	src, err := os.ReadFile(filepath.Join(root, "examples", "sermo.yml"))
+	cfg, err := Load(filepath.Join(root, "examples", "sermo.yml"), WithCatalogDirs(filepath.Join(root, "catalog")))
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Load: %v", err)
 	}
-	dir := t.TempDir()
-	body := strings.ReplaceAll(string(src), "/usr/share/sermo/catalog", filepath.Join(root, "catalog"))
-	body = strings.ReplaceAll(body, "    - /etc/sermo/catalog-available\n", "")
-	if body == string(src) {
-		t.Fatal("examples/sermo.yml no longer lists the packaged catalog paths; update this rewrite")
+	if len(cfg.Services) != 0 {
+		t.Fatalf("installed sample config should not load repo service examples, got %d", len(cfg.Services))
 	}
-	for _, name := range []string{"services", "apps", "notifiers", "storages", "networks", "watches", "mounts"} {
-		body = strings.ReplaceAll(body, "/etc/sermo/"+name, filepath.Join(dir, name))
+	for _, issue := range Validate(cfg) {
+		t.Errorf("shipped sermo.yml fails validation: %s", issue)
 	}
+}
 
-	if err := os.WriteFile(filepath.Join(dir, "sermo.yml"), []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// The shipped config enables no services out of the box; when bundled target
-	// dirs reappear, copy them so their entries validate too.
-	for _, include := range []string{"services", "apps", "notifiers", "storages", "networks", "watches", "mounts"} {
-		if bundled := filepath.Join(root, "examples", include); dirExists(bundled) {
-			copyYAMLDir(t, bundled, filepath.Join(dir, include))
-		}
-	}
-
-	cfg, err := Load(filepath.Join(dir, "sermo.yml"))
+func TestRepoDevConfigLoadsExampleTree(t *testing.T) {
+	root := repoRoot(t)
+	cfg, err := Load(filepath.Join(root, "examples", "sermo-dev.yml"))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	for _, issue := range Validate(cfg) {
-		t.Errorf("shipped sermo.yml fails validation: %s", issue)
+		t.Errorf("examples/sermo-dev.yml fails validation: %s", issue)
+	}
+
+	if _, ok := cfg.Services["apache-main"]; !ok {
+		t.Fatalf("dev config did not load examples/services: %v", cfg.ServiceNames)
+	}
+	if _, ok := cfg.Apps["custom-tool"]; !ok {
+		t.Fatalf("dev config did not load examples/apps: %v", cfg.AppNames)
+	}
+	if _, ok := cfg.Mounts["mount-backup"]; !ok {
+		t.Fatalf("dev config did not load examples/mounts: %v", cfg.MountNames)
+	}
+	notifiers, _ := cfg.Global.Raw["notifiers"].(map[string]any)
+	if _, ok := notifiers["ops-email"]; !ok {
+		t.Fatalf("dev config did not load examples/notifiers: %v", notifiers)
+	}
+	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
+	for _, name := range []string{"storage-root", "ping-gw", "load"} {
+		if _, ok := watches[name]; !ok {
+			t.Fatalf("dev config did not load watch %q from example dirs: %v", name, watches)
+		}
 	}
 }
 
@@ -1466,28 +1476,4 @@ func collectForbiddenKeys(node any, keyPath string, forbidden map[string]struct{
 func dirExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.IsDir()
-}
-
-// copyYAMLDir copies the top-level *.yml files of src into dst.
-func copyYAMLDir(t *testing.T, src, dst string) {
-	t.Helper()
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yml") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(src, e.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dst, e.Name()), data, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 }
