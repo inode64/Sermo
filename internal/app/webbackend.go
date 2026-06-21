@@ -142,6 +142,8 @@ type WebBackend struct {
 	raidSampler      checks.RaidSamplerFunc
 	edacSampler      checks.EdacSamplerFunc
 	routeSampler     checks.RouteSamplerFunc
+	firewallSampler  checks.FirewallRulesSamplerFunc
+	execRunner       execx.Runner
 	expander         VolumeExpander
 	userLookup       *process.UserLookup
 	emit             func(Event)
@@ -219,6 +221,8 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		raidSampler:      deps.RaidSampler,
 		edacSampler:      deps.EdacSampler,
 		routeSampler:     deps.RouteSampler,
+		firewallSampler:  deps.FirewallRulesSampler,
+		execRunner:       deps.ExecxRunner,
 		expander:         configuredVolumeExpander(deps),
 		userLookup:       deps.UserLookup,
 		emit:             deps.Emit,
@@ -1078,6 +1082,18 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 		return b.edacWatchView()
 	case "route":
 		return b.routeWatchView(w)
+	case "file":
+		return b.fileWatchView(w)
+	case "count":
+		return b.countWatchView(w)
+	case "firewall_rules":
+		return b.firewallRulesWatchView(w)
+	case "size":
+		return b.sizeWatchView(w)
+	case "hdparm":
+		return b.hdparmWatchView(w)
+	case "smart":
+		return b.smartWatchView(w)
 	default:
 		return watchMeter(w.checkType, system), nil, ""
 	}

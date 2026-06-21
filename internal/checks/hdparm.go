@@ -59,6 +59,33 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	return r
 }
 
+// SampleHdparm runs hdparm -t and/or -T on device and returns MB/s rates.
+func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantCached, wantRead bool) (map[string]float64, error) {
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	if !wantCached && !wantRead {
+		wantCached, wantRead = true, true
+	}
+	args := make([]string, 0, 3)
+	if wantCached {
+		args = append(args, "-T")
+	}
+	if wantRead {
+		args = append(args, "-t")
+	}
+	args = append(args, device)
+	res, _ := runner.Run(ctx, "hdparm", args...)
+	values, err := parseHdparm(res.Stdout)
+	if err != nil {
+		if s := FirstNonEmptyLine(res.Stderr); s != "" {
+			return nil, fmt.Errorf("%s", s)
+		}
+		return nil, err
+	}
+	return values, nil
+}
+
 // parseHdparm extracts the MB/sec rate from hdparm's timing lines: the
 // "cached reads" line is `cached`, "buffered disk reads" is `read`. The rate is
 // always the number after "=" and before "MB/sec" (the leading "N MB/GB in …" is

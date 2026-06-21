@@ -58,6 +58,43 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	return r
 }
 
+// SmartSample is one smartctl observation for the web UI and tests.
+type SmartSample struct {
+	Health      string
+	HealthKnown bool
+	Values      map[string]float64
+}
+
+// SampleSmart runs smartctl -H -A -j on device.
+func SampleSmart(ctx context.Context, runner execx.Runner, device string) (SmartSample, error) {
+	if runner == nil {
+		runner = execx.CommandRunner{}
+	}
+	res, _ := runner.Run(ctx, "smartctl", "-H", "-A", "-j", device)
+	data, err := parseSmart(res.Stdout)
+	if err != nil {
+		if s := FirstNonEmptyLine(res.Stderr); s != "" {
+			return SmartSample{}, fmt.Errorf("%s", s)
+		}
+		return SmartSample{}, err
+	}
+	return SmartSample{
+		Health:      smartHealthLabel(data),
+		HealthKnown: data.healthKnown,
+		Values:      data.values,
+	}, nil
+}
+
+func smartHealthLabel(data smartData) string {
+	if !data.healthKnown {
+		return "unknown"
+	}
+	if data.passed {
+		return "PASSED"
+	}
+	return "FAILED"
+}
+
 // smartData is the parsed subset of `smartctl -j` output.
 type smartData struct {
 	passed      bool
