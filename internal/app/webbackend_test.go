@@ -1329,6 +1329,12 @@ func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
 			"muted": map[string]any{"enabled": false, "type": "slack", "webhook": "https://hooks.example/x"},
 			"ops":   map[string]any{"type": "email", "dsn": "smtp://x", "from": "x@y", "to": []any{"a@b"}},
 		},
+		"watches": map[string]any{
+			"disk": map[string]any{
+				"check": map[string]any{"type": "storage", "path": "/"},
+				"then":  map[string]any{"notify": []any{"ops"}},
+			},
+		},
 	}}}
 	b, warns := NewWebBackend(cfg, Deps{})
 	if len(warns) != 0 {
@@ -1348,6 +1354,12 @@ func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
 	}
 	if byName["muted"].Enabled {
 		t.Fatalf("muted should be disabled: %+v", byName["muted"])
+	}
+	if byName["ops"].Summary != "a@b" || byName["ops"].UsedBy != 1 {
+		t.Fatalf("ops summary/usage = %+v, want a@b and used_by 1", byName["ops"])
+	}
+	if byName["muted"].Summary != "hooks.example" {
+		t.Fatalf("muted summary = %q, want hooks.example", byName["muted"].Summary)
 	}
 }
 

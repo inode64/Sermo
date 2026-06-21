@@ -88,6 +88,7 @@ type webNotifier struct {
 	name    string
 	typ     string
 	enabled bool
+	summary string
 }
 
 type diagnosticCleaner interface {
@@ -361,7 +362,12 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		for _, name := range slices.Sorted(maps.Keys(raw)) {
 			entry, _ := raw[name].(map[string]any)
 			typ := cfgval.AsString(entry["type"])
-			wn := &webNotifier{name: name, typ: typ, enabled: notify.Enabled(entry)}
+			wn := &webNotifier{
+				name:    name,
+				typ:     typ,
+				enabled: notify.Enabled(entry),
+				summary: notify.ConfigSummary(typ, entry),
+			}
 			wb.notifiers[name] = wn
 			wb.notifierOrder = append(wb.notifierOrder, name)
 		}
@@ -1814,6 +1820,15 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 	if len(b.notifierOrder) == 0 {
 		return nil
 	}
+	usedBy := map[string]int{}
+	for _, w := range b.watches {
+		if w == nil {
+			continue
+		}
+		for _, n := range w.notifiers {
+			usedBy[n]++
+		}
+	}
 	out := make([]web.Notifier, 0, len(b.notifierOrder))
 	for _, name := range b.notifierOrder {
 		n := b.notifiers[name]
@@ -1824,6 +1839,8 @@ func (b *WebBackend) Notifiers(ctx context.Context) []web.Notifier {
 			Name:    n.name,
 			Type:    n.typ,
 			Enabled: n.enabled,
+			Summary: n.summary,
+			UsedBy:  usedBy[name],
 		})
 	}
 	return out
