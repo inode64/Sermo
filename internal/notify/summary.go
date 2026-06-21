@@ -1,0 +1,35 @@
+package notify
+
+import (
+	"fmt"
+	"net/url"
+
+	"sermo/internal/cfgval"
+)
+
+// ConfigSummary returns a non-secret destination hint for operator dashboards.
+func ConfigSummary(typ string, entry map[string]any) string {
+	switch typ {
+	case "email":
+		to := cfgval.StringList(entry["to"])
+		if len(to) == 0 {
+			return ""
+		}
+		if len(to) == 1 {
+			return to[0]
+		}
+		return fmt.Sprintf("%s (+%d)", to[0], len(to)-1)
+	case "slack", "teams":
+		webhook := cfgval.AsString(entry["webhook"])
+		if webhook == "" {
+			return ""
+		}
+		u, err := url.Parse(webhook)
+		if err != nil || u.Host == "" {
+			return ""
+		}
+		return u.Host
+	default:
+		return ""
+	}
+}

@@ -201,6 +201,8 @@ type Notifier struct {
 	Name    string `json:"name"`
 	Type    string `json:"type"`
 	Enabled bool   `json:"enabled"`
+	Summary string `json:"summary,omitempty"`
+	UsedBy  int    `json:"used_by,omitempty"`
 }
 
 // DaemonInfo provides a summary of the running daemon configuration
