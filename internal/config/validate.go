@@ -185,7 +185,7 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
 			}
 		}
-		issues = append(issues, validateTopLevelBinary(doc, scope)...)
+		issues = append(issues, validateBinaryVariables(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
@@ -273,11 +273,8 @@ func versionFromCycle(cfg *Config, start string) []string {
 	}
 }
 
-func validateTopLevelBinary(doc *Document, scope string) []Issue {
+func validateBinaryVariables(doc *Document, scope string) []Issue {
 	var issues []Issue
-	if _, present := doc.Body["binary"]; present {
-		issues = append(issues, Issue{Scope: scope, Msg: "binary is not supported; use variables.binary with preflight.binary"})
-	}
 	if vars, ok := doc.Body["variables"].(map[string]any); ok {
 		raw := vars["binary"]
 		if raw == nil {
