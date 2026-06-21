@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sermo</title>
-<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7'%20fill='%231a7f37'/%3E%3C/svg%3E">
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Ccircle%20cx='8'%20cy='8'%20r='7'%20fill='%238b96a5'/%3E%3C/svg%3E">
 <style nonce="{{CSP_NONCE}}">
   /* ---- design tokens -------------------------------------------------------
      One light/dark token set drives the whole document. Status colors stay in
@@ -54,7 +54,7 @@
     background: var(--bg); color: var(--text);
   }
   h1 { font-size: 1.12rem; margin: 0; display: flex; align-items: center; gap: .55rem; letter-spacing: .01em; }
-  .brand-dot { width: .95rem; height: .95rem; border-radius: 32%; background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); flex: none; }
+  .brand-dot { width: .95rem; height: .95rem; border-radius: 32%; background: var(--text-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-2) 22%, transparent); flex: none; }
   code { font-family: var(--mono); background: var(--panel-2); border-radius: 4px; padding: .04rem .3rem; font-size: .86em; }
   .mono { font-family: var(--mono); }
 
@@ -791,6 +791,7 @@ function showDisconnected() {
 // overview inputs (readyz, livez, monitoring, ops, host) share the same burst so
 // renderStatus does not re-fetch locks, daemon or ops that load() already has.
 async function load() {
+  healthIconReady = false;
   const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
     getJSON("api/watches", null),       // host watches (visible even when services=0)
@@ -837,7 +838,9 @@ async function load() {
   renderOpsPanel(ops);
 
   loadEvents();
-  loadDiag();
+  await loadDiag();
+  healthIconReady = true;
+  renderAttention();
 
   lastRefresh = Date.now();
   tickRefreshAge();
@@ -1315,6 +1318,9 @@ let latestActivity = null;
 let latestReady = null;
 let latestHostMetrics = [];   // last /api/host readings (for process memory bars)
 let latestDiagnostics = [];
+// Defer favicon/title until load() has the full dashboard snapshot (including
+// diagnostics). Avoids a green default flashing to red while panels hydrate.
+let healthIconReady = false;
 
 function targetStateClass(state) {
   switch (state) {
@@ -1414,8 +1420,10 @@ function openPanelTarget(target) {
   el.scrollIntoView({ block: "start", behavior: "smooth" });
 }
 // setFavicon reflects overall health in the browser tab: green = ok,
-// warning = degraded health, critical = malfunctioning.
+// warning = degraded health, critical = malfunctioning. Until healthIconReady,
+// the neutral HTML/CSS placeholder stays — no optimistic green on first paint.
 function setFavicon(status) {
+  if (!healthIconReady) return;
   const color = status === "critical" ? "#cf222e" : status === "warning" ? "#e8830c" : "#1a7f37";
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
   const link = $("#favicon");
@@ -1505,13 +1513,13 @@ function renderAttention() {
   }
   if (!items.length) {
     setFavicon("ok");
-    document.title = "Sermo · services";
+    if (healthIconReady) document.title = "Sermo · services";
     box.style.display = "none";
     box.innerHTML = "";
     return;
   }
   setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
-  document.title = `(${items.length}) Sermo · services`;
+  if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
   box.style.display = "block";
   box.innerHTML = `
     <div class="attn-head">
