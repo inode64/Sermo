@@ -110,7 +110,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `mongodb-query` | a MongoDB document count / aggregation / command result compares against a value (see MongoDB query) |
 | `influxdb-query` | an InfluxQL (1.x) or Flux (2.x) query's scalar result compares against a value (see InfluxDB query) |
 | `size`        | a file/directory grows by at least `grow_by` within `within` (runaway growth) (see Size growth) |
-| `websocket` / `ws` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
+| `websocket` | a WebSocket endpoint completes the RFC 6455 opening handshake (see WebSocket) |
 
 The `storage` check also verifies the **mount** of its `path` — see
 [storage and mount](configuration.md#host-watches).
@@ -1262,7 +1262,7 @@ data carries `current_bytes`, `baseline_bytes`,
 `growth_bytes`, the `window` and `value` (the growth) for hooks/rules. A
 directory walk reads the whole subtree each cycle, so point it at a bounded path.
 
-### WebSocket (`websocket` / `ws`)
+### WebSocket (`websocket`)
 
 A `websocket` check verifies a WebSocket endpoint completes the RFC 6455 opening
 handshake: it sends the HTTP `Upgrade` request and checks the server answers
@@ -1390,7 +1390,7 @@ condition-style — `OK == true` means there is a problem — so in rules
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
 `autofs`, `route`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
-`websocket`/`ws`, and connection-protocol checks such as `mysql`/`smtp`) are the
+`websocket`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 

@@ -27,4 +27,12 @@ service: x
 checks:
   ws: { type: websocket, url: "ftp://h/x" }
 `), "scheme must be ws")
+
+	mustHave(t, validateService(t, `
+kind: service
+name: w
+service: x
+checks:
+  old: { type: ws, url: "ws://h/s" }
+`), `has unknown type "ws"`)
 }
