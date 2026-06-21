@@ -192,7 +192,7 @@ func run(args []string) int {
 		logger.Warn("load persisted events failed", "error", err)
 	}
 
-	interval := app.EngineInterval(cfg, 30*time.Second)
+	interval := config.EngineInterval(cfg, 30*time.Second)
 	runner := execx.CommandRunner{}
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
 	userLookup := app.EngineUserLookup(cfg, runner)
