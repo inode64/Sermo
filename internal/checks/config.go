@@ -14,9 +14,9 @@ import (
 // config-test `command` (e.g. `apachectl configtest`, `nginx -t`, `sshd -t`) and
 // alerts when it fails (invalid config), and — with on_change over the config
 // `path`(s) — alerts when a config file changed since the last cycle. It is a
-// health-style check (OK==true means valid and unchanged); change detection
-// persists across cycles only when built once (a host watch), like the other
-// stateful checks.
+// health-style check (OK==true means valid and unchanged). Service workers and
+// host watches reuse the check instance across cycles, so change detection
+// persists until a config reload/worker rebuild creates a fresh baseline.
 type configCheck struct {
 	base
 	runner   execx.Runner
