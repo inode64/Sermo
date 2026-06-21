@@ -1,5 +1,10 @@
 # Sermo — project conventions
 
+This file describes **current** behavior, invariants and agent workflow. Planned or
+unimplemented features (access/event logs, `exec` rule actions, service
+priorities, extra notifier sinks, cluster mode, …) live in [TODO.md](TODO.md) —
+do not treat missing TODO items as accidental gaps in the code.
+
 ## AI / agent workflow — standard git commits
 
 AI agents, sub-agents, assistant sessions and automated coding processes use the
@@ -123,8 +128,15 @@ After the change is accepted or requested, remove the previous structure in the
 same change: runtime parsing, validation, examples, reference docs, agent
 guidance and tests must not keep the old form alive. Document exceptions
 explicitly at the owner. Examples of valid exceptions are Linux/init
-compatibility such as `/var/run` metadata normalized to `/run`, and hard safety
-invariants such as deriving lock directories from `paths.runtime`.
+compatibility such as `/var/run` metadata normalized to `/run`, hard safety
+invariants such as deriving lock directories from `paths.runtime`, and
+**catalog/daemon sugar** that desugars during resolution into the canonical
+shape (never a second runtime parser): `reload_on_change` and
+`restart_on_change` in catalog profiles and service trees expand to remediation
+rules in `internal/config/resolve.go` and are removed from the resolved tree.
+Do not add new dual parsers or migration shims for retired parameters; new sugar
+must follow the same one-way desugar pattern and be documented in
+`docs/daemons.md`.
 
 ## Runtime paths
 
@@ -160,6 +172,10 @@ that group several apps, services, mounts, storage entries, interfaces, VMs,
 containers or other targets into one YAML file. The single exception is a
 clearly labeled reference bundle such as `docs/sermo-all.yml`, whose purpose is
 to validate and demonstrate the full schema in one file.
+
+For source-tree development and validation without installing under `/etc/sermo`,
+use `examples/sermo-dev.yml` (relative `paths.*` into the bundled `examples/`
+tree). `examples/sermo.yml` intentionally targets installed locations.
 
 ## Catalog init and reload fallback verification
 
@@ -211,6 +227,13 @@ or command. When an external command is genuinely required (`systemctl`,
 call `os/exec` directly: it goes through an injectable `execx` runner with a
 context and an explicit timeout, invoking an argv directly — never a shell.
 `execx` and tests/fakes are the only exceptions.
+
+The one production exception is `sermoctl lock … -- COMMAND`: `lock wrap` runs
+the operator-provided argv with inherited stdin/stdout/stderr so the wrapped
+process behaves like a normal shell foreground job; it uses `exec.CommandContext`
+directly in `internal/cli/lock.go` (no `execx`, no engine timeout — the wrapped
+command owns its own lifetime). Do not route other CLI or daemon paths through
+this shortcut.
 
 ## Protocol probes: interface binding is mandatory
 
@@ -280,6 +303,11 @@ builder functions (`internal/checks/build.go`, `internal/app/watch_build.go`,
 or add ad-hoc cases across packages. If no central builder exists yet, create
 one at the owning package instead of scattering switch cases through callers.
 
+**Notifiers** are typed, pluggable transports: register a builder in
+`internal/notify` keyed by `type` (`email`, `slack`, `teams`, …). Call sites
+reference notifiers by name only; adding a transport must not require changes
+outside `internal/notify` and the user docs (`docs/configuration.md`).
+
 ## Timeout discipline
 
 Every blocking operation (commands, network, database, I/O, etc.) must be
@@ -336,8 +364,11 @@ instead of trapping a panel in its own scrollbar. When you introduce a genuinely
 new pattern, document it here so the next change can follow it.
 
 When adding a host watch/check with useful runtime data, wire its Web UI
-`Watch.Meter` or `Watch.Readings` path and add a `webbackend` regression test;
-do not leave it visible only as static config.
+`Watch.Meter` or `Watch.Readings` path in `internal/app/webbackend.go` and add
+a `webbackend` regression test; do not leave it visible only as static config or
+configured conditions. Stateful watches (`file`, `process`, rate-based probes,
+…) must expose the live sample the daemon already computes, not just the YAML
+thresholds.
 
 The visual layer is a token-driven design system (June 2026 redesign):
 
@@ -522,7 +553,12 @@ checklist). Match the suite's existing style instead of inventing one.
    (remediation policy). Cooldown is decided by the daemon's rule evaluation
    before the shared engine runs. Manual operator commands are exempt from
    cooldown but still subject to locks, guards and preflight.
-9. Always log whether an action was executed or blocked, and why.
+9. Always log whether an action was executed or blocked, and why. Today that
+   means daemon events (`action`, `blocked`, `shadow`, `suppressed`, …) via the
+   in-process event log (web UI / `sermoctl activity`) and explicit CLI status
+   output for manual operations. Append-only `access.log` / `event.log` export
+   is future work ([TODO.md](TODO.md)); do not bypass the existing event/CLI
+   paths while adding those sinks.
 10. Database daemons must default to conservative stop policies.
 11. Auto-remediation must use the same safe operation path as manual `sermoctl` commands.
 12. Only residuals that exactly match `kill_only_if` are ever signaled; a residual
@@ -558,8 +594,20 @@ This project has a knowledge graph at graphify-out/ with god nodes, community st
 When the user types `/graphify`, invoke the `skill` tool with `skill: "graphify"` before doing anything else.
 
 Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- Dirty graphify-out/ files are expected after hooks or incremental updates; dirty graph files are not a reason to skip graphify. Only skip graphify if the task is about stale or incorrect graph output, or the user explicitly says not to use it.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- For codebase questions, first run `graphify query "<question>"` when
+  `graphify-out/graph.json` exists. Use `graphify path "<A>" "<B>"` for
+  relationships and `graphify explain "<concept>"` for focused concepts. These
+  return a scoped subgraph, usually much smaller than raw grep or a full report.
+- Dirty `graphify-out/` files are expected after hooks or incremental updates;
+  dirty graph files are not a reason to skip graphify. Only skip graphify if the
+  task is about stale or incorrect graph output, or the user explicitly says not
+  to use it.
+- If `graphify-out/wiki/index.md` exists, use it for broad navigation instead of
+  raw source browsing.
+- `graphify-out/GRAPH_REPORT.md` and `graphify-out/graph.html` are local exports
+  (gitignored). Do not assume they are present in the checkout; run
+  `graphify update .` when a human-readable report is needed, or stay with
+  query/path/explain for agent work.
+- After modifying code, run `graphify update .` to keep the graph current
+  (AST-only, no API cost). Core query inputs (`graph.json`, `manifest.json`,
+  labels) may stay tracked.
