@@ -62,9 +62,9 @@ func (d Discoverer) resolveGroup() UserResolver {
 	return DefaultUserLookup().ResolveGroup
 }
 
-// Discover applies pidfile then command selectors, then adds descendants
-// from the process tree, deduplicated by PID. Non-fatal problems
-// (missing pidfile, dead pid) are returned as warnings.
+// Discover applies backend-provided PID seeds first, then pidfile and command
+// selectors, then adds descendants from the process tree, deduplicated by PID.
+// Non-fatal problems (missing pidfile, dead pid) are returned as warnings.
 func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
 	reader := d.reader()
 	resolve := d.resolveUser()
