@@ -1,7 +1,7 @@
 # Configuration
 
-Sermo configuration is split by target type: **daemons/apps/libs/patterns** in
-the catalog, **services** as concrete monitored instances, **notifiers** as
+Sermo configuration is split by target type: **catalog daemon/app/lib/pattern
+definitions**, **services** as concrete monitored instances, **notifiers** as
 delivery targets, **watches** as host-level monitors, and **mounts** as
 fstab-backed mount units. Watch and notifier files are global fragments with a
 top-level `watches:` or `notifiers:` map; those fragments do not use `kind:`.
@@ -124,8 +124,8 @@ with app-specific runtime directories.
 Catalog daemons and apps may declare `catalog_aliases` for old names after a
 catalog rename. A service may still use a daemon alias in `uses:` or an app alias
 in `apps:`, but aliases are compatibility entries only and are not shown as
-separate daemons/apps in wizard selection lists. New configuration should use the
-canonical name. `catalog_aliases` must be a non-empty list of simple names,
+separate catalog entries in wizard selection lists. New configuration should use
+the canonical name. `catalog_aliases` must be a non-empty list of simple names,
 without path separators.
 
 Catalog apps may declare `version_from: <app-name>` when a different binary from
