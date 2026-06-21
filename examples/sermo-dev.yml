@@ -1,0 +1,61 @@
+# Sermo source-tree development configuration.
+#
+# This file is meant for validating and inspecting the repository examples
+# without installing them under /etc/sermo:
+#
+#   sermoctl --config examples/sermo-dev.yml config validate
+#
+# It loads every bundled example below examples/. If you run sermod with this
+# file, those service examples become real monitor targets; adapt or pause them
+# before using it on a host with matching real services.
+
+engine:
+  backend: auto
+  interval: 30s
+  max_parallel_checks: 8
+  max_parallel_operations: 2
+  default_timeout: 10s
+  operation_timeout: 90s
+  startup_delay: 0
+  user_lookup: auto
+  user_lookup_timeout: 250ms
+
+paths:
+  # Relative entries resolve against this file's directory (examples/).
+  catalog:
+    - ../catalog
+  services:
+    - services
+  apps:
+    - apps
+  notifiers:
+    - notifiers
+  storages:
+    - storages
+  networks:
+    - networks
+  watches:
+    - watches
+  mounts:
+    - mounts
+
+  # Keep local runs out of /run and /var/lib.
+  runtime: /tmp/sermo-dev/run
+  state: /tmp/sermo-dev/state
+
+defaults:
+  stop_policy:
+    graceful_timeout: 30s
+    term_timeout: 15s
+    kill_timeout: 5s
+    force_kill: false
+  policy:
+    cooldown: 5m
+
+web:
+  address: 127.0.0.1
+  port: 19797
+  # password: "change-me"
+  # guest_password: "read-only"
+  # guest: false
+  # disable_diagnostics: false

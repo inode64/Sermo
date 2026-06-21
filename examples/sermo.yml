@@ -1,7 +1,10 @@
-# Sermo minimal configuration.
+# Sermo minimal installed configuration.
 #
 # Engine-wide settings are not merged into individual services; only the
 # per-service parts of `defaults` (stop_policy, policy, rule_window) are.
+# For source-tree development and local validation, use examples/sermo-dev.yml;
+# this file intentionally points at installed /etc/sermo and /usr/share/sermo
+# locations.
 
 engine:
   backend: auto
