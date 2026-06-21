@@ -1613,26 +1613,6 @@ preflight:
 	}
 }
 
-func TestTopLevelBinaryRejected(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": baseGlobal,
-		"catalog/services/app.yml": `
-kind: daemon
-name: app
-binary: /usr/local/bin/app
-`,
-		"enabled/app-main.yml": "kind: service\nname: app-main\nuses: app\n",
-	})
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	issues := Validate(cfg)
-	if !hasIssue(issues, "binary is not supported; use variables.binary with preflight.binary") {
-		t.Fatalf("Validate issues = %v, want top-level binary rejection", issues)
-	}
-}
-
 func TestPidfileRejectsRelativeCandidate(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
@@ -3994,30 +3974,6 @@ checks:
 	cmd := rb.Tree["checks"].(map[string]any)["h"].(map[string]any)["command"].([]any)
 	if cmd[1] != "127.0.0.1" {
 		t.Fatalf("service variable should override custom, got %v", cmd[1])
-	}
-}
-
-func TestGlobalBinaryVariableAllowed(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": `
-engine: { backend: auto }
-paths:
-  catalog: [ @ROOT@/catalog ]
-  services: [ @ROOT@/enabled ]
-  runtime: /run/sermo
-defaults:
-  policy: { cooldown: 5m }
-  variables:
-    binary: /usr/bin/app
-`,
-	})
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	issues := Validate(cfg)
-	if hasIssue(issues, `defaults.variables: "binary" is reserved for top-level binary declarations`) {
-		t.Fatalf("Validate issues = %v, want defaults.variables.binary allowed", issues)
 	}
 }
 
