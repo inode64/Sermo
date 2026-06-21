@@ -100,8 +100,9 @@ func (e *certEvaluator) evaluate(s CertSample, opts certOptions, now time.Time) 
 
 // certCheck inspects TLS material from a live endpoint or local file. It is
 // health-style: OK means the material is acceptable. Expiry, verification and
-// change predicates produce alerts; change detection persists only when the
-// check instance is reused.
+// change predicates produce alerts. Service workers and host watches reuse the
+// check instance across cycles, so change detection persists until a config
+// reload/worker rebuild creates a fresh baseline.
 type certCheck struct {
 	base
 	host           string
