@@ -57,7 +57,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["/definitely-missing-sermo-version-probe"], timeout: 10s }
 `, linked))
-	write(filepath.Join(appsDir, "git.yml"), "kind: daemon\nname: git\nvariables: { binary: /bin/git }\n")
+	write(filepath.Join(appsDir, "git.yml"), "kind: app\nname: git\nvariables: { binary: /bin/git }\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
