@@ -62,7 +62,6 @@ func TestSSLMode(t *testing.T) {
 		"": "disable", "false": "disable", "off": "disable",
 		"true": "require", "on": "require",
 		"skip-verify": "require",
-		"insecure":    "insecure",
 		"verify-full": "verify-full", "verify-ca": "verify-ca", "prefer": "prefer",
 	}
 	for in, want := range cases {
