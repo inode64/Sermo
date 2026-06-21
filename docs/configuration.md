@@ -1030,7 +1030,8 @@ not action rehearsals.
 
 ```yaml
 kind: service
-service: apache
+name: apache-main
+uses: apache
 remediation:
   shadow: true
 rules:
