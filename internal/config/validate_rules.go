@@ -27,8 +27,15 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 			// A scalar (`for: 3`) would otherwise be silently ignored by the
 			// runtime parser, leaving the rule without a window.
 			add("%s.for must be a mapping, e.g. for: {cycles: 3}", prefix)
-		} else if c, _ := cfgval.Int(f["cycles"]); c <= 0 {
-			add("%s.for.cycles must be > 0", prefix)
+		} else {
+			for _, key := range slices.Sorted(maps.Keys(f)) {
+				if key != "cycles" {
+					add("%s.for.%s is not supported; for is always consecutive and only accepts cycles", prefix, key)
+				}
+			}
+			if c, _ := cfgval.Int(f["cycles"]); c <= 0 {
+				add("%s.for.cycles must be > 0", prefix)
+			}
 		}
 	}
 	if hasWithin {
@@ -36,6 +43,11 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 		if !ok {
 			add("%s.within must be a mapping, e.g. within: {cycles: 5, min_matches: 2}", prefix)
 			return
+		}
+		for _, key := range slices.Sorted(maps.Keys(wn)) {
+			if key != "cycles" && key != "min_matches" {
+				add("%s.within.%s is not supported; within only accepts cycles and min_matches", prefix, key)
+			}
 		}
 		cycles, _ := cfgval.Int(wn["cycles"])
 		if cycles <= 0 {

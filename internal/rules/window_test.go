@@ -239,7 +239,7 @@ func TestParseWindows(t *testing.T) {
 		"a": map[string]any{
 			"type": "remediation",
 			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
-			"for":  map[string]any{"cycles": 3, "mode": "consecutive"},
+			"for":  map[string]any{"cycles": 3},
 			"then": map[string]any{"action": "restart"},
 		},
 		"b": map[string]any{

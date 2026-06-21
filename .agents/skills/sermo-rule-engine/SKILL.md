@@ -30,7 +30,6 @@ rules:
         check: tcp-783
     for:
       cycles: 3
-      mode: consecutive
     then:
       action: restart
 ```
@@ -91,7 +90,6 @@ side-effect-free, array form, with a timeout. See `AGENTS.md`.
 ```yaml
 for:
   cycles: 3
-  mode: consecutive
 ```
 
 `within` means rolling window:
@@ -102,7 +100,9 @@ within:
   min_matches: 3
 ```
 
-Do not allow ambiguous windows. A rule cannot define both `for` and `within`; validation must reject it.
+`mode` belongs only to the `defaults.rule_window` fallback block, not to a
+rule's `for` block. Do not allow ambiguous windows. A rule cannot define both
+`for` and `within`; validation must reject it.
 
 ## Rule types
 
