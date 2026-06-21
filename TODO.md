@@ -81,8 +81,9 @@ a configtest CLI, `redis` / `keydb`, `mosquitto`, `supervisord`, `udisks2`,
       multiple services compete for the global semaphore; expose in `sermoctl
       services` (sort/filter), the web UI services table and detail panel, and
       the service wizard.
-- [ ] `exec` rule action: the `ActionExec` type is reserved in the rule model but
-  not implemented — `then: {action: exec, command: [...], timeout: ...}` (array
-  form, never a shell string).
+- [ ] `exec` rule action: not implemented. If scheduled, add an `ActionExec`
+      model constant, validation, docs and safe execution through `execx` —
+      `then: {action: exec, command: [...], timeout: ...}` (array form, never a
+      shell string).
 - [ ] Variable-to-variable references (`variables.x: "${y}"`), with cycle
   detection. Today a variable value containing `${...}` is a validation error.
