@@ -16,5 +16,7 @@ config_files: ["${config}", /etc/syslog-ng/conf.d]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/syslog-ng.pid
 
+socket: /run/syslog-ng.ctl
+
 checks:
   service: { type: service, expect: active }

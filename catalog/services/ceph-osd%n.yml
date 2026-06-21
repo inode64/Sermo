@@ -20,6 +20,8 @@ apps: ["ceph-osd${n}"]
 variables:
   user: ceph
 
+socket: "/run/ceph/ceph-osd.${n}.asok"
+
 # No `processes:` block on purpose. Every OSD on a host shares the same binary
 # and user, so an exe+user match cannot isolate one instance from its siblings
 # (the process model matches on exe+user only — OSD instances are separable just

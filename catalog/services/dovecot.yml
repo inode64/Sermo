@@ -17,6 +17,8 @@ preflight:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/dovecot/master.pid
 
+socket: /run/dovecot/master
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
