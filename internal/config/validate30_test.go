@@ -1199,6 +1199,19 @@ processes:
 	}
 }
 
+func TestValidateProcessSelectorsRejectUnknownKeys(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+processes:
+  main: { exe: /usr/sbin/mysqld, pidfile: /run/mysqld/mysqld.pid }
+  worker: { cmd: "worker", role: background }
+`)
+	mustHave(t, issues, "processes.main.pidfile is not supported")
+	mustHave(t, issues, "processes.worker.role is not supported")
+}
+
 func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
 kind: service

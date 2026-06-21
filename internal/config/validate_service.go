@@ -15,6 +15,7 @@ import (
 )
 
 var validMonitorModes = set(MonitorEnabled, MonitorDisabled, MonitorPrevious)
+var validProcessSelectorKeys = set("exe", "cmd", "user", "group", "delete")
 
 func validateMonitorMode(path string, mode any, add addFunc) {
 	s, isStr := mode.(string)
@@ -159,6 +160,11 @@ func validateProcesses(tree map[string]any, add addFunc) {
 		if !ok {
 			add("%s must be a mapping", path)
 			continue
+		}
+		for _, key := range slices.Sorted(maps.Keys(entry)) {
+			if _, ok := validProcessSelectorKeys[key]; !ok {
+				add("%s.%s is not supported; processes entries accept exe, cmd, user and group", path, key)
+			}
 		}
 		exe, cmd := cfgval.String(entry["exe"]), cfgval.String(entry["cmd"])
 		if exe == "" && cmd == "" {
