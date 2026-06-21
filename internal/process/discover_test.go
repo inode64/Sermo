@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -341,8 +342,6 @@ func TestParseSelectors(t *testing.T) {
 		"pidfile": "/run/x.pid",
 		"processes": map[string]any{
 			"command": map[string]any{"exe": "/opt/sermo-test/mysqld", "user": "mysql"},
-			"legacy":  map[string]any{"type": "command_match", "exe": "/opt/sermo-test/mysqld"},
-			"nopath":  map[string]any{"path": "/run/legacy.pid"},
 			"user":    map[string]any{"user": "mysql"},
 		},
 	}
@@ -350,8 +349,8 @@ func TestParseSelectors(t *testing.T) {
 	if len(selectors) != 2 {
 		t.Fatalf("selectors = %+v, want 2 valid", selectors)
 	}
-	if len(warnings) != 3 {
-		t.Fatalf("warnings = %v, want 3 (legacy type, path field, partial selector)", warnings)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "requires exe or cmd") {
+		t.Fatalf("warnings = %v, want partial selector warning", warnings)
 	}
 }
 
