@@ -10,8 +10,9 @@ exists. Nothing here is committed scope; pick items deliberately.
 - [ ] Remote API authentication
 - [ ] Multi-tenant RBAC
 - [ ] Plugin ABI
-- [ ] Complex notification integrations (email, Slack, Teams + templates;
-      additional sinks like file/syslog/generic webhook still pending)
+- [x] Core notification integrations: email, Slack, Teams and notifier
+      templates.
+- [ ] Additional notification sinks such as file, syslog and generic webhook.
 - [ ] Sermo metrics export (Prometheus / OpenMetrics scrape endpoint — distinct
       from *monitoring* a Prometheus server; log/slog, JSON file, syslog and
       webhook sinks are likewise pending)
