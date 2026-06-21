@@ -1342,6 +1342,7 @@ paths:
   locks: /run/sermo/locks
   runtime: relative/path
   templates: relative/templates
+  unexpected: /tmp/sermo
 defaults:
   policy:
     cooldown: 0s
@@ -1356,9 +1357,10 @@ security:
 	issues := Validate(cfg)
 	wantSubstrings := []string{
 		"engine.backend",
-		"paths.locks",
+		"paths.locks is not supported; runtime locks derive from paths.runtime",
 		"paths.runtime",
 		"paths.templates",
+		"paths.unexpected is not supported",
 		"security.allow_sigkill_by_default",
 		"defaults.policy.cooldown",
 	}
