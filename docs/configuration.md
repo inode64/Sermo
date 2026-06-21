@@ -23,6 +23,16 @@ diff, replace and clean up per target.
 > From a source checkout, use `examples/sermo-dev.yml` to validate the bundled
 > example tree without rewriting installed `/etc/sermo` paths.
 
+## Schema changes
+
+The documented schema is the current contract. When a Sermo-owned configuration
+field, alias or YAML shape is removed, do not keep compatibility fixtures or
+tests that still spell the removed form. Tests should cover the canonical
+current shape and, when strict validation needs coverage, use generic unknown
+fields or types instead of retired configuration names. External compatibility
+requirements, such as Linux/init metadata that still reports `/var/run` and is
+normalized to `/run`, must be documented as explicit exceptions at the owner.
+
 ## Layout
 
 ```
