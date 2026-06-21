@@ -23,8 +23,8 @@ type Process struct {
 	Exe     string   `json:"exe,omitempty"`     // resolved /proc/<pid>/exe; empty if unresolvable
 	ExeOK   bool     `json:"exe_resolved"`      // false when exe could not be trusted
 	Cmdline []string `json:"cmdline,omitempty"` // display data; an explicit process cmd may filter on it
-	Role    string   `json:"role,omitempty"`    // selector name, or "child" for tree members
-	Source  string   `json:"source"`            // pidfile | command_match | child
+	Role    string   `json:"role,omitempty"`    // selector name, "main" for backend seeds, or "child" for tree members
+	Source  string   `json:"source"`            // backend | pidfile | command_match | child
 }
 
 // Selector kinds.
@@ -45,7 +45,7 @@ const (
 // are command-match selectors; pidfile selectors are derived from top-level
 // service `pidfile:`.
 type Selector struct {
-	Name  string   // the map key, used as the discovered process Role
+	Name  string   // selector key used as Role when matched; backend seeds use Role "main"
 	Type  string   // pidfile | command_match
 	Paths []string // pidfile: candidate paths, tried in order (first running pid wins)
 	Exe   string   // exact /proc/<pid>/exe
@@ -53,8 +53,8 @@ type Selector struct {
 	User  string   // real UID owner
 	Group string   // real GID owner
 
-	cmdRe   *regexp.Regexp // compiled Cmd, set by ParseSelectors (matches falls back)
-	exePath string         // canonicalized Exe, set by ParseSelectors (matches falls back)
+	cmdRe   *regexp.Regexp // compiled Cmd, set by ParseSelectors; matches compiles lazily if empty
+	exePath string         // canonicalized Exe, set by ParseSelectors; matches canonicalizes lazily if empty
 }
 
 // Identity is the raw per-process data read from /proc. ExeOK is false when the
