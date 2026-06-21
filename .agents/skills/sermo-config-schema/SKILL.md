@@ -231,9 +231,9 @@ os-release ID (`gentoo`, `debian`, ...), substituted the same way. Both honor
 Other built-ins: `${service}` (backend unit name) and `${host}` (hostname,
 `SERMO_HOST` override; only applies when no `host` variable is defined) resolve at
 resolution time. `${date}` (RFC3339 timestamp), `${event}` (firing rule name) and
-`${action}` (restart/start/stop) are RUNTIME values substituted by the worker when
-it emits a rule message — use them in `message:` strings; elsewhere they stay
-literal.
+`${action}` (restart/start/stop/reload/resume) are RUNTIME values substituted by
+the worker when it emits a rule message — use them in `message:` strings;
+elsewhere they stay literal.
 
 An `os:` key anywhere (value = map of os-id -> block) is an OS SELECTOR: at load,
 the branch for the detected OS (or a `default` branch) is merged into the parent
@@ -280,8 +280,9 @@ value           "%" suffix = percentage 0..100; otherwise an absolute number.
 ```
 
 Safety: a remediation rule may only trigger on a `scope: service` metric. A
-`scope: system` metric may drive `alert` only — never restart/start/stop a
-single service. See `docs/rules.md`.
+`scope: system` metric may drive `alert` only — never an operation action
+(`restart`/`start`/`stop`/`reload`/`resume`) for a single service. See
+`docs/rules.md`.
 
 ## Required validation
 

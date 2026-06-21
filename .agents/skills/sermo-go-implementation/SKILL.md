@@ -24,7 +24,7 @@ You are implementing Go code for Sermo.
     commands. When one is genuinely required, never call `os/exec` directly:
     route it through the `execx` runner (context + timeout). See AGENTS.md
     "Native by default".
-13. All service start/stop/restart/reload/signals must go through the
+13. All service start/stop/restart/reload/resume/signals must go through the
     `internal/operation` package. Do not bypass it. See AGENTS.md "Service
     operations".
 14. Keep documentation, catalog examples and `docs/configuration.md` / `docs/rules.md`
@@ -114,7 +114,7 @@ internal/locks        runtime locks and external lock checks
 internal/metrics      CPU/memory/process collectors and time-series helpers
 internal/mountctl     mount/umount operation helpers
 internal/notify       notifier implementations
-internal/operation    safe start/stop/restart/reload workflows shared by sermod and sermoctl
+internal/operation    safe start/stop/restart/reload/resume workflows shared by sermod and sermoctl
 internal/process      process discovery, identity matching and signaling
 internal/rules        rule engine, windows and remediation state
 internal/servicemgr   systemd/OpenRC abstraction
