@@ -4854,18 +4854,35 @@ function setRefresh(v) {
   applyRefresh(ms);
 })();
 
-// "/" focuses the service filter (unless already typing in a field). It opens
-// the Services section first so the box is visible.
+// activeSearchBox returns the search input for the topmost open data panel.
+function activeSearchBox() {
+  const panels = [
+    ["#services-section", "#svc-search"],
+    ["#storage-section", "#storage-search"],
+    ["#network-section", "#network-search"],
+    ["#watches-section", "#watch-search"],
+    ["#app-section", "#app-search"],
+  ];
+  for (const [sectionSel, searchSel] of panels) {
+    const section = $(sectionSel);
+    if (!section || section.style.display === "none" || !section.open) continue;
+    const box = $(searchSel);
+    if (box) return { section, box };
+  }
+  const fallback = $("#svc-search");
+  return fallback ? { section: $("#services-section"), box: fallback } : null;
+}
+
+// "/" focuses the visible panel search (unless already typing in a field).
 document.addEventListener("keydown", (e) => {
   if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey) return;
   const tag = document.activeElement && document.activeElement.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-  const box = $("#svc-search");
-  if (!box) return;
+  const target = activeSearchBox();
+  if (!target) return;
   e.preventDefault();
-  const sec = $("#services-section");
-  if (sec && !sec.open) sec.open = true;
-  box.focus();
+  if (target.section && !target.section.open) target.section.open = true;
+  target.box.focus();
 });
 
 // Remember which sections the operator left open/closed across reloads. Each
