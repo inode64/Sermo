@@ -6,10 +6,10 @@ uses: nginx
 #
 # This shows the checks that belong on an INSTANCE rather than on the bundled
 # `nginx` daemon: the thresholds and the certificate path are deployment
-# specific, so baking them into daemons/nginx.yml would false-alarm on other
-# hosts. The service inherits everything from the nginx daemon (service / tcp /
-# http / live-endpoint cert checks + the config guard); the blocks below ADD to
-# it.
+# specific, so baking them into catalog/services/nginx.yml would false-alarm on
+# other hosts. The service inherits everything from the nginx daemon (service /
+# tcp / http / live-endpoint cert checks + the config guard); the blocks below
+# ADD to it.
 
 variables:
   # The TLS certificate this vhost serves on disk. Adjust to your site.

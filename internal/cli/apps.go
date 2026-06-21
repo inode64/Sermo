@@ -12,7 +12,7 @@ import (
 	"sermo/internal/config"
 )
 
-// runApps lists the applications (daemons under daemons/apps): which are
+// runApps lists catalog apps (catalog/apps): which are
 // installed (their binary is present and executable), the version their version
 // command reports, and whether they resolve without error. Only installed apps
 // are shown unless `apps all` is given.
@@ -20,13 +20,13 @@ func (a App) runApps(ctx context.Context, opts options) int {
 	return a.listCategory(ctx, opts, config.CategoryApp, "apps", "installed applications", "APPLICATION")
 }
 
-// runLibs lists the library daemons (daemons/libs) services can watch for
+// runLibs lists catalog libraries (catalog/libs) services can watch for
 // changes, with the version each reports and whether it is present.
 func (a App) runLibs(ctx context.Context, opts options) int {
 	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries", "LIBRARY")
 }
 
-// runServices lists the service daemons (daemons/services and the root): which
+// runServices lists catalog service profiles (catalog/services and the root): which
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {
