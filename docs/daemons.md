@@ -713,14 +713,16 @@ definition while preserving Linux/init compatibility. Before committing a new
 pidfile or socket path, resolve it with `readlink -f` or inspect it with
 `namei -l`; if any component is a symlink, use the resolved canonical target.
 
-On resolution this desugars into (a) a `processes` pidfile selector — so the
-parent process **and its descendants** are discovered and monitored — and (b) a
-`pidfile` health check gated by `requires: [service]`. Because of the gate, a
-missing or stale pidfile is reported as an **error only while the service is
-active** (it means the daemon died or lost its pidfile without the service
-manager noticing); a legitimately stopped service is skipped, not alarmed. An
-existing pidfile selector or a check already named `pidfile` is respected, so a
-daemon that needs a custom check can still spell it out. The shorthand path can
+On resolution this creates (a) an internal pidfile discovery selector — so the
+parent process **and its descendants** are discovered and monitored without
+adding a public `processes:` entry — and (b) a `pidfile` health check gated by
+`requires: [service]`. Because of the gate, a missing or stale pidfile is
+reported as an **error only while the service is active** (it means the daemon
+died or lost its pidfile without the service manager noticing); a legitimately
+stopped service is skipped, not alarmed. A check already named `pidfile` is
+respected, so a daemon that needs a custom check can still spell it out. Public
+`processes:` entries stay limited to `exe`/`cmd` selectors with optional
+`user`/`group`; do not put `pidfile` under `processes:`. The shorthand path can
 reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
 order and pass on the first live pidfile; if none exists, the backend PID
 fallback can still satisfy the gated health check.
