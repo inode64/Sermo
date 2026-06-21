@@ -286,6 +286,61 @@ uses: rpc-mountd
 	}
 }
 
+func writeFallbackUnitConfig(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, `
+paths:
+  services: [`+filepath.Join(root, "services")+`]
+  runtime: `+filepath.Join(root, "run")+`
+defaults:
+  policy: { cooldown: 5m }
+`)
+	mustWrite(t, filepath.Join(root, "services", "legacy.yml"), `
+kind: service
+name: legacy
+service:
+  systemd: [legacy-daemon]
+  openrc: [legacy-daemon]
+`)
+	return global
+}
+
+func TestStatusFallsBackToConfiguredServiceUnit(t *testing.T) {
+	global := writeFallbackUnitConfig(t)
+	var stdout, stderr bytes.Buffer
+	var statusCalls []string
+	app := App{
+		LoadConfig: config.Load,
+		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{
+				status: servicemgr.ServiceStatus{
+					Service: "legacy", Backend: servicemgr.BackendSystemd,
+					Unit: "legacy-daemon", Status: servicemgr.StatusActive,
+				},
+				statusCalls: &statusCalls,
+			}, nil
+		},
+		Runner: statusUnitRunner{},
+		Env:    func(string) string { return "" },
+		Stdout: &stdout,
+		Stderr: &stderr,
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "status", "legacy"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
+	}
+	if len(statusCalls) == 0 || statusCalls[len(statusCalls)-1] != "legacy-daemon" {
+		t.Fatalf("Status calls = %v, want fallback unit legacy-daemon", statusCalls)
+	}
+	if got := stderr.String(); !strings.Contains(got, "using legacy-daemon") {
+		t.Fatalf("stderr = %q, want fallback warning", got)
+	}
+}
+
 func TestStatusRequiresService(t *testing.T) {
 	var stderr bytes.Buffer
 	app := statusApp(servicemgr.ServiceStatus{}, nil, nil, &stderr)

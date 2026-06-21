@@ -16,7 +16,6 @@ import (
 	"sort"
 	"time"
 
-	"sermo/internal/cfgval"
 	"sermo/internal/config"
 )
 
@@ -74,7 +73,7 @@ type Host interface {
 // be non-nil.
 func Diagnose(cfg *config.Config, store Store, host Host) Result {
 	b := &builder{}
-	gi := globalInterval(cfg)
+	gi := config.EngineInterval(cfg, 30*time.Second)
 
 	diagConfig(b, cfg)
 	diagDatabase(b, cfg, store)
@@ -158,14 +157,4 @@ func ConfiguredStoredNames(cfg *config.Config) []string {
 		names = append(names, "watch:"+name)
 	}
 	return names
-}
-
-// globalInterval reads engine.interval, defaulting to 30s.
-func globalInterval(cfg *config.Config) time.Duration {
-	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
-		if d := cfgval.Duration(engine["interval"]); d > 0 {
-			return d
-		}
-	}
-	return 30 * time.Second
 }

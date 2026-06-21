@@ -382,6 +382,45 @@ func TestActionTimeoutNotConsumedByDetection(t *testing.T) {
 	}
 }
 
+func TestDefaultOperateFallsBackToConfiguredServiceUnit(t *testing.T) {
+	global := writeFallbackUnitConfig(t)
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, errs := cfg.Resolve("legacy")
+	if len(errs) > 0 {
+		t.Fatalf("resolve: %v", errs)
+	}
+
+	var actions []string
+	var stderr bytes.Buffer
+	app := App{
+		LoadConfig: config.Load,
+		Detector:   fakeBackendDetector{detection: servicemgr.Detection{Backend: servicemgr.BackendSystemd}},
+		NewManager: func(servicemgr.Backend) (servicemgr.Manager, error) {
+			return fakeManager{actions: &actions}, nil
+		},
+		Runner: statusUnitRunner{},
+		Stdout: &bytes.Buffer{},
+		Stderr: &stderr,
+	}
+
+	result, err := app.defaultOperate(context.Background(), options{config: global}, cfg, resolved, "legacy", "start")
+	if err != nil {
+		t.Fatalf("defaultOperate: %v", err)
+	}
+	if result.Status != operation.ResultOK {
+		t.Fatalf("result = %+v, want ok", result)
+	}
+	if len(actions) != 1 || actions[0] != "start legacy-daemon" {
+		t.Fatalf("actions = %v, want start legacy-daemon", actions)
+	}
+	if got := stderr.String(); !strings.Contains(got, "using legacy-daemon") {
+		t.Fatalf("stderr = %q, want fallback warning", got)
+	}
+}
+
 func TestActionRequiresService(t *testing.T) {
 	var stderr bytes.Buffer
 	app := actionApp(operation.Result{}, nil, nil, &stderr)
