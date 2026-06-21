@@ -95,6 +95,12 @@ func humanizeSigned(n int64) string {
 	return humanize.Bytes(uint64(n))
 }
 
+// SamplePathSize returns the size of a regular file, or the recursive sum of
+// regular-file sizes under a directory. Used by size checks and the web UI.
+func SamplePathSize(ctx context.Context, path string) (int64, error) {
+	return dirOrFileSize(ctx, path)
+}
+
 // dirOrFileSize returns the size of a regular file, or the recursive sum of
 // regular-file sizes under a directory.
 func dirOrFileSize(ctx context.Context, path string) (int64, error) {

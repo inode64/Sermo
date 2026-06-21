@@ -897,6 +897,84 @@ func TestWebBackendAdditionalHostWatchReadings(t *testing.T) {
 	}
 }
 
+func TestWebBackendStatefulWatchReadings(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"cfg-file": map[string]any{"check": map[string]any{
+				"type": "file",
+				"path": filepath.Join(dir, "a.txt"),
+			}},
+			"entry-count": map[string]any{"check": map[string]any{
+				"type": "count",
+				"path": dir,
+				"of":   "file",
+			}},
+			"fw": map[string]any{"check": map[string]any{
+				"type": "firewall_rules",
+			}},
+			"grow": map[string]any{"check": map[string]any{
+				"type":    "size",
+				"path":    filepath.Join(dir, "a.txt"),
+				"grow_by": "1M",
+				"within":  "1h",
+			}},
+			"disk-speed": map[string]any{"check": map[string]any{
+				"type":   "hdparm",
+				"device": "/dev/sda",
+				"read":   map[string]any{"op": ">", "value": 50},
+			}},
+			"disk-health": map[string]any{"check": map[string]any{
+				"type":   "smart",
+				"device": "/dev/sda",
+			}},
+		},
+	}}}
+	hdparmOut := " Timing buffered disk reads: 1 GB in 2.00 seconds = 500.00 MB/sec\n"
+	smartOut := `{"smart_status":{"passed":true},"temperature":{"current":41},"power_on_time":{"hours":1000}}`
+	b, warns := NewWebBackend(cfg, Deps{
+		DefaultTimeout: 5 * time.Second,
+		FirewallRulesSampler: func(context.Context, string, execx.Runner) (checks.FirewallRulesSample, error) {
+			return checks.FirewallRulesSample{Backend: "nftables", Rules: 42}, nil
+		},
+		ExecxRunner: webBackendTestRunner{byCommand: map[string]execx.Result{
+			"hdparm":   {Stdout: hdparmOut},
+			"smartctl": {Stdout: smartOut},
+		}},
+	})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	byName := map[string]web.Watch{}
+	for _, w := range b.Watches(context.Background()) {
+		byName[w.Name] = w
+	}
+	if got := readingByField(byName["cfg-file"].Readings, "kind").Value; got != "file" {
+		t.Fatalf("file kind = %q, want file", got)
+	}
+	if got := readingByField(byName["entry-count"].Readings, "count").Value; got != "1" {
+		t.Fatalf("count = %q, want 1", got)
+	}
+	if got := readingByField(byName["fw"].Readings, "rules").Value; got != "42" {
+		t.Fatalf("firewall rules = %q, want 42", got)
+	}
+	if got := readingByField(byName["grow"].Readings, "current_bytes").Value; got != "5 B" {
+		t.Fatalf("size = %q, want 5 B", got)
+	}
+	if got := readingByField(byName["disk-speed"].Readings, "read").Value; got != "500.0 MB/s" {
+		t.Fatalf("hdparm read = %q, want 500.0 MB/s", got)
+	}
+	if got := readingByField(byName["disk-health"].Readings, "health").Value; got != "PASSED" {
+		t.Fatalf("smart health = %q, want PASSED", got)
+	}
+	if got := readingByField(byName["disk-health"].Readings, "temperature").Value; got != "41 °C" {
+		t.Fatalf("smart temperature = %q, want 41 °C", got)
+	}
+}
+
 func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
 	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
 		"watches": map[string]any{
@@ -949,6 +1027,17 @@ func TestWebBackendFdsReadingErrorMarksWatchFailed(t *testing.T) {
 	if w.State != TargetStateFailed || len(w.Readings) != 1 || w.Readings[0].Error != "file-nr failed" {
 		t.Fatalf("watch = %+v, want failed with fds error reading", w)
 	}
+}
+
+type webBackendTestRunner struct {
+	byCommand map[string]execx.Result
+}
+
+func (r webBackendTestRunner) Run(_ context.Context, name string, _ ...string) (execx.Result, error) {
+	if res, ok := r.byCommand[name]; ok {
+		return res, nil
+	}
+	return execx.Result{ExitCode: 127}, nil
 }
 
 func readingByField(readings []web.WatchReading, field string) web.WatchReading {
