@@ -42,6 +42,13 @@ func TestLDAPProbeDialerInterfaceBinding(t *testing.T) {
 	}
 }
 
+func TestLibvirtRemoteDialerInterfaceBinding(t *testing.T) {
+	d := libvirtRemoteNetDialer("eth0", time.Second)
+	if d.Control == nil {
+		t.Fatal("libvirt remote dialer must use BindDialer when interface is set")
+	}
+}
+
 func TestHTTPProbeClientInterfaceBinding(t *testing.T) {
 	client := httpProbeClient("eth0", nil)
 	tr, ok := client.Transport.(*http.Transport)
