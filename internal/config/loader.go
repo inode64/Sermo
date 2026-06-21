@@ -210,7 +210,7 @@ func absCatalogDirs(dirs []string) []string {
 // directory so a tree like examples/sermo.yml with `services: [services]` loads
 // examples/services when run from the repository.
 func resolveConfigPaths(globalPath string, g *Global) {
-	base := filepath.Dir(filepath.Clean(globalPath))
+	base := configBaseDir(globalPath)
 	g.Catalog = resolvePathList(base, g.Catalog)
 	g.Services = resolvePathList(base, g.Services)
 	g.Apps = resolvePathList(base, g.Apps)
@@ -257,7 +257,15 @@ func resolveConfigPath(base, p string) string {
 }
 
 func defaultConfigDirs(globalPath string, dirs []string) []string {
-	return resolvePathList(filepath.Dir(filepath.Clean(globalPath)), dirs)
+	return resolvePathList(configBaseDir(globalPath), dirs)
+}
+
+func configBaseDir(globalPath string) string {
+	base := filepath.Dir(filepath.Clean(globalPath))
+	if abs, err := filepath.Abs(base); err == nil {
+		return abs
+	}
+	return base
 }
 
 func pathSpecList(v any, field string) ([]PathSpec, error) {

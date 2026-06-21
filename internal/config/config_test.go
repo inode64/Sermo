@@ -1089,6 +1089,42 @@ path: /mnt/recursive
 	}
 }
 
+func TestLoadRelativeConfigPathResolvesDirsAbsolute(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "conf", "services"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "conf", "sermo.yml"), []byte(`
+paths:
+  services: [services]
+  runtime: /run/sermo
+defaults:
+  policy: { cooldown: 5m }
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "conf", "services", "web.yml"), []byte(`
+kind: service
+name: web
+service: web
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(root)
+	cfg, err := Load(filepath.Join("conf", "sermo.yml"))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := filepath.Join(root, "conf", "services")
+	if got := cfg.Global.Services; len(got) != 1 || got[0] != want {
+		t.Fatalf("Global.Services = %v, want [%s]", got, want)
+	}
+	if _, ok := cfg.Services["web"]; !ok {
+		t.Fatalf("relative service directory was not loaded: %v", cfg.ServiceNames)
+	}
+}
+
 func TestLoadIncludedWatchFragmentRejectsDuplicate(t *testing.T) {
 	root := t.TempDir()
 	storages := filepath.Join(root, "storages")

@@ -20,6 +20,8 @@ diff, replace and clean up per target.
 > cloned service example — and is validated by the test suite, so it cannot
 > drift from the schema. It is a reference bundle only; real deployments keep
 > one target per file. The shipped operational config is `examples/sermo.yml`.
+> From a source checkout, use `examples/sermo-dev.yml` to validate the bundled
+> example tree without rewriting installed `/etc/sermo` paths.
 
 ## Layout
 
