@@ -140,8 +140,8 @@ install-examples:
 	done
 
 # Install the global config (kept if one already exists) and create the
-# available/included service directories. `apps` is kept as a legacy include
-# alias for hosts that still store service files there.
+# configured directories for user catalog entries, services, host-specific apps
+# and mounts.
 install-config:
 	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/mounts)
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
