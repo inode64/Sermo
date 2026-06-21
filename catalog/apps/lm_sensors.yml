@@ -1,6 +1,5 @@
 kind: app
 name: lm_sensors
-catalog_aliases: [lm-sensors]
 display_name: "lm_sensors"
 category: hardware
 variables:

@@ -122,22 +122,15 @@ If the path resolves through a symlink, configure the canonical target path
 instead. This is especially common for `/var/run` → `/run`, but can also happen
 with app-specific runtime directories.
 
-Catalog daemons and apps may declare `catalog_aliases` for old names after a
-catalog rename. A service may still use a daemon alias in `uses:` or an app alias
-in `apps:`, but aliases are compatibility entries only and are not shown as
-separate catalog entries in wizard selection lists. New configuration should use
-the canonical name. `catalog_aliases` must be a non-empty list of simple names,
-without path separators.
-
 Catalog apps may declare `version_from: <app-name>` when a different binary from
 the same package has the authoritative version probe. The app still checks its
 own `variables.binary` for installation and health; `version_from` only fills
 the displayed
 version when the app has no local version result. Local `health`, `version` and
 `version_short` commands still win. The referenced app must be another catalog
-app, may be addressed by a catalog alias, and `version_from` chains must not
-cycle. This is not an operational dependency and does not inject preflight
-checks into services.
+app addressed by its canonical name, and `version_from` chains must not cycle.
+This is not an operational dependency and does not inject preflight checks into
+services.
 
 When a daemon or service lists apps, every app variable is also available to that
 daemon/service with a normalized app-name prefix: an app with

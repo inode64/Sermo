@@ -1,6 +1,5 @@
 kind: daemon
 name: keydb
-catalog_aliases: [keydb-server]
 display_name: "KeyDB"
 category: database
 service:

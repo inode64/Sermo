@@ -1,6 +1,5 @@
 kind: daemon
 name: networkmanager
-catalog_aliases: [NetworkManager]
 display_name: "NetworkManager"
 category: network
 description: "NetworkManager system network management daemon."
