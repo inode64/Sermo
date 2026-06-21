@@ -151,6 +151,7 @@
   body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
   body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section, body.disconnected #diag-section,
   body.disconnected #notifiers-section, body.disconnected #app-section { opacity: .5; transition: opacity .2s; }
+  .win-btn-active { background: color-mix(in srgb, var(--text-2) 20%, transparent); }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
   .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
@@ -2607,7 +2608,7 @@ function renderServiceDetail(d) {
   const measured = serviceMeasuredChecks(d);
   const activeMetricCheck = selectedMetricCheck(measured);
   const checkBtns = measured.length
-    ? measured.map((c) => `<button data-metric-service="${esc(d.name)}" data-metric-check="${esc(c.name)}"${c.name === activeMetricCheck ? ' style="background:#8883"' : ''}>${esc(c.name)}</button>`).join(" ")
+    ? measured.map((c) => `<button data-metric-service="${esc(d.name)}" data-metric-check="${esc(c.name)}"${c.name === activeMetricCheck ? ' class="win-btn-active"' : ''}>${esc(c.name)}</button>`).join(" ")
     : '<span class="muted">No latency checks</span>';
   const latencyPanel = measured.length
     ? `<div id="${esc(detailDomId(d.name, "lat-summary"))}" class="muted">loading…</div>
@@ -4223,7 +4224,7 @@ function setDaemonMetricWin(win) { daemonMetricWindow = win; loadDaemonMetrics()
 
 function winButtons(list, selected, fn) {
   return list.map(([label, val]) =>
-    `<button data-window-kind="${esc(fn)}" data-window-value="${esc(val)}"${val === selected ? ' style="background:#8883"' : ''}>${label}</button>`).join(" ");
+    `<button data-window-kind="${esc(fn)}" data-window-value="${esc(val)}"${val === selected ? ' class="win-btn-active"' : ''}>${label}</button>`).join(" ");
 }
 
 async function loadMetrics(name, measured) {
