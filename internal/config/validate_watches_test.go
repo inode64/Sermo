@@ -713,7 +713,7 @@ func TestValidateStorageMountWatch(t *testing.T) {
 				"check": map[string]any{"type": "storage", "path": "/data"}, // no predicate, no mount condition
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/x"}}},
 			},
-			"old-mount-controls": map[string]any{
+			"unsupported-mount-controls": map[string]any{
 				"check": map[string]any{
 					"type":    "storage",
 					"path":    "/data",
@@ -730,9 +730,9 @@ func TestValidateStorageMountWatch(t *testing.T) {
 		t.Fatalf("expected combined-requirement issue, got %v", bad)
 	}
 	for _, want := range []string{
-		"watches.old-mount-controls.check.fstype is not supported for a storage check",
-		"watches.old-mount-controls.check.device is not supported for a storage check",
-		"watches.old-mount-controls.check.options is not supported for a storage check",
+		"watches.unsupported-mount-controls.check.fstype is not supported for a storage check",
+		"watches.unsupported-mount-controls.check.device is not supported for a storage check",
+		"watches.unsupported-mount-controls.check.options is not supported for a storage check",
 	} {
 		if !hasIssue(bad, want) {
 			t.Fatalf("missing issue %q in %v", want, bad)

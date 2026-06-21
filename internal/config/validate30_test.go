@@ -57,8 +57,9 @@ defaults:
 }
 
 func TestValidateBackoffDurations(t *testing.T) {
-	// A garbage initial must not let a valid max slip through (the old code left
-	// the parsed initial at 0, so any max compared >= 0 and passed).
+	// A garbage initial must not let a valid max slip through. A previous
+	// implementation left the parsed initial at 0, so any max compared >= 0
+	// and passed.
 	badInitial := validateService(t, `
 kind: service
 name: svc
@@ -784,13 +785,13 @@ policy: { cooldown: 5m }
 checks:
   empty: { type: storage, path: /data }
   bad-mounted: { type: storage, path: /data, mounted: "yes" }
-  old-mount-controls: { type: storage, path: /data, mounted: true, fstype: ext4, device: /dev/sdb1, options: [rw] }
+  unsupported-mount-controls: { type: storage, path: /data, mounted: true, fstype: ext4, device: /dev/sdb1, options: [rw] }
 `)
 	mustHave(t, bad, "checks.empty requires a space/inode predicate")
 	mustHave(t, bad, "checks.bad-mounted.mounted must be a boolean")
-	mustHave(t, bad, "checks.old-mount-controls.fstype is not supported for a storage check")
-	mustHave(t, bad, "checks.old-mount-controls.device is not supported for a storage check")
-	mustHave(t, bad, "checks.old-mount-controls.options is not supported for a storage check")
+	mustHave(t, bad, "checks.unsupported-mount-controls.fstype is not supported for a storage check")
+	mustHave(t, bad, "checks.unsupported-mount-controls.device is not supported for a storage check")
+	mustHave(t, bad, "checks.unsupported-mount-controls.options is not supported for a storage check")
 }
 
 func TestValidateResourceServiceCheckErrors(t *testing.T) {
