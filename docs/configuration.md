@@ -796,10 +796,7 @@ notifiers:
     webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/…"
 ```
 
-The set of notifier **types is pluggable** — new transports (`discord`, …) are
-added without touching watches or rules (each registers a builder in
-`internal/notify`). A new transport looks the same: a `type` plus its own
-fields, addressed by name.
+The supported notifier types today are `email`, `slack` and `teams`.
 
 Set **`enabled: false`** on any notifier to keep it defined but skip delivery.
 Disabled notifiers may still be referenced by `notify` selections.
