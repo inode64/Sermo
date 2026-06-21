@@ -123,6 +123,17 @@ func (c countCheck) matches(typ fs.FileMode) bool {
 	}
 }
 
+// TallyEntries counts path entries matching kind (any, file, dir, symlink). The
+// root path itself is never included. Used by the web UI for live count-watch
+// readings without re-running the full check.
+func TallyEntries(ctx context.Context, path, kind string, recursive bool) (int, error) {
+	if kind == "" {
+		kind = countAny
+	}
+	c := countCheck{path: path, kind: kind, recursive: recursive, op: ">=", value: 0}
+	return c.tally(ctx)
+}
+
 // validCountKind reports whether s is a supported `of` value.
 func validCountKind(s string) bool {
 	switch s {
