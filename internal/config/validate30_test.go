@@ -367,19 +367,19 @@ rules:
   bad-for-key:
     type: remediation
     if: { failed: { check: http } }
-    for: { cycles: 3, mode: consecutive }
+    for: { cycles: 3, unexpected: true }
     then: { action: restart }
   bad-within-key:
     type: remediation
     if: { failed: { check: http } }
-    within: { cycles: 5, min_matches: 2, mode: within }
+    within: { cycles: 5, min_matches: 2, unexpected: true }
     then: { action: restart }
 `)
 	mustHave(t, issues, "cannot define both for and within")
 	mustHave(t, issues, "for.cycles must be > 0")
 	mustHave(t, issues, "within.min_matches must be <= within.cycles")
-	mustHave(t, issues, "rules.bad-for-key.for.mode is not supported")
-	mustHave(t, issues, "rules.bad-within-key.within.mode is not supported")
+	mustHave(t, issues, "rules.bad-for-key.for.unexpected is not supported")
+	mustHave(t, issues, "rules.bad-within-key.within.unexpected is not supported")
 }
 
 func TestValidateUnknownCheckReference(t *testing.T) {
