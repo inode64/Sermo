@@ -33,16 +33,6 @@ type HookRunner interface {
 	RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) (execx.Result, error)
 }
 
-// HookRunnerFunc adapts a plain error-returning function to HookRunner; the
-// returned Result is the zero value (a clean exit 0), so existing test stubs that
-// signal failure by returning a non-nil error keep working unchanged.
-type HookRunnerFunc func(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error
-
-// RunHook calls the adapted function, mapping its error to a (zero Result, err).
-func (f HookRunnerFunc) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) (execx.Result, error) {
-	return execx.Result{}, f(ctx, argv, env, timeout)
-}
-
 // Run executes the hook and validates its outcome: the command must run, exit
 // with ExpectExit (default 0), and satisfy the stdout/stderr matchers. It returns
 // a descriptive error on the first failed expectation, or nil when all pass.
