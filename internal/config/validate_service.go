@@ -446,8 +446,6 @@ func validateServiceField(tree map[string]any, add addFunc) {
 				if len(cfgval.StringList(v[k])) == 0 {
 					add("service.%s must be a non-empty list", k)
 				}
-			case "name":
-				add("service.name is not supported; use scalar service: <unit>")
 			default:
 				add("service key %q is not one of systemd, openrc", k)
 			}
