@@ -43,11 +43,6 @@ by the web UI and `GET /api/services`, not by `sermoctl services` — see
 `sermoctl patterns` lists the pattern sets and their rule counts (see the
 `analyze:` block in [rules.md](rules.md)).
 
-Catalog daemons can keep compatibility names with `catalog_aliases`. Aliases are
-accepted by `uses:` but are not listed by `sermoctl wizard service` as separate
-catalog choices, so renamed daemons such as `avahi-daemon` → `avahi` remain
-loadable without creating duplicate wizard entries.
-
 ## Library daemons
 
 A library daemon describes a shared library so services can restart when it is

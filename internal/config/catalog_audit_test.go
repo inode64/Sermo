@@ -577,9 +577,6 @@ func TestCatalogCupsUsesSingleCupsdApp(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("ResolveCatalog(cups): %v", errs)
 	}
-	if _, errs := cfg.ResolveCatalog(CategoryService, "cups-config"); len(errs) != 0 {
-		t.Fatalf("ResolveCatalog(cups-config alias): %v", errs)
-	}
 	preflight := resolved.Tree["preflight"].(map[string]any)
 	config := preflight["config"].(map[string]any)
 	command := config["command"].([]any)

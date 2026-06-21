@@ -26,7 +26,7 @@ func (a App) runLibs(ctx context.Context, opts options) int {
 	return a.listCategory(ctx, opts, config.CategoryLibrary, "libs", "libraries", "LIBRARY")
 }
 
-// runServices lists catalog service profiles (catalog/services and the root): which
+// runServices lists catalog service profiles (catalog/services): which
 // are installed, the version their version command reports, and whether they
 // resolve without error.
 func (a App) runServices(ctx context.Context, opts options) int {

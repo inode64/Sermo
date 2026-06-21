@@ -190,7 +190,6 @@ func validateDocuments(cfg *Config) []Issue {
 			}
 		}
 		issues = append(issues, validateTopLevelBinary(doc, scope)...)
-		issues = append(issues, validateCatalogAliases(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
@@ -299,32 +298,6 @@ func validateTopLevelBinary(doc *Document, scope string) []Issue {
 		}
 	} else {
 		return issues
-	}
-	return issues
-}
-
-func validateCatalogAliases(doc *Document, scope string) []Issue {
-	raw, present := doc.Body["catalog_aliases"]
-	if !present {
-		return nil
-	}
-	var issues []Issue
-	if doc.Kind != kindDaemon && doc.Kind != kindApp {
-		issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases is only supported on daemon and app catalog documents"})
-	}
-	aliases, ok := raw.([]any)
-	if !ok || len(aliases) == 0 {
-		return append(issues, Issue{Scope: scope, Msg: "catalog_aliases must be a non-empty list"})
-	}
-	for _, rawAlias := range aliases {
-		alias, ok := rawAlias.(string)
-		if !ok || alias == "" {
-			issues = append(issues, Issue{Scope: scope, Msg: "catalog_aliases entries must be non-empty strings"})
-			continue
-		}
-		if !validDocumentName(alias) {
-			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("catalog_aliases entry %q must be a simple name without path separators", alias)})
-		}
 	}
 	return issues
 }

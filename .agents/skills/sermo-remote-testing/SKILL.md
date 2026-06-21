@@ -344,7 +344,7 @@ If a remote host has active services that Sermo cannot map to a catalog daemon o
 
 - Do not create approximate or guessed service definitions on the remote host.
 - Keep testing the supported active services unless the unsupported service blocks the requested scenario.
-- Record unsupported active services per server with: host, init backend, unit/init name, active state, executable or main PID when known, and any obvious catalog alias candidate.
+- Record unsupported active services per server with: host, init backend, unit/init name, active state, executable or main PID when known, and any obvious canonical catalog profile candidate.
 - Include this list in the final report so the user can decide which catalog entries should be added next.
 
 ## Operation Test Safety

@@ -86,12 +86,6 @@ For OpenRC:
 nginx -> nginx
 ```
 
-Catalog daemon definitions may define compatibility aliases:
-
-```yaml
-catalog_aliases: [apache2, httpd]
-```
-
 Resolution (see `docs/configuration.md`): read the service unit from scalar
 `service: <unit>` or a per-init `service: { systemd: [...], openrc: [...] }` map,
 normalize for the backend (systemd appends `.service`), pick the first candidate
