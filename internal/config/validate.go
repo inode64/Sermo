@@ -29,6 +29,20 @@ var rejectedSecurityToggles = []string{
 	"require_kill_selector",
 }
 
+var validGlobalPathKeys = set(
+	"apps",
+	"catalog",
+	"mounts",
+	"networks",
+	"notifiers",
+	"runtime",
+	"services",
+	"state",
+	"storages",
+	"templates",
+	"watches",
+)
+
 // Validate returns all schema and safety issues for a loaded config. An empty
 // slice means the current validators accept the configuration.
 func Validate(cfg *Config) []Issue {
@@ -78,8 +92,14 @@ func validateGlobal(cfg *Config) []Issue {
 	}
 
 	if paths, ok := raw["paths"].(map[string]any); ok {
-		if _, present := paths["locks"]; present {
-			add("paths.locks is not supported; runtime locks derive from paths.runtime")
+		for _, key := range slices.Sorted(maps.Keys(paths)) {
+			if key == "locks" {
+				add("paths.locks is not supported; runtime locks derive from paths.runtime")
+				continue
+			}
+			if _, known := validGlobalPathKeys[key]; !known {
+				add("paths.%s is not supported", key)
+			}
 		}
 		if runtime := cfgval.String(paths["runtime"]); runtime != "" && !filepath.IsAbs(runtime) {
 			add("paths.runtime %q must be an absolute directory", runtime)

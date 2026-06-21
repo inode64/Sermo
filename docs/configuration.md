@@ -91,6 +91,8 @@ paths:
 When `recursive` is omitted it defaults to `false`. A non-recursive entry loads
 only `.yml`/`.yaml` files directly inside that directory. `recursive: true`
 descends the whole subtree, still loading files in deterministic sorted order.
+Unknown keys under `paths` are rejected so typos do not silently disable a
+configured source.
 For `paths.catalog`, catalog documents must live under the immediate
 `services/`, `apps/`, `libs/` or `patterns/` category directories. Those
 category directories are part of the catalog layout and are read even when
