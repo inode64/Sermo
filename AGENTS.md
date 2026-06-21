@@ -190,7 +190,7 @@ go test ./internal/config -run 'TestRealCatalog(AllDaemonsValidate|ReloadDaemons
 
 ## Service operations
 
-Application-level start, stop, restart, reload or signal actions on a service
+Application-level start, stop, restart, reload, resume or signal actions on a service
 must go through the shared `internal/operation` package and its engine. Do not
 call backends directly, do not send signals from `app/` or `cli/`, and do not
 bypass locks, guards, preflight or policy. The operation path is the single
