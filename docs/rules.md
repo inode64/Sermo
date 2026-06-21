@@ -5,7 +5,7 @@
 Checks are single-shot probes under `checks` (and `preflight`/`postflight`,
 which reuse the same schema). Supported types:
 
-The complete set of single-shot check types is defined centrally and the table below (plus connection-protocol checks registered in the `conn` package) is kept in sync with the implementation. A test locks the advertised list against the builder dispatch and configuration validation, so this surface cannot drift from the code. (Multi-metric watch forms such as `net`/`icmp`/`swap` and `file`/`process` watches expand on these primitives.)
+The complete set of single-shot check types is defined centrally. Tests lock that list against the builder dispatch and configuration validation, and lock the connection-protocol list below against the `conn` registry, so advertised check types cannot drift from the code. (Multi-metric watch forms such as `net`/`icmp`/`swap` and `file`/`process` watches expand on these primitives.)
 
 Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are registered by their protocol name with common aliases (e.g. `mysql`/`mariadb`, `fpm`/`php-fpm`).
 
