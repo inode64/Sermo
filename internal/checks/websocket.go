@@ -227,7 +227,7 @@ func wsAccept(key string) string {
 // wsSkipVerify reports whether the tls value requests skipping verification.
 func wsSkipVerify(tlsVal string) bool {
 	switch strings.ToLower(strings.TrimSpace(tlsVal)) {
-	case "skip-verify", "skip_verify", "insecure":
+	case "skip-verify":
 		return true
 	default:
 		return false

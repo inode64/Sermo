@@ -320,7 +320,7 @@ func NormalizeTLS(s string) string {
 		return ""
 	case "true", "yes", "on", "required":
 		return "true"
-	case "skip-verify", "skip_verify", "insecure":
+	case "skip-verify":
 		return "skip-verify"
 	default:
 		return s
@@ -336,7 +336,7 @@ func ValidTLSValue(v any) bool {
 		return true
 	case string:
 		switch strings.ToLower(strings.TrimSpace(t)) {
-		case "true", "false", "yes", "no", "on", "off", "required", "skip-verify", "skip_verify", "insecure":
+		case "true", "false", "yes", "no", "on", "off", "required", "skip-verify":
 			return true
 		default:
 			return false
