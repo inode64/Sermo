@@ -443,7 +443,7 @@ Set passwords on the `web` block for HTTP Basic auth with two roles:
 ```yaml
 web:
   port: 9797
-  password: "s3cret"           # admin: read + actions (start/stop/restart/reload/resume, monitor)
+  password: "s3cret"           # admin: read + actions (start/stop/restart/reload/resume, monitor/unmonitor)
   guest_password: "lookonly"   # optional: a read-only login
   guest: true                  # optional: allow anonymous read-only access
 ```
