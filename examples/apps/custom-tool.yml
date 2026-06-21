@@ -1,0 +1,10 @@
+kind: app
+name: custom-tool
+display_name: Custom tool
+description: "Host-specific helper that services may link with apps: [custom-tool]."
+category: app
+variables:
+  binary: /usr/local/bin/custom-tool
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }
