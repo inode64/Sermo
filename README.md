@@ -115,6 +115,8 @@ Packaged definitions live under [`catalog/`](catalog/), sample configs under
 [`examples/`](examples/), packaging units under [`packaging/`](packaging/). The
 on-host file layout is in
 [configuration → layout](docs/configuration.md#layout).
+Daemon flags for development and packaging (`--catalog`, `--verbose`) are in
+[CLI → sermod daemon flags](docs/cli.md#sermod-daemon-flags).
 
 ## Documentation
 
