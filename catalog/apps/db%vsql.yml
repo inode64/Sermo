@@ -3,7 +3,6 @@ name: db%vsql
 display_name: "Berkeley DB ${version}"
 category: database
 description: "Oracle Berkeley DB"
-service: db${version}sql
 variables:
   binary: "/usr/bin/db${version}sql"
 preflight:
