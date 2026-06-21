@@ -279,7 +279,7 @@ func askServicePidfile(p *Prompt, c DaemonCandidate) string {
 }
 
 func detectedProcessSelector(c DaemonCandidate) (map[string]any, string) {
-	selector := map[string]any{"type": "command_match"}
+	selector := map[string]any{}
 	if c.Cmd != "" {
 		selector["cmd"] = c.Cmd
 		if c.User != "" {

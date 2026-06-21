@@ -24,7 +24,6 @@ config_files: ["${config}", /etc/prometheus/rules, /etc/prometheus/rules.d]
 
 processes:
   main:
-    type: command_match
     exe: "${prometheus_binary}"
     user: "${user}"
 

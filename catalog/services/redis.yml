@@ -17,13 +17,10 @@ variables:
   port: 6379
   pidfile: /run/redis/redis.pid
 
-processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
+pidfile: "${pidfile}"
 
+processes:
   redis:
-    type: command_match
     exe: "${redis_binary}"
     user: "${user}"
 

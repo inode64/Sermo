@@ -17,7 +17,6 @@ pidfile: /run/proftpd/proftpd.pid
 
 processes:
   main:
-    type: command_match
     exe: "${proftpd_binary}"
     user: "${user}"
 

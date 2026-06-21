@@ -27,7 +27,6 @@ pidfile: /run/loki.pid
 
 processes:
   main:
-    type: command_match
     exe: "${loki_binary}"
     user: "${user}"
 

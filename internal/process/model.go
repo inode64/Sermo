@@ -2,7 +2,7 @@
 //
 // Identity is security-critical because kill decisions depend on it: Exe is the
 // resolved target of /proc/<pid>/exe, and the user match is on the real UID.
-// Cmdline may be used only by an explicit command_match.cmd selector to narrow
+// Cmdline may be used only by an explicit process cmd selector to narrow
 // discovery for shared binaries; it never authorizes signaling. An unresolvable
 // or "(deleted)" exe never matches an exe selector, so an unidentifiable process
 // is reported, never killed.
@@ -22,7 +22,7 @@ type Process struct {
 	UID     uint32   `json:"uid"`
 	Exe     string   `json:"exe,omitempty"`     // resolved /proc/<pid>/exe; empty if unresolvable
 	ExeOK   bool     `json:"exe_resolved"`      // false when exe could not be trusted
-	Cmdline []string `json:"cmdline,omitempty"` // display data; command_match.cmd may explicitly filter on it
+	Cmdline []string `json:"cmdline,omitempty"` // display data; an explicit process cmd may filter on it
 	Role    string   `json:"role,omitempty"`    // selector name, or "child" for tree members
 	Source  string   `json:"source"`            // pidfile | command_match | child
 }
@@ -41,15 +41,17 @@ const (
 	sourceChild   = "child"
 )
 
-// Selector is one entry of a service's `processes` section.
+// Selector is one internal process discovery source. Public `processes` entries
+// are command-match selectors; pidfile selectors are derived from top-level
+// service `pidfile:`.
 type Selector struct {
 	Name  string   // the map key, used as the discovered process Role
 	Type  string   // pidfile | command_match
 	Paths []string // pidfile: candidate paths, tried in order (first running pid wins)
-	Exe   string   // command_match: exact /proc/<pid>/exe
-	Cmd   string   // command_match: RE2 regex matched against the joined cmdline (argv)
-	User  string   // command_match: real UID owner
-	Group string   // command_match: real GID owner
+	Exe   string   // exact /proc/<pid>/exe
+	Cmd   string   // RE2 regex matched against the joined cmdline (argv)
+	User  string   // real UID owner
+	Group string   // real GID owner
 
 	cmdRe   *regexp.Regexp // compiled Cmd, set by ParseSelectors (matches falls back)
 	exePath string         // canonicalized Exe, set by ParseSelectors (matches falls back)

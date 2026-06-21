@@ -19,7 +19,6 @@ pidfile: /run/sshd.pid
 
 processes:
   main:
-    type: command_match
     exe: "${ssh_binary}"
     user: "${user}"
 

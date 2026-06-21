@@ -14,7 +14,6 @@ variables:
 
 processes:
   mountd:
-    type: command_match
     exe: "${rpc_mountd_binary}"
     user: root
 

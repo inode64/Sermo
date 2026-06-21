@@ -174,7 +174,7 @@ For systemd, inspect the unit and `systemctl show` metadata (`CanReload`,
 canonical `/run` paths before writing catalog YAML.
 
 Any OpenRC-capable `reload.signal` must have a canonical `pidfile:` candidate
-and a `processes.command_match` selector with exact `exe` and `user`, so the
+and a `processes:` selector with exact `exe` and `user`, so the
 pidfile PID can be verified before Sermo signals it. If init scripts differ by
 distro, encode the real candidates with a path list or `os:` branch. If a backend
 has no trustworthy pidfile and exact identity selector, use `reload.command` or

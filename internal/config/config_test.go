@@ -161,10 +161,7 @@ variables:
   port: 3306
   pidfile: /run/dbserver/main.pid
   config: /etc/dbserver/main.cnf
-processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
+pidfile: "${pidfile}"
 checks:
   tcp:
     type: tcp
@@ -212,8 +209,11 @@ variables:
 		if got := cfgval.String(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != w.port {
 			t.Errorf("%s tcp.port = %q, want %q", name, got, w.port)
 		}
-		if got := cfgval.String(nested(t, resolved.Tree, "processes", "pidfile")["path"]); got != w.pidfile {
-			t.Errorf("%s pidfile.path = %q, want %q", name, got, w.pidfile)
+		if got := cfgval.String(resolved.Tree["pidfile"]); got != w.pidfile {
+			t.Errorf("%s pidfile = %q, want %q", name, got, w.pidfile)
+		}
+		if got := cfgval.String(nested(t, resolved.Tree, "checks", "pidfile")["path"]); got != w.pidfile {
+			t.Errorf("%s checks.pidfile.path = %q, want %q", name, got, w.pidfile)
 		}
 		cmd, _ := nested(t, resolved.Tree, "checks", "config")["command"].([]any)
 		if joined := fmt.Sprint(cmd...); !strings.Contains(joined, w.config) {
@@ -408,7 +408,7 @@ apps: [php-fpm]
 preflight:
   config: { type: command, command: ["${binary}", "--test", "--fpm-config", "${config}"] }
 processes:
-  main: { type: command_match, exe: "${binary}", user: root }
+  main: { exe: "${binary}", user: root }
 checks:
   service: { type: service, expect: active }
 `,
@@ -1931,8 +1931,7 @@ func TestBuiltinInitUserPidfileVars(t *testing.T) {
 kind: service
 name: db
 service: postgresql
-processes:
-  main: { type: pidfile, path: "${pidfile}" }
+pidfile: "${pidfile}"
 checks:
   who: { type: command, command: ["id", "-u", "${user}"] }
   init: { type: command, command: ["echo", "${init}"] }
@@ -1946,7 +1945,7 @@ checks:
 	if len(errs) != 0 {
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
-	if got := cfgval.String(nested(t, resolved.Tree, "processes", "main")["path"]); got != "/run/postgresql.pid" {
+	if got := cfgval.String(resolved.Tree["pidfile"]); got != "/run/postgresql.pid" {
 		t.Errorf("${pidfile} = %q, want /run/postgresql.pid", got)
 	}
 	who, _ := nested(t, resolved.Tree, "checks", "who")["command"].([]any)
@@ -1969,8 +1968,7 @@ service: postgresql
 variables:
   user: postgres
   pidfile: /run/postgresql/main.pid
-processes:
-  main: { type: pidfile, path: "${pidfile}" }
+pidfile: "${pidfile}"
 checks:
   who: { type: command, command: ["id", "${user}"] }
 `,
@@ -1980,7 +1978,7 @@ checks:
 		t.Fatalf("Load() error = %v", err)
 	}
 	resolved, _ := cfg.Resolve("db")
-	if got := cfgval.String(nested(t, resolved.Tree, "processes", "main")["path"]); got != "/run/postgresql/main.pid" {
+	if got := cfgval.String(resolved.Tree["pidfile"]); got != "/run/postgresql/main.pid" {
 		t.Errorf("pidfile = %q, want the explicit variable", got)
 	}
 	who, _ := nested(t, resolved.Tree, "checks", "who")["command"].([]any)
@@ -2152,23 +2150,19 @@ func TestOSSelectorListBranch(t *testing.T) {
 		"catalog/services/db.yml": `
 kind: daemon
 name: db
-processes:
-  main:
-    type: pidfile
-    path:
-      os:
-        gentoo: [/run/db1.pid, /run/db.pid]
-        default: [/run/db.pid]
+pidfile:
+  os:
+    gentoo: [/run/db1.pid, /run/db.pid]
+    default: [/run/db.pid]
 `,
 	})
 	cfg, err := Load(global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	main := nested(t, cfg.Daemons["db"].Body, "processes", "main")
-	got, _ := main["path"].([]any)
+	got, _ := cfg.Daemons["db"].Body["pidfile"].([]any)
 	if len(got) != 2 || got[0] != "/run/db1.pid" {
-		t.Errorf("path = %v, want the gentoo candidate list", main["path"])
+		t.Errorf("pidfile = %v, want the gentoo candidate list", cfg.Daemons["db"].Body["pidfile"])
 	}
 }
 
@@ -2898,7 +2892,7 @@ apps: ["php-fpm${version}"]
 preflight:
   config: { type: command, command: ["${binary}", "--test"] }
 processes:
-  main: { type: command_match, exe: "${binary}", user: root }
+  main: { exe: "${binary}", user: root }
 checks:
   service: { type: service, expect: active }
 `), 0o644); err != nil {
@@ -3757,16 +3751,13 @@ checks:
 	if len(errs) != 0 {
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
-	if _, present := resolved.Tree["pidfile"]; present {
-		t.Errorf("top-level pidfile key must be consumed")
+	if got := cfgval.String(resolved.Tree["pidfile"]); got != "/run/svc.pid" {
+		t.Fatalf("pidfile = %q, want /run/svc.pid", got)
 	}
-	// (a) process selector for tree discovery.
-	procs := resolved.Tree["processes"].(map[string]any)
-	sel := procs["pidfile"].(map[string]any)
-	if sel["type"] != "pidfile" || sel["path"] != "/run/svc.pid" {
-		t.Fatalf("process selector = %v", sel)
+	if _, present := resolved.Tree["processes"]; present {
+		t.Fatalf("pidfile must not create public processes entry: %v", resolved.Tree["processes"])
 	}
-	// (b) gated health check.
+	// Gated health check.
 	checks := resolved.Tree["checks"].(map[string]any)
 	chk := checks["pidfile"].(map[string]any)
 	if chk["type"] != "pidfile" || chk["path"] != "/run/svc.pid" {
@@ -3801,10 +3792,8 @@ checks:
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
 	want := []string{"/run/svc-main.pid", "/run/svc-legacy.pid"}
-	procs := resolved.Tree["processes"].(map[string]any)
-	sel := procs["pidfile"].(map[string]any)
-	if got := cfgval.StringList(sel["path"]); !slices.Equal(got, want) {
-		t.Fatalf("process pidfile paths = %v, want %v", got, want)
+	if got := cfgval.StringList(resolved.Tree["pidfile"]); !slices.Equal(got, want) {
+		t.Fatalf("pidfile paths = %v, want %v", got, want)
 	}
 	checks := resolved.Tree["checks"].(map[string]any)
 	chk := checks["pidfile"].(map[string]any)
@@ -3914,9 +3903,7 @@ also_service: { foo: [x] }
 
 func TestStopInvariants(t *testing.T) {
 	tree := map[string]any{
-		"processes": map[string]any{
-			"pidfile": map[string]any{"type": "pidfile", "path": "/run/svc.pid"},
-		},
+		"pidfile": "/run/svc.pid",
 		"stop_policy": map[string]any{
 			"pidfile_absent":   true,
 			"files_absent":     []any{"/run/svc/*.sock"},
@@ -3930,9 +3917,9 @@ func TestStopInvariants(t *testing.T) {
 	if len(ff) != 1 || ff[0] != "/run/svc/*.sock" || !cleanEnabled {
 		t.Fatalf("files=%v cleanEnabled=%v", ff, cleanEnabled)
 	}
-	// pidfile_absent omitted -> no pidfile paths even if a selector exists.
+	// pidfile_absent omitted -> no pidfile paths even if pidfile is declared.
 	pp2, _, _, _ := StopInvariants(map[string]any{
-		"processes":   tree["processes"],
+		"pidfile":     tree["pidfile"],
 		"stop_policy": map[string]any{"files_absent": []any{"/x"}},
 	})
 	if len(pp2) != 0 {

@@ -13,7 +13,6 @@ variables:
 
 processes:
   main:
-    type: command_match
     exe: "${libvirt_dbus_binary}"
     user: "${user}"
 
