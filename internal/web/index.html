@@ -146,7 +146,11 @@
   #err.status-err { color: var(--crit); }
   #err.status-ok { color: var(--ok); }
   #err.status-warn { color: var(--warn); }
-  body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section { opacity: .5; transition: opacity .2s; }
+  body.disconnected #overview,
+  body.disconnected #attention,
+  body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
+  body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section, body.disconnected #diag-section,
+  body.disconnected #notifiers-section, body.disconnected #app-section { opacity: .5; transition: opacity .2s; }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
   .truncate { display: inline-block; max-width: min(38rem, 48vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
