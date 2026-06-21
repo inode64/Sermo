@@ -2078,7 +2078,9 @@ function toggleExpand(key) {
     if (location.hash === "#" + key) history.replaceState(null, "", location.pathname + location.search);
   } else {
     expanded.add(key);
-    if (key.startsWith("svc:")) history.replaceState(null, "", "#" + key); // shareable deep-link
+    if (key.startsWith("svc:") || key.startsWith("wat:") || key.startsWith("app:")) {
+      history.replaceState(null, "", "#" + key); // shareable deep-link
+    }
   }
   renderServices();
   renderWatches();
@@ -2152,19 +2154,53 @@ async function refreshServiceExpansionLight(key) {
   } catch (_) { /* keep charts/events on a transient error */ }
 }
 
-// applyHash opens/scrolls to the service named in a #svc:<name> URL fragment, so a
-// service is directly linkable. Runs after each render and on hashchange.
+// applyHash opens/scrolls to the target named in a #svc:|#wat:|#app: URL fragment.
+// Runs after each render and on hashchange.
 let hashScrolled = false;
+function watchSectionFor(w) {
+  if (isStorageWatch(w)) return "#storage-section";
+  if (isNetworkWatch(w)) return "#network-section";
+  return "#watches-section";
+}
 function applyHash() {
   const h = decodeURIComponent(location.hash.slice(1));
-  if (!h.startsWith("svc:")) return;
-  const name = h.slice(4);
-  if (!(allServices || []).some((s) => s.name === name)) return;
-  if (!expanded.has(h)) { expanded.add(h); renderServices(); } // renderServices loads the expansion
-  if (!hashScrolled) {
-    const el = document.getElementById("svc-row-" + name);
-    if (el) el.scrollIntoView({ block: "center" });
-    hashScrolled = true;
+  if (!h) return;
+  if (h.startsWith("svc:")) {
+    const name = h.slice(4);
+    if (!(allServices || []).some((s) => s.name === name)) return;
+    if (!expanded.has(h)) { expanded.add(h); renderServices(); }
+    if (!hashScrolled) {
+      const el = document.getElementById("svc-row-" + name);
+      if (el) el.scrollIntoView({ block: "center" });
+      hashScrolled = true;
+    }
+    return;
+  }
+  if (h.startsWith("wat:")) {
+    const name = h.slice(4);
+    const w = (allWatches || []).find((item) => item && item.name === name);
+    if (!w) return;
+    const sec = $(watchSectionFor(w));
+    if (sec) { sec.style.display = ""; sec.open = true; }
+    if (!expanded.has(h)) { expanded.add(h); renderWatches(); }
+    if (!hashScrolled) {
+      const el = document.getElementById("wat-row-" + name);
+      if (el) el.scrollIntoView({ block: "center" });
+      hashScrolled = true;
+    }
+    return;
+  }
+  if (h.startsWith("app:")) {
+    const name = h.slice(4);
+    if (!(allApps || []).some((a) => a.name === name)) return;
+    const sec = $("#apps-section");
+    if (sec) { sec.style.display = ""; sec.open = true; }
+    if (!expanded.has(h)) { expanded.add(h); renderApps(); }
+    if (!hashScrolled) {
+      const el = document.getElementById("app-row-" + name);
+      if (el) el.scrollIntoView({ block: "center" });
+      hashScrolled = true;
+    }
   }
 }
 window.addEventListener("hashchange", () => { hashScrolled = false; applyHash(); });
@@ -3342,7 +3378,7 @@ function watchRowHTML(w) {
   const actions = !w.enabled
     ? '<span class="muted">disabled in config</span>'
     : [expandBtn, monitorBtn].filter(Boolean).join(" ");
-  const row = `<tr class="clickable" data-exp-key="${esc(key)}">
+  const row = `<tr id="wat-row-${esc(w.name)}" class="clickable" data-exp-key="${esc(key)}">
     <td>${chev}${esc(displayName(w))}</td>
     <td>${esc(w.check_type || "")}</td>
     <td class="watch-summary">${summary}</td>
@@ -3367,6 +3403,7 @@ function renderWatches(watches) {
   renderWatchPanel("network", all.filter(isNetworkWatch));
   renderWatchPanel("host", all.filter((w) => !isStorageWatch(w) && !isNetworkWatch(w)));
   expanded.forEach((k) => { if (k.startsWith("wat:")) loadExpansionFor(k); });
+  applyHash();
 }
 
 // renderWatchPanel fills one watch table (Storage, Network, or Host watches)
@@ -3537,7 +3574,7 @@ function renderApps(apps) {
     const open = expanded.has(key);
     const chev = `<span class="exp">${open ? '▾' : '▸'}</span>`;
     const ver = a.version_short || a.version || "—";
-    const row = `<tr class="clickable ${rowClass}" data-exp-key="${esc(key)}">
+    const row = `<tr id="app-row-${esc(a.name)}" class="clickable ${rowClass}" data-exp-key="${esc(key)}">
       <td>${chev}${label}</td>
       <td>${categoryBadge(category)}</td>
       ${appStatusCell(a)}
@@ -3552,6 +3589,7 @@ function renderApps(apps) {
     ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 4, appRow, appSort.key === "category" ? appSort.dir : 1)
     : list.map(appRow).join("");
   tbody.innerHTML = rows || `<tr><td colspan="4" class="muted">No applications match the filter.</td></tr>`;
+  applyHash();
 }
 
 // renderAppExpansion shows one application's full version, binary location and
