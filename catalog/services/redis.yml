@@ -69,7 +69,6 @@ rules:
         check: tcp
     for:
       cycles: 3
-      mode: consecutive
     then:
       action: restart
 
@@ -80,6 +79,5 @@ rules:
         check: ping
     for:
       cycles: 3
-      mode: consecutive
     then:
       action: restart
