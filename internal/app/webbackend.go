@@ -259,7 +259,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		}
 		iv := cfgval.Duration(resolved.Tree["interval"])
 		if iv <= 0 {
-			iv = EngineInterval(cfg, 30*time.Second)
+			iv = config.EngineInterval(cfg, 30*time.Second)
 		}
 		entry := &webEntry{
 			displayName:       config.DisplayName(resolved.Tree, name),
@@ -1890,7 +1890,7 @@ func (b *WebBackend) DaemonInfo(ctx context.Context) web.DaemonInfo {
 		info.StateDir = g.StateDir()
 
 		// Engine block (effective values with documented fallbacks)
-		info.Interval = formatInterval(EngineInterval(b.cfg, 30*time.Second))
+		info.Interval = formatInterval(config.EngineInterval(b.cfg, 30*time.Second))
 		info.MaxParallelChecks = EngineInt(b.cfg, "max_parallel_checks", 8)
 		info.MaxParallelOperations = EngineInt(b.cfg, "max_parallel_operations", 2)
 		info.DefaultTimeout = formatInterval(EngineDuration(b.cfg, "default_timeout", 10*time.Second))
