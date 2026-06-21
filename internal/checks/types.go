@@ -478,7 +478,9 @@ func (c fileCheck) Run(_ context.Context) Result {
 	if !info.Mode().IsRegular() {
 		return c.result(false, c.path+" is not a regular file", start)
 	}
-	return c.result(true, c.path+" is a regular file", start)
+	res := c.result(true, c.path+" is a regular file", start)
+	res.Data = map[string]any{"path": c.path, "size": info.Size()}
+	return res
 }
 
 // binaryCheck passes when a path exists and is an executable file.

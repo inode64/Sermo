@@ -114,6 +114,49 @@ func TestWebBackendDetailRanFlag(t *testing.T) {
 	}
 }
 
+func TestWebBackendDetailCheckReadings(t *testing.T) {
+	snap := NewSnapshots()
+	snap.Publish("web", map[string]checks.Result{
+		"tls": {
+			Check: "tls", OK: true, Message: "valid",
+			Data: map[string]any{
+				"source": "/etc/ssl/cert.pem", "days_left": 45, "not_after": "2026-08-01T00:00:00Z",
+				"issuer": "Test CA",
+			},
+		},
+		"fw": {
+			Check: "fw", OK: true, Message: "ok",
+			Data: map[string]any{"backend": "nftables", "rules": uint64(10), "min_rules": 1},
+		},
+	}, map[string]bool{"tls": true, "fw": true})
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {
+				displayName: "web",
+				checkNames:  []string{"tls", "fw"},
+				checkTypes:  map[string]string{"tls": "cert", "fw": "firewall_rules"},
+				status:      func(context.Context) (servicemgr.Status, error) { return servicemgr.StatusActive, nil },
+			},
+		},
+		snapshots: snap,
+	}
+	detail, ok := b.Detail(context.Background(), "web")
+	if !ok {
+		t.Fatal("detail not found")
+	}
+	byName := map[string]web.Check{}
+	for _, ch := range detail.Checks {
+		byName[ch.Name] = ch
+	}
+	if got := readingByField(byName["tls"].Readings, "days_left").Value; got != "45" {
+		t.Fatalf("tls readings = %+v", byName["tls"].Readings)
+	}
+	if got := readingByField(byName["fw"].Readings, "rules").Value; got != "10" {
+		t.Fatalf("fw readings = %+v", byName["fw"].Readings)
+	}
+}
+
 func TestWebBackendDetailIncludesCheckSLA(t *testing.T) {
 	b := &WebBackend{
 		order: []string{"web"},

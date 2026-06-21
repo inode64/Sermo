@@ -350,14 +350,15 @@ type PreflightResult struct {
 
 // Check is one check's latest observed result in a service detail.
 type Check struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	OK       bool   `json:"ok"`
-	Optional bool   `json:"optional"`
-	Skipped  bool   `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
-	Message  string `json:"message,omitempty"`
-	Ran      bool   `json:"ran"`          // false if not observed yet
-	At       string `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)
+	Name     string         `json:"name"`
+	Type     string         `json:"type"`
+	OK       bool           `json:"ok"`
+	Optional bool           `json:"optional"`
+	Skipped  bool           `json:"skipped,omitempty"` // gated off (requires/skip_when_changed)
+	Message  string         `json:"message,omitempty"`
+	Readings []WatchReading `json:"readings,omitempty"`
+	Ran      bool           `json:"ran"`          // false if not observed yet
+	At       string         `json:"at,omitempty"` // RFC3339 when the check last ran (cached checks keep prior time)
 	// Metrics are the check's graphable named series (time-series), if any.
 	Metrics []CheckMetric `json:"metrics,omitempty"`
 	SLA     []SLAWindow   `json:"sla,omitempty"`

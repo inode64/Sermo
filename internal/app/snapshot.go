@@ -14,6 +14,7 @@ type CheckSnapshot struct {
 	Optional  bool
 	Skipped   bool
 	Message   string
+	Data      map[string]any
 	Ran       bool // true when the check actually executed this cycle (not interval cache)
 	At        time.Time
 }
@@ -57,7 +58,7 @@ func (s *Snapshots) Publish(service string, cache map[string]checks.Result, ran 
 	for name, r := range cache {
 		cs := CheckSnapshot{
 			OK: r.OK, Condition: r.Condition, Optional: r.Optional, Skipped: r.Skipped, Message: r.Message,
-			Ran: ran[name],
+			Data: r.Data, Ran: ran[name],
 		}
 		if ran[name] {
 			cs.At = at

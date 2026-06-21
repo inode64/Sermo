@@ -2454,10 +2454,15 @@ function renderServiceDetail(d) {
       ? (c.at ? `<span class="muted">cached</span>${age}` : '<span class="muted">not run yet</span>')
       : c.skipped ? `<span class="muted">skipped</span>${age}`
       : c.ok ? `<span class="ok">ok</span>${age}` : `<span class="bad">fail</span>${age}`;
+    const readings = (c.readings && c.readings.length) ? renderWatchReadings(c.readings) : "";
+    const msg = c.message
+      ? `<span class="truncate check-message" title="${esc(c.message || "")}">${esc(c.message || "")}</span>`
+      : "";
+    const detailCell = [readings, msg].filter(Boolean).join(readings && msg ? "" : "") || "—";
     return `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.type || "")}</td>
       <td>${state}${c.optional ? ' <span class="muted">(optional)</span>' : ''}</td>
       <td class="sla-cell">${renderSLAWindows(c.sla, true)}</td>
-      <td class="muted"><span class="truncate check-message" title="${esc(c.message || "")}">${esc(c.message || "")}</span></td></tr>`;
+      <td class="muted">${detailCell}</td></tr>`;
   }).join("") || `<tr><td colspan="5" class="muted">No checks.</td></tr>`;
 
   const lockRows = (d.locks || []).map((l) => {
