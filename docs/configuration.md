@@ -93,20 +93,26 @@ per lock named `<service>[.<name>].lock`) and internal operation locks
 `paths.locks` is **not** supported. See [Locks](safety.md#locks) for the TTL and
 stale-reclaim semantics.
 
-If `paths.services` is omitted, Sermo falls back to `services/` next to the
-loaded `sermo.yml` file. If `paths.apps` is omitted, Sermo falls back to `apps/`
-next to that same file. With the standard `/etc/sermo/sermo.yml` this means
-`/etc/sermo/services` and `/etc/sermo/apps`.
+If `paths.catalog` is omitted, Sermo reads the installed catalog defaults:
+`/usr/share/sermo/catalog` and `/etc/sermo/catalog-available`.
 
-Every new service, notifier or watch fragment under these directories should be
-isolated in its own `.yml` file, even when several targets are generated in the
-same wizard run.
+Only service, app and mount document directories have config-relative fallbacks.
+If `paths.services`, `paths.apps` or `paths.mounts` is omitted, Sermo falls back
+to `services/`, `apps/` or `mounts/` next to the loaded `sermo.yml` file. With
+the standard `/etc/sermo/sermo.yml` this means `/etc/sermo/services`,
+`/etc/sermo/apps` and `/etc/sermo/mounts`.
 
-If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
-`sermo.yml` file. With the standard `/etc/sermo/sermo.yml` this means
-`/etc/sermo/mounts`. Mount documents are intentionally separate from service
-documents and watch fragments because they are operator actions, not monitored
-services.
+Global fragment directories have no implicit fallback. If `paths.notifiers`,
+`paths.storages`, `paths.networks` or `paths.watches` is omitted or empty, Sermo
+loads no fragments of that type; a sibling `notifiers/`, `storages/`,
+`networks/` or `watches/` directory next to `sermo.yml` is ignored until listed
+explicitly under `paths`.
+
+Every new service, mount, notifier or watch fragment under configured
+directories should be isolated in its own `.yml` file, even when several targets
+are generated in the same wizard run. Mount documents are intentionally separate
+from service documents and watch fragments because they are operator actions,
+not monitored services.
 
 Use `/run` for runtime paths in Sermo configuration and examples. Do not write
 new `/var/run` pidfiles, sockets or runtime directories in Sermo-owned config.

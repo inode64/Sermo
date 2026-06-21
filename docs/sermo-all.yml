@@ -36,6 +36,9 @@ paths:
   # Directory entries are non-recursive unless a list item uses
   # `{ path: ..., recursive: true }`. Catalog documents must live under
   # immediate services/apps/libs/patterns category directories.
+  # Omitted paths.catalog uses installed catalog defaults. Omitted
+  # services/apps/mounts fall back to sibling services/, apps/ and mounts/.
+  # Global fragment dirs (notifiers/storages/networks/watches) load only when listed.
   catalog:                     # packaged + admin daemon/app/lib definitions
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
@@ -51,7 +54,6 @@ paths:
     - networks         # network/uplink watch fragments
   watches:
     - watches          # generic host watch fragments
-    # If service/app dirs are omitted, Sermo falls back to services/ and apps/ next to this file.
   mounts:                     # kind:mount files, separated from services/watches
     - /etc/sermo/mounts
   runtime: /run/sermo          # volatile: locks, op slots (tmpfs)
