@@ -2,7 +2,13 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1016,6 +1022,54 @@ func TestWebBackendStatefulWatchReadings(t *testing.T) {
 	if got := readingByField(byName["disk-health"].Readings, "temperature").Value; got != "41 °C" {
 		t.Fatalf("smart temperature = %q, want 41 °C", got)
 	}
+}
+
+func TestWebBackendProbeWatchReadings(t *testing.T) {
+	certPath := filepath.Join(t.TempDir(), "leaf.pem")
+	certDER := mustProbeCertPEM(t)
+	if err := os.WriteFile(certPath, certDER, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Global: config.Global{Raw: map[string]any{
+		"watches": map[string]any{
+			"tls-file": map[string]any{"check": map[string]any{
+				"type": "cert",
+				"path": certPath,
+			}},
+		},
+	}}}
+	b, warns := NewWebBackend(cfg, Deps{DefaultTimeout: 5 * time.Second})
+	if len(warns) != 0 {
+		t.Fatalf("unexpected warnings: %v", warns)
+	}
+	w := b.Watches(context.Background())[0]
+	if got := readingByField(w.Readings, "source").Value; got != certPath {
+		t.Fatalf("cert source = %q, want %q", got, certPath)
+	}
+	if got := readingByField(w.Readings, "days_left").Value; got == "" {
+		t.Fatalf("cert days_left missing: %+v", w.Readings)
+	}
+}
+
+func mustProbeCertPEM(t *testing.T) []byte {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "probe.test"},
+		DNSNames:     []string{"probe.test"},
+		NotBefore:    now.Add(-time.Hour),
+		NotAfter:     now.Add(30 * 24 * time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
 func TestWebBackendPidsReadingErrorMarksWatchFailed(t *testing.T) {
