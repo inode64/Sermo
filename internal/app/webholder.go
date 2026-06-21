@@ -77,6 +77,14 @@ func (h *WebBackendHolder) Applications(ctx context.Context) []web.Application {
 	return nil
 }
 
+// Mounts returns configured mount units from the active backend.
+func (h *WebBackendHolder) Mounts(ctx context.Context) []web.Mount {
+	if b := h.backend(); b != nil {
+		return b.Mounts(ctx)
+	}
+	return nil
+}
+
 // DaemonInfo returns daemon and engine info from the active backend.
 func (h *WebBackendHolder) DaemonInfo(ctx context.Context) web.DaemonInfo {
 	if b := h.backend(); b != nil {
