@@ -83,8 +83,9 @@ sermoctl backend
 sermoctl status nginx
 sermoctl is-active nginx
 
-# List installed services, applications and libraries
-sermoctl services      # service software (nginx, mariadb, ...)
+# List catalog inventory, not configured runtime targets
+sermoctl services      # daemon profiles under paths.catalog (nginx, mariadb, ...)
+sermoctl services all  # include profiles not installed on this host
 sermoctl services --notify ops-email  # email a services inventory report
 sermoctl apps          # tools/runtimes (only installed)
 sermoctl apps all      # include not-installed
