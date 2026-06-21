@@ -77,19 +77,25 @@ CLI exit codes (0/1/2/64/75/78)
 
 ## Fixtures
 
-Recommended fixture layout. Preflight is not a standalone package: config
-resolution fixtures belong under `internal/config`, while daemon/web preflight
-fixtures belong under `internal/app`.
+Prefer inline table-driven fixtures until a case needs reusable files. When
+persistent fixtures are useful, create `testdata/` next to the owning package;
+do not create a cross-package fixture tree.
+
+Preflight is not a standalone package: config resolution fixtures belong under
+`internal/config`, while daemon/web preflight fixtures belong under
+`internal/app`.
+
+Common owners, when a fixture file is actually needed:
 
 ```text
-internal/config/testdata/
-internal/rules/testdata/
-internal/servicemgr/testdata/
-internal/process/testdata/
-internal/locks/testdata/
-internal/metrics/testdata/
-internal/operation/testdata/
-internal/app/testdata/
+internal/config/testdata/      config resolution inputs
+internal/rules/testdata/       rule scenarios
+internal/servicemgr/testdata/  init backend samples
+internal/process/testdata/     process discovery samples
+internal/locks/testdata/       lock state samples
+internal/metrics/testdata/     metrics reader samples
+internal/operation/testdata/   operation result samples
+internal/app/testdata/         daemon/web preflight samples
 ```
 
 ## Acceptance
