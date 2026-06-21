@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -131,7 +132,7 @@ func TestProcessesUsesSystemdMainPIDWhenPidfileMissing(t *testing.T) {
 		t.Fatalf("Run() exit = %d, want %d; stderr=%s", code, exitSuccess, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "pid="+itoa(os.Getpid())+" ") || !strings.Contains(out, "source=backend") {
+	if !strings.Contains(out, "pid="+strconv.Itoa(os.Getpid())+" ") || !strings.Contains(out, "source=backend") {
 		t.Fatalf("stdout = %q, want current pid from backend", out)
 	}
 	if strings.Contains(stderr.String(), "pidfile") {
@@ -178,7 +179,7 @@ func (r processSystemdRunner) Run(_ context.Context, name string, args ...string
 	case strings.Contains(joined, "-p ControlGroup"):
 		return execx.Result{Stdout: "\n"}, nil
 	case strings.Contains(joined, "-p MainPID"):
-		return execx.Result{Stdout: itoa(r.pid) + "\n"}, nil
+		return execx.Result{Stdout: strconv.Itoa(r.pid) + "\n"}, nil
 	default:
 		return execx.Result{Stdout: "\n"}, nil
 	}
@@ -189,7 +190,7 @@ func (r processSystemdRunner) Run(_ context.Context, name string, args ...string
 func TestProcessesRealPidfileSelf(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := filepath.Join(dir, "self.pid")
-	if err := os.WriteFile(pidfile, []byte(itoa(os.Getpid())), 0o644); err != nil {
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := writeProcessConfig(t, pidfile)
@@ -200,19 +201,7 @@ func TestProcessesRealPidfileSelf(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
 	}
-	if !strings.Contains(stdout.String(), "pid="+itoa(os.Getpid())+" ") {
+	if !strings.Contains(stdout.String(), "pid="+strconv.Itoa(os.Getpid())+" ") {
 		t.Fatalf("stdout did not include self pid:\n%s", stdout.String())
 	}
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
 }
