@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ pidfile: `+pidfile+`
 func TestWebBackendDetailProcessesRealPidfile(t *testing.T) {
 	dir := t.TempDir()
 	pidfile := filepath.Join(dir, "self.pid")
-	if err := os.WriteFile(pidfile, []byte(itoa(os.Getpid())), 0o644); err != nil {
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg := writeWebProcessConfig(t, pidfile)
@@ -241,7 +242,7 @@ processes: {}
 func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 	pid := os.Getpid()
 	pidfile := filepath.Join(t.TempDir(), "web.pid")
-	if err := os.WriteFile(pidfile, []byte(itoa(pid)), 0o644); err != nil {
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(pid)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -287,7 +288,7 @@ func TestWorkerLiveCPUUsesInitDerivedProcessSelectors(t *testing.T) {
 func TestWorkerRecordsServiceRuntimeMetricsForWebHistory(t *testing.T) {
 	pid := os.Getpid()
 	pidfile := filepath.Join(t.TempDir(), "web.pid")
-	if err := os.WriteFile(pidfile, []byte(itoa(pid)), 0o644); err != nil {
+	if err := os.WriteFile(pidfile, []byte(strconv.Itoa(pid)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg := writeWebProcessConfig(t, pidfile)
@@ -417,18 +418,6 @@ processes:
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
-}
-
 type procInfoRunner struct {
 	pidfile string
 }
@@ -463,7 +452,7 @@ func (r systemdPIDRunner) Run(_ context.Context, name string, args ...string) (e
 	case strings.Contains(joined, "-p ControlGroup"):
 		return execx.Result{Stdout: "\n"}, nil
 	case strings.Contains(joined, "-p MainPID"):
-		return execx.Result{Stdout: itoa(r.pid) + "\n"}, nil
+		return execx.Result{Stdout: strconv.Itoa(r.pid) + "\n"}, nil
 	default:
 		return execx.Result{Stdout: "\n"}, nil
 	}
