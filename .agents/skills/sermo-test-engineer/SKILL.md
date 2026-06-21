@@ -27,8 +27,8 @@ Use fakes and fixtures. Do not call real system services.
 Do not run:
 
 ```text
-systemctl start/stop/restart
-rc-service start/stop/restart
+systemctl start/stop/restart/reload
+rc-service start/stop/restart/reload
 kill real processes
 pkill
 killall
