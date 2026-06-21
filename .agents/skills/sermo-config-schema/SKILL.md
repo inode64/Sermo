@@ -63,7 +63,9 @@ description: "..."        # optional free-text note
 category: "database"      # optional WebUI grouping/filter label
 ```
 
-- `display_name` is the label shown to humans (`daemon show`, `service list`).
+- `display_name` is the label shown to humans in catalog inventory
+  (`sermoctl services` / `apps` / `libs`) and the Web UI service/application
+  lists.
   When absent or blank it falls back to `name`. Omit it when it would just repeat
   `name`.
 - `description` is optional free text with NO fallback: when absent, nothing is
@@ -324,9 +326,10 @@ file_exists checks do not point under <paths.runtime>/locks; Sermo named runtime
 
 ## Resolved config
 
-`sermoctl service show SERVICE` outputs the final resolved service config.
-Do not document or reintroduce a resolved-config rendering subcommand under
-`sermoctl config`.
+There is no CLI command that renders the final resolved service config today.
+Use `sermoctl status SERVICE`, `sermoctl config validate`, the Web UI/API, or
+YAML examples that match the current public commands. Do not document or
+reintroduce a resolved-config rendering subcommand under `sermoctl config`.
 
 ## Output format
 

@@ -38,7 +38,7 @@ catalog daemons/apps/libs/patterns
 services
 clones
 config validate
-service show
+service status and inventory
 checks
 rules
 guards
@@ -68,7 +68,7 @@ Prefer complete examples:
 ```bash
 sermoctl preflight mysql-main
 sermoctl restart mysql-main
-sermoctl service show mysql-main
+sermoctl status mysql-main
 ```
 
 ```yaml
