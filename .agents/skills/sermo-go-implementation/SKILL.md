@@ -93,23 +93,35 @@ failed
 
 ## Package guidance
 
-Use these packages. This is the full internal/ layout; it must match
-`AGENTS.md` and AGENTS.md — do not invent or drop packages:
+Use these packages. This is the current full `internal/` layout; it must match
+the repository — do not invent or drop packages:
 
 ```text
-internal/app          daemon, scheduler and in-memory state (sermod)
-internal/checks       check implementations
+internal/app          sermod daemon, scheduler, in-memory state, event log and web preflight
+internal/appinspect   catalog app/library inspection and installed-version discovery
+internal/assist       wizard prompt helpers and assistant flow primitives
+internal/buildinfo    build/version metadata
+internal/cfgval       typed config value parsing and validation helpers
+internal/checks       check implementations and central check builders
 internal/cli          sermoctl command implementations
 internal/config       YAML model, catalog loading, services/mounts/clones, merge, render, variables, validation
-internal/events       structured event model and logger
+internal/conn         protocol probes used by connection checks
+internal/control      daemon control socket/client helpers
+internal/diag         diagnostics assembly
+internal/dockerctl    Docker control helpers
 internal/execx        command runner
 internal/locks        runtime locks and external lock checks
-internal/metrics      cpu/memory collectors (service and system scope)
-internal/operation    safe start/stop/restart workflows (shared by sermod+sermoctl)
-internal/preflight    preflight runner (reuses the check runner)
-internal/process      process discovery and signaling
+internal/metrics      CPU/memory/process collectors and time-series helpers
+internal/mountctl     mount/umount operation helpers
+internal/notify       notifier implementations
+internal/operation    safe start/stop/restart/reload workflows shared by sermod and sermoctl
+internal/process      process discovery, identity matching and signaling
 internal/rules        rule engine, windows and remediation state
-internal/servicemgr   systemd/openrc abstraction
+internal/servicemgr   systemd/OpenRC abstraction
+internal/state        persisted daemon state and migrations
+internal/virt         virtualization control helpers
+internal/volume       volume/storage expansion helpers
+internal/web          web API contracts and embedded UI server
 ```
 
 ## Test requirements
