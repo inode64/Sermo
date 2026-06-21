@@ -198,7 +198,7 @@ var commandUsages = []commandUsage{
 			"sermoctl unmonitor SERVICE",
 		},
 		Notes: []string{
-			"Manual operations such as start, stop and restart remain available.",
+			"Manual operations such as start, stop, restart, reload and resume remain available.",
 		},
 		Examples: []string{
 			"sermoctl unmonitor mysql-main",
