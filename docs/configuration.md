@@ -64,6 +64,26 @@ paths:
   templates: /etc/sermo/templates
 ```
 
+Directory lists under `paths.catalog`, `paths.services`, `paths.apps`,
+`paths.notifiers`, `paths.storages`, `paths.networks`, `paths.watches` and
+`paths.mounts` accept either a path string or an explicit mapping:
+
+```yaml
+paths:
+  services:
+    - /etc/sermo/services          # recursive: false
+    - path: /etc/sermo/services.d
+      recursive: true
+```
+
+When `recursive` is omitted it defaults to `false`. A non-recursive entry loads
+only `.yml`/`.yaml` files directly inside that directory. `recursive: true`
+descends the whole subtree, still loading files in deterministic sorted order.
+For `paths.catalog`, the immediate `services/`, `apps/`, `libs/` and
+`patterns/` category directories are part of the catalog layout and are read
+even when `recursive` is false; `recursive: true` only controls directories
+below those category directories and any extra subdirectories.
+
 `paths.runtime` is the root for named runtime locks (`<runtime>/locks`, one file
 per lock named `<service>[.<name>].lock`) and internal operation locks
 (`<runtime>/ops/<service>.lock`). It lives on tmpfs and is wiped on reboot.
