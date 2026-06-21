@@ -13,6 +13,13 @@ variables:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/salt-master.pid
 
+socket:
+  path:
+    - /run/salt/master/publish_pull.ipc
+    - /run/salt/master/master_event_pub.ipc
+    - /run/salt/master/master_event_pull.ipc
+  optional: true
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

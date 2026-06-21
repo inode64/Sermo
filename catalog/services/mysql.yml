@@ -20,6 +20,8 @@ variables:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
 
+socket: { path: /run/mysqld/mysqld.sock, optional: true }
+
 preflight:
   config:
     type: command

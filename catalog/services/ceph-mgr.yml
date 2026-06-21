@@ -16,6 +16,8 @@ apps: [ceph-mgr]
 variables:
   user: ceph
 
+socket: "/run/ceph/ceph-mgr.${hostname}.asok"
+
 processes:
   # Exactly one ceph-mgr runs per host, so an exe+user match selects it
   # unambiguously. The mgr binds a dynamic messenger port (no fixed listener),

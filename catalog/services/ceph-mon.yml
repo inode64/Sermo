@@ -20,6 +20,8 @@ variables:
   host: 127.0.0.1
   port: 3300
 
+socket: "/run/ceph/ceph-mon.${hostname}.asok"
+
 processes:
   # Exactly one ceph-mon runs per host, so an exe+user match selects it
   # unambiguously.

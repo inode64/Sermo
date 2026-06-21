@@ -7,5 +7,10 @@ service:
   systemd: [pmlogger]
 apps: [pmlogger]
 
+variables:
+  host: 127.0.0.1
+  port: 4330
+
 checks:
   service: { type: service, expect: active }
+  port: { type: tcp, host: "${host}", port: "${port}", timeout: 2s }

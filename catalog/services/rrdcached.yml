@@ -7,5 +7,7 @@ service: rrdcached
 
 pidfile: /run/rrdcached.pid
 
+socket: /run/rrdcached.sock
+
 checks:
   service: { type: service, expect: active }

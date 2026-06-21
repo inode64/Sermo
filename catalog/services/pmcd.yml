@@ -22,6 +22,10 @@ restart_on_change:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/pcp/pmcd.pid
 
+socket:
+  - /run/pcp/pmcd.socket
+  - /var/lib/pcp/pmcd/root.socket
+
 checks:
   service:
     type: service

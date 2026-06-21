@@ -10,5 +10,7 @@ apps: [lldpd]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/lldpd.pid
 
+socket: /run/lldpd.socket
+
 checks:
   service: { type: service, expect: active }
