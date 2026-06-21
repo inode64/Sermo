@@ -1022,33 +1022,6 @@ service: x
 	}
 }
 
-func TestValidateCatalogAliases(t *testing.T) {
-	issues := validateService(t, `
-kind: service
-name: svc
-catalog_aliases: [stale]
-service: x
-`)
-	mustHave(t, issues, "catalog_aliases is only supported on daemon and app catalog documents")
-
-	issues = validateService(t, `
-kind: service
-name: svc
-catalog_aliases: stale
-service: x
-`)
-	mustHave(t, issues, "catalog_aliases must be a non-empty list")
-
-	issues = validateService(t, `
-kind: service
-name: svc
-catalog_aliases: ["../stale", 42]
-service: x
-`)
-	mustHave(t, issues, `catalog_aliases entry "../stale" must be a simple name`)
-	mustHave(t, issues, "catalog_aliases entries must be non-empty strings")
-}
-
 func TestValidateAppVersionFrom(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

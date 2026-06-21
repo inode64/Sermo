@@ -357,7 +357,6 @@ watches:
 # ---------------------------------------------------------------------------
 kind: daemon
 name: demo
-catalog_aliases: [demo-http] # prior daemon name still accepted by uses:
 display_name: "Demo HTTP Server"
 description: "Reference daemon showing every service/catalog section."
 category: web
@@ -845,7 +844,6 @@ rules:
 # ---------------------------------------------------------------------------
 kind: app
 name: demo-app
-catalog_aliases: [demo-app-alt] # prior app name still accepted by services' apps:
 display_name: "Demo Server"
 description: "Runtime/tool dependency injected into services that list apps: [demo-app]."
 category: app

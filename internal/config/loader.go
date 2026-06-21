@@ -705,6 +705,9 @@ func loadDocument(path string) (*Document, error) {
 	if body == nil {
 		body = map[string]any{}
 	}
+	if _, present := body["catalog_aliases"]; present {
+		return nil, fmt.Errorf("%s: catalog_aliases is not supported; use canonical catalog names", path)
+	}
 	kind := cfgval.String(body["kind"])
 	return &Document{
 		Kind: kind,
@@ -721,10 +724,8 @@ func (c *Config) add(doc *Document) {
 	switch doc.Kind {
 	case kindDaemon:
 		indexDocument(c.Daemons, &c.DaemonNames, doc)
-		addCatalogAliases(c.Daemons, doc)
 	case kindApp:
 		indexDocument(c.Apps, &c.AppNames, doc)
-		addCatalogAliases(c.Apps, doc)
 	case kindLibrary:
 		indexDocument(c.Libraries, &c.LibraryNames, doc)
 	case kindPatterns:
@@ -742,23 +743,8 @@ func indexDocument(reg map[string]*Document, names *[]string, doc *Document) {
 	if doc.Name == "" {
 		return
 	}
-	existing, exists := reg[doc.Name]
-	// A canonical document may replace a registry entry that was created by a
-	// previous document's catalog_aliases, but duplicate canonical names still keep
-	// the first document and are reported by validation.
-	if !exists || existing.Name != doc.Name {
+	if _, exists := reg[doc.Name]; !exists {
 		reg[doc.Name] = doc
-	}
-}
-
-func addCatalogAliases(reg map[string]*Document, doc *Document) {
-	for _, alias := range cfgval.StringList(doc.Body["catalog_aliases"]) {
-		if alias == "" || alias == doc.Name {
-			continue
-		}
-		if _, exists := reg[alias]; !exists {
-			reg[alias] = doc
-		}
 	}
 }
 

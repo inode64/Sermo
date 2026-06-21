@@ -1,6 +1,5 @@
 kind: daemon
 name: dbus
-catalog_aliases: [dbus-daemon]
 display_name: "D-Bus"
 category: system
 description: "DBus Daemon"

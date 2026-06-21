@@ -1,6 +1,5 @@
 kind: app
 name: networkmanager
-catalog_aliases: [NetworkManager]
 display_name: "NetworkManager"
 category: network
 variables:

@@ -286,13 +286,12 @@ uses: tomcat
 	}
 }
 
-func TestAppsLinkAcceptsCatalogAlias(t *testing.T) {
+func TestAppsLinkUsesCanonicalAppName(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
 		"catalog/apps/dbus.yml": `
 kind: app
 name: dbus
-catalog_aliases: [dbus-daemon]
 variables:
   binary: /usr/bin/dbus-daemon
 preflight:
@@ -301,7 +300,7 @@ preflight:
 		"catalog/services/dbus.yml": `
 kind: daemon
 name: dbus
-apps: [dbus-daemon]
+apps: [dbus]
 preflight:
   config: { type: command, command: ["${dbus_binary}", "--check"] }
 checks:
@@ -322,15 +321,15 @@ uses: dbus
 		t.Fatalf("Resolve() errors = %v", errs)
 	}
 	pf := nested(t, resolved.Tree, "preflight")
-	if got := cfgval.String(nested(t, pf, "dbus-daemon-binary")["path"]); got != "/usr/bin/dbus-daemon" {
-		t.Fatalf("alias-linked app binary path = %q, want /usr/bin/dbus-daemon", got)
+	if got := cfgval.String(nested(t, pf, "dbus-binary")["path"]); got != "/usr/bin/dbus-daemon" {
+		t.Fatalf("linked app binary path = %q, want /usr/bin/dbus-daemon", got)
 	}
 	configCmd, _ := nested(t, pf, "config")["command"].([]any)
 	if got := fmt.Sprint(configCmd...); got != "/usr/bin/dbus-daemon--check" {
-		t.Fatalf("alias-linked canonical app variable command = %v, want dbus binary", configCmd)
+		t.Fatalf("linked app variable command = %v, want dbus binary", configCmd)
 	}
 	if names := cfg.DaemonsInCategory(CategoryApp); strings.Join(names, ",") != "dbus" {
-		t.Fatalf("listed apps = %v, want only canonical dbus", names)
+		t.Fatalf("listed apps = %v, want dbus", names)
 	}
 }
 
@@ -2287,38 +2286,34 @@ func TestCatalogRootFilesRejected(t *testing.T) {
 	}
 }
 
-func TestCatalogAliasDoesNotShadowCanonicalDaemon(t *testing.T) {
+func TestCatalogAliasesRejected(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"catalog/services/a.yml": `
+		"catalog/services/nginx.yml": `
 kind: daemon
-name: a
-catalog_aliases: [b]
-service: a
+name: nginx
+catalog_aliases: [nginx-old]
+service: nginx
 `,
-		"catalog/services/b.yml": `
-kind: daemon
-name: b
-service: b
-`,
+	})
+	_, err := Load(global)
+	if err == nil || !strings.Contains(err.Error(), "catalog_aliases is not supported") {
+		t.Fatalf("Load() error = %v, want catalog_aliases rejection", err)
+	}
+}
+
+func TestCatalogOldAliasNameDoesNotResolve(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml":                baseGlobal,
+		"catalog/services/new.yml": "kind: daemon\nname: new\nservice: new\n",
 	})
 	cfg, err := Load(global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	doc, ok := cfg.Daemons["b"]
-	if !ok {
-		t.Fatal("daemon b is not indexed")
-	}
-	if doc.Name != "b" {
-		t.Fatalf("daemon b resolves to %q, want canonical b", doc.Name)
-	}
-	resolved, errs := cfg.ResolveCatalog(CategoryService, "b")
-	if len(errs) > 0 {
-		t.Fatalf("ResolveCatalog(b) errors = %v", errs)
-	}
-	if resolved.Name != "b" {
-		t.Fatalf("ResolveCatalog(b) = %q, want b", resolved.Name)
+	_, errs := cfg.ResolveCatalog(CategoryService, "old")
+	if len(errs) == 0 || !strings.Contains(errs[0], `unknown service "old"`) {
+		t.Fatalf("ResolveCatalog(old) errors = %v, want unknown service", errs)
 	}
 }
 

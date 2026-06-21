@@ -74,11 +74,10 @@ func categoryFromDir(name string) string {
 // metaKeys are the document keys that control resolution and are not part of a
 // service's merged body.
 var metaKeys = map[string]struct{}{
-	"kind":            {},
-	"name":            {},
-	"uses":            {},
-	"clone":           {},
-	"catalog_aliases": {},
+	"kind":  {},
+	"name":  {},
+	"uses":  {},
+	"clone": {},
 }
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a

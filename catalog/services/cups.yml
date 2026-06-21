@@ -1,6 +1,5 @@
 kind: daemon
 name: cups
-catalog_aliases: [cups-config]
 display_name: "CUPS"
 category: system
 service:
