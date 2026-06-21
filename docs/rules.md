@@ -454,9 +454,9 @@ requires an `https` URL — setting one on an `http://` URL is a configuration
 error. A certificate problem (expired/not-yet-valid, inside the
 `cert_expires_in_days` window, failing verification, or a change between cycles)
 **fails** the `http` check, keeping its health-style semantics (`OK == true`
-means healthy) — the opposite of the standalone `cert` check. When inspection
-runs, the result data carries the same certificate fields the `cert` check
-exposes (`issuer`, `subject`, `dns_names`, `not_after`, `days_left`,
+means healthy), the same polarity as the standalone `cert` check. When
+inspection runs, the result data carries the same certificate fields the `cert`
+check exposes (`issuer`, `subject`, `dns_names`, `not_after`, `days_left`,
 `fingerprint`, …). To read the certificate even when it is expired or otherwise
 invalid, the request skips transport-level verification and verifies the chain
 manually; `cert_verify: false` disables that verification. The change conditions
@@ -489,9 +489,11 @@ at config validation). Uses `github.com/quic-go/quic-go` (pure Go).
 ### Cert
 
 A `cert` check inspects TLS material — either a **live TLS endpoint** (`host`) or
-a **local file** (`path`) — and alerts (`OK == true`) on any configured problem. It
-is condition-style, so as a watch the hook/notify fires on a problem and in rules
-`active: {check: api-cert}` is true.
+a **local file** (`path`). It is health-style: `OK == true` means the certificate
+or key material is acceptable, and any configured certificate problem makes the
+check fail (`OK == false`). In rules, alert on certificate problems with
+`failed: {check: api-cert}`. As a watch, the hook/notify fires when the check
+fails.
 
 ```yaml
 checks:
@@ -510,23 +512,31 @@ checks:
     type: cert
     path: /etc/ssl/private/api.key   # host XOR path
     on_change: true            # optional: alert if the file's fingerprint changes
+
+rules:
+  alert-api-cert:
+    if:
+      failed: { check: api-cert }
+    then:
+      action: alert
+      message: "api.example.com certificate is invalid, expiring soon or changed"
 ```
 
-**Host source.** It alerts when the certificate is **expired or not yet valid**,
+**Host source.** It fails when the certificate is **expired or not yet valid**,
 **expires within `expires_in_days`**, fails chain/hostname **verification**
 (`verify`, on by default — catches self-signed, wrong host, expired chains), or —
 between cycles — its **signature algorithm**, **issuer** or **fingerprint** changes.
-A network/TLS error fetching the cert is **not** an alert (use a `tcp`/`http` check
-for reachability).
+A network/TLS error fetching the cert is **not** a `cert` failure (use a
+`tcp`/`http` check for reachability).
 
 **File source (`path`).** Reads and parses a local file, recognising natively (no
 external tools): PEM **certificate**, **certificate request** (CSR), PKCS#1 / EC /
 PKCS#8 **private keys**, PKIX **public key**, **OpenSSH** private key, and **OpenSSH**
 public key (`authorized_keys` line). Certificates are checked for expiry/validity as
-above; material that does not expire (keys, CSRs) alerts only on
-`on_change`/`on_algorithm_change`. A **missing, unreadable or unparseable file is an
-alert** (a local configuration problem, unlike a transient network error). `verify`,
-`port` and `server_name` do not apply to files.
+above; material that does not expire (keys, CSRs) fails only on
+`on_change`/`on_algorithm_change`. A **missing, unreadable or unparseable file makes
+the check fail** (a local configuration problem, unlike a transient network
+error). `verify`, `port` and `server_name` do not apply to files.
 
 **Result data** exposes `kind` (certificate / certificate_request / private_key /
 public_key / openssh_private_key / openssh_public_key / …), `source`,
@@ -1365,13 +1375,13 @@ Every type above is a **single-shot check** (`Check.Run → Result`) and is usab
 - a host **watch** (`watches:`, firing a hook) — see [configuration](configuration.md#host-watches).
 
 The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid`,
-`edac`, `fds`, `conntrack`, `entropy`, `zombies`, `oom`, `cert`) are
+`edac`, `fds`, `conntrack`, `entropy`, `zombies`, `oom`) are
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
 `file`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
-`autofs`, `route`, `firewall_rules`, `sqlite`/`sqlite3`, `websocket`/`ws`, and
-connection-protocol checks such as `mysql`/`smtp`) are the
+`autofs`, `route`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
+`websocket`/`ws`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on
 **failure**.
 
