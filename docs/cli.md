@@ -114,6 +114,19 @@ sermoctl daemon reload
 sermoctl state compact --before 720h
 ```
 
+## Service target resolution
+
+For a configured `kind: service`, `sermoctl status`, `is-active` and service
+operations resolve the same control target that `sermod` and the web UI use.
+Sermo reads the service's `service:` candidates, picks the first unit known by
+the active backend, and normalizes systemd names with `.service` when needed.
+
+If the backend probe cannot surface a configured init unit but the service still
+has a usable configured seed, Sermo falls back to that unit and prints a warning,
+matching the daemon/web behavior used for historic init-service setups. There is
+no fallback for invalid `control:` targets or a per-backend `service:` map with
+no candidate for the active backend; those are configuration errors.
+
 ## Catalog inventory
 
 `sermoctl services`, `sermoctl apps`, `sermoctl libs` and `sermoctl patterns`
