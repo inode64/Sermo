@@ -160,16 +160,6 @@ func validateProcesses(tree map[string]any, add addFunc) {
 			add("%s must be a mapping", path)
 			continue
 		}
-		if name == "pidfile" {
-			add("%s is reserved; declare pidfile: at service level", path)
-			continue
-		}
-		if _, present := entry["type"]; present {
-			add("%s.type is not supported; use processes.%s.exe or processes.%s.cmd directly", path, name, name)
-		}
-		if _, present := entry["path"]; present {
-			add("%s.path is not supported; declare pidfile: at service level", path)
-		}
 		exe, cmd := cfgval.String(entry["exe"]), cfgval.String(entry["cmd"])
 		if exe == "" && cmd == "" {
 			add("%s requires exe or cmd", path)

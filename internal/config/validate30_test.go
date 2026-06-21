@@ -1179,13 +1179,9 @@ service: x
 processes:
   main: { user: mysql }
   badcmd: { cmd: "(" }
-  pidfile: { path: /run/mysqld.pid }
-  bad: { type: by_name, name: mysqld }
 `)
 	mustHave(t, issues, "processes.main requires exe or cmd")
 	mustHave(t, issues, "processes.badcmd.cmd is not a valid regex")
-	mustHave(t, issues, "processes.pidfile is reserved; declare pidfile: at service level")
-	mustHave(t, issues, "processes.bad.type is not supported")
 
 	// exe-only and cmd-only selectors are now valid (user/group optional).
 	ok := validateService(t, `

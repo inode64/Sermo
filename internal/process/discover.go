@@ -399,19 +399,6 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
 			continue
 		}
-		if name == "pidfile" {
-			warnings = append(warnings, `process selector "pidfile" is reserved; declare pidfile: at service level`)
-			continue
-		}
-		if typ := cfgval.AsString(entry["type"]); typ != "" {
-			warnings = append(warnings, fmt.Sprintf("process selector %q uses unsupported type field; use exe/cmd directly", name))
-			continue
-		}
-		if _, hasPath := entry["path"]; hasPath {
-			warnings = append(warnings, fmt.Sprintf("process selector %q uses unsupported path field; declare pidfile: at service level", name))
-			continue
-		}
-
 		sel := Selector{
 			Name:  name,
 			Type:  SelectorCommandMatch,
