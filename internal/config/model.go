@@ -128,20 +128,35 @@ func MonitorMode(tree map[string]any) string {
 // Global is the effective global configuration (sermo.yml plus conf.d), kept
 // mostly generic so its `defaults` block merges into services unchanged.
 type Global struct {
+	Path          string
+	Raw           map[string]any
+	Defaults      map[string]any
+	Catalog       []string
+	Services      []string
+	Apps          []string
+	Notifiers     []string
+	Storages      []string
+	Networks      []string
+	Watches       []string
+	Mounts        []string
+	CatalogPaths  []PathSpec
+	ServicePaths  []PathSpec
+	AppPaths      []PathSpec
+	NotifierPaths []PathSpec
+	StoragePaths  []PathSpec
+	NetworkPaths  []PathSpec
+	WatchPaths    []PathSpec
+	MountPaths    []PathSpec
+	Runtime       string
+	State         string
+	Templates     string
+}
+
+// PathSpec is one configured directory under paths.*. Recursive defaults to
+// false; operators opt in per directory when they want nested *.yml files.
+type PathSpec struct {
 	Path      string
-	Raw       map[string]any
-	Defaults  map[string]any
-	Catalog   []string
-	Services  []string
-	Apps      []string
-	Notifiers []string
-	Storages  []string
-	Networks  []string
-	Watches   []string
-	Mounts    []string
-	Runtime   string
-	State     string
-	Templates string
+	Recursive bool
 }
 
 // RuntimeDir returns the runtime root, falling back to the default when unset.

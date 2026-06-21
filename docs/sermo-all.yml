@@ -33,6 +33,9 @@ engine:
   user_lookup_timeout: 250ms   # per-getent lookup timeout; cached in-process
 
 paths:
+  # Directory entries are non-recursive unless a list item uses
+  # `{ path: ..., recursive: true }`. Catalog still reads its immediate
+  # services/apps/libs/patterns category directories.
   catalog:                     # packaged + admin daemon/app/lib definitions
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available

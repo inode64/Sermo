@@ -101,6 +101,7 @@ func validateGlobal(cfg *Config) []Issue {
 		}
 		pathLists := map[string][]string{
 			"apps":      cfg.Global.Apps,
+			"catalog":   cfg.Global.Catalog,
 			"mounts":    cfg.Global.Mounts,
 			"networks":  cfg.Global.Networks,
 			"notifiers": cfg.Global.Notifiers,

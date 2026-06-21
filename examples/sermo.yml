@@ -28,6 +28,9 @@ engine:
   user_lookup_timeout: 250ms
 
 paths:
+  # Directory entries are non-recursive by default. Use
+  # `{ path: /some/dir, recursive: true }` for nested *.yml files.
+  # Catalog always reads its immediate services/apps/libs/patterns categories.
   catalog:
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available

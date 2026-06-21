@@ -51,28 +51,32 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 	if len(o.catalogDirs) > 0 {
 		global.Catalog = absCatalogDirs(o.catalogDirs)
+		global.CatalogPaths = pathSpecsFromPaths(global.Catalog)
 	}
 
-	catalogDirs := global.Catalog
-	if len(catalogDirs) == 0 {
-		catalogDirs = []string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"}
+	catalogPaths := global.CatalogPaths
+	if len(catalogPaths) == 0 {
+		catalogPaths = pathSpecsFromPaths([]string{"/usr/share/sermo/catalog", "/etc/sermo/catalog-available"})
 	}
-	serviceDirs := global.Services
-	if len(serviceDirs) == 0 {
-		serviceDirs = defaultConfigDirs(globalPath, defaultServiceDirs)
-		global.Services = append([]string(nil), serviceDirs...)
+	servicePaths := global.ServicePaths
+	if len(servicePaths) == 0 {
+		servicePaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultServiceDirs))
+		global.Services = pathsFromSpecs(servicePaths)
+		global.ServicePaths = append([]PathSpec(nil), servicePaths...)
 	}
-	appDirs := global.Apps
-	if len(appDirs) == 0 {
-		appDirs = defaultConfigDirs(globalPath, defaultAppDirs)
-		global.Apps = append([]string(nil), appDirs...)
+	appPaths := global.AppPaths
+	if len(appPaths) == 0 {
+		appPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultAppDirs))
+		global.Apps = pathsFromSpecs(appPaths)
+		global.AppPaths = append([]PathSpec(nil), appPaths...)
 	}
-	notifierDirs := global.Notifiers
-	watchDirs := appendPathLists(global.Storages, global.Networks, global.Watches)
-	mountDirs := global.Mounts
-	if len(mountDirs) == 0 {
-		mountDirs = defaultConfigDirs(globalPath, defaultMountDirs)
-		global.Mounts = append([]string(nil), mountDirs...)
+	notifierPaths := global.NotifierPaths
+	watchPaths := appendPathSpecLists(global.StoragePaths, global.NetworkPaths, global.WatchPaths)
+	mountPaths := global.MountPaths
+	if len(mountPaths) == 0 {
+		mountPaths = pathSpecsFromPaths(defaultConfigDirs(globalPath, defaultMountDirs))
+		global.Mounts = pathsFromSpecs(mountPaths)
+		global.MountPaths = append([]PathSpec(nil), mountPaths...)
 	}
 
 	cfg := &Config{
@@ -85,34 +89,33 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 		Mounts:    map[string]*Document{},
 	}
 
-	for _, dir := range catalogDirs {
-		if err := cfg.loadDir(dir); err != nil {
+	for _, spec := range uniquePathSpecs(catalogPaths) {
+		if err := cfg.loadDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
-	loadedServiceDirs := uniquePathList(serviceDirs)
-	for _, dir := range loadedServiceDirs {
-		if err := cfg.loadServiceDir(dir); err != nil {
+	for _, spec := range uniquePathSpecs(servicePaths) {
+		if err := cfg.loadServiceDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
-	for _, dir := range uniquePathList(appDirs) {
-		if err := cfg.loadAppDir(dir); err != nil {
+	for _, spec := range uniquePathSpecs(appPaths) {
+		if err := cfg.loadAppDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
-	for _, dir := range uniquePathList(notifierDirs) {
-		if err := cfg.loadGlobalFragmentDir(dir, "notifiers"); err != nil {
+	for _, spec := range uniquePathSpecs(notifierPaths) {
+		if err := cfg.loadGlobalFragmentDir(spec.Path, "notifiers", spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
-	for _, dir := range uniquePathList(watchDirs) {
-		if err := cfg.loadGlobalFragmentDir(dir, "watches"); err != nil {
+	for _, spec := range uniquePathSpecs(watchPaths) {
+		if err := cfg.loadGlobalFragmentDir(spec.Path, "watches", spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
-	for _, dir := range mountDirs {
-		if err := cfg.loadMountDir(dir); err != nil {
+	for _, spec := range uniquePathSpecs(mountPaths) {
+		if err := cfg.loadMountDir(spec.Path, spec.Recursive); err != nil {
 			return nil, err
 		}
 	}
@@ -145,14 +148,38 @@ func loadGlobal(path string) (Global, error) {
 		g.Defaults = map[string]any{}
 	}
 	if paths, ok := raw["paths"].(map[string]any); ok {
-		g.Catalog = cfgval.StringList(paths["catalog"])
-		g.Services = cfgval.StringList(paths["services"])
-		g.Apps = cfgval.StringList(paths["apps"])
-		g.Notifiers = cfgval.StringList(paths["notifiers"])
-		g.Storages = cfgval.StringList(paths["storages"])
-		g.Networks = cfgval.StringList(paths["networks"])
-		g.Watches = cfgval.StringList(paths["watches"])
-		g.Mounts = cfgval.StringList(paths["mounts"])
+		if g.CatalogPaths, err = pathSpecList(paths["catalog"], "paths.catalog"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.ServicePaths, err = pathSpecList(paths["services"], "paths.services"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.AppPaths, err = pathSpecList(paths["apps"], "paths.apps"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.NotifierPaths, err = pathSpecList(paths["notifiers"], "paths.notifiers"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.StoragePaths, err = pathSpecList(paths["storages"], "paths.storages"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.NetworkPaths, err = pathSpecList(paths["networks"], "paths.networks"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.WatchPaths, err = pathSpecList(paths["watches"], "paths.watches"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		if g.MountPaths, err = pathSpecList(paths["mounts"], "paths.mounts"); err != nil {
+			return Global{}, fmt.Errorf("parse global config %s: %w", path, err)
+		}
+		g.Catalog = pathsFromSpecs(g.CatalogPaths)
+		g.Services = pathsFromSpecs(g.ServicePaths)
+		g.Apps = pathsFromSpecs(g.AppPaths)
+		g.Notifiers = pathsFromSpecs(g.NotifierPaths)
+		g.Storages = pathsFromSpecs(g.StoragePaths)
+		g.Networks = pathsFromSpecs(g.NetworkPaths)
+		g.Watches = pathsFromSpecs(g.WatchPaths)
+		g.Mounts = pathsFromSpecs(g.MountPaths)
 		g.Runtime = cfgval.String(paths["runtime"])
 		g.State = cfgval.String(paths["state"])
 		g.Templates = cfgval.String(paths["templates"])
@@ -192,6 +219,14 @@ func resolveConfigPaths(globalPath string, g *Global) {
 	g.Networks = resolvePathList(base, g.Networks)
 	g.Watches = resolvePathList(base, g.Watches)
 	g.Mounts = resolvePathList(base, g.Mounts)
+	g.CatalogPaths = resolvePathSpecs(base, g.CatalogPaths)
+	g.ServicePaths = resolvePathSpecs(base, g.ServicePaths)
+	g.AppPaths = resolvePathSpecs(base, g.AppPaths)
+	g.NotifierPaths = resolvePathSpecs(base, g.NotifierPaths)
+	g.StoragePaths = resolvePathSpecs(base, g.StoragePaths)
+	g.NetworkPaths = resolvePathSpecs(base, g.NetworkPaths)
+	g.WatchPaths = resolvePathSpecs(base, g.WatchPaths)
+	g.MountPaths = resolvePathSpecs(base, g.MountPaths)
 	if g.Runtime != "" {
 		g.Runtime = resolveConfigPath(base, g.Runtime)
 	}
@@ -225,56 +260,159 @@ func defaultConfigDirs(globalPath string, dirs []string) []string {
 	return resolvePathList(filepath.Dir(filepath.Clean(globalPath)), dirs)
 }
 
-func appendPathLists(lists ...[]string) []string {
-	var out []string
+func pathSpecList(v any, field string) ([]PathSpec, error) {
+	switch t := v.(type) {
+	case nil:
+		return nil, nil
+	case string:
+		if t == "" {
+			return nil, nil
+		}
+		return []PathSpec{{Path: t}}, nil
+	case map[string]any:
+		spec, err := pathSpecFromMap(t, field)
+		if err != nil {
+			return nil, err
+		}
+		return []PathSpec{spec}, nil
+	case []any:
+		out := make([]PathSpec, 0, len(t))
+		for i, item := range t {
+			spec, ok, err := pathSpecFromListItem(item, fmt.Sprintf("%s[%d]", field, i))
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				out = append(out, spec)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("%s must be a path string, {path, recursive} mapping, or list of those", field)
+	}
+}
+
+func pathSpecFromListItem(v any, field string) (PathSpec, bool, error) {
+	switch t := v.(type) {
+	case string:
+		if t == "" {
+			return PathSpec{}, false, nil
+		}
+		return PathSpec{Path: t}, true, nil
+	case map[string]any:
+		spec, err := pathSpecFromMap(t, field)
+		return spec, err == nil, err
+	default:
+		return PathSpec{}, false, fmt.Errorf("%s must be a path string or {path, recursive} mapping", field)
+	}
+}
+
+func pathSpecFromMap(m map[string]any, field string) (PathSpec, error) {
+	for key := range m {
+		switch key {
+		case "path", "recursive":
+		default:
+			return PathSpec{}, fmt.Errorf("%s.%s is not supported; use path and recursive", field, key)
+		}
+	}
+	path, ok := m["path"].(string)
+	if !ok || path == "" {
+		return PathSpec{}, fmt.Errorf("%s.path must be a non-empty string", field)
+	}
+	var recursive bool
+	if raw, present := m["recursive"]; present {
+		recursive, ok = raw.(bool)
+		if !ok {
+			return PathSpec{}, fmt.Errorf("%s.recursive must be a boolean", field)
+		}
+	}
+	return PathSpec{Path: path, Recursive: recursive}, nil
+}
+
+func pathSpecsFromPaths(paths []string) []PathSpec {
+	out := make([]PathSpec, 0, len(paths))
+	for _, path := range paths {
+		if path != "" {
+			out = append(out, PathSpec{Path: path})
+		}
+	}
+	return out
+}
+
+func pathsFromSpecs(specs []PathSpec) []string {
+	out := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		if spec.Path != "" {
+			out = append(out, spec.Path)
+		}
+	}
+	return out
+}
+
+func resolvePathSpecs(base string, specs []PathSpec) []PathSpec {
+	if len(specs) == 0 {
+		return specs
+	}
+	out := make([]PathSpec, len(specs))
+	for i, spec := range specs {
+		out[i] = spec
+		out[i].Path = resolveConfigPath(base, spec.Path)
+	}
+	return out
+}
+
+func appendPathSpecLists(lists ...[]PathSpec) []PathSpec {
+	var out []PathSpec
 	for _, list := range lists {
 		out = append(out, list...)
 	}
 	return out
 }
 
-func uniquePathList(list []string) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(list))
-	for _, dir := range list {
-		if dir == "" {
+func uniquePathSpecs(specs []PathSpec) []PathSpec {
+	seen := map[string]int{}
+	out := make([]PathSpec, 0, len(specs))
+	for _, spec := range specs {
+		if spec.Path == "" {
 			continue
 		}
-		if _, ok := seen[dir]; ok {
+		if idx, ok := seen[spec.Path]; ok {
+			out[idx].Recursive = out[idx].Recursive || spec.Recursive
 			continue
 		}
-		seen[dir] = struct{}{}
-		out = append(out, dir)
+		seen[spec.Path] = len(out)
+		out = append(out, spec)
 	}
 	return out
 }
 
-// loadDir reads every *.yml/*.yaml document in dir, recursing into
-// subdirectories. A `services`/`apps`/`libs`/`patterns` subdirectory tags the
-// catalog documents it holds with that category; files directly in dir default
-// to CategoryService. A missing directory is not an error (a host may not have
-// user catalog documents), but an unreadable one is.
-func (c *Config) loadDir(dir string) error {
-	return c.loadCategoryDir(dir, "")
+// loadDir reads every *.yml/*.yaml document in dir. A
+// `services`/`apps`/`libs`/`patterns` subdirectory tags the catalog documents it
+// holds with that category; files directly in dir default to CategoryService.
+// Recursive controls descent below those base catalog directories. A missing
+// directory is not an error (a host may not have user catalog documents), but an
+// unreadable one is.
+func (c *Config) loadDir(dir string, recursive bool) error {
+	return c.loadCategoryDir(dir, "", recursive)
 }
 
-func (c *Config) loadServiceDir(dir string) error {
-	return c.loadServiceDirEntries(dir)
+func (c *Config) loadServiceDir(dir string, recursive bool) error {
+	return c.loadServiceDirEntries(dir, recursive)
 }
 
-func (c *Config) loadAppDir(dir string) error {
-	return c.loadAppDirEntries(dir)
+func (c *Config) loadAppDir(dir string, recursive bool) error {
+	return c.loadAppDirEntries(dir, recursive)
 }
 
-func (c *Config) loadGlobalFragmentDir(dir string, section string) error {
-	return c.loadGlobalFragmentDirEntries(dir, section)
+func (c *Config) loadGlobalFragmentDir(dir string, section string, recursive bool) error {
+	return c.loadGlobalFragmentDirEntries(dir, section, recursive)
 }
 
-func (c *Config) loadMountDir(dir string) error {
-	return c.loadMountDirEntries(dir)
+func (c *Config) loadMountDir(dir string, recursive bool) error {
+	return c.loadMountDirEntries(dir, recursive)
 }
 
-func (c *Config) loadServiceDirEntries(dir string) error {
+func (c *Config) loadServiceDirEntries(dir string, recursive bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -307,15 +445,18 @@ func (c *Config) loadServiceDirEntries(dir string) error {
 		}
 		c.add(doc)
 	}
+	if !recursive {
+		return nil
+	}
 	for _, name := range subdirs {
-		if err := c.loadServiceDirEntries(filepath.Join(dir, name)); err != nil {
+		if err := c.loadServiceDirEntries(filepath.Join(dir, name), recursive); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Config) loadAppDirEntries(dir string) error {
+func (c *Config) loadAppDirEntries(dir string, recursive bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -348,15 +489,18 @@ func (c *Config) loadAppDirEntries(dir string) error {
 		}
 		c.add(doc)
 	}
+	if !recursive {
+		return nil
+	}
 	for _, name := range subdirs {
-		if err := c.loadAppDirEntries(filepath.Join(dir, name)); err != nil {
+		if err := c.loadAppDirEntries(filepath.Join(dir, name), recursive); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Config) loadGlobalFragmentDirEntries(dir string, section string) error {
+func (c *Config) loadGlobalFragmentDirEntries(dir string, section string, recursive bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -392,15 +536,18 @@ func (c *Config) loadGlobalFragmentDirEntries(dir string, section string) error 
 			return fmt.Errorf("%s: %s config directories only support top-level %s", doc.Path, section, section)
 		}
 	}
+	if !recursive {
+		return nil
+	}
 	for _, name := range subdirs {
-		if err := c.loadGlobalFragmentDirEntries(filepath.Join(dir, name), section); err != nil {
+		if err := c.loadGlobalFragmentDirEntries(filepath.Join(dir, name), section, recursive); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Config) loadMountDirEntries(dir string) error {
+func (c *Config) loadMountDirEntries(dir string, recursive bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -433,15 +580,18 @@ func (c *Config) loadMountDirEntries(dir string) error {
 		}
 		c.add(doc)
 	}
+	if !recursive {
+		return nil
+	}
 	for _, name := range subdirs {
-		if err := c.loadMountDirEntries(filepath.Join(dir, name)); err != nil {
+		if err := c.loadMountDirEntries(filepath.Join(dir, name), recursive); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Config) loadCategoryDir(dir, category string) error {
+func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -479,8 +629,13 @@ func (c *Config) loadCategoryDir(dir, category string) error {
 		sub := category
 		if sub == "" {
 			sub = categoryFromDir(name) // only the top level names a category
+			if sub == "" && !recursive {
+				continue
+			}
+		} else if !recursive {
+			continue
 		}
-		if err := c.loadCategoryDir(filepath.Join(dir, name), sub); err != nil {
+		if err := c.loadCategoryDir(filepath.Join(dir, name), sub, recursive); err != nil {
 			return err
 		}
 	}
