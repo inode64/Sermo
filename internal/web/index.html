@@ -1419,12 +1419,20 @@ function openPanelTarget(target) {
   if (el.tagName === "DETAILS") el.open = true;
   el.scrollIntoView({ block: "start", behavior: "smooth" });
 }
+// themeHealthColor reads the active --ok/--warn/--crit tokens so the favicon and
+// brand dot track light/dark scheme instead of hard-coded palette literals.
+function themeHealthColor(status) {
+  const root = getComputedStyle(document.documentElement);
+  if (status === "critical") return root.getPropertyValue("--crit").trim() || "#cf222e";
+  if (status === "warning") return root.getPropertyValue("--warn").trim() || "#9a6700";
+  return root.getPropertyValue("--ok").trim() || "#1a7f37";
+}
 // setFavicon reflects overall health in the browser tab: green = ok,
 // warning = degraded health, critical = malfunctioning. Until healthIconReady,
 // the neutral HTML/CSS placeholder stays — no optimistic green on first paint.
 function setFavicon(status) {
   if (!healthIconReady) return;
-  const color = status === "critical" ? "#cf222e" : status === "warning" ? "#e8830c" : "#1a7f37";
+  const color = themeHealthColor(status);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="${color}"/></svg>`;
   const link = $("#favicon");
   if (link) link.href = "data:image/svg+xml," + encodeURIComponent(svg);
