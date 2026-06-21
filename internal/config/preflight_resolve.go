@@ -18,9 +18,6 @@ var wholeVarRef = regexp.MustCompile(`^\$\{\s*([^}:][^}]*)\s*\}$`)
 // Command execution itself stays out of config resolution.
 func prepareExpansionInputs(tree map[string]any) []string {
 	var errs []string
-	if _, present := tree["binary"]; present {
-		errs = append(errs, "binary is not supported; use variables.binary with preflight.binary")
-	}
 	errs = append(errs, resolvePreflightResourceVariables(tree)...)
 	applyCommandExportDefaults(tree)
 	return errs
