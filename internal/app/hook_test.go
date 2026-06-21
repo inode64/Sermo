@@ -9,6 +9,17 @@ import (
 	"sermo/internal/execx"
 )
 
+// HookRunnerFunc adapts a plain error-returning function to HookRunner; the
+// returned Result is the zero value (a clean exit 0), so test stubs that signal
+// failure by returning a non-nil error keep working unchanged. It exists only
+// for tests, so it lives here rather than in the production hook.go.
+type HookRunnerFunc func(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) error
+
+// RunHook calls the adapted function, mapping its error to a (zero Result, err).
+func (f HookRunnerFunc) RunHook(ctx context.Context, argv []string, env map[string]string, timeout time.Duration) (execx.Result, error) {
+	return execx.Result{}, f(ctx, argv, env, timeout)
+}
+
 // stubHookRunner returns a fixed result/error, for exercising HookSpec.Run's
 // exit-code and stdout/stderr assertions without spawning a process.
 type stubHookRunner struct {
