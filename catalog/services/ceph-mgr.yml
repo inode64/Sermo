@@ -23,7 +23,6 @@ processes:
   # unambiguously. The mgr binds a dynamic messenger port (no fixed listener),
   # so process liveness — not a tcp probe — is the reliable signal here.
   ceph-mgr:
-    type: command_match
     exe: "${ceph_mgr_binary}"
     user: "${user}"
 

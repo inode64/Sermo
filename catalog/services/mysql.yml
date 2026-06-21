@@ -28,13 +28,10 @@ preflight:
     command: ["${mysql_binary}", "--help", "--verbose"]
     timeout: 15s
 
-processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
+pidfile: "${pidfile}"
 
+processes:
   mysqld:
-    type: command_match
     exe: "${mysql_binary}"
     user: "${user}"
 

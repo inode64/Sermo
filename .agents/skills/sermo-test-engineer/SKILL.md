@@ -69,7 +69,7 @@ operation lock released on every early-return path; exactly one event
 cooldown suppression and max_actions rate limit; manual actions exempt
 missing or zero resolved policy.cooldown rejected
 scheduler: one worker per service; tick skipped (not queued) on overrun
-process discovery; exe matched by exact resolved /proc/<pid>/exe; cmdline used only by explicit command_match.cmd
+process discovery; exe matched by exact resolved /proc/<pid>/exe; cmdline used only by explicit processes.<name>.cmd
 residual handling: non-matching residual yields orphan_processes; no start after
 SIGKILL policy validation
 CLI exit codes (0/1/2/64/75/78)

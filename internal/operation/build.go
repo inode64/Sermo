@@ -263,12 +263,12 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 			}
 			if source == reloadPIDPidfile {
 				if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
-					return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any command_match selector with exact exe and user", pidfile, pid)
+					return fmt.Errorf("reload: pidfile %q resolved pid %d, but it does not match any process selector with exact exe and user", pidfile, pid)
 				}
 			}
 			if source == reloadPIDMain && hasCommandMatchSelector(selectors) {
 				if _, ok := discoverer.StrictMatchPID(pid, selectors); !ok {
-					return fmt.Errorf("reload: MainPID %d does not match any command_match selector with exact exe and user", pid)
+					return fmt.Errorf("reload: MainPID %d does not match any process selector with exact exe and user", pid)
 				}
 			}
 			if err := ctx.Err(); err != nil {
@@ -324,20 +324,11 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 	return 0, "", fmt.Errorf("reload: cannot resolve a pid to signal — the backend exposes no MainPID (OpenRC) and the service declares no pidfile:; add a pidfile: so the signal target can be found")
 }
 
-// reloadPidfile returns the service's pidfile path from its processes section (a
-// pidfile selector, as produced by the `pidfile:` shorthand), used as the signal
+// reloadPidfile returns the service's top-level pidfile path, used as the signal
 // target when the backend has no MainPID (OpenRC).
 func reloadPidfile(tree map[string]any) string {
-	procs, ok := tree["processes"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	for _, v := range procs {
-		if m, ok := v.(map[string]any); ok && cfgval.AsString(m["type"]) == "pidfile" {
-			if paths := cfgval.StringList(m["path"]); len(paths) > 0 {
-				return paths[0]
-			}
-		}
+	if paths := cfgval.StringList(tree["pidfile"]); len(paths) > 0 {
+		return paths[0]
 	}
 	return ""
 }

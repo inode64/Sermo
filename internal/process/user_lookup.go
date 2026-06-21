@@ -45,7 +45,7 @@ type nameLookupResult struct {
 // negativeCacheTTL bounds how long a failed (ok=false) lookup is cached. Positive
 // results are cached for the lookup's lifetime, but caching a miss forever means
 // a user created after the first probe — e.g. one named in kill_only_if or a
-// command_match selector — would never be recognized until the daemon restarts,
+// process selector — would never be recognized until the daemon restarts,
 // silently weakening a force_kill safety decision.
 const negativeCacheTTL = 30 * time.Second
 

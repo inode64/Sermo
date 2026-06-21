@@ -34,7 +34,7 @@ and the invariants below, and update this file in the same change.
    not need to slow down. For active units with no catalog daemon, ask the
    **PID source** because there is no catalog daemon to inherit: a pidfile path
    writes `pidfile:`; with no pidfile, an executable derived from the unit offers
-   a `command_match` process selector. Docker and VM service assistants write a
+   a `processes:` selector. Docker and VM service assistants write a
    per-service `control:` block plus a read-only Docker/libvirt check; they do not
    ask for process selectors because control backends provide the identity.
 4. **Batch.** When more than one target was selected, ask once whether to apply

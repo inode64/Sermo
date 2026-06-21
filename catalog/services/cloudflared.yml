@@ -28,7 +28,6 @@ preflight:
 
 processes:
   main:
-    type: command_match
     exe: "${cloudflared_binary}"
     user: "${user}"
 

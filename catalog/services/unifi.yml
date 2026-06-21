@@ -25,8 +25,8 @@ pidfile: /run/unifi.pid
 # match the controller by cmdline and the db by exe+user when one java binary
 # serves several JVM apps. These also feed the residual reaper on stop.
 processes:
-  controller: { type: command_match, cmd: "java .*unifi", user: unifi }
-  mongo: { type: command_match, exe: "${mongod_binary}", user: unifi }
+  controller: { cmd: "java .*unifi", user: unifi }
+  mongo: { exe: "${mongod_binary}", user: unifi }
 
 checks:
   service:

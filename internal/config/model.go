@@ -250,7 +250,7 @@ type CleanPath struct {
 
 // StopInvariants reads the stopped-state invariants from `stop_policy`: the
 // pidfile path(s) that must be absent after stop (when `pidfile_absent: true`,
-// found by scanning the processes section for pidfile selectors), the files/globs
+// found from the service's top-level `pidfile:`), the files/globs
 // that must be absent (`files_absent`), the master cleanup switch
 // (`clean_after_stop`), and the files/directories to delete on stop
 // (`clean_on_stop`, each a path string or a `{path, recursive}` mapping). The
@@ -266,13 +266,7 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 	clean, _ = sp["clean_after_stop"].(bool)
 	files = cfgval.StringList(sp["files_absent"])
 	if pa, _ := sp["pidfile_absent"].(bool); pa {
-		if procs, ok := tree["processes"].(map[string]any); ok {
-			for _, v := range procs {
-				if m, ok := v.(map[string]any); ok && cfgval.AsString(m["type"]) == "pidfile" {
-					pidfilePaths = append(pidfilePaths, cfgval.StringList(m["path"])...)
-				}
-			}
-		}
+		pidfilePaths = append(pidfilePaths, cfgval.StringList(tree["pidfile"])...)
 	}
 	if raw, ok := sp["clean_on_stop"].([]any); ok {
 		for _, item := range raw {

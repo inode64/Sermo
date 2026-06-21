@@ -82,20 +82,15 @@ func cleanMountPath(path string) string {
 	return filepath.Clean(path)
 }
 
-// expandPidfile desugars a top-level `pidfile: <path>` or candidate list into
-// two things that share the one declaration: (a) a `processes` pidfile selector,
-// so the parent process and its descendants are discovered and monitored, and
-// (b) a `pidfile` health check gated by `requires: [service]`, so a missing or
-// stale pidfile is an error only while the service is active (which means the
-// daemon died or lost its pidfile without the service manager noticing). The key
-// is removed. An existing pidfile selector or a check already named `pidfile` is
-// respected, not overwritten.
+// expandPidfile validates a top-level `pidfile: <path>` or candidate list and
+// adds a gated `pidfile` health check. The top-level declaration remains in the
+// resolved tree as the service's single pidfile source; process discovery and
+// OpenRC signal reload derive their internal pidfile selector from it.
 func expandPidfile(tree map[string]any) []string {
 	raw, present := tree["pidfile"]
 	if !present {
 		return nil
 	}
-	delete(tree, "pidfile")
 	paths := cfgval.StringList(raw)
 	if len(paths) == 0 {
 		return []string{"pidfile must be a non-empty path string or list"}
@@ -107,22 +102,9 @@ func expandPidfile(tree map[string]any) []string {
 		}
 	}
 	pathValue := pidfilePathValue(paths)
+	tree["pidfile"] = pathValue
 
-	// (a) process-tree selector, unless the service already declares one.
-	procs, _ := tree["processes"].(map[string]any)
-	if procs == nil {
-		procs = map[string]any{}
-	}
-	if !hasPidfileSelector(procs) {
-		if _, exists := procs["pidfile"]; !exists {
-			procs["pidfile"] = map[string]any{"type": "pidfile", "path": pathValue}
-		}
-	}
-	if len(procs) > 0 {
-		tree["processes"] = procs
-	}
-
-	// (b) gated health check, unless the service already defines one.
+	// Gated health check, unless the service already defines one.
 	checksMap, _ := tree["checks"].(map[string]any)
 	if checksMap == nil {
 		checksMap = map[string]any{}
@@ -193,19 +175,6 @@ func pidfilePathValue(paths []string) any {
 		out = append(out, path)
 	}
 	return out
-}
-
-// hasPidfileSelector reports whether a processes map already declares a pidfile
-// selector (so the desugar does not add a second one).
-func hasPidfileSelector(procs map[string]any) bool {
-	for _, v := range procs {
-		if m, ok := v.(map[string]any); ok {
-			if cfgval.AsString(m["type"]) == "pidfile" {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // expandAnalyze resolves each check's `analyze` block into the flat rule list the

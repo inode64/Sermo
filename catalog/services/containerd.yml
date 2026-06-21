@@ -25,7 +25,6 @@ socket: "${socket}"
 
 processes:
   main:
-    type: command_match
     exe: "${containerd_binary}"
     user: "${user}"
 

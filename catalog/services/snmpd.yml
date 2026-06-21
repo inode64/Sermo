@@ -15,7 +15,6 @@ pidfile: /run/snmpd.pid
 
 processes:
   main:
-    type: command_match
     exe: "${snmpd_binary}"
     user: "${user}"
 

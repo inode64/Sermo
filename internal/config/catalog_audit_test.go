@@ -258,9 +258,8 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 			if len(errs) != 0 {
 				t.Fatalf("Resolve() errors = %v", errs)
 			}
-			proc := nested(t, resolved.Tree, "processes", "pidfile")
-			if got := cfgval.StringList(proc["path"]); !slices.Equal(got, tc.want) {
-				t.Fatalf("process pidfile = %q, want %q", got, tc.want)
+			if got := cfgval.StringList(resolved.Tree["pidfile"]); !slices.Equal(got, tc.want) {
+				t.Fatalf("pidfile = %q, want %q", got, tc.want)
 			}
 			check := nested(t, resolved.Tree, "checks", "pidfile")
 			if got := cfgval.StringList(check["path"]); !slices.Equal(got, tc.want) {

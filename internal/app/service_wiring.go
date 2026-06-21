@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	"sermo/internal/cfgval"
 	"sermo/internal/checks"
 	"sermo/internal/locks"
 	"sermo/internal/metrics"
@@ -104,7 +105,7 @@ func serviceProcessSelectors(ctx context.Context, tree map[string]any, deps Deps
 
 func noResidentProcess(tree map[string]any) bool {
 	processes, ok := tree["processes"].(map[string]any)
-	return ok && len(processes) == 0
+	return ok && len(processes) == 0 && len(cfgval.StringList(tree["pidfile"])) == 0
 }
 
 func initDerivedProcessSelectors(info servicemgr.ProcInfo) []process.Selector {

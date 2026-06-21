@@ -243,7 +243,7 @@ func TestServiceAssistantRejectsNonAbsolutePidfile(t *testing.T) {
 
 func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	// No pidfile, but an exe was detected: accepting the fallback writes a
-	// command_match process selector.
+	// process selector.
 	env := Env{Daemons: func() ([]DaemonCandidate, error) {
 		return []DaemonCandidate{{Name: "sshd", Title: "OpenSSH", Unit: "sshd", Status: "active", Generic: true, Exe: "/usr/sbin/sshd"}}, nil
 	}}
@@ -255,8 +255,8 @@ func TestServiceAssistantCommandMatchFallback(t *testing.T) {
 	}
 	procs := res.Services["sshd"].(map[string]any)["processes"].(map[string]any)
 	main := procs["main"].(map[string]any)
-	if main["type"] != "command_match" || main["exe"] != "/usr/sbin/sshd" {
-		t.Fatalf("processes.main = %v, want command_match /usr/sbin/sshd", main)
+	if _, present := main["type"]; present || main["exe"] != "/usr/sbin/sshd" {
+		t.Fatalf("processes.main = %v, want /usr/sbin/sshd without type", main)
 	}
 }
 
@@ -274,8 +274,8 @@ func TestServiceAssistantCommandPatternFallback(t *testing.T) {
 	}
 	procs := res.Services["homeassistant"].(map[string]any)["processes"].(map[string]any)
 	main := procs["main"].(map[string]any)
-	if main["type"] != "command_match" || main["cmd"] != `(^|[[:space:]])/usr/bin/hass($|[[:space:]])` || main["user"] != "homeassistant" {
-		t.Fatalf("processes.main = %v, want command_match cmd+user", main)
+	if _, present := main["type"]; present || main["cmd"] != `(^|[[:space:]])/usr/bin/hass($|[[:space:]])` || main["user"] != "homeassistant" {
+		t.Fatalf("processes.main = %v, want cmd+user without type", main)
 	}
 }
 

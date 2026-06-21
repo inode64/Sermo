@@ -67,7 +67,7 @@ func newManager(backend Backend, runner execx.Runner) (Manager, error) {
 
 // MainPID returns the backend's main process ID for a unit.
 // systemd exposes it via `systemctl show -p MainPID`; OpenRC has no uniform
-// equivalent, so it returns false there (pidfile or command_match selectors
+// equivalent, so it returns false there (pidfile or process selectors
 // cover OpenRC).
 func MainPID(runner execx.Runner, backend Backend, unit string) (int, bool) {
 	return MainPIDContext(context.Background(), runner, backend, unit)

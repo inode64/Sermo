@@ -15,7 +15,7 @@ any `security:` toggle that tries to disable them.
 4. **Never SIGKILL by default.** `force_kill` is false unless explicitly enabled.
 5. **Never kill by process name.** A kill requires an exact match on the
    resolved `/proc/<pid>/exe` path **and** the real UID against an explicit
-   `kill_only_if` selector. A `command_match.cmd` regex may narrow process
+   `kill_only_if` selector. A `processes.<name>.cmd` regex may narrow process
    discovery for shared binaries, but cmdline never authorizes a kill; a process
    whose exe cannot be resolved (permission, or a `(deleted)` binary) is never
    killed — it is reported as a residual instead.
@@ -227,7 +227,7 @@ Kill decisions depend on how process facts are read, so this is fixed:
   while keeping the Sermo binary static. If a configured name cannot be
   resolved, the selector fails closed and no process is matched or signaled by
   that name. Numeric UID/GID selectors remain deterministic.
-- **Cmdline** is normally display/logging data, but a `command_match.cmd` field
+- **Cmdline** is normally display/logging data, but a `processes.<name>.cmd` field
   is an explicit RE2 regex over the joined argv. Use it only to make discovery
   more specific when the same executable runs several roles, e.g. Java or QEMU
   wrappers. Cmdline is spoofable, so it does not satisfy `kill_only_if` and does
@@ -240,12 +240,12 @@ Kill decisions depend on how process facts are read, so this is fixed:
   is never signaled.
 - **Native signal reloads use the same identity model.** On OpenRC, or any
   service with no backend `MainPID`, the pidfile PID is signaled only after it
-  matches a `command_match` selector with exact `exe` and `user`. Catalog authors
+  matches a `processes:` selector with exact `exe` and `user`. Catalog authors
   must verify each shipped init script, pidfile fallback and identity selector
   together before declaring `reload.signal`.
 
 Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
-→ configured pidfiles → `command_match` selectors → child process tree from
+→ configured pidfiles → `processes:` selectors → child process tree from
 `/proc`, deduplicated by PID.
 
 ## Stop and signal escalation
