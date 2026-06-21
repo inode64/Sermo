@@ -846,41 +846,246 @@ path: /data
 	}
 }
 
-func TestLoadWatchFragmentsFromStorageDir(t *testing.T) {
-	root := t.TempDir()
-	storages := filepath.Join(root, "storages")
-	if err := os.MkdirAll(filepath.Join(storages, "volume"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	global := filepath.Join(root, "sermo.yml")
-	if err := os.WriteFile(global, []byte(`
+func TestLoadPathSpecsRecursiveOptIn(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": `
 paths:
-  storages: [storages]
+  catalog:
+    - path: @ROOT@/catalog-flat
+    - path: @ROOT@/catalog-recursive
+      recursive: true
+  services:
+    - path: @ROOT@/services-flat
+    - path: @ROOT@/services-recursive
+      recursive: true
+  apps:
+    - path: @ROOT@/apps-flat
+    - path: @ROOT@/apps-recursive
+      recursive: true
+  notifiers:
+    - path: @ROOT@/notifiers-flat
+    - path: @ROOT@/notifiers-recursive
+      recursive: true
+  storages:
+    - path: @ROOT@/storages-flat
+    - path: @ROOT@/storages-recursive
+      recursive: true
+  networks:
+    - path: @ROOT@/networks-flat
+    - path: @ROOT@/networks-recursive
+      recursive: true
+  watches:
+    - path: @ROOT@/watches-flat
+    - path: @ROOT@/watches-recursive
+      recursive: true
+  mounts:
+    - path: @ROOT@/mounts-flat
+    - path: @ROOT@/mounts-recursive
+      recursive: true
+  runtime: /run/sermo
 defaults:
   policy: { cooldown: 5m }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(storages, "volume", "storage-root.yml"), []byte(`
+notify: [ops]
+`,
+		"catalog-flat/services/direct-daemon.yml": `
+kind: daemon
+name: direct-daemon
+`,
+		"catalog-flat/services/deep/skipped-daemon.yml": `
+kind: daemon
+name: skipped-daemon
+`,
+		"catalog-recursive/services/deep/recursive-daemon.yml": `
+kind: daemon
+name: recursive-daemon
+`,
+		"services-flat/direct-service.yml": `
+kind: service
+name: direct-service
+service: direct-service
+`,
+		"services-flat/deep/skipped-service.yml": `
+kind: service
+name: skipped-service
+service: skipped-service
+`,
+		"services-recursive/deep/recursive-service.yml": `
+kind: service
+name: recursive-service
+service: recursive-service
+`,
+		"apps-flat/direct-app.yml": `
+kind: app
+name: direct-app
+variables: { binary: /bin/true }
+`,
+		"apps-flat/deep/skipped-app.yml": `
+kind: app
+name: skipped-app
+variables: { binary: /bin/true }
+`,
+		"apps-recursive/deep/recursive-app.yml": `
+kind: app
+name: recursive-app
+variables: { binary: /bin/true }
+`,
+		"notifiers-flat/ops.yml": `
+notifiers:
+  ops:
+    enabled: false
+    type: email
+`,
+		"notifiers-flat/deep/skipped-notifier.yml": `
+notifiers:
+  skipped-notifier:
+    enabled: false
+    type: email
+`,
+		"notifiers-recursive/deep/team.yml": `
+notifiers:
+  team:
+    enabled: false
+    type: email
+`,
+		"storages-flat/root.yml": `
 watches:
-  storage-root:
-    check: { type: storage, path: /, used_pct: { op: ">=", value: 90 } }
-    then:
-      hook: { command: [/bin/true] }
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+  storage-direct:
+    check: { type: storage, path: /, used_pct: { op: ">=", value: "90%" } }
+    then: { notify: [ops] }
+`,
+		"storages-flat/deep/skipped.yml": `
+watches:
+  storage-skipped:
+    check: { type: storage, path: /tmp, used_pct: { op: ">=", value: "90%" } }
+    then: { notify: [ops] }
+`,
+		"storages-recursive/deep/root.yml": `
+watches:
+  storage-recursive:
+    check: { type: storage, path: /var, used_pct: { op: ">=", value: "90%" } }
+    then: { notify: [ops] }
+`,
+		"networks-flat/ping.yml": `
+watches:
+  network-direct:
+    check: { type: icmp, host: 192.0.2.1 }
+    metrics:
+      state:
+        expect: up
+        then: { notify: [ops] }
+`,
+		"networks-flat/deep/skipped.yml": `
+watches:
+  network-skipped:
+    check: { type: icmp, host: 192.0.2.2 }
+    metrics:
+      state:
+        expect: up
+        then: { notify: [ops] }
+`,
+		"networks-recursive/deep/ping.yml": `
+watches:
+  network-recursive:
+    check: { type: icmp, host: 192.0.2.3 }
+    metrics:
+      state:
+        expect: up
+        then: { notify: [ops] }
+`,
+		"watches-flat/load.yml": `
+watches:
+  load-direct:
+    check: { type: load, load5: { op: ">", value: 2 } }
+    then: { notify: [ops] }
+`,
+		"watches-flat/deep/skipped.yml": `
+watches:
+  load-skipped:
+    check: { type: load, load5: { op: ">", value: 3 } }
+    then: { notify: [ops] }
+`,
+		"watches-recursive/deep/load.yml": `
+watches:
+  load-recursive:
+    check: { type: load, load5: { op: ">", value: 4 } }
+    then: { notify: [ops] }
+`,
+		"mounts-flat/direct-mount.yml": `
+kind: mount
+name: direct-mount
+path: /mnt/direct
+`,
+		"mounts-flat/deep/skipped-mount.yml": `
+kind: mount
+name: skipped-mount
+path: /mnt/skipped
+`,
+		"mounts-recursive/deep/recursive-mount.yml": `
+kind: mount
+name: recursive-mount
+path: /mnt/recursive
+`,
+	})
 
 	cfg, err := Load(global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+
+	for _, name := range []string{"direct-daemon", "recursive-daemon"} {
+		if _, ok := cfg.Daemons[name]; !ok {
+			t.Fatalf("daemon %q was not loaded", name)
+		}
+	}
+	if _, ok := cfg.Daemons["skipped-daemon"]; ok {
+		t.Fatalf("non-recursive catalog path loaded nested daemon")
+	}
+	for _, name := range []string{"direct-service", "recursive-service"} {
+		if _, ok := cfg.Services[name]; !ok {
+			t.Fatalf("service %q was not loaded", name)
+		}
+	}
+	if _, ok := cfg.Services["skipped-service"]; ok {
+		t.Fatalf("non-recursive services path loaded nested service")
+	}
+	for _, name := range []string{"direct-app", "recursive-app"} {
+		if _, ok := cfg.Apps[name]; !ok {
+			t.Fatalf("app %q was not loaded", name)
+		}
+	}
+	if _, ok := cfg.Apps["skipped-app"]; ok {
+		t.Fatalf("non-recursive apps path loaded nested app")
+	}
+	notifiers := cfg.Notifiers()
+	for _, name := range []string{"ops", "team"} {
+		if _, ok := notifiers[name]; !ok {
+			t.Fatalf("notifier %q was not loaded: %v", name, notifiers)
+		}
+	}
+	if _, ok := notifiers["skipped-notifier"]; ok {
+		t.Fatalf("non-recursive notifiers path loaded nested notifier")
+	}
 	watches, _ := cfg.Global.Raw["watches"].(map[string]any)
-	if _, ok := watches["storage-root"]; !ok {
-		t.Fatalf("watch fragment not loaded: %v", watches)
+	for _, name := range []string{"storage-direct", "storage-recursive", "network-direct", "network-recursive", "load-direct", "load-recursive"} {
+		if _, ok := watches[name]; !ok {
+			t.Fatalf("watch %q was not loaded: %v", name, watches)
+		}
+	}
+	for _, name := range []string{"storage-skipped", "network-skipped", "load-skipped"} {
+		if _, ok := watches[name]; ok {
+			t.Fatalf("non-recursive watch path loaded nested watch %q", name)
+		}
+	}
+	for _, name := range []string{"direct-mount", "recursive-mount"} {
+		if _, ok := cfg.Mounts[name]; !ok {
+			t.Fatalf("mount %q was not loaded", name)
+		}
+	}
+	if _, ok := cfg.Mounts["skipped-mount"]; ok {
+		t.Fatalf("non-recursive mounts path loaded nested mount")
 	}
 	if issues := Validate(cfg); len(issues) != 0 {
-		t.Fatalf("fragment config should validate, got %v", issues)
+		t.Fatalf("recursive path config should validate, got %v", issues)
 	}
 }
 
