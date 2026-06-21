@@ -77,14 +77,15 @@ CLI exit codes (0/1/2/64/75/78)
 
 ## Fixtures
 
-Recommended fixture layout:
+Recommended fixture layout. Preflight is not a standalone package: config
+resolution fixtures belong under `internal/config`, while daemon/web preflight
+fixtures belong under `internal/app`.
 
 ```text
 internal/config/testdata/
 internal/rules/testdata/
 internal/servicemgr/testdata/
 internal/process/testdata/
-internal/preflight/testdata/
 internal/locks/testdata/
 internal/metrics/testdata/
 internal/operation/testdata/
