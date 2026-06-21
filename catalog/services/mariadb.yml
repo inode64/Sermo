@@ -33,7 +33,6 @@ preflight:
 
 processes:
   mariadbd:
-    type: command_match
     exe: "${mariadb_binary}"
     user: "${user}"
 

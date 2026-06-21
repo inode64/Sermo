@@ -14,7 +14,6 @@ socket: /run/rpcbind.sock
 
 processes:
   main:
-    type: command_match
     exe: "${rpcbind_binary}"
     user: root
 

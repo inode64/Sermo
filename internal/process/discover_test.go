@@ -338,12 +338,12 @@ func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 
 func TestParseSelectors(t *testing.T) {
 	tree := map[string]any{
+		"pidfile": "/run/x.pid",
 		"processes": map[string]any{
-			"pidfile": map[string]any{"type": "pidfile", "path": "/run/x.pid"},
-			"command": map[string]any{"type": "command_match", "exe": "/opt/sermo-test/mysqld", "user": "mysql"},
-			"bogus":   map[string]any{"type": "weird"},
-			"nopath":  map[string]any{"type": "pidfile"},
-			"user":    map[string]any{"type": "command_match", "user": "mysql"},
+			"command": map[string]any{"exe": "/opt/sermo-test/mysqld", "user": "mysql"},
+			"legacy":  map[string]any{"type": "command_match", "exe": "/opt/sermo-test/mysqld"},
+			"nopath":  map[string]any{"path": "/run/legacy.pid"},
+			"user":    map[string]any{"user": "mysql"},
 		},
 	}
 	selectors, warnings := ParseSelectors(tree)
@@ -351,7 +351,7 @@ func TestParseSelectors(t *testing.T) {
 		t.Fatalf("selectors = %+v, want 2 valid", selectors)
 	}
 	if len(warnings) != 3 {
-		t.Fatalf("warnings = %v, want 3 (bogus type, missing path, partial command_match)", warnings)
+		t.Fatalf("warnings = %v, want 3 (legacy type, path field, partial selector)", warnings)
 	}
 }
 
@@ -367,7 +367,7 @@ func TestParseSelectorsCanonicalizesExe(t *testing.T) {
 	}
 	tree := map[string]any{
 		"processes": map[string]any{
-			"main": map[string]any{"type": "command_match", "exe": link},
+			"main": map[string]any{"exe": link},
 		},
 	}
 

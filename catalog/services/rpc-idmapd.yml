@@ -10,7 +10,6 @@ apps: [rpc-idmapd]
 
 processes:
   main:
-    type: command_match
     exe: "${rpc_idmapd_binary}"
     user: root
 

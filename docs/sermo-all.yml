@@ -417,10 +417,10 @@ commands:                      # informational or reserved names such as version
     command: ["${binary}", "status"]
     timeout: 5s
 
-# pidfile auto-wires process-tree monitoring and a requires:[service] health check
-# unless the service already declares an equivalent process selector/check. Use
-# a list when a daemon has several distro-specific pidfile candidates.
-pidfile: /run/demo.pid
+# pidfile auto-wires internal process-tree monitoring and a requires:[service]
+# health check unless the service already declares an equivalent check. Use a
+# list when a daemon has several distro-specific pidfile candidates.
+pidfile: [/run/demo.pid, /run/demo/demo.pid]
 
 # socket auto-wires a requires:[service] health check. It may reference a
 # variable and may be optional for socket-activated or distro-specific daemons.
@@ -454,16 +454,11 @@ postflight:                    # assert health after start/restart/reload/resume
     requires: [http]
 
 processes:                     # discovery selectors (used by metrics/reaper)
-  main:
-    type: pidfile
-    path: [/run/demo.pid, /run/demo/demo.pid]
   workers:
-    type: command_match
     exe: "${binary}"           # exact resolved /proc/<pid>/exe
     user: "${user}"
     group: "${group}"
   java-worker:
-    type: command_match
     cmd: "java .*demo-worker"  # Go/RE2 regex over cmdline
     user: "${user}"
 

@@ -29,10 +29,7 @@ defaults:
 kind: service
 name: mysql-main
 service: mysql
-processes:
-  pidfile:
-    type: pidfile
-    path: `+pidfile+`
+pidfile: `+pidfile+`
 `)
 	return global
 }

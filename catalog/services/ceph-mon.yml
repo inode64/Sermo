@@ -26,7 +26,6 @@ processes:
   # Exactly one ceph-mon runs per host, so an exe+user match selects it
   # unambiguously.
   ceph-mon:
-    type: command_match
     exe: "${ceph_mon_binary}"
     user: "${user}"
 

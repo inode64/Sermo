@@ -62,7 +62,7 @@ func (d Discoverer) resolveGroup() UserResolver {
 	return DefaultUserLookup().ResolveGroup
 }
 
-// Discover applies pidfile then command_match selectors, then adds descendants
+// Discover applies pidfile then command selectors, then adds descendants
 // from the process tree, deduplicated by PID. Non-fatal problems
 // (missing pidfile, dead pid) are returned as warnings.
 func (d Discoverer) Discover(selectors []Selector) ([]Process, []string) {
@@ -201,7 +201,7 @@ func (d Discoverer) ObserveState(exe, user string) string {
 	}
 }
 
-// StrictMatchPID reports whether pid currently matches a command_match selector
+// StrictMatchPID reports whether pid currently matches a process selector
 // that declares both exact resolved exe and real user. Pidfile-only evidence is
 // intentionally ignored: callers that are about to signal a process need the
 // stronger identity check used by the signaling safety invariants.
@@ -225,7 +225,7 @@ func (d Discoverer) StrictMatchPID(pid int, selectors []Selector) (Process, bool
 	return Process{}, false
 }
 
-// matches reports whether a process satisfies a command_match selector. Every
+// matches reports whether a process satisfies a command selector. Every
 // configured field is ANDed. Exe is matched by exact resolved /proc/<pid>/exe;
 // cmd is an explicit regex over argv used only to narrow discovery for shared
 // binaries, not to authorize signaling.
@@ -373,15 +373,24 @@ func ReadPidfile(path string) (int, error) {
 	return pid, nil
 }
 
-// ParseSelectors extracts the `processes` section of a resolved service tree
-// into typed selectors, reporting unknown or malformed entries as warnings.
+// ParseSelectors extracts typed process selectors from a resolved service tree.
+// Top-level `pidfile:` becomes an internal pidfile selector. Public
+// `processes:` entries are command-match selectors and use exe/cmd directly.
 func ParseSelectors(tree map[string]any) ([]Selector, []string) {
-	raw, ok := tree["processes"].(map[string]any)
-	if !ok {
-		return nil, nil
+	var selectors []Selector
+	if paths := cfgval.StringList(tree["pidfile"]); len(paths) > 0 {
+		selectors = append(selectors, Selector{
+			Name:  "pidfile",
+			Type:  SelectorPidfile,
+			Paths: paths,
+		})
 	}
 
-	var selectors []Selector
+	raw, ok := tree["processes"].(map[string]any)
+	if !ok {
+		return selectors, nil
+	}
+
 	var warnings []string
 	names := make([]string, 0, len(raw))
 	for name := range raw {
@@ -395,37 +404,41 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
 			continue
 		}
-		sel := Selector{Name: name, Type: cfgval.AsString(entry["type"])}
-		switch sel.Type {
-		case SelectorPidfile:
-			sel.Paths = cfgval.StringList(entry["path"])
-			if len(sel.Paths) == 0 {
-				warnings = append(warnings, fmt.Sprintf("pidfile selector %q has no path", name))
-				continue
-			}
-		case SelectorCommandMatch:
-			sel.Exe = cfgval.AsString(entry["exe"])
-			sel.Cmd = cfgval.AsString(entry["cmd"])
-			sel.User = cfgval.AsString(entry["user"])
-			sel.Group = cfgval.AsString(entry["group"])
-			if sel.Exe != "" {
-				sel.exePath = canonicalizePath(sel.Exe)
-			}
-			if sel.Exe == "" && sel.Cmd == "" {
-				warnings = append(warnings, fmt.Sprintf("command_match selector %q requires exe or cmd", name))
-				continue
-			}
-			if sel.Cmd != "" {
-				re, err := regexp.Compile(sel.Cmd)
-				if err != nil {
-					warnings = append(warnings, fmt.Sprintf("command_match selector %q has an invalid cmd regex: %v", name, err))
-					continue
-				}
-				sel.cmdRe = re
-			}
-		default:
-			warnings = append(warnings, fmt.Sprintf("process selector %q has unknown type %q", name, sel.Type))
+		if name == "pidfile" {
+			warnings = append(warnings, `process selector "pidfile" is reserved; declare pidfile: at service level`)
 			continue
+		}
+		if typ := cfgval.AsString(entry["type"]); typ != "" {
+			warnings = append(warnings, fmt.Sprintf("process selector %q uses unsupported type field; use exe/cmd directly", name))
+			continue
+		}
+		if _, hasPath := entry["path"]; hasPath {
+			warnings = append(warnings, fmt.Sprintf("process selector %q uses unsupported path field; declare pidfile: at service level", name))
+			continue
+		}
+
+		sel := Selector{
+			Name:  name,
+			Type:  SelectorCommandMatch,
+			Exe:   cfgval.AsString(entry["exe"]),
+			Cmd:   cfgval.AsString(entry["cmd"]),
+			User:  cfgval.AsString(entry["user"]),
+			Group: cfgval.AsString(entry["group"]),
+		}
+		if sel.Exe != "" {
+			sel.exePath = canonicalizePath(sel.Exe)
+		}
+		if sel.Exe == "" && sel.Cmd == "" {
+			warnings = append(warnings, fmt.Sprintf("process selector %q requires exe or cmd", name))
+			continue
+		}
+		if sel.Cmd != "" {
+			re, err := regexp.Compile(sel.Cmd)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("process selector %q has an invalid cmd regex: %v", name, err))
+				continue
+			}
+			sel.cmdRe = re
 		}
 		selectors = append(selectors, sel)
 	}

@@ -532,7 +532,7 @@ func TestRestartOrphanProcessesDoesNotStart(t *testing.T) {
 
 func TestRestartDiscoveryErrorDoesNotStart(t *testing.T) {
 	h := defaultHarness()
-	h.discoverErrs = []error{errors.New("selector config: command_match selector has invalid cmd regex")}
+	h.discoverErrs = []error{errors.New("selector config: process selector has invalid cmd regex")}
 	res := h.restart(t)
 	if res.Status != ResultFailed {
 		t.Fatalf("status = %q, want failed", res.Status)
@@ -632,7 +632,7 @@ func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 		Service:    "mysql-main",
 		Unit:       "mysqld",
 		Backend:    "systemd",
-		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"type": "command_match", "user": "mysql"}}},
+		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"user": "mysql"}}},
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
@@ -689,7 +689,7 @@ func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 		Service:    "mysql-main",
 		Unit:       "mysqld",
 		Backend:    "systemd",
-		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"type": "command_match", "exe": "/usr/sbin/mysqld", "user": "mysql"}}},
+		Tree:       map[string]any{"processes": map[string]any{"main": map[string]any{"exe": "/usr/sbin/mysqld", "user": "mysql"}}},
 		Manager:    &fakeManager{status: servicemgr.StatusActive},
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
@@ -717,9 +717,7 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 		Unit:    "mysqld",
 		Backend: "systemd",
 		Tree: map[string]any{
-			"processes": map[string]any{
-				"pid": map[string]any{"type": "pidfile", "path": filepath.Join(dir, "missing.pid")},
-			},
+			"pidfile": filepath.Join(dir, "missing.pid"),
 		},
 		Manager:    mgr,
 		Locker:     &locker,

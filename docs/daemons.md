@@ -158,9 +158,9 @@ reload:
   when the command must always run.
 - **Signal target.** The signal goes to systemd's `MainPID`, or — on OpenRC, or
   any unit with no MainPID — to the PID in the service's `pidfile:`. The pidfile
-  fallback is only used when that PID also matches a `processes:` `command_match`
-  selector with exact `exe` and `user`; a stale pidfile must not signal an
-  unrelated process. A signal reload with neither target available fails. Daemons
+  fallback is only used when that PID also matches a `processes:` selector with
+  exact `exe` and `user`; a stale pidfile must not signal an unrelated process.
+  A signal reload with neither target available fails. Daemons
   without pidfiles reload by signal only on systemd; on OpenRC they rely on the
   init script's own `reload` (`when: auto`).
 
@@ -178,10 +178,10 @@ only the platform where the profile was first written.
    script defines `reload()`. If a host lacks that path, Sermo's native fallback
    must still be safe.
 3. For any OpenRC-capable `reload.signal`, declare a canonical `/run/...`
-   `pidfile:` candidate and a `processes.command_match` selector with exact
-   `exe` and `user`. The executable must be the resolved `/proc/<pid>/exe` path
-   (usually through the linked app's binary variable), and the user should be a
-   service variable so local packaging differences can override it.
+   `pidfile:` candidate and a `processes:` selector with exact `exe` and `user`.
+   The executable must be the resolved `/proc/<pid>/exe` path (usually through
+   the linked app's binary variable), and the user should be a service variable
+   so local packaging differences can override it.
 4. If OpenRC scripts differ by distribution, encode the real pidfile candidates
    as a list or an `os:` branch. Do not ship a single path that was verified on
    only one distro.
@@ -359,9 +359,9 @@ example `versions: { from: "/var/lib/ceph/osd/ceph-${n}" }`; the daemon links
 "ceph-osd@${n}"`. An explicit `hostname` variable (or `SERMO_HOSTNAME`) wins.
 
 ⁴ `${user}` and `${pidfile}` are fallbacks: a daemon's own `user` (a service
-account such as `www-data`) or `pidfile` variable always wins. They pair with the
-pidfile selector — e.g. `processes.main: { type: pidfile, path: "${pidfile}" }` —
-and the `command_match` user — `user: "${user}"`.
+account such as `www-data`) or `pidfile` variable always wins. Put the pidfile
+variable in the service-level `pidfile: "${pidfile}"`, and use `user: "${user}"`
+inside any `processes:` selector that should be tied to the service account.
 
 Runtime paths in Sermo config use the canonical `/run` spelling. Do not write
 new `/var/run` pidfiles or sockets in catalog daemons, generated services or
@@ -429,19 +429,17 @@ key in its parent, the selected branch *replaces* the value (rather than merging
 which is handy for OS-specific candidate lists such as pidfile paths:
 
 ```yaml
-processes:
-  main:
-    type: pidfile
-    path:                       # the resolved value becomes the OS's list
-      os:
-        fedora: [/run/postgres.pid]
-        gentoo: [/run/postgres${port}.pid, /run/postgres.pid]
-        default: [/run/postgres.pid]
+pidfile:                        # the resolved value becomes the OS's list
+  os:
+    fedora: [/run/postgres.pid]
+    gentoo: [/run/postgres${port}.pid, /run/postgres.pid]
+    default: [/run/postgres.pid]
 ```
 
-A **pidfile** selector's `path` accepts a single path or a **list of candidates**;
-discovery tries them in order and uses the first that points at a running process
-(so per-OS or versioned pidfile locations all resolve without personal config).
+The service-level `pidfile:` accepts a single path or a **list of candidates**.
+Discovery tries them in order and uses the first that points at a running
+process, so per-OS or versioned pidfile locations all resolve without personal
+config.
 
 For oneshot loaders that do not keep a resident process (for example firewall
 loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
@@ -471,7 +469,6 @@ checks:
 
 processes:
   qemu:
-    type: command_match
     exe: /usr/bin/qemu-system-x86_64
     cmd: "web01|2b3f3d26-bb45-4b25-b65a-1e3ef86fc1a4"
     user: qemu
@@ -503,9 +500,9 @@ from Sermo's monitor pause (`unmonitor`).
 
 Process discovery is intentionally explicit in this first VM integration. If you
 want process metrics or residual-process reporting for the QEMU process, add a
-restrictive `processes.command_match` selector as above: exact `exe` and `user`
-plus a `cmd` regex that narrows the shared QEMU binary to the intended domain or
-UUID. The cmdline selector narrows discovery; residual signaling is still
+restrictive `processes:` selector as above: exact `exe` and `user` plus a `cmd`
+regex that narrows the shared QEMU binary to the intended domain or UUID. The
+cmdline selector narrows discovery; residual signaling is still
 authorized only by `stop_policy.kill_only_if`.
 
 `sermoctl wizard vm` can generate this `kind: service` shape from domains
@@ -623,15 +620,16 @@ also_apply: [nginx, varnish]
 `also_apply` (other services) and `also_service` (this service's init units) are
 complementary; a service may use both.
 
-### `command_match` by cmdline / group
+### `processes:` by executable or cmdline
 
-A `command_match` selector matches a process by the **AND** of the fields you
-set; at least one of `exe`/`cmd` is required:
+A `processes:` selector matches a process by the **AND** of the fields you set;
+at least one of `exe`/`cmd` is required. The map key is the selector's role name
+in status, metrics and alerts:
 
 ```yaml
 processes:
-  unifi: { type: command_match, cmd: "java .*unifi", user: unifi, group: unifi }
-  mongo: { type: command_match, exe: "${mongod_binary}", user: unifi }
+  unifi: { cmd: "java .*unifi", user: unifi, group: unifi }
+  mongo: { exe: "${mongod_binary}", user: unifi }
 ```
 
 - `exe` — exact resolved `/proc/<pid>/exe` (fail-safe; never cmdline).
@@ -1015,8 +1013,7 @@ variables:
   port:    3306
   pidfile: /run/dbserver/main.pid
   config:  /etc/dbserver/main.cnf
-processes:
-  pidfile: { type: pidfile, path: "${pidfile}" }
+pidfile: "${pidfile}"
 checks:
   tcp:    { type: tcp, port: "${port}" }
   config: { type: command, command: ["dbserverd", "--defaults-file=${config}", "--help"] }

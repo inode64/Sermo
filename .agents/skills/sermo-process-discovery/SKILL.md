@@ -20,7 +20,7 @@ user real UID from /proc/<pid>/status, matched exactly
 ```
 
 `cmdline` may be used only when the operator explicitly configures
-`command_match.cmd`, as a narrowing regex for shared binaries or different
+`processes.<name>.cmd`, as a narrowing regex for shared binaries or different
 argument sets. It never authorizes a kill; kill permission still comes from
 `stop_policy.kill_only_if` matching exact resolved exe and real UID. If
 `/proc/<pid>/exe` is unreadable or "(deleted)" (binary replaced after an
@@ -43,13 +43,10 @@ listening port owned by PID
 Support discovery by:
 
 ```yaml
-processes:
-  main:
-    type: pidfile
-    path: /run/mysqld/mysqld.pid
+pidfile: /run/mysqld/mysqld.pid
 
+processes:
   workers:
-    type: command_match
     exe: /usr/sbin/apache2
     user: www-data
 ```
@@ -113,7 +110,7 @@ SIGTERM path
 SIGKILL blocked by policy
 SIGKILL allowed with kill_only_if
 name-only matching rejected
-exe matched exactly (substring/basename rejected); cmdline used only by explicit command_match.cmd
+exe matched exactly (substring/basename rejected); cmdline used only by explicit processes.<name>.cmd
 unresolvable or "(deleted)" exe never matches
 residual not matching kill_only_if is never signalled; result is orphan_processes
 no start after a stop that left orphans

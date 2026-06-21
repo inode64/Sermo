@@ -160,25 +160,24 @@ func validateProcesses(tree map[string]any, add addFunc) {
 			add("%s must be a mapping", path)
 			continue
 		}
-		switch typ := cfgval.String(entry["type"]); typ {
-		case "pidfile":
-			if len(cfgval.StringList(entry["path"])) == 0 {
-				add("%s.path is required for a pidfile selector", path)
+		if name == "pidfile" {
+			add("%s is reserved; declare pidfile: at service level", path)
+			continue
+		}
+		if _, present := entry["type"]; present {
+			add("%s.type is not supported; use processes.%s.exe or processes.%s.cmd directly", path, name, name)
+		}
+		if _, present := entry["path"]; present {
+			add("%s.path is not supported; declare pidfile: at service level", path)
+		}
+		exe, cmd := cfgval.String(entry["exe"]), cfgval.String(entry["cmd"])
+		if exe == "" && cmd == "" {
+			add("%s requires exe or cmd", path)
+		}
+		if cmd != "" {
+			if _, err := regexp.Compile(cmd); err != nil {
+				add("%s.cmd is not a valid regex: %v", path, err)
 			}
-		case "command_match":
-			exe, cmd := cfgval.String(entry["exe"]), cfgval.String(entry["cmd"])
-			if exe == "" && cmd == "" {
-				add("%s command_match requires exe or cmd", path)
-			}
-			if cmd != "" {
-				if _, err := regexp.Compile(cmd); err != nil {
-					add("%s command_match cmd is not a valid regex: %v", path, err)
-				}
-			}
-		case "":
-			add("%s.type is required", path)
-		default:
-			add("%s.type %q is not one of pidfile, command_match", path, typ)
 		}
 	}
 }
@@ -313,8 +312,8 @@ func validateDockerControl(control map[string]any, add addFunc) {
 // when the init backend cannot (`when: auto`) or instead of it (`when: always`).
 // Exactly one of `signal` (a known signal name) or `command` (an array) is
 // required; `when`, when present, must be `auto` or `always`. A signal reload
-// on OpenRC (or a service with only OpenRC units) also needs a pidfile selector
-// plus a command_match selector with exact exe and user so the signal target can
+// on OpenRC (or a service with only OpenRC units) also needs top-level pidfile:
+// plus a process selector with exact exe and user so the signal target can
 // be verified before signaling.
 func validateReload(tree map[string]any, backend string, add addFunc) {
 	raw, present := tree["reload"]
@@ -340,10 +339,10 @@ func validateReload(tree map[string]any, backend string, add addFunc) {
 		} else if reloadSignalNeedsPidfileIdentity(tree, backend) {
 			pidfile, identity := reloadSignalPidfileIdentity(tree)
 			if !pidfile {
-				add("reload.signal requires a processes pidfile selector when the service runs on OpenRC (no MainPID)")
+				add("reload.signal requires top-level pidfile: when the service runs on OpenRC (no MainPID)")
 			}
 			if !identity {
-				add("reload.signal requires a processes command_match selector with both exe and user so the pidfile PID can be verified before signaling")
+				add("reload.signal requires a processes selector with both exe and user so the pidfile PID can be verified before signaling")
 			}
 		}
 	case hasCmd:
@@ -374,24 +373,18 @@ func reloadSignalNeedsPidfileIdentity(tree map[string]any, backend string) bool 
 }
 
 func reloadSignalPidfileIdentity(tree map[string]any) (pidfile, identity bool) {
+	pidfile = len(cfgval.StringList(tree["pidfile"])) > 0
 	procs, ok := tree["processes"].(map[string]any)
 	if !ok {
-		return false, false
+		return pidfile, false
 	}
 	for _, raw := range procs {
 		entry, ok := raw.(map[string]any)
 		if !ok {
 			continue
 		}
-		switch cfgval.String(entry["type"]) {
-		case "pidfile":
-			if len(cfgval.StringList(entry["path"])) > 0 {
-				pidfile = true
-			}
-		case "command_match":
-			if cfgval.String(entry["exe"]) != "" && cfgval.String(entry["user"]) != "" {
-				identity = true
-			}
+		if cfgval.String(entry["exe"]) != "" && cfgval.String(entry["user"]) != "" {
+			identity = true
 		}
 	}
 	return pidfile, identity

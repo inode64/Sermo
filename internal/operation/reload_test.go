@@ -207,8 +207,8 @@ func TestReloadClosureSignalUsesPidfileWhenNoMainPID(t *testing.T) {
 	defer signal.Stop(got)
 
 	tree := map[string]any{
-		"reload":    map[string]any{"signal": "USR2"},
-		"processes": map[string]any{"main": map[string]any{"type": "pidfile", "path": pidfile}},
+		"pidfile": pidfile,
+		"reload":  map[string]any{"signal": "USR2"},
 	}
 	selectors := []process.Selector{
 		{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}},
@@ -236,14 +236,14 @@ func TestReloadClosureSignalPidfileRequiresStrictIdentity(t *testing.T) {
 	}
 	mgr := &fakeManager{canReload: false}
 	tree := map[string]any{
-		"reload":    map[string]any{"signal": "HUP"},
-		"processes": map[string]any{"main": map[string]any{"type": "pidfile", "path": pidfile}},
+		"pidfile": pidfile,
+		"reload":  map[string]any{"signal": "HUP"},
 	}
 	selectors := []process.Selector{{Name: "main", Type: process.SelectorPidfile, Paths: []string{pidfile}}}
 	reload := reloadClosure(tree, depsWith(&scriptedRunner{}), mgr, "openrc", "svc", reloadDiscoverer(nil), selectors)
 
 	err := reload(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "does not match any command_match selector with exact exe and user") {
+	if err == nil || !strings.Contains(err.Error(), "does not match any process selector with exact exe and user") {
 		t.Fatalf("reload err = %v, want strict identity failure", err)
 	}
 }
@@ -261,7 +261,7 @@ func TestReloadClosureSignalMainPIDRequiresStrictIdentity(t *testing.T) {
 	reload := reloadClosure(tree, depsWith(runner), mgr, "systemd", "svc", reloadDiscoverer(nil), selectors)
 
 	err := reload(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "MainPID 424242 does not match any command_match selector") {
+	if err == nil || !strings.Contains(err.Error(), "MainPID 424242 does not match any process selector") {
 		t.Fatalf("reload err = %v, want strict MainPID identity failure", err)
 	}
 }

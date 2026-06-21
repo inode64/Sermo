@@ -29,17 +29,11 @@ preflight:
     timeout: 10s
 
 processes:
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
-
   master:
-    type: command_match
     exe: "${binary}"
     user: root
 
   workers:
-    type: command_match
     exe: "${binary}"
     user: "${user}"
 

@@ -70,8 +70,8 @@ func TestValidateReloadSignalRequiresPidfileIdentityOnOpenRC(t *testing.T) {
 		"reload": map[string]any{"signal": "HUP"},
 	})
 	for _, want := range []string{
-		"reload.signal requires a processes pidfile selector",
-		"reload.signal requires a processes command_match selector with both exe and user",
+		"reload.signal requires top-level pidfile:",
+		"reload.signal requires a processes selector with both exe and user",
 	} {
 		if !strings.Contains(strings.Join(bad, "\n"), want) {
 			t.Fatalf("missing issue %q in:\n%s", want, strings.Join(bad, "\n"))
@@ -79,10 +79,10 @@ func TestValidateReloadSignalRequiresPidfileIdentityOnOpenRC(t *testing.T) {
 	}
 
 	ok := reloadTreeIssues(t, "openrc", map[string]any{
-		"reload": map[string]any{"signal": "HUP"},
+		"pidfile": "/run/svc.pid",
+		"reload":  map[string]any{"signal": "HUP"},
 		"processes": map[string]any{
-			"main":     map[string]any{"type": "pidfile", "path": "/run/svc.pid"},
-			"identity": map[string]any{"type": "command_match", "exe": "/usr/sbin/svc", "user": "svc"},
+			"identity": map[string]any{"exe": "/usr/sbin/svc", "user": "svc"},
 		},
 	})
 	if len(ok) != 0 {

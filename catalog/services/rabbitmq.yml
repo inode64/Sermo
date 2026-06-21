@@ -19,18 +19,11 @@ variables:
   port: 5672
   pidfile: /run/rabbitmq.pid
 
-processes:
-  # The init script writes the wrapper PID here; the Erlang broker (beam.smp,
-  # a version-specific exe under /usr/lib64/erlang) runs as a descendant and is
-  # picked up automatically. A command_match on ${binary} would not match the
-  # broker, so the pidfile is the reliable anchor.
-  pidfile:
-    type: pidfile
-    path: "${pidfile}"
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
-pidfile: /run/rabbitmq.pid
+# The init script writes the wrapper PID here; the Erlang broker (beam.smp,
+# a version-specific exe under /usr/lib64/erlang) runs as a descendant and is
+# picked up automatically. Matching by ${binary} would not match the broker, so
+# the pidfile is the reliable anchor.
+pidfile: "${pidfile}"
 
 checks:
   service:

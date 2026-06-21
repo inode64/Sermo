@@ -26,12 +26,10 @@ preflight:
 
 processes:
   main:
-    type: command_match
     exe: "${apache_binary}"
     user: root
 
   workers:
-    type: command_match
     exe: "${apache_binary}"
     user: "${user}"
 

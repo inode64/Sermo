@@ -38,10 +38,7 @@ defaults:
 kind: service
 name: mysql-main
 service: mysql
-processes:
-  pidfile:
-    type: pidfile
-    path: `+pidfile+`
+pidfile: `+pidfile+`
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -399,8 +396,7 @@ kind: service
 name: web
 service: web
 processes:
-  main:
-    type: command_match
+  main: {}
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -417,7 +413,7 @@ processes:
 		t.Fatal("detail not found")
 	}
 	if len(detail.ProcessWarnings) != 1 || !strings.Contains(detail.ProcessWarnings[0], "requires exe or cmd") {
-		t.Fatalf("ProcessWarnings = %+v, want command_match warning", detail.ProcessWarnings)
+		t.Fatalf("ProcessWarnings = %+v, want process selector warning", detail.ProcessWarnings)
 	}
 }
 

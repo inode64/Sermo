@@ -15,7 +15,7 @@ import (
 //
 // It reads /proc/<pid>/comm, which is world-readable, so it finds a process
 // owned by another user (e.g. a root daemon) without ptrace privileges — unlike
-// the exe-symlink matching used by command_match selectors. Note the kernel
+// the exe-symlink matching used by process selectors. Note the kernel
 // truncates comm to 15 characters (TASK_COMM_LEN-1), so name must be the
 // (possibly truncated) comm value, not a longer binary path.
 func PIDsByComm(name string) ([]int, error) {
