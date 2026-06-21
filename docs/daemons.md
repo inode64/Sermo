@@ -365,8 +365,10 @@ and the `command_match` user — `user: "${user}"`.
 
 Runtime paths in Sermo config use the canonical `/run` spelling. Do not write
 new `/var/run` pidfiles or sockets in catalog daemons, generated services or
-examples; `/var/run` is the legacy compatibility alias for `/run`, and detected
-paths should be normalized to `/run/...` before they are committed to config.
+examples. Linux keeps `/var/run` as compatibility for `/run`, and older init
+scripts, service managers or packaged configs may still report that spelling;
+detected paths should be normalized to `/run/...` before they are committed to
+config.
 Before adding a new runtime path, check whether it or a parent directory is a
 symlink (`readlink -f <path>` or `namei -l <path>`), then record the canonical
 target path rather than the alias.
@@ -708,10 +710,10 @@ pidfile:
 ```
 
 Use `/run` here, not `/var/run`. If a distro init script or service manager
-reports the legacy `/var/run/...` spelling, write the equivalent `/run/...` path
-in the daemon definition. Before committing a new pidfile or socket path, resolve
-it with `readlink -f` or inspect it with `namei -l`; if any component is a
-symlink, use the resolved canonical target.
+reports `/var/run/...`, write the equivalent `/run/...` path in the daemon
+definition while preserving Linux/init compatibility. Before committing a new
+pidfile or socket path, resolve it with `readlink -f` or inspect it with
+`namei -l`; if any component is a symlink, use the resolved canonical target.
 
 On resolution this desugars into (a) a `processes` pidfile selector — so the
 parent process **and its descendants** are discovered and monitored — and (b) a

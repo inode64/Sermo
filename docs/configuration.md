@@ -106,10 +106,11 @@ If `paths.mounts` is omitted, Sermo falls back to `mounts/` next to the loaded
 documents and watch fragments because they are operator actions, not monitored
 services.
 
-Use `/run` for runtime paths in Sermo configuration and examples. `/var/run` is
-the historical compatibility alias for `/run`; do not write new `/var/run`
-pidfiles, sockets or runtime directories. If an init system reports `/var/run`,
-normalize the configured path to the equivalent `/run/...` spelling.
+Use `/run` for runtime paths in Sermo configuration and examples. Do not write
+new `/var/run` pidfiles, sockets or runtime directories in Sermo-owned config.
+Linux keeps `/var/run` as a compatibility path for `/run`, and older init
+scripts, service managers or packaged configs may still report it; Sermo
+normalizes those host-provided paths to the equivalent `/run/...` spelling.
 
 Before adding a new runtime path, resolve it on the target host:
 
@@ -119,8 +120,8 @@ namei -l /var/run/example.pid
 ```
 
 If the path resolves through a symlink, configure the canonical target path
-instead. This is especially common for `/var/run` → `/run`, but can also happen
-with app-specific runtime directories.
+instead. This is especially common for Linux `/var/run` → `/run` compatibility,
+but can also happen with app-specific runtime directories.
 
 Catalog apps may declare `version_from: <app-name>` when a different binary from
 the same package has the authoritative version probe. The app still checks its
