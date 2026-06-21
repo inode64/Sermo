@@ -691,11 +691,11 @@ is needed — it is on for every monitored service.
 A service is **available** in a cycle when none of its **required** checks
 failed. Optional checks (warnings) do not affect it, and a service with no
 required checks is always available. Health-style checks (`tcp`, `http`,
-`service`, `process`, `cert`, etc.) fail when `OK=false`; condition-style checks
-(`fds`, `oom`, resource thresholds, etc.) fail only when the alerting
-condition fires. Samples are accumulated into per-minute buckets in the state DB
-(`/var/lib/sermo/sermo.db`); the daemon prunes buckets older than a year on
-startup.
+`service`, `process`, `cert`, `firewall_rules`, etc.) fail when `OK=false`;
+condition-style checks (`fds`, `oom`, resource thresholds, etc.) fail only when
+the alerting condition fires. Samples are accumulated into per-minute buckets in
+the state DB (`/var/lib/sermo/sermo.db`); the daemon prunes buckets older than a
+year on startup.
 
 Only **observed** cycles count, so these periods are **excluded** from the SLA
 rather than counted as downtime:
@@ -1154,16 +1154,19 @@ receives.
 
 **Checks and watches share the same check types.** Any single-shot check — the
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
-`pids`, `conntrack`, `firewall_rules`, `entropy`, `zombies`, `oom`) *and* the
+`pids`, `conntrack`, `entropy`, `zombies`, `oom`) *and* the
 service checks (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
-`binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`, `cert`,
-`sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and connection-protocol checks
-such as `mysql`/`smtp`) — can be used as a watch here, and
+`binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
+`firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`/`ws`, `count`, and
+connection-protocol checks such as `mysql`/`smtp`) — can be used as a watch
+here, and
 the host-resource ones can equally be used in a service's `checks:`/rules (see
 [Checks](rules.md#checks)). A watch fires its hook on the check's **alert**
 outcome: threshold crossed for condition checks, **failure** for health checks
-(`tcp`/`http`/`cert`/…), so e.g. an `http` watch alerts when the endpoint is down
-and a `cert` watch alerts when the certificate is invalid or expiring. The
+(`tcp`/`http`/`firewall_rules`/`cert`/…), so e.g. an `http` watch alerts when
+the endpoint is down, a `firewall_rules` watch alerts when the loaded rule count
+is below `min_rules`, and a `cert` watch alerts when the certificate is invalid
+or expiring. The
 multi-metric (`net`, `icmp`, `swap`) watch shape below (a `metrics:` map, one
 hook per metric) and the multi-target (`file`, `process`) types are watch-only;
 the single-metric form of `net`/`icmp`/`swap` (an explicit `metric:` field) also
