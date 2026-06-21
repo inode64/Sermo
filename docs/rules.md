@@ -1360,9 +1360,14 @@ fingerprint identity) — both can be enabled at once.
 ```yaml
 watches:
   mail-version:
-    type: smtp
-    host: mail.example.com
-    on_version_change: true     # alert when the SMTP banner/version changes
+    monitor: disabled
+    check:
+      type: smtp
+      host: mail.example.com
+      on_version_change: true   # alert when the SMTP banner/version changes
+      expect_latency: { op: "<", value: 500 }
+    then:
+      notify: [ops-email]
 ```
 
 More protocols are added the same way — the check type, dispatch and validation
