@@ -71,7 +71,7 @@ func TestUsersWithLookupStopsOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // already cancelled before the scan begins
 
-	procs, err := UsersWithLookupContext(ctx, "/nonexistent-mount", nil)
+	procs, err := usersWithLookup(ctx, "/nonexistent-mount", nil)
 	if err == nil {
 		t.Fatal("usersWithLookup returned nil error for a cancelled context; want context.Canceled")
 	}
