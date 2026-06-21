@@ -7,5 +7,7 @@ service:
   systemd: [virtnetworkd]
 apps: [virtnetworkd]
 
+socket: /run/libvirt/virtnetworkd-sock
+
 checks:
   service: { type: service, expect: active }

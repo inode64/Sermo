@@ -16,6 +16,8 @@ apps: [ceph-mds]
 variables:
   user: ceph
 
+socket: "/run/ceph/ceph-mds.${hostname}.asok"
+
 processes:
   # Assumes a single mds per host (the norm); an exe+user match then selects it
   # unambiguously. Override if this host runs multiple mds daemons.

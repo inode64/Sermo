@@ -10,6 +10,8 @@ variables:
   host: 127.0.0.1
   port: 111
 
+socket: /run/rpcbind.sock
+
 processes:
   main:
     type: command_match

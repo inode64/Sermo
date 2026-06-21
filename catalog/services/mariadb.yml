@@ -23,6 +23,8 @@ pidfile:
   - /run/mysqld/mariadb.pid
   - /run/mysqld/mysqld.pid
 
+socket: { path: /run/mysqld/mysqld.sock, optional: true }
+
 preflight:
   config:
     type: command

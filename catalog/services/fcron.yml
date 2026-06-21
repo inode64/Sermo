@@ -9,5 +9,7 @@ apps: [fcron]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/fcron.pid
 
+socket: /run/fcron.fifo
+
 checks:
   service: { type: service, expect: active }

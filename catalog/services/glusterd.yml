@@ -9,6 +9,8 @@ apps: [glusterd]
 variables:
   port: 24007
 
+socket: /run/glusterd.socket
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
