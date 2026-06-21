@@ -79,6 +79,21 @@ catalog audit / profile-author notes): most hardware helpers, JVM stacks without
 a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
 `keydb` tracked above).
 
+## Logging and audit
+
+- [ ] `access.log`: append-only access records for operator traffic through the
+      web API and `sermoctl` (timestamp, actor or auth identity, source —
+      HTTP/CLI —, method/command, target, outcome/status). Configurable path
+      (under `paths.runtime` or a dedicated `paths.logs` entry), rotation and
+      retention; distinct from monitoring events and from the web UI activity
+      summary.
+- [ ] `event.log`: append-only structured export of daemon events (actions,
+      alerts, suppressions, shadow/dry-run, hook/notify outcomes, cascades, …)
+      for log shipping and offline forensics. May mirror or supplement the
+      existing SQLite event/activity store the web UI and `sermoctl activity`
+      read today; distinct from `access.log` (who accessed Sermo) and from
+      process/service logs on the host.
+
 ## Engine and config
 
 - [ ] Service priorities: configurable per-service `priority` (integer or named
