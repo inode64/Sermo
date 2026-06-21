@@ -66,15 +66,19 @@ func Resolve(ctx context.Context, name string, tree map[string]any, backend serv
 }
 
 // ResolveWithFallback mirrors the historic init-service behavior: if probing the
-// init backend cannot resolve a unit, it falls back to the configured service
-// name. Explicit control errors are still returned because there is no safe
-// fallback target for a VM/container.
+// init backend cannot resolve configured unit candidates, it falls back to the
+// configured service name. Explicit control errors and backend-unavailable
+// service maps are still returned because there is no safe fallback target.
 func ResolveWithFallback(ctx context.Context, name string, tree map[string]any, backend servicemgr.Backend, manager servicemgr.Manager, resolver servicemgr.UnitResolver) (Target, string) {
 	target, err := Resolve(ctx, name, tree, backend, manager, resolver)
 	if err == nil {
 		return target, ""
 	}
 	if _, controlled, specErr := controlType(tree); controlled || specErr != nil {
+		return Target{}, err.Error()
+	}
+	candidates, _ := config.ServiceCandidates(tree, string(backend), name)
+	if len(candidates) == 0 {
 		return Target{}, err.Error()
 	}
 	unit := config.ServiceUnit(tree, name)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -572,7 +573,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 
 	resolver := servicemgr.NewUnitResolver()
 	resolver.Manager = manager
-	target, err := control.Resolve(ctx, service, resolved.Tree, detection.Backend, manager, resolver)
+	target, err := a.resolveControlTarget(ctx, opts, service, resolved.Tree, detection.Backend, manager, resolver)
 	if err != nil {
 		return operation.Result{}, err
 	}
@@ -834,7 +835,7 @@ func (a App) statusFunc(opts options, tree map[string]any, base string) func(con
 		}
 		resolver := servicemgr.NewUnitResolver()
 		resolver.Manager = manager
-		target, err := control.Resolve(ctx, base, tree, detection.Backend, manager, resolver)
+		target, err := a.resolveControlTarget(ctx, opts, base, tree, detection.Backend, manager, resolver)
 		if err != nil {
 			return "", err
 		}
@@ -982,7 +983,7 @@ func (a App) discoverProcesses(ctx context.Context, opts options, cfg *config.Co
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
-	target, err := control.Resolve(ctx, service, resolved.Tree, detection.Backend, manager, servicemgr.UnitResolver{Runner: a.Runner, Manager: manager})
+	target, err := a.resolveControlTarget(ctx, opts, service, resolved.Tree, detection.Backend, manager, servicemgr.UnitResolver{Runner: a.Runner, Manager: manager})
 	if err != nil {
 		return discoverer.Discover(selectors)
 	}
@@ -1062,7 +1063,7 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 			resolver := servicemgr.NewUnitResolver()
 			resolver.Runner = a.Runner
 			resolver.Manager = manager
-			target, err = control.Resolve(ctx, opts.service(), resolved.Tree, detection.Backend, manager, resolver)
+			target, err = a.resolveControlTarget(ctx, opts, opts.service(), resolved.Tree, detection.Backend, manager, resolver)
 			if err != nil {
 				a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
 				return servicemgr.ServiceStatus{}, exitRuntimeError
@@ -1079,6 +1080,20 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 	return status, exitSuccess
+}
+
+func (a App) resolveControlTarget(ctx context.Context, opts options, service string, tree map[string]any, backend servicemgr.Backend, manager servicemgr.Manager, resolver servicemgr.UnitResolver) (control.Target, error) {
+	target, warning := control.ResolveWithFallback(ctx, service, tree, backend, manager, resolver)
+	if warning == "" {
+		return target, nil
+	}
+	if target.Unit == "" {
+		return control.Target{}, errors.New(warning)
+	}
+	if !opts.quiet {
+		fmt.Fprintf(a.Stderr, "warning: service %s: %s\n", service, warning)
+	}
+	return target, nil
 }
 
 func (a App) reportError(opts options, msg string) {

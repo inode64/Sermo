@@ -971,8 +971,12 @@ service:
 Candidates are bare names — systemd appends `.service` automatically. They are
 tried in order and deduplicated, and the resolved name is used for all later
 operations. A **scalar** `service` is trusted even when the probe cannot surface
-it (e.g. sysv-generated units); a **per-init list** requires a match, and an
-init system with no entry means the service is *not available* there.
+it (e.g. sysv-generated units). A **per-init list** first requires a backend
+match; if the probe cannot surface one, Sermo logs or prints a warning and falls
+back to the configured seed unit so `sermod`, the web UI and `sermoctl` behave
+the same on historic init-service setups. An init system with no entry means the
+service is *not available* there. Services using `control:` (libvirt/docker) do
+not use the init-unit fallback.
 
 An enabled instance can override the unit with a scalar (e.g.
 `service: redis-cache`) to run as its own unit, or omit `service` entirely to
