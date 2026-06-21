@@ -107,6 +107,21 @@ documented alias — `limit` for `max`. So the kernel-maximum concept is `Max` /
 `levelCountResult` in `internal/checks/check.go` and `countMeter` in
 `internal/app/webbackend.go`). Do not "fix" those `limit` locals back to `max`.
 
+## Configuration compatibility
+
+When Sermo's own configuration structure changes, break compatibility by
+default: keep one canonical spelling in code, docs, examples and tests. Do not
+preserve old aliases, migration-only validators, compatibility comments,
+fixtures or tests for removed Sermo config parameters unless the old spelling is
+still a current external compatibility requirement or safety invariant.
+
+Before applying a new structure, state the scope of the breakage and remove the
+previous structure in the same change: runtime parsing, validation, examples,
+reference docs, agent guidance and tests must not keep the old form alive.
+Document exceptions explicitly at the owner. Examples of valid exceptions are
+Linux/init compatibility such as `/var/run` metadata normalized to `/run`, and
+hard safety invariants such as deriving lock directories from `paths.runtime`.
+
 ## Runtime paths
 
 Use `/run` for volatile runtime artifacts in catalog profiles, generated

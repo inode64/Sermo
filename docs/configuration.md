@@ -1874,17 +1874,16 @@ entry:
 ```yaml
 defaults:
   policy: { cooldown: 5m }
-  # remediation.shadow (or mode: "shadow") puts the service's remediation rules
-  # into observation-only mode: full condition evaluation, window tracking
-  # (for/within), guard evaluation and policy checks (cooldown, max_actions,
-  # backoff) still occur and produce "shadow" events with rich detail about
-  # what Sermo would have done and why (including suppressions). No operations
-  # are executed and the live RemediationState is not advanced. Perfect for
-  # safely tuning rules before going live. This does not affect host watches;
-  # put dry_run: true inside a watch's then block to rehearse hooks/notifies/
-  # expand without executing them. A per-service setting overrides the default.
+  # remediation.shadow puts the service's remediation rules into observation-only
+  # mode: full condition evaluation, window tracking (for/within), guard
+  # evaluation and policy checks (cooldown, max_actions, backoff) still occur and
+  # produce "shadow" events with rich detail about what Sermo would have done and
+  # why (including suppressions). No operations are executed and the live
+  # RemediationState is not advanced. Perfect for safely tuning rules before
+  # going live. This does not affect host watches; put dry_run: true inside a
+  # watch's then block to rehearse hooks/notifies/expand without executing them.
+  # A per-service setting overrides the default.
   #   remediation: { shadow: true }
-  #   # remediation: { mode: shadow }  # alternative spelling
   remediation: { shadow: false }
 
   variables:
