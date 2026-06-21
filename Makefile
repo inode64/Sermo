@@ -143,7 +143,7 @@ install-examples:
 # configured directories for user catalog entries, services, host-specific apps
 # and mounts.
 install-config:
-	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/catalog-available $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/mounts)
+	$(call install_dirs,$(DESTDIR)$(SERMO_CONFDIR)/catalog-available/services $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/apps $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/libs $(DESTDIR)$(SERMO_CONFDIR)/catalog-available/patterns $(DESTDIR)$(SERMO_CONFDIR)/services $(DESTDIR)$(SERMO_CONFDIR)/apps $(DESTDIR)$(SERMO_CONFDIR)/mounts)
 	@if [ -f "$(DESTDIR)$(SERMO_CONFDIR)/sermo.yml" ]; then \
 		echo "  keeping existing $(DESTDIR)$(SERMO_CONFDIR)/sermo.yml"; \
 	else \

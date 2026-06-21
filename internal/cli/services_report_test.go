@@ -52,8 +52,9 @@ func TestServicesReportMessageHTML(t *testing.T) {
 func TestServicesCommandNotifySendsReport(t *testing.T) {
 	root := t.TempDir()
 	catalogDir := filepath.Join(root, "catalog")
+	catalogServicesDir := filepath.Join(catalogDir, "services")
 	binDir := filepath.Join(root, "bin")
-	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+	if err := os.MkdirAll(catalogServicesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
@@ -63,7 +64,7 @@ func TestServicesCommandNotifySendsReport(t *testing.T) {
 	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(catalogDir, "nginx.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(catalogServicesDir, "nginx.yml"), []byte(`
 kind: daemon
 name: nginx
 display_name: "Nginx"

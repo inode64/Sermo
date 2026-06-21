@@ -386,12 +386,10 @@ func uniquePathSpecs(specs []PathSpec) []PathSpec {
 	return out
 }
 
-// loadDir reads every *.yml/*.yaml document in dir. A
-// `services`/`apps`/`libs`/`patterns` subdirectory tags the catalog documents it
-// holds with that category; files directly in dir default to CategoryService.
-// Recursive controls descent below those base catalog directories. A missing
-// directory is not an error (a host may not have user catalog documents), but an
-// unreadable one is.
+// loadDir reads catalog documents from the explicit services/apps/libs/patterns
+// category directories. Recursive controls descent below those base catalog
+// directories. A missing directory is not an error (a host may not have user
+// catalog documents), but an unreadable one is.
 func (c *Config) loadDir(dir string, recursive bool) error {
 	return c.loadCategoryDir(dir, "", recursive)
 }
@@ -614,12 +612,15 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 	sort.Strings(names)
 	sort.Strings(subdirs)
 
+	if category == "" && len(names) > 0 {
+		return fmt.Errorf("%s: catalog documents must live under services, apps, libs, or patterns", filepath.Join(dir, names[0]))
+	}
 	for _, name := range names {
 		doc, err := loadDocument(filepath.Join(dir, name))
 		if err != nil {
 			return err
 		}
-		doc.Category = effectiveCategory(category)
+		doc.Category = category
 		// Catalog definitions take their kind from the subdirectory
 		// (daemon/app/lib/patterns), so each lives in its own registry.
 		doc.Kind = kindForCategory(doc.Category)
@@ -628,8 +629,8 @@ func (c *Config) loadCategoryDir(dir, category string, recursive bool) error {
 	for _, name := range subdirs {
 		sub := category
 		if sub == "" {
-			sub = categoryFromDir(name) // only the top level names a category
-			if sub == "" && !recursive {
+			sub = categoryFromDir(name)
+			if sub == "" {
 				continue
 			}
 		} else if !recursive {
@@ -690,13 +691,6 @@ func includedGlobalSectionLabel(section string) string {
 	default:
 		return strings.TrimSuffix(section, "s")
 	}
-}
-
-func effectiveCategory(category string) string {
-	if category == "" {
-		return CategoryService
-	}
-	return category
 }
 
 func loadDocument(path string) (*Document, error) {

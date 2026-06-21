@@ -30,7 +30,8 @@ engine:
 paths:
   # Directory entries are non-recursive by default. Use
   # `{ path: /some/dir, recursive: true }` for nested *.yml files.
-  # Catalog always reads its immediate services/apps/libs/patterns categories.
+  # Catalog documents must live under immediate services/apps/libs/patterns
+  # category directories.
   catalog:
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available
