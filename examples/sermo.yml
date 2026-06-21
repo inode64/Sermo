@@ -82,10 +82,6 @@ defaults:
   #   cycles: 1
   #   mode: consecutive    # consecutive | within (min_matches optional, default 1)
 
-logging:
-  level: info
-  format: text
-
 # Web dashboard (view services; monitor/unmonitor and start/stop/restart/reload/resume;
 # per-service detail with checks, SLA history and events). Binds to loopback by
 # default.
