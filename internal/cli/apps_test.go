@@ -157,24 +157,23 @@ func TestAppsCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeDaemon := func(file, name, display, binary string) {
-		body := fmt.Sprintf(`kind: daemon
+	writeApp := func(file, name, display, binary string) {
+		body := fmt.Sprintf(`kind: app
 name: %s
 display_name: %q
-service: %s
 variables:
   binary: %q
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-`, name, display, name, binary)
+`, name, display, binary)
 		if err := os.WriteFile(filepath.Join(appsDir, file), []byte(body), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	writeDaemon("good.yml", "goodapp", "GoodApp", good)
-	writeDaemon("bad.yml", "badapp", "BadApp", bad)
-	writeDaemon("gone.yml", "goneapp", "GoneApp", missing)
+	writeApp("good.yml", "goodapp", "GoodApp", good)
+	writeApp("bad.yml", "badapp", "BadApp", bad)
+	writeApp("gone.yml", "goneapp", "GoneApp", missing)
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
