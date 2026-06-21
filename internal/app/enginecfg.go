@@ -21,11 +21,6 @@ func engineValue(cfg *config.Config, key string) any {
 	return engineMap(cfg)[key]
 }
 
-// EngineInterval returns engine.interval, or fallback when unset/invalid.
-func EngineInterval(cfg *config.Config, fallback time.Duration) time.Duration {
-	return config.EngineInterval(cfg, fallback)
-}
-
 // EngineDuration reads a duration field from the engine block.
 func EngineDuration(cfg *config.Config, key string, fallback time.Duration) time.Duration {
 	return engineDuration(cfg, key, fallback)
