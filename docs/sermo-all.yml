@@ -179,7 +179,7 @@ watches:
   api-websocket:
     monitor: disabled
     check:
-      type: websocket           # alias: ws
+      type: websocket
       url: "wss://example.com/ws"
       subprotocol: "chat"
       headers: { Authorization: "Bearer ${env:API_TOKEN:-demo}" }
@@ -689,7 +689,7 @@ checks:
     value: 0
   size: { type: size, path: /var/log/demo/demo.log, grow_by: 500M, within: 1h }
   websocket:
-    type: websocket            # alias: ws
+    type: websocket
     url: "ws://127.0.0.1:8080/ws"
     origin: "https://example.com"
     subprotocol: "chat"

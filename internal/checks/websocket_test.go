@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -93,6 +94,15 @@ func TestBuildWebsocketCheckErrors(t *testing.T) {
 	}
 	if _, warn := buildWS(t, map[string]any{"url": "ftp://h/x"}); warn == "" {
 		t.Fatal("a non-ws/http scheme should warn")
+	}
+}
+
+func TestBuildWebsocketAliasRejected(t *testing.T) {
+	_, warns := Build(map[string]any{
+		"probe": map[string]any{"type": "ws", "url": "ws://127.0.0.1/socket"},
+	}, Deps{DefaultTimeout: time.Second})
+	if len(warns) == 0 || !strings.Contains(warns[0], `unsupported type "ws"`) {
+		t.Fatalf("type ws should be rejected, got %v", warns)
 	}
 }
 

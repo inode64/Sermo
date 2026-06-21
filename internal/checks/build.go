@@ -351,7 +351,7 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildMongoCheck(b, entry)
 	case "influxdb-query":
 		return buildInfluxCheck(b, entry)
-	case "websocket", "ws":
+	case "websocket":
 		return buildWebsocketCheck(b, entry)
 	case "size":
 		return buildSizeCheck(b, entry, deps)

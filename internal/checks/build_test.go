@@ -98,7 +98,7 @@ func TestIsHealthType(t *testing.T) {
 		{"autofs", true},
 		{"sqlite", true},
 		{"websocket", true},
-		{"ws", true},
+		{"ws", false},
 		{"firewall_rules", true},
 		{"process", true},
 		{"mysql", true},
