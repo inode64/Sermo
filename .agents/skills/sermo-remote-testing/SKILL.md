@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop/restart/reload operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap, storage below 10% free, network/USB mount and direct-file /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop/restart/reload operation tests to acpid, full sermod runs with every available host watch that can be safely discovered on the host, and safe alert/notification checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -18,6 +18,8 @@ description: Use when running safe Sermo validation or exploratory tests on remo
 ```yaml
 web:
   address: 0.0.0.0
+  password: "sermo-remote-admin"                                                                                                                                                                                                                                                 
+  guest_password: "sermo-remote-readonly"
 ```
 
 Keep the chosen `web.port` and auth settings explicit. Prefer `9797`; if it is already used by a verified `sermod` process, terminate that Sermo process and reuse `9797`.
@@ -164,28 +166,49 @@ When the task asks to add remote targets:
 ## Complete Remote Installation Configuration
 
 Only when the user explicitly asks for a remote installation or a complete remote
-configuration, expand discovery beyond active services and add host-resource
-watches that match the server. Do not add these host-resource watches during
+configuration, expand discovery beyond active services and add the full set of
+host watches that match the server. Do not add these host-resource watches during
 ordinary remote validation, service-specific checks, catalog/app probes, or any
 partial test run.
 
-- Discover host resources with read-only probes before generating YAML: CPU
-  count/load (`nproc`, `/proc/loadavg`), memory (`/proc/meminfo`), swap
-  (`/proc/swaps`, `/proc/vmstat`), PID table (`/proc/loadavg`,
-  `/proc/sys/kernel/pid_max`), PSI (`/proc/pressure/*`), mounted local
-  filesystems (`findmnt`, `/proc/self/mountinfo`, `df -PT`), mounted network
-  and USB filesystems, fstab-backed network and USB mount entries, network
-  interfaces and default routes (`ip addr`, `ip route`), certificate-like files
-  directly under `/etc/ssl` only (non-recursive), and any explicitly requested
-  uplink/ICMP targets.
+Complete means complete for the exact Sermo checkout and test binaries used in
+that remote run, not a fixed hand-picked subset maintained in this skill. At the
+start of every complete remote installation/configuration run, before generating
+YAML, build a fresh host-watch inventory from the local checkout that will be
+compiled and deployed. Inspect the watch builder, the central checks builder/type
+registry, validation, examples and the host-watch docs; save the resulting
+inventory in the local result directory. Use that inventory to drive remote
+discovery and generation. Do not copy a static list from this skill into remote
+setup scripts, and do not silently omit a discovered watch type because an older
+run covered only a smaller legacy subset.
+
+For each watch type found in that run-time inventory:
+
+- Generate it when its target, predicates and thresholds can be derived safely
+  from read-only host evidence or from an explicit user-selected target.
+- Skip it when the host lacks the feature, the target would be guessed, the probe
+  requires privileges the run does not have, the watch is service-scoped rather
+  than host-scoped, or the user did not authorize the necessary target. Record the
+  concrete skip reason.
+- Prefer Sermo wizards/helpers when they already know how to generate that watch
+  type. Otherwise derive the minimal valid YAML from the same checked-out docs
+  and validation rules used to build the inventory.
+- Validate the generated config with the deployed `sermoctl`; if validation
+  rejects a discovered watch type, fix the local project when it reveals a code
+  or docs mismatch, or report the watch as skipped with the validation error.
+
+Discover host resources with read-only probes chosen from the run-time inventory
+and the corresponding docs/schema. The discovery script must be data-driven from
+that inventory: adding a new host watch type to Sermo should require no edit to
+this skill before remote installation runs start considering it.
 - Generate one fragment per host watch under the matching temporary directory
   loaded by `paths.storages`, `paths.networks` or `paths.watches`; every fragment
   must contain a top-level `watches:` map with exactly one entry.
-- Include baseline watches for memory, load and PID pressure on every complete
-  config. Add swap only when swap exists. Add PSI cpu/memory/io only when the
-  kernel exposes the matching `/proc/pressure/*` file. Add storage watches for
-  mounted local, network and USB filesystems that are currently mounted and safe
-  to monitor; skip pseudo filesystems, bind mounts and transient
+- Include baseline watches for every safely discoverable host resource on every
+  complete config according to the run-time inventory. Do not use a hardcoded
+  allow-list. For feature-dependent watches, generate entries only when the
+  remote host exposes the required source data read-only; otherwise record the
+  skip reason. Skip pseudo filesystems, bind mounts and transient
   container/runtime mounts unless the user explicitly asks for them.
 - Every generated storage watch must alert when free space is below 10%. Use
   `free_pct: { op: "<", value: "10%" }` rather than an inverted `used_pct`
@@ -267,29 +290,23 @@ watches:
   requested, keep these watches alert-only, `then.notify: [none]`, or
   `then.dry_run: true` with the selected notifier.
 - Prefer portable, conservative thresholds suitable for validation, not
-  remediation: memory available/used percentage, load with `per_cpu: true`,
-  swap usage and swap IO, pids used percentage, PSI `some_avg60`, and storage
-  used/free percentage. Do not add hooks. If notifications are requested only to
-  test routing, use `then.dry_run: true`.
+  remediation, across every generated watch type. Choose the predicate names and
+  event semantics from the run-time inventory, docs and validation code for that
+  exact checkout. Do not add hooks. If notifications are requested only to test
+  routing, use `then.dry_run: true`.
 - For complete configs that will be run under `sermod`, add monitor-only
-  sustained host checks for the validation window:
-  - load/cpu pressure signal: `type: load`, `per_cpu: true`, a `load5`
-    threshold, `interval: 30s`, and `for: { cycles: 10 }` so it represents at
-    least five minutes of sustained host load. Add a CPU PSI watch too when
-    `/proc/pressure/cpu` exists (`type: pressure`, `resource: cpu`,
-    `some_avg60`, monitor-only).
-  - low memory: `type: memory`, `available_pct` or `used_pct`,
-    `interval: 30s`, and `for: { cycles: 10 }` so it represents at least five
-    minutes of sustained low-RAM pressure. Add memory PSI when available.
-  - swap present: when swap exists, add the normal swap `usage` and `io` watches.
-    When no swap exists, do **not** fake a Sermo `swap` watch for absence: the
-    built-in swap usage check intentionally never fires on swapless hosts. Record
-    swap absence with the remote observation loop described below.
+  sustained host checks for the validation window across all discovered watch
+  types that represent pressure, depletion or saturation. Apply `for: { cycles:
+  10 }` with `interval: 30s` where the check is naturally a sustained level
+  predicate. For edge-triggered or stateful change watches, keep their native
+  event semantics instead of forcing a sustained `for` window. Do not fake
+  absence-only watches when the check intentionally never fires without the
+  underlying host feature; record absence in the observation report instead.
 - Validate after host watches are added, then run one-shot checks or start the
   temporary daemon only after the full generated config passes.
-- Report which host checks were generated, which were skipped, and why
-  (for example: no swap configured, PSI unsupported, filesystem excluded as
-  pseudo/transient, no default route).
+- Report the run-time host-watch inventory, which concrete targets were
+  generated for each discovered type, which discovered types were skipped, and
+  why.
 
 ## Full Daemon Resource Observation
 
@@ -310,17 +327,19 @@ apply to ordinary CLI-only validation.
   - `/api/events` or the relevant watch/event endpoint when available;
   - `ps -p <sermod_pid> -o pid,etime,pcpu,pmem,rss,vsz,cmd` as a fallback and
     cross-check for daemon CPU/RAM usage.
-- If host load is sustained for more than five minutes, include a CPU/load
-  report: current and peak host load, CPU count/per-core interpretation, `sermod`
-  average/peak CPU from daemon metrics or `ps`, and the top CPU processes from a
-  read-only `ps` sample. Do not run stress tools.
-- If low memory is sustained for more than five minutes, include a memory report:
-  MemTotal, MemAvailable, used/available percentage, `sermod` RSS/percentage,
-  and the top RSS processes from a read-only `ps` sample.
-- If the host has no configured swap for six continuous minutes, include a swap
-  absence report. Confirm with `/proc/swaps` at the beginning and end of the
-  six-minute window; when swap exists, report swap usage and swap IO watch data
-  instead.
+- For any generated pressure, depletion, saturation or absence-sensitive watch
+  that remains firing or near-threshold for more than five minutes, include a
+  watch-specific report using its readings plus safe read-only host samples that
+  explain the condition when available. Do not run stress tools or change host
+  state to reproduce a finding.
+- For feature-dependent watch types that were skipped because the host did not
+  expose the underlying resource, include the read-only evidence that established
+  the absence when that evidence is meaningful over the six-minute observation
+  window.
+- Include every generated host-watch family from the run-time inventory in the
+  observation output, not only the subset covered by older remote-test runs. For
+  each discovered type that was skipped, carry forward the skip reason from
+  configuration generation.
 - Include storage and mount watch results in the observation output. Report any
   filesystem with less than 10% free space, any configured storage watch whose
   mount condition failed, and any generated network/USB `kind: mount` target
@@ -441,6 +460,8 @@ Summarize:
 - alerts that fired or would fire in dry-run;
 - storage findings: filesystems below 10% free space, failed `mounted: true`
   checks, and network/USB mount units generated or skipped;
+- complete host-watch coverage: the run-time inventory source, every generated
+  watch type/target and every discovered type skipped with its reason;
 - direct-file `/etc/ssl` certificate findings: expiring within 15 days,
   expired, not yet valid, missing/unreadable/unparseable, issuer or algorithm
   changes, and any weak/obsolete-looking algorithm or key-size review notes;
