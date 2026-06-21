@@ -119,7 +119,7 @@ notify: [ops-email]
 
 # Host watches: one entry per concern. This reference groups several examples
 # only to keep the schema readable; real config stores each watch in its own
-# include file. `enabled: false` omits the watch entirely, while
+# watch fragment file. `enabled: false` omits the watch entirely, while
 # `monitor: disabled` builds it paused. `monitor: previous` restores the
 # persisted state from paths.state.
 watches:
@@ -903,7 +903,7 @@ rules:
 
 ---
 # ---------------------------------------------------------------------------
-# 6. kind: service — a concrete monitored instance (include dir)
+# 6. kind: service — a concrete monitored instance (paths.services)
 # ---------------------------------------------------------------------------
 kind: service
 name: demo-main
