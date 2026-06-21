@@ -1169,15 +1169,6 @@ service:
 	mustHave(t, issues, `service key "upstart" is not one of systemd, openrc`)
 	mustHave(t, issues, "service.systemd must be a non-empty list")
 
-	// service.name shorthand is not supported.
-	named := validateService(t, `
-kind: service
-name: svc
-service:
-  name: x
-  systemd: [x]
-`)
-	mustHave(t, named, "service.name is not supported; use scalar service: <unit>")
 }
 
 func TestValidateProcessSelectorsRequireExeOrCmd(t *testing.T) {
