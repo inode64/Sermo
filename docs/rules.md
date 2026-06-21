@@ -368,9 +368,9 @@ concurrently, but a large range of *filtered* ports (no response) is bounded onl
 by `connect_timeout`, so prefer tight ranges and a short timeout.
 
 Like `cert`, the `on_change` detection is **stateful** (it remembers the previous
-states across cycles), so it works as a **host watch** (built once); as a
-per-service check, where checks are rebuilt each cycle, only the open/closed
-expectation applies.
+states across cycles). It works in service checks and host watches while the same
+check instance is alive; the baseline is reset when the service worker or watch
+is rebuilt, for example after a config reload.
 
 ### HTTP
 
@@ -460,9 +460,10 @@ check exposes (`issuer`, `subject`, `dns_names`, `not_after`, `days_left`,
 `fingerprint`, …). To read the certificate even when it is expired or otherwise
 invalid, the request skips transport-level verification and verifies the chain
 manually; `cert_verify: false` disables that verification. The change conditions
-are **stateful** (they remember the previous cycle), so they only apply when the
-check is built once — as a host watch. For raw TLS endpoints or local
-certificate files, use the standalone [`cert`](#cert) check.
+are **stateful** (they remember the previous cycle). They work in service checks
+and host watches while the same check instance is alive, and reset when the
+service worker or watch is rebuilt. For raw TLS endpoints or local certificate
+files, use the standalone [`cert`](#cert) check.
 
 **HTTP/3 (QUIC).** Set `http3: true` to send the request over **HTTP/3** (QUIC,
 UDP) instead of TCP:
@@ -545,9 +546,9 @@ public_key / openssh_private_key / openssh_public_key / …), `source`,
 `not_after`, `issuer`, `serial_number` (hex) and `dns_names` (SANs).
 
 The change conditions are **stateful** (they remember the previous value across
-cycles), so they work as a **host watch** (built once); as a per-service check —
-where checks are rebuilt each cycle — only the level conditions (expiry, validity)
-apply.
+cycles). They work in service checks and host watches while the same check
+instance is alive; the baseline is reset when the service worker or watch is
+rebuilt, for example after a config reload.
 
 Each check has an optional `timeout` (else `engine.default_timeout`) and an
 optional `interval` to run it less often than the worker cycle — every
@@ -623,8 +624,8 @@ Protocols, in the order of the table above:
   **optional**: anonymous completes the key exchange to capture the server's host
   key (authentication then fails, which is expected); with a user/password login
   must succeed. Result data: `fingerprint` (SHA256 of the host key),
-  `host_key_algo`, `server_version`, `protocol`. Set **`on_change: true`** (on a
-  host watch) to alert when the host-key fingerprint changes — a possible re-key or
+  `host_key_algo`, `server_version`, `protocol`. Set **`on_change: true`** to
+  alert when the host-key fingerprint changes — a possible re-key or
   man-in-the-middle. Uses `golang.org/x/crypto/ssh`.
 - `fpm` (alias `php-fpm`) — PHP-FPM over FastCGI. Set `socket` to the pool's Unix
   socket (e.g. `/run/php/php8.2-fpm.sock`), or use `host`/`port` (default 9000) for
@@ -666,8 +667,8 @@ Protocols, in the order of the table above:
   result data carries `sys_object_id`, `snmp_version`, the description (as the
   version banner) and — when the agent exposes them — `sys_name`, `sys_contact`,
   `sys_location` and `sys_uptime_seconds` (assertable via `expect:`). Set
-  **`on_change: true`** (on a host watch) to alert when `sysObjectID` (the device
-  identity — model/firmware) changes. Uses `github.com/gosnmp/gosnmp`.
+  **`on_change: true`** to alert when `sysObjectID` (the device identity —
+  model/firmware) changes. Uses `github.com/gosnmp/gosnmp`.
 - `tftp` — default port 69 (UDP). No auth. Sends a read request (RRQ) for `query`
   (default `sermo-tftp-check`) and verifies a valid TFTP packet: a `DATA` reply
   (the file is served) or an `ERROR` reply (e.g. file not found) both pass. Result
@@ -997,7 +998,7 @@ Protocols, in the order of the table above:
   TLS). No auth. On connect, Asterisk's Manager Interface sends an `Asterisk Call
   Manager/<version>` greeting before any login; reading it yields the manager
   `version` (result data also carries the full `banner`). Pair with
-  `on_version_change` (host watch) to alert on an Asterisk upgrade.
+  `on_version_change` to alert on an Asterisk upgrade.
 - `sieve` (alias `managesieve`) — default port 4190 (TCP); `tls` supported
   (implicit TLS). No auth. On connect the server sends a greeting of capability
   lines terminated by an `OK` response (RFC 5804); reading it and seeing the `OK`
@@ -1230,8 +1231,9 @@ A `size` check watches a file or directory and **alerts when it grows** by at
 least `grow_by` within the `within` window — useful to catch a runaway log, a
 disk-filling spool or a leaking cache. Only **increases** trip it: a steady or
 shrinking path passes. It is **condition-style** (`OK == true` means "grew too
-fast", so `active: {check: …}` fires) and **stateful**; run it as a **host
-watch** when growth history must persist across cycles.
+fast", so `active: {check: …}` fires) and **stateful**. Growth history persists
+while the service worker or watch is alive and resets when that worker/watch is
+rebuilt, for example after a config reload.
 
 ```yaml
 watches:
@@ -1348,14 +1350,16 @@ checks:
 ```
 
 **Version-change detection (`on_version_change`).** Set `on_version_change: true`
-(on a **host watch**, so the check is built once and keeps state across cycles) to
-alert when the server's version changes between cycles — e.g. after a package
-upgrade. The tracked identity is the protocol's reported `version` (mysql,
-postgres, redis, ssh, snmp, rspamd, libvirt, syncthing) or, for protocols that
-only return a greeting banner (`smtp`, `imap`, `pop`, `ftp`), that banner. The
-first cycle baselines silently; a later change **fails** the check and the result
-data carries `version`/`version_old`. It composes with `on_change` (the SSH/SNMP
-fingerprint identity) — both can be enabled at once.
+on a service check or host watch to alert when the server's version changes
+between cycles — e.g. after a package upgrade. The tracked identity is the
+protocol's reported `version` (mysql, postgres, redis, ssh, snmp, rspamd,
+libvirt, syncthing) or, for protocols that only return a greeting banner
+(`smtp`, `imap`, `pop`, `ftp`), that banner. The first cycle baselines silently;
+a later change **fails** the check and the result data carries
+`version`/`version_old`. The baseline lives in the check instance, so it persists
+while the service worker or watch is alive and resets when that worker/watch is
+rebuilt, for example after a config reload. It composes with `on_change` (the
+SSH/SNMP fingerprint identity) — both can be enabled at once.
 
 ```yaml
 watches:
