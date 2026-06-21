@@ -50,7 +50,6 @@ var typeInfos = []TypeInfo{
 	{Name: "influxdb-query"},
 	{Name: "size"},
 	{Name: "websocket", Health: true},
-	{Name: "ws", Health: true},
 	{Name: "net"},
 	{Name: "icmp"},
 	{Name: "swap"},

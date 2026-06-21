@@ -802,7 +802,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateInfluxFields(path, entry, add)
 	case "size":
 		validateSizeFields(path, entry, add)
-	case "websocket", "ws":
+	case "websocket":
 		validateWebsocketFields(path, entry, add)
 	}
 	return true

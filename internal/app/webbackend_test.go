@@ -433,7 +433,7 @@ func TestWebBackendWatchPolarityUsesSharedHealthTypes(t *testing.T) {
 			"count":  map[string]any{"check": map[string]any{"type": "count"}},
 			"mysql":  map[string]any{"check": map[string]any{"type": "mysql"}},
 			"ports":  map[string]any{"check": map[string]any{"type": "ports"}},
-			"ws":     map[string]any{"check": map[string]any{"type": "ws"}},
+			"ws":     map[string]any{"check": map[string]any{"type": "websocket"}},
 		},
 	}}}
 
