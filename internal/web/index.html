@@ -349,10 +349,10 @@
   .usagebar-fill { position: absolute; left: 0; top: 0; bottom: 0; width: var(--usage-pct); min-width: .18rem; transition: width .2s ease, background-color .2s ease; background: var(--usage-color); }
   .usagebar-fill::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, #fff5, #fff0 48%, #0001); }
   .usagebar.usage-empty .usagebar-fill { min-width: 0; }
-  .usagebar.usage-ok { --usage-color: #2da44e; }
-  .usagebar.usage-warn { --usage-color: #d4a72c; }
-  .usagebar.usage-high { --usage-color: #fb8500; }
-  .usagebar.usage-crit { --usage-color: #cf222e; }
+  .usagebar.usage-ok { --usage-color: var(--ok); }
+  .usagebar.usage-warn { --usage-color: var(--warn); }
+  .usagebar.usage-high { --usage-color: color-mix(in srgb, var(--warn) 55%, var(--crit)); }
+  .usagebar.usage-crit { --usage-color: var(--crit); }
   .usagebar-label { position: relative; z-index: 1; font-size: .68rem; font-weight: 700; line-height: 1; color: var(--text); text-shadow: 0 1px 0 var(--panel), 0 -1px 0 var(--panel), 1px 0 0 var(--panel), -1px 0 0 var(--panel); }
   .usagebar.usagebar-sm { width: 5.5rem; height: .85rem; }
   .usagebar.usagebar-sm .usagebar-label { font-size: .58rem; }
@@ -2293,10 +2293,10 @@ function slaWindowLabel(window) {
 }
 
 function slaColor(pct) {
-  if (pct == null) return "#8886";
-  if (pct >= 99) return "#1a7f37";
-  if (pct >= 95) return "#9a6700";
-  return "#cf222e";
+  if (pct == null) return "color-mix(in srgb, var(--text-2) 40%, transparent)";
+  if (pct >= 99) return themeHealthColor("ok");
+  if (pct >= 95) return themeHealthColor("warning");
+  return themeHealthColor("critical");
 }
 
 function renderSLAWindows(wins, compact) {
