@@ -775,7 +775,7 @@ policy:                        # overrides defaults.policy for this daemon
   backoff: { initial: 1m, factor: 2, max: 30m }
 
 remediation:
-  mode: shadow                 # alternative to remediation.shadow: true
+  shadow: true                 # observe service remediation without executing operations
 
 rule_window:
   cycles: 3

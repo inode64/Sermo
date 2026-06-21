@@ -362,15 +362,12 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 		liveSample = nil
 	}
 
-	// remediation.shadow (or mode: shadow) allows full rule+window+guard+policy
-	// evaluation and event emission without ever executing operations. It merges
-	// from defaults via perServiceDefaults.
+	// remediation.shadow allows full rule+window+guard+policy evaluation and
+	// event emission without ever executing operations. It merges from defaults
+	// via perServiceDefaults.
 	shadow := false
 	if r, ok := tree["remediation"].(map[string]any); ok {
 		if cfgval.Bool(r["shadow"]) {
-			shadow = true
-		}
-		if cfgval.AsString(r["mode"]) == "shadow" {
 			shadow = true
 		}
 	}
