@@ -81,11 +81,6 @@ func validateGlobal(cfg *Config) []Issue {
 		if _, present := paths["locks"]; present {
 			add("paths.locks is not supported; runtime locks derive from paths.runtime")
 		}
-		for _, key := range []string{"includes", "enabled", "profiles"} {
-			if _, present := paths[key]; present {
-				add("paths.%s is not supported; use explicit paths.catalog/services/apps/notifiers/storages/networks/watches/mounts", key)
-			}
-		}
 		if runtime := cfgval.String(paths["runtime"]); runtime != "" && !filepath.IsAbs(runtime) {
 			add("paths.runtime %q must be an absolute directory", runtime)
 		}
