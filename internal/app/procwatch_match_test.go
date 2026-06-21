@@ -23,14 +23,14 @@ func TestProcMatches(t *testing.T) {
 		{"empty selector matches nothing", ProcMatch{}, false},
 	}
 	for _, c := range cases {
-		if got := procMatches(c.m, id); got != c.want {
-			t.Errorf("%s: procMatches(%+v) = %v, want %v", c.desc, c.m, got, c.want)
+		if got := procMatchesWithLookup(c.m, id, nil); got != c.want {
+			t.Errorf("%s: procMatchesWithLookup(%+v) = %v, want %v", c.desc, c.m, got, c.want)
 		}
 	}
 	// A name selector must not match a process whose exe could not be resolved
 	// (an unverified exe must never satisfy safe matching).
 	unresolved := process.Identity{Exe: "/usr/sbin/nginx", ExeOK: false, User: "www"}
-	if procMatches(ProcMatch{Name: "nginx"}, unresolved) {
+	if procMatchesWithLookup(ProcMatch{Name: "nginx"}, unresolved, nil) {
 		t.Error("a name selector must not match an unresolved exe")
 	}
 }

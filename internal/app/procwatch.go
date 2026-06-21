@@ -324,12 +324,8 @@ func (s osProcSampler) Sample(m ProcMatch) ([]ProcInfo, bool) {
 	return out, true
 }
 
-// procMatches reports whether a process matches the selector: its name against
-// the resolved exe (full path or basename) and, if set, the owning user.
-func procMatches(m ProcMatch, id process.Identity) bool {
-	return procMatchesWithLookup(m, id, nil)
-}
-
+// procMatchesWithLookup reports whether a process matches the selector: its name
+// against the resolved exe (full path or basename) and, if set, the owning user.
 func procMatchesWithLookup(m ProcMatch, id process.Identity, lookup *process.UserLookup) bool {
 	if m.Name != "" {
 		if !id.ExeOK || (m.Name != id.Exe && m.Name != filepath.Base(id.Exe)) {
