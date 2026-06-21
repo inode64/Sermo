@@ -148,6 +148,7 @@ func TestShippedServiceConfigsLiveUnderServices(t *testing.T) {
 	}
 
 	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "apps"), kindApp)
+	assertExampleDocsHaveKind(t, filepath.Join(root, "examples", "mounts"), kindMount)
 }
 
 func TestShippedServiceConfigExamplesValidate(t *testing.T) {
