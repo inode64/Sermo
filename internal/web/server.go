@@ -76,6 +76,20 @@ type Service struct {
 	AlsoApply     []string `json:"also_apply,omitempty"` // also_apply cascade targets
 }
 
+// Mount is a view of one configured fstab-backed mount unit for the dashboard.
+type Mount struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name,omitempty"`
+	Category    string `json:"category,omitempty"`
+	Path        string `json:"path"`
+	Mounted     bool   `json:"mounted"`
+	Refcount    int    `json:"refcount"`
+	Source      string `json:"source,omitempty"`
+	State       string `json:"state"`
+	Refcounted  bool   `json:"refcounted"`
+	Message     string `json:"message,omitempty"` // set when status sampling failed
+}
+
 // Application is a view of one installed application (a catalog app daemon) for
 // the dashboard: its name, version and where its binary lives. It mirrors the
 // sermoctl `apps` report so both surfaces agree.
@@ -586,6 +600,8 @@ type Backend interface {
 	// Applications returns the installed applications (catalog app daemons whose
 	// binary is present), with their version and binary location.
 	Applications(ctx context.Context) []Application
+	// Mounts returns configured fstab-backed mount units and their runtime status.
+	Mounts(ctx context.Context) []Mount
 	// Detail returns one service's checks and SLA; ok is false for unknown names.
 	Detail(ctx context.Context, name string) (Detail, bool)
 	// Series returns a service's per-minute availability history over since; ok is
@@ -704,6 +720,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/watches/{name}/{action}", s.handleWatchAction)
 	mux.HandleFunc("GET /api/notifiers", s.handleNotifiers)
 	mux.HandleFunc("GET /api/applications", s.handleApplications)
+	mux.HandleFunc("GET /api/mounts", s.handleMounts)
 	mux.HandleFunc("GET /api/daemon", s.handleDaemon)
 	mux.HandleFunc("GET /api/daemon/metrics", s.handleDaemonMetrics)
 	mux.HandleFunc("GET /api/host", s.handleHost)
@@ -946,6 +963,10 @@ func (s *Server) handleNotifiers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleApplications(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.Backend.Applications(r.Context()))
+}
+
+func (s *Server) handleMounts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.Backend.Mounts(r.Context()))
 }
 
 func (s *Server) handleDaemon(w http.ResponseWriter, r *http.Request) {
