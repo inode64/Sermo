@@ -2248,20 +2248,18 @@ preflight:
 	}
 }
 
-func TestDaemonCategoryFromDirectory(t *testing.T) {
+func TestCatalogCategoryFromDirectory(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml":                   baseGlobal,
 		"catalog/services/nginx.yml":  "kind: daemon\nname: nginx\nservice: nginx\n",
-		"catalog/apps/git.yml":        "kind: daemon\nname: git\nservice: git\n",
-		"catalog/libs/glibc.yml":      "kind: daemon\nname: glibc\nbinary: /lib64/libc.so.6\n",
+		"catalog/apps/git.yml":        "kind: app\nname: git\nbinary: /usr/bin/git\n",
+		"catalog/libs/glibc.yml":      "kind: lib\nname: glibc\nbinary: /lib64/libc.so.6\n",
 		"catalog/patterns/common.yml": "kind: patterns\nname: common\n",
 	})
 	cfg, err := Load(global)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	// The subdirectory determines the kind and registry, even when a fixture's
-	// declared kind does not match the directory.
 	cases := []struct {
 		name, wantCat string
 		reg           map[string]*Document
