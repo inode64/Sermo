@@ -92,8 +92,8 @@ When creating catalog daemons, consider:
 apache/httpd: apachectl configtest, apachectl -v
 nginx: nginx -t, nginx -v
 php-fpm: php-fpm -t, php-fpm -v
-mysql/mariadb: mysqld --validate-config when supported, mysqladmin ping
-redis: redis-server --version, redis-cli ping
+mysql/mariadb: binary-owned config preflight when reliable; native mysql check for liveness
+redis: linked redis app binary/version preflight; native redis check for PING/INFO liveness
 postgresql: pg_isready, postgres version, pg_ctl where applicable
 ```
 
