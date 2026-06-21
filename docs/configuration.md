@@ -1808,9 +1808,9 @@ socket. If none currently matches, Sermo keeps the first non-empty candidate so
 the runtime preflight reports the bad path explicitly instead of expanding to an
 empty string. Paths must be absolute after templating.
 
-There is no top-level `binary:` compatibility path. Use `variables.binary` plus
-an explicit preflight entry for apps, daemons and services. Libraries use the
-same pattern with `type: file`:
+Use `variables.binary` plus an explicit
+preflight entry for apps, daemons and services. Libraries use the same pattern
+with `type: file`:
 
 ```yaml
 kind: lib
