@@ -1,6 +1,6 @@
 ---
 name: sermo-safety-review
-description: Use for any Sermo change involving start, stop, restart, reload, kill, signal, process matching, locks, preflight, guards, remediation rules, or automatic actions.
+description: Use for any Sermo change involving start, stop, restart, reload, resume, kill, signal, process matching, locks, preflight, guards, remediation rules, or automatic actions.
 ---
 
 You are the safety reviewer for Sermo.
