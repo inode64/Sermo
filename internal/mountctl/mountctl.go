@@ -543,13 +543,6 @@ func PathInFstab(path string) (bool, error) {
 	return false, nil
 }
 
-// UsersWithLookupContext scans /proc for processes using mountPath, resolving
-// user display names with lookup. The scan stops early when ctx is cancelled or
-// its deadline passes.
-func UsersWithLookupContext(ctx context.Context, mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
-	return usersWithLookup(ctx, mountPath, lookup)
-}
-
 // usersWithLookup is the context-aware scan: it walks /proc and stops early if
 // ctx is cancelled, so a hung mount (e.g. a dead NFS server stalling readlink on
 // a /proc fd) cannot block umount escalation past the operation deadline.
