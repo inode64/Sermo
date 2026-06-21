@@ -2256,6 +2256,7 @@ func (b *WebBackend) Detail(ctx context.Context, name string) (web.Detail, bool)
 			Optional: cs.Optional,
 			Skipped:  cs.Skipped,
 			Message:  cs.Message,
+			Readings: checkReadings(e.checkTypes[cn], cs.Data),
 			Ran:      seen && cs.Ran,
 		}
 		if seen && !cs.At.IsZero() {
