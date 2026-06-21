@@ -6,7 +6,11 @@ variables:
   binary:
     - /usr/sbin/mariadbd
     - /usr/bin/mariadbd
+  mysqld_binary:
+    - /usr/sbin/mysqld
+    - /usr/bin/mysqld
 preflight:
   binary: { type: binary, path: "${binary}" }
+  mysqld: { type: binary, path: "${mysqld_binary}", optional: true }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
   libraries: { type: libraries, binary: "${binary}" }

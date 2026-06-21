@@ -26,6 +26,12 @@ preflight:
     command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" --validate --config-file=\"$1\"", "${docker_daemon}", "${config}"]
     timeout: 30s
 
+processes:
+  main:
+    exe: "${docker_daemon}"
+  proxy:
+    exe: "${docker_proxy_binary}"
+
 checks:
   service:
     type: service

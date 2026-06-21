@@ -6,6 +6,36 @@ version_from: pcp
 # pmcd ships under PCP's libexec tree; override if your distribution differs.
 variables:
   binary: /usr/libexec/pcp/bin/pmcd
+  pmdaroot_binary:
+    - /var/lib/pcp/pmdas/root/pmdaroot
+    - /usr/libexec/pcp/pmdas/root/pmdaroot
+    - /usr/lib/pcp/pmdas/root/pmdaroot
+    - /usr/lib64/pcp/pmdas/root/pmdaroot
+  pmdaproc_binary:
+    - /var/lib/pcp/pmdas/proc/pmdaproc
+    - /usr/libexec/pcp/pmdas/proc/pmdaproc
+    - /usr/lib/pcp/pmdas/proc/pmdaproc
+    - /usr/lib64/pcp/pmdas/proc/pmdaproc
+  pmdaxfs_binary:
+    - /var/lib/pcp/pmdas/xfs/pmdaxfs
+    - /usr/libexec/pcp/pmdas/xfs/pmdaxfs
+    - /usr/lib/pcp/pmdas/xfs/pmdaxfs
+    - /usr/lib64/pcp/pmdas/xfs/pmdaxfs
+  pmdalinux_binary:
+    - /var/lib/pcp/pmdas/linux/pmdalinux
+    - /usr/libexec/pcp/pmdas/linux/pmdalinux
+    - /usr/lib/pcp/pmdas/linux/pmdalinux
+    - /usr/lib64/pcp/pmdas/linux/pmdalinux
+  pmdakvm_binary:
+    - /var/lib/pcp/pmdas/kvm/pmdakvm
+    - /usr/libexec/pcp/pmdas/kvm/pmdakvm
+    - /usr/lib/pcp/pmdas/kvm/pmdakvm
+    - /usr/lib64/pcp/pmdas/kvm/pmdakvm
 preflight:
   binary: { type: binary, path: "${binary}" }
+  pmdaroot: { type: binary, path: "${pmdaroot_binary}", optional: true }
+  pmdaproc: { type: binary, path: "${pmdaproc_binary}", optional: true }
+  pmdaxfs: { type: binary, path: "${pmdaxfs_binary}", optional: true }
+  pmdalinux: { type: binary, path: "${pmdalinux_binary}", optional: true }
+  pmdakvm: { type: binary, path: "${pmdakvm_binary}", optional: true }
   health: { type: command, command: ["${binary}", "-?"], timeout: 10s }

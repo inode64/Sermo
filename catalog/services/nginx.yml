@@ -18,6 +18,10 @@ pidfile: /run/nginx/nginx.pid
 
 config_files: [/etc/nginx/nginx.conf]
 
+processes:
+  main:
+    exe: "${nginx_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

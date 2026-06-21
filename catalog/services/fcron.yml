@@ -11,5 +11,9 @@ pidfile: /run/fcron.pid
 
 socket: /run/fcron.fifo
 
+processes:
+  main:
+    exe: "${fcron_binary}"
+
 checks:
   service: { type: service, expect: active }

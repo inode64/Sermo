@@ -18,5 +18,9 @@ pidfile: /run/syslog-ng.pid
 
 socket: /run/syslog-ng.ctl
 
+processes:
+  main:
+    exe: "${syslog_ng_binary}"
+
 checks:
   service: { type: service, expect: active }

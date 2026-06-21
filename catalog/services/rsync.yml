@@ -13,6 +13,10 @@ variables:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/rsyncd.pid
 
+processes:
+  main:
+    exe: "${rsync_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

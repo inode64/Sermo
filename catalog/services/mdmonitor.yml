@@ -7,6 +7,10 @@ service:
   systemd: [mdmonitor]
 apps: [mdadm]
 
+processes:
+  main:
+    exe: "${mdadm_binary}"
+
 checks:
   service: { type: service, expect: active }
   raid: { type: raid, degraded: { op: ">", value: 0 } }

@@ -17,6 +17,10 @@ variables:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/node_exporter.pid
 
+processes:
+  main:
+    exe: "${node_exporter_binary}"
+
 checks:
   service:
     type: service

@@ -12,5 +12,9 @@ pidfile: /run/lldpd.pid
 
 socket: /run/lldpd.socket
 
+processes:
+  main:
+    exe: "${lldpd_binary}"
+
 checks:
   service: { type: service, expect: active }

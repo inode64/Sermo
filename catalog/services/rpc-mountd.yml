@@ -8,5 +8,9 @@ service:
   openrc: [rpc-mountd, nfs-mountd]
 apps: [rpc-mountd]
 
+processes:
+  main:
+    exe: "${rpc_mountd_binary}"
+
 checks:
   service: { type: service, expect: active }

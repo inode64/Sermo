@@ -5,6 +5,16 @@ category: observability
 version_from: pcp
 variables:
   binary: /usr/libexec/pcp/bin/pmlogger_farm
+  pmpause_binary:
+    - /usr/libexec/pcp/bin/pmpause
+    - /usr/lib/pcp/bin/pmpause
+    - /usr/lib64/pcp/bin/pmpause
+  pmsleep_binary:
+    - /usr/libexec/pcp/bin/pmsleep
+    - /usr/lib/pcp/bin/pmsleep
+    - /usr/lib64/pcp/bin/pmsleep
 preflight:
   binary: { type: binary, path: "${binary}" }
+  pmpause: { type: binary, path: "${pmpause_binary}", optional: true }
+  pmsleep: { type: binary, path: "${pmsleep_binary}", optional: true }
   health: { type: command, command: ["${binary}", "-?"], timeout: 10s, expect_exit: [0, 1] }

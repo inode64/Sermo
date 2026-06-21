@@ -11,6 +11,10 @@ variables:
   host: 127.0.0.1
   port: 11211
 
+processes:
+  main:
+    exe: "${memcached_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, host: "${host}", port: "${port}", timeout: 2s }

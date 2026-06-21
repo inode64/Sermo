@@ -23,6 +23,10 @@ config_files: ["${config}"]
 preflight:
   config: { type: command, command: ["${nebula_binary}", "-test", "-config", "${config}"], timeout: 30s }
 
+processes:
+  main:
+    exe: "${binary}"
+
 checks:
   service:
     type: service

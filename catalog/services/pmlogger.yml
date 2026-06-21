@@ -11,6 +11,10 @@ variables:
   host: 127.0.0.1
   port: 4330
 
+processes:
+  main:
+    exe: "${pmlogger_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, host: "${host}", port: "${port}", timeout: 2s }

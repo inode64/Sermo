@@ -5,7 +5,42 @@ category: messaging
 variables:
   binary: "/usr/bin/dovecot"
   doveconf: "/usr/bin/doveconf"
+  anvil_binary:
+    - /usr/libexec/dovecot/anvil
+    - /usr/lib/dovecot/anvil
+    - /usr/lib64/dovecot/anvil
+  log_binary:
+    - /usr/libexec/dovecot/log
+    - /usr/lib/dovecot/log
+    - /usr/lib64/dovecot/log
+  config_binary:
+    - /usr/libexec/dovecot/config
+    - /usr/lib/dovecot/config
+    - /usr/lib64/dovecot/config
+  stats_binary:
+    - /usr/libexec/dovecot/stats
+    - /usr/lib/dovecot/stats
+    - /usr/lib64/dovecot/stats
+  auth_binary:
+    - /usr/libexec/dovecot/auth
+    - /usr/lib/dovecot/auth
+    - /usr/lib64/dovecot/auth
+  imap_login_binary:
+    - /usr/libexec/dovecot/imap-login
+    - /usr/lib/dovecot/imap-login
+    - /usr/lib64/dovecot/imap-login
+  imap_binary:
+    - /usr/libexec/dovecot/imap
+    - /usr/lib/dovecot/imap
+    - /usr/lib64/dovecot/imap
 preflight:
   binary: { type: binary, path: "${binary}" }
   doveconf: { type: binary, path: "${doveconf}" }
+  anvil: { type: binary, path: "${anvil_binary}", optional: true }
+  log: { type: binary, path: "${log_binary}", optional: true }
+  config: { type: binary, path: "${config_binary}", optional: true }
+  stats: { type: binary, path: "${stats_binary}", optional: true }
+  auth: { type: binary, path: "${auth_binary}", optional: true }
+  imap-login: { type: binary, path: "${imap_login_binary}", optional: true }
+  imap: { type: binary, path: "${imap_binary}", optional: true }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

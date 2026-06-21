@@ -19,6 +19,10 @@ pidfile: /run/named/named.pid
 
 config_files: [/etc/bind/named.conf, /etc/named.conf]
 
+processes:
+  main:
+    exe: "${named_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: dns, host: "${host}", port: "${port}", query: "${query}" }

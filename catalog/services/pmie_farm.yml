@@ -7,5 +7,11 @@ service:
   systemd: [pmie_farm]
 apps: [pmie_farm]
 
+processes:
+  main:
+    exe: "${pmie_farm_binary}"
+  pmpause:
+    exe: "${pmie_farm_pmpause_binary}"
+
 checks:
   service: { type: service, expect: active }

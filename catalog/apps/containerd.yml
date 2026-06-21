@@ -6,6 +6,10 @@ variables:
   binary:
     - /usr/bin/containerd
     - /usr/sbin/containerd
+  shim_binary:
+    - /usr/bin/containerd-shim-runc-v2
+    - /usr/sbin/containerd-shim-runc-v2
 preflight:
   binary: { type: binary, path: "${binary}" }
+  shim: { type: binary, path: "${shim_binary}", optional: true }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
