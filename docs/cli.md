@@ -19,6 +19,36 @@ or `--help` for the command index, and use `sermoctl help COMMAND` or
 Global flags may be placed before or after the command. Command-specific flags
 are shown by `sermoctl help COMMAND`.
 
+## sermod daemon flags
+
+`sermod` is the long-running monitoring daemon. Packaged units normally start it
+with the standard config path:
+
+```bash
+sermod run --config /etc/sermo/sermo.yml
+```
+
+Manual runs support these flags:
+
+```text
+sermod run [--config PATH] [--catalog DIR ...] [--verbose|-v]
+sermod version
+sermod --version
+```
+
+- `--config PATH` loads the global config file. The default is
+  `/etc/sermo/sermo.yml`. Use the same path with `sermoctl --config` when
+  validating or reloading a non-standard tree.
+- `--catalog DIR` overrides `paths.catalog` for this daemon process. It is
+  repeatable and preserves order, so development and packaging checks can run
+  against source-tree or staged catalog directories without editing the config.
+- `--verbose` / `-v` enables debug logging, including config load details,
+  catalog overrides, backend detection and monitor-target counts.
+
+Use `sermoctl daemon reload` to ask a running daemon to re-read the config file
+it was started with; changing `--catalog` requires restarting `sermod` with the
+new flag set.
+
 ## Command surface
 
 ```bash
