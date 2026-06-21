@@ -7,5 +7,13 @@ service:
   systemd: [pmlogger_farm]
 apps: [pmlogger_farm]
 
+processes:
+  main:
+    exe: "${pmlogger_farm_binary}"
+  pmpause:
+    exe: "${pmlogger_farm_pmpause_binary}"
+  pmsleep:
+    exe: "${pmlogger_farm_pmsleep_binary}"
+
 checks:
   service: { type: service, expect: active }

@@ -34,6 +34,9 @@ processes:
   mysqld:
     exe: "${mysql_binary}"
     user: "${user}"
+  mariadbd:
+    exe: "${mysql_mariadbd_binary}"
+    user: "${user}"
 
 config_files: ["${config}"]
 
@@ -64,6 +67,7 @@ stop_policy:
     users: ["${user}"]
     exe_any:
       - "${mysql_binary}"
+      - "${mysql_mariadbd_binary}"
 
 policy:
   cooldown: 15m

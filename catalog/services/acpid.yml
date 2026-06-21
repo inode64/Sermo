@@ -12,6 +12,10 @@ apps: [acpid]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/acpid.pid
 
+processes:
+  main:
+    exe: "${acpid_binary}"
+
 checks:
   service: { type: service, expect: active }
   acpid: { type: acpid, timeout: 3s }

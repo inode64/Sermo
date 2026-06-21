@@ -19,6 +19,24 @@ pidfile: /run/dovecot/master.pid
 
 socket: /run/dovecot/master
 
+processes:
+  main:
+    exe: "${dovecot_binary}"
+  anvil:
+    exe: "${dovecot_anvil_binary}"
+  log:
+    exe: "${dovecot_log_binary}"
+  config:
+    exe: "${dovecot_config_binary}"
+  stats:
+    exe: "${dovecot_stats_binary}"
+  auth:
+    exe: "${dovecot_auth_binary}"
+  imap-login:
+    exe: "${dovecot_imap_login_binary}"
+  imap:
+    exe: "${dovecot_imap_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

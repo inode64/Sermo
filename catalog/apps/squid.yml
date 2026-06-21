@@ -4,6 +4,24 @@ display_name: "Squid"
 category: web
 variables:
   binary: "/usr/bin/squid"
+  pinger_binary:
+    - /usr/libexec/squid/pinger
+    - /usr/lib/squid/pinger
+    - /usr/lib64/squid/pinger
+    - /usr/lib/squid3/pinger
+  log_file_daemon_binary:
+    - /usr/libexec/squid/log_file_daemon
+    - /usr/lib/squid/log_file_daemon
+    - /usr/lib64/squid/log_file_daemon
+    - /usr/lib/squid3/log_file_daemon
+  security_file_certgen_binary:
+    - /usr/libexec/squid/security_file_certgen
+    - /usr/lib/squid/security_file_certgen
+    - /usr/lib64/squid/security_file_certgen
+    - /usr/lib/squid3/security_file_certgen
 preflight:
   binary: { type: binary, path: "${binary}" }
+  pinger: { type: binary, path: "${pinger_binary}", optional: true }
+  log-file-daemon: { type: binary, path: "${log_file_daemon_binary}", optional: true }
+  security-file-certgen: { type: binary, path: "${security_file_certgen_binary}", optional: true }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

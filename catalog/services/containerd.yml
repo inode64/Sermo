@@ -27,6 +27,9 @@ processes:
   main:
     exe: "${containerd_binary}"
     user: "${user}"
+  shim:
+    exe: "${containerd_shim_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

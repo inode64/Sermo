@@ -14,6 +14,16 @@ preflight:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/squid.pid
 
+processes:
+  main:
+    exe: "${squid_binary}"
+  pinger:
+    exe: "${squid_pinger_binary}"
+  log-file-daemon:
+    exe: "${squid_log_file_daemon_binary}"
+  security-file-certgen:
+    exe: "${squid_security_file_certgen_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

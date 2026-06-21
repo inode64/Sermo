@@ -8,5 +8,9 @@ service:
   openrc: [NetworkManager, networkmanager]
 apps: [networkmanager]
 
+processes:
+  main:
+    exe: "${networkmanager_binary}"
+
 checks:
   service: { type: service, expect: active }

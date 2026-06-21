@@ -7,5 +7,9 @@ apps: [smartd]
 
 pidfile: /run/smartd.pid
 
+processes:
+  main:
+    exe: "${smartd_binary}"
+
 checks:
   service: { type: service, expect: active }

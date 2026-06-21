@@ -29,6 +29,10 @@ config_files: ["${config}", /etc/monit/conf.d, /etc/monit.d]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/monit.pid
 
+processes:
+  main:
+    exe: "${monit_binary}"
+
 checks:
   service:
     type: service

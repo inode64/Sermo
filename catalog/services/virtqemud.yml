@@ -7,6 +7,10 @@ service:
   systemd: [virtqemud]
 apps: [virtqemud]
 
+processes:
+  main:
+    exe: "${virtqemud_binary}"
+
 checks:
   service: { type: service, expect: active }
   libvirt: { type: libvirt, socket: /run/libvirt/virtqemud-sock, timeout: 5s }

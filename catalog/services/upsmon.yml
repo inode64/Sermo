@@ -7,5 +7,9 @@ apps: [upsmon]
 
 pidfile: /run/nut/upsmon.pid
 
+processes:
+  main:
+    exe: "${upsmon_binary}"
+
 checks:
   service: { type: service, expect: active }

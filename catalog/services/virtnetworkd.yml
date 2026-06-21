@@ -9,5 +9,12 @@ apps: [virtnetworkd]
 
 socket: /run/libvirt/virtnetworkd-sock
 
+processes:
+  main:
+    exe: "${virtnetworkd_binary}"
+  dnsmasq:
+    exe: "${virtnetworkd_dnsmasq_binary}"
+    cmd: "/var/lib/libvirt/dnsmasq/"
+
 checks:
   service: { type: service, expect: active }
