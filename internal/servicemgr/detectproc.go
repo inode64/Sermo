@@ -51,21 +51,14 @@ type openRCBranch struct {
 	known  bool
 }
 
-// DetectProc inspects a service's init definition to derive a stable pidfile
-// path and main executable, for the wizard's PID question (see docs/wizards.md).
-// It is best-effort: a field it cannot determine comes back "". For systemd it
-// reads `systemctl show` PIDFile and ExecStart; for OpenRC it scans the init
-// script and its conf.d override for `pidfile=`, a `start-stop-daemon
-// --pidfile`, and `command=`. runner/readFile are injected for tests; nil uses
-// the host.
-func DetectProc(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) (pidfile, exe string) {
-	info := DetectProcInfo(ctx, runner, readFile, backend, unit)
-	return info.Pidfile, info.Exe
-}
-
-// DetectProcInfo is the richer form of DetectProc used by the wizard. It reports
-// DetectProc's pidfile/exe fields and also a cmdline regex and user when OpenRC
-// exposes command/command_user without a pidfile.
+// DetectProcInfo inspects a service's init definition to derive a stable
+// pidfile path and main executable, for the wizard's PID question (see
+// docs/wizards.md). It is best-effort: a field it cannot determine comes back
+// "". For systemd it reads `systemctl show` PIDFile and ExecStart; for OpenRC
+// it scans the init script and its conf.d override for `pidfile=`, a
+// `start-stop-daemon --pidfile`, and `command=`. It also reports a cmdline
+// regex and user when OpenRC exposes command/command_user without a pidfile.
+// runner/readFile are injected for tests; nil uses the host.
 func DetectProcInfo(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) ProcInfo {
 	if unit == "" {
 		return ProcInfo{}

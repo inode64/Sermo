@@ -12,7 +12,7 @@ func TestDetectProcSystemd(t *testing.T) {
 		"systemctl show -p PIDFile --value -- nginx.service":   {Stdout: "/run/nginx.pid\n"},
 		"systemctl show -p ExecStart --value -- nginx.service": {Stdout: "{ path=/usr/sbin/nginx ; argv[]=/usr/sbin/nginx -g daemon off ; ignore_errors=no }\n"},
 	}}
-	pidfile, exe := DetectProc(context.Background(), runner, nil, BackendSystemd, "nginx.service")
+	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, "nginx.service")
 	if pidfile != "/run/nginx.pid" {
 		t.Fatalf("pidfile = %q, want /run/nginx.pid", pidfile)
 	}
@@ -26,7 +26,7 @@ func TestDetectProcSystemdExecStartOnly(t *testing.T) {
 	runner := fakeRunner{results: map[string]execx.Result{
 		"systemctl show -p ExecStart --value -- sshd.service": {Stdout: "{ path=/usr/sbin/sshd ; argv[]=/usr/sbin/sshd -D }\n"},
 	}}
-	pidfile, exe := DetectProc(context.Background(), runner, nil, BackendSystemd, "sshd.service")
+	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, "sshd.service")
 	if pidfile != "" {
 		t.Fatalf("pidfile = %q, want empty", pidfile)
 	}
@@ -40,7 +40,7 @@ func TestDetectProcSystemdNormalizesLegacyVarRun(t *testing.T) {
 		"systemctl show -p PIDFile --value -- apache.service":   {Stdout: "/var/run/apache2.pid\n"},
 		"systemctl show -p ExecStart --value -- apache.service": {Stdout: "{ path=/usr/sbin/apache2 ; argv[]=/usr/sbin/apache2 -k start ; ignore_errors=no }\n"},
 	}}
-	pidfile, exe := DetectProc(context.Background(), runner, nil, BackendSystemd, "apache.service")
+	pidfile, exe := detectProcPidfileExe(context.Background(), runner, nil, BackendSystemd, "apache.service")
 	if pidfile != "/run/apache2.pid" {
 		t.Fatalf("pidfile = %q, want /run/apache2.pid", pidfile)
 	}
@@ -57,7 +57,7 @@ func TestDetectProcOpenRCPidfile(t *testing.T) {
 		}
 		return nil, errNotFound
 	}
-	pidfile, exe := DetectProc(context.Background(), nil, read, BackendOpenRC, "nginx")
+	pidfile, exe := detectProcPidfileExe(context.Background(), nil, read, BackendOpenRC, "nginx")
 	if pidfile != "/run/nginx.pid" {
 		t.Fatalf("pidfile = %q, want /run/nginx.pid", pidfile)
 	}
@@ -75,7 +75,7 @@ func TestDetectProcOpenRCStartStopDaemonArg(t *testing.T) {
 		}
 		return nil, errNotFound
 	}
-	pidfile, _ := DetectProc(context.Background(), nil, read, BackendOpenRC, "foo")
+	pidfile, _ := detectProcPidfileExe(context.Background(), nil, read, BackendOpenRC, "foo")
 	if pidfile != "/run/foo/foo.pid" {
 		t.Fatalf("pidfile = %q, want /run/foo/foo.pid", pidfile)
 	}
@@ -312,13 +312,20 @@ func TestDetectProcOpenRCSkipsVariablePidfile(t *testing.T) {
 		}
 		return nil, errNotFound
 	}
-	pidfile, exe := DetectProc(context.Background(), nil, read, BackendOpenRC, "bar")
+	pidfile, exe := detectProcPidfileExe(context.Background(), nil, read, BackendOpenRC, "bar")
 	if pidfile != "" {
 		t.Fatalf("pidfile = %q, want empty (variable, not literal)", pidfile)
 	}
 	if exe != "/usr/bin/bar" {
 		t.Fatalf("exe = %q, want /usr/bin/bar", exe)
 	}
+}
+
+// detectProcPidfileExe adapts DetectProcInfo to the pidfile/exe pair these tests
+// assert on; production code calls DetectProcInfo directly.
+func detectProcPidfileExe(ctx context.Context, runner execx.Runner, readFile func(string) ([]byte, error), backend Backend, unit string) (pidfile, exe string) {
+	info := DetectProcInfo(ctx, runner, readFile, backend, unit)
+	return info.Pidfile, info.Exe
 }
 
 var errNotFound = &fakeFSError{}
