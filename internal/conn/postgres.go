@@ -50,17 +50,15 @@ func PostgresDSN(cfg Config) string { return buildPGDSN(cfg) }
 // openPostgresDB opens a PostgreSQL pool via lib/pq, routing TCP dials through
 // BindDialer when cfg.Interface is set so multihomed probes egress the right link.
 func openPostgresDB(cfg Config) (*sql.DB, error) {
-	connector, err := pq.NewConnector(buildPGDSN(cfg))
+	connector, err := postgresConnector(cfg)
 	if err != nil {
 		return nil, err
-	}
-	if cfg.Interface != "" {
-		connector.Dialer(pqDialer(cfg.Interface))
 	}
 	return sql.OpenDB(connector), nil
 }
 
-// postgresConnector builds the lib/pq connector for cfg. Used by tests to verify
+// postgresConnector builds the lib/pq connector for cfg, routing TCP dials
+// through BindDialer when cfg.Interface is set. Tests also use it to verify
 // interface binding is wired without opening a connection.
 func postgresConnector(cfg Config) (*pq.Connector, error) {
 	connector, err := pq.NewConnector(buildPGDSN(cfg))
