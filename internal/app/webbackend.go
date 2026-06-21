@@ -1101,7 +1101,10 @@ func (b *WebBackend) watchLiveView(w *webWatch, system metrics.Snapshot) (*web.W
 	case "smart":
 		return b.smartWatchView(w)
 	default:
-		return watchMeter(w.checkType, system), nil, ""
+		if m := watchMeter(w.checkType, system); m != nil {
+			return m, nil, ""
+		}
+		return b.probeWatchView(w)
 	}
 }
 
