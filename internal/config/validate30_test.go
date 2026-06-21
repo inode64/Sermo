@@ -1206,10 +1206,10 @@ name: svc
 service: x
 processes:
   main: { exe: /usr/sbin/mysqld, extra: value }
-  worker: { cmd: "worker", selector: background }
+  worker: { cmd: "worker", unexpected: true }
 `)
 	mustHave(t, issues, "processes.main.extra is not supported")
-	mustHave(t, issues, "processes.worker.selector is not supported")
+	mustHave(t, issues, "processes.worker.unexpected is not supported")
 }
 
 func TestValidateCleanServicePasses(t *testing.T) {
