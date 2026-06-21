@@ -1205,11 +1205,11 @@ kind: service
 name: svc
 service: x
 processes:
-  main: { exe: /usr/sbin/mysqld, pidfile: /run/mysqld/mysqld.pid }
-  worker: { cmd: "worker", role: background }
+  main: { exe: /usr/sbin/mysqld, extra: value }
+  worker: { cmd: "worker", selector: background }
 `)
-	mustHave(t, issues, "processes.main.pidfile is not supported")
-	mustHave(t, issues, "processes.worker.role is not supported")
+	mustHave(t, issues, "processes.main.extra is not supported")
+	mustHave(t, issues, "processes.worker.selector is not supported")
 }
 
 func TestValidateCleanServicePasses(t *testing.T) {

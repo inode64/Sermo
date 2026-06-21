@@ -138,6 +138,11 @@ Do not add new dual parsers or migration shims for retired parameters; new sugar
 must follow the same one-way desugar pattern and be documented in
 `docs/daemons.md`.
 
+Do not add regression tests that feed a removed YAML field, alias or spelling
+just to assert that it is rejected. Those fixtures keep the retired vocabulary
+alive. Test the current canonical shape and, when strict validation needs
+coverage, use generic unknown fields/types rather than old configuration names.
+
 ## Runtime paths
 
 Use `/run` for volatile runtime artifacts in catalog profiles, generated

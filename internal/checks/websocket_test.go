@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -97,15 +96,6 @@ func TestBuildWebsocketCheckErrors(t *testing.T) {
 	}
 }
 
-func TestBuildWebsocketAliasRejected(t *testing.T) {
-	_, warns := Build(map[string]any{
-		"probe": map[string]any{"type": "ws", "url": "ws://127.0.0.1/socket"},
-	}, Deps{DefaultTimeout: time.Second})
-	if len(warns) == 0 || !strings.Contains(warns[0], `unsupported type "ws"`) {
-		t.Fatalf("type ws should be rejected, got %v", warns)
-	}
-}
-
 // wsSkipVerify gates TLS certificate verification, so it must return true ONLY
 // for the explicit opt-out values — a typo or stray value must keep verification
 // on (the safe default).
@@ -115,7 +105,7 @@ func TestWsSkipVerify(t *testing.T) {
 			t.Errorf("wsSkipVerify(%q) = false, want true (explicit opt-out)", v)
 		}
 	}
-	for _, v := range []string{"", "verify", "true", "1", "yes", "skipverify", "skip verify", "skip_verify", "insecure", "none"} {
+	for _, v := range []string{"", "verify", "true", "1", "yes", "skipverify", "skip verify", "none"} {
 		if wsSkipVerify(v) {
 			t.Errorf("wsSkipVerify(%q) = true, want false (verification must stay on)", v)
 		}

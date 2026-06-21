@@ -135,8 +135,7 @@ func TestSpecFromTreeDockerRejectsUnsafeOptions(t *testing.T) {
 		{name: "relative socket", tree: map[string]any{"type": "docker", "container": "web", "socket": "docker.sock"}},
 		{name: "bad port", tree: map[string]any{"type": "docker", "container": "web", "host": "127.0.0.1", "port": 70000}},
 		{name: "interface", tree: map[string]any{"type": "docker", "container": "web", "interface": "eth0"}},
-		{name: "old skip_verify tls alias", tree: map[string]any{"type": "docker", "container": "web", "host": "127.0.0.1", "tls": "skip_verify"}},
-		{name: "old insecure tls alias", tree: map[string]any{"type": "docker", "container": "web", "host": "127.0.0.1", "tls": "insecure"}},
+		{name: "bad tls mode", tree: map[string]any{"type": "docker", "container": "web", "host": "127.0.0.1", "tls": "maybe"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, ok, err := SpecFromTree(map[string]any{"control": tc.tree})
