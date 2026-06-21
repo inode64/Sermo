@@ -62,9 +62,12 @@ Batch already landed in the catalog (start/restart/reload gate):
       `named`, `dhcpd`, `dnsmasq`, `syslog-ng`, `monit`, `fetchmail`
 - [x] Mail / security: `dovecot`, `exim`, `rspamd`, `spamassassin`, `fail2ban`,
       `squid`, `proftpd`
-- [x] Databases / caches: `mysql` (`--defaults-file` + `--validate-config`),
-      `mariadb` (`--defaults-file` + `--help --verbose`), `postgres-%v`
-      (`postgres --check`), `mongod`, `redis` still pending (no offline validator)
+- [x] Databases / caches with offline `preflight.config`: `mysql`
+      (`--defaults-file` + `--validate-config`), `mariadb` (`--defaults-file` +
+      `--help --verbose`), `postgres-%v` (`postgres --check`), `mongod`
+      (`--outputConfig`)
+- [ ] `redis` / `keydb` catalog `preflight.config` (no reliable offline validator
+      shipped yet; live checks and restart rules exist in catalog)
 - [x] Backup: `bacula-*`, `bareos-*`
 - [x] Observability / tunnels: `prometheus`, `alloy`, `loki`, `influxdb`,
       `filebeat`, `cloudflared`, `nebula`, `nebula-%i`
@@ -73,8 +76,8 @@ Batch already landed in the catalog (start/restart/reload gate):
 
 Still missing `preflight.config` where no reliable offline check exists (see
 catalog audit / profile-author notes): most hardware helpers, JVM stacks without
-a configtest CLI, `redis` / `keydb`, `mosquitto`, `supervisord`, `udisks2`,
-`pm2`, etc.
+a configtest CLI, `mosquitto`, `supervisord`, `udisks2`, `pm2`, etc. (`redis` /
+`keydb` tracked above).
 
 ## Engine and config
 
