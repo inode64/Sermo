@@ -34,7 +34,7 @@ func TestAcquireOnEmptyDir(t *testing.T) {
 	if handle == nil {
 		t.Fatal("Acquire() handle = nil")
 	}
-	lf, err := readLockFile(handle.Path())
+	lf, err := readLockFile(handle.path)
 	if err != nil {
 		t.Fatalf("readLockFile: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestAcquireReclaimsStale(t *testing.T) {
 			if len(reclaimed) != 1 || reclaimed[0] != tc.wantTag {
 				t.Fatalf("reclaim reasons = %v, want [%s]", reclaimed, tc.wantTag)
 			}
-			lf, err := readLockFile(handle.Path())
+			lf, err := readLockFile(handle.path)
 			if err != nil {
 				t.Fatalf("readLockFile: %v", err)
 			}
@@ -138,7 +138,7 @@ func TestReleaseRemovesOwnLock(t *testing.T) {
 	if err := handle.Release(); err != nil {
 		t.Fatalf("Release() error = %v", err)
 	}
-	if _, err := os.Stat(handle.Path()); !os.IsNotExist(err) {
+	if _, err := os.Stat(handle.path); !os.IsNotExist(err) {
 		t.Fatalf("lock file still present after Release: %v", err)
 	}
 	// Release is idempotent.
@@ -159,7 +159,7 @@ func TestReleaseLeavesForeignLock(t *testing.T) {
 	if err := handle.Release(); err != nil {
 		t.Fatalf("Release() error = %v", err)
 	}
-	lf, err := readLockFile(handle.Path())
+	lf, err := readLockFile(handle.path)
 	if err != nil {
 		t.Fatalf("foreign lock should remain: %v", err)
 	}
