@@ -89,8 +89,8 @@ nginx -> nginx
 Resolution (see `docs/configuration.md`): read the service unit from scalar
 `service: <unit>` or a per-init `service: { systemd: [...], openrc: [...] }` map,
 normalize for the backend (systemd appends `.service`), pick the first candidate
-the backend actually knows, and cache it. `service.name` is not supported. If no
-candidate resolves, fail with a clear error listing the candidates tried.
+the backend actually knows, and cache it. If no candidate resolves, fail with a
+clear error listing the candidates tried.
 
 ## Testing
 
