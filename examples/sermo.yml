@@ -51,6 +51,10 @@ paths:
     - /etc/sermo/networks    # network/uplink watch fragments
   watches:
     - /etc/sermo/watches     # generic host watch fragments
+  # The shipped watch examples under storages/, networks/ and watches/ use
+  # `monitor: disabled` so copying them cannot immediately run hooks or send
+  # notifications. After adapting thresholds, hooks and notify targets for the
+  # host, set each fragment to `monitor: enabled` or `monitor: previous`.
   mounts:
     - /etc/sermo/mounts      # fstab-backed kind: mount documents
 
