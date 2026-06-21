@@ -15,7 +15,7 @@ service override or disable a single inherited rule. An entry has:
 type           remediation | guard | alert        (RuleType)
 if             condition tree
 for / within   optional window
-then           a single Action { action, message, ... }   (ActionType)
+then           one action { action, message, ... } or actions: [{ type, message, ... }]
 blocks         list of actions a guard blocks (guard rules only)
 ```
 
@@ -35,9 +35,13 @@ rules:
       action: restart
 ```
 
-`RuleType`/`ActionType` constants and the `Action` struct are defined in
-`docs/rules.md`. `block` and `alert` actions require a
-`message`; only guard rules use `action: block`, and a guard must list `blocks`.
+`RuleType`/`ActionType` constants and the resolved `Action` struct live in
+`internal/rules/model.go`; the public YAML surface is documented in
+`docs/rules.md`. A `then` block resolves to one or more actions. The single form
+is `then: { action: restart }`; the multi-action form is
+`then: { actions: [ { type: alert, message: "..." }, { type: restart } ] }`.
+`block` and `alert` actions require a `message`; only guard rules use
+`action: block`, and a guard must list `blocks`.
 
 ## Condition tree
 
@@ -54,6 +58,7 @@ service
 process
 file
 command
+changed
 ```
 
 Example:
@@ -70,7 +75,8 @@ if:
 
 `metric` leaves carry a `scope` (`service` default, or `system`). Remediation
 rules may only trigger on `scope: service` metrics; a `scope: system` metric may
-drive `alert` only — never restart/start/stop a single service.
+drive `alert` only — never an operation action
+(`restart`/`start`/`stop`/`reload`/`resume`) for a single service.
 
 Conditions are read-only predicates. The evaluator runs every distinct probe (a
 declared check or an inline condition) at most once per cycle and caches the
@@ -103,7 +109,7 @@ Do not allow ambiguous windows. A rule cannot define both `for` and `within`; va
 Support these concepts:
 
 ```text
-remediation: may start/stop/restart
+remediation: may start/stop/restart/reload/resume
 guard: blocks actions
 alert: records or notifies
 ```
