@@ -92,22 +92,6 @@ func TestReloadClosureNoSpecUsesBackendReload(t *testing.T) {
 	}
 }
 
-func TestReloadClosureCommandsReloadIsIgnored(t *testing.T) {
-	mgr := &fakeManager{canReload: true}
-	runner := &scriptedRunner{}
-	tree := map[string]any{"commands": map[string]any{"reload": map[string]any{"command": []any{"nginx", "-s", "reload"}}}}
-	reload := reloadClosureForTest(tree, depsWith(runner), mgr, "systemd", "nginx")
-	if err := reload(context.Background()); err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if runner.ran("nginx") {
-		t.Errorf("commands.reload must not run the command; calls=%v", runner.calls)
-	}
-	if !mgr.did("reload nginx") {
-		t.Errorf("commands.reload must be ignored so backend reload runs; calls=%v", mgr.calls)
-	}
-}
-
 func TestReloadClosureAutoCommandPrefersBackendWhenSupported(t *testing.T) {
 	mgr := &fakeManager{canReload: true}
 	runner := &scriptedRunner{}

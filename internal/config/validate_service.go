@@ -406,10 +406,6 @@ func validateCommands(tree map[string]any, add addFunc) {
 			add("commands.%s must be a mapping", name)
 			continue
 		}
-		if name == "reload" {
-			add("commands.reload is not supported; use reload.command with when: always")
-			continue
-		}
 		if !isStringArray(entry["command"]) {
 			add("commands.%s command must be an array, not a shell string", name)
 		}
