@@ -12,9 +12,9 @@ Assume Sermo may run on production servers and may control databases, web server
 Always verify:
 
 1. No service action runs without a timeout.
-2. Restart/start is blocked when required preflight fails.
-3. Restart/stop/start is blocked when a matching guard blocks it.
-4. Restart/stop is blocked when a relevant operational lock is active.
+2. Start/restart/reload/resume is blocked when required preflight fails.
+3. Start/stop/restart/reload/resume is blocked when a matching guard blocks it.
+4. Start/stop/restart/reload/resume is blocked when a relevant operational lock is active.
 5. Auto-remediation uses the same safe operation path as manual CLI actions.
 6. `SIGKILL` is never used unless explicitly allowed.
 7. Any `SIGKILL` allowance has a restrictive `kill_only_if` clause.
@@ -34,7 +34,8 @@ Always verify:
 14. Commands do not interpolate untrusted strings through a shell.
 15. External command arguments are passed as argv arrays, not shell strings.
 16. Remediation triggers only on service-scope metrics; a system-scope metric
-    (total_memory, total_cpu, load) may drive an alert but never restart/stop/start.
+    (total_memory, total_cpu, load) may drive an alert but never
+    start/stop/restart/reload/resume.
 17. Locks are atomic (O_CREAT|O_EXCL) and TTL-bounded; a stale lock (expired or
     dead owner via owner_start_ticks) is reclaimed through a logged path, never
     silently overwritten. The internal operation lock is released on every exit
@@ -91,9 +92,11 @@ Safety-sensitive changes should include tests for:
 ```text
 guard blocks restart
 guard blocks start
+guard blocks reload/resume
 preflight failure blocks restart
 preflight failure blocks start
-lock blocks stop/restart
+preflight failure blocks reload/resume
+lock blocks start/stop/restart/reload/resume
 paths.locks rejected; named and operation lock dirs derive separately from paths.runtime
 force_kill false does not send SIGKILL
 force_kill true requires kill_only_if

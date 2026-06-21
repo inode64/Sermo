@@ -5,10 +5,11 @@ any `security:` toggle that tries to disable them.
 
 ## Hard invariants
 
-1. **Never start, restart or reload if a required preflight fails.** A required
-   preflight failure blocks the action with `preflight_failed`.
-2. **Never start, stop, restart or reload if a guard blocks the action.** Guards are
-   evaluated before remediation; a remediation action a guard blocks never runs.
+1. **Never start, restart, reload or resume if a required preflight fails.** A
+   required preflight failure blocks the action with `preflight_failed`.
+2. **Never start, stop, restart, reload or resume if a guard blocks the action.**
+   Guards are evaluated before remediation; a remediation action a guard blocks
+   never runs.
 3. **Active named runtime locks always block service actions.** The operation
    engine checks `<runtime>/locks` automatically — no rule needed.
 4. **Never SIGKILL by default.** `force_kill` is false unless explicitly enabled.

@@ -510,8 +510,9 @@ checklist). Match the suite's existing style instead of inventing one.
 2. Never use `SIGKILL` unless the daemon definition explicitly allows it.
 3. A `SIGKILL` policy must include a restrictive `kill_only_if` clause.
 4. Process matching must validate at least `exe` and `user`; prefer `pidfile` or `cgroup` as additional evidence. `exe` is the resolved `/proc/<pid>/exe` path matched exactly (never argv[0]/cmdline, never a substring); an unresolvable `exe` never matches. See `docs/safety.md` (process identity).
-5. Never restart, start or stop a service when a matching guard blocks the action.
-6. Never restart or start when required preflight checks fail.
+5. Never start, stop, restart, reload or resume a service when a matching guard
+   blocks the action.
+6. Never start, restart, reload or resume when required preflight checks fail.
 7. Never perform service actions without a timeout.
 8. Never enter a restart loop. Automatic remediation must honor the resolved
    per-service `policy` block; `policy.cooldown` is mandatory and positive after
@@ -527,8 +528,8 @@ checklist). Match the suite's existing style instead of inventing one.
     remaining residual makes the result `orphan_processes`, and a failed stop must
     not automatically start the service unless policy explicitly allows it.
 13. Remediation must trigger on service-scoped metrics only. A system-wide metric
-    (total memory, total CPU, load) must never restart, start or stop an
-    individual service; it may only drive an alert.
+    (total memory, total CPU, load) must never drive start, stop, restart, reload
+    or resume for an individual service; it may only drive an alert.
 14. Rule conditions are read-only predicates, evaluated at most once per cycle. A
     condition must never mutate system state; mutation belongs to actions.
 15. Locks are acquired atomically (O_CREAT|O_EXCL) and bounded by a TTL. A lock is
