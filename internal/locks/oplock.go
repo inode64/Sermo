@@ -60,9 +60,6 @@ type Handle struct {
 	ownedLock
 }
 
-// Path returns the lock file path.
-func (h *Handle) Path() string { return h.path }
-
 // Release removes the lock, but only if it is still this owner's lock. Safe on
 // a nil handle, so callers can defer it unconditionally.
 func (h *Handle) Release() error {

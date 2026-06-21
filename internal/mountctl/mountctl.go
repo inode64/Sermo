@@ -543,20 +543,9 @@ func PathInFstab(path string) (bool, error) {
 	return false, nil
 }
 
-// Users returns processes with cwd/root/fd targets under mountPath.
-func Users(mountPath string) ([]process.Process, error) {
-	return UsersWithLookup(mountPath, nil)
-}
-
-// UsersWithLookup returns processes using mountPath, resolving user display
-// names with lookup. The scan has no deadline; prefer UsersWithLookupContext
-// when the caller carries a timeout or cancellation.
-func UsersWithLookup(mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
-	return UsersWithLookupContext(context.Background(), mountPath, lookup)
-}
-
-// UsersWithLookupContext scans /proc for processes using mountPath. The scan
-// stops early when ctx is cancelled or its deadline passes.
+// UsersWithLookupContext scans /proc for processes using mountPath, resolving
+// user display names with lookup. The scan stops early when ctx is cancelled or
+// its deadline passes.
 func UsersWithLookupContext(ctx context.Context, mountPath string, lookup *process.UserLookup) ([]process.Process, error) {
 	return usersWithLookup(ctx, mountPath, lookup)
 }

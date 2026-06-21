@@ -18,10 +18,6 @@ type Issue struct {
 	Msg   string
 }
 
-func (i Issue) String() string {
-	return fmt.Sprintf("%s: %s", i.Scope, i.Msg)
-}
-
 var validBackends = map[string]struct{}{"": {}, "auto": {}, "systemd": {}, "openrc": {}}
 
 // rejectedSecurityToggles are keys under `security:` that try to disable hard
