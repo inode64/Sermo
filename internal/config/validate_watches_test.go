@@ -1222,8 +1222,8 @@ func TestValidateSwapUsageSharedGrammar(t *testing.T) {
 }
 
 func TestValidateMetricWatchEntryLevelBlocks(t *testing.T) {
-	// then/for/within on a multi-metric watch entry are ignored by the runtime
-	// (each metric carries its own), so validation must flag them.
+	// then/for/within on a multi-metric watch entry belong in each metric's own
+	// block, so validation must reject entry-level copies.
 	bad := validateRawGlobal(t, map[string]any{
 		"watches": map[string]any{
 			"swap": map[string]any{
@@ -1250,9 +1250,9 @@ func TestValidateMetricWatchEntryLevelBlocks(t *testing.T) {
 		},
 	})
 	for _, w := range []string{
-		"watches.swap.then is ignored on a multi-metric watch",
-		"watches.swap.for is ignored on a multi-metric watch",
-		"watches.net.then is ignored on a multi-metric watch",
+		"watches.swap.then is not valid on a multi-metric watch",
+		"watches.swap.for is not valid on a multi-metric watch",
+		"watches.net.then is not valid on a multi-metric watch",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)
@@ -1452,8 +1452,8 @@ func TestValidateFileProcessWatchRejectsEntryLevelWindow(t *testing.T) {
 		},
 	})
 	for _, w := range []string{
-		"watches.cfg.for is ignored on a file watch",
-		"watches.proc.within is ignored on a process watch",
+		"watches.cfg.for is not valid on a file watch",
+		"watches.proc.within is not valid on a process watch",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)

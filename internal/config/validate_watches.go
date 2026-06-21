@@ -194,24 +194,23 @@ func HasEffectiveNotifyAction(names, defaultNotify []string) bool {
 	return HasNotifyAction(names) || (len(names) == 0 && len(defaultNotify) > 0)
 }
 
-// validateMetricWatchEntry flags entry-level then/for/within on a multi-metric
-// watch (net, icmp, swap): the runtime reads them only inside each metric's own
-// block, so an entry-level copy would be silently ignored.
+// validateMetricWatchEntry rejects entry-level then/for/within on a multi-metric
+// watch (net, icmp, swap): those fields belong inside each metric's own block.
 func validateMetricWatchEntry(name string, entry map[string]any, add func(string, ...any)) {
-	validateIgnoredWatchEntryFields(name, "multi-metric", entry, []string{"then", "for", "within"}, "metrics.<name>.%s", add)
+	validateInvalidWatchEntryFields(name, "multi-metric", entry, []string{"then", "for", "within"}, "metrics.<name>.%s", add)
 }
 
-// validateStatefulWatchEntry flags entry-level for/within on a file or process
+// validateStatefulWatchEntry rejects entry-level for/within on a file or process
 // watch: these use internal per-path/per-PID state and never read the shared
 // rules window fields at the entry level.
 func validateStatefulWatchEntry(name, typ string, entry map[string]any, add func(string, ...any)) {
-	validateIgnoredWatchEntryFields(name, typ, entry, []string{"for", "within"}, "", add)
+	validateInvalidWatchEntryFields(name, typ, entry, []string{"for", "within"}, "", add)
 }
 
-func validateIgnoredWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add func(string, ...any)) {
+func validateInvalidWatchEntryFields(name, typ string, entry map[string]any, keys []string, moveHint string, add func(string, ...any)) {
 	for _, key := range keys {
 		if _, present := entry[key]; present {
-			msg := fmt.Sprintf("watches.%s.%s is ignored on a %s watch", name, key, typ)
+			msg := fmt.Sprintf("watches.%s.%s is not valid on a %s watch", name, key, typ)
 			if moveHint != "" {
 				msg += fmt.Sprintf("; move it into the metric's own block ("+moveHint+")", key)
 			}
