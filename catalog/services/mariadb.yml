@@ -79,7 +79,6 @@ rules:
         check: tcp
     for:
       cycles: 3
-      mode: consecutive
     then:
       action: restart
 

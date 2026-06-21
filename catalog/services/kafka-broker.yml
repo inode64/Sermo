@@ -54,6 +54,5 @@ rules:
         check: protocol
     for:
       cycles: 3
-      mode: consecutive
     then:
       action: restart
