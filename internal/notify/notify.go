@@ -6,7 +6,7 @@
 // `builders` map keyed by `type`; the rest of the system addresses every
 // transport uniformly through the Notifier interface. Keep this extensible:
 // adding a transport must not require changes outside this package and the docs
-// (see AGENTS.md "Notifications are pluggable").
+// (see AGENTS.md "Central builders" — Notifiers).
 package notify
 
 import (
