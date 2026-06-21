@@ -89,13 +89,16 @@ checks:
 }
 
 func TestValidateMySQLCheckBadTLS(t *testing.T) {
-	mustHave(t, validateService(t, `
+	for _, tls := range []string{"maybe", "skip_verify", "insecure"} {
+		issues := validateService(t, `
 kind: service
 name: db
 service: x
 checks:
-  conn: { type: mariadb, user: u, tls: maybe }
-`), "tls")
+  conn: { type: mariadb, user: u, tls: `+tls+` }
+`)
+		mustHave(t, issues, "tls")
+	}
 }
 
 func TestValidateConnExpectValid(t *testing.T) {

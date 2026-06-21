@@ -125,7 +125,9 @@ func TestNormalizeTLS(t *testing.T) {
 	cases := map[string]string{
 		"": "", "false": "", "no": "",
 		"true": "true", "yes": "true",
-		"skip-verify": "skip-verify", "insecure": "skip-verify",
+		"skip-verify": "skip-verify",
+		"skip_verify": "skip_verify",
+		"insecure":    "insecure",
 	}
 	for in, want := range cases {
 		if got := normalizeTLS(in); got != want {

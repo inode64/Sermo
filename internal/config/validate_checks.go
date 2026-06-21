@@ -434,7 +434,7 @@ func validateConnFields(prefix string, fields map[string]any, requireUser bool, 
 			// fine
 		case string:
 			switch strings.ToLower(strings.TrimSpace(t)) {
-			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify", "skip_verify", "insecure",
+			case "true", "false", "yes", "no", "on", "off", "required", "skip-verify",
 				// PostgreSQL sslmodes
 				"disable", "require", "prefer", "verify-ca", "verify-full":
 			default:

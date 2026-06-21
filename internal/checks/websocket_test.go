@@ -100,12 +100,12 @@ func TestBuildWebsocketCheckErrors(t *testing.T) {
 // for the explicit opt-out values — a typo or stray value must keep verification
 // on (the safe default).
 func TestWsSkipVerify(t *testing.T) {
-	for _, v := range []string{"skip-verify", "skip_verify", "insecure", "SKIP-VERIFY", "  Insecure  "} {
+	for _, v := range []string{"skip-verify", "SKIP-VERIFY", "  skip-verify  "} {
 		if !wsSkipVerify(v) {
 			t.Errorf("wsSkipVerify(%q) = false, want true (explicit opt-out)", v)
 		}
 	}
-	for _, v := range []string{"", "verify", "true", "1", "yes", "skipverify", "skip verify", "none"} {
+	for _, v := range []string{"", "verify", "true", "1", "yes", "skipverify", "skip verify", "skip_verify", "insecure", "none"} {
 		if wsSkipVerify(v) {
 			t.Errorf("wsSkipVerify(%q) = true, want false (verification must stay on)", v)
 		}
