@@ -4,6 +4,10 @@ display_name: "libvirt Network Daemon"
 category: virtualization
 variables:
   binary: /usr/bin/virtnetworkd
+  dnsmasq_binary:
+    - /usr/sbin/dnsmasq
+    - /usr/bin/dnsmasq
 preflight:
   binary: { type: binary, path: "${binary}" }
+  dnsmasq: { type: binary, path: "${dnsmasq_binary}", optional: true }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

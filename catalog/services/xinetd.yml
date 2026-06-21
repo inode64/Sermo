@@ -8,5 +8,9 @@ apps: [xinetd]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/xinetd.pid
 
+processes:
+  main:
+    exe: "${xinetd_binary}"
+
 checks:
   service: { type: service, expect: active }

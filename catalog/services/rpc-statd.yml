@@ -9,5 +9,9 @@ apps: [rpc-statd]
 
 pidfile: /run/rpc.statd.pid
 
+processes:
+  main:
+    exe: "${rpc_statd_binary}"
+
 checks:
   service: { type: service, expect: active }

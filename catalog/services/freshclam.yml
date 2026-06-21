@@ -23,5 +23,9 @@ os:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: "${pidfile}"
 
+processes:
+  main:
+    exe: "${freshclam_binary}"
+
 checks:
   service: { type: service, expect: active }

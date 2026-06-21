@@ -7,6 +7,10 @@ service:
   openrc: [ovsdb-server]
 apps: [ovsdb-server]
 
+processes:
+  main:
+    exe: "${ovsdb_server_binary}"
+
 checks:
   service: { type: service, expect: active }
   openvswitch: { type: openvswitch, socket: /run/openvswitch/db.sock, timeout: 3s }

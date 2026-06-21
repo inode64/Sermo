@@ -26,6 +26,20 @@ socket:
   - /run/pcp/pmcd.socket
   - /var/lib/pcp/pmcd/root.socket
 
+processes:
+  main:
+    exe: "${pmcd_binary}"
+  pmdaroot:
+    exe: "${pmcd_pmdaroot_binary}"
+  pmdaproc:
+    exe: "${pmcd_pmdaproc_binary}"
+  pmdaxfs:
+    exe: "${pmcd_pmdaxfs_binary}"
+  pmdalinux:
+    exe: "${pmcd_pmdalinux_binary}"
+  pmdakvm:
+    exe: "${pmcd_pmdakvm_binary}"
+
 checks:
   service:
     type: service

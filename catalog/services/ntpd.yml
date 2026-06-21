@@ -13,6 +13,10 @@ variables:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/ntpd.pid
 
+processes:
+  main:
+    exe: "${ntpd_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: ntp, port: "${port}" }

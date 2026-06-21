@@ -7,5 +7,9 @@ service:
   systemd: [pmie]
 apps: [pmie]
 
+processes:
+  main:
+    exe: "${pmie_binary}"
+
 checks:
   service: { type: service, expect: active }

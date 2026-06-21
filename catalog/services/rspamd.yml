@@ -16,6 +16,10 @@ pidfile: /run/rspamd.pid
 
 socket: { path: /var/lib/rspamd/rspamd.sock, optional: true }
 
+processes:
+  main:
+    exe: "${rspamd_binary}"
+
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }

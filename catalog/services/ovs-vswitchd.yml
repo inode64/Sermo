@@ -5,6 +5,10 @@ category: virtualization
 service: ovs-vswitchd
 apps: [ovs-vswitchd]
 
+processes:
+  main:
+    exe: "${ovs_vswitchd_binary}"
+
 checks:
   service: { type: service, expect: active }
   openvswitch: { type: openvswitch, socket: /run/openvswitch/db.sock, timeout: 3s }

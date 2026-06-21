@@ -6,6 +6,10 @@ apps: [mdadm]
 
 pidfile: /run/mdadm.pid
 
+processes:
+  main:
+    exe: "${mdadm_binary}"
+
 checks:
   service: { type: service, expect: active }
 

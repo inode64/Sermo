@@ -7,7 +7,13 @@ variables:
   daemon:
     - /usr/bin/dockerd
     - /usr/sbin/dockerd
+  proxy_binary:
+    - /usr/libexec/docker/docker-proxy
+    - /usr/lib/docker/docker-proxy
+    - /usr/bin/docker-proxy
+    - /usr/sbin/docker-proxy
 preflight:
   binary: { type: binary, path: "${binary}" }
   daemon: { type: binary, path: "${daemon}" }
+  proxy: { type: binary, path: "${proxy_binary}", optional: true }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

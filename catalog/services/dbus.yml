@@ -12,6 +12,10 @@ apps: [dbus]
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/dbus.pid
 
+processes:
+  main:
+    exe: "${dbus_binary}"
+
 checks:
   service: { type: service, expect: active }
   dbus: { type: dbus, timeout: 3s }

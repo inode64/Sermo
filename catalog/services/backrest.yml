@@ -17,6 +17,10 @@ variables:
 # requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/backrest.pid
 
+processes:
+  main:
+    exe: "${backrest_binary}"
+
 checks:
   service:
     type: service

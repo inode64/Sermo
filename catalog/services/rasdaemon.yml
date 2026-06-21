@@ -7,5 +7,9 @@ service:
   systemd: [rasdaemon]
 apps: [rasdaemon]
 
+processes:
+  main:
+    exe: "${rasdaemon_binary}"
+
 checks:
   service: { type: service, expect: active }

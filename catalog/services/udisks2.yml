@@ -7,5 +7,9 @@ service:
   systemd: [udisks2]
 apps: [udisks2]
 
+processes:
+  main:
+    exe: "${udisks2_binary}"
+
 checks:
   service: { type: service, expect: active }
