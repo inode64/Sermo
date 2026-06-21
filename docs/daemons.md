@@ -111,7 +111,7 @@ The **`reload`** action runs through the same safe engine as restart but in
 place: it runs **preflight first** (so an invalid config — caught by the
 service's `config` check — blocks the reload), reloads, then verifies health.
 `reload` is also a valid rule action on its own (`then: { action: reload }`) and
-is blocked by the same guards as restart/start.
+is blocked by guards that list `reload`, like any other service action.
 
 **What "reload" runs.** By default it is the backend per-unit reload —
 `systemctl reload <unit>` (which runs the unit's `ExecReload`, e.g. `nginx -s
@@ -253,8 +253,8 @@ names.
 
 Because they run in **preflight**, a missing or wrong-version runtime fails the
 service's preflight, which **blocks start/restart/reload/resume** (a preflight-failed
-operation never executes the action) — you do not start, restart or reload a
-service whose runtime is absent.
+operation never executes the action) — you do not start, restart, reload or
+resume a service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
 every service that lists it. The service keeps its own `variables.binary`,
 `version` and `config` checks (the **config** test is always service-specific,

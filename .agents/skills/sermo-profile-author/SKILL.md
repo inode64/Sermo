@@ -66,7 +66,7 @@ For databases:
 force_kill: false
 long graceful timeout
 backup locks enabled
-config validation required before restart/start
+config validation required before start/restart/reload/resume
 ```
 
 For stateless web services:
