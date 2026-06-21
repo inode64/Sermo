@@ -152,9 +152,9 @@ func (h *harness) engine() Engine {
 	}
 }
 
-func (h *harness) restart(t *testing.T) Result {
+func (h *harness) action(t *testing.T, action string) Result {
 	t.Helper()
-	res := h.engine().Restart(context.Background())
+	res := h.engine().Do(context.Background(), action)
 	if len(h.emitted) != 1 {
 		t.Fatalf("Emit called %d times, want exactly 1", len(h.emitted))
 	}
@@ -162,6 +162,11 @@ func (h *harness) restart(t *testing.T) Result {
 		t.Fatalf("emitted result %q != returned %q", h.emitted[0].Status, res.Status)
 	}
 	return res
+}
+
+func (h *harness) restart(t *testing.T) Result {
+	t.Helper()
+	return h.action(t, "restart")
 }
 
 func TestRestartOK(t *testing.T) {
@@ -315,6 +320,29 @@ func TestRestartBlockedByOpLock(t *testing.T) {
 	}
 }
 
+func TestOperationLockBlocksAllServiceActions(t *testing.T) {
+	for _, action := range []string{"start", "stop", "restart", "reload", "resume"} {
+		t.Run(action, func(t *testing.T) {
+			h := defaultHarness()
+			h.lockErr = &locks.HeldError{Service: "mysql-main", Lock: locks.Lock{Path: "/run/sermo/ops/mysql-main.lock"}}
+
+			res := h.action(t, action)
+			if res.Status != ResultBlocked || res.Message != "operation in progress" {
+				t.Fatalf("res = %+v, want blocked/operation in progress", res)
+			}
+			if len(h.mgr.calls) != 0 {
+				t.Fatalf("service action must not run while op lock is held; calls=%v", h.mgr.calls)
+			}
+			if h.released != 0 {
+				t.Fatalf("must not release a lock it never acquired (released=%d)", h.released)
+			}
+			if len(res.Locks) != 1 {
+				t.Fatalf("blocked-by-lock result should carry the held lock")
+			}
+		})
+	}
+}
+
 func TestRestartBlockedByNamedLock(t *testing.T) {
 	h := defaultHarness()
 	h.named = []locks.Lock{{Service: "mysql-main", Name: "backup", State: locks.StateActive}}
@@ -330,6 +358,29 @@ func TestRestartBlockedByNamedLock(t *testing.T) {
 	}
 	if h.released != 1 {
 		t.Errorf("op lock must be released (released=%d)", h.released)
+	}
+}
+
+func TestNamedRuntimeLockBlocksAllServiceActions(t *testing.T) {
+	for _, action := range []string{"start", "stop", "restart", "reload", "resume"} {
+		t.Run(action, func(t *testing.T) {
+			h := defaultHarness()
+			h.named = []locks.Lock{{Service: "mysql-main", Name: "backup", State: locks.StateActive}}
+
+			res := h.action(t, action)
+			if res.Status != ResultBlocked || res.Message != "blocked by active runtime lock" {
+				t.Fatalf("res = %+v, want blocked by active runtime lock", res)
+			}
+			if len(res.Locks) != 1 || res.Locks[0].Name != "backup" {
+				t.Fatalf("result should list the active named lock: %+v", res.Locks)
+			}
+			if len(h.mgr.calls) != 0 {
+				t.Fatalf("service action must not run while a named lock is active; calls=%v", h.mgr.calls)
+			}
+			if h.released != 1 {
+				t.Fatalf("op lock must be released (released=%d)", h.released)
+			}
+		})
 	}
 }
 
@@ -367,6 +418,26 @@ func TestReloadPreflightFailedDoesNotReload(t *testing.T) {
 	}
 }
 
+func TestPreflightBlocksReloadAndResume(t *testing.T) {
+	for _, action := range []string{"reload", "resume"} {
+		t.Run(action, func(t *testing.T) {
+			h := defaultHarness()
+			h.preflight = checks.Outcome{OK: false, Results: []checks.Result{{Check: "config", OK: false}}}
+
+			res := h.action(t, action)
+			if res.Status != ResultPreflightFailed {
+				t.Fatalf("status = %q, want preflight_failed", res.Status)
+			}
+			if len(h.mgr.calls) != 0 {
+				t.Fatalf("must not run %s when preflight fails; calls=%v", action, h.mgr.calls)
+			}
+			if len(res.Checks) != 1 {
+				t.Fatalf("result should carry the preflight check results")
+			}
+		})
+	}
+}
+
 func TestReloadFailureSurfaces(t *testing.T) {
 	h := defaultHarness()
 	h.mgr.reloadErr = errors.New("no ExecReload")
@@ -401,6 +472,24 @@ func TestRestartGuardBlocks(t *testing.T) {
 	}
 	if h.mgr.did("stop mysqld") {
 		t.Error("must not stop when a guard blocks")
+	}
+}
+
+func TestGuardBlocksReloadAndResume(t *testing.T) {
+	for _, action := range []string{"reload", "resume"} {
+		t.Run(action, func(t *testing.T) {
+			h := defaultHarness()
+			h.guardBlocked = true
+			h.guardReason = "backup running"
+
+			res := h.action(t, action)
+			if res.Status != ResultBlocked || res.Message != "backup running" {
+				t.Fatalf("res = %+v, want blocked/backup running", res)
+			}
+			if len(h.mgr.calls) != 0 {
+				t.Fatalf("must not run %s when a guard blocks; calls=%v", action, h.mgr.calls)
+			}
+		})
 	}
 }
 
