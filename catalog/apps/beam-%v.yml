@@ -2,7 +2,6 @@ kind: app
 name: beam-%v
 display_name: "Erlang BEAM ${version}"
 category: messaging
-service: beam
 variables:
   binary: "/usr/lib64/erlang/erts-${version}/bin/beam"
 preflight:
