@@ -579,6 +579,9 @@ auth is enabled:
   stale/expired named runtime lock; active locks are refused.
 - `POST /api/events/clear?before=TIME` — clear the persisted event/activity log;
   `before` may be RFC3339 or a duration. Omit it to clear all events.
+- `POST /api/state/compact?before=TIME` — prune old SLA, measurement, daemon
+  metric, service runtime metric and event history, then vacuum the state
+  database; matches `sermoctl state compact`.
 - `POST /api/diagnostics/clean` — when diagnostics are enabled, remove stale
   control state for services/watches no longer configured; metric, SLA and event
   history is kept. Returns `404` while `web.disable_diagnostics` is `true`.
