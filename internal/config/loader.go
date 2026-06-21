@@ -713,9 +713,6 @@ func loadDocument(path string) (*Document, error) {
 	if body == nil {
 		body = map[string]any{}
 	}
-	if _, present := body["catalog_aliases"]; present {
-		return nil, fmt.Errorf("%s: catalog_aliases is not supported; use canonical catalog names", path)
-	}
 	kind := cfgval.String(body["kind"])
 	return &Document{
 		Kind: kind,

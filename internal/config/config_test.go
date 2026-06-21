@@ -2316,22 +2316,6 @@ func TestCatalogRootFilesRejected(t *testing.T) {
 	}
 }
 
-func TestCatalogAliasesRejected(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml": baseGlobal,
-		"catalog/services/nginx.yml": `
-kind: daemon
-name: nginx
-catalog_aliases: [nginx-old]
-service: nginx
-`,
-	})
-	_, err := Load(global)
-	if err == nil || !strings.Contains(err.Error(), "catalog_aliases is not supported") {
-		t.Fatalf("Load() error = %v, want catalog_aliases rejection", err)
-	}
-}
-
 func TestCatalogOldAliasNameDoesNotResolve(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml":                baseGlobal,
