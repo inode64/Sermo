@@ -304,8 +304,9 @@ func (m statusMatcher) String() string {
 	return strings.Join(parts, ",")
 }
 
-// cmdState persists on_change state for checks reused across cycles; rebuilt
-// service checks leave on_change inert.
+// cmdState persists on_change state while a service worker or host watch reuses
+// the check instance across cycles. A config reload/worker rebuild creates a
+// fresh baseline.
 type cmdState struct {
 	primed bool
 	last   string
