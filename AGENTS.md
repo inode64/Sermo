@@ -111,9 +111,12 @@ documented alias — `limit` for `max`. So the kernel-maximum concept is `Max` /
 
 Use `/run` for volatile runtime artifacts in catalog profiles, generated
 configuration, examples and docs: pidfiles, sockets, OpenRC runtime metadata,
-Sermo runtime directories and locks. Do not write new `/var/run` paths. Modern
-Linux systems expose `/var/run` as a legacy compatibility symlink to `/run`, and
-Sermo configuration should use the canonical `/run` spelling.
+Sermo runtime directories and locks. Do not write new `/var/run` paths in Sermo
+configuration. Modern Linux systems expose `/var/run` as a compatibility
+symlink to `/run`, and older init scripts, service managers or packaged configs
+may still report that spelling. Sermo must keep normalizing those host-provided
+paths; this is Linux/init compatibility, not an obsolete Sermo configuration
+shape to remove.
 
 When systemd, OpenRC or a host file reports a pidfile or socket under
 `/var/run`, normalize it to the equivalent `/run/...` path before writing it to a
