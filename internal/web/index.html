@@ -1307,6 +1307,73 @@ const watchPanels = {
     allTypesLabel: "all host types", empty: "No watches.", emptyFiltered: "No watches match the filter.",
   },
 };
+
+const UI_STATE_KEY = "sermo-ui-state";
+
+function restoreUIState() {
+  try {
+    const raw = localStorage.getItem(UI_STATE_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (typeof s.svcQuery === "string") svcQuery = s.svcQuery;
+    if (typeof s.svcStatus === "string") svcStatus = s.svcStatus;
+    if (typeof s.svcCategory === "string") svcCategory = s.svcCategory;
+    if (typeof s.svcGrouped === "boolean") svcGrouped = s.svcGrouped;
+    if (s.svcSort && typeof s.svcSort.key === "string") {
+      svcSort = { key: s.svcSort.key, dir: s.svcSort.dir === -1 ? -1 : 1 };
+    }
+    if (typeof s.appQuery === "string") appQuery = s.appQuery;
+    if (s.appSort && typeof s.appSort.key === "string") {
+      appSort = { key: s.appSort.key, dir: s.appSort.dir === -1 ? -1 : 1 };
+    }
+    if (s.watchPanels && typeof s.watchPanels === "object") {
+      for (const [key, saved] of Object.entries(s.watchPanels)) {
+        const panel = watchPanels[key];
+        if (!panel || !saved) continue;
+        if (typeof saved.query === "string") panel.query = saved.query;
+        if (typeof saved.status === "string") panel.status = saved.status;
+        if (typeof saved.type === "string") panel.type = saved.type;
+        if (saved.sort && typeof saved.sort.key === "string") {
+          panel.sort = { key: saved.sort.key, dir: saved.sort.dir === -1 ? -1 : 1 };
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+function saveUIState() {
+  try {
+    localStorage.setItem(UI_STATE_KEY, JSON.stringify({
+      svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
+      appQuery, appSort,
+      watchPanels: Object.fromEntries(Object.entries(watchPanels).map(([k, p]) => [k, {
+        query: p.query, status: p.status, type: p.type, sort: p.sort,
+      }])),
+    }));
+  } catch (_) {}
+}
+
+function applyUIStateToControls() {
+  const svcSearch = $("#svc-search");
+  if (svcSearch) svcSearch.value = svcQuery;
+  document.querySelectorAll("#svc-filters button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.f === svcStatus));
+  const svcCategorySelect = $("#svc-category");
+  if (svcCategorySelect) svcCategorySelect.value = svcCategory;
+  const appSearch = $("#app-search");
+  if (appSearch) appSearch.value = appQuery;
+  for (const key of Object.keys(watchPanels)) {
+    const panel = watchPanels[key];
+    const search = $(panel.search);
+    if (search) search.value = panel.query;
+    syncWatchFilterActive(key);
+    const typeSelect = $(panel.typeSelect);
+    if (typeSelect && panel.type) typeSelect.value = panel.type;
+  }
+}
+
+restoreUIState();
+
 let allEvents = [];
 let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
@@ -1651,8 +1718,8 @@ function serviceMatches(s) {
   }
 }
 
-function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); }
-function setSvcCategory(v) { svcCategory = v || "all"; renderServices(); }
+function setSvcQuery(v) { svcQuery = (v || "").trim().toLowerCase(); renderServices(); saveUIState(); }
+function setSvcCategory(v) { svcCategory = v || "all"; renderServices(); saveUIState(); }
 
 function compareSortValues(a, b) {
   if (a == null) a = "";
@@ -1703,6 +1770,7 @@ function toggleSort(sort, key, render) {
   if (sort.key === key) sort.dir = -sort.dir;
   else { sort.key = key; sort.dir = 1; }
   render();
+  saveUIState();
 }
 
 function setSvcSort(key) { toggleSort(svcSort, key, renderServices); }
@@ -1739,11 +1807,13 @@ function setSvcStatus(v) {
   document.querySelectorAll("#svc-filters button").forEach((b) =>
     b.classList.toggle("f-active", b.dataset.f === v));
   renderServices();
+  saveUIState();
 }
 
 function setSvcGrouped(v) {
   svcGrouped = !!v;
   renderServices();
+  saveUIState();
 }
 
 function toggleAllSvcGroups() {
@@ -2978,6 +3048,7 @@ function setWatchQuery(panelKey, v) {
   const panel = getWatchPanel(panelKey);
   panel.query = (v || "").trim().toLowerCase();
   renderWatches();
+  saveUIState();
 }
 
 function setWatchStatus(panelKey, v) {
@@ -2985,6 +3056,7 @@ function setWatchStatus(panelKey, v) {
   panel.status = v || "all";
   syncWatchFilterActive(panelKey);
   renderWatches();
+  saveUIState();
 }
 
 function setAllWatchStatuses(v) {
@@ -2993,12 +3065,14 @@ function setAllWatchStatuses(v) {
     syncWatchFilterActive(key);
   });
   renderWatches();
+  saveUIState();
 }
 
 function setWatchType(panelKey, v) {
   const panel = getWatchPanel(panelKey);
   panel.type = v || "all";
   renderWatches();
+  saveUIState();
 }
 
 // syncWatchTypeSelect repopulates one watch panel's type dropdown from the
@@ -3299,7 +3373,7 @@ const appSortKeys = {
   version: (a) => (a.version_short || a.version || "").toLowerCase(),
 };
 function setAppSort(key) { toggleSort(appSort, key, renderApps); }
-function setAppQuery(q) { appQuery = q || ""; renderApps(); }
+function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
 function setAppCategory(v) { appCategory = v || "all"; renderApps(); }
 function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
 function appStateText(a) {
@@ -4527,6 +4601,8 @@ function initStaticHandlers() {
   document.querySelectorAll(".events th.sortable[data-ev-sort]").forEach((th) => {
     th.addEventListener("click", () => setEvSort(th.dataset.evSort || ""));
   });
+
+  applyUIStateToControls();
 
   function bindWatchPanelControls(panelKey) {
     const panel = getWatchPanel(panelKey);
