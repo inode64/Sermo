@@ -139,6 +139,23 @@ containers or other targets into one YAML file. The single exception is a
 clearly labeled reference bundle such as `docs/sermo-all.yml`, whose purpose is
 to validate and demonstrate the full schema in one file.
 
+## Configuration structure changes
+
+When changing the public configuration structure, prefer a clean break over
+carrying old shapes forward. Backward compatibility, dual parsers, aliases,
+deprecated fields and migration shims are exceptions, not the default. Keep
+them only when the user explicitly asks for compatibility or when there is a
+documented safety or release reason that justifies the legacy path.
+
+Before applying a new configuration structure, report the intended scope to the
+user: which YAML shape is being replaced, which structs/builders/validators are
+being removed or rewritten, which docs/examples change, and what operators will
+need to update. After the change is accepted or requested, remove the old
+documentation, examples, schema structures, validation paths and tests that
+describe the retired shape. Do not leave parallel legacy behavior in place just
+to avoid touching more files; too many inherited paths make future changes less
+reviewable and less safe.
+
 ## Catalog init and reload fallback verification
 
 When adding or changing a catalog daemon that depends on init metadata or defines
