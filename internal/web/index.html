@@ -830,22 +830,26 @@ async function load() {
   if (locks) renderLocks(locks);
   if (activity) renderActivity(activity);
 
-  renderStatus({
-    ready,
-    live,
-    mon,
-    ops,
-    locks: locks || latestLocks,
-    daemon: daemon || {},
-    hostMetrics: hostMetrics || [],
-  });
-  renderReadyBanner(ready);
-  renderOpsPanel(ops);
-
-  loadEvents();
-  await loadDiag();
-  healthIconReady = true;
-  renderAttention();
+  if (connOK) {
+    renderStatus({
+      ready,
+      live,
+      mon,
+      ops,
+      locks: locks || latestLocks,
+      daemon: daemon || {},
+      hostMetrics: hostMetrics || [],
+    });
+    renderReadyBanner(ready);
+    renderOpsPanel(ops);
+    loadEvents();
+    await loadDiag();
+    healthIconReady = true;
+    renderAttention();
+  } else {
+    healthIconReady = true;
+    setFavicon("warning");
+  }
 
   lastRefresh = Date.now();
   tickRefreshAge();
