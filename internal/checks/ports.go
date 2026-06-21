@@ -29,7 +29,8 @@ const defaultPortConnectTimeout = time.Second
 // (e.g. "80,443,1024-4000"); expect is the per-port desired state (open|closed|
 // any) and match the quantifier over the ports in that state (all=AND, any=OR,
 // none=NOT). With on_change it also fails on any open<->closed transition between
-// cycles (stateful, so it works built once as a host watch).
+// cycles while the check instance is reused by a service worker or host watch.
+// A config reload/worker rebuild creates a fresh baseline.
 type portsCheck struct {
 	base
 	host           string

@@ -26,7 +26,8 @@ type connCheck struct {
 	// server's version identity changes (its reported version, or the connection
 	// greeting banner for protocols that have no version — smtp/imap/pop/ftp).
 	// state holds the previous values; being a pointer, it survives across cycles
-	// when the check is built once (a host watch), like the cert check.
+	// while the check instance is reused by a service worker or host watch. A
+	// config reload/worker rebuild creates a fresh baseline, like the cert check.
 	onChange        bool
 	onVersionChange bool
 	state           *connState
