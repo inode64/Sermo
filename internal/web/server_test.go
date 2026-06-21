@@ -13,6 +13,7 @@ import (
 type fakeBackend struct {
 	services        []Service
 	applications    []Application
+	mounts          []Mount
 	operated        []string // "name/action"
 	monitored       map[string]bool
 	watchMonitored  map[string]bool
@@ -36,6 +37,7 @@ func (f *fakeBackend) Notifiers(context.Context) []Notifier { return nil }
 func (f *fakeBackend) Applications(context.Context) []Application {
 	return f.applications
 }
+func (f *fakeBackend) Mounts(context.Context) []Mount           { return f.mounts }
 func (f *fakeBackend) DaemonInfo(context.Context) DaemonInfo    { return DaemonInfo{} }
 func (f *fakeBackend) HostMetrics(context.Context) []HostMetric { return nil }
 func (f *fakeBackend) DaemonMetrics(context.Context, time.Duration) DaemonMetrics {
@@ -316,6 +318,24 @@ func TestListApplications(t *testing.T) {
 		got[0].User != "root" || got[0].Group != "root" || got[0].Category != "web" ||
 		got[0].VersionSource != "nginx-bin" {
 		t.Fatalf("unexpected applications: %+v", got)
+	}
+}
+
+func TestListMounts(t *testing.T) {
+	b := &fakeBackend{mounts: []Mount{{
+		Name: "mount-backup", Path: "/mnt/backup", Mounted: true, Refcount: 2, Source: "fstab", State: "active", Refcounted: true,
+	}}}
+	rec := httptest.NewRecorder()
+	newServer(b).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/mounts", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var got []Mount
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].Name != "mount-backup" || !got[0].Mounted || got[0].Refcount != 2 {
+		t.Fatalf("unexpected mounts: %+v", got)
 	}
 }
 

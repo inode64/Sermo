@@ -150,7 +150,7 @@
   body.disconnected #attention,
   body.disconnected #services-section, body.disconnected #storage-section, body.disconnected #watches-section, body.disconnected #network-section,
   body.disconnected #locks-section, body.disconnected #activity-section, body.disconnected #daemon-section, body.disconnected #diag-section,
-  body.disconnected #notifiers-section, body.disconnected #app-section { opacity: .5; transition: opacity .2s; }
+  body.disconnected #notifiers-section, body.disconnected #mounts-section, body.disconnected #app-section { opacity: .5; transition: opacity .2s; }
   .win-btn-active { background: color-mix(in srgb, var(--text-2) 20%, transparent); }
   .muted { color: var(--text-2); font-size: .85rem; }
   td.status-cell { font-weight: 600; }
@@ -613,6 +613,15 @@
   </table>
 </details>
 
+<details id="mounts-section" style="display:none">
+  <summary>Mount units <span id="mounts-count" class="muted"></span></summary>
+  <table>
+    <thead><tr><th>Name</th><th>Path</th><th>Mounted</th><th>Refcount</th><th>Source</th><th>State</th></tr></thead>
+    <tbody id="mount-rows"></tbody>
+  </table>
+  <p class="muted" style="font-size:.8rem">Configured fstab-backed mount units managed by Sermo refcounting (<code>sermoctl mount</code> / <code>umount</code>).</p>
+</details>
+
 <details id="notifiers-section" style="display:none">
   <summary>Notifiers <span id="notifiers-count" class="muted"></span></summary>
   <table>
@@ -797,10 +806,11 @@ function showDisconnected() {
 // renderStatus does not re-fetch locks, daemon or ops that load() already has.
 async function load() {
   healthIconReady = false;
-  const [services, watches, apps, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
+  const [services, watches, apps, mounts, notifiers, daemon, daemonMetrics, locks, activity, ready, live, mon, ops, hostMetrics] = await Promise.all([
     fetch("api/services").then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).catch(() => null),
     getJSON("api/watches", null),       // host watches (visible even when services=0)
     getJSON("api/applications", null),  // installed applications
+    getJSON("api/mounts", null),        // configured mount units
     getJSON("api/notifiers", null),     // what watches can send to
     getJSON("api/daemon", null),        // daemon / engine settings panel
     getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null),
@@ -824,6 +834,7 @@ async function load() {
   }
   if (watches) renderWatches(watches);
   if (apps) renderApps(apps);
+  if (mounts) renderMounts(mounts);
   if (notifiers) renderNotifiers(notifiers);
   if (daemon) renderDaemon(daemon);
   if (daemonMetrics) renderDaemonMetrics(daemonMetrics);
@@ -3655,6 +3666,42 @@ function renderWatchExpansion(w, events) {
   return cfg + live + conditions + `<table class="events" style="width:auto; font-size:.85rem;"><tbody>${rows}</tbody></table>`;
 }
 
+function mountStateClass(state, mounted) {
+  if (state === "error") return "state-failed";
+  if (mounted || state === "active") return "state-running";
+  return "state-stopped";
+}
+
+function renderMounts(mounts) {
+  const section = $("#mounts-section");
+  const tbody = $("#mount-rows");
+  const cnt = $("#mounts-count");
+  if (!section || !tbody) return;
+  if (!mounts || mounts.length === 0) {
+    section.style.display = "none";
+    if (cnt) cnt.textContent = "";
+    return;
+  }
+  section.style.display = "block";
+  if (cnt) cnt.textContent = `(${mounts.length})`;
+  const rows = mounts.map((m) => {
+    const label = esc(m.display_name || m.name);
+    const mounted = !!m.mounted;
+    const state = m.state || (mounted ? "active" : "inactive");
+    const detail = m.message ? ` title="${esc(m.message)}"` : "";
+    const refcount = m.refcounted === false ? '<span class="muted">off</span>' : String(Number(m.refcount || 0));
+    return `<tr${detail}>
+      <td>${label}</td>
+      <td><code>${esc(m.path || "")}</code></td>
+      <td>${mounted ? '<span class="ok">yes</span>' : '<span class="muted">no</span>'}</td>
+      <td>${refcount}</td>
+      <td class="muted">${esc(m.source || "—")}</td>
+      <td><span class="target-state ${mountStateClass(state, mounted)}">${esc(state)}</span></td>
+    </tr>`;
+  });
+  tbody.innerHTML = rows.join("") || `<tr><td colspan="6" class="muted">No mount units.</td></tr>`;
+}
+
 function renderNotifiers(notifiers) {
   const section = $("#notifiers-section");
   const tbody = $("#notifier-rows");
@@ -4058,7 +4105,7 @@ function renderStatus(ctx) {
 
 async function act(name, action, opts = {}) {
   let noCascade = !!opts.noCascade;
-  if ((action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
+  if ((action === "start" || action === "stop" || action === "restart") && !(await confirmAction(name, action))) return;
   if (!opts.noCascade && (action === "stop" || action === "restart")) {
     noCascade = confirmNoCascade;
     confirmNoCascade = false;
