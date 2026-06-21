@@ -107,20 +107,24 @@ documented alias — `limit` for `max`. So the kernel-maximum concept is `Max` /
 `levelCountResult` in `internal/checks/check.go` and `countMeter` in
 `internal/app/webbackend.go`). Do not "fix" those `limit` locals back to `max`.
 
-## Configuration compatibility
+## Configuration structure changes
 
-When Sermo's own configuration structure changes, break compatibility by
-default: keep one canonical spelling in code, docs, examples and tests. Do not
-preserve old aliases, migration-only validators, compatibility comments,
-fixtures or tests for removed Sermo config parameters unless the old spelling is
-still a current external compatibility requirement or safety invariant.
+When Sermo's own public configuration structure changes, break compatibility by
+default and keep one canonical spelling in code, docs, examples and tests. Do
+not preserve old aliases, dual parsers, deprecated fields, migration-only
+validators, compatibility comments, fixtures or tests for removed Sermo config
+parameters unless the user explicitly asks for compatibility, or the old spelling
+is still a current external compatibility requirement or safety invariant.
 
-Before applying a new structure, state the scope of the breakage and remove the
-previous structure in the same change: runtime parsing, validation, examples,
-reference docs, agent guidance and tests must not keep the old form alive.
-Document exceptions explicitly at the owner. Examples of valid exceptions are
-Linux/init compatibility such as `/var/run` metadata normalized to `/run`, and
-hard safety invariants such as deriving lock directories from `paths.runtime`.
+Before applying a new structure, state the intended scope to the user: which YAML
+shape is being replaced, which structs/builders/validators are being removed or
+rewritten, which docs/examples change, and what operators will need to update.
+After the change is accepted or requested, remove the previous structure in the
+same change: runtime parsing, validation, examples, reference docs, agent
+guidance and tests must not keep the old form alive. Document exceptions
+explicitly at the owner. Examples of valid exceptions are Linux/init
+compatibility such as `/var/run` metadata normalized to `/run`, and hard safety
+invariants such as deriving lock directories from `paths.runtime`.
 
 ## Runtime paths
 
@@ -156,23 +160,6 @@ that group several apps, services, mounts, storage entries, interfaces, VMs,
 containers or other targets into one YAML file. The single exception is a
 clearly labeled reference bundle such as `docs/sermo-all.yml`, whose purpose is
 to validate and demonstrate the full schema in one file.
-
-## Configuration structure changes
-
-When changing the public configuration structure, prefer a clean break over
-carrying old shapes forward. Backward compatibility, dual parsers, aliases,
-deprecated fields and migration shims are exceptions, not the default. Keep
-them only when the user explicitly asks for compatibility or when there is a
-documented safety or release reason that justifies the legacy path.
-
-Before applying a new configuration structure, report the intended scope to the
-user: which YAML shape is being replaced, which structs/builders/validators are
-being removed or rewritten, which docs/examples change, and what operators will
-need to update. After the change is accepted or requested, remove the old
-documentation, examples, schema structures, validation paths and tests that
-describe the retired shape. Do not leave parallel legacy behavior in place just
-to avoid touching more files; too many inherited paths make future changes less
-reviewable and less safe.
 
 ## Catalog init and reload fallback verification
 
