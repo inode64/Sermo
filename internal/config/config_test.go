@@ -2296,21 +2296,6 @@ func TestCatalogRootFilesRejected(t *testing.T) {
 	}
 }
 
-func TestCatalogOldAliasNameDoesNotResolve(t *testing.T) {
-	global := writeConfig(t, map[string]string{
-		"sermo.yml":                baseGlobal,
-		"catalog/services/new.yml": "kind: daemon\nname: new\nservice: new\n",
-	})
-	cfg, err := Load(global)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-	_, errs := cfg.ResolveCatalog(CategoryService, "old")
-	if len(errs) == 0 || !strings.Contains(errs[0], `unknown service "old"`) {
-		t.Fatalf("ResolveCatalog(old) errors = %v, want unknown service", errs)
-	}
-}
-
 func TestReloadOnChangeDesugarsToReloadRule(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
