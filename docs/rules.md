@@ -1577,8 +1577,9 @@ checks:
 ### Count
 
 A `count` check tallies the entries in a directory and compares the total to a
-threshold. It is condition-style: `active`/`failed` is true when `op value`
-holds.
+threshold. It is **condition-style** (`OK == true` means the comparison holds),
+so in rules `active: {check: …}` fires when the comparison holds and
+`failed: {check: …}` fires when it does not.
 
 ```yaml
 checks:
