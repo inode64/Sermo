@@ -25,10 +25,10 @@ type ServiceStatus struct {
 
 // Manager queries and controls services on a specific backend.
 //
-// Start, Stop and Restart are raw backend actions: they invoke the underlying
-// service manager and report whether it succeeded. They do NOT implement the
-// safe operation engine (locks, guards, preflight, residual-process handling);
-// that wraps these primitives separately.
+// Start, Stop, Restart and Reload are raw backend actions: they invoke the
+// underlying service manager and report whether it succeeded. They do NOT
+// implement the safe operation engine (locks, guards, preflight,
+// residual-process handling); that wraps these primitives separately.
 type Manager interface {
 	Status(ctx context.Context, service string) (ServiceStatus, error)
 	Start(ctx context.Context, service string) error
