@@ -931,6 +931,7 @@ function flushLoadEvents() {
     clearTimeout(eventFilterTimer);
     eventFilterTimer = null;
   }
+  saveUIState();
   loadEvents();
 }
 
@@ -946,6 +947,7 @@ function clearEventFilters() {
   });
   const err = $("#event-errors");
   if (err) err.checked = false;
+  saveUIState();
   loadEvents();
 }
 
@@ -1289,6 +1291,11 @@ let svcStatus = "all"; // all | disabled | running | paused | stopped | unmonito
 let svcCategory = "all";
 let svcGrouped = false;
 let svcCollapsedGroups = new Set();
+let expanded = new Set(); // open expansions, keyed "svc:<name>" / "wat:<name>" / "app:<name>"
+let appGrouped = false;
+let appCollapsedGroups = new Set();
+let metricWindow = "24h";
+let daemonMetricWindow = "24h";
 let svcRenderedKey = ""; // last full-render structure; enables in-place row patches
 const SVC_PATCH_MIN = 50; // patch instead of rebuilding the whole tbody from this size up
 let allWatches = [];
@@ -1343,6 +1350,26 @@ function restoreUIState() {
         }
       }
     }
+    if (Array.isArray(s.expanded)) {
+      expanded = new Set(s.expanded.filter((k) => typeof k === "string"));
+    }
+    if (typeof s.metricWindow === "string") metricWindow = s.metricWindow;
+    if (typeof s.daemonMetricWindow === "string") daemonMetricWindow = s.daemonMetricWindow;
+    if (typeof s.appGrouped === "boolean") appGrouped = s.appGrouped;
+    if (Array.isArray(s.svcCollapsedGroups)) svcCollapsedGroups = new Set(s.svcCollapsedGroups);
+    if (Array.isArray(s.appCollapsedGroups)) appCollapsedGroups = new Set(s.appCollapsedGroups);
+    if (s.eventFilters && typeof s.eventFilters === "object") {
+      const ef = s.eventFilters;
+      const setVal = (id, v) => { const el = $(id); if (el && typeof v === "string") el.value = v; };
+      setVal("#event-service", ef.service);
+      setVal("#event-watch", ef.watch);
+      setVal("#event-kind", ef.kind);
+      setVal("#event-status", ef.status);
+      const err = $("#event-errors");
+      if (err && typeof ef.onlyErrors === "boolean") err.checked = ef.onlyErrors;
+      const grp = $("#event-group");
+      if (grp && typeof ef.group === "boolean") grp.checked = ef.group;
+    }
   } catch (_) {}
 }
 
@@ -1350,7 +1377,19 @@ function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
-      appQuery, appSort,
+      appQuery, appSort, appGrouped,
+      metricWindow, daemonMetricWindow,
+      expanded: [...expanded],
+      svcCollapsedGroups: [...svcCollapsedGroups],
+      appCollapsedGroups: [...appCollapsedGroups],
+      eventFilters: {
+        service: ($("#event-service") || {}).value || "",
+        watch: ($("#event-watch") || {}).value || "",
+        kind: ($("#event-kind") || {}).value || "",
+        status: ($("#event-status") || {}).value || "",
+        onlyErrors: !!($("#event-errors") && $("#event-errors").checked),
+        group: !($("#event-group") && !$("#event-group").checked),
+      },
       watchPanels: Object.fromEntries(Object.entries(watchPanels).map(([k, p]) => [k, {
         query: p.query, status: p.status, type: p.type, sort: p.sort,
       }])),
@@ -1380,7 +1419,6 @@ function applyUIStateToControls() {
 restoreUIState();
 
 let allEvents = [];
-let expanded = new Set();  // open expansions, keyed "svc:<name>" / "wat:<name>"
 let expCache = {};         // last rendered expansion HTML per key (avoids flicker)
 let expDetailCache = {};   // last /api/services/{name} JSON per svc expansion key
 let svcExpandRefreshTick = 0;
@@ -1499,8 +1537,8 @@ function openPanelTarget(target) {
 // brand dot track light/dark scheme instead of hard-coded palette literals.
 function themeHealthColor(status) {
   const root = getComputedStyle(document.documentElement);
-  if (status === "critical") return root.getPropertyValue("--crit").trim() || "#cf222e";
-  if (status === "warning") return root.getPropertyValue("--warn").trim() || "#9a6700";
+  if (status === "critical" || status === "crit") return root.getPropertyValue("--crit").trim() || "#cf222e";
+  if (status === "warning" || status === "warn") return root.getPropertyValue("--warn").trim() || "#9a6700";
   return root.getPropertyValue("--ok").trim() || "#1a7f37";
 }
 // setFavicon reflects overall health in the browser tab: green = ok,
@@ -1831,6 +1869,7 @@ function toggleAllSvcGroups() {
     categories.forEach((category) => svcCollapsedGroups.add(category));
   }
   renderServices();
+  saveUIState();
 }
 
 // serviceRowParts builds one service's main and optional expansion <tr> HTML.
@@ -2044,6 +2083,7 @@ function toggleExpand(key) {
   renderServices();
   renderWatches();
   renderApps();
+  saveUIState();
 }
 
 function openServiceExpansion(name, scroll) {
@@ -3368,8 +3408,6 @@ function renderWatchPanel(panelKey, watches) {
 let allApps = [];
 let appQuery = "";
 let appCategory = "all";
-let appGrouped = false;
-let appCollapsedGroups = new Set();
 let appSort = { key: "", dir: 1 };
 const appSortKeys = {
   name: (a) => displayName(a).toLowerCase(),
@@ -3427,6 +3465,7 @@ function appMatches(a) {
 function setAppGrouped(v) {
   appGrouped = !!v;
   renderApps();
+  saveUIState();
 }
 
 function toggleAllAppGroups() {
@@ -3439,6 +3478,7 @@ function toggleAllAppGroups() {
     categories.forEach((category) => appCollapsedGroups.add(category));
   }
   renderApps();
+  saveUIState();
 }
 
 function toggleCategoryGroup(panel, category) {
@@ -3447,12 +3487,14 @@ function toggleCategoryGroup(panel, category) {
     if (svcCollapsedGroups.has(category)) svcCollapsedGroups.delete(category);
     else svcCollapsedGroups.add(category);
     renderServices();
+    saveUIState();
     return;
   }
   if (panel === "app") {
     if (appCollapsedGroups.has(category)) appCollapsedGroups.delete(category);
     else appCollapsedGroups.add(category);
     renderApps();
+    saveUIState();
   }
 }
 
@@ -4213,8 +4255,6 @@ const windowMs = { "1h": 36e5, "24h": 864e5, "168h": 6048e5, "720h": 2592e6, "87
 
 // Latency graph state: the selected measured check and its window.
 let metricCheck = "";
-let metricWindow = "24h";
-let daemonMetricWindow = "24h";
 const metricTypes = ["tcp", "http", "ports", "service"];
 const metricWins = [["1h", "1h"], ["24h", "24h"], ["7d", "168h"], ["30d", "720h"], ["1y", "8760h"]];
 
@@ -4226,8 +4266,8 @@ function setMetricCheck(name, service) {
   else if (service) loadExpansionFor(key);
   else refreshExpandedServiceDetails();
 }
-function setMetricWin(win) { metricWindow = win; refreshExpandedServiceDetails(); }
-function setDaemonMetricWin(win) { daemonMetricWindow = win; loadDaemonMetrics(); }
+function setMetricWin(win) { metricWindow = win; saveUIState(); refreshExpandedServiceDetails(); }
+function setDaemonMetricWin(win) { daemonMetricWindow = win; saveUIState(); loadDaemonMetrics(); }
 
 function winButtons(list, selected, fn) {
   return list.map(([label, val]) =>
@@ -4686,7 +4726,7 @@ function initStaticHandlers() {
   const onlyErrors = $("#event-errors");
   if (onlyErrors) onlyErrors.addEventListener("change", flushLoadEvents);
   const groupEvents = $("#event-group");
-  if (groupEvents) groupEvents.addEventListener("change", renderGlobalEvents);
+  if (groupEvents) groupEvents.addEventListener("change", () => { saveUIState(); renderGlobalEvents(); });
   const eventResetFilters = $("#event-reset-filters");
   if (eventResetFilters) eventResetFilters.addEventListener("click", clearEventFilters);
   const eventClear = $("#event-clear");
