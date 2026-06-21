@@ -608,7 +608,7 @@ func TestNewInvalidReloadBlocksRestart(t *testing.T) {
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
-		Discoverer: process.NewDiscoverer(),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
 
@@ -636,7 +636,7 @@ func TestNewInvalidProcessSelectorBlocksRestart(t *testing.T) {
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
-		Discoverer: process.NewDiscoverer(),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
 
@@ -680,7 +680,7 @@ func TestNewResidualDiscoveryReadsLiveProcfs(t *testing.T) {
 	// plain CachingReader would walk /proc once; the operation engine must
 	// invalidate it before each discovery.
 	inner := &countingPIDReader{ids: map[int]process.Identity{100: {PID: 100, PPID: 1}}}
-	discoverer := process.NewDiscoverer()
+	discoverer := process.NewDiscovererWithUserLookup(nil)
 	discoverer.Reader = process.NewCachingReader(inner, time.Hour)
 
 	dir := t.TempDir()
@@ -722,7 +722,7 @@ func TestNewRuntimeDiscoveryWarningWithoutCommandMatchBlocksRestart(t *testing.T
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
-		Discoverer: process.NewDiscoverer(),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
 
@@ -752,7 +752,7 @@ func TestNewInvalidStopPolicyDurationBlocksBeforeServiceAction(t *testing.T) {
 		Manager:    mgr,
 		Locker:     &locker,
 		Scanner:    locks.NewScanner(filepath.Join(dir, "locks")),
-		Discoverer: process.NewDiscoverer(),
+		Discoverer: process.NewDiscovererWithUserLookup(nil),
 		Sleep:      func(time.Duration) {},
 	})
 

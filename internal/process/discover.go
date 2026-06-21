@@ -22,13 +22,8 @@ type Discoverer struct {
 	BackendPIDs func() []int
 }
 
-// NewDiscoverer returns a Discoverer backed by the host /proc and passwd db.
-func NewDiscoverer() Discoverer {
-	return NewDiscovererWithUserLookup(DefaultUserLookup())
-}
-
 // NewDiscovererWithUserLookup returns a Discoverer backed by the host /proc and
-// the provided user/group lookup policy.
+// the provided user/group lookup policy. A nil lookup uses DefaultUserLookup.
 func NewDiscovererWithUserLookup(lookup *UserLookup) Discoverer {
 	if lookup == nil {
 		lookup = DefaultUserLookup()
