@@ -34,8 +34,8 @@ engine:
 
 paths:
   # Directory entries are non-recursive unless a list item uses
-  # `{ path: ..., recursive: true }`. Catalog still reads its immediate
-  # services/apps/libs/patterns category directories.
+  # `{ path: ..., recursive: true }`. Catalog documents must live under
+  # immediate services/apps/libs/patterns category directories.
   catalog:                     # packaged + admin daemon/app/lib definitions
     - /usr/share/sermo/catalog
     - /etc/sermo/catalog-available

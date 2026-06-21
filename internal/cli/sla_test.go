@@ -17,10 +17,11 @@ import (
 func TestSLACommandReportsWindows(t *testing.T) {
 	root := t.TempDir()
 	daemonsDir := filepath.Join(root, "daemons")
+	catalogServicesDir := filepath.Join(daemonsDir, "services")
 	enabledDir := filepath.Join(root, "enabled")
 	runDir := filepath.Join(root, "run")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{daemonsDir, enabledDir, runDir, stateDir} {
+	for _, d := range []string{catalogServicesDir, enabledDir, runDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -30,7 +31,7 @@ func TestSLACommandReportsWindows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
+	write(filepath.Join(catalogServicesDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }
@@ -101,9 +102,10 @@ defaults: { policy: { cooldown: 5m } }
 func TestSLASeriesCommand(t *testing.T) {
 	root := t.TempDir()
 	daemonsDir := filepath.Join(root, "daemons")
+	catalogServicesDir := filepath.Join(daemonsDir, "services")
 	enabledDir := filepath.Join(root, "enabled")
 	stateDir := filepath.Join(root, "state")
-	for _, d := range []string{daemonsDir, enabledDir, stateDir} {
+	for _, d := range []string{catalogServicesDir, enabledDir, stateDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -113,7 +115,7 @@ func TestSLASeriesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(daemonsDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
+	write(filepath.Join(catalogServicesDir, "nginx.yml"), "kind: daemon\nname: nginx\nservice: nginx\n")
 	write(filepath.Join(enabledDir, "web.yml"), "kind: service\nname: web\nuses: nginx\n")
 	write(filepath.Join(root, "sermo.yml"), fmt.Sprintf(`
 engine: { backend: auto }

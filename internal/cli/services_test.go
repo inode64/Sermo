@@ -12,11 +12,12 @@ import (
 
 func TestServicesCommand(t *testing.T) {
 	root := t.TempDir()
-	daemonsDir := filepath.Join(root, "daemons") // root daemons → category service
+	daemonsDir := filepath.Join(root, "daemons")
+	catalogServicesDir := filepath.Join(daemonsDir, "services")
 	appsDir := filepath.Join(daemonsDir, "apps")
 	enabledDir := filepath.Join(root, "enabled")
 	binDir := filepath.Join(root, "bin")
-	for _, d := range []string{daemonsDir, appsDir, enabledDir, binDir} {
+	for _, d := range []string{catalogServicesDir, appsDir, enabledDir, binDir} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -33,8 +34,8 @@ func TestServicesCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A service-category daemon (root) and an app-category daemon (apps/).
-	write(filepath.Join(daemonsDir, "nginx.yml"), fmt.Sprintf(`kind: daemon
+	// A service-category daemon (services/) and an app-category daemon (apps/).
+	write(filepath.Join(catalogServicesDir, "nginx.yml"), fmt.Sprintf(`kind: daemon
 name: nginx
 display_name: "Nginx"
 service: nginx
@@ -42,7 +43,7 @@ variables:
   binary: %q
 preflight: { binary: { type: binary, path: "${binary}" } }
 `, nginx))
-	write(filepath.Join(daemonsDir, "linked.yml"), `kind: daemon
+	write(filepath.Join(catalogServicesDir, "linked.yml"), `kind: daemon
 name: linked
 display_name: "Linked Service"
 service: linked

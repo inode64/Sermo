@@ -27,7 +27,7 @@ diff, replace and clean up per target.
 /etc/sermo/sermo.yml              global config
 /usr/share/sermo/catalog/{services,apps,libs,patterns}/*.yml   packaged catalog
 /usr/share/sermo/examples/        packaged examples operators may copy/adapt
-/etc/sermo/catalog-available/*.yml   user catalog definitions
+/etc/sermo/catalog-available/{services,apps,libs,patterns}/*.yml   user catalog definitions
 /etc/sermo/services/*.yml concrete service documents
 /etc/sermo/apps/*.yml     host-specific app documents
 /etc/sermo/mounts/*.yml   fstab-backed mount documents
@@ -79,10 +79,11 @@ paths:
 When `recursive` is omitted it defaults to `false`. A non-recursive entry loads
 only `.yml`/`.yaml` files directly inside that directory. `recursive: true`
 descends the whole subtree, still loading files in deterministic sorted order.
-For `paths.catalog`, the immediate `services/`, `apps/`, `libs/` and
-`patterns/` category directories are part of the catalog layout and are read
-even when `recursive` is false; `recursive: true` only controls directories
-below those category directories and any extra subdirectories.
+For `paths.catalog`, catalog documents must live under the immediate
+`services/`, `apps/`, `libs/` or `patterns/` category directories. Those
+category directories are part of the catalog layout and are read even when
+`recursive` is false; `recursive: true` only controls directories below those
+category directories.
 
 `paths.runtime` is the root for named runtime locks (`<runtime>/locks`, one file
 per lock named `<service>[.<name>].lock`) and internal operation locks

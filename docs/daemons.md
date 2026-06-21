@@ -32,9 +32,9 @@ catalog/
 ```
 
 The directory sets the catalog category (`service` / `app` / `library` /
-`patterns`); files placed directly in a catalog root default to `service`.
-Use one YAML file per catalog document: one daemon, app, lib or pattern in each
-file. `sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
+`patterns`); files placed directly in a catalog root are rejected. Use one YAML
+file per catalog document: one daemon, app, lib or pattern in each file.
+`sermoctl services`, `sermoctl apps` and `sermoctl libs` list each category,
 showing which are installed, the version their version command reports, and
 whether they resolve without error (add `all` to include the not-installed).
 Configured service instances (`kind: service` under `paths.services`) are listed

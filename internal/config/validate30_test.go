@@ -1109,7 +1109,7 @@ variables:
   binary: /usr/bin/bad-type
 version_from: [provider]
 `,
-		"catalog/not-app.yml": `
+		"catalog/services/not-app.yml": `
 kind: daemon
 name: not-app
 version_from: provider

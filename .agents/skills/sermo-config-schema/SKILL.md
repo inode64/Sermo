@@ -130,8 +130,8 @@ preflight:
 ## Categories and library restarts
 
 Catalog documents are categorized by the subdirectory under a catalog root:
-`services/`, `apps/`, `libs/`, `patterns/` (files at the root default to
-`service`). Loading recurses; the directory sets `Document.Category`. `apps` and
+`services/`, `apps/`, `libs/`, `patterns/`. Files at the catalog root are
+rejected. Loading recurses; the directory sets `Document.Category`. `apps` and
 `libs` are minimal catalog documents (name, display_name, description,
 `variables.binary` and preflight/version entries) surfaced by `sermoctl apps` /
 `libs`.
