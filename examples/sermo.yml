@@ -39,17 +39,17 @@ paths:
   services:
     - /etc/sermo/services
   apps:
-    - /etc/sermo/apps
+    - /etc/sermo/apps        # host-specific kind: app documents
   notifiers:
     - /etc/sermo/notifiers
   storages:
-    - /etc/sermo/storages
+    - /etc/sermo/storages    # storage watch fragments
   networks:
-    - /etc/sermo/networks
+    - /etc/sermo/networks    # network/uplink watch fragments
   watches:
-    - /etc/sermo/watches
+    - /etc/sermo/watches     # generic host watch fragments
   mounts:
-    - /etc/sermo/mounts
+    - /etc/sermo/mounts      # fstab-backed kind: mount documents
 
   # Volatile runtime data (locks, operation markers) on tmpfs; wiped on reboot.
   runtime: /run/sermo
