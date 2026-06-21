@@ -35,6 +35,14 @@ go.work.sum
 .vscode/
 .history
 .codex
+# graphify knowledge graph — generated/regenerated output (see AGENTS.md).
+# Core query inputs (graph.json, manifest.json, labels) may stay tracked; the
+# rest is local cache, dated snapshots and human-readable exports.
 graphify-out/cost.json
 graphify-out/cache/
 graphify-out/.graphify_python
+graphify-out/20*/
+graphify-out/GRAPH_REPORT.md
+graphify-out/graph.html
+graphify-out/.graphify_analysis.json
+graphify-out/.vocab.txt
