@@ -286,14 +286,13 @@ checks:
   interface does not exist or the daemon lacks privilege the check **fails** rather
   than silently using the wrong link.
 - **Where it applies.** `tcp`, `ports`, `icmp`, `websocket`, and every
-  natively-dialed connection-protocol check (the TCP/UDP probes — `redis`, `imap`,
-  `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`, `tftp`, …, plus the
-  `influxdb`/`prometheus`/`cloudflared` HTTP probes) honor the **full list +
-  `interface_match`**.
-  The standalone `http` check honors a **single** interface (the first listed). It
-  is **not** honored by checks that dial through a third-party library — the SQL
-  drivers (`mysql`/`postgres`), `mongodb`, `ldap`, `libvirt`, and the
-  `syncthing`/`unifi`/`rspamd`/`ipp` HTTP probes.
+  connection-protocol check that dials TCP/UDP — native probes and driver-backed
+  probes with a custom dialer such as `mysql`, `postgres`, `mongodb`, `ldap`,
+  `libvirt`, `redis`, `smtp`, `dns`, `ntp`, `nfs`, `dhcp`, `openvpn`, `nebula`,
+  `tftp`, …, plus HTTP-based protocol probes such as
+  `influxdb`/`prometheus`/`cloudflared`/`syncthing`/`unifi`/`rspamd`/`ipp` —
+  honors the **full list + `interface_match`**. The standalone `http` check
+  honors a **single** interface (the first listed).
 
 ### Check interdependencies (`requires` / `skip_when_changed`)
 
