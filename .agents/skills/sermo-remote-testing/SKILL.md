@@ -1,6 +1,6 @@
 ---
 name: sermo-remote-testing
-description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap, storage below 10% free, network/USB mount and direct-file /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
+description: Use when running safe Sermo validation or exploratory tests on remote Linux servers over SSH, using the host list from .env.ssh as the source of truth, local GOAMD64=v1 builds copied to /tmp, staged all-host runs that validate the first four hosts before continuing with the rest, Sermo wizards/tools for temporary setup, complete host discovery only for explicit remote installation or complete remote configuration requests, exposing the web UI with web.address 0.0.0.0 and reclaiming port 9797 from verified Sermo instances, configuring only currently active services, reporting unsupported active services per host, preserving database/LDAP dump stop blockers, limiting start/stop/restart/reload operation tests to acpid, full sermod runs with sustained CPU/load, memory, swap, storage below 10% free, network/USB mount and direct-file /etc/ssl certificate observation, and safe alert/notification checks that must not execute hooks or alter server behavior.
 ---
 
 # Sermo Remote Testing
@@ -349,8 +349,9 @@ If a remote host has active services that Sermo cannot map to a catalog daemon o
 
 ## Operation Test Safety
 
-- Do not test start, stop, restart, reload, or signal operations on arbitrary remote services.
-- When an operation test is required, use only `acpid`.
+- Do not test start, stop, restart, reload, resume or signal operations on arbitrary remote services.
+- When an operation test is required, use only `acpid` for start, stop, restart and reload paths.
+- Skip `resume` operation tests unless a future explicitly supported control target has a real paused state.
 - Before testing `acpid`, confirm it is active and represented by the temporary config.
 - If `acpid` is missing, inactive, unsupported, or its config/preflight fails, skip operation testing and report why.
 - Run operation tests through Sermo's normal command path with the temporary config; do not call `systemctl`, `rc-service`, `kill`, or init scripts directly except for read-only status inspection.
