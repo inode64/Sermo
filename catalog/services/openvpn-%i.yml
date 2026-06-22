@@ -7,7 +7,6 @@ service: "openvpn.${instance}"
 apps: ["openvpn-${instance}"]
 variables:
   config: "/etc/openvpn/${instance}.conf"
-  pidfile: "/run/openvpn.${instance}.pid"
 
 config_files: ["${config}"]
 
@@ -16,4 +15,4 @@ config_files: ["${config}"]
 # *valid* config never exits and would only fail the preflight on its timeout —
 # inverted behaviour. There is no offline syntax checker to gate start/restart on.
 
-pidfile: "${pidfile}"
+pidfile: /run/openvpn.${instance}.pid

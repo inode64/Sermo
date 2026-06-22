@@ -8,6 +8,7 @@ apps: [named]
 variables:
   host: 127.0.0.1
   port: 53
+  user: named
   # Name resolved to prove the resolver answers; override per deployment.
   query: localhost
 preflight:
@@ -22,6 +23,7 @@ config_files: [/etc/bind/named.conf, /etc/named.conf]
 processes:
   main:
     exe: "${named_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

@@ -29,8 +29,10 @@ preflight:
 processes:
   main:
     exe: "${docker_daemon}"
+    user: root
   proxy:
     exe: "${docker_proxy_binary}"
+    user: root
 
 checks:
   service:

@@ -14,6 +14,7 @@ socket: /run/fcron.fifo
 processes:
   main:
     exe: "${fcron_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

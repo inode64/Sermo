@@ -15,6 +15,7 @@ pidfile: /run/acpid.pid
 processes:
   main:
     exe: "${acpid_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

@@ -18,6 +18,7 @@ pidfile: /run/smartctl_exporter.pid
 processes:
   main:
     exe: "${smartctl_exporter_binary}"
+    user: root
 
 checks:
   service:

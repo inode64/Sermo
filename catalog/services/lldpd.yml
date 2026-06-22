@@ -5,6 +5,8 @@ category: network
 description: "Link Layer Discovery Protocol"
 service: lldpd
 apps: [lldpd]
+variables:
+  user: lldpd
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
@@ -15,6 +17,7 @@ socket: /run/lldpd.socket
 processes:
   main:
     exe: "${lldpd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }
