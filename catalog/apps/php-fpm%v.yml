@@ -1,6 +1,6 @@
 kind: app
 name: php-fpm%v
-display_name: "PHP-FPM ${version}"
+display_name: "PHP-FPM ${version} ${current}"
 category: runtime
 description: "PHP-FPM interpreter"
 variables:

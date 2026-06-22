@@ -900,6 +900,14 @@ becomes `Python` for the active slot. Set `versions.unversioned: false` to ignor
 the marker-less binary; a map form can still override fields for the unversioned
 instance when a template needs a custom label:
 
+Templates may also use `${current}` in `display_name` or `description`. During
+materialization it becomes `current` only for the versioned entry whose binary is
+the same filesystem entry as the marker-less active-slot binary (for example
+`/usr/bin/php -> /usr/bin/php8.2`); otherwise it becomes empty before metadata is
+trimmed. This lets `display_name: "PHP ${version} ${current}"` render as
+`PHP 8.2 current` for the active version and `PHP 8.3` for the others without
+running version commands during config load.
+
 ```yaml
 kind: app
 name: python%n

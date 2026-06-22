@@ -36,6 +36,11 @@ var tmplTokens = []tmplToken{
 	{placeholder: "%i", variable: "instance", capture: "(?:[A-Za-z0-9][A-Za-z0-9_.-]*)?"},
 }
 
+const (
+	templateCurrentMarker = "${current}"
+	templateCurrentLabel  = "current"
+)
+
 // tokenFor returns the template token a name carries, or nil if it is not a
 // version template.
 func tokenFor(name string) *tmplToken {
@@ -110,9 +115,11 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		} else {
 			tok := tokenFor(tmpl.Name)
 			source := c.versionDiscoverySource(body, *tok, kind)
-			values := materializedVersionValues(source.paths, source.options, *tok)
-			for _, value := range values {
-				instances = append(instances, instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind))
+			versions := materializedVersionValues(source.paths, source.options, *tok)
+			for _, value := range versions.values {
+				instances = append(instances, instantiateVersion(
+					body, tmpl.Name, value, versions.current[value], *tok, tmpl.Path, kind,
+				))
 			}
 		}
 		for _, inst := range instances {
@@ -332,12 +339,13 @@ func tupleKey(toks []tmplToken, vals map[string]string) string {
 // its captured value in a single pass.
 func instantiateMulti(body map[string]any, templateName string, vals map[string]string, toks []tmplToken, path, kind string) *Document {
 	name := templateName
-	bodyPairs := make([]string, 0, len(toks)*2)
+	bodyPairs := make([]string, 0, len(toks)*2+2)
 	for _, t := range toks {
 		v := vals[t.variable]
 		name = strings.ReplaceAll(name, t.placeholder, v)
 		bodyPairs = append(bodyPairs, t.marker(), v)
 	}
+	bodyPairs = append(bodyPairs, templateCurrentMarker, "")
 	name = strings.TrimSpace(name)
 	out := bindTokens(cloneMap(body), strings.NewReplacer(bodyPairs...)).(map[string]any)
 	out["kind"] = kind
@@ -347,25 +355,87 @@ func instantiateMulti(body map[string]any, templateName string, vals map[string]
 	return &Document{Kind: kind, Name: name, Path: path, Body: out}
 }
 
-func materializedVersionValues(discoverPaths []string, options map[string]any, tok tmplToken) []string {
+type materializedVersionSet struct {
+	values  []string
+	current map[string]bool
+}
+
+func materializedVersionValues(discoverPaths []string, options map[string]any, tok tmplToken) materializedVersionSet {
 	seen := map[string]bool{}
 	var values []string
+	var unversionedPaths []string
+	unversionedEnabled := versionUnversionedEnabled(options, tok)
 	for _, discoverPath := range discoverPaths {
 		for _, value := range discoverVersions(discoverPath, tok) {
-			if !seen[value] {
-				seen[value] = true
-				values = append(values, value)
-			}
+			values = appendMaterializedVersionValue(values, seen, value)
 		}
-		if versionUnversionedEnabled(options, tok) && unversionedVersionExists(discoverPath, tok) && !seen[""] {
-			seen[""] = true
-			values = append(values, "")
+		if !unversionedEnabled {
+			continue
+		}
+		if path, ok := unversionedVersionPath(discoverPath, tok); ok {
+			unversionedPaths = append(unversionedPaths, path)
+			values = appendMaterializedVersionValue(values, seen, "")
 		}
 	}
 	if len(values) > 0 {
 		sort.Slice(values, func(i, j int) bool { return versionLess(values[i], values[j]) })
 	}
-	return values
+	return materializedVersionSet{
+		values:  values,
+		current: currentVersionValues(discoverPaths, values, unversionedPaths, tok),
+	}
+}
+
+func appendMaterializedVersionValue(values []string, seen map[string]bool, value string) []string {
+	if seen[value] {
+		return values
+	}
+	seen[value] = true
+	return append(values, value)
+}
+
+func currentVersionValues(discoverPaths []string, values []string, unversionedPaths []string, tok tmplToken) map[string]bool {
+	if len(unversionedPaths) == 0 {
+		return nil
+	}
+	current := map[string]bool{}
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if versionMatchesUnversioned(discoverPaths, value, unversionedPaths, tok) {
+			current[value] = true
+		}
+	}
+	return current
+}
+
+func versionMatchesUnversioned(discoverPaths []string, value string, unversionedPaths []string, tok tmplToken) bool {
+	marker := tok.marker()
+	for _, discoverPath := range discoverPaths {
+		if !strings.Contains(discoverPath, marker) {
+			continue
+		}
+		versionedPath := strings.ReplaceAll(discoverPath, marker, value)
+		for _, unversionedPath := range unversionedPaths {
+			if sameFile(unversionedPath, versionedPath) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sameFile(a, b string) bool {
+	ainfo, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	binfo, err := os.Stat(b)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(ainfo, binfo)
 }
 
 // versionLess orders discovered version values numerically by their
@@ -481,13 +551,14 @@ func versionUnversionedEnabled(body map[string]any, tok tmplToken) bool {
 	return true
 }
 
-func unversionedVersionExists(discoverPath string, tok tmplToken) bool {
+func unversionedVersionPath(discoverPath string, tok tmplToken) (string, bool) {
 	marker := tok.marker()
 	if !strings.Contains(discoverPath, marker) {
-		return false
+		return "", false
 	}
-	_, err := os.Stat(strings.ReplaceAll(discoverPath, marker, ""))
-	return err == nil
+	path := strings.ReplaceAll(discoverPath, marker, "")
+	_, err := os.Stat(path)
+	return path, err == nil
 }
 
 // templateBody returns the template's body folded onto its `uses` base (if any),
@@ -542,9 +613,13 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 // token placeholder in the name becomes the value, and every `${...}` reference
 // for that token in the body (variables.binary, display_name, service, ...) is
 // substituted. Other `${var}` references are left for normal resolution.
-func instantiateVersion(body map[string]any, templateName, value string, tok tmplToken, path, kind string) *Document {
+func instantiateVersion(body map[string]any, templateName, value string, current bool, tok tmplToken, path, kind string) *Document {
 	name := strings.TrimSpace(strings.ReplaceAll(templateName, tok.placeholder, value))
-	out := bindToken(cloneMap(body), tok.marker(), value).(map[string]any)
+	currentValue := ""
+	if current {
+		currentValue = templateCurrentLabel
+	}
+	out := bindTokens(cloneMap(body), strings.NewReplacer(tok.marker(), value, templateCurrentMarker, currentValue)).(map[string]any)
 	if value == "" {
 		applyUnversionedOverrides(out)
 	}
@@ -578,12 +653,6 @@ func applyUnversionedOverrides(out map[string]any) {
 		}
 		out[key] = value
 	}
-}
-
-// bindToken replaces every occurrence of marker in every string of the tree with
-// value. Unlike full expansion it touches only that one marker.
-func bindToken(v any, marker, value string) any {
-	return bindTokens(v, strings.NewReplacer(marker, value))
 }
 
 // bindTokens applies a Replacer to every string of the tree in one pass,

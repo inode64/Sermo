@@ -221,6 +221,13 @@ resolution (no `variables` entry needed): `${name}` is the resolved service name
 parameterize human-facing strings, e.g. `message: "${display_name} backup is
 running"`. An explicit `variables` entry of the same name overrides the built-in.
 
+`${current}` is only a version-template materialization marker for `%v` / `%n`
+catalog templates. It is replaced before normal resolution, not exposed as a
+runtime variable: `current` for the versioned entry whose binary is the same
+filesystem entry as the marker-less active-slot binary, or empty otherwise. Use
+it in metadata such as `display_name: "PHP ${version} ${current}"`; metadata is
+trimmed after substitution.
+
 `${arch}` is the machine architecture (uname -m: `x86_64`, `aarch64`, ...),
 substituted everywhere on load — including inside variable values and
 version-discovery paths — so it works in `binary`, library paths and
