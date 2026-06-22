@@ -1250,8 +1250,8 @@
     "semantic_hash": "10cba139b5327f0d1e3635142fb3e72d"
   },
   "internal/config/catalog_audit_test.go": {
-    "mtime": 1782063959.2270155,
-    "ast_hash": "7e7b2dc179ebd9015d950130973c39f1",
+    "mtime": 1782106652.4580302,
+    "ast_hash": "da7f7bdc5b417026e90f0ee9706641c7",
     "semantic_hash": ""
   },
   "internal/config/config_test.go": {
@@ -4567,6 +4567,16 @@
   "internal/app/webbackend_mounts_test.go": {
     "mtime": 1782076176.4989972,
     "ast_hash": "7fc0bb97cc9208534f0e43075a2c1f86",
+    "semantic_hash": ""
+  },
+  "catalog/apps/upower.yml": {
+    "mtime": 1782106652.361797,
+    "ast_hash": "5678d9e3a9f01a29f370227a9d88ba65",
+    "semantic_hash": ""
+  },
+  "catalog/services/upower.yml": {
+    "mtime": 1782106686.538884,
+    "ast_hash": "9584a4076257b1f0fa9c1d40b8117ba0",
     "semantic_hash": ""
   }
 }
