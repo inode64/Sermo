@@ -1,0 +1,19 @@
+kind: daemon
+name: upower
+display_name: "UPower"
+category: hardware
+description: "D-Bus service for power device and battery status."
+service:
+  systemd: [upower]
+apps: [upower]
+
+variables:
+  user: root
+
+processes:
+  main:
+    exe: "${upower_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
