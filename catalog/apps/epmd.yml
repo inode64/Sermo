@@ -1,0 +1,11 @@
+kind: app
+name: epmd
+display_name: "EPMD"
+category: messaging
+description: "Erlang Port Mapper Daemon."
+version_from: erlang
+variables:
+  binary: /usr/bin/epmd
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "-help"], timeout: 10s, expect_exit: [0, 1] }

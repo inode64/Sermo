@@ -1,0 +1,24 @@
+kind: daemon
+name: epmd
+display_name: "EPMD"
+category: messaging
+description: "Erlang Port Mapper Daemon used by local Erlang nodes."
+service:
+  systemd: [epmd]
+  openrc: [epmd]
+apps: [epmd]
+
+variables:
+  port: 4369
+  user: epmd
+
+pidfile: /run/epmd.pid
+
+processes:
+  main:
+    exe: "${epmd_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}", timeout: 2s }
