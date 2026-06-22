@@ -233,7 +233,7 @@ perl, …). An app owns the tool's **binary**, **health** and **version** checks
 Link them with `apps:`:
 
 ```yaml
-# catalog/services/tomcat-%v.yml — Tomcat runs on the JVM
+# catalog/services/tomcat-%v%s%i.yml — Tomcat runs on the JVM
 apps: [java, "tomcat-${version}"]
 ```
 
@@ -835,34 +835,36 @@ mirrors the name (`postgres-%v.yml`); only that one file is needed. `%v` may sit
 anywhere in the name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in
 the name; inside the body always use `${version}` (e.g. in `service` or `apps`).
 
-Keep application discovery in `catalog/apps`. A versioned or instanced daemon
-that links a matching app, such as `apps: ["postgres-${version}"]`,
-`apps: ["php-fpm${version}"]` or `apps: ["openvpn-${instance}"]`, must not
-declare its own `versions:` block. If discovery cannot come from a versioned
-`variables.binary` path, put `versions.from` on the app template.
+Prefer application discovery in `catalog/apps` when the installed binary path
+identifies the version or instance. A versioned or instanced daemon that links a
+matching app, such as `apps: ["postgres-${version}"]` or
+`apps: ["php-fpm${version}"]`, can materialize from that app's
+`variables.binary` or `versions.from`.
 
-For example, an init instance template discovers instances from init files in the
-app, then the daemon links the materialized app:
+When discovery belongs to the daemon instead — for example the instances are
+configuration files or init scripts and the application binary is generic — put
+`versions.from` on the daemon template and link the generic or versioned app that
+owns the binary:
 
 ```yaml
 kind: app
-name: openvpn-%i
-versions:
-  from: "/etc/init.d/openvpn.${instance}"
+name: mydaemon
 variables:
-  binary: /usr/bin/openvpn
+  binary: /usr/sbin/mydaemon
 preflight:
   binary: { type: binary, path: "${binary}" }
 
 ---
 kind: daemon
-name: openvpn-%i
-apps: ["openvpn-${instance}"]
-service: "openvpn.${instance}"
+name: mydaemon-%i
+apps: ["mydaemon"]
+versions:
+  from: "/etc/mydaemon/${instance}.conf"
+service: "mydaemon@${instance}"
 ```
 
-`versions.from` is discovery-only app metadata; it never appears in materialized
-apps or daemons.
+`versions.from` is discovery-only metadata; it never appears in materialized apps
+or daemons.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
@@ -914,6 +916,110 @@ preflight:
 Use `%i`/`${instance}` for named init instances discovered from a bounded app
 path, for example `versions: { from: "/etc/init.d/openvpn.${instance}" }` on
 `kind: app`.
+
+### Composite names with a separator (`%s`)
+
+Some daemons encode **both** a version and an environment/pool in one name, joined
+by `-` or `_` — `tomcat-8.5-main`, `tomcat-9-guacamole`, `php-fpm8.4_airbnb`. Use
+`%s`/`${sep}` for that joining separator, which matches an empty string, `-` or
+`_`. A name may carry several tokens (`tomcat-%v%s%i`); all are discovered
+together from a single glob whose markers (`${version}${sep}${instance}`) are each
+captured per match, and bound everywhere at once. A non-final `%v` is bounded so
+it stops at the separator (`8.5`), and the instance may be empty — when it is, the
+separator collapses too, so a bare `/etc/tomcat-8.5` materializes `tomcat-8.5`
+with no trailing `-`:
+
+```yaml
+kind: daemon
+name: tomcat-%v%s%i
+versions:
+  from: "/etc/tomcat-${version}${sep}${instance}/server.xml"
+service:
+  openrc: "tomcat-${version}${sep}${instance}"
+  systemd: "tomcat@${version}${sep}${instance}"
+```
+
+### Daemon-owned discovery
+
+A daemon template normally discovers through a linked app (the app owns the
+installed-binary source). When the instances live on the daemon side — config
+directories the binary cannot know about — the daemon may declare its **own**
+token-bearing `versions.from`, as above. The linked app (generic like `openvpn`,
+or versioned like `tomcat-${version}`) still supplies `${binary}` for preflight. A
+daemon never discovers from its own *binary*; only an explicit `versions.from`
+qualifies.
+
+When discovery is config-driven, a stray config tree may exist without its runtime
+installed (e.g. `/etc/php/fpm-php5.6` after the 5.6 package was removed). Gate
+materialization on the binary with **`versions.require`** — one or more candidate
+paths (the captured tokens are bound) of which at least one must exist, or the
+instance is skipped. This keeps the daemon and its versioned binary app in step,
+so no daemon dangles a link to an app that never materialized:
+
+```yaml
+versions:
+  from: "/etc/php/fpm-php${version}${sep}${instance}"
+  require:
+    - "/usr/sbin/php-fpm${version}"
+    - "/usr/bin/php-fpm${version}"
+```
+
+### Optional components (`enable_if`)
+
+An entry under `processes`, `checks`, `preflight` or `postflight` may carry an
+`enable_if` guard that keeps it only when a key in a distro config file satisfies
+a predicate; otherwise the entry is dropped during service resolution. This
+models components that are optional per host — e.g. Samba runs `winbindd` only
+when `/etc/conf.d/samba`'s `daemon_list` names it:
+
+```yaml
+processes:
+  winbindd:
+    exe: /usr/sbin/winbindd
+    enable_if:
+      file: /etc/conf.d/samba
+      key: daemon_list
+      contains: winbindd          # or: equals: <value> | matches: <regex>
+checks:
+  winbindd:
+    type: process
+    exe: /usr/sbin/winbindd
+    state: running
+    enable_if:
+      file: /etc/conf.d/samba
+      key: daemon_list
+      contains: winbindd
+```
+
+A missing file or absent key prunes the entry (fail-safe). The guard is stripped
+from surviving entries. `config validate` still checks disabled entries before
+they are pruned, so typos in optional process/check definitions are reported.
+`enable_if` is intentionally not supported under `rules`, `policy`, `guards` or
+other safety-affecting sections.
+
+### Variables read from a config file (`from_file`)
+
+A variable may take its value from a config file instead of a literal, useful when
+a port or path is defined in the daemon's own config. `directive:` reads the token
+after a `key value` line (OpenVPN/sshd style); `pattern:` reads capture group 1 of
+a regex; `default:` applies when the file or key is absent:
+
+```yaml
+variables:
+  config: "/etc/openvpn/${instance}.conf"
+  port:
+    from_file: "${config}"
+    directive: port              # "port 1194" -> 1194
+    default: 1194               # required fallback when file/key is absent
+  # tomcat: pattern: '<Connector[^>]*?\bport="(\d+)"'
+```
+
+It is evaluated during resolution (so it can reference other variables such as
+`${config}`) and re-evaluated on every config reload. The variable spec must
+define `from_file`, `default`, and exactly one of `directive` or `pattern`.
+`pattern` must compile and include a capture group. A missing file or unmatched
+key uses `default`; malformed specs or unknown variables in `from_file` are
+validation errors.
 
 ### Listing installed applications
 

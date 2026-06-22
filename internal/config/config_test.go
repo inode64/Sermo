@@ -4399,3 +4399,390 @@ rules:
 		t.Fatalf("expected unknown-library error, got %v", errs)
 	}
 }
+
+// TestDaemonOwnsDiscovery covers the v2 rule: a daemon template that declares
+// its own token-bearing `versions.from` materializes from that path directly,
+// without needing a linked discovery app.
+func TestDaemonOwnsDiscovery(t *testing.T) {
+	root := t.TempDir()
+	confd := filepath.Join(root, "conf")
+	if err := os.MkdirAll(confd, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"myd-tun1.conf", "myd-tun2.conf"} {
+		if err := os.WriteFile(filepath.Join(confd, f), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalogDir := filepath.Join(root, "catalog")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(dir, file, content string) {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(catalogDir, "services"), "myd-%i.yml", fmt.Sprintf(`
+kind: daemon
+name: myd-%%i
+display_name: "Myd ${instance}"
+service: "myd.${instance}"
+versions:
+  from: "%s/myd-${instance}.conf"
+checks:
+  service: { type: service, expect: active }
+`, confd))
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if _, ok := cfg.Daemons["myd-%i"]; ok {
+		t.Fatal("template myd-%i should not be registered")
+	}
+	for _, inst := range []string{"tun1", "tun2"} {
+		name := "myd-" + inst
+		doc, ok := cfg.Daemons[name]
+		if !ok {
+			t.Fatalf("expected materialized daemon %q from daemon-owned discovery", name)
+		}
+		if got := ServiceUnit(doc.Body, name); got != "myd."+inst {
+			t.Fatalf("%s service unit = %q, want myd.%s", name, got, inst)
+		}
+	}
+}
+
+// TestMultiTokenSeparatorMaterialization covers a `name: tomcat-%v%s%i` template:
+// version + optional separator + instance discovered together from config dirs.
+// The no-instance case (tomcat-8.5) must materialize without a trailing separator.
+func TestMultiTokenSeparatorMaterialization(t *testing.T) {
+	root := t.TempDir()
+	etc := filepath.Join(root, "etc")
+	for _, dir := range []string{"tomcat-8.5-main", "tomcat-9-guacamole", "tomcat-8.5"} {
+		if err := os.MkdirAll(filepath.Join(etc, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(etc, dir, "server.xml"), []byte("<Server/>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	catalogDir := filepath.Join(root, "catalog")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(catalogDir, "services")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tomcat-%v%s%i.yml"), []byte(fmt.Sprintf(`
+kind: daemon
+name: tomcat-%%v%%s%%i
+display_name: "Tomcat ${version} (${instance})"
+service: "tomcat-${version}${sep}${instance}"
+versions:
+  from: "%s/tomcat-${version}${sep}${instance}/server.xml"
+variables:
+  config: "%s/tomcat-${version}${sep}${instance}/server.xml"
+checks:
+  service: { type: service, expect: active }
+`, etc, etc)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := map[string]string{
+		"tomcat-8.5-main":    "tomcat-8.5-main",
+		"tomcat-9-guacamole": "tomcat-9-guacamole",
+		"tomcat-8.5":         "tomcat-8.5", // no instance -> no trailing separator
+	}
+	for name, unit := range want {
+		doc, ok := cfg.Daemons[name]
+		if !ok {
+			t.Fatalf("expected materialized daemon %q", name)
+		}
+		if got := ServiceUnit(doc.Body, name); got != unit {
+			t.Fatalf("%s service unit = %q, want %q", name, got, unit)
+		}
+	}
+	if _, ok := cfg.Daemons["tomcat-8.5-"]; ok {
+		t.Fatal("must not materialize a trailing-separator name tomcat-8.5-")
+	}
+}
+
+// TestVariableFromFileExtraction covers a variable whose value is read from a
+// config file: `directive: port` extracts the value after "port" (OpenVPN
+// style), `pattern:` extracts a regex group, and `default:` applies when neither
+// the file nor the key is present.
+func TestVariableFromFileExtraction(t *testing.T) {
+	root := t.TempDir()
+	vpnConf := filepath.Join(root, "vpn.conf")
+	if err := os.WriteFile(vpnConf, []byte("# comment\nproto udp\nport 1195\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tomcatConf := filepath.Join(root, "server.xml")
+	if err := os.WriteFile(tomcatConf, []byte(`<Connector port="8081" protocol="HTTP/1.1"/>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalogDir := filepath.Join(root, "catalog", "services")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(file, content string) {
+		if err := os.WriteFile(filepath.Join(catalogDir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enable := func(name, daemon string) {
+		body := fmt.Sprintf("kind: service\nname: %s\nuses: %s\n", name, daemon)
+		if err := os.WriteFile(filepath.Join(enabledDir, name+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enable("myvpn", "vpn")
+	enable("mycat", "cat")
+	enable("mydfl", "dfl")
+	write("vpn.yml", fmt.Sprintf(`
+kind: daemon
+name: vpn
+service: vpn
+variables:
+  config: "%s"
+  port: { from_file: "${config}", directive: port, default: 1194 }
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: "${port}", timeout: 2s }
+`, vpnConf))
+	write("cat.yml", fmt.Sprintf(`
+kind: daemon
+name: cat
+service: cat
+variables:
+  config: "%s"
+  port: { from_file: "${config}", pattern: '<Connector[^>]*?\bport="(\d+)"', default: 8080 }
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: "${port}", timeout: 2s }
+`, tomcatConf))
+	write("dfl.yml", `
+kind: daemon
+name: dfl
+service: dfl
+variables:
+  config: "/nonexistent/path.conf"
+  port: { from_file: "${config}", directive: port, default: 1194 }
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: "${port}", timeout: 2s }
+`)
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, filepath.Join(root, "catalog"), enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, tc := range []struct{ name, want string }{
+		{"myvpn", "1195"},
+		{"mycat", "8081"},
+		{"mydfl", "1194"},
+	} {
+		resolved, errs := cfg.Resolve(tc.name)
+		if len(errs) != 0 {
+			t.Fatalf("Resolve(%s) errors = %v", tc.name, errs)
+		}
+		if got := cfgval.String(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != tc.want {
+			t.Errorf("%s: port = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestEnableIfPrunesByConfdFile covers the enable_if directive: a process branch
+// is kept only when a key in a distro conf file satisfies the predicate (e.g.
+// winbindd present in /etc/conf.d/samba's daemon_list). An absent file or
+// unmatched key prunes the branch (fail-safe).
+func TestEnableIfPrunesByConfdFile(t *testing.T) {
+	root := t.TempDir()
+	withWinbind := filepath.Join(root, "samba.on")
+	if err := os.WriteFile(withWinbind, []byte(`daemon_list="smbd nmbd winbindd"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withoutWinbind := filepath.Join(root, "samba.off")
+	if err := os.WriteFile(withoutWinbind, []byte(`daemon_list="smbd nmbd"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalogDir := filepath.Join(root, "catalog", "services")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	daemon := func(name, confFile string) {
+		body := fmt.Sprintf(`
+kind: daemon
+name: %s
+service: %s
+processes:
+  smbd: { exe: /usr/sbin/smbd }
+  winbindd:
+    exe: /usr/sbin/winbindd
+    enable_if: { file: "%s", key: daemon_list, contains: winbindd }
+checks:
+  service: { type: service, expect: active }
+  winbindd:
+    type: process
+    exe: /usr/sbin/winbindd
+    state: running
+    enable_if: { file: "%s", key: daemon_list, contains: winbindd }
+`, name, name, confFile, confFile)
+		if err := os.WriteFile(filepath.Join(catalogDir, name+".yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		svc := fmt.Sprintf("kind: service\nname: my%s\nuses: %s\n", name, name)
+		if err := os.WriteFile(filepath.Join(enabledDir, "my"+name+".yml"), []byte(svc), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	daemon("sambaon", withWinbind)
+	daemon("sambaoff", withoutWinbind)
+	daemon("sambanone", filepath.Join(root, "missing"))
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, filepath.Join(root, "catalog"), enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, tc := range []struct {
+		svc      string
+		winbindd bool
+	}{
+		{"mysambaon", true},
+		{"mysambaoff", false},
+		{"mysambanone", false},
+	} {
+		resolved, errs := cfg.Resolve(tc.svc)
+		if len(errs) != 0 {
+			t.Fatalf("Resolve(%s) errors = %v", tc.svc, errs)
+		}
+		procs := nested(t, resolved.Tree, "processes")
+		checks := nested(t, resolved.Tree, "checks")
+		win, ok := procs["winbindd"]
+		if ok != tc.winbindd {
+			t.Errorf("%s: winbindd present = %v, want %v", tc.svc, ok, tc.winbindd)
+		}
+		if _, ok := checks["winbindd"]; ok != tc.winbindd {
+			t.Errorf("%s: winbindd check present = %v, want %v", tc.svc, ok, tc.winbindd)
+		}
+		if _, ok := procs["smbd"]; !ok {
+			t.Errorf("%s: smbd must always be present", tc.svc)
+		}
+		if tc.winbindd {
+			if _, has := win.(map[string]any)["enable_if"]; has {
+				t.Errorf("%s: enable_if must be stripped from a surviving branch", tc.svc)
+			}
+		}
+	}
+}
+
+// TestMultiTokenDiscoveryRequireGate covers `versions.require`: an instance
+// discovered from config (php-fpm pools, tomcat envs) is materialized only when
+// its required binary also exists, so a stray config directory whose runtime is
+// not installed does not produce a daemon with a dangling app link.
+func TestMultiTokenDiscoveryRequireGate(t *testing.T) {
+	root := t.TempDir()
+	etc := filepath.Join(root, "etc")
+	bin := filepath.Join(root, "bin")
+	for _, d := range []string{"app8.4", "app8.4_pool", "app5.6"} {
+		if err := os.MkdirAll(filepath.Join(etc, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Binary present only for 8.4 (so 8.4 and 8.4_pool keep it; 5.6 is gated out).
+	if err := os.WriteFile(filepath.Join(bin, "app8.4"), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	catalogDir := filepath.Join(root, "catalog", "services")
+	enabledDir := filepath.Join(root, "enabled")
+	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "app%v%s%i.yml"), []byte(fmt.Sprintf(`
+kind: daemon
+name: app%%v%%s%%i
+service: "app${version}${sep}${instance}"
+versions:
+  from: "%s/app${version}${sep}${instance}"
+  require: "%s/app${version}"
+checks:
+  service: { type: service, expect: active }
+`, etc, bin)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, filepath.Join(root, "catalog"), enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, name := range []string{"app8.4", "app8.4_pool"} {
+		if _, ok := cfg.Daemons[name]; !ok {
+			t.Errorf("expected %q to materialize (binary present)", name)
+		}
+	}
+	if _, ok := cfg.Daemons["app5.6"]; ok {
+		t.Error("app5.6 must be gated out: its required binary is absent")
+	}
+}

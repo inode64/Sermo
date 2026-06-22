@@ -1,12 +1,23 @@
 kind: daemon
-name: openvpn-%i
+name: openvpn%s%i
 display_name: "OpenVPN ${instance}"
 category: network
-uses: openvpn
+apps: [openvpn]
+
+# OpenRC has a single flat namespace (no server/client split): one init script
+# per tunnel, symlinked as openvpn.<instance>. The daemon owns its discovery
+# from those symlinks; the generic `openvpn` app provides the binary.
+versions:
+  from: "/etc/init.d/openvpn.${instance}"
+
 service: "openvpn.${instance}"
-apps: ["openvpn-${instance}"]
+
 variables:
   config: "/etc/openvpn/${instance}.conf"
+  port:
+    from_file: "${config}"
+    directive: port
+    default: 1194
 
 config_files: ["${config}"]
 
@@ -16,3 +27,7 @@ config_files: ["${config}"]
 # inverted behaviour. There is no offline syntax checker to gate start/restart on.
 
 pidfile: /run/openvpn.${instance}.pid
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: openvpn, optional: true, port: "${port}" }
