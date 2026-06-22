@@ -386,9 +386,11 @@ func (a App) serviceMonitorState(opts options) monitorView {
 	if err != nil {
 		return view
 	}
-	if _, ok := cfg.Services[opts.service()]; ok {
+	service := opts.service()
+	if canonical, ok := cfg.CanonicalServiceName(service); ok {
+		service = canonical
 		view.Configured = true
-		if resolved, errs := cfg.Resolve(opts.service()); len(errs) == 0 {
+		if resolved, errs := cfg.Resolve(service); len(errs) == 0 {
 			if cfgval.Disabled(resolved.Tree) {
 				view.Enabled = false
 				view.Paused = true
@@ -403,7 +405,7 @@ func (a App) serviceMonitorState(opts options) monitorView {
 		return view
 	}
 	defer store.Close()
-	rec, found, err := store.MonitorState(opts.service())
+	rec, found, err := store.MonitorState(service)
 	if err != nil || !found {
 		return view
 	}
@@ -480,7 +482,8 @@ func (a App) runAction(ctx context.Context, opts options, action string) int {
 	if cfg == nil {
 		return code
 	}
-	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+	service, code = a.canonicalService(opts, cfg, service)
+	if code != exitSuccess {
 		return code
 	}
 	if action == "reload" {
@@ -757,7 +760,8 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 	if cfg == nil {
 		return code
 	}
-	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+	service, code = a.canonicalService(opts, cfg, service)
+	if code != exitSuccess {
 		return code
 	}
 
@@ -872,9 +876,10 @@ func (a App) runLocks(opts options) int {
 	if cfg == nil {
 		return code
 	}
+	service := canonicalServiceIfKnown(cfg, opts.service())
 
 	dir := filepath.Join(cfg.Global.RuntimeDir(), "locks")
-	report, err := locks.NewScanner(dir).Scan(opts.service())
+	report, err := locks.NewScanner(dir).Scan(service)
 	if err != nil {
 		return a.fail(opts, fmt.Sprintf("scan locks failed: %v", err))
 	}
@@ -936,7 +941,8 @@ func (a App) runProcesses(opts options) int {
 	if cfg == nil {
 		return code
 	}
-	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+	service, code = a.canonicalService(opts, cfg, service)
+	if code != exitSuccess {
 		return code
 	}
 
@@ -1052,10 +1058,12 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 		return servicemgr.ServiceStatus{}, exitRuntimeError
 	}
 
-	target := control.Target{Unit: opts.service(), Backend: detection.Backend, Manager: manager}
+	service := opts.service()
+	target := control.Target{Unit: service, Backend: detection.Backend, Manager: manager}
 	if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
-		if _, ok := cfg.Services[opts.service()]; ok {
-			resolved, errs := cfg.Resolve(opts.service())
+		if canonical, ok := cfg.CanonicalServiceName(service); ok {
+			service = canonical
+			resolved, errs := cfg.Resolve(service)
 			if len(errs) > 0 {
 				a.reportError(opts, fmt.Sprintf("config resolve failed: %v", errs[0]))
 				return servicemgr.ServiceStatus{}, exitRuntimeError
@@ -1063,13 +1071,13 @@ func (a App) serviceStatus(ctx context.Context, opts options) (servicemgr.Servic
 			resolver := servicemgr.NewUnitResolver()
 			resolver.Runner = a.Runner
 			resolver.Manager = manager
-			target, err = a.resolveControlTarget(ctx, opts, opts.service(), resolved.Tree, detection.Backend, manager, resolver)
+			target, err = a.resolveControlTarget(ctx, opts, service, resolved.Tree, detection.Backend, manager, resolver)
 			if err != nil {
 				a.reportError(opts, fmt.Sprintf("control target failed: %v", err))
 				return servicemgr.ServiceStatus{}, exitRuntimeError
 			}
 		} else if len(cfg.Services) > 0 {
-			a.reportError(opts, fmt.Sprintf("unknown service %q", opts.service()))
+			a.reportError(opts, fmt.Sprintf("unknown service %q", service))
 			return servicemgr.ServiceStatus{}, exitRuntimeError
 		}
 	}
@@ -1175,6 +1183,11 @@ func (a App) runEvents(ctx context.Context, opts options) int {
 	service := ""
 	if len(args) > 0 {
 		service = args[0]
+		if a.LoadConfig != nil {
+			if cfg, err := a.LoadConfig(opts.globalPath()); err == nil {
+				service = canonicalServiceIfKnown(cfg, service)
+			}
+		}
 	}
 
 	evs, err := a.FetchEvents(ctx, opts, service, limit)

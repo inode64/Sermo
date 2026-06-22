@@ -182,6 +182,9 @@ func validateDocuments(cfg *Config) []Issue {
 	counts := map[string]map[string]int{
 		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {}, kindMount: {},
 	}
+	aliasOwners := map[string]map[string]string{
+		kindDaemon: {}, kindApp: {}, kindLibrary: {}, kindPatterns: {}, kindService: {}, kindMount: {},
+	}
 
 	for _, doc := range cfg.docs {
 		scope := documentScope(doc)
@@ -221,6 +224,49 @@ func validateDocuments(cfg *Config) []Issue {
 		counts[doc.Kind][doc.Name]++
 	}
 
+	for _, doc := range cfg.docs {
+		kindCounts, knownKind := counts[doc.Kind]
+		if !knownKind || doc.Name == "" {
+			continue
+		}
+		scope := documentScope(doc)
+		raw, present := doc.Body["aliases"]
+		if !present {
+			continue
+		}
+		aliases, ok := documentAliasList(raw)
+		if !ok {
+			issues = append(issues, Issue{Scope: scope, Msg: "aliases must be a list of simple names"})
+			continue
+		}
+		seen := map[string]bool{}
+		for _, alias := range aliases {
+			switch {
+			case alias == "":
+				issues = append(issues, Issue{Scope: scope, Msg: "aliases must not contain empty names"})
+				continue
+			case !validDocumentName(alias):
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q must be a simple name without path separators", alias)})
+				continue
+			case alias == doc.Name:
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q duplicates the document name", alias)})
+				continue
+			case kindCounts[alias] > 0:
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q conflicts with a %s name", alias, doc.Kind)})
+				continue
+			case seen[alias]:
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("duplicate alias %q", alias)})
+				continue
+			}
+			seen[alias] = true
+			if owner := aliasOwners[doc.Kind][alias]; owner != "" && owner != doc.Name {
+				issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("alias %q is already used by %s %q", alias, doc.Kind, owner)})
+				continue
+			}
+			aliasOwners[doc.Kind][alias] = doc.Name
+		}
+	}
+
 	for _, kind := range []string{kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount} {
 		for _, name := range slices.Sorted(maps.Keys(counts[kind])) {
 			if counts[kind][name] > 1 {
@@ -229,6 +275,25 @@ func validateDocuments(cfg *Config) []Issue {
 		}
 	}
 	return issues
+}
+
+func documentAliasList(raw any) ([]string, bool) {
+	switch v := raw.(type) {
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, true
+	case []string:
+		return append([]string(nil), v...), true
+	default:
+		return nil, false
+	}
 }
 
 func validateVersionFrom(cfg *Config, doc *Document, scope string) []Issue {

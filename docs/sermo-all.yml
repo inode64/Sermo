@@ -359,6 +359,7 @@ watches:
 # ---------------------------------------------------------------------------
 kind: daemon
 name: demo
+aliases: [demo-server]          # alternate catalog names accepted by uses:
 display_name: "Demo HTTP Server"
 description: "Reference daemon showing every service/catalog section."
 category: web
@@ -904,6 +905,7 @@ rules:
 # ---------------------------------------------------------------------------
 kind: service
 name: demo-main
+aliases: [demo-primary]         # alternate names accepted by sermoctl commands
 uses: demo                     # inherit the daemon, then override below
 interval: 15s                  # check more often than engine.interval
 monitor: previous              # enabled | disabled | previous

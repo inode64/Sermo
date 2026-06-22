@@ -10,10 +10,25 @@ import (
 // requireService reports an unknown-service error unless name is configured.
 // It returns exitSuccess when the service exists.
 func (a App) requireService(opts options, cfg *config.Config, name string) int {
-	if _, ok := cfg.Services[name]; !ok {
-		return a.fail(opts, fmt.Sprintf("unknown service %q", name))
+	_, code := a.canonicalService(opts, cfg, name)
+	return code
+}
+
+// canonicalService resolves name to the configured service name, accepting
+// service aliases and safe catalog aliases.
+func (a App) canonicalService(opts options, cfg *config.Config, name string) (string, int) {
+	canonical, ok := cfg.CanonicalServiceName(name)
+	if !ok {
+		return "", a.fail(opts, fmt.Sprintf("unknown service %q", name))
 	}
-	return exitSuccess
+	return canonical, exitSuccess
+}
+
+func canonicalServiceIfKnown(cfg *config.Config, name string) string {
+	if canonical, ok := cfg.CanonicalServiceName(name); ok {
+		return canonical
+	}
+	return name
 }
 
 // resolveService resolves name into its flat tree, printing the scoped

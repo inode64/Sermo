@@ -23,13 +23,17 @@ type Resolved struct {
 // returned errors include undefined-variable and nested-variable problems; a
 // nil error slice means a clean resolution.
 func (c *Config) Resolve(name string) (Resolved, []string) {
-	merged, err := c.mergedService(name, nil)
+	canonicalName, ok := c.CanonicalServiceName(name)
+	if !ok {
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown service %q", name)}
+	}
+	merged, err := c.mergedService(canonicalName, nil)
 	if err != nil {
 		return Resolved{Name: name}, []string{err.Error()}
 	}
 
 	errs := prepareExpansionInputs(merged)
-	vars, varErrs := c.expansionVariables(merged, name)
+	vars, varErrs := c.expansionVariables(merged, canonicalName)
 	errs = append(errs, varErrs...)
 	expanded, expErrs := expandTree(merged, vars)
 	errs = append(errs, expErrs...)
@@ -41,7 +45,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
 
-	return Resolved{Name: name, Tree: expanded}, errs
+	return Resolved{Name: canonicalName, Tree: expanded}, errs
 }
 
 // ResolveMount expands one configured mount document. Mounts do not merge catalog
@@ -678,11 +682,15 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 // inspected directly, as the `apps` command does. ${name} and ${display_name}
 // are available; the returned errors mirror Resolve's.
 func (c *Config) ResolveDaemon(name string) (Resolved, []string) {
-	doc, ok := c.Daemons[name]
+	canonicalName, ok := c.CanonicalCatalogName(CategoryService, name)
 	if !ok {
 		return Resolved{Name: name}, []string{fmt.Sprintf("unknown daemon %q", name)}
 	}
-	return c.resolveDoc(doc, name)
+	doc, ok := c.Daemons[canonicalName]
+	if !ok {
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown daemon %q", name)}
+	}
+	return c.resolveDoc(doc, canonicalName)
 }
 
 // catalogRegistry returns the registry that holds a given category's
@@ -705,11 +713,15 @@ func (c *Config) catalogRegistry(category string) map[string]*Document {
 // `services`) resolve a name in its own registry, since names may repeat across
 // kinds.
 func (c *Config) ResolveCatalog(category, name string) (Resolved, []string) {
-	doc, ok := c.catalogRegistry(category)[name]
+	canonicalName, ok := c.CanonicalCatalogName(category, name)
 	if !ok {
 		return Resolved{Name: name}, []string{fmt.Sprintf("unknown %s %q", category, name)}
 	}
-	return c.resolveDoc(doc, name)
+	doc := c.catalogRegistry(category)[canonicalName]
+	if doc == nil {
+		return Resolved{Name: name}, []string{fmt.Sprintf("unknown %s %q", category, name)}
+	}
+	return c.resolveDoc(doc, canonicalName)
 }
 
 // resolveDoc expands a single catalog document's own body (no service merge),
@@ -742,6 +754,11 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 // its uses/clone layering. chain tracks the active clone path for cycle
 // detection.
 func (c *Config) mergedService(name string, chain []string) (map[string]any, error) {
+	canonicalName, ok := c.CanonicalServiceName(name)
+	if !ok {
+		return nil, fmt.Errorf("unknown service %q", name)
+	}
+	name = canonicalName
 	for _, prev := range chain {
 		if prev == name {
 			cycle := append(append([]string{}, chain...), name)
@@ -770,10 +787,11 @@ func (c *Config) mergedService(name string, chain []string) (map[string]any, err
 	} else {
 		merged = c.defaultsPerService()
 		if uses := cfgval.String(doc.Body["uses"]); uses != "" {
-			daemon, ok := c.Daemons[uses]
+			daemonName, ok := c.CanonicalCatalogName(CategoryService, uses)
 			if !ok {
 				return nil, fmt.Errorf("service %q uses unknown daemon %q", name, uses)
 			}
+			daemon := c.Daemons[daemonName]
 			merged = mergeMaps(merged, stripMeta(daemon.Body))
 		}
 	}
