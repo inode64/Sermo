@@ -528,7 +528,7 @@ func TestListIncludesUnversionedTemplateApp(t *testing.T) {
 		}
 	}
 	for dir, content := range map[string]string{
-		"catalog/apps/php%v.yml": fmt.Sprintf(`kind: app
+		"catalog/apps/php.yml": fmt.Sprintf(`kind: app
 name: php%%v
 display_name: "PHP ${version}"
 variables:

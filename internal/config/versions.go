@@ -86,9 +86,11 @@ func tokensFor(name string) []tmplToken {
 // from an explicit token-bearing `versions.from` or a linked app template
 // (`apps: ["php-fpm${version}"]`). `%v` and `%n` may also register an empty
 // active-slot value when the marker-less app binary exists (e.g. `php%v` ->
-// `php`). The template itself is dropped; if nothing is installed it yields
-// nothing. A daemon template may `uses` a base daemon (e.g. php-fpm%v uses
-// php-fpm) to inherit its checks, rules and processes.
+// `php`), and any template can declare `versions.current_from` to materialize
+// that active-slot entry explicitly. The template itself is dropped; if nothing
+// is installed and no active slot is declared it yields nothing. A daemon
+// template may `uses` a base daemon (e.g. php-fpm%v uses php-fpm) to inherit its
+// checks, rules and processes.
 func (c *Config) materializeVersionTemplates() {
 	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
 	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
@@ -108,22 +110,26 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		}
 	}
 	for _, tmpl := range templates {
+		c.recordTemplateValidationIssues(tmpl)
 		body := c.templateBody(tmpl, kind)
 		var instances []*Document
-		if toks := tokensFor(tmpl.Name); len(toks) > 1 {
+		toks := tokensFor(tmpl.Name)
+		if len(toks) > 1 {
 			instances = c.materializeMultiToken(tmpl, body, toks, kind)
 		} else {
-			tok := tokenFor(tmpl.Name)
-			source := c.versionDiscoverySource(body, *tok, kind)
-			versions := materializedVersionValues(source.paths, source.options, *tok)
-			for _, value := range versions.values {
+			tok := toks[0]
+			source := c.versionDiscoverySource(body, tok, kind)
+			matches := materializedTemplateMatches(source.paths, source.options, toks)
+			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
+			for _, match := range matches {
 				instances = append(instances, instantiateVersion(
-					body, tmpl.Name, value, versions.current[value], *tok, tmpl.Path, kind,
+					body, tmpl.Name, match, tok, tmpl.Path, kind,
 				))
 			}
 		}
 		for _, inst := range instances {
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
+				c.recordMaterializedNameCollision(kind, tmpl, inst, existing)
 				continue
 			}
 			inst.Category = tmpl.Category
@@ -133,22 +139,38 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 	}
 }
 
+func (c *Config) recordTemplateValidationIssues(tmpl *Document) {
+	c.validationIssues = append(c.validationIssues, validateVersionsCurrentFrom(tmpl, documentScope(tmpl))...)
+}
+
+func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existing *Document) {
+	c.materializedNameCollisions = append(c.materializedNameCollisions, materializedNameCollision{
+		Kind:         kind,
+		Name:         inst.Name,
+		TemplateName: tmpl.Name,
+		TemplatePath: tmpl.Path,
+		ExistingPath: existing.Path,
+	})
+}
+
 // materializeMultiToken materializes a template whose name carries more than one
 // token (e.g. tomcat-%v%s%i). All markers are discovered together from a single
 // glob whose matches yield one value per token; each present combination becomes
 // a concrete document with every token bound in the name and body at once.
 func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
-	path := c.multiTokenDiscoveryPath(body, toks, kind)
-	if path == "" {
+	paths := c.multiTokenDiscoveryPaths(body, toks, kind)
+	if len(paths) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
 		return nil
 	}
 	require := versionsRequire(body)
 	var out []*Document
-	for _, vals := range discoverTokenTuples(path, toks) {
-		if !requireSatisfied(require, vals, toks) {
+	matches := materializedTemplateMatches(paths, body, toks)
+	matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
+	for _, match := range matches {
+		if !requireSatisfied(require, match.values, toks) {
 			continue
 		}
-		out = append(out, instantiateMulti(body, tmpl.Name, vals, toks, tmpl.Path, kind))
+		out = append(out, instantiateMulti(body, tmpl.Name, match, toks, tmpl.Path, kind))
 	}
 	return out
 }
@@ -183,26 +205,37 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 	return false
 }
 
-// multiTokenDiscoveryPath returns the glob (carrying all markers) that enumerates
-// a multi-token template's instances: the daemon's own `versions.from` when it
-// carries every marker, else a linked app template that does.
-func (c *Config) multiTokenDiscoveryPath(body map[string]any, toks []tmplToken, kind string) string {
-	if from := versionsFromPath(body); containsAllMarkers(from, toks) {
-		return from
+// multiTokenDiscoveryPaths returns the globs (carrying all markers) that
+// enumerate a multi-token template's instances: the daemon's own
+// `versions.from` when it carries every marker, else a linked app template that
+// does.
+func (c *Config) multiTokenDiscoveryPaths(body map[string]any, toks []tmplToken, kind string) []string {
+	if paths := pathsContainingAllMarkers(versionsFromPaths(body), toks); len(paths) > 0 {
+		return paths
 	}
 	if kind != kindDaemon {
-		return ""
+		return nil
 	}
 	for _, name := range cfgval.StringList(body["apps"]) {
 		doc, ok := c.Apps[linkedAppTemplateNameMulti(name, toks)]
 		if !ok {
 			continue
 		}
-		if from := versionsFromPath(stripMeta(doc.Body)); containsAllMarkers(from, toks) {
-			return from
+		if paths := pathsContainingAllMarkers(directVersionDiscoverySources(stripMeta(doc.Body)), toks); len(paths) > 0 {
+			return paths
 		}
 	}
-	return ""
+	return nil
+}
+
+func pathsContainingAllMarkers(paths []string, toks []tmplToken) []string {
+	var out []string
+	for _, path := range paths {
+		if containsAllMarkers(path, toks) {
+			out = append(out, path)
+		}
+	}
+	return out
 }
 
 func containsAllMarkers(path string, toks []tmplToken) bool {
@@ -210,6 +243,9 @@ func containsAllMarkers(path string, toks []tmplToken) bool {
 		return false
 	}
 	for _, t := range toks {
+		if t.variable == "sep" {
+			continue
+		}
 		if !strings.Contains(path, t.marker()) {
 			return false
 		}
@@ -223,53 +259,6 @@ func linkedAppTemplateNameMulti(name string, toks []tmplToken) string {
 		pairs = append(pairs, t.marker(), t.placeholder)
 	}
 	return strings.NewReplacer(pairs...).Replace(name)
-}
-
-// discoverTokenTuples globs the discovery path with every marker wildcarded and,
-// for each match, captures one value per token via a regex with a group per
-// token. An empty trailing instance drops its separator so no dangling `-`/`_`
-// survives. Tuples are de-duplicated and ordered by version then instance.
-func discoverTokenTuples(path string, toks []tmplToken) []map[string]string {
-	pairs := make([]string, 0, len(toks)*2)
-	for _, t := range toks {
-		pairs = append(pairs, t.marker(), "*")
-	}
-	matches, err := filepath.Glob(strings.NewReplacer(pairs...).Replace(path))
-	if err != nil {
-		return nil
-	}
-	re, order := buildMultiRegex(path, toks)
-	if re == nil {
-		return nil
-	}
-	var out []map[string]string
-	seen := map[string]bool{}
-	for _, m := range matches {
-		sub := re.FindStringSubmatch(m)
-		if sub == nil {
-			continue
-		}
-		vals := make(map[string]string, len(order))
-		for i, tk := range order {
-			vals[tk.variable] = sub[i+1]
-		}
-		if vals["instance"] == "" {
-			vals["sep"] = ""
-		}
-		key := tupleKey(toks, vals)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		out = append(out, vals)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i]["version"] != out[j]["version"] {
-			return versionLess(out[i]["version"], out[j]["version"])
-		}
-		return out[i]["instance"] < out[j]["instance"]
-	})
-	return out
 }
 
 // buildMultiRegex compiles an anchored regex matching the discovery path with one
@@ -337,17 +326,19 @@ func tupleKey(toks []tmplToken, vals map[string]string) string {
 // instantiateMulti bakes one discovered tuple into a concrete document: each
 // token placeholder in the name and each `${...}` marker in the body is bound to
 // its captured value in a single pass.
-func instantiateMulti(body map[string]any, templateName string, vals map[string]string, toks []tmplToken, path, kind string) *Document {
-	name := templateName
+func instantiateMulti(body map[string]any, templateName string, match templateMatch, toks []tmplToken, path, kind string) *Document {
+	name := materializedTemplateName(templateName, match, toks)
 	bodyPairs := make([]string, 0, len(toks)*2+2)
 	for _, t := range toks {
-		v := vals[t.variable]
-		name = strings.ReplaceAll(name, t.placeholder, v)
+		v := match.values[t.variable]
 		bodyPairs = append(bodyPairs, t.marker(), v)
 	}
-	bodyPairs = append(bodyPairs, templateCurrentMarker, "")
-	name = strings.TrimSpace(name)
+	bodyPairs = append(bodyPairs, templateCurrentMarker, templateCurrentValue(match.current))
 	out := bindTokens(cloneMap(body), strings.NewReplacer(bodyPairs...)).(map[string]any)
+	if templateMatchHasEmptyValue(match, toks) {
+		applyUnversionedOverrides(out)
+	}
+	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
 	out["kind"] = kind
 	out["name"] = name
 	trimMaterializedMetadata(out)
@@ -355,72 +346,339 @@ func instantiateMulti(body map[string]any, templateName string, vals map[string]
 	return &Document{Kind: kind, Name: name, Path: path, Body: out}
 }
 
-type materializedVersionSet struct {
-	values  []string
-	current map[string]bool
+type templateMatch struct {
+	values       map[string]string
+	matchedPath  string
+	realPath     string
+	currentPaths []string
+	current      bool
 }
 
-func materializedVersionValues(discoverPaths []string, options map[string]any, tok tmplToken) materializedVersionSet {
-	seen := map[string]bool{}
-	var values []string
-	var unversionedPaths []string
-	unversionedEnabled := versionUnversionedEnabled(options, tok)
-	for _, discoverPath := range discoverPaths {
-		for _, value := range discoverVersions(discoverPath, tok) {
-			values = appendMaterializedVersionValue(values, seen, value)
-		}
-		if !unversionedEnabled {
-			continue
-		}
-		if path, ok := unversionedVersionPath(discoverPath, tok); ok {
-			unversionedPaths = append(unversionedPaths, path)
-			values = appendMaterializedVersionValue(values, seen, "")
+func materializedTemplateMatches(discoverPaths []string, options map[string]any, toks []tmplToken) []templateMatch {
+	matches := discoverTokenMatches(discoverPaths, toks)
+	if tok, ok := unversionedTemplateToken(toks); ok && versionUnversionedEnabled(options, tok) {
+		matches = append(matches, currentFromTemplateMatches(options, toks)...)
+	}
+	if len(toks) == 1 && versionUnversionedEnabled(options, toks[0]) {
+		for _, discoverPath := range discoverPaths {
+			if path, ok := unversionedVersionPath(discoverPath, toks[0]); ok {
+				matches = append(matches, templateMatch{
+					values:      map[string]string{toks[0].variable: ""},
+					matchedPath: path,
+					realPath:    realPathFor(path),
+				})
+			}
 		}
 	}
-	if len(values) > 0 {
-		sort.Slice(values, func(i, j int) bool { return versionLess(values[i], values[j]) })
-	}
-	return materializedVersionSet{
-		values:  values,
-		current: currentVersionValues(discoverPaths, values, unversionedPaths, tok),
-	}
+	matches = dedupeTemplateMatches(matches, toks)
+	sortTemplateMatches(matches)
+	return matches
 }
 
-func appendMaterializedVersionValue(values []string, seen map[string]bool, value string) []string {
-	if seen[value] {
-		return values
+func unversionedTemplateToken(toks []tmplToken) (tmplToken, bool) {
+	for _, tok := range toks {
+		if tok.allowEmpty {
+			return tok, true
+		}
 	}
-	seen[value] = true
-	return append(values, value)
+	return tmplToken{}, false
 }
 
-func currentVersionValues(discoverPaths []string, values []string, unversionedPaths []string, tok tmplToken) map[string]bool {
-	if len(unversionedPaths) == 0 {
+func currentFromTemplateMatches(body map[string]any, toks []tmplToken) []templateMatch {
+	paths := versionsCurrentFromCandidates(body)
+	if len(paths) == 0 {
 		return nil
 	}
-	current := map[string]bool{}
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		if versionMatchesUnversioned(discoverPaths, value, unversionedPaths, tok) {
-			current[value] = true
-		}
+	values := make(map[string]string, len(toks))
+	for _, tok := range toks {
+		values[tok.variable] = ""
 	}
-	return current
+	path := paths[0]
+	if path == "" {
+		return nil
+	}
+	return []templateMatch{{
+		values:       values,
+		matchedPath:  path,
+		realPath:     realPathFor(path),
+		currentPaths: paths,
+	}}
 }
 
-func versionMatchesUnversioned(discoverPaths []string, value string, unversionedPaths []string, tok tmplToken) bool {
-	marker := tok.marker()
-	for _, discoverPath := range discoverPaths {
-		if !strings.Contains(discoverPath, marker) {
+// discoverTokenMatches globs each discovery path with every marker wildcarded
+// and keeps the matched path alongside the captured token values. The matched
+// path can later become the materialized app/library binary when the template
+// does not declare variables.binary itself.
+func discoverTokenMatches(paths []string, toks []tmplToken) []templateMatch {
+	var out []templateMatch
+	for _, path := range paths {
+		if !containsAllMarkers(path, toks) {
 			continue
 		}
-		versionedPath := strings.ReplaceAll(discoverPath, marker, value)
-		for _, unversionedPath := range unversionedPaths {
-			if sameFile(unversionedPath, versionedPath) {
-				return true
+		pairs := make([]string, 0, len(toks)*2)
+		for _, t := range toks {
+			pairs = append(pairs, t.marker(), "*")
+		}
+		matches, err := filepath.Glob(strings.NewReplacer(pairs...).Replace(path))
+		if err != nil {
+			continue
+		}
+		re, order := buildMultiRegex(path, toks)
+		if re == nil {
+			continue
+		}
+		for _, matchPath := range matches {
+			sub := re.FindStringSubmatch(matchPath)
+			if sub == nil {
+				continue
 			}
+			values := make(map[string]string, len(order))
+			for i, tk := range order {
+				values[tk.variable] = sub[i+1]
+			}
+			addImplicitTokenValues(values, toks)
+			realPath := realPathFor(matchPath)
+			values = refineMatchValues(values, path, realPath, toks)
+			normalizeOptionalTupleValues(values)
+			out = append(out, templateMatch{
+				values:      values,
+				matchedPath: matchPath,
+				realPath:    realPath,
+			})
+		}
+	}
+	return out
+}
+
+func addImplicitTokenValues(values map[string]string, toks []tmplToken) {
+	for _, tok := range toks {
+		if _, ok := values[tok.variable]; !ok && tok.variable == "sep" {
+			values[tok.variable] = ""
+		}
+	}
+}
+
+func normalizeOptionalTupleValues(values map[string]string) {
+	if values["instance"] == "" {
+		values["sep"] = ""
+	}
+}
+
+func refineMatchValues(values map[string]string, pattern, realPath string, toks []tmplToken) map[string]string {
+	refined := refineMatchValuesFromRealPath(values, pattern, realPath, toks)
+	return refineJavaReleaseVersion(refined, realPath)
+}
+
+func refineMatchValuesFromRealPath(values map[string]string, pattern, realPath string, toks []tmplToken) map[string]string {
+	if realPath == "" {
+		return values
+	}
+	patternParts := splitCleanPath(pattern)
+	realParts := splitCleanPath(realPath)
+	limit := len(patternParts)
+	if len(realParts) < limit {
+		limit = len(realParts)
+	}
+	for offset := 0; offset < limit; offset++ {
+		patternPart := patternParts[len(patternParts)-1-offset]
+		if !strings.Contains(patternPart, "${") {
+			continue
+		}
+		realPart := realParts[len(realParts)-1-offset]
+		re, order := buildMultiRegex(patternPart, toks)
+		if re == nil {
+			continue
+		}
+		sub := re.FindStringSubmatch(realPart)
+		if sub == nil {
+			continue
+		}
+		out := cloneStringMap(values)
+		for i, tk := range order {
+			out[tk.variable] = sub[i+1]
+		}
+		normalizeOptionalTupleValues(out)
+		return out
+	}
+	return values
+}
+
+func splitCleanPath(path string) []string {
+	return strings.Split(filepath.Clean(path), string(os.PathSeparator))
+}
+
+func refineJavaReleaseVersion(values map[string]string, realPath string) map[string]string {
+	current := values["version"]
+	if current == "" || filepath.Base(realPath) != "java" || filepath.Base(filepath.Dir(realPath)) != "bin" {
+		return values
+	}
+	releasePath := filepath.Join(filepath.Dir(filepath.Dir(realPath)), "release")
+	data, err := os.ReadFile(releasePath) //nolint:gosec // release is metadata under a discovered JVM home.
+	if err != nil {
+		return values
+	}
+	version := javaReleaseVersion(string(data))
+	if !moreSpecificVersion(version, current) {
+		return values
+	}
+	out := cloneStringMap(values)
+	out["version"] = version
+	return out
+}
+
+func javaReleaseVersion(data string) string {
+	for _, line := range strings.Split(data, "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || key != "JAVA_VERSION" {
+			continue
+		}
+		return strings.Trim(strings.TrimSpace(value), `"`)
+	}
+	return ""
+}
+
+func moreSpecificVersion(candidate, current string) bool {
+	if candidate == "" || candidate == current {
+		return false
+	}
+	return strings.HasPrefix(candidate, current+".") || strings.HasPrefix(candidate, current+"_")
+}
+
+func cloneStringMap(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func dedupeTemplateMatches(matches []templateMatch, toks []tmplToken) []templateMatch {
+	seen := map[string]bool{}
+	out := make([]templateMatch, 0, len(matches))
+	for _, match := range matches {
+		key := match.realPath
+		if templateMatchHasEmptyValue(match, toks) {
+			key = "unversioned:" + tupleKey(toks, match.values)
+		} else if key == "" {
+			key = match.matchedPath
+		}
+		if key == "" {
+			key = tupleKey(toks, match.values)
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, match)
+	}
+	return out
+}
+
+func sortTemplateMatches(matches []templateMatch) {
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].values["version"] != matches[j].values["version"] {
+			return versionLess(matches[i].values["version"], matches[j].values["version"])
+		}
+		if matches[i].values["n"] != matches[j].values["n"] {
+			return versionLess(matches[i].values["n"], matches[j].values["n"])
+		}
+		if matches[i].values["instance"] != matches[j].values["instance"] {
+			return matches[i].values["instance"] < matches[j].values["instance"]
+		}
+		return matches[i].matchedPath < matches[j].matchedPath
+	})
+}
+
+func realPathFor(path string) string {
+	realPath, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return path
+	}
+	return realPath
+}
+
+func (c *Config) withCurrentMatches(matches []templateMatch, templateName string, toks []tmplToken, kind string) []templateMatch {
+	candidates := currentPathsFromUnversionedMatches(matches, toks)
+	candidates = append(candidates, c.templateCurrentCandidatePaths(templateName, kind)...)
+	if len(candidates) == 0 {
+		return matches
+	}
+	for i := range matches {
+		if templateMatchHasEmptyValue(matches[i], toks) {
+			continue
+		}
+		if templateMatchMatchesAnyPath(matches[i], candidates) {
+			matches[i].current = true
+		}
+	}
+	return matches
+}
+
+func currentPathsFromUnversionedMatches(matches []templateMatch, toks []tmplToken) []string {
+	var paths []string
+	for _, match := range matches {
+		if !templateMatchHasEmptyValue(match, toks) || match.matchedPath == "" {
+			continue
+		}
+		if len(match.currentPaths) > 0 {
+			paths = append(paths, match.currentPaths...)
+			continue
+		}
+		paths = append(paths, match.matchedPath)
+	}
+	return paths
+}
+
+func templateMatchHasEmptyValue(match templateMatch, toks []tmplToken) bool {
+	for _, tok := range toks {
+		if (tok.variable == "version" || tok.variable == "n") && match.values[tok.variable] == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) templateCurrentCandidatePaths(templateName, kind string) []string {
+	baseName := templateBaseName(templateName)
+	if baseName == "" {
+		return nil
+	}
+	var doc *Document
+	switch kind {
+	case kindApp:
+		doc = c.Apps[baseName]
+	case kindLibrary:
+		doc = c.Libraries[baseName]
+	case kindDaemon:
+		doc = c.Daemons[baseName]
+	}
+	if doc == nil || doc.Name == templateName {
+		return nil
+	}
+	path := DocumentBinary(doc.Body)
+	if path == "" {
+		return nil
+	}
+	return []string{path}
+}
+
+func templateBaseName(templateName string) string {
+	first := len(templateName)
+	for _, tok := range tmplTokens {
+		if idx := strings.Index(templateName, tok.placeholder); idx >= 0 && idx < first {
+			first = idx
+		}
+	}
+	if first == len(templateName) {
+		return ""
+	}
+	return strings.TrimRight(templateName[:first], "-_.")
+}
+
+func templateMatchMatchesAnyPath(match templateMatch, paths []string) bool {
+	for _, path := range paths {
+		if sameFile(path, match.matchedPath) || sameFile(path, match.realPath) {
+			return true
 		}
 	}
 	return false
@@ -484,8 +742,8 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 	// ${instance}/server.xml). Prefer it when present. A daemon still never
 	// discovers from its own *binary* — that remains the linked app's job — so
 	// only an explicit versions.from qualifies, not documentBinaryCandidates.
-	if from := versionsFromPath(body); strings.Contains(from, tok.marker()) {
-		return versionDiscovery{paths: []string{from}, options: body}
+	if paths := pathsContainingMarker(versionsFromPaths(body), tok.marker()); len(paths) > 0 {
+		return versionDiscovery{paths: paths, options: body}
 	}
 	for _, name := range cfgval.StringList(body["apps"]) {
 		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
@@ -502,18 +760,36 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 }
 
 func directVersionDiscoverySources(body map[string]any) []string {
-	if from := versionsFromPath(body); from != "" {
-		return []string{from}
+	if from := versionsFromPaths(body); len(from) > 0 {
+		return from
 	}
 	return documentBinaryCandidates(body)
 }
 
-// versionsFromPath returns the explicit `versions.from` discovery glob, or "".
-func versionsFromPath(body map[string]any) string {
-	if v, ok := body["versions"].(map[string]any); ok {
-		return cfgval.String(v["from"])
+func pathsContainingMarker(paths []string, marker string) []string {
+	var out []string
+	for _, path := range paths {
+		if strings.Contains(path, marker) {
+			out = append(out, path)
+		}
 	}
-	return ""
+	return out
+}
+
+// versionsFromPaths returns the explicit `versions.from` discovery globs.
+func versionsFromPaths(body map[string]any) []string {
+	if v, ok := body["versions"].(map[string]any); ok {
+		return cfgval.StringList(v["from"])
+	}
+	return nil
+}
+
+func versionsCurrentFromCandidates(body map[string]any) []string {
+	v, ok := body["versions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return cfgval.StringList(v["current_from"])
 }
 
 func anyContains(values []string, marker string) bool {
@@ -613,21 +889,61 @@ func discoverVersions(discoverPath string, tok tmplToken) []string {
 // token placeholder in the name becomes the value, and every `${...}` reference
 // for that token in the body (variables.binary, display_name, service, ...) is
 // substituted. Other `${var}` references are left for normal resolution.
-func instantiateVersion(body map[string]any, templateName, value string, current bool, tok tmplToken, path, kind string) *Document {
-	name := strings.TrimSpace(strings.ReplaceAll(templateName, tok.placeholder, value))
-	currentValue := ""
-	if current {
-		currentValue = templateCurrentLabel
-	}
-	out := bindTokens(cloneMap(body), strings.NewReplacer(tok.marker(), value, templateCurrentMarker, currentValue)).(map[string]any)
+func instantiateVersion(body map[string]any, templateName string, match templateMatch, tok tmplToken, path, kind string) *Document {
+	value := match.values[tok.variable]
+	name := materializedTemplateName(templateName, match, []tmplToken{tok})
+	out := bindTokens(cloneMap(body), strings.NewReplacer(tok.marker(), value, templateCurrentMarker, templateCurrentValue(match.current))).(map[string]any)
 	if value == "" {
 		applyUnversionedOverrides(out)
 	}
+	injectMaterializedBinary(out, materializedBinaryFromMatch(body, kind, match))
 	out["kind"] = kind
 	out["name"] = name
 	trimMaterializedMetadata(out)
 	delete(out, "versions") // discovery metadata, not part of the concrete definition
 	return &Document{Kind: kind, Name: name, Path: path, Body: out}
+}
+
+func materializedTemplateName(templateName string, match templateMatch, toks []tmplToken) string {
+	if templateMatchHasEmptyValue(match, toks) {
+		if base := templateBaseName(templateName); base != "" {
+			return base
+		}
+	}
+	name := templateName
+	for _, tok := range toks {
+		name = strings.ReplaceAll(name, tok.placeholder, match.values[tok.variable])
+	}
+	return strings.TrimSpace(name)
+}
+
+func templateCurrentValue(current bool) string {
+	if current {
+		return templateCurrentLabel
+	}
+	return ""
+}
+
+func materializedBinaryFromMatch(body map[string]any, kind string, match templateMatch) string {
+	if kind != kindApp && kind != kindLibrary {
+		return ""
+	}
+	if match.matchedPath == "" || len(documentBinaryCandidates(body)) > 0 {
+		return ""
+	}
+	return match.matchedPath
+}
+
+func injectMaterializedBinary(out map[string]any, binary string) {
+	if binary == "" {
+		return
+	}
+	vars, _ := out["variables"].(map[string]any)
+	if vars == nil {
+		vars = map[string]any{}
+		out["variables"] = vars
+	}
+	vars["binary"] = binary
 }
 
 func trimMaterializedMetadata(out map[string]any) {

@@ -1,10 +1,10 @@
 kind: app
-name: db%vsql
+name: db%v
 display_name: "Berkeley DB ${version}"
 category: database
 description: "Oracle Berkeley DB"
 variables:
-  binary: "/usr/bin/db${version}sql"
+  binary: "/usr/bin/db${version}"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

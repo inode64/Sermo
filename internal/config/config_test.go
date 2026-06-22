@@ -701,9 +701,31 @@ uses: web
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
+	if !hasIssue(Validate(cfg), `apps references unknown app "no-such-app"`) {
+		t.Fatalf("Validate() did not report unknown linked app")
+	}
 	_, errs := cfg.Resolve("web-main")
 	if len(errs) == 0 {
 		t.Fatal("linking an unknown app must error")
+	}
+}
+
+func TestValidateServiceAppsLinkUnknownApp(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"enabled/web-main.yml": `
+kind: service
+name: web-main
+apps: [no-such-app]
+service: web
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !hasIssue(Validate(cfg), `apps references unknown app "no-such-app"`) {
+		t.Fatalf("Validate() did not report unknown service app link")
 	}
 }
 
@@ -2581,7 +2603,6 @@ func TestDiscoverVersions(t *testing.T) {
 	}
 
 	// Version embedded mid-filename, wrapped by literals on both sides (the
-	// Berkeley DB db%vsql shape: /usr/bin/db4.8sql).
 	bin := filepath.Join(root, "bin")
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
@@ -2648,7 +2669,7 @@ func TestDiscoverVersions(t *testing.T) {
 	}
 }
 
-func TestMaterializedVersionValuesUsesAllBinaryCandidates(t *testing.T) {
+func TestMaterializedTemplateMatchesUsesAllBinaryCandidates(t *testing.T) {
 	root := t.TempDir()
 	first := filepath.Join(root, "first")
 	second := filepath.Join(root, "second")
@@ -2670,11 +2691,19 @@ func TestMaterializedVersionValuesUsesAllBinaryCandidates(t *testing.T) {
 		filepath.Join(first, "php${version}", "bin", "php-fpm"),
 		filepath.Join(second, "php${version}", "bin", "php-fpm"),
 	}
-	got := materializedVersionValues(paths, nil, *tok)
+	got := materializedTemplateMatches(paths, nil, []tmplToken{*tok})
 	want := []string{"8.2", "8.3"}
-	if strings.Join(got.values, ",") != strings.Join(want, ",") {
-		t.Fatalf("materializedVersionValues = %v, want %v", got, want)
+	if values := templateMatchValues(got, "version"); strings.Join(values, ",") != strings.Join(want, ",") {
+		t.Fatalf("materializedTemplateMatches = %v, want %v", values, want)
 	}
+}
+
+func templateMatchValues(matches []templateMatch, variable string) []string {
+	out := make([]string, 0, len(matches))
+	for _, match := range matches {
+		out = append(out, match.values[variable])
+	}
+	return out
 }
 
 // TestDaemonVersionTemplateDiscoversFromLinkedApp covers a daemon template whose
@@ -2716,7 +2745,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"] }
 `, slots, slots)
-	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "php-fpm%v.yml"), []byte(appTmpl), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "php-fpm.yml"), []byte(appTmpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	tmpl := `
@@ -2729,7 +2758,7 @@ apps: ["php-fpm${version}"]
 variables:
   binary: /usr/sbin/php-fpm
 `
-	if err := os.WriteFile(filepath.Join(catalogDir, "services", "php-fpm%v.yml"), []byte(tmpl), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(catalogDir, "services", "php-fpm.yml"), []byte(tmpl), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
@@ -2778,7 +2807,7 @@ func TestDaemonVersionTemplateRequiresLinkedAppDiscovery(t *testing.T) {
 
 	cfg, err := Load(writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"catalog/services/worker%v.yml": fmt.Sprintf(`
+		"catalog/services/worker.yml": fmt.Sprintf(`
 kind: daemon
 name: worker%%v
 variables:
@@ -2826,7 +2855,7 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
 `)
-	write(filepath.Join(catalogDir, "apps"), "tomcat-%v.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "apps"), "tomcat.yml", fmt.Sprintf(`
 kind: app
 name: tomcat-%%v
 display_name: "Apache Tomcat ${version}"
@@ -2836,7 +2865,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
 `, catalina))
-	write(filepath.Join(catalogDir, "services"), "tomcat-%v.yml", `
+	write(filepath.Join(catalogDir, "services"), "tomcat.yml", `
 kind: daemon
 name: tomcat-%v
 display_name: "Apache Tomcat ${version}"
@@ -2919,7 +2948,7 @@ func TestVersionTemplateServiceLinksMaterializedApp(t *testing.T) {
 		}
 	}
 	binary := filepath.Join(pgRoot, "postgresql-${version}", "bin", "postgres")
-	write(filepath.Join(catalogDir, "apps"), "postgres-%v.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "apps"), "postgres.yml", fmt.Sprintf(`
 kind: app
 name: postgres-%%v
 display_name: "PostgreSQL ${version}"
@@ -2929,7 +2958,7 @@ preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
 `, binary))
-	write(filepath.Join(catalogDir, "services"), "postgres-%v.yml", `
+	write(filepath.Join(catalogDir, "services"), "postgres.yml", `
 kind: daemon
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
@@ -3010,7 +3039,7 @@ func TestVersionTemplateDiscoversFromLinkedAppTemplate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := os.WriteFile(filepath.Join(appsDir, "php-fpm%v.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(appsDir, "php-fpm.yml"), []byte(fmt.Sprintf(`
 kind: app
 name: php-fpm%%v
 display_name: "PHP-FPM ${version}"
@@ -3022,7 +3051,7 @@ preflight:
 `, bin)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(catalogServicesDir, "php-fpm%v.yml"), []byte(`
+	if err := os.WriteFile(filepath.Join(catalogServicesDir, "php-fpm.yml"), []byte(`
 kind: daemon
 name: php-fpm%v
 display_name: "PHP-FPM ${version}"
@@ -3105,7 +3134,7 @@ preflight:
 `, bin)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(appsDir, "php%v.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(appsDir, "php.yml"), []byte(fmt.Sprintf(`
 kind: app
 name: php%%v
 display_name: "PHP ${version}"
@@ -3220,14 +3249,14 @@ func TestVersionTemplateCurrentMarker(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	writeApp("php%v.yml", fmt.Sprintf(`
+	writeApp("php.yml", fmt.Sprintf(`
 kind: app
 name: php%%v
 display_name: "PHP ${version} ${current}"
 variables:
   binary: "%s/php${version}"
 `, bin))
-	writeApp("php-fpm%v.yml", fmt.Sprintf(`
+	writeApp("php-fpm.yml", fmt.Sprintf(`
 kind: app
 name: php-fpm%%v
 display_name: "PHP-FPM ${version} ${current}"
@@ -3286,6 +3315,170 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestJavaVersionTemplateDiscoversFullVersionsFromJVMDirectory(t *testing.T) {
+	root := t.TempDir()
+	jvm := filepath.Join(root, "usr", "lib", "jvm")
+	opt := filepath.Join(root, "opt")
+	bin := filepath.Join(root, "bin")
+	for _, dir := range []string{jvm, opt, bin} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeJavaHome := func(name, releaseVersion string) string {
+		t.Helper()
+		home := filepath.Join(opt, name)
+		if err := os.MkdirAll(filepath.Join(home, "bin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, "bin", "java"), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(home, "release"), []byte(`JAVA_VERSION="`+releaseVersion+`"`+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return home
+	}
+	java21 := writeJavaHome("openjdk-bin-21.0.11_p10", "21.0.11")
+	java25 := writeJavaHome("openjdk-bin-25.0.3_p9", "25.0.3")
+	links := map[string]string{
+		"openjdk-bin-21":          java21,
+		"openjdk-bin-21.0.11_p10": java21,
+		"openjdk-bin-25":          java25,
+		"openjdk-bin-25.0.3_p9":   java25,
+	}
+	for name, target := range links {
+		if err := os.Symlink(target, filepath.Join(jvm, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(jvm, "openjdk-bin-25", "bin", "java"), filepath.Join(bin, "java")); err != nil {
+		t.Fatal(err)
+	}
+
+	catalogDir := filepath.Join(root, "catalog")
+	appsDir := filepath.Join(catalogDir, "apps")
+	enabledDir := filepath.Join(root, "enabled")
+	for _, dir := range []string{appsDir, enabledDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeApp := func(file, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(appsDir, file), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeApp("java.yml", fmt.Sprintf(`
+kind: app
+name: java-%%i-%%v
+display_name: "Java ${instance} ${version} ${current}"
+versions:
+  from:
+    - "%s/${instance}-jre-bin-${version}/bin/java"
+    - "%s/${instance}-jdk-bin-${version}/bin/java"
+    - "%s/${instance}-bin-${version}/bin/java"
+    - "%s/${instance}-${version}/bin/java"
+  current_from: "%s/java"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-version"], timeout: 10s }
+`, jvm, jvm, jvm, jvm, bin))
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	tests := []struct {
+		name        string
+		binary      string
+		displayName string
+	}{
+		{
+			name:        "java",
+			binary:      filepath.Join(bin, "java"),
+			displayName: "Java",
+		},
+		{
+			name:        "java-openjdk-21.0.11_p10",
+			binary:      filepath.Join(jvm, "openjdk-bin-21", "bin", "java"),
+			displayName: "Java openjdk 21.0.11_p10",
+		},
+		{
+			name:        "java-openjdk-25.0.3_p9",
+			binary:      filepath.Join(jvm, "openjdk-bin-25", "bin", "java"),
+			displayName: "Java openjdk 25.0.3_p9 current",
+		},
+	}
+	if _, ok := cfg.Apps["java-openjdk-21"]; ok {
+		t.Fatalf("short Java version should be deduplicated")
+	}
+	if _, ok := cfg.Apps["java-openjdk-25"]; ok {
+		t.Fatalf("short Java version should be deduplicated")
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, ok := cfg.Apps[tt.name]
+			if !ok {
+				t.Fatalf("app %q was not materialized", tt.name)
+			}
+			if got := DisplayName(doc.Body, tt.name); got != tt.displayName {
+				t.Fatalf("%s display_name = %q, want %q", tt.name, got, tt.displayName)
+			}
+			if got := DocumentBinary(doc.Body); got != tt.binary {
+				t.Fatalf("%s binary = %q, want %q", tt.name, got, tt.binary)
+			}
+			resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name)
+			if len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s): %v", tt.name, errs)
+			}
+			if got := cfgval.String(valueAt(t, resolved.Tree, "variables", "binary")); got != tt.binary {
+				t.Fatalf("%s resolved binary = %q, want %q", tt.name, got, tt.binary)
+			}
+		})
+	}
+}
+
+func TestCompositeVersionTemplateCurrentFromMaterializesActiveSlot(t *testing.T) {
+	cfg, err := Load(writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/java.yml": `
+kind: app
+name: java-%i-%v
+display_name: "Java ${instance} ${version}"
+versions:
+  current_from: /usr/bin/java
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+	}))
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	doc, ok := cfg.Apps["java"]
+	if !ok {
+		t.Fatalf("current_from did not materialize active app: %v", cfg.AppNames)
+	}
+	if got := DisplayName(doc.Body, "java"); got != "Java" {
+		t.Fatalf("java display_name = %q, want Java", got)
+	}
+	if got := DocumentBinary(doc.Body); got != "/usr/bin/java" {
+		t.Fatalf("java binary = %q, want /usr/bin/java", got)
+	}
+	if _, ok := cfg.Apps["java--"]; ok {
+		t.Fatalf("active app was materialized with dangling separators")
+	}
+}
+
 func TestVersionTemplateUnversionedRequiresBinary(t *testing.T) {
 	root := t.TempDir()
 	bin := filepath.Join(root, "bin")
@@ -3331,7 +3524,7 @@ func TestVersionTemplateUnversionedCanBeDisabled(t *testing.T) {
 
 	cfg, err := Load(writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"catalog/apps/php%v.yml": fmt.Sprintf(`
+		"catalog/apps/php.yml": fmt.Sprintf(`
 kind: app
 name: php%%v
 display_name: "PHP ${version}"
@@ -3364,7 +3557,7 @@ func TestVersionTemplateUnversionedCanOverrideMetadata(t *testing.T) {
 
 	cfg, err := Load(writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
-		"catalog/apps/php%v.yml": fmt.Sprintf(`
+		"catalog/apps/php.yml": fmt.Sprintf(`
 kind: app
 name: php%%v
 display_name: "PHP ${version}"
@@ -3455,7 +3648,7 @@ func TestInstanceTemplateMaterialization(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(catalogDir, "services"), "openvpn.yml", `
+	write(filepath.Join(catalogDir, "services"), "openvpn-base.yml", `
 kind: daemon
 name: openvpn
 display_name: OpenVPN
@@ -3464,28 +3657,28 @@ variables: { port: 1194 }
 checks:
   port: { type: openvpn, port: "${port}" }
 `)
-	write(filepath.Join(catalogDir, "apps"), "openvpn-%i.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "apps"), "openvpn.yml", `
 kind: app
-name: openvpn-%%i
-display_name: "OpenVPN ${instance}"
-versions:
-  from: "%s/openvpn.${instance}"
+name: openvpn
+display_name: OpenVPN
 variables:
   binary: /usr/bin/openvpn
 preflight:
   binary: { type: binary, path: "${binary}" }
-`, initd))
+`)
 	tmpl := `
 kind: daemon
 name: openvpn-%i
 uses: openvpn
 display_name: "OpenVPN ${instance}"
 service: "openvpn.${instance}"
-apps: ["openvpn-${instance}"]
+apps: [openvpn]
+versions:
+  from: "` + initd + `/openvpn.${instance}"
 variables:
   config: "/etc/openvpn/${instance}.conf"
 `
-	write(filepath.Join(catalogDir, "services"), "openvpn-%i.yml", tmpl)
+	write(filepath.Join(catalogDir, "services"), "openvpn.yml", tmpl)
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
@@ -3556,7 +3749,7 @@ func TestVersionTemplateMaterialization(t *testing.T) {
 	}
 
 	// Rich base with a marker rule and an extra variable, to prove inheritance.
-	write(catalogServicesDir, "php-fpm.yml", `
+	write(catalogServicesDir, "php-fpm-base.yml", `
 kind: daemon
 name: php-fpm
 display_name: "PHP-FPM"
@@ -3575,7 +3768,7 @@ rules:
       action: block
       message: "${display_name} configuration is invalid"
 `)
-	write(filepath.Join(daemonsDir, "apps"), "php-fpm-%v.yml", fmt.Sprintf(`
+	write(filepath.Join(daemonsDir, "apps"), "php-fpm.yml", fmt.Sprintf(`
 kind: app
 name: php-fpm-%%v
 display_name: "PHP-FPM ${version}"
@@ -3586,7 +3779,7 @@ preflight:
   version: { type: command, command: ["${binary}", "-v"] }
 `, binRoot))
 	// Version template inheriting the base; installed versions come from the app.
-	write(catalogServicesDir, "php-fpm-%v.yml", `
+	write(catalogServicesDir, "php-fpm-template.yml", `
 kind: daemon
 name: php-fpm-%v
 uses: php-fpm
@@ -3761,7 +3954,7 @@ func TestVersionTemplateCephOSD(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(catalogDir, "apps"), "ceph-osd%n.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "apps"), "ceph-osd.yml", fmt.Sprintf(`
 kind: app
 name: ceph-osd%%n
 display_name: "Ceph OSD ${n}"

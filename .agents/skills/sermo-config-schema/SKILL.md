@@ -106,17 +106,28 @@ and matches only whole integers (`python%n` → `python2`, `python3`, not
 `python3.11`). The placeholder may sit anywhere in the name (`db%vsql` →
 `db4.8sql`). Put the matching `${...}` in `variables.binary`, or in
 `versions.from` when discovery needs a path that is not the runtime executable.
-On load Sermo globs that path with `${version}` wildcarded, extracts each
-installed version, and registers `name` with `%v`→version and every `${version}`
-substituted in the body.
+`versions.from` may be a string or a candidate list. On load Sermo globs those
+paths with `${version}` wildcarded, extracts each installed version, and
+registers `name` with `%v`→version and every `${version}` substituted in the
+body. For app and library templates that discover from `versions.from` and do
+not declare `variables.binary`, the materialized document binds `${binary}` to
+the path that matched. Matches are de-duplicated by resolved filesystem path.
 The template is then dropped and yields nothing when no version is installed. Keep
-exactly one file, named to match (`postgres-%v.yml`). `%v` is substituted only in
-the name; inside the body always use `${version}` (`variables.binary`,
-`display_name`, service candidates, commands, etc.).
+exactly one descriptive file per template, but the YAML filename does not have
+to match `name:`. `%v` is substituted only in the name; inside the body always
+use `${version}` (`variables.binary`, `display_name`, service candidates,
+commands, etc.).
 When the runtime executable is version-agnostic, point discovery at a
 version-specific path with `versions.from` (discovery-only; stripped from the
 materialized document). A template may also `uses` a base daemon to inherit
-checks/processes/rules and override only `variables.binary`.
+checks/processes/rules and override only `variables.binary`. Simple `%v`/`%n`
+templates may materialize an unversioned active-slot entry by default when the
+marker-less path exists; composite templates with `%i`, `%s` or more than one
+token do not infer that entry from `versions.from`, but can declare
+`versions.current_from` to materialize the active-slot base name explicitly.
+`current_from` accepts a path string or a list of path strings.
+Materialized names must not collide with explicit documents in the same catalog
+category; validation reports those collisions.
 
 ```yaml
 kind: app
@@ -221,12 +232,14 @@ resolution (no `variables` entry needed): `${name}` is the resolved service name
 parameterize human-facing strings, e.g. `message: "${display_name} backup is
 running"`. An explicit `variables` entry of the same name overrides the built-in.
 
-`${current}` is only a version-template materialization marker for `%v` / `%n`
-catalog templates. It is replaced before normal resolution, not exposed as a
-runtime variable: `current` for the versioned entry whose binary is the same
-filesystem entry as the marker-less active-slot binary, or empty otherwise. Use
-it in metadata such as `display_name: "PHP ${version} ${current}"`; metadata is
-trimmed after substitution.
+`${current}` is only a version-template materialization marker for catalog
+templates. It is replaced before normal resolution, not exposed as a runtime
+variable: `current` for the versioned entry whose binary is the same filesystem
+entry as the active-slot binary, whether that slot was inferred from the
+marker-less path or declared with `versions.current_from`, or empty otherwise.
+Use it in metadata such as
+`display_name: "PHP ${version} ${current}"`; metadata is trimmed after
+substitution.
 
 `${arch}` is the machine architecture (uname -m: `x86_64`, `aarch64`, ...),
 substituted everywhere on load — including inside variable values and
@@ -297,7 +310,9 @@ Validate:
 
 ```text
 duplicate service names
+materialized version-template names that collide with explicit documents
 missing catalog daemons in uses
+apps entries that reference unknown app catalog documents
 missing service targets in clone
 clone cycles
 unknown check types

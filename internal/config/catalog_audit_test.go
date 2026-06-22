@@ -32,6 +32,40 @@ func repoRoot(t *testing.T) string {
 	return root
 }
 
+func catalogDocByName(t *testing.T, root, category, name string) map[string]any {
+	t.Helper()
+	dir := filepath.Join(root, "catalog", category)
+	var found map[string]any
+	err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() || !isYAML(entry.Name()) {
+			return nil
+		}
+		data, err := os.ReadFile(path) //nolint:gosec // test walks YAML files under the repository catalog root.
+		if err != nil {
+			return err
+		}
+		var body map[string]any
+		if err := yaml.Unmarshal(data, &body); err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		if cfgval.String(body["name"]) == name {
+			found = body
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found == nil {
+		t.Fatalf("catalog %s document %q not found", category, name)
+	}
+	return found
+}
+
 // TestRealCatalogAllDaemonsValidate enables every instantiable catalog daemon
 // as a service and validates the whole set. Version templates (%v/%n/%i) cannot
 // be materialized off-host, so only the concrete daemon names are exercised.
@@ -310,14 +344,7 @@ func TestCatalogAppsDoNotDeclareServiceProcessSelectors(t *testing.T) {
 
 func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 	root := repoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "catalog", "services", "unifi.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var doc map[string]any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		t.Fatalf("parse unifi catalog: %v", err)
-	}
+	doc := catalogDocByName(t, root, "services", "unifi")
 	if apps := strings.Join(cfgval.StringList(doc["apps"]), ","); apps != "java,mongod" {
 		t.Fatalf("unifi apps = %q, want java,mongod", apps)
 	}
@@ -670,6 +697,12 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
+	nebula := catalogDocByName(t, root, "services", "nebula-%i")
+	nebulaCommand := cfgval.StringList(nested(t, nebula, "preflight", "config")["command"])
+	if len(nebulaCommand) == 0 || nebulaCommand[0] != "${nebula_binary}" {
+		t.Fatalf("nebula config command = %v, want app binary token first", nebulaCommand)
+	}
+
 	tests := []struct {
 		service      string
 		appToolCheck string
@@ -711,13 +744,6 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			toolArgIndex: 3,
 			wantTool:     []string{"/usr/sbin/slaptest", "/usr/bin/slaptest", "/usr/bin/openldap/slaptest"},
 			wantContains: []string{"-Q", "-u"},
-		},
-		{
-			service:      "nebula",
-			appToolCheck: "nebula-binary",
-			toolArgIndex: 0,
-			wantTool:     []string{"/usr/bin/nebula"},
-			wantContains: []string{"-test", "-config"},
 		},
 		{
 			service:      "loki",
@@ -786,15 +812,7 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 
 func TestCatalogNamedDNSCheckIsHostOverrideFriendly(t *testing.T) {
 	root := repoRoot(t)
-	path := filepath.Join(root, "catalog", "services", "named.yml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body map[string]any
-	if err := yaml.Unmarshal(data, &body); err != nil {
-		t.Fatal(err)
-	}
+	body := catalogDocByName(t, root, "services", "named")
 
 	vars := nested(t, body, "variables")
 	for _, key := range []string{"host", "port", "query"} {
@@ -818,15 +836,7 @@ func TestCatalogRAIDChecksAlertOnDegradedArrays(t *testing.T) {
 	root := repoRoot(t)
 	for _, name := range []string{"mdadm", "mdmonitor"} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(root, "catalog", "services", name+".yml")
-			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatal(err)
-			}
-			var body map[string]any
-			if err := yaml.Unmarshal(data, &body); err != nil {
-				t.Fatal(err)
-			}
+			body := catalogDocByName(t, root, "services", name)
 			degraded := nested(t, body, "checks", "raid", "degraded")
 			if got := cfgval.String(degraded["op"]); got != ">" {
 				t.Fatalf("%s raid degraded op = %q, want >", name, got)
@@ -921,15 +931,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 
 func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	root := repoRoot(t)
-	path := filepath.Join(root, "catalog", "services", "php-fpm%v%s%i.yml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body map[string]any
-	if err := yaml.Unmarshal(data, &body); err != nil {
-		t.Fatal(err)
-	}
+	body := catalogDocByName(t, root, "services", "php-fpm%v%s%i")
 	if got := cfgval.String(nested(t, body, "variables")["config"]); got != "/etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf" {
 		t.Fatalf("php-fpm config variable = %q", got)
 	}
@@ -952,25 +954,18 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 
 func TestCatalogOpenVPNSystemdInstancesAreSystemdOnly(t *testing.T) {
 	root := repoRoot(t)
-	for _, file := range []string{"openvpn-client-%i.yml", "openvpn-server-%i.yml"} {
-		t.Run(file, func(t *testing.T) {
-			data, err := os.ReadFile(filepath.Join(root, "catalog", "services", file))
-			if err != nil {
-				t.Fatal(err)
-			}
-			var body map[string]any
-			if err := yaml.Unmarshal(data, &body); err != nil {
-				t.Fatal(err)
-			}
+	for _, name := range []string{"openvpn-client-%i", "openvpn-server-%i"} {
+		t.Run(name, func(t *testing.T) {
+			body := catalogDocByName(t, root, "services", name)
 			service, ok := body["service"].(map[string]any)
 			if !ok {
-				t.Fatalf("%s service = %v, want per-init map", file, body["service"])
+				t.Fatalf("%s service = %v, want per-init map", name, body["service"])
 			}
 			if got := cfgval.StringList(service["systemd"]); len(got) != 1 {
-				t.Fatalf("%s service.systemd = %v, want one candidate", file, got)
+				t.Fatalf("%s service.systemd = %v, want one candidate", name, got)
 			}
 			if got := cfgval.StringList(service["openrc"]); len(got) != 0 {
-				t.Fatalf("%s service.openrc = %v, want no OpenRC candidates", file, got)
+				t.Fatalf("%s service.openrc = %v, want no OpenRC candidates", name, got)
 			}
 		})
 	}
@@ -978,14 +973,7 @@ func TestCatalogOpenVPNSystemdInstancesAreSystemdOnly(t *testing.T) {
 
 func TestCatalogPHPFPMInstancedCandidatesPreferInstance(t *testing.T) {
 	root := repoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "catalog", "services", "php-fpm%v%s%i.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body map[string]any
-	if err := yaml.Unmarshal(data, &body); err != nil {
-		t.Fatal(err)
-	}
+	body := catalogDocByName(t, root, "services", "php-fpm%v%s%i")
 	service := nested(t, body, "service")
 	for _, backend := range []string{"systemd", "openrc"} {
 		candidates := cfgval.StringList(service[backend])
@@ -1000,14 +988,7 @@ func TestCatalogPHPFPMInstancedCandidatesPreferInstance(t *testing.T) {
 
 func TestCatalogTomcatConfigDiscoveryRequiresRuntime(t *testing.T) {
 	root := repoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "catalog", "services", "tomcat-%v%s%i.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body map[string]any
-	if err := yaml.Unmarshal(data, &body); err != nil {
-		t.Fatal(err)
-	}
+	body := catalogDocByName(t, root, "services", "tomcat-%v%s%i")
 	versions := nested(t, body, "versions")
 	if got := cfgval.StringList(versions["require"]); strings.Join(got, ",") != "/usr/share/tomcat-${version}/bin/catalina.sh" {
 		t.Fatalf("tomcat versions.require = %v, want catalina.sh runtime gate", got)
@@ -1016,15 +997,7 @@ func TestCatalogTomcatConfigDiscoveryRequiresRuntime(t *testing.T) {
 
 func TestCatalogVarnishAdminChecksAreOptional(t *testing.T) {
 	root := repoRoot(t)
-	path := filepath.Join(root, "catalog", "services", "varnishd.yml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var body map[string]any
-	if err := yaml.Unmarshal(data, &body); err != nil {
-		t.Fatal(err)
-	}
+	body := catalogDocByName(t, root, "services", "varnishd")
 	checks := nested(t, body, "checks")
 	for _, name := range []string{"port", "varnish"} {
 		check, _ := checks[name].(map[string]any)
