@@ -23,6 +23,10 @@ type Resolved struct {
 // returned errors include undefined-variable and nested-variable problems; a
 // nil error slice means a clean resolution.
 func (c *Config) Resolve(name string) (Resolved, []string) {
+	return c.resolveService(name, true)
+}
+
+func (c *Config) resolveService(name string, pruneOptional bool) (Resolved, []string) {
 	canonicalName, ok := c.CanonicalServiceName(name)
 	if !ok {
 		return Resolved{Name: name}, []string{fmt.Sprintf("unknown service %q", name)}
@@ -30,6 +34,9 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	merged, err := c.mergedService(canonicalName, nil)
 	if err != nil {
 		return Resolved{Name: name}, []string{err.Error()}
+	}
+	if pruneOptional {
+		merged = pruneEnableIf(merged, nil).(map[string]any)
 	}
 
 	errs := prepareExpansionInputs(merged)
@@ -505,6 +512,7 @@ func (c *Config) expansionVariablesForKind(tree map[string]any, name string, kin
 	maps.Copy(vars, collectVariablesForKind(tree, kind)) // service/doc variables override app and global custom ones
 	errs = append(errs, validateVariableValues(vars)...)
 	injectBuiltinVariables(vars, name, tree)
+	errs = append(errs, resolveFileVars(vars, tree)...)
 	return vars, errs
 }
 
@@ -526,6 +534,7 @@ func (c *Config) appVariables(tree map[string]any) (map[string]string, []string)
 		body := stripMeta(doc.Body)
 		errs = append(errs, prepareExpansionInputs(body)...)
 		appVars := collectVariablesForKind(body, doc.Kind)
+		errs = append(errs, resolveFileVars(appVars, body)...)
 		// Iterate variable names in sorted order so conflict errors surface in a
 		// stable, reproducible order (map ranging is randomized).
 		varNames := slices.Sorted(maps.Keys(appVars))
@@ -840,6 +849,7 @@ func (c *Config) resolveDoc(doc *Document, name string) (Resolved, []string) {
 // detect a cyclic apps: linkage instead of recursing into a stack overflow.
 func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (Resolved, []string) {
 	body := stripMeta(doc.Body)
+	body = pruneEnableIf(body, nil).(map[string]any)
 	errs := prepareExpansionInputs(body)
 	vars, varErrs := c.expansionVariablesForKind(body, name, doc.Kind)
 	errs = append(errs, varErrs...)

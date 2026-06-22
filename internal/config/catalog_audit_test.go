@@ -921,7 +921,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 
 func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	root := repoRoot(t)
-	path := filepath.Join(root, "catalog", "services", "php-fpm%v.yml")
+	path := filepath.Join(root, "catalog", "services", "php-fpm%v%s%i.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -930,7 +930,7 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	if err := yaml.Unmarshal(data, &body); err != nil {
 		t.Fatal(err)
 	}
-	if got := cfgval.String(nested(t, body, "variables")["config"]); got != "/etc/php/fpm-php${version}/php-fpm.conf" {
+	if got := cfgval.String(nested(t, body, "variables")["config"]); got != "/etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf" {
 		t.Fatalf("php-fpm config variable = %q", got)
 	}
 	config := nested(t, body, "preflight", "config")
@@ -947,6 +947,70 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	rules := nested(t, body, "rules")
 	if _, ok := rules["restart-if-tcp-failed"]; ok {
 		t.Fatal("php-fpm must not remediate on the optional tcp check by default")
+	}
+}
+
+func TestCatalogOpenVPNSystemdInstancesAreSystemdOnly(t *testing.T) {
+	root := repoRoot(t)
+	for _, file := range []string{"openvpn-client-%i.yml", "openvpn-server-%i.yml"} {
+		t.Run(file, func(t *testing.T) {
+			data, err := os.ReadFile(filepath.Join(root, "catalog", "services", file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := yaml.Unmarshal(data, &body); err != nil {
+				t.Fatal(err)
+			}
+			service, ok := body["service"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s service = %v, want per-init map", file, body["service"])
+			}
+			if got := cfgval.StringList(service["systemd"]); len(got) != 1 {
+				t.Fatalf("%s service.systemd = %v, want one candidate", file, got)
+			}
+			if got := cfgval.StringList(service["openrc"]); len(got) != 0 {
+				t.Fatalf("%s service.openrc = %v, want no OpenRC candidates", file, got)
+			}
+		})
+	}
+}
+
+func TestCatalogPHPFPMInstancedCandidatesPreferInstance(t *testing.T) {
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "catalog", "services", "php-fpm%v%s%i.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := yaml.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+	service := nested(t, body, "service")
+	for _, backend := range []string{"systemd", "openrc"} {
+		candidates := cfgval.StringList(service[backend])
+		if len(candidates) == 0 {
+			t.Fatalf("php-fpm service.%s is empty", backend)
+		}
+		if !strings.Contains(candidates[0], "${sep}${instance}") {
+			t.Fatalf("php-fpm service.%s first candidate = %q, want instance-specific candidate first", backend, candidates[0])
+		}
+	}
+}
+
+func TestCatalogTomcatConfigDiscoveryRequiresRuntime(t *testing.T) {
+	root := repoRoot(t)
+	data, err := os.ReadFile(filepath.Join(root, "catalog", "services", "tomcat-%v%s%i.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := yaml.Unmarshal(data, &body); err != nil {
+		t.Fatal(err)
+	}
+	versions := nested(t, body, "versions")
+	if got := cfgval.StringList(versions["require"]); strings.Join(got, ",") != "/usr/share/tomcat-${version}/bin/catalina.sh" {
+		t.Fatalf("tomcat versions.require = %v, want catalina.sh runtime gate", got)
 	}
 }
 
@@ -1309,26 +1373,40 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 		if err := yaml.Unmarshal(data, &doc); err != nil {
 			t.Fatalf("parse %s: %v", path, err)
 		}
-		if _, hasVersions := doc["versions"]; hasVersions {
-			t.Errorf("%s declares versions; service templates must discover from linked apps", path)
+		toks := tokensFor(cfgval.String(doc["name"]))
+		if len(toks) == 0 {
+			if _, hasVersions := doc["versions"]; hasVersions {
+				t.Errorf("%s declares versions but its name carries no template token", path)
+			}
+			continue
 		}
-		tok := tokenFor(cfgval.String(doc["name"]))
-		if tok == nil {
+		discoversAll := func(sources []string) bool {
+			for _, s := range sources {
+				if containsAllMarkers(s, toks) {
+					return true
+				}
+			}
+			return false
+		}
+		// v2: a template either owns its discovery (a `versions.from` carrying
+		// every marker — instance configs the binary cannot know about) or links
+		// an app template whose discovery source carries them.
+		if discoversAll(directVersionDiscoverySources(doc)) {
 			continue
 		}
 		hasLinkedDiscovery := false
 		for _, appName := range cfgval.StringList(doc["apps"]) {
-			app, ok := apps[linkedAppTemplateName(appName, *tok)]
+			app, ok := apps[linkedAppTemplateNameMulti(appName, toks)]
 			if !ok {
 				continue
 			}
-			if anyContains(directVersionDiscoverySources(app), tok.marker()) {
+			if discoversAll(directVersionDiscoverySources(app)) {
 				hasLinkedDiscovery = true
 				break
 			}
 		}
 		if !hasLinkedDiscovery {
-			t.Errorf("%s is a template but does not link an app template that can discover %s", path, tok.marker())
+			t.Errorf("%s is a template but neither declares its own versions.from nor links an app template that can discover its tokens", path)
 		}
 	}
 }

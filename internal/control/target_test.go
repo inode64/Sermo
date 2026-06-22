@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"sermo/internal/execx"
@@ -54,6 +55,21 @@ func TestResolveWithFallbackUsesConfiguredInitUnit(t *testing.T) {
 	}
 }
 
+func TestResolveWithFallbackUsesActiveBackendCandidate(t *testing.T) {
+	target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
+		"service": map[string]any{
+			"systemd": []any{"svc@main"},
+			"openrc":  []any{"svc.main"},
+		},
+	}, servicemgr.BackendOpenRC, nil, servicemgr.UnitResolver{Probe: noKnownUnitsProbe{}})
+	if target.Unit != "svc.main" || target.Backend != servicemgr.BackendOpenRC {
+		t.Fatalf("ResolveWithFallback() target = %+v, want svc.main/openrc", target)
+	}
+	if warning == "" {
+		t.Fatal("ResolveWithFallback() warning is empty, want failed resolution warning")
+	}
+}
+
 func TestResolveWithFallbackDoesNotFallbackWhenBackendHasNoCandidates(t *testing.T) {
 	target, warning := ResolveWithFallback(context.Background(), "svc", map[string]any{
 		"service": map[string]any{
@@ -73,3 +89,11 @@ type noKnownUnitsRunner struct{}
 func (noKnownUnitsRunner) Run(context.Context, string, ...string) (execx.Result, error) {
 	return execx.Result{ExitCode: 1}, nil
 }
+
+type noKnownUnitsProbe struct{}
+
+func (noKnownUnitsProbe) CommandExists(string) bool { return false }
+
+func (noKnownUnitsProbe) PathExists(string) bool { return false }
+
+func (noKnownUnitsProbe) ReadFile(string) ([]byte, error) { return nil, errors.New("not found") }

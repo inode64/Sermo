@@ -11,9 +11,10 @@ import (
 
 func TestWebBackendMounts(t *testing.T) {
 	root := t.TempDir()
+	runtime := filepath.Join(root, "run")
 	cfg := &config.Config{
-		Global: config.Global{Raw: map[string]any{
-			"paths": map[string]any{"runtime": filepath.Join(root, "run")},
+		Global: config.Global{Runtime: runtime, Raw: map[string]any{
+			"paths": map[string]any{"runtime": runtime},
 		}},
 		Mounts: map[string]*config.Document{
 			"mount-backup": {

@@ -81,7 +81,7 @@ func ResolveWithFallback(ctx context.Context, name string, tree map[string]any, 
 	if len(candidates) == 0 {
 		return Target{}, err.Error()
 	}
-	unit := config.ServiceUnit(tree, name)
+	unit := candidates[0]
 	return Target{Unit: unit, Backend: backend, Manager: manager}, fmt.Sprintf("%s (using %s)", err.Error(), unit)
 }
 

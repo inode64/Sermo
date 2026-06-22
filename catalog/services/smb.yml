@@ -35,12 +35,34 @@ processes:
   nmbd:
     exe: "${nmbd_binary}"
     user: "${user}"
+  # winbindd is optional: Gentoo lists the daemons to run in /etc/conf.d/samba.
+  # Supervise it only when daemon_list names it, so hosts that don't run winbind
+  # are not falsely reported as having a stopped process. Inlined (not an app)
+  # precisely because it is conditional — an unconditional winbindd app would
+  # make every Samba host preflight a binary it may not have installed.
+  winbindd:
+    exe: /usr/sbin/winbindd
+    user: "${user}"
+    enable_if:
+      file: /etc/conf.d/samba
+      key: daemon_list
+      contains: winbindd
 
 checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
   smb: { type: smb, port: "${port}", timeout: 3s }
   netbios: { type: tcp, port: "${netbios_port}", optional: true }
+  winbindd:
+    type: process
+    exe: /usr/sbin/winbindd
+    user: "${user}"
+    state: running
+    requires: [service]
+    enable_if:
+      file: /etc/conf.d/samba
+      key: daemon_list
+      contains: winbindd
 
 rules:
   block-restart-if-config-invalid:
