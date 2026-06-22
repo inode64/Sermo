@@ -1,7 +1,7 @@
 kind: daemon
 name: openvpn%s%i
 display_name: "OpenVPN ${instance}"
-category: network
+category: vpn
 apps: [openvpn]
 
 # OpenRC has a single flat namespace (no server/client split): one init script
