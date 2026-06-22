@@ -1,0 +1,18 @@
+kind: app
+name: cockpit
+display_name: "Cockpit"
+category: system
+description: "Web-based Linux server administration console."
+variables:
+  binary:
+    - /usr/libexec/cockpit-tls
+    - /usr/lib/cockpit/cockpit-tls
+  bridge:
+    - /usr/bin/cockpit-bridge
+    - /usr/libexec/cockpit-bridge
+    - /usr/lib/cockpit/cockpit-bridge
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  bridge: { type: binary, path: "${bridge}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }
+  version: { type: command, command: ["${bridge}", "--version"], timeout: 10s }
