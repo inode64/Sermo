@@ -1,0 +1,9 @@
+kind: app
+name: atftp
+display_name: "atftp"
+category: network
+variables:
+  binary: "/usr/bin/atftpd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

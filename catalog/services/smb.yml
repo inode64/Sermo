@@ -1,0 +1,52 @@
+kind: daemon
+name: smb
+display_name: "Samba SMB/NMB"
+category: storage
+description: "Combined Samba service unit that supervises SMB and NetBIOS daemons."
+service:
+  systemd: [smb]
+  openrc: [samba]
+apps: [smbd, nmbd]
+
+variables:
+  port: 445
+  netbios_port: 139
+  user: root
+
+pidfile:
+  - /run/samba/smbd.pid
+  - /run/samba/nmbd.pid
+
+preflight:
+  config:
+    type: command
+    command: ["${smbd_testparm}", "-s"]
+    timeout: 30s
+    analyze:
+      use: [common]
+      rules:
+        - { id: dir-artifact, match: '(?i)(lock|pid) directory .* does not exist', severity: ok }
+
+processes:
+  main:
+    exe: "${smbd_binary}"
+    user: "${user}"
+  nmbd:
+    exe: "${nmbd_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}" }
+  smb: { type: smb, port: "${port}", timeout: 3s }
+  netbios: { type: tcp, port: "${netbios_port}", optional: true }
+
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks: [restart, start]
+    if:
+      failed: { check: config }
+    then:
+      action: block
+      message: "${display_name} configuration is invalid"
