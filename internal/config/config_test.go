@@ -3940,6 +3940,96 @@ checks:
 	}
 }
 
+func TestExpandPidfilesDesugarsByRole(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+kind: daemon
+name: svc
+pidfiles:
+  main:
+    - /run/svc-main.pid
+    - /run/svc.pid
+  helper: /run/svc-helper.pid
+processes:
+  main:
+    exe: /usr/sbin/svc
+    user: svc
+  helper:
+    exe: /usr/sbin/svc-helper
+    user: svc
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	pidfiles := resolved.Tree["pidfiles"].(map[string]any)
+	if got, want := cfgval.StringList(pidfiles["main"]), []string{"/run/svc-main.pid", "/run/svc.pid"}; !slices.Equal(got, want) {
+		t.Fatalf("pidfiles.main = %v, want %v", got, want)
+	}
+	if got := cfgval.String(pidfiles["helper"]); got != "/run/svc-helper.pid" {
+		t.Fatalf("pidfiles.helper = %q, want /run/svc-helper.pid", got)
+	}
+	checks := resolved.Tree["checks"].(map[string]any)
+	main := checks["pidfile-main"].(map[string]any)
+	if got := cfgval.StringList(main["path"]); !slices.Equal(got, []string{"/run/svc-main.pid", "/run/svc.pid"}) {
+		t.Fatalf("check pidfile-main path = %v", got)
+	}
+	helper := checks["pidfile-helper"].(map[string]any)
+	if got := cfgval.String(helper["path"]); got != "/run/svc-helper.pid" {
+		t.Fatalf("check pidfile-helper path = %v", got)
+	}
+}
+
+func TestValidatePidfilesRequireMatchingProcessIdentity(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+kind: daemon
+name: svc
+pidfile: /run/legacy.pid
+pidfiles:
+  missing: /run/missing.pid
+  relative: run/relative.pid
+  no-exe: /run/no-exe.pid
+  no-user: /run/no-user.pid
+processes:
+  no-exe:
+    user: svc
+    cmd: svc --no-exe
+  no-user:
+    exe: /usr/sbin/no-user
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	for _, want := range []string{
+		"pidfile and pidfiles are mutually exclusive",
+		"pidfiles.missing requires matching processes.missing",
+		"pidfiles.no-exe requires processes.no-exe.exe",
+		"pidfiles.no-user requires processes.no-user.user",
+		`pidfiles.relative path "run/relative.pid" must be absolute`,
+	} {
+		if !hasIssue(issues, want) {
+			t.Errorf("missing issue containing %q in %v", want, issues)
+		}
+	}
+}
+
 func TestExpandSocketDesugars(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,
@@ -4042,6 +4132,10 @@ also_service: { foo: [x] }
 func TestStopInvariants(t *testing.T) {
 	tree := map[string]any{
 		"pidfile": "/run/svc.pid",
+		"pidfiles": map[string]any{
+			"helper": "/run/svc-helper.pid",
+			"worker": []any{"/run/svc-worker.pid", "/run/svc-worker-legacy.pid"},
+		},
 		"stop_policy": map[string]any{
 			"pidfile_absent":   true,
 			"files_absent":     []any{"/run/svc/*.sock"},
@@ -4049,8 +4143,9 @@ func TestStopInvariants(t *testing.T) {
 		},
 	}
 	pp, ff, cleanEnabled, _ := StopInvariants(tree)
-	if len(pp) != 1 || pp[0] != "/run/svc.pid" {
-		t.Fatalf("pidfile paths = %v, want [/run/svc.pid]", pp)
+	wantPidfiles := []string{"/run/svc.pid", "/run/svc-helper.pid", "/run/svc-worker.pid", "/run/svc-worker-legacy.pid"}
+	if !slices.Equal(pp, wantPidfiles) {
+		t.Fatalf("pidfile paths = %v, want %v", pp, wantPidfiles)
 	}
 	if len(ff) != 1 || ff[0] != "/run/svc/*.sock" || !cleanEnabled {
 		t.Fatalf("files=%v cleanEnabled=%v", ff, cleanEnabled)

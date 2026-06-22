@@ -424,6 +424,10 @@ commands:                      # informational or reserved names such as version
 # health check unless the service already declares an equivalent check. Use a
 # list when a daemon has several distro-specific pidfile candidates.
 pidfile: [/run/demo.pid, /run/demo/demo.pid]
+# For several required process roles with separate pidfiles, use `pidfiles:`
+# instead of `pidfile:` and mirror each role under `processes:`:
+# pidfiles:
+#   workers: /run/demo-workers.pid
 
 # socket auto-wires a requires:[service] health check. It may reference a
 # variable and may be optional for socket-activated or distro-specific daemons.

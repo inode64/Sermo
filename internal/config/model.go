@@ -385,6 +385,9 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 	files = cfgval.StringList(sp["files_absent"])
 	if pa, _ := sp["pidfile_absent"].(bool); pa {
 		pidfilePaths = append(pidfilePaths, cfgval.StringList(tree["pidfile"])...)
+		for _, role := range sortedPidfileRoles(tree) {
+			pidfilePaths = append(pidfilePaths, cfgval.StringList(tree["pidfiles"].(map[string]any)[role])...)
+		}
 	}
 	if raw, ok := sp["clean_on_stop"].([]any); ok {
 		for _, item := range raw {
@@ -403,6 +406,14 @@ func StopInvariants(tree map[string]any) (pidfilePaths, files []string, clean bo
 		}
 	}
 	return pidfilePaths, files, clean, cleanPaths
+}
+
+func sortedPidfileRoles(tree map[string]any) []string {
+	pidfiles, ok := tree["pidfiles"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(pidfiles))
 }
 
 // CascadeTargets returns the additional Sermo services declared in `also_apply`,

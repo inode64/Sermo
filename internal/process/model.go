@@ -43,7 +43,7 @@ const (
 
 // Selector is one internal process discovery source. Public `processes` entries
 // are command-match selectors; pidfile selectors are derived from top-level
-// service `pidfile:`.
+// service `pidfile:` or per-role `pidfiles:`.
 type Selector struct {
 	Name  string   // selector key used as Role when matched; backend seeds use Role "main"
 	Type  string   // pidfile | command_match

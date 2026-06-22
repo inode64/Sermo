@@ -354,6 +354,32 @@ func TestParseSelectors(t *testing.T) {
 	}
 }
 
+func TestParseSelectorsPidfilesByRole(t *testing.T) {
+	tree := map[string]any{
+		"pidfiles": map[string]any{
+			"main": []any{"/run/main.pid", "/run/main-legacy.pid"},
+			"side": "/run/side.pid",
+		},
+		"processes": map[string]any{
+			"main": map[string]any{"exe": "/opt/sermo-test/main", "user": "svc"},
+			"side": map[string]any{"exe": "/opt/sermo-test/side", "user": "svc"},
+		},
+	}
+	selectors, warnings := ParseSelectors(tree)
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %v, want none", warnings)
+	}
+	if len(selectors) != 4 {
+		t.Fatalf("selectors = %+v, want 4", selectors)
+	}
+	if selectors[0].Type != SelectorPidfile || selectors[0].Name != "main" || strings.Join(selectors[0].Paths, ",") != "/run/main.pid,/run/main-legacy.pid" {
+		t.Fatalf("first selector = %+v, want main pidfile candidates", selectors[0])
+	}
+	if selectors[1].Type != SelectorPidfile || selectors[1].Name != "side" || strings.Join(selectors[1].Paths, ",") != "/run/side.pid" {
+		t.Fatalf("second selector = %+v, want side pidfile", selectors[1])
+	}
+}
+
 func TestParseSelectorsCanonicalizesExe(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "mysqld")
