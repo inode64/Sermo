@@ -42,6 +42,10 @@ type portsCheck struct {
 	onChange       bool
 	connectTimeout time.Duration
 
+	// dialFunc dials addr through iface honoring ctx. nil uses the real
+	// interface-bound dialer; tests override it to make timing deterministic.
+	dialFunc func(ctx context.Context, iface, addr string) (net.Conn, error)
+
 	primed bool
 	last   map[int]bool // port -> open
 }
@@ -161,10 +165,16 @@ func (c *portsCheck) probe(ctx context.Context, port int) bool {
 	}
 	pctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	dial := c.dialFunc
+	if dial == nil {
+		dial = func(ctx context.Context, iface, addr string) (net.Conn, error) {
+			return conn.BindDialer(iface).DialContext(ctx, "tcp", addr)
+		}
+	}
 	// With an interface set, a port is "open" if it connects on any (or, with
 	// ifaceAll, every) configured interface.
 	_, _, err := tryInterfaces(c.ifaces, c.ifaceAll, func(iface string) error {
-		nc, e := conn.BindDialer(iface).DialContext(pctx, "tcp", net.JoinHostPort(c.host, strconv.Itoa(port)))
+		nc, e := dial(pctx, iface, net.JoinHostPort(c.host, strconv.Itoa(port)))
 		if e == nil {
 			_ = nc.Close()
 		}
