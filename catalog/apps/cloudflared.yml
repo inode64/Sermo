@@ -1,7 +1,7 @@
 kind: app
 name: cloudflared
 display_name: "Cloudflare Tunnel"
-category: network
+category: vpn
 variables:
   binary: /usr/bin/cloudflared
 preflight:
