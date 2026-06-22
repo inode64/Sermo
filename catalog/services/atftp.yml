@@ -1,0 +1,22 @@
+kind: daemon
+name: atftp
+display_name: "atftp"
+category: network
+description: "atftp TFTP server daemon."
+service:
+  systemd: [atftp]
+  openrc: [atftp]
+apps: [atftp]
+
+variables:
+  port: 69
+  user: nobody
+
+processes:
+  main:
+    exe: "${atftp_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tftp, port: "${port}" }

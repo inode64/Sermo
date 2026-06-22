@@ -1,0 +1,9 @@
+kind: app
+name: dcc
+display_name: "Distributed Checksum Clearinghouse"
+category: mail
+variables:
+  binary: "/usr/bin/dccifd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }
