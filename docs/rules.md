@@ -1249,8 +1249,8 @@ watches:
 ```
 
 (Note `within` here is the size check's **own field** — the duration of its
-growth window — not the watch-level `within: {cycles, min_matches}` firing
-window, which a size watch normally does not need.)
+growth window — not the watch-level `within: {cycles|duration, min_matches}`
+firing window, which a size watch normally does not need.)
 
 Each cycle it samples the path's size (a file's bytes, or the recursive sum of
 regular-file sizes under a directory), keeps the samples seen in the last
@@ -1676,7 +1676,9 @@ rules:
     type: remediation | guard | alert
     if: { ... }       # condition tree
     for: { cycles: 3 }            # consecutive cycles (optional)
+    # for: { duration: 6m }        # or consecutive wall-clock time
     within: { cycles: 15, min_matches: 5 }  # sliding window (optional)
+    # within: { duration: 30m, min_matches: 3 } # or a time window
     notify: [ops-email]           # who gets this rule's alert messages (optional)
     then: { action: alert, message: "http is down" }
 ```
@@ -1724,15 +1726,20 @@ primitive behind `restart_on_change` (see Daemons → Library daemons).
 ### Windows
 
 Without `for`/`within`, a rule fires the cycle its condition is true.
-`for: {cycles: N}` requires N consecutive true cycles; `within: {cycles,
-min_matches}` requires
-`min_matches` true cycles out of the last `cycles` — `min_matches` is optional
-and defaults to `1` (true at least once within the window). A rule cannot use
-both.
+`for` is consecutive: `for: {cycles: N}` requires N consecutive true cycles,
+while `for: {duration: 6m}` requires the condition to stay true for at least
+that wall-clock duration. `within` is a rolling window:
+`within: {cycles: N, min_matches: M}` requires M true cycles out of the last N,
+while `within: {duration: 30m, min_matches: M}` requires M true observed cycles
+inside the last 30 minutes. `min_matches` is optional and defaults to `1`
+(true at least once within the window). A rule cannot use both `for` and
+`within`; a single window must choose either `cycles` or `duration`, not both.
 
 Service rule-window progress is persisted in `paths.state`. If `sermod`
 restarts while a `for` window is at 2/3 consecutive matches, the next observed
-matching cycle continues from 2/3 instead of starting from zero.
+matching cycle continues from 2/3 instead of starting from zero. Duration-based
+windows persist their timestamps too, so a restart does not restart a pending
+`for: {duration: ...}` window.
 
 ### Guards
 

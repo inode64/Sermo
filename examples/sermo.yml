@@ -82,11 +82,12 @@ defaults:
 
   # Fallback firing window for rules that declare neither `for` nor `within`.
   # The values below equal the built-in default (fire on the first true cycle),
-  # so the block is documentation; raise `cycles` (e.g. 3) to require N
-  # consecutive true cycles for every window-less rule, or use `mode: within`
-  # with `min_matches` for a sliding window.
+  # so the block is documentation; raise `cycles` (e.g. 3) or use `duration`
+  # (e.g. 6m) to require a sustained condition for every window-less rule, or
+  # use `mode: within` with `min_matches` for a sliding window.
   # rule_window:
   #   cycles: 1
+  #   # duration: 6m       # choose cycles or duration, not both
   #   mode: consecutive    # consecutive | within (min_matches optional, default 1)
 
 # Web dashboard (view services; monitor/unmonitor and start/stop/restart/reload/resume;

@@ -46,6 +46,7 @@ checks:
     expires_in_days: 21
     timeout: 5s
 
+rules:
   restart-if-worker-thread-hot:
     type: remediation
     if:
@@ -54,13 +55,11 @@ checks:
         name: cpu_thread
         op: ">"
         value: 90%
-    # 12 consecutive 30s cycles = 6 minutes.
     for:
-      cycles: 12
+      duration: 6m
     then:
       action: restart
 
-rules:
   block-restart-if-config-invalid:
     type: guard
     blocks: [restart, start]

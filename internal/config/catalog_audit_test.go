@@ -146,10 +146,6 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	if len(errs) > 0 {
 		t.Fatalf("ResolveCatalog(apache): %v", errs)
 	}
-	if got := cfgval.String(resolved.Tree["interval"]); got != "30s" {
-		t.Fatalf("apache interval = %q, want 30s", got)
-	}
-
 	rule := nested(t, resolved.Tree, "rules", "restart-if-worker-thread-hot")
 	if got := cfgval.String(rule["type"]); got != "remediation" {
 		t.Fatalf("rule type = %q, want remediation", got)
@@ -167,9 +163,8 @@ func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
 	if got := cfgval.String(metric["value"]); got != "90%" {
 		t.Fatalf("metric value = %q, want 90%%", got)
 	}
-	cycles, _ := cfgval.Int(nested(t, rule, "for")["cycles"])
-	if cycles != 12 {
-		t.Fatalf("for.cycles = %d, want 12", cycles)
+	if got := cfgval.String(nested(t, rule, "for")["duration"]); got != "6m" {
+		t.Fatalf("for.duration = %q, want 6m", got)
 	}
 	if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
 		t.Fatalf("then.action = %q, want restart", got)

@@ -524,6 +524,33 @@ func TestCycleForWindowDelaysAction(t *testing.T) {
 	}
 }
 
+func TestCycleForDurationWindowDelaysAction(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{
+		"down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"for":  map[string]any{"duration": "6m"},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(tree, rules.Policy{}, nil)
+	now := t0
+	w.Now = func() time.Time { return now }
+
+	w.RunCycle(context.Background())
+	now = now.Add(5 * time.Minute)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 0 {
+		t.Fatalf("must not act before duration elapses, ops=%v", h.ops)
+	}
+	now = now.Add(time.Minute)
+	w.RunCycle(context.Background())
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("ops = %v, want [restart] after 6m", h.ops)
+	}
+}
+
 func TestCycleForWindowResetsOnRecovery(t *testing.T) {
 	tree := map[string]any{"rules": map[string]any{
 		"down": map[string]any{
@@ -650,7 +677,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		Type: rules.RuleRemediation,
 		If:   map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}},
 	}
-	if w.fires(context.Background(), ev, r, nil) {
+	if w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("a system-metric remediation rule must never fire")
 	}
 	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
@@ -665,7 +692,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 			"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"},
 		}},
 	}
-	if w.fires(context.Background(), ev, r, nil) {
+	if w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("an inline system-metric remediation probe must never fire")
 	}
 	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
@@ -681,7 +708,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 		Type: rules.RuleRemediation,
 		If:   map[string]any{"active": map[string]any{"check": "machine-hot"}},
 	}
-	if w.fires(context.Background(), ev, r, nil) {
+	if w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("a remediation rule referencing a system metric check must never fire")
 	}
 	if len(events) != 1 || events[0].Kind != "error" || !strings.Contains(events[0].Message, "alert rules") {
@@ -691,7 +718,7 @@ func TestWorkerFiresSuppressesSystemMetricRemediation(t *testing.T) {
 	// The same metric on an alert rule keeps working.
 	r.Type = rules.RuleAlert
 	r.If = map[string]any{"metric": map[string]any{"scope": "system", "name": "total_memory", "op": ">", "value": "90%"}}
-	if !w.fires(context.Background(), ev, r, nil) {
+	if !w.fires(context.Background(), ev, r, t0, nil) {
 		t.Fatal("an alert rule on the same system metric must still fire")
 	}
 }

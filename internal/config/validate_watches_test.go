@@ -952,6 +952,16 @@ func TestValidateWatchesGoodForWindow(t *testing.T) {
 				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
 				"for":   map[string]any{"cycles": 3},
 			},
+			"storage-duration": map[string]any{
+				"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 95}},
+				"then":  map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
+				"for":   map[string]any{"duration": "6m"},
+			},
+			"storage-within-duration": map[string]any{
+				"check":  map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 97}},
+				"then":   map[string]any{"hook": map[string]any{"command": []any{"/usr/local/bin/alert.sh"}}},
+				"within": map[string]any{"duration": "30m", "min_matches": 3},
+			},
 		},
 	})
 	if w := watchIssues(issues); len(w) != 0 {
@@ -966,8 +976,11 @@ func TestValidateWatchesBad(t *testing.T) {
 		"bad op":                 {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": "=>", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}},
 		"empty cmd":              {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{}}}},
 		"for cycles 0":           {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 0}},
+		"for duration bad":       {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"duration": "soon"}},
+		"for both lengths":       {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 3, "duration": "6m"}},
 		"for unexpected":         {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 3, "unexpected": true}},
 		"within cycles -1":       {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": -1}},
+		"within duration bad":    {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"duration": "-1m"}},
 		"within min 0":           {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": 5, "min_matches": 0}},
 		"within unexpected":      {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "within": map[string]any{"cycles": 5, "min_matches": 2, "unexpected": true}},
 		"both for within":        {"check": map[string]any{"type": "storage", "path": "/", "used_pct": map[string]any{"op": ">=", "value": 90}}, "then": map[string]any{"hook": map[string]any{"command": []any{"/x"}}}, "for": map[string]any{"cycles": 3}, "within": map[string]any{"cycles": 5, "min_matches": 2}},

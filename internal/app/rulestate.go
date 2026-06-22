@@ -110,11 +110,44 @@ func remediationToRecord(remediation *rules.RemediationState) state.RemediationR
 }
 
 func windowStateFromRecord(rec state.RuleWindowRecord) *rules.WindowState {
-	return rules.WindowStateFromSnapshot(rules.WindowStateSnapshot(rec))
+	return rules.WindowStateFromSnapshot(rules.WindowStateSnapshot{
+		Consecutive:  rec.Consecutive,
+		History:      append([]bool(nil), rec.History...),
+		TrueSince:    rec.TrueSince,
+		TimedHistory: ruleSamplesFromRecords(rec.TimedHistory),
+	})
 }
 
 func ruleWindowRecord(window *rules.WindowState) state.RuleWindowRecord {
-	return state.RuleWindowRecord(window.Snapshot())
+	snapshot := window.Snapshot()
+	return state.RuleWindowRecord{
+		Consecutive:  snapshot.Consecutive,
+		History:      append([]bool(nil), snapshot.History...),
+		TrueSince:    snapshot.TrueSince,
+		TimedHistory: ruleRecordsFromSamples(snapshot.TimedHistory),
+	}
+}
+
+func ruleSamplesFromRecords(records []state.RuleWindowSample) []rules.WindowSample {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]rules.WindowSample, 0, len(records))
+	for _, rec := range records {
+		out = append(out, rules.WindowSample{At: rec.At, Match: rec.Match})
+	}
+	return out
+}
+
+func ruleRecordsFromSamples(samples []rules.WindowSample) []state.RuleWindowSample {
+	if len(samples) == 0 {
+		return nil
+	}
+	out := make([]state.RuleWindowSample, 0, len(samples))
+	for _, sample := range samples {
+		out = append(out, state.RuleWindowSample{At: sample.At, Match: sample.Match})
+	}
+	return out
 }
 
 func emitRuleStateError(emit func(Event), service, action string, err error) {
