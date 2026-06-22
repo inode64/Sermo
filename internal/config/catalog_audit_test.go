@@ -1361,9 +1361,9 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 			}
 			return false
 		}
-		// v2: a template either owns its discovery (a `versions.from` carrying
-		// every marker — instance configs the binary cannot know about) or links
-		// an app template whose discovery source carries them.
+		// v2: a template either owns its discovery (`variables.binary` or
+		// `versions.from` carrying every marker) or links an app template whose
+		// discovery source carries them.
 		if discoversAll(directVersionDiscoverySources(doc)) {
 			continue
 		}
@@ -1379,7 +1379,7 @@ func TestCatalogVersionedServicesDiscoverFromLinkedApps(t *testing.T) {
 			}
 		}
 		if !hasLinkedDiscovery {
-			t.Errorf("%s is a template but neither declares its own versions.from nor links an app template that can discover its tokens", path)
+			t.Errorf("%s is a template but neither declares its own discovery source nor links an app template that can discover its tokens", path)
 		}
 	}
 }

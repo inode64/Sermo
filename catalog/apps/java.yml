@@ -3,14 +3,15 @@ name: java-%i-%v
 display_name: "Java ${instance} ${version} ${current}"
 category: runtime
 description: "Java runtime environment (JVM)"
-versions:
-  from:
+variables:
+  binary:
     - "/usr/lib/jvm/${instance}-jre-bin-${version}/bin/java"
     - "/usr/lib/jvm/${instance}-jdk-bin-${version}/bin/java"
     - "/usr/lib/jvm/${instance}-bin-${version}/bin/java"
     - "/usr/lib/jvm/${instance}-${version}/bin/java"
     - "/usr/lib/jvm/java-${version}-${instance}/bin/java"
     - "/usr/lib64/jvm/java-${version}-${instance}/bin/java"
+versions:
   current_from: "/usr/bin/java"
 preflight:
   binary: { type: binary, path: "${binary}" }

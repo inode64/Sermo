@@ -844,12 +844,12 @@ matching app, such as `apps: ["postgres-${version}"]` or
 `apps: ["php-fpm${version}"]`, can materialize from that app's
 `variables.binary` or `versions.from`.
 
-`versions.from` may be a string or a candidate list. For app and library
-templates that discover from `versions.from` and do not declare
-`variables.binary`, the materialized document binds `${binary}` to the path that
-matched. This keeps profiles such as Java readable: discovery can enumerate
-several distro-specific JVM layouts without repeating the same candidates in
-`variables.binary`.
+`variables.binary` may be a string or a candidate list. Use it when the
+versioned path is also the runtime executable that preflight and version checks
+should probe. For app and library templates that discover from `versions.from`
+and do not declare `variables.binary`, the materialized document binds
+`${binary}` to the path that matched; keep `versions.from` for discovery sources
+that are not the runtime executable.
 
 When discovery belongs to the daemon instead — for example the instances are
 configuration files or init scripts and the application binary is generic — put
@@ -937,7 +937,11 @@ marker-less path or declared with `versions.current_from` (for example
 otherwise it becomes empty before metadata is trimmed. This lets
 `display_name: "PHP ${version} ${current}"` render as `PHP 8.2 current` for the
 active version and `PHP 8.3` for the others without running version commands
-during config load. Symlinks are resolved before comparison.
+during config load. Symlinks are resolved before comparison. App/service
+inventory commands may still add the `current` label at inspection time when an
+active-slot wrapper reports the same `version_short` as one materialized
+version, which keeps wrappers such as Gentoo Java generic without `from_file`
+catalog metadata.
 
 ```yaml
 kind: app
