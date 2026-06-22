@@ -71,8 +71,8 @@ Batch already landed in the catalog (start/restart/reload gate):
 - [x] Backup: `bacula-*`, `bareos-*`
 - [x] Observability / tunnels: `prometheus`, `alloy`, `loki`, `influxdb`,
       `filebeat`, `cloudflared`, `nebula`, `nebula-%i`
-- [x] Other: `php-fpm%v`, `slapd`, `smbd`, `nmbd`, `cups`, `varnishd`,
-      `containerd`, `openvpn-%i`
+- [x] Other: `php-fpm`, `slapd`, `smbd`, `nmbd`, `cups`, `varnishd`,
+      `containerd`, `openvpn`
 
 Still missing `preflight.config` where no reliable offline check exists (see
 catalog audit / profile-author notes): most hardware helpers, JVM stacks without

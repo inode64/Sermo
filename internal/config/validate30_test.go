@@ -1355,6 +1355,31 @@ checks:
 	mustHave(t, issues, "variables.empty-path.from_file is required")
 }
 
+func TestValidateVersionsCurrentFromSpecs(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/java.yml": `
+kind: app
+name: java-%i-%v
+versions:
+  current_from:
+    - ""
+    - { path: /usr/lib/jvm/static/bin/java }
+    - 42
+preflight:
+  binary: { type: binary, path: "${binary}" }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	mustHave(t, issues, "versions.current_from[0] must be a non-empty path string")
+	mustHave(t, issues, "versions.current_from[1] must be a path string or list of path strings")
+	mustHave(t, issues, "versions.current_from[2] must be a path string or list of path strings")
+}
+
 func TestValidateFromFileVariablePathReferences(t *testing.T) {
 	issues := validateService(t, `
 kind: service

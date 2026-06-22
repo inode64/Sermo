@@ -9,6 +9,9 @@ service:
   openrc: ["nebula.${instance}"]
 apps: ["nebula"]
 
+versions:
+  from: "/etc/nebula/${instance}.yml"
+
 variables:
   config: "/etc/nebula/${instance}.yml"
   # Probe the node's own lighthouse/listen port; the default is 4242/udp.
