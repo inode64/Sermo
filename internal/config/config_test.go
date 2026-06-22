@@ -4854,6 +4854,12 @@ func TestVariableFromFileExtraction(t *testing.T) {
 	if err := os.WriteFile(tomcatConf, []byte(`<Connector port="8081" protocol="HTTP/1.1"/>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	nebulaConf := filepath.Join(root, "nebula.yml")
+	if err := os.WriteFile(nebulaConf, []byte(`static_host_map:
+  "172.31.18.1": ["178.33.30.216:4243"]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	catalogDir := filepath.Join(root, "catalog", "services")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
@@ -4875,6 +4881,7 @@ func TestVariableFromFileExtraction(t *testing.T) {
 	}
 	enable("myvpn", "vpn")
 	enable("mycat", "cat")
+	enable("mynb", "nebula")
 	enable("mydfl", "dfl")
 	write("vpn.yml", fmt.Sprintf(`
 kind: daemon
@@ -4896,6 +4903,23 @@ variables:
 checks:
   tcp: { type: tcp, host: 127.0.0.1, port: "${port}", timeout: 2s }
 `, tomcatConf))
+	write("nebula.yml", fmt.Sprintf(`
+kind: daemon
+name: nebula
+service: nebula
+variables:
+  config: "%s"
+  host:
+    from_file: "${config}"
+    pattern: '(?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"\[?([^"\]]+)\]?:(?:\d+)"'
+    default: 127.0.0.1
+  port:
+    from_file: "${config}"
+    pattern: '(?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"[^"]+:(\d+)"'
+    default: 4242
+checks:
+  tcp: { type: tcp, host: "${host}", port: "${port}", timeout: 2s }
+`, nebulaConf))
 	write("dfl.yml", `
 kind: daemon
 name: dfl
@@ -4922,6 +4946,7 @@ defaults: { policy: { cooldown: 5m } }
 	for _, tc := range []struct{ name, want string }{
 		{"myvpn", "1195"},
 		{"mycat", "8081"},
+		{"mynb", "4243"},
 		{"mydfl", "1194"},
 	} {
 		resolved, errs := cfg.Resolve(tc.name)
@@ -4930,6 +4955,11 @@ defaults: { policy: { cooldown: 5m } }
 		}
 		if got := cfgval.String(nested(t, resolved.Tree, "checks", "tcp")["port"]); got != tc.want {
 			t.Errorf("%s: port = %q, want %q", tc.name, got, tc.want)
+		}
+		if tc.name == "mynb" {
+			if got := cfgval.String(nested(t, resolved.Tree, "checks", "tcp")["host"]); got != "178.33.30.216" {
+				t.Errorf("%s: host = %q, want 178.33.30.216", tc.name, got)
+			}
 		}
 	}
 }
