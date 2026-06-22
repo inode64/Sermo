@@ -159,6 +159,15 @@ app addressed by its canonical name, and `version_from` chains must not cycle.
 This is not an operational dependency and does not inject preflight checks into
 services.
 
+Catalog apps may also declare `version_match` to prove the identity of a
+compatibility binary before considering the app installed. The matcher is
+evaluated against the combined stdout/stderr of the app's `version` command and
+supports `contains`, `excludes` and `regex` string matchers. A failed
+`version_match` marks the app as not installed, even when the binary exists; this
+lets MariaDB use an older `/usr/sbin/mysqld` fallback without also showing the
+MySQL catalog app on MariaDB hosts. When a service links the app through
+`apps:`, the matcher is copied into that app's namespaced version preflight.
+
 Catalog and service documents may declare `aliases: [...]`, a list of alternate
 simple names. Aliases are metadata: they resolve names but never merge into the
 runtime service body. Catalog aliases let `uses:` accept distro spellings such

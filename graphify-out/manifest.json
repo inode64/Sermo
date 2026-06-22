@@ -600,19 +600,19 @@
     "semantic_hash": "eca60193697b4b9cec21e83909522bd9"
   },
   "internal/checks/build.go": {
-    "mtime": 1782108383.0693326,
-    "ast_hash": "751950b326e24ba519d4d08930990f72",
+    "mtime": 1782118962.5161297,
+    "ast_hash": "02663b3c4fa21d023e9662620799e8bf",
     "semantic_hash": ""
   },
   "internal/checks/build_test.go": {
-    "mtime": 1782108383.0693326,
-    "ast_hash": "84b548f706a9bdad16cb326dc06012c4",
+    "mtime": 1782119030.5796685,
+    "ast_hash": "b1601f03d9894a2356f4d0385438da37",
     "semantic_hash": ""
   },
   "internal/checks/build_types_test.go": {
-    "mtime": 1782108383.0693326,
-    "ast_hash": "6f5f5b8ebcb5a50a7adc4ae4bbe6c71a",
-    "semantic_hash": "6f5f5b8ebcb5a50a7adc4ae4bbe6c71a"
+    "mtime": 1782119030.639668,
+    "ast_hash": "7583a3372010dc3db1b3654ded08718b",
+    "semantic_hash": ""
   },
   "internal/checks/cert.go": {
     "mtime": 1782108383.0693326,
@@ -630,13 +630,13 @@
     "semantic_hash": "394cb5fc6ac6f90268a39d78f67190a2"
   },
   "internal/checks/check.go": {
-    "mtime": 1782108383.0693326,
-    "ast_hash": "9d6923326e2e0bdc9358414b19e16d00",
+    "mtime": 1782118962.632129,
+    "ast_hash": "d6572b8711c542d1b41d78be80869bae",
     "semantic_hash": ""
   },
   "internal/checks/checks_test.go": {
-    "mtime": 1782108383.0693326,
-    "ast_hash": "b427c690c4644d2333ecc8f37fc800e7",
+    "mtime": 1782119030.5236688,
+    "ast_hash": "8b3f127593b4eb894ac282f6aca412ee",
     "semantic_hash": ""
   },
   "internal/checks/compare.go": {
@@ -1025,13 +1025,13 @@
     "semantic_hash": "6b34913fb4d85ea0bfa961e668480370"
   },
   "internal/checks/typeinfo.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "deeebcabb7f8501b10cf11dbd18a8d58",
+    "mtime": 1782118962.4521303,
+    "ast_hash": "475b5f51e03f9dd92ddda1f97cf44c2b",
     "semantic_hash": ""
   },
   "internal/checks/types.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "5d675d91bf6d1c1e552f0e793f1a3137",
+    "mtime": 1782118962.5721295,
+    "ast_hash": "a9d66fd997dfea1ac89e9533ff98e934",
     "semantic_hash": ""
   },
   "internal/checks/version.go": {
@@ -1070,13 +1070,13 @@
     "semantic_hash": ""
   },
   "internal/cli/cli.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "7d930c2b79220e76310036e0292e0ba5",
+    "mtime": 1782115495.4232736,
+    "ast_hash": "f37bce747585483c033e4f8dd53b578b",
     "semantic_hash": ""
   },
   "internal/cli/cli_action_test.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "4ab0ab20c5c410262231a29a24aa2c2a",
+    "mtime": 1782115427.0357065,
+    "ast_hash": "5b7e61bf7ce03a0ecc81567fa4528f72",
     "semantic_hash": ""
   },
   "internal/cli/cli_config_test.go": {
@@ -1130,9 +1130,9 @@
     "semantic_hash": "643ebd56248e97f6dd3688da94523517"
   },
   "internal/cli/helpers.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "b96b757e24a6765dbcc02631a748c6a4",
-    "semantic_hash": "b96b757e24a6765dbcc02631a748c6a4"
+    "mtime": 1782132572.954279,
+    "ast_hash": "42420f7d6003cfc640d22c8b74089009",
+    "semantic_hash": ""
   },
   "internal/cli/helpers_test.go": {
     "mtime": 1782108383.0733325,
@@ -1140,14 +1140,14 @@
     "semantic_hash": "67dd55841b0a10fda4fe424651896fef"
   },
   "internal/cli/lock.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "07b83f8a17dba0639ad011f86c7f5214",
-    "semantic_hash": "07b83f8a17dba0639ad011f86c7f5214"
+    "mtime": 1782115340.1165953,
+    "ast_hash": "eab34e672252123c495c30f814c330c5",
+    "semantic_hash": ""
   },
   "internal/cli/monitor.go": {
-    "mtime": 1781682474.0593977,
-    "ast_hash": "af92119810e4ea91a68c45cdb8506772",
-    "semantic_hash": "af92119810e4ea91a68c45cdb8506772"
+    "mtime": 1782115311.6484327,
+    "ast_hash": "bb413615d38727987d2802a0c89d8513",
+    "semantic_hash": ""
   },
   "internal/cli/monitor_test.go": {
     "mtime": 1782108383.0733325,
@@ -1190,9 +1190,9 @@
     "semantic_hash": ""
   },
   "internal/cli/sla.go": {
-    "mtime": 1781682530.764119,
-    "ast_hash": "2c0cbb8b18dc2c3b652183ec4f37031b",
-    "semantic_hash": "2c0cbb8b18dc2c3b652183ec4f37031b"
+    "mtime": 1782115320.0203803,
+    "ast_hash": "6f1cde5237e241db3775e0ed53a8b165",
+    "semantic_hash": ""
   },
   "internal/cli/sla_test.go": {
     "mtime": 1782108383.0733325,
@@ -1250,13 +1250,13 @@
     "semantic_hash": "10cba139b5327f0d1e3635142fb3e72d"
   },
   "internal/config/catalog_audit_test.go": {
-    "mtime": 1782113525.266046,
-    "ast_hash": "ca00a2d07079a21b307283c1e5435b61",
+    "mtime": 1782132572.954279,
+    "ast_hash": "4517512fd358c03b51d7f5a10a584053",
     "semantic_hash": ""
   },
   "internal/config/config_test.go": {
-    "mtime": 1782108383.0733325,
-    "ast_hash": "8b0518b1e1efddeaf04fed37ee8db8ae",
+    "mtime": 1782132572.954279,
+    "ast_hash": "baea85b48dcb0aa71a5e1e50299dcfe4",
     "semantic_hash": ""
   },
   "internal/config/conn_validate_test.go": {
@@ -1310,7 +1310,7 @@
     "semantic_hash": "754af825db44ee517a789aaa33409134"
   },
   "internal/config/loader.go": {
-    "mtime": 1782108383.0773325,
+    "mtime": 1782129717.968344,
     "ast_hash": "66632b35fb3946fe0e96f5995a85fa7b",
     "semantic_hash": ""
   },
@@ -1325,8 +1325,8 @@
     "semantic_hash": "63dd41ce24ae25e345bd8e14b534d10c"
   },
   "internal/config/model.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "21b623a2fc3ece40e18b43ba36dba674",
+    "mtime": 1782129712.0959423,
+    "ast_hash": "2d477211929c17a9ebd4c1b38a24d2c9",
     "semantic_hash": ""
   },
   "internal/config/mount_test.go": {
@@ -1340,8 +1340,8 @@
     "semantic_hash": "2a3fbc74ccdc4d4e973fc1e19bcac324"
   },
   "internal/config/preflight_resolve.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "ab99f4dd765ac888eca89836608d424b",
+    "mtime": 1782118996.2759008,
+    "ast_hash": "5a5f94530c1a90ed5cdeaf43379fcba4",
     "semantic_hash": ""
   },
   "internal/config/reload_catalog_test.go": {
@@ -1350,8 +1350,8 @@
     "semantic_hash": "01d0a26a5c9e8fa2bf3ab4de63b59f2c"
   },
   "internal/config/resolve.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "989b06a67eb616218d62f4f8a5000312",
+    "mtime": 1782132572.954279,
+    "ast_hash": "e4797b4ae4da747b98c3437acacda40e",
     "semantic_hash": ""
   },
   "internal/config/resolve_clone_uses_test.go": {
@@ -1380,18 +1380,18 @@
     "semantic_hash": "e1ca86ef9c45c6e7409ea71a35244158"
   },
   "internal/config/validate.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "70f2c7a8a70d5d4919421fd8d3e4919e",
+    "mtime": 1782132572.954279,
+    "ast_hash": "8ce36a9c6e5ab4d2939dc68918b3df44",
     "semantic_hash": ""
   },
   "internal/config/validate30_test.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "d9acec23418c3e5e44befe3e2d984ef4",
+    "mtime": 1782132572.954279,
+    "ast_hash": "ec66a0d770fecef8b98a5b07a34d4bd9",
     "semantic_hash": ""
   },
   "internal/config/validate_checks.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "9ab9534864765a8d13bf57264060215b",
+    "mtime": 1782118996.3359003,
+    "ast_hash": "4dbc1fa0a045799f322a6cf340a88600",
     "semantic_hash": ""
   },
   "internal/config/validate_commands_test.go": {
@@ -1440,8 +1440,8 @@
     "semantic_hash": ""
   },
   "internal/config/validate_service.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "4c21569d6ca342a0477b0e9ae24996e6",
+    "mtime": 1782132572.954279,
+    "ast_hash": "7da076d8195ab8f3d2d017b422b4b160",
     "semantic_hash": ""
   },
   "internal/config/validate_util.go": {
@@ -1460,14 +1460,14 @@
     "semantic_hash": ""
   },
   "internal/config/variables.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "31ee2a8af211df7ec7720e0b1237046e",
-    "semantic_hash": "31ee2a8af211df7ec7720e0b1237046e"
+    "mtime": 1782132572.954279,
+    "ast_hash": "aaf6d7043fd2e94fcebed504367b44d1",
+    "semantic_hash": ""
   },
   "internal/config/versions.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "889a61a83ee4cd5a68f811599ce8700d",
-    "semantic_hash": "889a61a83ee4cd5a68f811599ce8700d"
+    "mtime": 1782132572.954279,
+    "ast_hash": "abd14cc0694efe60ac8e1b02500f8927",
+    "semantic_hash": ""
   },
   "internal/config/versions_test.go": {
     "mtime": 1781856933.0519392,
@@ -2105,13 +2105,13 @@
     "semantic_hash": "fccfcf472ffc9482f9bad758ab7afb7e"
   },
   "internal/control/target.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "fc90feec9de707ac30e4ad7b8517df6c",
+    "mtime": 1782132572.954279,
+    "ast_hash": "696a002a476c2f43031e399e5f59e624",
     "semantic_hash": ""
   },
   "internal/control/target_test.go": {
-    "mtime": 1782108383.0773325,
-    "ast_hash": "6119b365eb79ca1bd5cce3ea35232734",
+    "mtime": 1782132572.954279,
+    "ast_hash": "99bf33b25973ca42594424adde2269cc",
     "semantic_hash": ""
   },
   "internal/diag/checks.go": {
@@ -2420,13 +2420,13 @@
     "semantic_hash": "d1b9caf08d81502c1d628574fc3ce289"
   },
   "internal/process/discover.go": {
-    "mtime": 1782108383.0813324,
-    "ast_hash": "886873d2b01420a6891bf2f0eb807668",
+    "mtime": 1782117310.0717523,
+    "ast_hash": "c9cc106d0021ba0e1dbdb4c4e7152366",
     "semantic_hash": ""
   },
   "internal/process/discover_test.go": {
-    "mtime": 1782108383.0813324,
-    "ast_hash": "1d027c00f29817e960437c4b00835522",
+    "mtime": 1782117395.5592456,
+    "ast_hash": "4e82aed75e695c94b76c47d613c7e0a8",
     "semantic_hash": ""
   },
   "internal/process/killpolicy.go": {
@@ -2440,8 +2440,8 @@
     "semantic_hash": "ed15a44a5c8ac3023226357e8e5836d4"
   },
   "internal/process/model.go": {
-    "mtime": 1782108383.0813324,
-    "ast_hash": "5495160ff54048d65908cf6de1db7ae3",
+    "mtime": 1782117497.2185383,
+    "ast_hash": "199ef49f9d8e1cca76782492db7d1143",
     "semantic_hash": ""
   },
   "internal/process/procfs.go": {
@@ -3189,11 +3189,6 @@
     "ast_hash": "99dd86fb717a91f5ff2af07e16696495",
     "semantic_hash": ""
   },
-  "catalog/apps/openvpn-%i.yml": {
-    "mtime": 1782108383.0573328,
-    "ast_hash": "053ad8ca96e25a63d3e48a2a79771cb7",
-    "semantic_hash": ""
-  },
   "catalog/apps/openvpn.yml": {
     "mtime": 1782108383.0573328,
     "ast_hash": "d3dd1060f15b02730582977e126e7811",
@@ -3455,8 +3450,8 @@
     "semantic_hash": ""
   },
   "catalog/apps/tuned.yml": {
-    "mtime": 1782108383.0573328,
-    "ast_hash": "fc4e2bd575f29dc821a94f3f7506ad6c",
+    "mtime": 1782136353.3271484,
+    "ast_hash": "d2aed641b81c39d4f6233aad625dba9b",
     "semantic_hash": ""
   },
   "catalog/apps/udisks2.yml": {
@@ -3610,8 +3605,8 @@
     "semantic_hash": ""
   },
   "catalog/services/apache.yml": {
-    "mtime": 1782108383.0573328,
-    "ast_hash": "2c381753ade0629a27b46337b9146773",
+    "mtime": 1782115362.4441137,
+    "ast_hash": "3f80c75454e222da3b0d1cd754df5f7b",
     "semantic_hash": ""
   },
   "catalog/services/apcsmart.yml": {
@@ -4004,16 +3999,6 @@
     "ast_hash": "2ac402155308b6aca5e549609e4df719",
     "semantic_hash": ""
   },
-  "catalog/services/openvpn-%i.yml": {
-    "mtime": 1782111913.536612,
-    "ast_hash": "105583f94852a73fd4da9a3d5230c56c",
-    "semantic_hash": ""
-  },
-  "catalog/services/openvpn.yml": {
-    "mtime": 1781504015.1705847,
-    "ast_hash": "df6f14e2a14da609672d77526bec0b40",
-    "semantic_hash": ""
-  },
   "catalog/services/ovs-vswitchd.yml": {
     "mtime": 1782109207.1338432,
     "ast_hash": "69b750c9e2a98ed7369dc032a2d4afbe",
@@ -4027,11 +4012,6 @@
   "catalog/services/ovsdb-server.yml": {
     "mtime": 1782109207.2898424,
     "ast_hash": "2b0591e32ded7cec4f43e5f4c8a3be49",
-    "semantic_hash": ""
-  },
-  "catalog/services/php-fpm%v.yml": {
-    "mtime": 1782108383.0613327,
-    "ast_hash": "84c94f0ff1bf83dca3acaa5632b1765a",
     "semantic_hash": ""
   },
   "catalog/services/pmcd.yml": {
@@ -4234,14 +4214,9 @@
     "ast_hash": "088d3cd541453238e6f59073968422c4",
     "semantic_hash": ""
   },
-  "catalog/services/tomcat-%v.yml": {
-    "mtime": 1781598581.0626962,
-    "ast_hash": "5df98c193fce223512c8a87abace367f",
-    "semantic_hash": ""
-  },
   "catalog/services/tuned.yml": {
-    "mtime": 1781655120.3695328,
-    "ast_hash": "2edd6a7f0d56dc59411666e6ec6b5c8b",
+    "mtime": 1782136387.0298054,
+    "ast_hash": "0b1ccc9960659d2579c2da779f58e844",
     "semantic_hash": ""
   },
   "catalog/services/udisks2.yml": {
@@ -4315,28 +4290,28 @@
     "semantic_hash": ""
   },
   "docs/configuration.md": {
-    "mtime": 1782108383.0613327,
-    "ast_hash": "bcfd92ef9cfb252ca1ff5584dd99da4e",
+    "mtime": 1782119162.8627748,
+    "ast_hash": "8230cfbd2f7004e2501852ccba4a2c2d",
     "semantic_hash": ""
   },
   "docs/daemons.md": {
-    "mtime": 1782108383.0613327,
-    "ast_hash": "c16aa37cfa1c8d6549b73024a1c4c73d",
+    "mtime": 1782132572.954279,
+    "ast_hash": "2941d735b9bc56a2fcdce538330f8912",
     "semantic_hash": ""
   },
   "docs/rules.md": {
-    "mtime": 1782108383.0613327,
-    "ast_hash": "6b57d6301517eab5727f68d1aefe4391",
+    "mtime": 1782119127.407014,
+    "ast_hash": "3fc0763a8cae7260c1d0545be129d0f2",
     "semantic_hash": ""
   },
   "docs/safety.md": {
-    "mtime": 1782108383.0653327,
-    "ast_hash": "bfc2ba87a6661f1d8cec59658095233f",
+    "mtime": 1782119127.5190132,
+    "ast_hash": "e65b1f08f2ee2a00c701c171b5b159bb",
     "semantic_hash": ""
   },
   "docs/sermo-all.yml": {
-    "mtime": 1782108383.0653327,
-    "ast_hash": "9aca30498c92dbd66ad11d28cf306ef6",
+    "mtime": 1782119127.576056,
+    "ast_hash": "2b88aca7b713cf98784a3ab55c192f1e",
     "semantic_hash": ""
   },
   "docs/webui-representation.md": {
@@ -4565,8 +4540,8 @@
     "semantic_hash": ""
   },
   "internal/app/webbackend_mounts_test.go": {
-    "mtime": 1782108383.0693326,
-    "ast_hash": "7fc0bb97cc9208534f0e43075a2c1f86",
+    "mtime": 1782132572.954279,
+    "ast_hash": "903470e58c12f73369473889d50a7c9a",
     "semantic_hash": ""
   },
   "catalog/apps/upower.yml": {
@@ -4580,7 +4555,7 @@
     "semantic_hash": ""
   },
   "a.sh": {
-    "mtime": 1782110240.9260373,
+    "mtime": 1782132572.962005,
     "ast_hash": "1468e9b797b31e012af7411629c32e75",
     "semantic_hash": ""
   },
@@ -4605,8 +4580,68 @@
     "semantic_hash": ""
   },
   "catalog/services/smb.yml": {
-    "mtime": 1782113812.5061085,
-    "ast_hash": "630f26f38c45c2e96ee6eb93a54648d1",
+    "mtime": 1782132572.954279,
+    "ast_hash": "1db2e1802b5f2db0fc82b3e5c6b4d46d",
+    "semantic_hash": ""
+  },
+  "internal/config/enableif.go": {
+    "mtime": 1782132572.962005,
+    "ast_hash": "cb423da1de89659999d501967f72521a",
+    "semantic_hash": ""
+  },
+  "internal/config/probe.go": {
+    "mtime": 1782132572.962005,
+    "ast_hash": "c7fe21d61cbc1aaec6f24444d8a628a2",
+    "semantic_hash": ""
+  },
+  "catalog/services/openvpn%s%i.yml": {
+    "mtime": 1782132988.90103,
+    "ast_hash": "36a542c65570c34da55f5a72256a80bc",
+    "semantic_hash": ""
+  },
+  "catalog/services/openvpn-client-%i.yml": {
+    "mtime": 1782132572.962005,
+    "ast_hash": "b124af908960f7e740ad148b28f59417",
+    "semantic_hash": ""
+  },
+  "catalog/services/openvpn-server-%i.yml": {
+    "mtime": 1782132572.962005,
+    "ast_hash": "2ebe8e46ac4cb66f2add02f4e07a0c83",
+    "semantic_hash": ""
+  },
+  "catalog/services/php-fpm%v%s%i.yml": {
+    "mtime": 1782132572.962005,
+    "ast_hash": "66f917e8a25f02f2a5642ae61963308f",
+    "semantic_hash": ""
+  },
+  "catalog/services/tomcat-%v%s%i.yml": {
+    "mtime": 1782132572.962005,
+    "ast_hash": "69c030ee4903cd017072b3fcd4e70fe3",
+    "semantic_hash": ""
+  },
+  "catalog/apps/cockpit.yml": {
+    "mtime": 1782136537.597823,
+    "ast_hash": "7c3f7c6f7f0415139c20c23a8e8e3f03",
+    "semantic_hash": ""
+  },
+  "catalog/apps/epmd.yml": {
+    "mtime": 1782136537.6578224,
+    "ast_hash": "1f91a2560380c4732e66e50a343de3e0",
+    "semantic_hash": ""
+  },
+  "catalog/services/cockpit.yml": {
+    "mtime": 1782136424.4186368,
+    "ast_hash": "93422a887bade9a5ce385ec5dfffb90e",
+    "semantic_hash": ""
+  },
+  "catalog/services/epmd.yml": {
+    "mtime": 1782136353.1311498,
+    "ast_hash": "8f478fda76962a8b42880e81fc41b951",
+    "semantic_hash": ""
+  },
+  "reports/remote-services-20260622-150112.md": {
+    "mtime": 1782133919.5037515,
+    "ast_hash": "26af3d3e05a49f7e038ff6ed3ce70a16",
     "semantic_hash": ""
   }
 }

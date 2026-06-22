@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"sermo/internal/cfgval"
+	"sermo/internal/checks"
 	"sermo/internal/process"
 )
 
@@ -212,6 +213,7 @@ func validateDocuments(cfg *Config) []Issue {
 		validateFromFileVariables("variables", doc.Body["variables"], addDoc)
 		issues = append(issues, validateBinaryVariables(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
+		issues = append(issues, validateVersionMatch(doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
 		case "":
@@ -301,6 +303,24 @@ func documentAliasList(raw any) ([]string, bool) {
 	default:
 		return nil, false
 	}
+}
+
+func validateVersionMatch(doc *Document, scope string) []Issue {
+	raw, present := doc.Body["version_match"]
+	if !present {
+		return nil
+	}
+	var issues []Issue
+	if doc.Kind != kindApp {
+		issues = append(issues, Issue{Scope: scope, Msg: "version_match is only supported on app catalog documents"})
+	}
+	if _, warn := checks.ParseVersionMatcher(raw); warn != "" {
+		issues = append(issues, Issue{Scope: scope, Msg: "version_match " + warn})
+	}
+	if doc.Kind == kindApp && checks.ReservedCommandEntry(doc.Body, "version") == nil {
+		issues = append(issues, Issue{Scope: scope, Msg: "version_match requires a version command"})
+	}
+	return issues
 }
 
 func validateVersionFrom(cfg *Config, doc *Document, scope string) []Issue {

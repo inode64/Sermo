@@ -325,6 +325,7 @@ type commandCheck struct {
 	expectExit []int
 	stdout     OutputMatcher
 	stderr     OutputMatcher
+	version    VersionMatcher
 	exports    []commandExport
 	analyzer   *outputAnalyzer
 	onChange   bool
@@ -351,6 +352,9 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	}
 	if ok, detail := c.stderr.Match(res.Stderr); !ok {
 		return c.result(false, fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail), start)
+	}
+	if ok, detail := c.version.Match(VersionOutput(res.Stdout, res.Stderr)); !ok {
+		return c.result(false, fmt.Sprintf("exit %d; version %s", res.ExitCode, detail), start)
 	}
 	if c.analyzer.Active() {
 		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {

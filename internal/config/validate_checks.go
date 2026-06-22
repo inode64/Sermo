@@ -288,6 +288,15 @@ func validateOutputExpectation(prefix, field string, v any, add addFunc) {
 	}
 }
 
+func validateVersionMatcherField(prefix string, v any, add addFunc) {
+	if v == nil {
+		return
+	}
+	if _, warn := checks.ParseVersionMatcher(v); warn != "" {
+		add("%s.version_match %s", prefix, warn)
+	}
+}
+
 func isExpectExit(raw any) bool {
 	_, ok := cfgval.IntList(raw)
 	return ok
@@ -661,6 +670,7 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		}
 		validateOutputExpectation(path, "expect_stdout", entry["expect_stdout"], add)
 		validateOutputExpectation(path, "expect_stderr", entry["expect_stderr"], add)
+		validateVersionMatcherField(path, entry["version_match"], add)
 		validateAnalyze(path, entry, add)
 		validateCommandExport(path, entry, add)
 	case "service":
