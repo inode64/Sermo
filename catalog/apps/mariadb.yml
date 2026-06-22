@@ -2,10 +2,13 @@ kind: app
 name: mariadb
 display_name: "MariaDB"
 category: database
+version_match: { contains: MariaDB }
 variables:
   binary:
     - /usr/sbin/mariadbd
     - /usr/bin/mariadbd
+    - /usr/sbin/mysqld
+    - /usr/bin/mysqld
   mysqld_binary:
     - /usr/sbin/mysqld
     - /usr/bin/mysqld

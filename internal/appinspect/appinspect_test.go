@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"sermo/internal/config"
@@ -175,6 +176,12 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	optional := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
 	if !optional.OK || optional.Status != "ok" {
 		t.Fatalf("optional Inspect() = %+v, want ok with unknown version", optional)
+	}
+
+	resolved.Tree["version_match"] = map[string]any{"contains": "Webd"}
+	matched := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
+	if matched.Installed || !strings.HasPrefix(matched.Status, "not installed: version ") {
+		t.Fatalf("version_match Inspect() = %+v, want identity failure despite optional version", matched)
 	}
 }
 

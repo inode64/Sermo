@@ -779,6 +779,14 @@ func (c *Config) expandAppsChain(tree map[string]any, chain []string) []string {
 				errs = append(errs, fmt.Sprintf("apps preflight key %q would overwrite an existing preflight check; rename one of the checks", key))
 				continue
 			}
+			if checkName == "version" {
+				if match, present := resolved.Tree["version_match"]; present {
+					if checkMap, ok := check.(map[string]any); ok {
+						check = maps.Clone(checkMap)
+						check.(map[string]any)["version_match"] = match
+					}
+				}
+			}
 			preflight[key] = check
 		}
 	}

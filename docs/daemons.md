@@ -1068,6 +1068,14 @@ version. The app still checks its own `variables.binary` and health;
 `version_from` only
 sets `version`/`version_short` when the app has no local version result.
 
+Catalog apps can use `version_match` when a binary name is shared by compatible
+implementations. It runs against the combined stdout/stderr of the local
+`version` command and supports `contains`, `excludes` and `regex`. If it fails,
+the app is treated as not installed rather than as an installed app with a bad
+version. For example, MariaDB accepts `mysqld` only when the output contains
+`MariaDB`, while MySQL excludes that token so MariaDB's compatibility `mysqld`
+does not appear as MySQL.
+
 `version` is the raw first line the version command prints (e.g. `nginx version:
 nginx/1.30.2`); `version_short` reduces it to just the numeric version and at
 most the patchlevel (`1.30.2`), taking the first `major.minor[.patch]` token and

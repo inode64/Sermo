@@ -459,6 +459,7 @@ func validateCommands(tree map[string]any, add addFunc) {
 		}
 		validateOutputExpectation("commands."+name, "expect_stdout", entry["expect_stdout"], add)
 		validateOutputExpectation("commands."+name, "expect_stderr", entry["expect_stderr"], add)
+		validateVersionMatcherField("commands."+name, entry["version_match"], add)
 		validateCommandExport("commands."+name, entry, add)
 	}
 }

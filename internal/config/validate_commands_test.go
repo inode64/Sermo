@@ -19,6 +19,7 @@ func TestValidateCommandsExpectations(t *testing.T) {
 			"expect_exit":   "nope",                                   // not an int
 			"expect_stdout": map[string]any{"op": "=>", "value": "1"}, // invalid op
 			"expect_stderr": 42,                                       // wrong shape
+			"version_match": map[string]any{"rejects": "MariaDB"},
 		},
 	}}
 	validateCommands(tree, add)
@@ -29,6 +30,7 @@ func TestValidateCommandsExpectations(t *testing.T) {
 		"commands.version expect_exit must be an integer or a non-empty list of integers",
 		"commands.version.expect_stdout op",
 		"commands.version.expect_stderr must be a string substring or an {op, value} mapping",
+		"commands.version.version_match unknown key",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("missing issue %q in:\n%s", want, joined)
@@ -48,6 +50,7 @@ func TestValidateCommandsValid(t *testing.T) {
 			"expect_exit":   []any{0, 1},
 			"expect_stdout": "v1.",
 			"expect_stderr": map[string]any{"op": "==", "value": ""},
+			"version_match": map[string]any{"excludes": "MariaDB"},
 			"export": map[string]any{
 				"raw": map[string]any{"from": "stdout", "trim": true, "regex": `([0-9.]+)`, "default": "unknown"},
 			},

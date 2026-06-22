@@ -541,6 +541,10 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check expect_stderr " + warn
 	}
+	version, warn := ParseVersionMatcher(entry["version_match"])
+	if warn != "" {
+		return nil, "command check version_match " + warn
+	}
 	analyzer, warn := parseAnalyzer(entry["analyze"])
 	if warn != "" {
 		return nil, "command check " + warn
@@ -549,7 +553,7 @@ func buildCommandCheck(b base, entry map[string]any, runner execx.Runner) (Check
 	if warn != "" {
 		return nil, "command check " + warn
 	}
-	c := commandCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry["user"]), expectExit: expect, stdout: stdout, stderr: stderr, exports: exports, analyzer: analyzer}
+	c := commandCheck{base: b, runner: runner, argv: argv, user: cfgval.String(entry["user"]), expectExit: expect, stdout: stdout, stderr: stderr, version: version, exports: exports, analyzer: analyzer}
 	if c.onChange = cfgval.Bool(entry["on_change"]); c.onChange {
 		c.state = &cmdState{}
 	}

@@ -71,6 +71,61 @@ func TestOutputMatcherMatch(t *testing.T) {
 	}
 }
 
+func TestParseVersionMatcher(t *testing.T) {
+	cases := []struct {
+		name      string
+		in        any
+		wantWarn  bool
+		notActive bool
+	}{
+		{name: "absent", in: nil, notActive: true},
+		{name: "contains", in: map[string]any{"contains": "MariaDB"}},
+		{name: "excludes", in: map[string]any{"excludes": "MariaDB"}},
+		{name: "regex", in: map[string]any{"regex": `(?i)\bmysql\b`}},
+		{name: "bad regex", in: map[string]any{"regex": "["}, wantWarn: true, notActive: true},
+		{name: "unknown key", in: map[string]any{"rejects": "MariaDB"}, wantWarn: true, notActive: true},
+		{name: "wrong type", in: "MariaDB", wantWarn: true, notActive: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, warn := ParseVersionMatcher(c.in)
+			if (warn != "") != c.wantWarn {
+				t.Fatalf("warn = %q, wantWarn %v", warn, c.wantWarn)
+			}
+			if m.Active() == c.notActive {
+				t.Errorf("Active() = %v, want %v", m.Active(), !c.notActive)
+			}
+		})
+	}
+}
+
+func TestVersionMatcherMatch(t *testing.T) {
+	cases := []struct {
+		name   string
+		m      VersionMatcher
+		output string
+		want   bool
+	}{
+		{"inactive matches anything", VersionMatcher{}, "", true},
+		{"contains passes", VersionMatcher{Contains: []string{"MariaDB"}}, "mysqld Ver 11.8.5-MariaDB", true},
+		{"contains fails", VersionMatcher{Contains: []string{"MariaDB"}}, "mysqld Ver 8.0.36", false},
+		{"excludes passes", VersionMatcher{Excludes: []string{"MariaDB"}}, "mysqld Ver 8.0.36", true},
+		{"excludes fails", VersionMatcher{Excludes: []string{"MariaDB"}}, "mysqld Ver 11.8.5-MariaDB", false},
+		{"empty output fails active matcher", VersionMatcher{Excludes: []string{"MariaDB"}}, "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ok, detail := c.m.Match(c.output)
+			if ok != c.want {
+				t.Errorf("Match(%q) = (%v, %q), want %v", c.output, ok, detail, c.want)
+			}
+			if !ok && detail == "" {
+				t.Error("a failed match must return a non-empty detail")
+			}
+		})
+	}
+}
+
 func TestCommandCheckOutputExpectations(t *testing.T) {
 	mk := func(res execx.Result, expectExit []int, stdout, stderr OutputMatcher) commandCheck {
 		return commandCheck{
@@ -112,6 +167,13 @@ func TestCommandCheckOutputExpectations(t *testing.T) {
 		c = mk(execx.Result{ExitCode: 0, Stderr: "5\n"}, []int{0}, OutputMatcher{}, OutputMatcher{Op: "==", Value: "0"})
 		if res := c.Run(context.Background()); res.OK {
 			t.Error("non-matching stderr should fail")
+		}
+	})
+	t.Run("version_match excludes compatibility identity", func(t *testing.T) {
+		c := mk(execx.Result{ExitCode: 0, Stdout: "mysqld Ver 11.8.5-MariaDB\n"}, []int{0}, OutputMatcher{}, OutputMatcher{})
+		c.version = VersionMatcher{Excludes: []string{"MariaDB"}}
+		if res := c.Run(context.Background()); res.OK {
+			t.Error("MariaDB version output should fail a MySQL excludes matcher")
 		}
 	})
 }

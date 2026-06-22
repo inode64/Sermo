@@ -282,6 +282,149 @@ func TestListFiltersMissingBinaries(t *testing.T) {
 	}
 }
 
+func TestListVersionMatchDistinguishesMySQLAndMariaDB(t *testing.T) {
+	tests := []struct {
+		name         string
+		versionByBin map[string]string
+		wantApps     string
+		wantServices string
+		wantRejected string
+	}{
+		{
+			name:         "old MariaDB only has mysqld",
+			versionByBin: map[string]string{"mysqld": "/usr/sbin/mysqld Ver 10.11.11-MariaDB for Linux\n"},
+			wantApps:     "mariadb",
+			wantServices: "mariadb",
+			wantRejected: "mysql",
+		},
+		{
+			name:         "new MariaDB has mariadbd and compatibility mysqld",
+			versionByBin: map[string]string{"mariadbd": "/usr/sbin/mariadbd Ver 11.8.5-MariaDB for Linux\n", "mysqld": "/usr/sbin/mysqld Ver 11.8.5-MariaDB for Linux\n"},
+			wantApps:     "mariadb",
+			wantServices: "mariadb",
+			wantRejected: "mysql",
+		},
+		{
+			name:         "Oracle MySQL mysqld is not MariaDB",
+			versionByBin: map[string]string{"mysqld": "/usr/sbin/mysqld  Ver 8.4.6 for Linux on x86_64 (MySQL Community Server - GPL)\n"},
+			wantApps:     "mysql",
+			wantServices: "mysql",
+			wantRejected: "mariadb",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			binDir := filepath.Join(root, "bin")
+			catalogDir := filepath.Join(root, "catalog")
+			servicesDir := filepath.Join(root, "services")
+			for _, dir := range []string{binDir, filepath.Join(catalogDir, "apps"), filepath.Join(catalogDir, "services"), servicesDir} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			pathFor := func(name string) string { return filepath.Join(binDir, name) }
+			for name := range tc.versionByBin {
+				if err := os.WriteFile(pathFor(name), []byte("x"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			files := map[string]string{
+				"catalog/apps/mariadb.yml": fmt.Sprintf(`kind: app
+name: mariadb
+display_name: "MariaDB"
+version_match: { contains: MariaDB }
+variables:
+  binary: [%q, %q]
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"] }
+`, pathFor("mariadbd"), pathFor("mysqld")),
+				"catalog/apps/mysql.yml": fmt.Sprintf(`kind: app
+name: mysql
+display_name: "MySQL"
+version_match: { excludes: MariaDB }
+variables:
+  binary: %q
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"] }
+`, pathFor("mysqld")),
+				"catalog/services/mariadb.yml": `kind: daemon
+name: mariadb
+display_name: "MariaDB"
+service: { systemd: [mariadb] }
+apps: [mariadb]
+`,
+				"catalog/services/mysql.yml": `kind: daemon
+name: mysql
+display_name: "MySQL"
+service: { systemd: [mysql] }
+apps: [mysql]
+`,
+				"sermo.yml": "engine: { backend: systemd }\n" +
+					"paths:\n  catalog: [" + catalogDir + "]\n  services: [" + servicesDir + "]\n  runtime: /run/sermo\n" +
+					"defaults:\n  policy: { cooldown: 5m }\n",
+			}
+			for rel, content := range files {
+				path := filepath.Join(root, rel)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			cfg, err := config.Load(filepath.Join(root, "sermo.yml"))
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+
+			runner := fakeRunner{byCommand: map[string]execx.Result{}}
+			for name, output := range tc.versionByBin {
+				runner.byCommand[commandKey(pathFor(name), "--version")] = execx.Result{Stdout: output, ExitCode: 0}
+			}
+
+			apps := List(context.Background(), runner, cfg, config.CategoryApp, false)
+			if got := strings.Join(reportNames(apps), ","); got != tc.wantApps {
+				t.Fatalf("apps = %s, want %s; reports=%+v", got, tc.wantApps, apps)
+			}
+			services := List(context.Background(), runner, cfg, config.CategoryService, false, WithOptionalVersion())
+			if got := strings.Join(reportNames(services), ","); got != tc.wantServices {
+				t.Fatalf("services = %s, want %s; reports=%+v", got, tc.wantServices, services)
+			}
+
+			allApps := reportsByName(List(context.Background(), runner, cfg, config.CategoryApp, true))
+			rejected := allApps[tc.wantRejected]
+			if rejected.Installed || !strings.HasPrefix(rejected.Status, "not installed: version ") {
+				t.Fatalf("rejected app %q report = %+v, want version identity rejection", tc.wantRejected, rejected)
+			}
+			if tc.name == "new MariaDB has mariadbd and compatibility mysqld" {
+				if got, want := allApps["mariadb"].Binary, pathFor("mariadbd"); got != want {
+					t.Fatalf("new MariaDB binary = %q, want official %q", got, want)
+				}
+			}
+		})
+	}
+}
+
+func reportNames(reports []Report) []string {
+	names := make([]string, 0, len(reports))
+	for _, report := range reports {
+		names = append(names, report.Name)
+	}
+	return names
+}
+
+func reportsByName(reports []Report) map[string]Report {
+	out := make(map[string]Report, len(reports))
+	for _, report := range reports {
+		out[report.Name] = report
+	}
+	return out
+}
+
 func TestListAppVersionFromProvider(t *testing.T) {
 	root := t.TempDir()
 	binDir := filepath.Join(root, "bin")
