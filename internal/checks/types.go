@@ -483,6 +483,45 @@ func (c fileCheck) Run(_ context.Context) Result {
 	return res
 }
 
+// lockfileCheck passes when any configured candidate exists and is a regular
+// file. It is for runtime lock artifacts created by the monitored service.
+type lockfileCheck struct {
+	base
+	paths []string
+}
+
+func (c lockfileCheck) Run(_ context.Context) Result {
+	start := time.Now()
+	if len(c.paths) == 0 {
+		return c.result(false, "lockfile check has no path candidates", start)
+	}
+	var failures []string
+	for _, path := range c.paths {
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			failures = append(failures, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			failures = append(failures, path+" is not a regular file")
+			continue
+		}
+		r := c.result(true, path+" is a regular lockfile", start)
+		r.Data = map[string]any{"path": path, "size": info.Size()}
+		return r
+	}
+	if len(failures) > 0 {
+		return c.result(false, strings.Join(failures, "; "), start)
+	}
+	if len(c.paths) == 1 {
+		return c.result(false, c.paths[0]+" does not exist", start)
+	}
+	return c.result(false, fmt.Sprintf("none of lockfile candidates exist (%s)", strings.Join(c.paths, ", ")), start)
+}
+
 // binaryCheck passes when a path exists and is an executable file.
 type binaryCheck struct {
 	base

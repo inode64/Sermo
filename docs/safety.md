@@ -148,6 +148,10 @@ Two complementary blocking mechanisms guard operations:
    foreign flag file. Never point such a check under `<paths.runtime>/locks` —
    that duplicates mechanism 1.
 
+A service-created `lockfile:` in the catalog is different: it is a gated health
+check for a regular runtime artifact, like `socket:`, and does not block
+operations unless the operator also writes an explicit guard rule.
+
 The **internal operation lock** (`<paths.runtime>/ops/<service>.lock`)
 serializes start/stop/restart/reload/resume for one service. It is deliberately outside the
 named-lock namespace so it cannot collide with a user lock named `op`, is never

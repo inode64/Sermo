@@ -4100,6 +4100,98 @@ checks:
 	}
 }
 
+func TestExpandLockfileDesugars(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+kind: daemon
+name: svc
+lockfile:
+  path:
+    - /run/lock/svc-main.lock
+    - /run/lock/svc-legacy.lock
+  optional: true
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if _, present := resolved.Tree["lockfile"]; present {
+		t.Errorf("top-level lockfile key must be consumed")
+	}
+	checks := resolved.Tree["checks"].(map[string]any)
+	chk := checks["lockfile"].(map[string]any)
+	want := []string{"/run/lock/svc-main.lock", "/run/lock/svc-legacy.lock"}
+	if chk["type"] != "lockfile" || !slices.Equal(cfgval.StringList(chk["path"]), want) {
+		t.Fatalf("lockfile check = %v, want candidate list %v", chk, want)
+	}
+	if optional, _ := chk["optional"].(bool); !optional {
+		t.Fatalf("lockfile check optional = %v, want true", chk["optional"])
+	}
+	req, _ := chk["requires"].([]any)
+	if len(req) != 1 || req[0] != "service" {
+		t.Fatalf("lockfile check requires = %v, want [service]", chk["requires"])
+	}
+}
+
+func TestExpandLockfileUsesVariable(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+kind: daemon
+name: svc
+variables:
+  lockfile: /run/lock/svc.lock
+lockfile: "${lockfile}"
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	resolved, errs := cfg.Resolve("svc-main")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	chk := nested(t, resolved.Tree, "checks", "lockfile")
+	if got := cfgval.String(chk["path"]); got != "/run/lock/svc.lock" {
+		t.Fatalf("lockfile check path = %q, want /run/lock/svc.lock", got)
+	}
+}
+
+func TestExpandLockfileRejectsRelativeCandidate(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+kind: daemon
+name: svc
+lockfile: run/lock/svc.lock
+checks:
+  service: { type: service, expect: active }
+`,
+		"enabled/svc-main.yml": "kind: service\nname: svc-main\nuses: svc\n",
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, errs := cfg.Resolve("svc-main")
+	if !hasSub(errs, `lockfile path "run/lock/svc.lock" must be absolute`) {
+		t.Fatalf("Resolve() errors = %v, want relative lockfile path error", errs)
+	}
+}
+
 func TestAdditionalUnitsAndValidation(t *testing.T) {
 	tree := map[string]any{
 		"service":      map[string]any{"systemd": []any{"docker"}, "openrc": []any{"docker"}},

@@ -101,6 +101,7 @@ func TestIsHealthType(t *testing.T) {
 		{"ws", false},
 		{"firewall_rules", true},
 		{"process", true},
+		{"lockfile", true},
 		{"mysql", true},
 		{"mariadb", true},
 		{"storage", false},

@@ -516,6 +516,14 @@ func TestFileExistsAndBinaryChecks(t *testing.T) {
 	if res := (fileCheck{base: base{name: "file"}, path: dir}).Run(context.Background()); res.OK {
 		t.Errorf("directory should fail a regular file check")
 	}
+	if res := (lockfileCheck{base: base{name: "lock"}, paths: []string{filepath.Join(dir, "absent.lock"), flag}}).Run(context.Background()); !res.OK {
+		t.Fatalf("lockfile candidate should pass: %s", res.Message)
+	} else if res.Data["path"] != flag {
+		t.Fatalf("lockfile data path = %v, want %s", res.Data["path"], flag)
+	}
+	if res := (lockfileCheck{base: base{name: "lock"}, paths: []string{dir}}).Run(context.Background()); res.OK {
+		t.Errorf("directory should fail a lockfile check")
+	}
 	if res := (binaryCheck{base: base{name: "b"}, path: bin}).Run(context.Background()); !res.OK {
 		t.Errorf("executable should pass")
 	}
@@ -545,6 +553,12 @@ func TestBuildFileAndSocketChecksNeedPath(t *testing.T) {
 	}
 	if c, warn := buildFileCheck(base{}, map[string]any{"path": "/etc/passwd"}); warn != "" || c == nil {
 		t.Fatalf("valid file check should build: warn=%q", warn)
+	}
+	if _, warn := buildLockfileCheck(base{}, map[string]any{}); warn == "" {
+		t.Fatal("lockfile check without a path must warn")
+	}
+	if c, warn := buildLockfileCheck(base{}, map[string]any{"path": []any{"/run/a.lock", "/run/b.lock"}}); warn != "" || c == nil {
+		t.Fatalf("valid lockfile candidate list should build: warn=%q", warn)
 	}
 	if _, warn := buildSocketCheck(base{}, map[string]any{}); warn == "" {
 		t.Fatal("socket check without a path must warn")

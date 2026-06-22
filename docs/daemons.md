@@ -375,11 +375,11 @@ variable in the service-level `pidfile: "${pidfile}"`, and use `user: "${user}"`
 inside any `processes:` selector that should be tied to the service account.
 
 Runtime paths in Sermo config use the canonical `/run` spelling. Do not write
-new `/var/run` pidfiles or sockets in catalog daemons, generated services or
-examples. Linux keeps `/var/run` as compatibility for `/run`, and older init
-scripts, service managers or packaged configs may still report that spelling;
-detected paths should be normalized to `/run/...` before they are committed to
-config.
+new `/var/run` pidfiles, sockets or lockfiles in catalog daemons, generated
+services or examples. Linux keeps `/var/run` as compatibility for `/run`, and
+older init scripts, service managers or packaged configs may still report that
+spelling; detected paths should be normalized to `/run/...` before they are
+committed to config.
 Before adding a new runtime path, check whether it or a parent directory is a
 symlink (`readlink -f <path>` or `namei -l <path>`), then record the canonical
 target path rather than the alias.
@@ -781,6 +781,21 @@ and removes the top-level key. Like `pidfile:`, `socket:` accepts a scalar path,
 a candidate list, or `{path: ..., optional: true}`. Use it for runtime sockets
 owned by the daemon; protocol checks such as `redis`, `dbus` or `libvirt` still
 use their own `socket` field inside the check body.
+
+### `lockfile:` shorthand (gated health check)
+
+A daemon can declare one regular lockfile created by the active service:
+
+```yaml
+lockfile: /run/lock/subsys/smb
+```
+
+On resolution this creates a `lockfile` health check gated by
+`requires: [service]` and removes the top-level key. Like `socket:`, `lockfile:`
+accepts a scalar path, a candidate list, or `{path: ..., optional: true}`. It is
+only evidence that the service left its own runtime lock artifact; it does not
+block start/stop/restart/reload/resume and must not point under
+`<paths.runtime>/locks`, which is reserved for Sermo operation locks.
 
 ## Versioned daemons
 
