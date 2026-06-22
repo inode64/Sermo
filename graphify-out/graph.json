@@ -9,9 +9,9 @@
       "source_file": "docs/configuration.md",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "docs_configuration",
       "community": 205,
-      "norm_label": "configuration.md",
-      "id": "docs_configuration"
+      "norm_label": "configuration.md"
     },
     {
       "label": "Configuration",
@@ -19,9 +19,9 @@
       "source_file": "docs/configuration.md",
       "source_location": "L1",
       "_origin": "ast",
+      "id": "docs_configuration_configuration",
       "community": 206,
-      "norm_label": "configuration",
-      "id": "docs_configuration_configuration"
+      "norm_label": "configuration"
     },
     {
       "label": "Schema changes",
@@ -29,9 +29,9 @@
       "source_file": "docs/configuration.md",
       "source_location": "L26",
       "_origin": "ast",
+      "id": "docs_configuration_schema_changes",
       "community": 206,
-      "norm_label": "schema changes",
-      "id": "docs_configuration_schema_changes"
+      "norm_label": "schema changes"
     },
     {
       "label": "Layout",
@@ -39,9 +39,9 @@
       "source_file": "docs/configuration.md",
       "source_location": "L36",
       "_origin": "ast",
+      "id": "docs_configuration_layout",
       "community": 206,
-      "norm_label": "layout",
-      "id": "docs_configuration_layout"
+      "norm_label": "layout"
     },
     {
       "label": "Mount units",
@@ -49,9 +49,9 @@
       "source_file": "docs/configuration.md",
       "source_location": "L220",
       "_origin": "ast",
+      "id": "docs_configuration_mount_units",
       "community": 206,
-      "norm_label": "mount units",
-      "id": "docs_configuration_mount_units"
+      "norm_label": "mount units"
     },
     {
       "label": "Engine settings",
@@ -59,9 +59,9 @@
       "source_file": "docs/configuration.md",
       "source_location": "L269",
       "_origin": "ast",
+      "id": "docs_configuration_engine_settings",
       "community": 206,
-      "norm_label": "engine settings",
-      "id": "docs_configuration_engine_settings"
+      "norm_label": "engine settings"
     },
     {
       "label": "Per-service interval",
@@ -69,409 +69,689 @@
       "source_file": "docs/configuration.md",
       "source_location": "L386",
       "_origin": "ast",
+      "id": "docs_configuration_per_service_interval",
       "community": 206,
-      "norm_label": "per-service interval",
-      "id": "docs_configuration_per_service_interval"
+      "norm_label": "per-service interval"
     },
     {
       "label": "Per-check interval",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L406",
+      "source_location": "L407",
       "_origin": "ast",
+      "id": "docs_configuration_per_check_interval",
       "community": 206,
-      "norm_label": "per-check interval",
-      "id": "docs_configuration_per_check_interval"
+      "norm_label": "per-check interval"
     },
     {
       "label": "Web UI",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L429",
+      "source_location": "L430",
       "_origin": "ast",
+      "id": "docs_configuration_web_ui",
       "community": 206,
-      "norm_label": "web ui",
-      "id": "docs_configuration_web_ui"
+      "norm_label": "web ui"
     },
     {
       "label": "Authentication",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L482",
+      "source_location": "L483",
       "_origin": "ast",
+      "id": "docs_configuration_authentication",
       "community": 206,
-      "norm_label": "authentication",
-      "id": "docs_configuration_authentication"
+      "norm_label": "authentication"
     },
     {
       "label": "Behind a reverse proxy (required to expose it)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L507",
+      "source_location": "L508",
       "_origin": "ast",
+      "id": "docs_configuration_behind_a_reverse_proxy_required_to_expose_it",
       "community": 206,
-      "norm_label": "behind a reverse proxy (required to expose it)",
-      "id": "docs_configuration_behind_a_reverse_proxy_required_to_expose_it"
+      "norm_label": "behind a reverse proxy (required to expose it)"
     },
     {
       "label": "Liveness (`/livez`)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L634",
+      "source_location": "L635",
       "_origin": "ast",
+      "id": "docs_configuration_liveness_livez",
       "community": 206,
-      "norm_label": "liveness (`/livez`)",
-      "id": "docs_configuration_liveness_livez"
+      "norm_label": "liveness (`/livez`)"
     },
     {
       "label": "Readiness (`/readyz`)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L652",
+      "source_location": "L653",
       "_origin": "ast",
+      "id": "docs_configuration_readiness_readyz",
       "community": 206,
-      "norm_label": "readiness (`/readyz`)",
-      "id": "docs_configuration_readiness_readyz"
+      "norm_label": "readiness (`/readyz`)"
     },
     {
       "label": "Latency graph",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L684",
+      "source_location": "L685",
       "_origin": "ast",
+      "id": "docs_configuration_latency_graph",
       "community": 206,
-      "norm_label": "latency graph",
-      "id": "docs_configuration_latency_graph"
+      "norm_label": "latency graph"
     },
     {
       "label": "Availability (SLA)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L731",
+      "source_location": "L732",
       "_origin": "ast",
+      "id": "docs_configuration_availability_sla",
       "community": 206,
-      "norm_label": "availability (sla)",
-      "id": "docs_configuration_availability_sla"
+      "norm_label": "availability (sla)"
     },
     {
       "label": "Availability time series",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L769",
+      "source_location": "L770",
       "_origin": "ast",
+      "id": "docs_configuration_availability_time_series",
       "community": 206,
-      "norm_label": "availability time series",
-      "id": "docs_configuration_availability_time_series"
+      "norm_label": "availability time series"
     },
     {
       "label": "Notifications",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L785",
+      "source_location": "L786",
       "_origin": "ast",
+      "id": "docs_configuration_notifications",
       "community": 206,
-      "norm_label": "notifications",
-      "id": "docs_configuration_notifications"
+      "norm_label": "notifications"
     },
     {
       "label": "Notification templates",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L855",
+      "source_location": "L856",
       "_origin": "ast",
+      "id": "docs_configuration_notification_templates",
       "community": 206,
-      "norm_label": "notification templates",
-      "id": "docs_configuration_notification_templates"
+      "norm_label": "notification templates"
     },
     {
       "label": "Default selection and precedence",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L896",
+      "source_location": "L897",
       "_origin": "ast",
+      "id": "docs_configuration_default_selection_and_precedence",
       "community": 206,
-      "norm_label": "default selection and precedence",
-      "id": "docs_configuration_default_selection_and_precedence"
+      "norm_label": "default selection and precedence"
     },
     {
       "label": "Host watches",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L923",
+      "source_location": "L924",
       "_origin": "ast",
+      "id": "docs_configuration_host_watches",
       "community": 207,
-      "norm_label": "host watches",
-      "id": "docs_configuration_host_watches"
+      "norm_label": "host watches"
     },
     {
       "label": "`then.expand` \u2014 volume growth (storage watches)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1157",
+      "source_location": "L1159",
       "_origin": "ast",
+      "id": "docs_configuration_then_expand_volume_growth_storage_watches",
       "community": 207,
-      "norm_label": "`then.expand` \u2014 volume growth (storage watches)",
-      "id": "docs_configuration_then_expand_volume_growth_storage_watches"
+      "norm_label": "`then.expand` \u2014 volume growth (storage watches)"
     },
     {
       "label": "Mount conditions",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1262",
+      "source_location": "L1264",
       "_origin": "ast",
+      "id": "docs_configuration_mount_conditions",
       "community": 207,
-      "norm_label": "mount conditions",
-      "id": "docs_configuration_mount_conditions"
+      "norm_label": "mount conditions"
     },
     {
       "label": "`net` \u2014 network interface",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1296",
+      "source_location": "L1298",
       "_origin": "ast",
+      "id": "docs_configuration_net_network_interface",
       "community": 207,
-      "norm_label": "`net` \u2014 network interface",
-      "id": "docs_configuration_net_network_interface"
+      "norm_label": "`net` \u2014 network interface"
     },
     {
       "label": "`icmp` \u2014 external host (ping)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1353",
+      "source_location": "L1355",
       "_origin": "ast",
+      "id": "docs_configuration_icmp_external_host_ping",
       "community": 207,
-      "norm_label": "`icmp` \u2014 external host (ping)",
-      "id": "docs_configuration_icmp_external_host_ping"
+      "norm_label": "`icmp` \u2014 external host (ping)"
     },
     {
       "label": "`swap` \u2014 system swap",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1398",
+      "source_location": "L1400",
       "_origin": "ast",
+      "id": "docs_configuration_swap_system_swap",
       "community": 207,
-      "norm_label": "`swap` \u2014 system swap",
-      "id": "docs_configuration_swap_system_swap"
+      "norm_label": "`swap` \u2014 system swap"
     },
     {
       "label": "`load` \u2014 system load average",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1430",
+      "source_location": "L1432",
       "_origin": "ast",
+      "id": "docs_configuration_load_system_load_average",
       "community": 207,
-      "norm_label": "`load` \u2014 system load average",
-      "id": "docs_configuration_load_system_load_average"
+      "norm_label": "`load` \u2014 system load average"
     },
     {
       "label": "`memory` \u2014 system RAM",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1455",
+      "source_location": "L1457",
       "_origin": "ast",
+      "id": "docs_configuration_memory_system_ram",
       "community": 207,
-      "norm_label": "`memory` \u2014 system ram",
-      "id": "docs_configuration_memory_system_ram"
+      "norm_label": "`memory` \u2014 system ram"
     },
     {
       "label": "`pressure` \u2014 kernel PSI stall time",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1476",
+      "source_location": "L1478",
       "_origin": "ast",
+      "id": "docs_configuration_pressure_kernel_psi_stall_time",
       "community": 207,
-      "norm_label": "`pressure` \u2014 kernel psi stall time",
-      "id": "docs_configuration_pressure_kernel_psi_stall_time"
+      "norm_label": "`pressure` \u2014 kernel psi stall time"
     },
     {
       "label": "`oom` \u2014 kernel OOM kills",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1501",
+      "source_location": "L1503",
       "_origin": "ast",
+      "id": "docs_configuration_oom_kernel_oom_kills",
       "community": 207,
-      "norm_label": "`oom` \u2014 kernel oom kills",
-      "id": "docs_configuration_oom_kernel_oom_kills"
+      "norm_label": "`oom` \u2014 kernel oom kills"
     },
     {
       "label": "`fds` \u2014 system file descriptors",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1518",
+      "source_location": "L1520",
       "_origin": "ast",
+      "id": "docs_configuration_fds_system_file_descriptors",
       "community": 207,
-      "norm_label": "`fds` \u2014 system file descriptors",
-      "id": "docs_configuration_fds_system_file_descriptors"
+      "norm_label": "`fds` \u2014 system file descriptors"
     },
     {
       "label": "`diskio` \u2014 block-device I/O rates",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1536",
+      "source_location": "L1538",
       "_origin": "ast",
+      "id": "docs_configuration_diskio_block_device_i_o_rates",
       "community": 207,
-      "norm_label": "`diskio` \u2014 block-device i/o rates",
-      "id": "docs_configuration_diskio_block_device_i_o_rates"
+      "norm_label": "`diskio` \u2014 block-device i/o rates"
     },
     {
       "label": "`pids` \u2014 kernel PID table",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1568",
+      "source_location": "L1570",
       "_origin": "ast",
+      "id": "docs_configuration_pids_kernel_pid_table",
       "community": 207,
-      "norm_label": "`pids` \u2014 kernel pid table",
-      "id": "docs_configuration_pids_kernel_pid_table"
+      "norm_label": "`pids` \u2014 kernel pid table"
     },
     {
       "label": "`conntrack` \u2014 netfilter connection table",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1589",
+      "source_location": "L1591",
       "_origin": "ast",
+      "id": "docs_configuration_conntrack_netfilter_connection_table",
       "community": 207,
-      "norm_label": "`conntrack` \u2014 netfilter connection table",
-      "id": "docs_configuration_conntrack_netfilter_connection_table"
+      "norm_label": "`conntrack` \u2014 netfilter connection table"
     },
     {
       "label": "`firewall_rules` \u2014 loaded firewall rules",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1608",
+      "source_location": "L1610",
       "_origin": "ast",
+      "id": "docs_configuration_firewall_rules_loaded_firewall_rules",
       "community": 207,
-      "norm_label": "`firewall_rules` \u2014 loaded firewall rules",
-      "id": "docs_configuration_firewall_rules_loaded_firewall_rules"
+      "norm_label": "`firewall_rules` \u2014 loaded firewall rules"
     },
     {
       "label": "`entropy` \u2014 kernel entropy pool",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1624",
+      "source_location": "L1626",
       "_origin": "ast",
+      "id": "docs_configuration_entropy_kernel_entropy_pool",
       "community": 207,
-      "norm_label": "`entropy` \u2014 kernel entropy pool",
-      "id": "docs_configuration_entropy_kernel_entropy_pool"
+      "norm_label": "`entropy` \u2014 kernel entropy pool"
     },
     {
       "label": "`zombies` \u2014 defunct processes",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1641",
+      "source_location": "L1643",
       "_origin": "ast",
+      "id": "docs_configuration_zombies_defunct_processes",
       "community": 207,
-      "norm_label": "`zombies` \u2014 defunct processes",
-      "id": "docs_configuration_zombies_defunct_processes"
+      "norm_label": "`zombies` \u2014 defunct processes"
     },
     {
       "label": "`file` \u2014 file/directory attributes",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1658",
+      "source_location": "L1660",
       "_origin": "ast",
+      "id": "docs_configuration_file_file_directory_attributes",
       "community": 207,
-      "norm_label": "`file` \u2014 file/directory attributes",
-      "id": "docs_configuration_file_file_directory_attributes"
+      "norm_label": "`file` \u2014 file/directory attributes"
     },
     {
       "label": "`process` \u2014 process by name",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1708",
+      "source_location": "L1710",
       "_origin": "ast",
+      "id": "docs_configuration_process_process_by_name",
       "community": 207,
-      "norm_label": "`process` \u2014 process by name",
-      "id": "docs_configuration_process_process_by_name"
+      "norm_label": "`process` \u2014 process by name"
     },
     {
       "label": "Global defaults",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1767",
+      "source_location": "L1769",
       "_origin": "ast",
+      "id": "docs_configuration_global_defaults",
       "community": 206,
-      "norm_label": "global defaults",
-      "id": "docs_configuration_global_defaults"
+      "norm_label": "global defaults"
     },
     {
       "label": "Resolution order",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1797",
+      "source_location": "L1801",
       "_origin": "ast",
+      "id": "docs_configuration_resolution_order",
       "community": 206,
-      "norm_label": "resolution order",
-      "id": "docs_configuration_resolution_order"
+      "norm_label": "resolution order"
     },
     {
       "label": "Merge rules",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1814",
+      "source_location": "L1818",
       "_origin": "ast",
+      "id": "docs_configuration_merge_rules",
       "community": 206,
-      "norm_label": "merge rules",
-      "id": "docs_configuration_merge_rules"
+      "norm_label": "merge rules"
     },
     {
       "label": "Binary resource variables",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1840",
+      "source_location": "L1844",
       "_origin": "ast",
+      "id": "docs_configuration_binary_resource_variables",
       "community": 206,
-      "norm_label": "binary resource variables",
-      "id": "docs_configuration_binary_resource_variables"
+      "norm_label": "binary resource variables"
     },
     {
       "label": "Variables",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1891",
+      "source_location": "L1895",
       "_origin": "ast",
+      "id": "docs_configuration_variables",
       "community": 206,
-      "norm_label": "variables",
-      "id": "docs_configuration_variables"
+      "norm_label": "variables"
     },
     {
       "label": "Global custom variables (`defaults.variables`)",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1912",
+      "source_location": "L1916",
       "_origin": "ast",
+      "id": "docs_configuration_global_custom_variables_defaults_variables",
       "community": 206,
-      "norm_label": "global custom variables (`defaults.variables`)",
-      "id": "docs_configuration_global_custom_variables_defaults_variables"
+      "norm_label": "global custom variables (`defaults.variables`)"
     },
     {
       "label": "Secrets from the environment",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1952",
+      "source_location": "L1956",
       "_origin": "ast",
+      "id": "docs_configuration_secrets_from_the_environment",
       "community": 206,
-      "norm_label": "secrets from the environment",
-      "id": "docs_configuration_secrets_from_the_environment"
+      "norm_label": "secrets from the environment"
     },
     {
       "label": "Validating",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1982",
+      "source_location": "L1986",
       "_origin": "ast",
+      "id": "docs_configuration_validating",
       "community": 206,
-      "norm_label": "validating",
-      "id": "docs_configuration_validating"
+      "norm_label": "validating"
     },
     {
       "label": "Diagnostics",
       "file_type": "document",
       "source_file": "docs/configuration.md",
-      "source_location": "L1991",
+      "source_location": "L1995",
       "_origin": "ast",
+      "id": "docs_configuration_diagnostics",
       "community": 206,
-      "norm_label": "diagnostics",
-      "id": "docs_configuration_diagnostics"
+      "norm_label": "diagnostics"
+    },
+    {
+      "label": "rules.md",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "docs_rules",
+      "community": 205,
+      "norm_label": "rules.md"
+    },
+    {
+      "label": "Checks, conditions and rules",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "docs_rules_checks_conditions_and_rules",
+      "community": 187,
+      "norm_label": "checks, conditions and rules"
+    },
+    {
+      "label": "Checks",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "docs_rules_checks",
+      "community": 187,
+      "norm_label": "checks"
+    },
+    {
+      "label": "Grading output with `analyze:` (pattern sets)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L149",
+      "_origin": "ast",
+      "id": "docs_rules_grading_output_with_analyze_pattern_sets",
+      "community": 187,
+      "norm_label": "grading output with `analyze:` (pattern sets)"
+    },
+    {
+      "label": "Service health conditions (version / state / config)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L193",
+      "_origin": "ast",
+      "id": "docs_rules_service_health_conditions_version_state_config",
+      "community": 187,
+      "norm_label": "service health conditions (version / state / config)"
+    },
+    {
+      "label": "Egress interface (`interface`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L240",
+      "_origin": "ast",
+      "id": "docs_rules_egress_interface_interface",
+      "community": 187,
+      "norm_label": "egress interface (`interface`)"
+    },
+    {
+      "label": "Check interdependencies (`requires` / `skip_when_changed`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L298",
+      "_origin": "ast",
+      "id": "docs_rules_check_interdependencies_requires_skip_when_changed",
+      "community": 187,
+      "norm_label": "check interdependencies (`requires` / `skip_when_changed`)"
+    },
+    {
+      "label": "Ports",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L340",
+      "_origin": "ast",
+      "id": "docs_rules_ports",
+      "community": 187,
+      "norm_label": "ports"
+    },
+    {
+      "label": "HTTP",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L376",
+      "_origin": "ast",
+      "id": "docs_rules_http",
+      "community": 187,
+      "norm_label": "http"
+    },
+    {
+      "label": "Cert",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L491",
+      "_origin": "ast",
+      "id": "docs_rules_cert",
+      "community": 187,
+      "norm_label": "cert"
+    },
+    {
+      "label": "Database connection (`mysql` / `mariadb`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L559",
+      "_origin": "ast",
+      "id": "docs_rules_database_connection_mysql_mariadb",
+      "community": 187,
+      "norm_label": "database connection (`mysql` / `mariadb`)"
+    },
+    {
+      "label": "SQLite integrity (`sqlite` / `sqlite3`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1063",
+      "_origin": "ast",
+      "id": "docs_rules_sqlite_integrity_sqlite_sqlite3",
+      "community": 187,
+      "norm_label": "sqlite integrity (`sqlite` / `sqlite3`)"
+    },
+    {
+      "label": "SQL query (`sql`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1082",
+      "_origin": "ast",
+      "id": "docs_rules_sql_query_sql",
+      "community": 187,
+      "norm_label": "sql query (`sql`)"
+    },
+    {
+      "label": "MongoDB query (`mongodb-query`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1124",
+      "_origin": "ast",
+      "id": "docs_rules_mongodb_query_mongodb_query",
+      "community": 187,
+      "norm_label": "mongodb query (`mongodb-query`)"
+    },
+    {
+      "label": "InfluxDB query (`influxdb-query`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1175",
+      "_origin": "ast",
+      "id": "docs_rules_influxdb_query_influxdb_query",
+      "community": 187,
+      "norm_label": "influxdb query (`influxdb-query`)"
+    },
+    {
+      "label": "Size growth (`size`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1229",
+      "_origin": "ast",
+      "id": "docs_rules_size_growth_size",
+      "community": 187,
+      "norm_label": "size growth (`size`)"
+    },
+    {
+      "label": "WebSocket (`websocket`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1266",
+      "_origin": "ast",
+      "id": "docs_rules_websocket_websocket",
+      "community": 187,
+      "norm_label": "websocket (`websocket`)"
+    },
+    {
+      "label": "Default route (`route`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1409",
+      "_origin": "ast",
+      "id": "docs_rules_default_route_route",
+      "community": 187,
+      "norm_label": "default route (`route`)"
+    },
+    {
+      "label": "Firewall rules (`firewall_rules`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1433",
+      "_origin": "ast",
+      "id": "docs_rules_firewall_rules_firewall_rules",
+      "community": 187,
+      "norm_label": "firewall rules (`firewall_rules`)"
+    },
+    {
+      "label": "Disk throughput (`hdparm`)",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1453",
+      "_origin": "ast",
+      "id": "docs_rules_disk_throughput_hdparm",
+      "community": 187,
+      "norm_label": "disk throughput (`hdparm`)"
+    },
+    {
+      "label": "Hardware sensors",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1488",
+      "_origin": "ast",
+      "id": "docs_rules_hardware_sensors",
+      "community": 187,
+      "norm_label": "hardware sensors"
+    },
+    {
+      "label": "Autofs",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1546",
+      "_origin": "ast",
+      "id": "docs_rules_autofs",
+      "community": 187,
+      "norm_label": "autofs"
+    },
+    {
+      "label": "Count",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1578",
+      "_origin": "ast",
+      "id": "docs_rules_count",
+      "community": 187,
+      "norm_label": "count"
+    },
+    {
+      "label": "Metrics",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1608",
+      "_origin": "ast",
+      "id": "docs_rules_metrics",
+      "community": 187,
+      "norm_label": "metrics"
+    },
+    {
+      "label": "Rules",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1664",
+      "_origin": "ast",
+      "id": "docs_rules_rules",
+      "community": 187,
+      "norm_label": "rules"
+    },
+    {
+      "label": "Windows",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1726",
+      "_origin": "ast",
+      "id": "docs_rules_windows",
+      "community": 187,
+      "norm_label": "windows"
+    },
+    {
+      "label": "Guards",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1744",
+      "_origin": "ast",
+      "id": "docs_rules_guards",
+      "community": 187,
+      "norm_label": "guards"
+    },
+    {
+      "label": "Remediation policy",
+      "file_type": "document",
+      "source_file": "docs/rules.md",
+      "source_location": "L1801",
+      "_origin": "ast",
+      "id": "docs_rules_remediation_policy",
+      "community": 187,
+      "norm_label": "remediation policy"
     },
     {
       "label": "daemons.md",
@@ -1032,286 +1312,6 @@
       "community": 20,
       "norm_label": "engine and config",
       "id": "todo_engine_and_config"
-    },
-    {
-      "label": "rules.md",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 205,
-      "norm_label": "rules.md",
-      "id": "docs_rules"
-    },
-    {
-      "label": "Checks, conditions and rules",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "checks, conditions and rules",
-      "id": "docs_rules_checks_conditions_and_rules"
-    },
-    {
-      "label": "Checks",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L3",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "checks",
-      "id": "docs_rules_checks"
-    },
-    {
-      "label": "Grading output with `analyze:` (pattern sets)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L149",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "grading output with `analyze:` (pattern sets)",
-      "id": "docs_rules_grading_output_with_analyze_pattern_sets"
-    },
-    {
-      "label": "Service health conditions (version / state / config)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L193",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "service health conditions (version / state / config)",
-      "id": "docs_rules_service_health_conditions_version_state_config"
-    },
-    {
-      "label": "Egress interface (`interface`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L240",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "egress interface (`interface`)",
-      "id": "docs_rules_egress_interface_interface"
-    },
-    {
-      "label": "Check interdependencies (`requires` / `skip_when_changed`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L298",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "check interdependencies (`requires` / `skip_when_changed`)",
-      "id": "docs_rules_check_interdependencies_requires_skip_when_changed"
-    },
-    {
-      "label": "Ports",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L340",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "ports",
-      "id": "docs_rules_ports"
-    },
-    {
-      "label": "HTTP",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L376",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "http",
-      "id": "docs_rules_http"
-    },
-    {
-      "label": "Cert",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L491",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "cert",
-      "id": "docs_rules_cert"
-    },
-    {
-      "label": "Database connection (`mysql` / `mariadb`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L559",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "database connection (`mysql` / `mariadb`)",
-      "id": "docs_rules_database_connection_mysql_mariadb"
-    },
-    {
-      "label": "SQLite integrity (`sqlite` / `sqlite3`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1063",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "sqlite integrity (`sqlite` / `sqlite3`)",
-      "id": "docs_rules_sqlite_integrity_sqlite_sqlite3"
-    },
-    {
-      "label": "SQL query (`sql`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1082",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "sql query (`sql`)",
-      "id": "docs_rules_sql_query_sql"
-    },
-    {
-      "label": "MongoDB query (`mongodb-query`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1124",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "mongodb query (`mongodb-query`)",
-      "id": "docs_rules_mongodb_query_mongodb_query"
-    },
-    {
-      "label": "InfluxDB query (`influxdb-query`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1175",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "influxdb query (`influxdb-query`)",
-      "id": "docs_rules_influxdb_query_influxdb_query"
-    },
-    {
-      "label": "Size growth (`size`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1229",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "size growth (`size`)",
-      "id": "docs_rules_size_growth_size"
-    },
-    {
-      "label": "WebSocket (`websocket`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1266",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "websocket (`websocket`)",
-      "id": "docs_rules_websocket_websocket"
-    },
-    {
-      "label": "Default route (`route`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1409",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "default route (`route`)",
-      "id": "docs_rules_default_route_route"
-    },
-    {
-      "label": "Firewall rules (`firewall_rules`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1433",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "firewall rules (`firewall_rules`)",
-      "id": "docs_rules_firewall_rules_firewall_rules"
-    },
-    {
-      "label": "Disk throughput (`hdparm`)",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1453",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "disk throughput (`hdparm`)",
-      "id": "docs_rules_disk_throughput_hdparm"
-    },
-    {
-      "label": "Hardware sensors",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1488",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "hardware sensors",
-      "id": "docs_rules_hardware_sensors"
-    },
-    {
-      "label": "Autofs",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1546",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "autofs",
-      "id": "docs_rules_autofs"
-    },
-    {
-      "label": "Count",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1578",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "count",
-      "id": "docs_rules_count"
-    },
-    {
-      "label": "Metrics",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1608",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "metrics",
-      "id": "docs_rules_metrics"
-    },
-    {
-      "label": "Rules",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1664",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "rules",
-      "id": "docs_rules_rules"
-    },
-    {
-      "label": "Windows",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1724",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "windows",
-      "id": "docs_rules_windows"
-    },
-    {
-      "label": "Guards",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1737",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "guards",
-      "id": "docs_rules_guards"
-    },
-    {
-      "label": "Remediation policy",
-      "file_type": "document",
-      "source_file": "docs/rules.md",
-      "source_location": "L1794",
-      "_origin": "ast",
-      "community": 187,
-      "norm_label": "remediation policy",
-      "id": "docs_rules_remediation_policy"
     },
     {
       "label": "safety.md",
@@ -6405,6 +6405,306 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons",
+      "target": "docs_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules",
+      "target": "docs_rules_checks_conditions_and_rules"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1606",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules",
+      "target": "docs_safety"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L123",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme",
+      "target": "docs_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L3",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks_conditions_and_rules",
+      "target": "docs_rules_checks"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1591",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks_conditions_and_rules",
+      "target": "docs_rules_metrics"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1777",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks_conditions_and_rules",
+      "target": "docs_rules_remediation_policy"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1647",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks_conditions_and_rules",
+      "target": "docs_rules_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1530",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_autofs"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L493",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_cert"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L301",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_check_interdependencies_requires_skip_when_changed"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1562",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_count"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L551",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_database_connection_mysql_mariadb"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1393",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_default_route_route"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1437",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_disk_throughput_hdparm"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L242",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_egress_interface_interface"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1417",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_firewall_rules_firewall_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L148",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_grading_output_with_analyze_pattern_sets"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1472",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_hardware_sensors"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L379",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_http"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1167",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_influxdb_query_influxdb_query"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1116",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_mongodb_query_mongodb_query"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L343",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_ports"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L195",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_service_health_conditions_version_state_config"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1221",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_size_growth_size"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1074",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_sql_query_sql"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1055",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_sqlite_integrity_sqlite_sqlite3"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1265",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_checks",
+      "target": "docs_rules_websocket_websocket"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1720",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_rules",
+      "target": "docs_rules_guards"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/rules.md",
+      "source_location": "L1707",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_rules_rules",
+      "target": "docs_rules_windows"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
       "source_file": "docs/cli.md",
       "source_location": "L91",
       "weight": 1.0,
@@ -6421,16 +6721,6 @@
       "confidence_score": 1.0,
       "source": "docs_daemons",
       "target": "docs_daemons_daemons"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L44",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons",
-      "target": "docs_rules"
     },
     {
       "relation": "references",
@@ -6971,296 +7261,6 @@
       "confidence_score": 1.0,
       "source": "todo_integrations_and_catalog",
       "target": "todo_process_managers_and_runtimes"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules",
-      "target": "docs_rules_checks_conditions_and_rules"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1606",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules",
-      "target": "docs_safety"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L123",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "readme",
-      "target": "docs_rules"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L3",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks_conditions_and_rules",
-      "target": "docs_rules_checks"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1591",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks_conditions_and_rules",
-      "target": "docs_rules_metrics"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1777",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks_conditions_and_rules",
-      "target": "docs_rules_remediation_policy"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1647",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks_conditions_and_rules",
-      "target": "docs_rules_rules"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1530",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_autofs"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L493",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_cert"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L301",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_check_interdependencies_requires_skip_when_changed"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1562",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_count"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L551",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_database_connection_mysql_mariadb"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1393",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_default_route_route"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1437",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_disk_throughput_hdparm"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L242",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_egress_interface_interface"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1417",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_firewall_rules_firewall_rules"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L148",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_grading_output_with_analyze_pattern_sets"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1472",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_hardware_sensors"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L379",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_http"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1167",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_influxdb_query_influxdb_query"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1116",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_mongodb_query_mongodb_query"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L343",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_ports"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L195",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_service_health_conditions_version_state_config"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1221",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_size_growth_size"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1074",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_sql_query_sql"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1055",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_sqlite_integrity_sqlite_sqlite3"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1265",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_checks",
-      "target": "docs_rules_websocket_websocket"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1720",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_rules",
-      "target": "docs_rules_guards"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/rules.md",
-      "source_location": "L1707",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_rules_rules",
-      "target": "docs_rules_windows"
     },
     {
       "relation": "references",
@@ -9365,5 +9365,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "78138844c3e15953eae8fb56280bccfd018dbcd9"
+  "built_at_commit": "0762c45f8746beeab81e3c58280fc05698a78b6b"
 }
