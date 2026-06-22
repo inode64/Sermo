@@ -17,6 +17,7 @@ var typeInfos = []TypeInfo{
 	{Name: "service", Health: true, ServiceScoped: true},
 	{Name: "file_exists", Health: true},
 	{Name: "file", Health: true},
+	{Name: "lockfile", Health: true},
 	{Name: "binary", Health: true},
 	{Name: "pidfile", Health: true},
 	{Name: "socket", Health: true},

@@ -692,6 +692,17 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a file check", path)
 		}
+	case "lockfile":
+		if len(cfgval.StringList(entry["path"])) == 0 {
+			add("%s.path is required for a lockfile check", path)
+		} else {
+			for _, p := range cfgval.StringList(entry["path"]) {
+				if underDir(p, locksDir) {
+					add("%s lockfile must not point under the runtime lock dir %s", path, locksDir)
+					break
+				}
+			}
+		}
 	case "binary":
 		if cfgval.String(entry["path"]) == "" {
 			add("%s.path is required for a binary check", path)
