@@ -45,6 +45,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
+	errs = append(errs, expandLockfile(expanded)...)
 
 	return Resolved{Name: canonicalName, Tree: expanded}, errs
 }
@@ -220,6 +221,52 @@ func expandSocket(tree map[string]any) []string {
 			entry["optional"] = true
 		}
 		checksMap["socket"] = entry
+	}
+	tree["checks"] = checksMap
+	return errs
+}
+
+// expandLockfile desugars a top-level `lockfile:` declaration into a gated
+// health check. It is for service-owned runtime lock artifacts, not Sermo
+// operation locks.
+func expandLockfile(tree map[string]any) []string {
+	raw, present := tree["lockfile"]
+	if !present {
+		return nil
+	}
+	delete(tree, "lockfile")
+
+	pathRaw := raw
+	optional := false
+	if m, ok := raw.(map[string]any); ok {
+		pathRaw = m["path"]
+		optional = cfgval.Bool(m["optional"])
+	}
+	paths := cfgval.StringList(pathRaw)
+	if len(paths) == 0 {
+		return []string{"lockfile must be a non-empty path string, list or {path: ...} mapping"}
+	}
+	var errs []string
+	for _, path := range paths {
+		if !filepath.IsAbs(path) {
+			errs = append(errs, fmt.Sprintf("lockfile path %q must be absolute", path))
+		}
+	}
+
+	checksMap, _ := tree["checks"].(map[string]any)
+	if checksMap == nil {
+		checksMap = map[string]any{}
+	}
+	if _, exists := checksMap["lockfile"]; !exists {
+		entry := map[string]any{
+			"type":     "lockfile",
+			"path":     pidfilePathValue(paths),
+			"requires": []any{"service"},
+		}
+		if optional {
+			entry["optional"] = true
+		}
+		checksMap["lockfile"] = entry
 	}
 	tree["checks"] = checksMap
 	return errs
@@ -803,6 +850,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	errs = append(errs, expandPidfile(expanded)...)
 	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
+	errs = append(errs, expandLockfile(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
 

@@ -281,6 +281,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildFileExistsCheck(b, entry)
 	case "file":
 		return buildFileCheck(b, entry)
+	case "lockfile":
+		return buildLockfileCheck(b, entry)
 	case "binary":
 		return buildBinaryCheck(b, entry)
 	case "pidfile":
@@ -700,6 +702,16 @@ func buildFileCheck(b base, entry map[string]any) (Check, string) {
 		return nil, "file check requires a path"
 	}
 	return fileCheck{base: b, path: path}, ""
+}
+
+// buildLockfileCheck builds a check that one service-owned lockfile candidate
+// exists and is a regular file.
+func buildLockfileCheck(b base, entry map[string]any) (Check, string) {
+	paths := cfgval.StringList(entry["path"])
+	if len(paths) == 0 {
+		return nil, "lockfile check requires a path"
+	}
+	return lockfileCheck{base: b, paths: paths}, ""
 }
 
 // buildPidfileCheck builds a check that a pidfile exists and references a running

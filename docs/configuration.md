@@ -127,13 +127,16 @@ from service documents and watch fragments because they are operator actions,
 not monitored services.
 
 Use `/run` for runtime paths in Sermo configuration and examples. Do not write
-new `/var/run` pidfiles, sockets or runtime directories in Sermo-owned config.
+new `/var/run` pidfiles, sockets, lockfiles or runtime directories in
+Sermo-owned config.
 Linux keeps `/var/run` as a compatibility path for `/run`, and older init
 scripts, service managers or packaged configs may still report it; Sermo
 normalizes those host-provided paths to the equivalent `/run/...` spelling.
 Use `pidfile:` for one logical process with candidate pidfile paths, and
 `pidfiles:` for several required process roles. `pidfiles.<role>` must have a
 matching `processes.<role>` with exact `exe` and `user`.
+Use `lockfile:` only for a regular runtime file created by the service itself;
+it is a health artifact like `socket:`, not an operation lock.
 
 Before adding a new runtime path, resolve it on the target host:
 
@@ -1188,7 +1191,7 @@ receives.
 host-resource ones below (`storage`, `memory`, `pressure`, `load`, `fds`,
 `pids`, `conntrack`, `entropy`, `zombies`, `oom`) *and* the
 service checks (`tcp`, `ports`, `http`, `command`, `file_exists`, `file`,
-`binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
+`lockfile`, `binary`, `pidfile`, `socket`, `libraries`, `config`, `autofs`, `route`,
 `firewall_rules`, `cert`, `sqlite`/`sqlite3`, `websocket`, `count`, and
 connection-protocol checks such as `mysql`/`smtp`) — can be used as a watch
 here, and
@@ -1833,10 +1836,11 @@ preflight:
 
 The resource preflight entry narrows `${binary}` to the first candidate matching
 the declared type. `binary` requires a regular executable file; `file` requires
-a regular file; `pidfile` requires a regular file; `socket` requires a Unix
-socket. If none currently matches, Sermo keeps the first non-empty candidate so
-the runtime preflight reports the bad path explicitly instead of expanding to an
-empty string. Paths must be absolute after templating.
+a regular file; `lockfile` requires a regular file; `pidfile` requires a
+regular file; `socket` requires a Unix socket. If none currently matches, Sermo
+keeps the first non-empty candidate so the runtime preflight reports the bad
+path explicitly instead of expanding to an empty string. Paths must be absolute
+after templating.
 
 Use `variables.binary` plus an explicit
 preflight entry for apps, daemons and services. Libraries use the same pattern

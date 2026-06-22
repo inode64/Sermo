@@ -4,7 +4,7 @@
 // executes a set concurrently and returns one Result per check.
 //
 // Service checks/preflight/postflight support tcp, ports, http, command, service,
-// file_exists, binary, process, metric (via the daemon's stateful collector),
+// file_exists, file, lockfile, binary, process, metric (via the daemon's stateful collector),
 // libraries, count, and host-resource probes (storage, autofs, load, fds, conntrack,
 // firewall_rules, entropy, zombies, oom, cert). The multi-target watch types
 // (net, icmp, swap and file) are also usable in single-metric/single-shot form.

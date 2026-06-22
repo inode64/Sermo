@@ -73,7 +73,7 @@ func ensureVariables(tree map[string]any) map[string]any {
 
 func isResourcePreflightType(typ string) bool {
 	switch typ {
-	case "binary", "file", "socket", "pidfile":
+	case "binary", "file", "socket", "pidfile", "lockfile":
 		return true
 	default:
 		return false
@@ -124,7 +124,7 @@ func resourceCandidateMatches(typ, path string) bool {
 	switch typ {
 	case "binary":
 		return info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0
-	case "file", "pidfile":
+	case "file", "pidfile", "lockfile":
 		return info.Mode().IsRegular()
 	case "socket":
 		return info.Mode()&os.ModeSocket != 0

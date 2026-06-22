@@ -432,6 +432,9 @@ pidfile: [/run/demo.pid, /run/demo/demo.pid]
 # socket auto-wires a requires:[service] health check. It may reference a
 # variable and may be optional for socket-activated or distro-specific daemons.
 socket: { path: "${socket}", optional: true }
+# lockfile is the same idea for a regular lock artifact created by the service;
+# it is not a Sermo operation lock and does not block actions by itself.
+lockfile: { path: /run/lock/demo.lock, optional: true }
 
 config_files: [/etc/demo/demo.conf, /etc/demo/conf.d]
 
@@ -548,6 +551,7 @@ checks:
         - { id: benign, match: '(?i)known benign warning', severity: ok, stream: both }
   file-present: { type: file_exists, path: /etc/demo/demo.conf }
   binary: { type: binary, path: "${binary}" }
+  lockfile: { type: lockfile, path: /run/lock/demo.lock, requires: [service] }
   pidfile: { type: pidfile, path: /run/demo.pid, requires: [service] }
   process: { type: process, exe: "${binary}", user: "${user}", state: running }
   service-memory:

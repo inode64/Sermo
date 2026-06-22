@@ -19,6 +19,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `service`     | the backend status equals `expect` (active/inactive/paused/failed/unknown)|
 | `file_exists` | a foreign flag/lock file exists (never under `<runtime>/locks`)     |
 | `file`        | a path exists and is a regular file                                |
+| `lockfile`    | one service-created regular lockfile candidate exists — gate with `requires: [service]`; it does not block operations |
 | `binary`      | a path exists and is executable                                    |
 | `pidfile`     | a pidfile exists and references a running process — gate with `requires: [service]` so a missing/stale pidfile is an error only while the service is active |
 | `socket`      | one Unix socket candidate exists — gate with `requires: [service]` for sockets created by the service |
@@ -1388,7 +1389,7 @@ The host-resource checks (`storage`, `load`, `hdparm`, `sensors`, `smart`, `raid
 condition-style — `OK == true` means there is a problem — so in rules
 `active: {check: x}` fires on it, and as a watch the hook fires on it.
 The health checks (`tcp`, `ports`, `http`, `command`, `service`, `file_exists`,
-`file`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
+`file`, `lockfile`, `binary`, `pidfile`, `socket`, `process`, `libraries`, `config`,
 `autofs`, `route`, `firewall_rules`, `cert`, `sqlite`/`sqlite3`,
 `websocket`, and connection-protocol checks such as `mysql`/`smtp`) are the
 opposite (`OK == true` is healthy), so as a watch they fire the hook on

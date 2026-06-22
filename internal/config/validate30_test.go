@@ -708,6 +708,7 @@ checks:
   opt: { type: binary, path: /x, optional: "yes" }
 preflight:
   lockfile: { type: file_exists, path: /run/sermo/locks/x.lock }
+  owned-lockfile: { type: lockfile, path: /run/sermo/locks/service.lock }
 `)
 	mustHave(t, issues, "command must be an array, not a shell string")
 	mustHave(t, issues, "expect is required for a service check")
@@ -716,6 +717,7 @@ preflight:
 	mustHave(t, issues, `state "weird" is not one of`)
 	mustHave(t, issues, "optional must be a boolean")
 	mustHave(t, issues, "must not point under the runtime lock dir")
+	mustHave(t, issues, "owned-lockfile lockfile must not point under the runtime lock dir")
 }
 
 func TestValidateCountCheck(t *testing.T) {
@@ -1325,6 +1327,18 @@ checks:
   sock: { type: socket }
 `)
 	mustHave(t, issues, "path is required for a socket check")
+}
+
+func TestValidateLockfileCheckRequiresPath(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+policy: { cooldown: 5m }
+checks:
+  lock: { type: lockfile }
+`)
+	mustHave(t, issues, "path is required for a lockfile check")
 }
 
 func TestValidatePercentBound(t *testing.T) {
