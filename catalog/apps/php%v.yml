@@ -1,6 +1,6 @@
 kind: app
 name: php%v
-display_name: "PHP ${version}"
+display_name: "PHP ${version} ${current}"
 category: runtime
 description: "PHP interpreter"
 variables:

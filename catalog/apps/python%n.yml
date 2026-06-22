@@ -1,6 +1,6 @@
 kind: app
 name: python%n
-display_name: "Python ${n}"
+display_name: "Python ${n} ${current}"
 category: runtime
 description: "Python interpreter"
 variables:
