@@ -10,6 +10,9 @@ variables:
   host: 127.0.0.1
   port: 143
   tls_port: 993
+  user: dovecot
+  login_user: dovenull
+  mail_user: mail
 preflight:
   config: { type: command, command: ["${dovecot_doveconf}", "-n"], timeout: 30s }
 
@@ -22,20 +25,31 @@ socket: /run/dovecot/master
 processes:
   main:
     exe: "${dovecot_binary}"
+    user: root
   anvil:
     exe: "${dovecot_anvil_binary}"
+    user: "${user}"
   log:
     exe: "${dovecot_log_binary}"
+    user: root
   config:
     exe: "${dovecot_config_binary}"
+    user: root
   stats:
     exe: "${dovecot_stats_binary}"
+    user: "${user}"
+  auth-root:
+    exe: "${dovecot_auth_binary}"
+    user: root
   auth:
     exe: "${dovecot_auth_binary}"
+    user: "${user}"
   imap-login:
     exe: "${dovecot_imap_login_binary}"
+    user: "${login_user}"
   imap:
     exe: "${dovecot_imap_binary}"
+    user: "${mail_user}"
 
 checks:
   service: { type: service, expect: active }

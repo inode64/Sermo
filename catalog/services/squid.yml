@@ -7,6 +7,7 @@ apps: [squid]
 
 variables:
   port: 3128
+  user: squid
 preflight:
   config: { type: command, command: ["${squid_binary}","-k","check"], timeout: 30s }
 
@@ -17,12 +18,16 @@ pidfile: /run/squid.pid
 processes:
   main:
     exe: "${squid_binary}"
+    user: root
   pinger:
     exe: "${squid_pinger_binary}"
+    user: "${user}"
   log-file-daemon:
     exe: "${squid_log_file_daemon_binary}"
+    user: "${user}"
   security-file-certgen:
     exe: "${squid_security_file_certgen_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

@@ -10,6 +10,7 @@ apps: [virtqemud]
 processes:
   main:
     exe: "${virtqemud_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

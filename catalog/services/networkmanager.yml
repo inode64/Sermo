@@ -11,6 +11,7 @@ apps: [networkmanager]
 processes:
   main:
     exe: "${networkmanager_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

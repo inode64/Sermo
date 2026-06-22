@@ -7,6 +7,7 @@ apps: [rspamd]
 
 variables:
   port: 11334
+  user: rspamd
 preflight:
   config: { type: command, command: ["${rspamd_rspamadm}", "configtest"], timeout: 30s }
 
@@ -19,6 +20,10 @@ socket: { path: /var/lib/rspamd/rspamd.sock, optional: true }
 processes:
   main:
     exe: "${rspamd_binary}"
+    user: root
+  worker:
+    exe: "${rspamd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

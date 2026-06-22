@@ -3,9 +3,17 @@ name: qemu-ga
 display_name: "QEMU Guest Agent"
 category: virtualization
 service:
-  systemd: [qemu-ga]
+  systemd: [qemu-ga, qemu-guest-agent]
   openrc: [qemu-guest-agent, qemu-ga]
 apps: [qemu-ga]
+
+variables:
+  user: root
+
+processes:
+  main:
+    exe: "${qemu_ga_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

@@ -10,6 +10,7 @@ apps: [udisks2]
 processes:
   main:
     exe: "${udisks2_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

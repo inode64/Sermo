@@ -32,6 +32,7 @@ pidfile: /run/monit.pid
 processes:
   main:
     exe: "${monit_binary}"
+    user: root
 
 checks:
   service:

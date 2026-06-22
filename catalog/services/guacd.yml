@@ -8,6 +8,7 @@ apps: [guacd]
 
 variables:
   port: 4822
+  user: guacamole
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
@@ -16,6 +17,7 @@ pidfile: /run/guacamole/guacd.pid
 processes:
   main:
     exe: "${guacd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

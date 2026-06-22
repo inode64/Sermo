@@ -21,6 +21,7 @@ config_files: [/etc/nginx/nginx.conf]
 processes:
   main:
     exe: "${nginx_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

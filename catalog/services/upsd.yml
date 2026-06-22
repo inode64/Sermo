@@ -7,12 +7,14 @@ apps: [upsd]
 
 variables:
   port: 3493
+  user: nut
 
 pidfile: /run/nut/upsd.pid
 
 processes:
   main:
     exe: "${upsd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

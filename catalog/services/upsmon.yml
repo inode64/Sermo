@@ -4,12 +4,18 @@ display_name: "NUT UPS Monitor"
 category: hardware
 service: upsmon
 apps: [upsmon]
+variables:
+  user: nut
 
 pidfile: /run/nut/upsmon.pid
 
 processes:
   main:
     exe: "${upsmon_binary}"
+    user: root
+  worker:
+    exe: "${upsmon_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

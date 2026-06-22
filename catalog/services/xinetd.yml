@@ -11,6 +11,7 @@ pidfile: /run/xinetd.pid
 processes:
   main:
     exe: "${xinetd_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

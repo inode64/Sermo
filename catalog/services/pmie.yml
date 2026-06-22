@@ -6,10 +6,15 @@ description: "Performance Co-Pilot inference engine daemon."
 service:
   systemd: [pmie]
 apps: [pmie]
+variables:
+  user: pcp
+
+pidfile: /run/pcp/pmie.pid
 
 processes:
   main:
     exe: "${pmie_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

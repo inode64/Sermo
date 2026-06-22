@@ -12,6 +12,7 @@ apps: [node_exporter]
 variables:
   host: 127.0.0.1
   port: 9100
+  user: node_exporter
 
 # Defining pidfile auto-wires process-tree monitoring and a
 # requires:[service] pidfile health check (error if missing while active).
@@ -20,6 +21,7 @@ pidfile: /run/node_exporter.pid
 processes:
   main:
     exe: "${node_exporter_binary}"
+    user: "${user}"
 
 checks:
   service:
