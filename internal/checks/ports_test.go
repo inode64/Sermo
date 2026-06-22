@@ -109,11 +109,18 @@ func TestPortsCheckRespectsTimeout(t *testing.T) {
 	}
 	c := &portsCheck{
 		base:           base{name: "p", timeout: 50 * time.Millisecond},
-		host:           "192.0.2.1", // TEST-NET; dials hang until connect_timeout
+		host:           "192.0.2.1",
 		ports:          ports,
 		expect:         "closed",
 		match:          "all",
 		connectTimeout: 30 * time.Second,
+		// Block every dial until the check's context is cancelled, so the
+		// global timeout reliably fires mid-scan regardless of how the host's
+		// network treats unreachable addresses (hang vs. instant ENETUNREACH).
+		dialFunc: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
 	}
 	start := time.Now()
 	res := c.Run(context.Background())

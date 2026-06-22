@@ -260,7 +260,7 @@ func TestGentooCatalogPidfileOverrides(t *testing.T) {
 		name string
 		want []string
 	}{
-		{name: "clamd", want: []string{"/run/clamd.pid"}},
+		{name: "clamd", want: []string{"/run/clamd.pid", "/run/clamav/clamd.pid"}},
 		{name: "mariadb", want: []string{"/run/mysqld/mariadb.pid", "/run/mysqld/mysqld.pid"}},
 	}
 	for _, tc := range tests {
@@ -385,6 +385,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 
 	want := map[string][]string{
 		"automount":    {"autofs", "automount"},
+		"atftp":        {"atftp"},
 		"avahi":        {"avahi", "avahi-daemon"},
 		"cups":         {"cupsd"},
 		"dbus":         {"dbus", "dbus-daemon"},
@@ -395,6 +396,7 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		"qemu-ga":      {"qemu-guest-agent", "qemu-ga"},
 		"rpc-mountd":   {"rpc-mountd", "nfs-mountd"},
 		"rsync":        {"rsyncd", "rsync"},
+		"smb":          {"samba", "smb"},
 		"spamassassin": {"spamd", "spamassassin"},
 	}
 	for name, openrcCandidates := range want {
@@ -414,17 +416,25 @@ func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 		}
 	}
 
-	resolved, errs := cfg.ResolveCatalog(CategoryService, "rpc-mountd")
-	if len(errs) > 0 {
-		t.Fatalf("ResolveCatalog(rpc-mountd): %v", errs)
+	systemdAliases := map[string][]string{
+		"clamd":      {"clamd", "clamav-daemon"},
+		"dhcpd":      {"dhcpd", "dhcpd4"},
+		"qemu-ga":    {"qemu-ga", "qemu-guest-agent"},
+		"rpc-mountd": {"nfs-mountd", "rpc-mountd"},
+		"smb":        {"smb"},
 	}
-	systemdCandidates, trust := ServiceCandidates(resolved.Tree, "systemd", "rpc-mountd")
-	if trust {
-		t.Fatalf("ServiceCandidates(rpc-mountd systemd) trust = true, want explicit candidates")
-	}
-	wantSystemdCandidates := []string{"nfs-mountd", "rpc-mountd"}
-	if strings.Join(systemdCandidates, ",") != strings.Join(wantSystemdCandidates, ",") {
-		t.Fatalf("ServiceCandidates(rpc-mountd systemd) = %v, want %v", systemdCandidates, wantSystemdCandidates)
+	for name, wantSystemdCandidates := range systemdAliases {
+		resolved, errs := cfg.ResolveCatalog(CategoryService, name)
+		if len(errs) > 0 {
+			t.Fatalf("ResolveCatalog(%s): %v", name, errs)
+		}
+		systemdCandidates, trust := ServiceCandidates(resolved.Tree, "systemd", name)
+		if trust {
+			t.Fatalf("ServiceCandidates(%s systemd) trust = true, want explicit candidates", name)
+		}
+		if strings.Join(systemdCandidates, ",") != strings.Join(wantSystemdCandidates, ",") {
+			t.Fatalf("ServiceCandidates(%s systemd) = %v, want %v", name, systemdCandidates, wantSystemdCandidates)
+		}
 	}
 }
 
@@ -813,10 +823,15 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 		binaryVar   string
 		wantProcess bool
 	}{
+		{name: "atftp", app: "atftp", binaryVar: "${atftp_binary}", wantProcess: true},
+		{name: "clamd", app: "clamd", binaryVar: "${clamd_binary}", wantProcess: true},
 		{name: "containerd", app: "containerd", binaryVar: "${containerd_binary}", wantProcess: true},
+		{name: "dcc", app: "dcc", binaryVar: "${dcc_binary}", wantProcess: true},
 		{name: "libvirt-dbus", app: "libvirt-dbus", binaryVar: "${libvirt_dbus_binary}", wantProcess: true},
 		{name: "nfsdcld", app: "nfsdcld", binaryVar: "${nfsdcld_binary}", wantProcess: true},
 		{name: "lm_sensors", app: "lm_sensors", wantProcess: false},
+		{name: "qemu-ga", app: "qemu-ga", binaryVar: "${qemu_ga_binary}", wantProcess: true},
+		{name: "smb", app: "smbd", binaryVar: "${smbd_binary}", wantProcess: true},
 		{name: "upower", app: "upower", binaryVar: "${upower_binary}", wantProcess: true},
 	}
 	for _, tc := range tests {
