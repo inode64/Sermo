@@ -3,6 +3,7 @@ package rules
 import (
 	"slices"
 	"testing"
+	"time"
 )
 
 // feed runs a sequence of condition values through a fresh window and returns the
@@ -36,6 +37,31 @@ func TestForConsecutive(t *testing.T) {
 	}
 }
 
+func TestForDuration(t *testing.T) {
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	r := Rule{For: &ForWindow{Duration: 6 * time.Minute}}
+	s := &WindowState{}
+	if s.FiresAt(r, true, at) {
+		t.Fatal("first true sample must not satisfy a duration window")
+	}
+	if got := s.ProgressAt(r, at.Add(3*time.Minute)); got != "3m/6m" {
+		t.Fatalf("progress after 3m = %q, want 3m/6m", got)
+	}
+	if s.FiresAt(r, true, at.Add(5*time.Minute)) {
+		t.Fatal("duration window fired before 6m")
+	}
+	if !s.FiresAt(r, true, at.Add(6*time.Minute)) {
+		t.Fatal("duration window did not fire at 6m")
+	}
+	if got := s.ProgressAt(r, at.Add(7*time.Minute)); got != "6m/6m" {
+		t.Fatalf("progress after firing = %q, want capped 6m/6m", got)
+	}
+	s.FiresAt(r, false, at.Add(8*time.Minute))
+	if got := s.ProgressAt(r, at.Add(9*time.Minute)); got != "0s/6m" {
+		t.Fatalf("progress after reset = %q, want 0s/6m", got)
+	}
+}
+
 func TestWithinSlidingWindow(t *testing.T) {
 	r := Rule{Within: &WithinWindow{Cycles: 4, MinMatches: 2}}
 	// At least 2 trues in the last 4 cycles.
@@ -50,6 +76,24 @@ func TestWithinSlidingWindow(t *testing.T) {
 	// c1=1; c2[T,T]=2 fire; c3[T,T,F]=2 fire; c4[T,T,F,F]=2 fire; c5[T,F,F,F]=1.
 	if !slices.Equal(got, []int{2, 3, 4}) {
 		t.Fatalf("within fired at %v, want [2 3 4]", got)
+	}
+}
+
+func TestWithinDurationWindow(t *testing.T) {
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	r := Rule{Within: &WithinWindow{Duration: 10 * time.Minute, MinMatches: 2}}
+	s := &WindowState{}
+	if s.FiresAt(r, true, at) {
+		t.Fatal("one match is not enough")
+	}
+	if !s.FiresAt(r, true, at.Add(9*time.Minute)) {
+		t.Fatal("two matches inside the duration window should fire")
+	}
+	if s.FiresAt(r, false, at.Add(21*time.Minute)) {
+		t.Fatal("old matches outside the duration window must expire")
+	}
+	if got := s.ProgressAt(r, at.Add(21*time.Minute)); got != "0/2 in 10m" {
+		t.Fatalf("progress after expiry = %q, want 0/2 in 10m", got)
 	}
 }
 
@@ -122,6 +166,28 @@ func TestWindowStateSnapshotRoundTrip(t *testing.T) {
 	if restored.Progress(withinRule) == w.Progress(withinRule) {
 		t.Fatal("snapshot restore should not alias live history")
 	}
+
+	at := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	forDuration := Rule{For: &ForWindow{Duration: 6 * time.Minute}}
+	d := &WindowState{}
+	d.FiresAt(forDuration, true, at)
+	restored = WindowStateFromSnapshot(d.Snapshot())
+	if got := restored.ProgressAt(forDuration, at.Add(3*time.Minute)); got != "3m/6m" {
+		t.Fatalf("restored for-duration progress = %q, want 3m/6m", got)
+	}
+
+	withinDuration := Rule{Within: &WithinWindow{Duration: 10 * time.Minute, MinMatches: 2}}
+	td := &WindowState{}
+	td.FiresAt(withinDuration, true, at)
+	td.FiresAt(withinDuration, false, at.Add(time.Minute))
+	restored = WindowStateFromSnapshot(td.Snapshot())
+	td.FiresAt(withinDuration, true, at.Add(2*time.Minute))
+	if got := restored.ProgressAt(withinDuration, at.Add(2*time.Minute)); got != "1/2 in 10m" {
+		t.Fatalf("restored within-duration progress = %q, want 1/2 in 10m", got)
+	}
+	if restored.ProgressAt(withinDuration, at.Add(2*time.Minute)) == td.ProgressAt(withinDuration, at.Add(2*time.Minute)) {
+		t.Fatal("duration snapshot restore should not alias live history")
+	}
 }
 
 func TestWindowDescription(t *testing.T) {
@@ -133,6 +199,12 @@ func TestWindowDescription(t *testing.T) {
 	}
 	if got := WindowDescription(Rule{Within: &WithinWindow{Cycles: 15, MinMatches: 5}}); got != "within 15 cycles (min 5)" {
 		t.Fatalf("within = %q", got)
+	}
+	if got := WindowDescription(Rule{For: &ForWindow{Duration: 6 * time.Minute}}); got != "for 6m" {
+		t.Fatalf("for duration = %q", got)
+	}
+	if got := WindowDescription(Rule{Within: &WithinWindow{Duration: 30 * time.Minute, MinMatches: 3}}); got != "within 30m (min 3)" {
+		t.Fatalf("within duration = %q", got)
 	}
 }
 
@@ -149,8 +221,10 @@ func TestParseRuleWindow(t *testing.T) {
 		{"implicit mode defaults to consecutive", map[string]any{"cycles": 1}, 0, [2]int{}},
 		{"zero cycles", map[string]any{"cycles": 0}, 0, [2]int{}},
 		{"consecutive N", map[string]any{"cycles": 3, "mode": "consecutive"}, 3, [2]int{}},
+		{"consecutive duration", map[string]any{"duration": "6m", "mode": "consecutive"}, -6, [2]int{}},
 		{"within with min_matches", map[string]any{"cycles": 15, "mode": "within", "min_matches": 5}, 0, [2]int{15, 5}},
 		{"within defaults min_matches to 1", map[string]any{"cycles": 10, "mode": "within"}, 0, [2]int{10, 1}},
+		{"within duration", map[string]any{"duration": "30m", "mode": "within", "min_matches": 3}, 0, [2]int{-30, 3}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -158,6 +232,9 @@ func TestParseRuleWindow(t *testing.T) {
 			gotFor := 0
 			if forWin != nil {
 				gotFor = forWin.Cycles
+				if forWin.Duration > 0 {
+					gotFor = -int(forWin.Duration / time.Minute)
+				}
 			}
 			if gotFor != tc.wantFor {
 				t.Errorf("For = %v, want cycles %d", forWin, tc.wantFor)
@@ -165,6 +242,9 @@ func TestParseRuleWindow(t *testing.T) {
 			var gotWithin [2]int
 			if withinWin != nil {
 				gotWithin = [2]int{withinWin.Cycles, withinWin.MinMatches}
+				if withinWin.Duration > 0 {
+					gotWithin[0] = -int(withinWin.Duration / time.Minute)
+				}
 			}
 			if gotWithin != tc.wantWithin {
 				t.Errorf("Within = %v, want %v", withinWin, tc.wantWithin)
@@ -262,6 +342,34 @@ func TestParseWindows(t *testing.T) {
 	}
 }
 
+func TestParseDurationWindows(t *testing.T) {
+	tree := map[string]any{"rules": map[string]any{
+		"a": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"for":  map[string]any{"duration": "6m"},
+			"then": map[string]any{"action": "restart"},
+		},
+		"b": map[string]any{
+			"type":   "alert",
+			"if":     map[string]any{"failed": map[string]any{"check": "http"}},
+			"within": map[string]any{"duration": "30m", "min_matches": 3},
+			"then":   map[string]any{"action": "alert", "message": "http down"},
+		},
+	}}
+	ruleSet, _ := ParseRules(tree)
+	byName := map[string]Rule{}
+	for _, r := range ruleSet {
+		byName[r.Name] = r
+	}
+	if byName["a"].For == nil || byName["a"].For.Duration != 6*time.Minute {
+		t.Fatalf("rule a For = %+v", byName["a"].For)
+	}
+	if byName["b"].Within == nil || byName["b"].Within.Duration != 30*time.Minute || byName["b"].Within.MinMatches != 3 {
+		t.Fatalf("rule b Within = %+v", byName["b"].Within)
+	}
+}
+
 func TestParseWithinWindowDefaultsMinMatches(t *testing.T) {
 	w := ParseWithinWindow(map[string]any{"cycles": 5})
 	if w == nil || w.Cycles != 5 || w.MinMatches != 1 {
@@ -290,5 +398,13 @@ func TestWindowStateNilReceiver(t *testing.T) {
 	}
 	if got := s.Progress(withinRule); got != "0/5 in 15 cycles" {
 		t.Fatalf("Progress = %q, want 0/5 in 15 cycles", got)
+	}
+
+	forDurationRule := Rule{For: &ForWindow{Duration: time.Minute}}
+	if s.IsFiringAt(forDurationRule, time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)) {
+		t.Fatal("nil state must not read as firing (for duration)")
+	}
+	if got := s.ProgressAt(forDurationRule, time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)); got != "0s/1m" {
+		t.Fatalf("Progress = %q, want 0s/1m", got)
 	}
 }

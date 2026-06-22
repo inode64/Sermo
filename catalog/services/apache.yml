@@ -9,8 +9,6 @@ service:
   systemd: [apache2, httpd]
   openrc: [apache2, apache]
 
-interval: 30s
-
 # Binary + version are owned by the `apache` app (same name) and linked here.
 apps: [apache]
 
@@ -101,8 +99,7 @@ rules:
         name: cpu_thread
         op: ">"
         value: 90%
-    # 12 consecutive 30s cycles = 6 minutes.
     for:
-      cycles: 12
+      duration: 6m
     then:
       action: restart

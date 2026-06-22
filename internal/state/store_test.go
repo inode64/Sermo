@@ -78,7 +78,15 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("SetRemediationState: %v", err)
 	}
 	if err := first.SetRuleWindowStates("db", map[string]RuleWindowRecord{
-		"restart-if-down": {Consecutive: 2, History: []bool{true, false, true}},
+		"restart-if-down": {
+			Consecutive: 2,
+			History:     []bool{true, false, true},
+			TrueSince:   t0.Add(-5 * time.Minute),
+			TimedHistory: []RuleWindowSample{
+				{At: t0.Add(-4 * time.Minute), Match: true},
+				{At: t0.Add(-2 * time.Minute), Match: false},
+			},
+		},
 	}); err != nil {
 		t.Fatalf("SetRuleWindowStates: %v", err)
 	}
@@ -112,6 +120,8 @@ func TestStorePersistsAcrossReopen(t *testing.T) {
 	}
 	if rec, ok := windows["restart-if-down"]; !ok || rec.Consecutive != 2 || len(rec.History) != 3 || !rec.History[2] {
 		t.Fatalf("rule window state = %+v", windows)
+	} else if !rec.TrueSince.Equal(t0.Add(-5*time.Minute)) || len(rec.TimedHistory) != 2 || rec.TimedHistory[0].Match != true || !rec.TimedHistory[1].At.Equal(t0.Add(-2*time.Minute)) {
+		t.Fatalf("duration rule window state = %+v", rec)
 	}
 }
 

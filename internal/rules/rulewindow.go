@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sermo/internal/cfgval"
 	"strings"
+	"time"
 )
 
 // RuleWindowReport is a read-only operator view of one rule's window progress.
@@ -96,6 +97,12 @@ func FormatCondition(node map[string]any) string {
 // cycle context (the probes are memoized, but a cancelled cycle must not be
 // outlived). eval may be nil (condition stays false).
 func BuildRuleWindowReports(ctx context.Context, ruleSet []Rule, windows map[string]*WindowState, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
+	return BuildRuleWindowReportsAt(ctx, ruleSet, windows, time.Now(), eval)
+}
+
+// BuildRuleWindowReportsAt is BuildRuleWindowReports with an explicit read time
+// for duration-based windows.
+func BuildRuleWindowReportsAt(ctx context.Context, ruleSet []Rule, windows map[string]*WindowState, at time.Time, eval func(context.Context, Rule) (bool, error)) []RuleWindowReport {
 	var out []RuleWindowReport
 	for _, r := range ruleSet {
 		if r.Type != RuleRemediation && r.Type != RuleAlert {
@@ -119,8 +126,8 @@ func BuildRuleWindowReports(ctx context.Context, ruleSet []Rule, windows map[str
 			Condition:     FormatCondition(r.If),
 			ConditionTrue: cond,
 			Window:        WindowDescription(r),
-			Progress:      ws.Progress(r), // Progress/IsFiring are nil-safe
-			Firing:        ws.IsFiring(r),
+			Progress:      ws.ProgressAt(r, at), // ProgressAt/IsFiringAt are nil-safe
+			Firing:        ws.IsFiringAt(r, at),
 		})
 	}
 	return out

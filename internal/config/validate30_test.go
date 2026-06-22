@@ -374,12 +374,48 @@ rules:
     if: { failed: { check: http } }
     within: { cycles: 5, min_matches: 2, unexpected: true }
     then: { action: restart }
+  both-for-lengths:
+    type: remediation
+    if: { failed: { check: http } }
+    for: { cycles: 3, duration: 6m }
+    then: { action: restart }
+  bad-duration:
+    type: remediation
+    if: { failed: { check: http } }
+    within: { duration: nope, min_matches: 2 }
+    then: { action: restart }
 `)
 	mustHave(t, issues, "cannot define both for and within")
 	mustHave(t, issues, "for.cycles must be > 0")
 	mustHave(t, issues, "within.min_matches must be <= within.cycles")
 	mustHave(t, issues, "rules.bad-for-key.for.unexpected is not supported")
 	mustHave(t, issues, "rules.bad-within-key.within.unexpected is not supported")
+	mustHave(t, issues, "rules.both-for-lengths.for cannot define both cycles and duration")
+	mustHave(t, issues, "rules.bad-duration.within.duration must be a valid positive duration")
+}
+
+func TestValidateRuleDurationWindows(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+rules:
+  restart-after-duration:
+    type: remediation
+    if: { failed: { check: http } }
+    for: { duration: 6m }
+    then: { action: restart }
+  alert-within-duration:
+    type: alert
+    if: { failed: { check: http } }
+    within: { duration: 30m, min_matches: 3 }
+    then: { action: alert, message: "http down" }
+`)
+	if hasIssue(issues, "duration") || hasIssue(issues, "rules.restart-after-duration") || hasIssue(issues, "rules.alert-within-duration") {
+		t.Fatalf("valid duration windows flagged: %v", issues)
+	}
 }
 
 func TestValidateUnknownCheckReference(t *testing.T) {
@@ -1556,6 +1592,32 @@ checks:
   http: { type: http, url: "http://127.0.0.1/" }
 `)
 	mustHave(t, bad, "rule_window.min_matches must be > 0")
+}
+
+func TestValidateRuleWindowDuration(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+policy: { cooldown: 5m }
+rule_window: { duration: 6m, mode: consecutive }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`)
+	if hasIssue(issues, "rule_window") {
+		t.Fatalf("valid duration rule_window flagged: %v", issues)
+	}
+
+	bad := validateService(t, `
+kind: service
+name: svc
+service: x
+policy: { cooldown: 5m }
+rule_window: { cycles: 3, duration: 6m }
+checks:
+  http: { type: http, url: "http://127.0.0.1/" }
+`)
+	mustHave(t, bad, "rule_window cannot define both cycles and duration")
 }
 
 func TestValidateCertServerNameAndFileScope(t *testing.T) {

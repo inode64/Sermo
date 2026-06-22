@@ -153,9 +153,10 @@ func (w *Worker) RunCycle(ctx context.Context) {
 	ev := &rules.Evaluator{Cache: cache, ResolveRef: resolveRef, Deps: deps, Changed: w.changed}
 	evals := w.ruleEvalCache()
 
-	w.runRemediation(ctx, ev, now, evals)
-	w.runAlerts(ctx, ev, evals)
-	w.publishRuleWindows(ctx, ev, evals)
+	at := now()
+	w.runRemediation(ctx, ev, now, at, evals)
+	w.runAlerts(ctx, ev, at, evals)
+	w.publishRuleWindows(ctx, ev, at, evals)
 	w.persistRuleState()
 }
 
@@ -270,7 +271,7 @@ func (w *Worker) ruleEvalCache() map[string]ruleEvalResult {
 	return make(map[string]ruleEvalResult, len(w.Rules))
 }
 
-func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time, evals map[string]ruleEvalResult) {
+func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now func() time.Time, at time.Time, evals map[string]ruleEvalResult) {
 	if w.State == nil {
 		w.State = &rules.RemediationState{}
 	}
@@ -282,7 +283,7 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 		if r.Type != rules.RuleRemediation {
 			continue
 		}
-		if w.fires(ctx, ev, r, evals) {
+		if w.fires(ctx, ev, r, at, evals) {
 			firing = append(firing, r)
 		}
 	}
@@ -363,12 +364,12 @@ func (w *Worker) runRemediation(ctx context.Context, ev *rules.Evaluator, now fu
 	}
 }
 
-func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, evals map[string]ruleEvalResult) {
+func (w *Worker) runAlerts(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) {
 	for _, r := range w.Rules {
 		if r.Type != rules.RuleAlert {
 			continue
 		}
-		if w.fires(ctx, ev, r, evals) {
+		if w.fires(ctx, ev, r, at, evals) {
 			w.emitAlerts(ctx, r)
 		}
 	}
@@ -404,7 +405,7 @@ func alertMessage(service, rule, msg string) notify.Message {
 // fires evaluates a rule's condition this cycle and advances its window state,
 // returning whether the rule fires now. An evaluation error counts
 // as a false cycle.
-func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) bool {
+func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, at time.Time, evals map[string]ruleEvalResult) bool {
 	// Defense-in-depth for safety invariant 13: a system-scoped metric must
 	// never trigger anything but an alert. ParseRules already drops such
 	// rules; this catches one that bypassed parsing entirely.
@@ -417,7 +418,7 @@ func (w *Worker) fires(ctx context.Context, ev *rules.Evaluator, r rules.Rule, e
 		w.emit(Event{Kind: "error", Rule: r.Name, Message: "evaluate: " + err.Error()})
 		cond = false
 	}
-	return w.windowState(r.Name).Fires(r, cond)
+	return w.windowState(r.Name).FiresAt(r, cond, at)
 }
 
 func (w *Worker) evalRule(ctx context.Context, ev *rules.Evaluator, r rules.Rule, evals map[string]ruleEvalResult) (bool, error) {
@@ -507,11 +508,11 @@ func (w *Worker) publishRemediation() {
 	w.Remediation.Publish(w.Service, w.Policy, w.State, now())
 }
 
-func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator, evals map[string]ruleEvalResult) {
+func (w *Worker) publishRuleWindows(ctx context.Context, ev *rules.Evaluator, at time.Time, evals map[string]ruleEvalResult) {
 	if w.RuleWindows == nil || ev == nil {
 		return
 	}
-	reports := rules.BuildRuleWindowReports(ctx, w.Rules, w.windows, func(ctx context.Context, r rules.Rule) (bool, error) {
+	reports := rules.BuildRuleWindowReportsAt(ctx, w.Rules, w.windows, at, func(ctx context.Context, r rules.Rule) (bool, error) {
 		return w.evalRule(ctx, ev, r, evals)
 	})
 	w.RuleWindows.Publish(w.Service, reports)
