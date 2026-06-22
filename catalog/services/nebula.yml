@@ -14,9 +14,17 @@ versions:
 
 variables:
   config: "/etc/nebula/${instance}.yml"
-  # Probe the node's own lighthouse/listen port; the default is 4242/udp.
-  host: 127.0.0.1
-  port: 4242
+  # Probe the first endpoint published in static_host_map. Nebula clients often
+  # bind a random local UDP port when no listen.port is configured, so 127.0.0.1
+  # is only a fallback for configs without a static map.
+  host:
+    from_file: "${config}"
+    pattern: '(?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"\[?([^"\]]+)\]?:(?:\d+)"'
+    default: 127.0.0.1
+  port:
+    from_file: "${config}"
+    pattern: '(?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"[^"]+:(\d+)"'
+    default: 4242
   user: root
 
 config_files: ["${config}"]
