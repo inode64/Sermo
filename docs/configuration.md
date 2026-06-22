@@ -1833,7 +1833,9 @@ alongside Java version discovery. `current_from` may be a path or a list of
 paths. Set `versions.unversioned: false` only when the marker-less or
 `current_from` active slot should be ignored. A materialized name must not
 collide with an explicit document in the same category; validation reports that
-as a configuration error.
+as a configuration error. When a template uses `${current}`, inventory listings
+also mark a versioned entry as current when the active-slot wrapper and that
+entry report the same `version_short`.
 
 ## Binary resource variables
 

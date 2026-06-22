@@ -155,6 +155,73 @@ defaults: { policy: { cooldown: 5m } }
 	}
 }
 
+func TestListMarksTemplateCurrentByBaseShortVersion(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "bin")
+	jvmDir := filepath.Join(root, "jvm")
+	catalogDir := filepath.Join(root, "catalog")
+	servicesDir := filepath.Join(root, "services")
+	for _, dir := range []string{binDir, jvmDir, filepath.Join(catalogDir, "apps"), servicesDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	currentJava := filepath.Join(binDir, "java")
+	java21 := filepath.Join(jvmDir, "openjdk-bin-21.0.11_p10", "bin", "java")
+	java25 := filepath.Join(jvmDir, "openjdk-bin-25.0.3_p9", "bin", "java")
+	for _, path := range []string{currentJava, java21, java25} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(catalogDir, "apps", "java.yml"), []byte(fmt.Sprintf(`kind: app
+name: java-%%i-%%v
+display_name: "Java ${instance} ${version} ${current}"
+versions:
+  from: "%s/${instance}-bin-${version}/bin/java"
+  current_from: "%s"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "-version"], timeout: 10s }
+`, jvmDir, currentJava)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, servicesDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := config.DisplayName(cfg.Apps["java-openjdk-21.0.11_p10"].Body, ""); got != "Java openjdk 21.0.11_p10" {
+		t.Fatalf("loaded display name = %q, want no static current marker", got)
+	}
+
+	apps := List(context.Background(), testRunner{
+		currentJava: {Stderr: "openjdk version \"21.0.11\" 2026-04-21 LTS\n", ExitCode: 0},
+		java21:      {Stderr: "openjdk version \"21.0.11\" 2026-04-21 LTS\n", ExitCode: 0},
+		java25:      {Stderr: "openjdk version \"25.0.3\" 2026-04-21 LTS\n", ExitCode: 0},
+	}, cfg, config.CategoryApp, false)
+	byName := map[string]Report{}
+	for _, app := range apps {
+		byName[app.Name] = app
+	}
+	if got := byName["java-openjdk-21.0.11_p10"].DisplayName; got != "Java openjdk 21.0.11_p10 current" {
+		t.Fatalf("java 21 display name = %q, want current marker", got)
+	}
+	if got := byName["java-openjdk-25.0.3_p9"].DisplayName; got != "Java openjdk 25.0.3_p9" {
+		t.Fatalf("java 25 display name = %q, want no current marker", got)
+	}
+}
+
 func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	root := t.TempDir()
 	binary := filepath.Join(root, "webd")
