@@ -18,6 +18,21 @@ checks:
   # marking an otherwise active HTTP cache as failed.
   port: { type: tcp, port: "${port}", optional: true }
   varnish: { type: varnish, port: "${port}", timeout: 3s, optional: true }
+
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: ">"
+        value: 90%
+    # 12 consecutive 30s cycles = 6 minutes.
+    for:
+      cycles: 12
+    then:
+      action: restart
+
 rules:
   block-restart-if-config-invalid:
     type: guard

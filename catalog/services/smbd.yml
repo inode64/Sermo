@@ -21,6 +21,21 @@ checks:
   service: { type: service, expect: active }
   port: { type: tcp, port: "${port}" }
   smb: { type: smb, port: "${port}", timeout: 3s }
+
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: ">"
+        value: 90%
+    # 12 consecutive 30s cycles = 6 minutes.
+    for:
+      cycles: 12
+    then:
+      action: restart
+
 rules:
   block-restart-if-config-invalid:
     type: guard

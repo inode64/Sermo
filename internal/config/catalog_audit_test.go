@@ -128,6 +128,54 @@ func TestRealCatalogAllDaemonsValidate(t *testing.T) {
 	}
 }
 
+func TestApacheCatalogRestartsOnHotWorkerThread(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "apache")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(apache): %v", errs)
+	}
+	if got := cfgval.String(resolved.Tree["interval"]); got != "30s" {
+		t.Fatalf("apache interval = %q, want 30s", got)
+	}
+
+	rule := nested(t, resolved.Tree, "rules", "restart-if-worker-thread-hot")
+	if got := cfgval.String(rule["type"]); got != "remediation" {
+		t.Fatalf("rule type = %q, want remediation", got)
+	}
+	metric := nested(t, rule, "if", "metric")
+	if got := cfgval.String(metric["scope"]); got != "service" {
+		t.Fatalf("metric scope = %q, want service", got)
+	}
+	if got := cfgval.String(metric["name"]); got != "cpu_thread" {
+		t.Fatalf("metric name = %q, want cpu_thread", got)
+	}
+	if got := cfgval.String(metric["op"]); got != ">" {
+		t.Fatalf("metric op = %q, want >", got)
+	}
+	if got := cfgval.String(metric["value"]); got != "90%" {
+		t.Fatalf("metric value = %q, want 90%%", got)
+	}
+	cycles, _ := cfgval.Int(nested(t, rule, "for")["cycles"])
+	if cycles != 12 {
+		t.Fatalf("for.cycles = %d, want 12", cycles)
+	}
+	if got := cfgval.String(nested(t, rule, "then")["action"]); got != "restart" {
+		t.Fatalf("then.action = %q, want restart", got)
+	}
+}
+
 // TestShippedGlobalConfigValidates validates the installed sample config as an
 // installed config. It deliberately points at /etc/sermo target directories;
 // source-tree examples are covered by TestRepoDevConfigLoadsExampleTree.

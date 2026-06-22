@@ -9,6 +9,8 @@ service:
   systemd: [apache2, httpd]
   openrc: [apache2, apache]
 
+interval: 30s
+
 # Binary + version are owned by the `apache` app (same name) and linked here.
 apps: [apache]
 
@@ -88,5 +90,19 @@ rules:
         check: http
     for:
       cycles: 3
+    then:
+      action: restart
+
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: ">"
+        value: 90%
+    # 12 consecutive 30s cycles = 6 minutes.
+    for:
+      cycles: 12
     then:
       action: restart
