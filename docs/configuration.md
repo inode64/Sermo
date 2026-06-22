@@ -131,6 +131,9 @@ new `/var/run` pidfiles, sockets or runtime directories in Sermo-owned config.
 Linux keeps `/var/run` as a compatibility path for `/run`, and older init
 scripts, service managers or packaged configs may still report it; Sermo
 normalizes those host-provided paths to the equivalent `/run/...` spelling.
+Use `pidfile:` for one logical process with candidate pidfile paths, and
+`pidfiles:` for several required process roles. `pidfiles.<role>` must have a
+matching `processes.<role>` with exact `exe` and `user`.
 
 Before adding a new runtime path, resolve it on the target host:
 

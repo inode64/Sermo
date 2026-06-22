@@ -178,6 +178,49 @@ func validateProcesses(tree map[string]any, add addFunc) {
 	}
 }
 
+func validatePidfiles(tree map[string]any, add addFunc) {
+	raw, present := tree["pidfiles"]
+	if _, hasPidfile := tree["pidfile"]; hasPidfile && present {
+		add("pidfile and pidfiles are mutually exclusive")
+	}
+	if !present {
+		return
+	}
+	pidfiles, ok := raw.(map[string]any)
+	if !ok {
+		add("pidfiles must be a mapping of process role to path string or candidate list")
+		return
+	}
+	processes, _ := tree["processes"].(map[string]any)
+	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
+		if !validDocumentName(role) {
+			add("pidfiles.%s role must be a simple name without path separators", role)
+			continue
+		}
+		paths := cfgval.StringList(pidfiles[role])
+		if len(paths) == 0 {
+			add("pidfiles.%s must be a non-empty path string or list", role)
+			continue
+		}
+		for _, path := range paths {
+			if !filepath.IsAbs(path) {
+				add("pidfiles.%s path %q must be absolute", role, path)
+			}
+		}
+		entry, ok := processes[role].(map[string]any)
+		if !ok {
+			add("pidfiles.%s requires matching processes.%s", role, role)
+			continue
+		}
+		if cfgval.String(entry["exe"]) == "" {
+			add("pidfiles.%s requires processes.%s.exe for exact pidfile identity", role, role)
+		}
+		if cfgval.String(entry["user"]) == "" {
+			add("pidfiles.%s requires processes.%s.user for exact pidfile identity", role, role)
+		}
+	}
+}
+
 func validatePolicyExtras(tree map[string]any, add addFunc) {
 	policy, ok := tree["policy"].(map[string]any)
 	if !ok {

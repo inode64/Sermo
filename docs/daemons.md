@@ -171,9 +171,9 @@ reload:
   any unit with no MainPID — to the PID in the service's `pidfile:`. The pidfile
   fallback is only used when that PID also matches a `processes:` selector with
   exact `exe` and `user`; a stale pidfile must not signal an unrelated process.
-  A signal reload with neither target available fails. Daemons
-  without pidfiles reload by signal only on systemd; on OpenRC they rely on the
-  init script's own `reload` (`when: auto`).
+  A signal reload with neither target available fails. Daemons without pidfile
+  metadata reload by signal only on systemd; on OpenRC they rely on the init
+  script's own `reload` (`when: auto`).
 
 #### Catalog author checklist: init scripts and fallbacks
 
@@ -450,7 +450,8 @@ pidfile:                        # the resolved value becomes the OS's list
 The service-level `pidfile:` accepts a single path or a **list of candidates**.
 Discovery tries them in order and uses the first that points at a running
 process, so per-OS or versioned pidfile locations all resolve without personal
-config.
+config. Use `pidfiles:` instead when one service intentionally owns several
+resident processes that each have their own pidfile.
 
 For oneshot loaders that do not keep a resident process (for example firewall
 loaders), set `processes: {}` explicitly. That prevents Sermo from deriving a
@@ -700,7 +701,7 @@ stop_policy:
   a shallow system directory (`/`, `/etc`, `/usr`, `/var`, `/var/lib`, …) — those
   are refused at validation time. A delete failure is a warning, not a failure.
 
-### `pidfile:` shorthand (selector + health check)
+### `pidfile:` and `pidfiles:` shorthand (selectors + health checks)
 
 A daemon can declare a top-level `pidfile: <path>` to wire **both** uses of a
 pidfile from one line:
@@ -737,6 +738,32 @@ respected, so a daemon that needs a custom check can still spell it out. Public
 reference variables (e.g. `pidfile: "${pidfile}"`). Candidate lists are tried in
 order and pass on the first live pidfile; if none exists, the backend PID
 fallback can still satisfy the gated health check.
+
+When a single service owns several independent resident processes, use
+`pidfiles:` as a map keyed by process role. Each role must also exist under
+`processes:` with exact `exe` and `user`, so the pidfile PID can be tied back to
+the process identity Sermo is allowed to observe:
+
+```yaml
+pidfiles:
+  smbd: /run/samba/smbd.pid
+  nmbd: /run/samba/nmbd.pid
+
+processes:
+  smbd:
+    exe: "${smbd_binary}"
+    user: root
+  nmbd:
+    exe: "${nmbd_binary}"
+    user: root
+```
+
+Each `pidfiles.<role>` creates its own internal pidfile selector and its own
+gated health check (`pidfile-smbd`, `pidfile-nmbd`, ...). A value may still be a
+candidate list for that specific role. Do not combine `pidfile:` and
+`pidfiles:` in the same service: `pidfile:` means "one logical PID with
+candidate paths"; `pidfiles:` means "all of these roles must have a live
+pidfile."
 
 ### `socket:` shorthand (gated health check)
 

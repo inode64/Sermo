@@ -247,6 +247,9 @@ Kill decisions depend on how process facts are read, so this is fixed:
 Discovery order: backend information (systemd MainPID/cgroup; OpenRC status)
 → configured pidfiles → `processes:` selectors → child process tree from
 `/proc`, deduplicated by PID.
+For `pidfiles:` maps, each pidfile role must be backed by a same-named
+`processes:` selector with exact `exe` and `user`; the pidfile is evidence, not
+a name-only authority.
 
 ## Stop and signal escalation
 

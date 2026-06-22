@@ -558,6 +558,7 @@ func validateResolved(name string, tree map[string]any, runtime string, notifier
 	validateCheckSection(tree, "preflight", locksDir, add)
 	validateCheckSection(tree, "postflight", locksDir, add)
 	validateProcesses(tree, add)
+	validatePidfiles(tree, add)
 	validateStopPolicy(tree, add)
 	validatePolicyExtras(tree, add)
 	validateControl(tree, add)
