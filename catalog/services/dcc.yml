@@ -1,0 +1,21 @@
+kind: daemon
+name: dcc
+display_name: "Distributed Checksum Clearinghouse"
+category: mail
+description: "DCC interface daemon used by mail filtering stacks."
+service: dcc
+apps: [dcc]
+
+variables:
+  user: root
+
+pidfile: /run/dcc/dccifd.pid
+socket: /var/lib/dcc/dccifd
+
+processes:
+  main:
+    exe: "${dcc_binary}"
+    user: "${user}"
+
+checks:
+  service: { type: service, expect: active }
