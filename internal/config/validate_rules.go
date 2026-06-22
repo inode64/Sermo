@@ -12,9 +12,10 @@ import (
 
 // validateWindow checks an optional for/within firing window at the dotted prefix,
 // shared by rules, host watches and per-metric sub-watches. A window may declare
-// at most one of for/within; for.cycles and within.cycles must be positive; and
-// within.min_matches — optional, defaulting to 1 (true at least once within the
-// window) — must be positive and no larger than within.cycles when declared.
+// at most one of for/within; each window must choose exactly one of cycles or
+// duration; cycles and duration must be positive; and within.min_matches —
+// optional, defaulting to 1 (true at least once within the window) — must be
+// positive and no larger than within.cycles when cycles are used.
 func validateWindow(prefix string, entry map[string]any, add addFunc) {
 	rawFor, hasFor := entry["for"]
 	rawWithin, hasWithin := entry["within"]
@@ -26,43 +27,59 @@ func validateWindow(prefix string, entry map[string]any, add addFunc) {
 		if !ok {
 			// A scalar (`for: 3`) would otherwise be silently ignored by the
 			// runtime parser, leaving the rule without a window.
-			add("%s.for must be a mapping, e.g. for: {cycles: 3}", prefix)
+			add("%s.for must be a mapping, e.g. for: {cycles: 3} or for: {duration: 6m}", prefix)
 		} else {
 			for _, key := range slices.Sorted(maps.Keys(f)) {
-				if key != "cycles" {
-					add("%s.for.%s is not supported; for is always consecutive and only accepts cycles", prefix, key)
+				if key != "cycles" && key != "duration" {
+					add("%s.for.%s is not supported; for is always consecutive and only accepts cycles or duration", prefix, key)
 				}
 			}
-			if c, _ := cfgval.Int(f["cycles"]); c <= 0 {
-				add("%s.for.cycles must be > 0", prefix)
-			}
+			validateWindowLength(prefix+".for", f, add)
 		}
 	}
 	if hasWithin {
 		wn, ok := rawWithin.(map[string]any)
 		if !ok {
-			add("%s.within must be a mapping, e.g. within: {cycles: 5, min_matches: 2}", prefix)
+			add("%s.within must be a mapping, e.g. within: {cycles: 5, min_matches: 2} or within: {duration: 30m, min_matches: 2}", prefix)
 			return
 		}
 		for _, key := range slices.Sorted(maps.Keys(wn)) {
-			if key != "cycles" && key != "min_matches" {
-				add("%s.within.%s is not supported; within only accepts cycles and min_matches", prefix, key)
+			if key != "cycles" && key != "duration" && key != "min_matches" {
+				add("%s.within.%s is not supported; within only accepts cycles or duration, plus min_matches", prefix, key)
 			}
 		}
-		cycles, _ := cfgval.Int(wn["cycles"])
-		if cycles <= 0 {
-			add("%s.within.cycles must be > 0", prefix)
-		}
+		cycles, hasCycles := validateWindowLength(prefix+".within", wn, add)
 		if v, present := wn["min_matches"]; present {
 			matches, _ := cfgval.Int(v)
 			switch {
 			case matches <= 0:
 				add("%s.within.min_matches must be > 0", prefix)
-			case cycles > 0 && matches > cycles:
+			case hasCycles && cycles > 0 && matches > cycles:
 				add("%s.within.min_matches must be <= within.cycles", prefix)
 			}
 		}
 	}
+}
+
+func validateWindowLength(prefix string, m map[string]any, add addFunc) (cycles int, hasCycles bool) {
+	_, hasCycles = m["cycles"]
+	_, hasDuration := m["duration"]
+	switch {
+	case !hasCycles && !hasDuration:
+		add("%s must define exactly one of cycles or duration", prefix)
+	case hasCycles && hasDuration:
+		add("%s cannot define both cycles and duration", prefix)
+	}
+	if hasCycles {
+		cycles, _ = cfgval.Int(m["cycles"])
+		if cycles <= 0 {
+			add("%s.cycles must be > 0", prefix)
+		}
+	}
+	if hasDuration && !isPositiveDuration(cfgval.String(m["duration"])) {
+		add("%s.duration must be a valid positive duration", prefix)
+	}
+	return cycles, hasCycles
 }
 
 var serviceStates = set("active", "inactive", "paused", "failed", "unknown")
@@ -96,10 +113,10 @@ var metricForms = map[string]metricForm{
 	"load15":        {absolute: true},
 }
 
-// validateRuleWindow checks the merged `rule_window` fallback block:
-// a positive cycles count, a known mode, and — for the within mode — an optional
-// min_matches (default 1) that is positive and no larger than cycles when
-// declared.
+// validateRuleWindow checks the merged `rule_window` fallback block: a positive
+// cycles or duration window, a known mode, and — for the within mode — an
+// optional min_matches (default 1) that is positive and no larger than cycles
+// when cycles are used.
 func validateRuleWindow(tree map[string]any, add addFunc) {
 	rw, present := tree["rule_window"]
 	if !present {
@@ -110,10 +127,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 		add("rule_window must be a mapping")
 		return
 	}
-	cycles, _ := cfgval.Int(m["cycles"])
-	if cycles <= 0 {
-		add("rule_window.cycles must be > 0")
-	}
+	cycles, hasCycles := validateWindowLength("rule_window", m, add)
 	switch mode := cfgval.String(m["mode"]); mode {
 	case "", "consecutive":
 	case "within":
@@ -122,7 +136,7 @@ func validateRuleWindow(tree map[string]any, add addFunc) {
 			switch {
 			case matches <= 0:
 				add("rule_window.min_matches must be > 0 for mode %q", mode)
-			case cycles > 0 && matches > cycles:
+			case hasCycles && cycles > 0 && matches > cycles:
 				add("rule_window.min_matches must be <= rule_window.cycles")
 			}
 		}

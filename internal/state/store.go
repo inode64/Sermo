@@ -158,6 +158,8 @@ var migrations = []string{
 		history     TEXT NOT NULL DEFAULT '[]',
 		PRIMARY KEY (service, rule_name)
 	);`,
+	`ALTER TABLE rule_window_state ADD COLUMN true_since INTEGER NOT NULL DEFAULT 0;`,
+	`ALTER TABLE rule_window_state ADD COLUMN timed_history TEXT NOT NULL DEFAULT '[]';`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -330,8 +332,16 @@ type RemediationRecord struct {
 
 // RuleWindowRecord is the persisted for/within progress for one rule.
 type RuleWindowRecord struct {
-	Consecutive int
-	History     []bool
+	Consecutive  int
+	History      []bool
+	TrueSince    time.Time
+	TimedHistory []RuleWindowSample
+}
+
+// RuleWindowSample is one persisted sample for a duration-based within window.
+type RuleWindowSample struct {
+	At    time.Time
+	Match bool
 }
 
 // RemediationState returns a service's persisted automatic-remediation state.
@@ -392,7 +402,7 @@ func (s *Store) SetRemediationState(service string, rec RemediationRecord) error
 // rules, keyed by rule name.
 func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, error) {
 	rows, err := s.db.Query(
-		`SELECT rule_name, consecutive, history
+		`SELECT rule_name, consecutive, history, true_since, timed_history
 		   FROM rule_window_state WHERE service = ? ORDER BY rule_name;`,
 		service,
 	)
@@ -407,15 +417,26 @@ func (s *Store) RuleWindowStates(service string) (map[string]RuleWindowRecord, e
 			name        string
 			consecutive int
 			rawHistory  string
+			trueSince   int64
+			rawTimed    string
 		)
-		if err := rows.Scan(&name, &consecutive, &rawHistory); err != nil {
+		if err := rows.Scan(&name, &consecutive, &rawHistory, &trueSince, &rawTimed); err != nil {
 			return nil, err
 		}
 		var history []bool
 		if err := json.Unmarshal([]byte(rawHistory), &history); err != nil {
 			return nil, err
 		}
-		out[name] = RuleWindowRecord{Consecutive: consecutive, History: history}
+		timed, err := decodeRuleWindowSamples(rawTimed)
+		if err != nil {
+			return nil, err
+		}
+		out[name] = RuleWindowRecord{
+			Consecutive:  consecutive,
+			History:      history,
+			TrueSince:    unixNanoTime(trueSince),
+			TimedHistory: timed,
+		}
 	}
 	return out, rows.Err()
 }
@@ -443,10 +464,14 @@ func (s *Store) SetRuleWindowStates(service string, records map[string]RuleWindo
 		if err != nil {
 			return err
 		}
+		timed, err := encodeRuleWindowSamples(rec.TimedHistory)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.Exec(
-			`INSERT INTO rule_window_state (service, rule_name, consecutive, history)
-			 VALUES (?, ?, ?, ?);`,
-			service, name, rec.Consecutive, string(history),
+			`INSERT INTO rule_window_state (service, rule_name, consecutive, history, true_since, timed_history)
+			 VALUES (?, ?, ?, ?, ?, ?);`,
+			service, name, rec.Consecutive, string(history), timeUnixNano(rec.TrueSince), timed,
 		); err != nil {
 			return err
 		}
@@ -481,6 +506,44 @@ func decodeUnixNanos(raw string) ([]time.Time, error) {
 		if n != 0 {
 			out = append(out, time.Unix(0, n).UTC())
 		}
+	}
+	return out, nil
+}
+
+type ruleWindowSampleJSON struct {
+	At    int64 `json:"at"`
+	Match bool  `json:"match"`
+}
+
+func encodeRuleWindowSamples(samples []RuleWindowSample) (string, error) {
+	raw := make([]ruleWindowSampleJSON, 0, len(samples))
+	for _, sample := range samples {
+		if sample.At.IsZero() {
+			continue
+		}
+		raw = append(raw, ruleWindowSampleJSON{At: sample.At.UTC().UnixNano(), Match: sample.Match})
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func decodeRuleWindowSamples(raw string) ([]RuleWindowSample, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	var encoded []ruleWindowSampleJSON
+	if err := json.Unmarshal([]byte(raw), &encoded); err != nil {
+		return nil, err
+	}
+	out := make([]RuleWindowSample, 0, len(encoded))
+	for _, sample := range encoded {
+		if sample.At == 0 {
+			continue
+		}
+		out = append(out, RuleWindowSample{At: time.Unix(0, sample.At).UTC(), Match: sample.Match})
 	}
 	return out, nil
 }

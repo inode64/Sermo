@@ -80,7 +80,8 @@ defaults:                      # merged into every service as the base layer
     max_actions_window: 1h
     backoff: { initial: 1m, factor: 2, max: 30m }
   rule_window:                 # fallback for rules without for/within
-    cycles: 1
+    cycles: 1                  # choose cycles or duration, not both
+    # duration: 6m
     mode: consecutive          # consecutive | within
     # min_matches: 1           # only meaningful with mode: within
   remediation:
@@ -803,7 +804,7 @@ rules:
       and:
         - failed: { check: http }
         - not: { service: { state: inactive } }
-    for: { cycles: 3 }          # consecutive cycles
+    for: { duration: 6m }       # consecutive wall-clock time; cycles: 3 is also valid
     then:
       actions:
         - { type: alert, message: "demo HTTP health failed" }
@@ -939,7 +940,7 @@ checks:
 
 rules:
   restart-if-http-failed:       # override one inherited rule field
-    for: { cycles: 5 }
+    for: { duration: 10m }
   stop-if-process-gone: { enabled: false }   # disable an inherited rule
 
 ---

@@ -408,6 +408,30 @@ func TestWatchForWindowRequiresConsecutive(t *testing.T) {
 	}
 }
 
+func TestWatchForDurationRequiresElapsedTime(t *testing.T) {
+	var calls int
+	now := time.Date(2026, 6, 22, 10, 0, 0, 0, time.UTC)
+	w := &Watch{
+		Name:   "storage-root",
+		Check:  stubCheck{name: "storage", ok: true},
+		Window: rules.Rule{For: &rules.ForWindow{Duration: 6 * time.Minute}},
+		Hook:   HookSpec{Command: []string{"/bin/true"}},
+		Runner: HookRunnerFunc(func(context.Context, []string, map[string]string, time.Duration) error { calls++; return nil }),
+		Now:    func() time.Time { return now },
+	}
+	w.RunCycle(context.Background())
+	now = now.Add(5 * time.Minute)
+	w.RunCycle(context.Background())
+	if calls != 0 {
+		t.Fatalf("fired before duration elapsed: %d", calls)
+	}
+	now = now.Add(time.Minute)
+	w.RunCycle(context.Background())
+	if calls != 1 {
+		t.Fatalf("expected fire after duration elapsed, got %d", calls)
+	}
+}
+
 func TestWatchWithRealOSHookRunner(t *testing.T) {
 	var hookEvents []Event
 	w := &Watch{

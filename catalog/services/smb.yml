@@ -64,6 +64,7 @@ checks:
       key: daemon_list
       contains: winbindd
 
+rules:
   restart-if-worker-thread-hot:
     type: remediation
     if:
@@ -72,13 +73,11 @@ checks:
         name: cpu_thread
         op: ">"
         value: 90%
-    # 12 consecutive 30s cycles = 6 minutes.
     for:
-      cycles: 12
+      duration: 6m
     then:
       action: restart
 
-rules:
   block-restart-if-config-invalid:
     type: guard
     blocks: [restart, start]
@@ -87,3 +86,16 @@ rules:
     then:
       action: block
       message: "${display_name} configuration is invalid"
+
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: ">"
+        value: 90%
+    for:
+      duration: 10m
+    then:
+      action: restart

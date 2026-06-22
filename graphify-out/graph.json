@@ -4,6 +4,476 @@
   "graph": {},
   "nodes": [
     {
+      "label": "configuration.md",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 205,
+      "norm_label": "configuration.md",
+      "id": "docs_configuration"
+    },
+    {
+      "label": "Configuration",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "configuration",
+      "id": "docs_configuration_configuration"
+    },
+    {
+      "label": "Schema changes",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L26",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "schema changes",
+      "id": "docs_configuration_schema_changes"
+    },
+    {
+      "label": "Layout",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L36",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "layout",
+      "id": "docs_configuration_layout"
+    },
+    {
+      "label": "Mount units",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L220",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "mount units",
+      "id": "docs_configuration_mount_units"
+    },
+    {
+      "label": "Engine settings",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L269",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "engine settings",
+      "id": "docs_configuration_engine_settings"
+    },
+    {
+      "label": "Per-service interval",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L386",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "per-service interval",
+      "id": "docs_configuration_per_service_interval"
+    },
+    {
+      "label": "Per-check interval",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L406",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "per-check interval",
+      "id": "docs_configuration_per_check_interval"
+    },
+    {
+      "label": "Web UI",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L429",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "web ui",
+      "id": "docs_configuration_web_ui"
+    },
+    {
+      "label": "Authentication",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L482",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "authentication",
+      "id": "docs_configuration_authentication"
+    },
+    {
+      "label": "Behind a reverse proxy (required to expose it)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L507",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "behind a reverse proxy (required to expose it)",
+      "id": "docs_configuration_behind_a_reverse_proxy_required_to_expose_it"
+    },
+    {
+      "label": "Liveness (`/livez`)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L634",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "liveness (`/livez`)",
+      "id": "docs_configuration_liveness_livez"
+    },
+    {
+      "label": "Readiness (`/readyz`)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L652",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "readiness (`/readyz`)",
+      "id": "docs_configuration_readiness_readyz"
+    },
+    {
+      "label": "Latency graph",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L684",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "latency graph",
+      "id": "docs_configuration_latency_graph"
+    },
+    {
+      "label": "Availability (SLA)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L731",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "availability (sla)",
+      "id": "docs_configuration_availability_sla"
+    },
+    {
+      "label": "Availability time series",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L769",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "availability time series",
+      "id": "docs_configuration_availability_time_series"
+    },
+    {
+      "label": "Notifications",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L785",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "notifications",
+      "id": "docs_configuration_notifications"
+    },
+    {
+      "label": "Notification templates",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L855",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "notification templates",
+      "id": "docs_configuration_notification_templates"
+    },
+    {
+      "label": "Default selection and precedence",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L896",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "default selection and precedence",
+      "id": "docs_configuration_default_selection_and_precedence"
+    },
+    {
+      "label": "Host watches",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L923",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "host watches",
+      "id": "docs_configuration_host_watches"
+    },
+    {
+      "label": "`then.expand` \u2014 volume growth (storage watches)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1157",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`then.expand` \u2014 volume growth (storage watches)",
+      "id": "docs_configuration_then_expand_volume_growth_storage_watches"
+    },
+    {
+      "label": "Mount conditions",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1262",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "mount conditions",
+      "id": "docs_configuration_mount_conditions"
+    },
+    {
+      "label": "`net` \u2014 network interface",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1296",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`net` \u2014 network interface",
+      "id": "docs_configuration_net_network_interface"
+    },
+    {
+      "label": "`icmp` \u2014 external host (ping)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1353",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`icmp` \u2014 external host (ping)",
+      "id": "docs_configuration_icmp_external_host_ping"
+    },
+    {
+      "label": "`swap` \u2014 system swap",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1398",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`swap` \u2014 system swap",
+      "id": "docs_configuration_swap_system_swap"
+    },
+    {
+      "label": "`load` \u2014 system load average",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1430",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`load` \u2014 system load average",
+      "id": "docs_configuration_load_system_load_average"
+    },
+    {
+      "label": "`memory` \u2014 system RAM",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1455",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`memory` \u2014 system ram",
+      "id": "docs_configuration_memory_system_ram"
+    },
+    {
+      "label": "`pressure` \u2014 kernel PSI stall time",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1476",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`pressure` \u2014 kernel psi stall time",
+      "id": "docs_configuration_pressure_kernel_psi_stall_time"
+    },
+    {
+      "label": "`oom` \u2014 kernel OOM kills",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1501",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`oom` \u2014 kernel oom kills",
+      "id": "docs_configuration_oom_kernel_oom_kills"
+    },
+    {
+      "label": "`fds` \u2014 system file descriptors",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1518",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`fds` \u2014 system file descriptors",
+      "id": "docs_configuration_fds_system_file_descriptors"
+    },
+    {
+      "label": "`diskio` \u2014 block-device I/O rates",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1536",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`diskio` \u2014 block-device i/o rates",
+      "id": "docs_configuration_diskio_block_device_i_o_rates"
+    },
+    {
+      "label": "`pids` \u2014 kernel PID table",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1568",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`pids` \u2014 kernel pid table",
+      "id": "docs_configuration_pids_kernel_pid_table"
+    },
+    {
+      "label": "`conntrack` \u2014 netfilter connection table",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1589",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`conntrack` \u2014 netfilter connection table",
+      "id": "docs_configuration_conntrack_netfilter_connection_table"
+    },
+    {
+      "label": "`firewall_rules` \u2014 loaded firewall rules",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1608",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`firewall_rules` \u2014 loaded firewall rules",
+      "id": "docs_configuration_firewall_rules_loaded_firewall_rules"
+    },
+    {
+      "label": "`entropy` \u2014 kernel entropy pool",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1624",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`entropy` \u2014 kernel entropy pool",
+      "id": "docs_configuration_entropy_kernel_entropy_pool"
+    },
+    {
+      "label": "`zombies` \u2014 defunct processes",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1641",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`zombies` \u2014 defunct processes",
+      "id": "docs_configuration_zombies_defunct_processes"
+    },
+    {
+      "label": "`file` \u2014 file/directory attributes",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1658",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`file` \u2014 file/directory attributes",
+      "id": "docs_configuration_file_file_directory_attributes"
+    },
+    {
+      "label": "`process` \u2014 process by name",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1708",
+      "_origin": "ast",
+      "community": 207,
+      "norm_label": "`process` \u2014 process by name",
+      "id": "docs_configuration_process_process_by_name"
+    },
+    {
+      "label": "Global defaults",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1767",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "global defaults",
+      "id": "docs_configuration_global_defaults"
+    },
+    {
+      "label": "Resolution order",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1797",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "resolution order",
+      "id": "docs_configuration_resolution_order"
+    },
+    {
+      "label": "Merge rules",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1814",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "merge rules",
+      "id": "docs_configuration_merge_rules"
+    },
+    {
+      "label": "Binary resource variables",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1840",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "binary resource variables",
+      "id": "docs_configuration_binary_resource_variables"
+    },
+    {
+      "label": "Variables",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1891",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "variables",
+      "id": "docs_configuration_variables"
+    },
+    {
+      "label": "Global custom variables (`defaults.variables`)",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1912",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "global custom variables (`defaults.variables`)",
+      "id": "docs_configuration_global_custom_variables_defaults_variables"
+    },
+    {
+      "label": "Secrets from the environment",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1952",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "secrets from the environment",
+      "id": "docs_configuration_secrets_from_the_environment"
+    },
+    {
+      "label": "Validating",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1982",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "validating",
+      "id": "docs_configuration_validating"
+    },
+    {
+      "label": "Diagnostics",
+      "file_type": "document",
+      "source_file": "docs/configuration.md",
+      "source_location": "L1991",
+      "_origin": "ast",
+      "community": 206,
+      "norm_label": "diagnostics",
+      "id": "docs_configuration_diagnostics"
+    },
+    {
       "label": "daemons.md",
       "file_type": "document",
       "source_file": "docs/daemons.md",
@@ -87,7 +557,7 @@
       "label": "Metadata fields",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L274",
+      "source_location": "L276",
       "_origin": "ast",
       "community": 208,
       "norm_label": "metadata fields",
@@ -97,7 +567,7 @@
       "label": "Built-in variables",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L308",
+      "source_location": "L310",
       "_origin": "ast",
       "community": 208,
       "norm_label": "built-in variables",
@@ -107,7 +577,7 @@
       "label": "OS-specific blocks (os:)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L408",
+      "source_location": "L410",
       "_origin": "ast",
       "community": 208,
       "norm_label": "os-specific blocks (os:)",
@@ -117,7 +587,7 @@
       "label": "`control: libvirt` \u2014 QEMU/libvirt virtual machines",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L461",
+      "source_location": "L463",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`control: libvirt` \u2014 qemu/libvirt virtual machines",
@@ -127,7 +597,7 @@
       "label": "`control: docker` \u2014 Docker containers",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L525",
+      "source_location": "L527",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`control: docker` \u2014 docker containers",
@@ -137,7 +607,7 @@
       "label": "`also_service` \u2014 auxiliary init units",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L581",
+      "source_location": "L583",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`also_service` \u2014 auxiliary init units",
@@ -147,7 +617,7 @@
       "label": "`also_apply` \u2014 cascade to other services",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L605",
+      "source_location": "L607",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`also_apply` \u2014 cascade to other services",
@@ -157,7 +627,7 @@
       "label": "`processes:` by executable or cmdline",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L635",
+      "source_location": "L637",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`processes:` by executable or cmdline",
@@ -167,7 +637,7 @@
       "label": "Stopped-state invariants (`stop_policy`)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L659",
+      "source_location": "L661",
       "_origin": "ast",
       "community": 208,
       "norm_label": "stopped-state invariants (`stop_policy`)",
@@ -177,7 +647,7 @@
       "label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L704",
+      "source_location": "L706",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`pidfile:` and `pidfiles:` shorthand (selectors + health checks)",
@@ -187,7 +657,7 @@
       "label": "`socket:` shorthand (gated health check)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L768",
+      "source_location": "L770",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`socket:` shorthand (gated health check)",
@@ -197,7 +667,7 @@
       "label": "`lockfile:` shorthand (gated health check)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L785",
+      "source_location": "L787",
       "_origin": "ast",
       "community": 208,
       "norm_label": "`lockfile:` shorthand (gated health check)",
@@ -207,7 +677,7 @@
       "label": "Versioned daemons",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L800",
+      "source_location": "L802",
       "_origin": "ast",
       "community": 208,
       "norm_label": "versioned daemons",
@@ -217,7 +687,7 @@
       "label": "Integer and instance placeholders",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L875",
+      "source_location": "L887",
       "_origin": "ast",
       "community": 208,
       "norm_label": "integer and instance placeholders",
@@ -227,7 +697,7 @@
       "label": "Composite names with a separator (`%s`)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L920",
+      "source_location": "L963",
       "_origin": "ast",
       "community": 208,
       "norm_label": "composite names with a separator (`%s`)",
@@ -237,7 +707,7 @@
       "label": "Daemon-owned discovery",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L942",
+      "source_location": "L985",
       "_origin": "ast",
       "community": 208,
       "norm_label": "daemon-owned discovery",
@@ -247,7 +717,7 @@
       "label": "Optional components (`enable_if`)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L967",
+      "source_location": "L1010",
       "_origin": "ast",
       "community": 208,
       "norm_label": "optional components (`enable_if`)",
@@ -257,7 +727,7 @@
       "label": "Variables read from a config file (`from_file`)",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1000",
+      "source_location": "L1043",
       "_origin": "ast",
       "community": 208,
       "norm_label": "variables read from a config file (`from_file`)",
@@ -267,7 +737,7 @@
       "label": "Listing installed applications",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1024",
+      "source_location": "L1067",
       "_origin": "ast",
       "community": 208,
       "norm_label": "listing installed applications",
@@ -277,7 +747,7 @@
       "label": "Service unit",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1112",
+      "source_location": "L1163",
       "_origin": "ast",
       "community": 208,
       "norm_label": "service unit",
@@ -287,7 +757,7 @@
       "label": "Cloning",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1146",
+      "source_location": "L1197",
       "_origin": "ast",
       "community": 208,
       "norm_label": "cloning",
@@ -297,7 +767,7 @@
       "label": "Multiple instances of one application",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1163",
+      "source_location": "L1214",
       "_origin": "ast",
       "community": 208,
       "norm_label": "multiple instances of one application",
@@ -307,7 +777,7 @@
       "label": "Disabling and deleting inherited entries",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1209",
+      "source_location": "L1260",
       "_origin": "ast",
       "community": 208,
       "norm_label": "disabling and deleting inherited entries",
@@ -317,7 +787,7 @@
       "label": "Monitoring flag",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1219",
+      "source_location": "L1270",
       "_origin": "ast",
       "community": 208,
       "norm_label": "monitoring flag",
@@ -327,481 +797,241 @@
       "label": "Auxiliary commands",
       "file_type": "document",
       "source_file": "docs/daemons.md",
-      "source_location": "L1249",
+      "source_location": "L1300",
       "_origin": "ast",
       "community": 208,
       "norm_label": "auxiliary commands",
       "id": "docs_daemons_auxiliary_commands"
     },
     {
-      "label": "configuration.md",
+      "label": "SKILL.md",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
       "source_location": "L1",
       "_origin": "ast",
-      "community": 205,
-      "norm_label": "configuration.md",
-      "id": "docs_configuration"
+      "community": 215,
+      "norm_label": "skill.md",
+      "id": "sermo_config_schema_skill"
     },
     {
-      "label": "Configuration",
+      "label": "Core principles",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L8",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "configuration",
-      "id": "docs_configuration_configuration"
+      "community": 215,
+      "norm_label": "core principles",
+      "id": "sermo_config_schema_skill_core_principles"
     },
     {
-      "label": "Schema changes",
+      "label": "Document kinds",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L26",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L18",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "schema changes",
-      "id": "docs_configuration_schema_changes"
+      "community": 215,
+      "norm_label": "document kinds",
+      "id": "sermo_config_schema_skill_document_kinds"
     },
     {
-      "label": "Layout",
+      "label": "File granularity",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L36",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L77",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "layout",
-      "id": "docs_configuration_layout"
+      "community": 215,
+      "norm_label": "file granularity",
+      "id": "sermo_config_schema_skill_file_granularity"
     },
     {
-      "label": "Mount units",
+      "label": "Version templates",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L211",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L99",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "mount units",
-      "id": "docs_configuration_mount_units"
+      "community": 215,
+      "norm_label": "version templates",
+      "id": "sermo_config_schema_skill_version_templates"
     },
     {
-      "label": "Engine settings",
+      "label": "Categories and library restarts",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L260",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L143",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "engine settings",
-      "id": "docs_configuration_engine_settings"
-    },
-    {
-      "label": "Per-service interval",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L377",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "per-service interval",
-      "id": "docs_configuration_per_service_interval"
-    },
-    {
-      "label": "Per-check interval",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L397",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "per-check interval",
-      "id": "docs_configuration_per_check_interval"
-    },
-    {
-      "label": "Web UI",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L420",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "web ui",
-      "id": "docs_configuration_web_ui"
-    },
-    {
-      "label": "Authentication",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L473",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "authentication",
-      "id": "docs_configuration_authentication"
-    },
-    {
-      "label": "Behind a reverse proxy (required to expose it)",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L498",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "behind a reverse proxy (required to expose it)",
-      "id": "docs_configuration_behind_a_reverse_proxy_required_to_expose_it"
-    },
-    {
-      "label": "Liveness (`/livez`)",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L625",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "liveness (`/livez`)",
-      "id": "docs_configuration_liveness_livez"
-    },
-    {
-      "label": "Readiness (`/readyz`)",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L643",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "readiness (`/readyz`)",
-      "id": "docs_configuration_readiness_readyz"
-    },
-    {
-      "label": "Latency graph",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L675",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "latency graph",
-      "id": "docs_configuration_latency_graph"
-    },
-    {
-      "label": "Availability (SLA)",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L722",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "availability (sla)",
-      "id": "docs_configuration_availability_sla"
-    },
-    {
-      "label": "Availability time series",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L760",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "availability time series",
-      "id": "docs_configuration_availability_time_series"
-    },
-    {
-      "label": "Notifications",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L776",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "notifications",
-      "id": "docs_configuration_notifications"
-    },
-    {
-      "label": "Notification templates",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L846",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "notification templates",
-      "id": "docs_configuration_notification_templates"
-    },
-    {
-      "label": "Default selection and precedence",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L887",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "default selection and precedence",
-      "id": "docs_configuration_default_selection_and_precedence"
-    },
-    {
-      "label": "Host watches",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L914",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "host watches",
-      "id": "docs_configuration_host_watches"
-    },
-    {
-      "label": "`then.expand` \u2014 volume growth (storage watches)",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1148",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`then.expand` \u2014 volume growth (storage watches)",
-      "id": "docs_configuration_then_expand_volume_growth_storage_watches"
-    },
-    {
-      "label": "Mount conditions",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1253",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "mount conditions",
-      "id": "docs_configuration_mount_conditions"
-    },
-    {
-      "label": "`net` \u2014 network interface",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1287",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`net` \u2014 network interface",
-      "id": "docs_configuration_net_network_interface"
-    },
-    {
-      "label": "`icmp` \u2014 external host (ping)",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1344",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`icmp` \u2014 external host (ping)",
-      "id": "docs_configuration_icmp_external_host_ping"
-    },
-    {
-      "label": "`swap` \u2014 system swap",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1389",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`swap` \u2014 system swap",
-      "id": "docs_configuration_swap_system_swap"
-    },
-    {
-      "label": "`load` \u2014 system load average",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1421",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`load` \u2014 system load average",
-      "id": "docs_configuration_load_system_load_average"
-    },
-    {
-      "label": "`memory` \u2014 system RAM",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1446",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`memory` \u2014 system ram",
-      "id": "docs_configuration_memory_system_ram"
-    },
-    {
-      "label": "`pressure` \u2014 kernel PSI stall time",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1467",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`pressure` \u2014 kernel psi stall time",
-      "id": "docs_configuration_pressure_kernel_psi_stall_time"
-    },
-    {
-      "label": "`oom` \u2014 kernel OOM kills",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1492",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`oom` \u2014 kernel oom kills",
-      "id": "docs_configuration_oom_kernel_oom_kills"
-    },
-    {
-      "label": "`fds` \u2014 system file descriptors",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1509",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`fds` \u2014 system file descriptors",
-      "id": "docs_configuration_fds_system_file_descriptors"
-    },
-    {
-      "label": "`diskio` \u2014 block-device I/O rates",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1527",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`diskio` \u2014 block-device i/o rates",
-      "id": "docs_configuration_diskio_block_device_i_o_rates"
-    },
-    {
-      "label": "`pids` \u2014 kernel PID table",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1559",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`pids` \u2014 kernel pid table",
-      "id": "docs_configuration_pids_kernel_pid_table"
-    },
-    {
-      "label": "`conntrack` \u2014 netfilter connection table",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1580",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`conntrack` \u2014 netfilter connection table",
-      "id": "docs_configuration_conntrack_netfilter_connection_table"
-    },
-    {
-      "label": "`firewall_rules` \u2014 loaded firewall rules",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1599",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`firewall_rules` \u2014 loaded firewall rules",
-      "id": "docs_configuration_firewall_rules_loaded_firewall_rules"
-    },
-    {
-      "label": "`entropy` \u2014 kernel entropy pool",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1615",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`entropy` \u2014 kernel entropy pool",
-      "id": "docs_configuration_entropy_kernel_entropy_pool"
-    },
-    {
-      "label": "`zombies` \u2014 defunct processes",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1632",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`zombies` \u2014 defunct processes",
-      "id": "docs_configuration_zombies_defunct_processes"
-    },
-    {
-      "label": "`file` \u2014 file/directory attributes",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1649",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`file` \u2014 file/directory attributes",
-      "id": "docs_configuration_file_file_directory_attributes"
-    },
-    {
-      "label": "`process` \u2014 process by name",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1699",
-      "_origin": "ast",
-      "community": 207,
-      "norm_label": "`process` \u2014 process by name",
-      "id": "docs_configuration_process_process_by_name"
-    },
-    {
-      "label": "Global defaults",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1758",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "global defaults",
-      "id": "docs_configuration_global_defaults"
-    },
-    {
-      "label": "Resolution order",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1788",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "resolution order",
-      "id": "docs_configuration_resolution_order"
+      "community": 215,
+      "norm_label": "categories and library restarts",
+      "id": "sermo_config_schema_skill_categories_and_library_restarts"
     },
     {
       "label": "Merge rules",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1805",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L168",
       "_origin": "ast",
-      "community": 206,
+      "community": 215,
       "norm_label": "merge rules",
-      "id": "docs_configuration_merge_rules"
-    },
-    {
-      "label": "Binary resource variables",
-      "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1823",
-      "_origin": "ast",
-      "community": 206,
-      "norm_label": "binary resource variables",
-      "id": "docs_configuration_binary_resource_variables"
+      "id": "sermo_config_schema_skill_merge_rules"
     },
     {
       "label": "Variables",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1874",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L210",
       "_origin": "ast",
-      "community": 206,
+      "community": 215,
       "norm_label": "variables",
-      "id": "docs_configuration_variables"
+      "id": "sermo_config_schema_skill_variables"
     },
     {
-      "label": "Global custom variables (`defaults.variables`)",
+      "label": "Typed fields and variable interaction",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1895",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L266",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "global custom variables (`defaults.variables`)",
-      "id": "docs_configuration_global_custom_variables_defaults_variables"
+      "community": 215,
+      "norm_label": "typed fields and variable interaction",
+      "id": "sermo_config_schema_skill_typed_fields_and_variable_interaction"
     },
     {
-      "label": "Secrets from the environment",
+      "label": "Metrics",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1935",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L282",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "secrets from the environment",
-      "id": "docs_configuration_secrets_from_the_environment"
+      "community": 215,
+      "norm_label": "metrics",
+      "id": "sermo_config_schema_skill_metrics"
     },
     {
-      "label": "Validating",
+      "label": "Required validation",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1965",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L307",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "validating",
-      "id": "docs_configuration_validating"
+      "community": 215,
+      "norm_label": "required validation",
+      "id": "sermo_config_schema_skill_required_validation"
     },
     {
-      "label": "Diagnostics",
+      "label": "Resolved config",
       "file_type": "document",
-      "source_file": "docs/configuration.md",
-      "source_location": "L1974",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L350",
       "_origin": "ast",
-      "community": 206,
-      "norm_label": "diagnostics",
-      "id": "docs_configuration_diagnostics"
+      "community": 215,
+      "norm_label": "resolved config",
+      "id": "sermo_config_schema_skill_resolved_config"
+    },
+    {
+      "label": "Output format",
+      "file_type": "document",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L357",
+      "_origin": "ast",
+      "community": 215,
+      "norm_label": "output format",
+      "id": "sermo_config_schema_skill_output_format"
+    },
+    {
+      "label": "TODO.md",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "todo.md",
+      "id": "todo"
+    },
+    {
+      "label": "Sermo TODO \u2014 future improvements",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "sermo todo \u2014 future improvements",
+      "id": "todo_sermo_todo_future_improvements"
+    },
+    {
+      "label": "Major features",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "major features",
+      "id": "todo_major_features"
+    },
+    {
+      "label": "Integrations and catalog",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L25",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "integrations and catalog",
+      "id": "todo_integrations_and_catalog"
+    },
+    {
+      "label": "D-Bus, storage and desktop",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L27",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "d-bus, storage and desktop",
+      "id": "todo_d_bus_storage_and_desktop"
+    },
+    {
+      "label": "Observability",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L36",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "observability",
+      "id": "todo_observability"
+    },
+    {
+      "label": "Process managers and runtimes",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L50",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "process managers and runtimes",
+      "id": "todo_process_managers_and_runtimes"
+    },
+    {
+      "label": "Catalog \u2014 preflight `config` checks",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L57",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "catalog \u2014 preflight `config` checks",
+      "id": "todo_catalog_preflight_config_checks"
+    },
+    {
+      "label": "Logging and audit",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L82",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "logging and audit",
+      "id": "todo_logging_and_audit"
+    },
+    {
+      "label": "Engine and config",
+      "file_type": "document",
+      "source_file": "TODO.md",
+      "source_location": "L97",
+      "_origin": "ast",
+      "community": 20,
+      "norm_label": "engine and config",
+      "id": "todo_engine_and_config"
     },
     {
       "label": "rules.md",
@@ -1414,136 +1644,6 @@
       "community": 191,
       "norm_label": "sermo",
       "id": "pkg_sermo"
-    },
-    {
-      "label": "SKILL.md",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "skill.md",
-      "id": "sermo_config_schema_skill"
-    },
-    {
-      "label": "Core principles",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L8",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "core principles",
-      "id": "sermo_config_schema_skill_core_principles"
-    },
-    {
-      "label": "Document kinds",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L18",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "document kinds",
-      "id": "sermo_config_schema_skill_document_kinds"
-    },
-    {
-      "label": "File granularity",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L77",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "file granularity",
-      "id": "sermo_config_schema_skill_file_granularity"
-    },
-    {
-      "label": "Version templates",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L99",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "version templates",
-      "id": "sermo_config_schema_skill_version_templates"
-    },
-    {
-      "label": "Categories and library restarts",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L132",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "categories and library restarts",
-      "id": "sermo_config_schema_skill_categories_and_library_restarts"
-    },
-    {
-      "label": "Merge rules",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L157",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "merge rules",
-      "id": "sermo_config_schema_skill_merge_rules"
-    },
-    {
-      "label": "Variables",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L199",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "variables",
-      "id": "sermo_config_schema_skill_variables"
-    },
-    {
-      "label": "Typed fields and variable interaction",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L246",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "typed fields and variable interaction",
-      "id": "sermo_config_schema_skill_typed_fields_and_variable_interaction"
-    },
-    {
-      "label": "Metrics",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L262",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "metrics",
-      "id": "sermo_config_schema_skill_metrics"
-    },
-    {
-      "label": "Required validation",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L287",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "required validation",
-      "id": "sermo_config_schema_skill_required_validation"
-    },
-    {
-      "label": "Resolved config",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L328",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "resolved config",
-      "id": "sermo_config_schema_skill_resolved_config"
-    },
-    {
-      "label": "Output format",
-      "file_type": "document",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L335",
-      "_origin": "ast",
-      "community": 215,
-      "norm_label": "output format",
-      "id": "sermo_config_schema_skill_output_format"
     },
     {
       "label": "SKILL.md",
@@ -2616,106 +2716,6 @@
       "id": "readme_documentation"
     },
     {
-      "label": "TODO.md",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "todo.md",
-      "id": "todo"
-    },
-    {
-      "label": "Sermo TODO \u2014 future improvements",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L1",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "sermo todo \u2014 future improvements",
-      "id": "todo_sermo_todo_future_improvements"
-    },
-    {
-      "label": "Major features",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L6",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "major features",
-      "id": "todo_major_features"
-    },
-    {
-      "label": "Integrations and catalog",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L25",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "integrations and catalog",
-      "id": "todo_integrations_and_catalog"
-    },
-    {
-      "label": "D-Bus, storage and desktop",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L27",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "d-bus, storage and desktop",
-      "id": "todo_d_bus_storage_and_desktop"
-    },
-    {
-      "label": "Observability",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L36",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "observability",
-      "id": "todo_observability"
-    },
-    {
-      "label": "Process managers and runtimes",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L50",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "process managers and runtimes",
-      "id": "todo_process_managers_and_runtimes"
-    },
-    {
-      "label": "Catalog \u2014 preflight `config` checks",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L57",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "catalog \u2014 preflight `config` checks",
-      "id": "todo_catalog_preflight_config_checks"
-    },
-    {
-      "label": "Logging and audit",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L82",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "logging and audit",
-      "id": "todo_logging_and_audit"
-    },
-    {
-      "label": "Engine and config",
-      "file_type": "document",
-      "source_file": "TODO.md",
-      "source_location": "L97",
-      "_origin": "ast",
-      "community": 20,
-      "norm_label": "engine and config",
-      "id": "todo_engine_and_config"
-    },
-    {
       "label": "cli.md",
       "file_type": "document",
       "source_file": "docs/cli.md",
@@ -3401,19 +3401,6 @@
       "id": "apps_ceph_mon"
     },
     {
-      "label": "Ceph OSD (app template)",
-      "file_type": "code",
-      "source_file": "catalog/apps/ceph-osd%n.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 38,
-      "norm_label": "ceph osd (app template)",
-      "id": "apps_ceph_osd_n"
-    },
-    {
       "label": "Ceph OSD (app)",
       "file_type": "code",
       "source_file": "catalog/apps/ceph-osd.yml",
@@ -3451,19 +3438,6 @@
       "community": 39,
       "norm_label": "clamav daemon (app)",
       "id": "apps_clamd"
-    },
-    {
-      "label": "Cloudflare Tunnel (app)",
-      "file_type": "code",
-      "source_file": "catalog/apps/cloudflared.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 40,
-      "norm_label": "cloudflare tunnel (app)",
-      "id": "apps_cloudflared"
     },
     {
       "label": "CUPS (app)",
@@ -3778,19 +3752,6 @@
       "id": "apps_irqbalance"
     },
     {
-      "label": "Java (app)",
-      "file_type": "code",
-      "source_file": "catalog/apps/java.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 11,
-      "norm_label": "java (app)",
-      "id": "apps_java"
-    },
-    {
       "label": "Apache Kafka (app)",
       "file_type": "code",
       "source_file": "catalog/apps/kafka.yml",
@@ -3999,19 +3960,6 @@
       "id": "apps_named"
     },
     {
-      "label": "Nebula (app template)",
-      "file_type": "code",
-      "source_file": "catalog/apps/nebula-%i.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 95,
-      "norm_label": "nebula (app template)",
-      "id": "apps_nebula_i"
-    },
-    {
       "label": "Nebula (app)",
       "file_type": "code",
       "source_file": "catalog/apps/nebula.yml",
@@ -4129,19 +4077,6 @@
       "id": "apps_openssl"
     },
     {
-      "label": "OpenVPN (app)",
-      "file_type": "code",
-      "source_file": "catalog/apps/openvpn.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 106,
-      "norm_label": "openvpn (app)",
-      "id": "apps_openvpn"
-    },
-    {
       "label": "Open vSwitch (app)",
       "file_type": "code",
       "source_file": "catalog/apps/ovs-vswitchd.yml",
@@ -4205,32 +4140,6 @@
       "community": 112,
       "norm_label": "perl (app)",
       "id": "apps_perl"
-    },
-    {
-      "label": "PHP (app template)",
-      "file_type": "code",
-      "source_file": "catalog/apps/php%v.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 114,
-      "norm_label": "php (app template)",
-      "id": "apps_php_v"
-    },
-    {
-      "label": "PHP-FPM (app template)",
-      "file_type": "code",
-      "source_file": "catalog/apps/php-fpm%v.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 113,
-      "norm_label": "php-fpm (app template)",
-      "id": "apps_php_fpm_v"
     },
     {
       "label": "PCP Inference Engine (app)",
@@ -4335,19 +4244,6 @@
       "community": 125,
       "norm_label": "prometheus (app)",
       "id": "apps_prometheus"
-    },
-    {
-      "label": "Python (app template)",
-      "file_type": "code",
-      "source_file": "catalog/apps/python%n.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 10,
-      "norm_label": "python (app template)",
-      "id": "apps_python_n"
     },
     {
       "label": "QEMU Guest Agent (app)",
@@ -5104,19 +5000,6 @@
       "id": "services_apcsmart"
     },
     {
-      "label": "Asterisk PBX (service)",
-      "file_type": "code",
-      "source_file": "catalog/services/asterisk.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 26,
-      "norm_label": "asterisk pbx (service)",
-      "id": "services_asterisk"
-    },
-    {
       "label": "Automount (service)",
       "file_type": "code",
       "source_file": "catalog/services/automount.yml",
@@ -5206,19 +5089,6 @@
       "community": 34,
       "norm_label": "bareos storage daemon (service)",
       "id": "services_bareos_sd"
-    },
-    {
-      "label": "Bitbucket Pipelines Runner (service)",
-      "file_type": "code",
-      "source_file": "catalog/services/bitbucketrunner.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 192,
-      "norm_label": "bitbucket pipelines runner (service)",
-      "id": "services_bitbucketrunner"
     },
     {
       "label": "Bluetooth (service)",
@@ -5466,19 +5336,6 @@
       "community": 72,
       "norm_label": "mongodb (service)",
       "id": "services_mongod"
-    },
-    {
-      "label": "Nebula Instance daemon",
-      "file_type": "code",
-      "source_file": "catalog/services/nebula-%i.yml",
-      "source_location": null,
-      "source_url": null,
-      "captured_at": null,
-      "author": null,
-      "contributor": null,
-      "community": 1,
-      "norm_label": "nebula instance daemon",
-      "id": "nebula_i"
     },
     {
       "label": "RPC pipefs",
@@ -6019,366 +5876,6 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "docs/cli.md",
-      "source_location": "L91",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_cli",
-      "target": "docs_daemons"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/configuration.md",
-      "source_location": "L326",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_configuration",
-      "target": "docs_daemons"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons",
-      "target": "docs_daemons_daemons"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L44",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons",
-      "target": "docs_rules"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L125",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "readme",
-      "target": "docs_daemons"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L223",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_app_dependencies_apps"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L1090",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_auxiliary_commands"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L22",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_categories"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L986",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_cloning"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L1050",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_disabling_and_deleting_inherited_entries"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L51",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_library_daemons"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L268",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_metadata_fields"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L1060",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_monitoring_flag"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L1003",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_multiple_instances_of_one_application"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L89",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_reload_on_config_change_reload_on_change"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L956",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_service_unit"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L750",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_daemons",
-      "target": "docs_daemons_versioned_daemons"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L133",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_reload_on_config_change_reload_on_change",
-      "target": "docs_daemons_native_reload_reload_when_the_init_can_t_sermo_can"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L172",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_native_reload_reload_when_the_init_can_t_sermo_can",
-      "target": "docs_daemons_catalog_author_checklist_init_scripts_and_fallbacks"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L599",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_also_apply_cascade_to_other_services"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L575",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_also_service_auxiliary_init_units"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L302",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_built_in_variables"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L519",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_control_docker_docker_containers"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L454",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_control_libvirt_qemu_libvirt_virtual_machines"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L785",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_lockfile_shorthand_gated_health_check"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L400",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_os_specific_blocks_os"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L704",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_pidfile_and_pidfiles_shorthand_selectors_health_checks"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L623",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_processes_by_executable_or_cmdline"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L733",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_socket_shorthand_gated_health_check"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L652",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_metadata_fields",
-      "target": "docs_daemons_stopped_state_invariants_stop_policy"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L920",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_versioned_daemons",
-      "target": "docs_daemons_composite_names_with_a_separator_s"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L942",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_versioned_daemons",
-      "target": "docs_daemons_daemon_owned_discovery"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L823",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_versioned_daemons",
-      "target": "docs_daemons_integer_and_instance_placeholders"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L868",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_versioned_daemons",
-      "target": "docs_daemons_listing_installed_applications"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L967",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_versioned_daemons",
-      "target": "docs_daemons_optional_components_enable_if"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/daemons.md",
-      "source_location": "L1000",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "docs_daemons_versioned_daemons",
-      "target": "docs_daemons_variables_read_from_a_config_file_from_file"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "source_file": "docs/cli.md",
       "source_location": "L137",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -6394,6 +5891,16 @@
       "confidence_score": 1.0,
       "source": "docs_configuration",
       "target": "docs_configuration_configuration"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/configuration.md",
+      "source_location": "L326",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_configuration",
+      "target": "docs_daemons"
     },
     {
       "relation": "references",
@@ -6894,6 +6401,576 @@
       "confidence_score": 1.0,
       "source": "docs_configuration_variables",
       "target": "docs_configuration_secrets_from_the_environment"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/cli.md",
+      "source_location": "L91",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_cli",
+      "target": "docs_daemons"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons",
+      "target": "docs_daemons_daemons"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L44",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons",
+      "target": "docs_rules"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L125",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "readme",
+      "target": "docs_daemons"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L223",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_app_dependencies_apps"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L1090",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_auxiliary_commands"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L22",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_categories"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L986",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_cloning"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L1050",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_disabling_and_deleting_inherited_entries"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L51",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_library_daemons"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L268",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_metadata_fields"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L1060",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_monitoring_flag"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L1003",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_multiple_instances_of_one_application"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L89",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_reload_on_config_change_reload_on_change"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L956",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_service_unit"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L750",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_daemons",
+      "target": "docs_daemons_versioned_daemons"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L133",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_reload_on_config_change_reload_on_change",
+      "target": "docs_daemons_native_reload_reload_when_the_init_can_t_sermo_can"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L172",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_native_reload_reload_when_the_init_can_t_sermo_can",
+      "target": "docs_daemons_catalog_author_checklist_init_scripts_and_fallbacks"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L599",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_also_apply_cascade_to_other_services"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L575",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_also_service_auxiliary_init_units"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L302",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_built_in_variables"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L519",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_control_docker_docker_containers"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L454",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_control_libvirt_qemu_libvirt_virtual_machines"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L785",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_lockfile_shorthand_gated_health_check"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L400",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_os_specific_blocks_os"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L704",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_pidfile_and_pidfiles_shorthand_selectors_health_checks"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L623",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_processes_by_executable_or_cmdline"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L733",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_socket_shorthand_gated_health_check"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L652",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_metadata_fields",
+      "target": "docs_daemons_stopped_state_invariants_stop_policy"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L920",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_versioned_daemons",
+      "target": "docs_daemons_composite_names_with_a_separator_s"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L942",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_versioned_daemons",
+      "target": "docs_daemons_daemon_owned_discovery"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L823",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_versioned_daemons",
+      "target": "docs_daemons_integer_and_instance_placeholders"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L868",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_versioned_daemons",
+      "target": "docs_daemons_listing_installed_applications"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L967",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_versioned_daemons",
+      "target": "docs_daemons_optional_components_enable_if"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "docs/daemons.md",
+      "source_location": "L1000",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "docs_daemons_versioned_daemons",
+      "target": "docs_daemons_variables_read_from_a_config_file_from_file"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L130",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_categories_and_library_restarts"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L8",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_core_principles"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_document_kinds"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L75",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_file_granularity"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L155",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_merge_rules"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L260",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_metrics"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L331",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_output_format"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L284",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_required_validation"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L325",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_resolved_config"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L244",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_typed_fields_and_variable_interaction"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L197",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_variables"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
+      "source_location": "L97",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "sermo_config_schema_skill",
+      "target": "sermo_config_schema_skill_version_templates"
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "AGENTS.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "agents",
+      "target": "todo"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo",
+      "target": "todo_sermo_todo_future_improvements"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L55",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_sermo_todo_future_improvements",
+      "target": "todo_catalog_preflight_config_checks"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L77",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_sermo_todo_future_improvements",
+      "target": "todo_engine_and_config"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L23",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_sermo_todo_future_improvements",
+      "target": "todo_integrations_and_catalog"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L82",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_sermo_todo_future_improvements",
+      "target": "todo_logging_and_audit"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_sermo_todo_future_improvements",
+      "target": "todo_major_features"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L25",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_integrations_and_catalog",
+      "target": "todo_d_bus_storage_and_desktop"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L34",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_integrations_and_catalog",
+      "target": "todo_observability"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "TODO.md",
+      "source_location": "L48",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "todo_integrations_and_catalog",
+      "target": "todo_process_managers_and_runtimes"
     },
     {
       "relation": "contains",
@@ -7504,126 +7581,6 @@
       "confidence_score": 1.0,
       "source": "sermo_remote_testing_skill_sermo_remote_testing",
       "target": "sermo_remote_testing_skill_wizard_and_discovery"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L130",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_categories_and_library_restarts"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L8",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_core_principles"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L18",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_document_kinds"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L75",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_file_granularity"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L155",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_merge_rules"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L260",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_metrics"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L331",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_output_format"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L284",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_required_validation"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L325",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_resolved_config"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L244",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_typed_fields_and_variable_interaction"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L197",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_variables"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": ".agents/skills/sermo-config-schema/SKILL.md",
-      "source_location": "L97",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "sermo_config_schema_skill",
-      "target": "sermo_config_schema_skill_version_templates"
     },
     {
       "relation": "contains",
@@ -8288,16 +8245,6 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "source_file": "AGENTS.md",
-      "source_location": "L5",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "agents",
-      "target": "todo"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
       "source_file": "CLAUDE.md",
       "source_location": null,
       "weight": 1.0,
@@ -8634,96 +8581,6 @@
       "confidence_score": 1.0,
       "source": "readme_sermo",
       "target": "readme_quick_start"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L1",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo",
-      "target": "todo_sermo_todo_future_improvements"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L55",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_sermo_todo_future_improvements",
-      "target": "todo_catalog_preflight_config_checks"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L77",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_sermo_todo_future_improvements",
-      "target": "todo_engine_and_config"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L23",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_sermo_todo_future_improvements",
-      "target": "todo_integrations_and_catalog"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L82",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_sermo_todo_future_improvements",
-      "target": "todo_logging_and_audit"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L6",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_sermo_todo_future_improvements",
-      "target": "todo_major_features"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L25",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_integrations_and_catalog",
-      "target": "todo_d_bus_storage_and_desktop"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L34",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_integrations_and_catalog",
-      "target": "todo_observability"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "TODO.md",
-      "source_location": "L48",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "todo_integrations_and_catalog",
-      "target": "todo_process_managers_and_runtimes"
     },
     {
       "relation": "contains",
@@ -9099,16 +8956,6 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": "catalog/services/asterisk.yml",
-      "source_location": null,
-      "weight": 1.0,
-      "source": "services_asterisk",
-      "target": "apps_asterisk"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
       "source_file": "catalog/services/automount.yml",
       "source_location": null,
       "weight": 1.0,
@@ -9298,16 +9145,6 @@
     {
       "relation": "references",
       "confidence": "EXTRACTED",
-      "confidence_score": 0.8,
-      "source_file": "catalog/apps/kafka.yml",
-      "source_location": null,
-      "weight": 0.8,
-      "source": "apps_kafka",
-      "target": "apps_java"
-    },
-    {
-      "relation": "references",
-      "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "catalog/services/libvirtd.yml",
       "source_location": null,
@@ -9364,16 +9201,6 @@
       "weight": 1.0,
       "source": "services_mongod",
       "target": "apps_mongod"
-    },
-    {
-      "relation": "references",
-      "confidence": "INFERRED",
-      "confidence_score": 0.7,
-      "source_file": "catalog/services/homeassistant.yml",
-      "source_location": null,
-      "weight": 0.7,
-      "source": "services_homeassistant",
-      "target": "apps_python_n"
     },
     {
       "relation": "references",
@@ -9538,5 +9365,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "47b040a53da171f874aa12710679b9aafc0a62a1"
+  "built_at_commit": "78138844c3e15953eae8fb56280bccfd018dbcd9"
 }

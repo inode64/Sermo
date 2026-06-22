@@ -399,9 +399,10 @@ checks:
 
 The override governs the whole worker cycle for that service (its checks, rules
 and remediation), exactly like the global interval — only its cadence differs.
-Window counts (`for`/`within`, measured in cycles) are therefore counted in that
-service's own cycles. Worker starts are still spread across one global interval
-so a fleet of services does not all probe on the same tick.
+Window counts (`for`/`within` with `cycles`) are therefore counted in that
+service's own cycles; duration windows use wall-clock elapsed time between those
+observed cycles. Worker starts are still spread across one global interval so a
+fleet of services does not all probe on the same tick.
 
 ### Per-check interval
 
@@ -1143,7 +1144,8 @@ These conventions keep the per-type sections below short:
   `load`, `fds`, `pids`, `conntrack`, `entropy`, `zombies`, swap `usage`) fires
   when **every present predicate holds**
   — a predicate is `{op, value}` with the operator set `>= > <= < == !=`; declare
-  at least one, and add `for: { cycles: N }` to require N consecutive cycles.
+  at least one, and add `for: { cycles: N }` or `for: { duration: 6m }` to
+  require a sustained condition first.
   Predicate values share one grammar across every level check: a `*_pct` field
   accepts a number or an explicit `%` suffix in 0–100 (`90` or `"90%"`), a
   `*_bytes` field **requires** a size suffix (`K`/`M`/`G`/`T`, e.g. `10G`), and
@@ -1781,7 +1783,8 @@ declares neither its own `for` nor `within` (see the rules section). It accepts:
 ```yaml
 defaults:
   rule_window:
-    cycles: 1            # how many cycles the window spans
+    cycles: 1            # choose cycles or duration, not both
+    # duration: 6m
     mode: consecutive    # consecutive (a `for` window) | within (a sliding window)
     # min_matches: 1     # mode: within only — optional, defaults to 1 (true at least once)
 ```
@@ -1789,10 +1792,11 @@ defaults:
 `cycles: 1` + `mode: consecutive` is also the built-in default (fire the moment a
 rule's condition is true), so the shipped `sermo.yml` carries this block only as
 a commented reference.
-Raise `cycles` (e.g. `3`) to require N consecutive true cycles before every
-window-less rule fires, or use `mode: within` with `min_matches` for a sliding
-window. A rule's own `for`/`within` always overrides the fallback, and like the
-other per-service defaults it can be overridden per daemon or service.
+Raise `cycles` (e.g. `3`) or set `duration` (e.g. `6m`) to require a longer
+consecutive window before every window-less rule fires, or use `mode: within`
+with `min_matches` for a sliding window. A rule's own `for`/`within` always
+overrides the fallback, and like the other per-service defaults it can be
+overridden per daemon or service.
 
 ## Resolution order
 

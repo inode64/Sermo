@@ -9,6 +9,7 @@ import (
 	"maps"
 	"sermo/internal/cfgval"
 	"slices"
+	"time"
 )
 
 // RuleType classifies a rule.
@@ -41,15 +42,18 @@ type Action struct {
 	Message string
 }
 
-// ForWindow requires the condition to hold for N consecutive cycles.
+// ForWindow requires the condition to hold for N consecutive cycles or for a
+// wall-clock duration.
 type ForWindow struct {
-	Cycles int
+	Cycles   int
+	Duration time.Duration
 }
 
-// WithinWindow requires the condition to be true at least MinMatches times in the
-// last Cycles cycles (sliding window).
+// WithinWindow requires the condition to be true at least MinMatches times in
+// the last Cycles cycles or within the last wall-clock Duration.
 type WithinWindow struct {
 	Cycles     int
+	Duration   time.Duration
 	MinMatches int
 }
 

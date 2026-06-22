@@ -94,7 +94,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if w.FireOnFail {
 		fired = !res.OK
 	}
-	if !w.state.Fires(w.Window, fired) {
+	if !w.state.FiresAt(w.Window, fired, w.clock()) {
 		if w.firing {
 			w.firing = false
 			w.lastNotifyAt = time.Time{}

@@ -65,6 +65,35 @@ func TestLoadedRuleWindowStateFiresAfterRestart(t *testing.T) {
 	}
 }
 
+func TestLoadedDurationRuleWindowStateFiresAfterRestart(t *testing.T) {
+	store := openRuleStateStore(t)
+	if err := store.SetRuleWindowStates("web", map[string]state.RuleWindowRecord{
+		"restart-if-down": {TrueSince: t0.Add(-5 * time.Minute)},
+	}); err != nil {
+		t.Fatalf("SetRuleWindowStates: %v", err)
+	}
+
+	tree := map[string]any{"rules": map[string]any{
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"for":  map[string]any{"duration": "6m"},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	remediation, windows := loadRuleStateForTest(t, store, tree)
+
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(tree, rules.Policy{}, remediation)
+	w.windows = windows
+	w.Now = func() time.Time { return t0.Add(time.Minute) }
+	w.RunCycle(context.Background())
+
+	if len(h.ops) != 1 || h.ops[0] != "restart" {
+		t.Fatalf("persisted duration window must fire after elapsed time, ops=%v", h.ops)
+	}
+}
+
 func TestWorkerPersistsRuleState(t *testing.T) {
 	store := openRuleStateStore(t)
 	tree := map[string]any{"rules": map[string]any{
@@ -90,6 +119,31 @@ func TestWorkerPersistsRuleState(t *testing.T) {
 	}
 	if _, found, err := store.RemediationState("web"); err != nil || found {
 		t.Fatalf("remediation state found=%v err=%v, want no cooldown row before action", found, err)
+	}
+}
+
+func TestWorkerPersistsDurationRuleState(t *testing.T) {
+	store := openRuleStateStore(t)
+	tree := map[string]any{"rules": map[string]any{
+		"restart-if-down": map[string]any{
+			"type": "remediation",
+			"if":   map[string]any{"failed": map[string]any{"check": "http"}},
+			"for":  map[string]any{"duration": "6m"},
+			"then": map[string]any{"action": "restart"},
+		},
+	}}
+	h := &workerHarness{cache: failedCache("http"), opResult: operation.Result{Status: operation.ResultOK}}
+	w := h.worker(tree, rules.Policy{}, nil)
+	w.PersistState = ruleStatePersister(store, w.Emit, w.Service, w.Rules)
+
+	w.RunCycle(context.Background())
+
+	windows, err := store.RuleWindowStates("web")
+	if err != nil {
+		t.Fatalf("RuleWindowStates: %v", err)
+	}
+	if got := windows["restart-if-down"].TrueSince; !got.Equal(t0) {
+		t.Fatalf("persisted true_since = %v, want %v", got, t0)
 	}
 }
 
