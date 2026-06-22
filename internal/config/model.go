@@ -87,11 +87,13 @@ var perServiceDefaults = []string{"stop_policy", "policy", "rule_window", "remed
 
 // Document is a single loaded daemon or service in raw, unexpanded form.
 type Document struct {
-	Kind     string
-	Name     string
-	Path     string
-	Category string // service | app | library (daemons only; from the directory)
-	Body     map[string]any
+	Kind                 string
+	Name                 string
+	Path                 string
+	Category             string // service | app | library (daemons only; from the directory)
+	Body                 map[string]any
+	TemplateBaseName     string
+	TemplateCurrentLabel bool
 }
 
 // DocumentAliases returns the alternate public names declared by a catalog or

@@ -79,7 +79,45 @@ func List(ctx context.Context, runner execx.Runner, cfg *config.Config, category
 		}
 		reports = append(reports, r)
 	}
+	applyCurrentLabels(reports, cfg, category)
 	return reports
+}
+
+func applyCurrentLabels(reports []Report, cfg *config.Config, category string) {
+	if category != config.CategoryApp || cfg == nil {
+		return
+	}
+	byName := make(map[string]int, len(reports))
+	for i := range reports {
+		byName[reports[i].Name] = i
+	}
+	for i := range reports {
+		doc := cfg.Apps[reports[i].Name]
+		if doc == nil || !doc.TemplateCurrentLabel || doc.TemplateBaseName == "" || doc.Name == doc.TemplateBaseName {
+			continue
+		}
+		if !reports[i].Installed || !reports[i].OK || reports[i].VersionShort == "" || hasCurrentLabel(reports[i].DisplayName) {
+			continue
+		}
+		baseIdx, ok := byName[doc.TemplateBaseName]
+		if !ok {
+			continue
+		}
+		base := reports[baseIdx]
+		if !base.Installed || !base.OK || base.VersionShort == "" || base.VersionShort != reports[i].VersionShort {
+			continue
+		}
+		reports[i].DisplayName = strings.TrimSpace(reports[i].DisplayName + " current")
+	}
+}
+
+func hasCurrentLabel(displayName string) bool {
+	for _, field := range strings.Fields(displayName) {
+		if field == "current" {
+			return true
+		}
+	}
+	return false
 }
 
 func inspectCatalog(ctx context.Context, runner execx.Runner, cfg *config.Config, category, name string, cache map[string]Report, chain map[string]bool, opts ...Option) Report {

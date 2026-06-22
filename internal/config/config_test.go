@@ -2691,7 +2691,7 @@ func TestMaterializedTemplateMatchesUsesAllBinaryCandidates(t *testing.T) {
 		filepath.Join(first, "php${version}", "bin", "php-fpm"),
 		filepath.Join(second, "php${version}", "bin", "php-fpm"),
 	}
-	got := materializedTemplateMatches(paths, nil, []tmplToken{*tok})
+	got := materializedTemplateMatches(paths, false, nil, []tmplToken{*tok})
 	want := []string{"8.2", "8.3"}
 	if values := templateMatchValues(got, "version"); strings.Join(values, ",") != strings.Join(want, ",") {
 		t.Fatalf("materializedTemplateMatches = %v, want %v", values, want)
@@ -3375,16 +3375,17 @@ kind: app
 name: java-%%i-%%v
 display_name: "Java ${instance} ${version} ${current}"
 versions:
-  from:
+  current_from: "%s/java"
+variables:
+  binary:
     - "%s/${instance}-jre-bin-${version}/bin/java"
     - "%s/${instance}-jdk-bin-${version}/bin/java"
     - "%s/${instance}-bin-${version}/bin/java"
     - "%s/${instance}-${version}/bin/java"
-  current_from: "%s/java"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-version"], timeout: 10s }
-`, jvm, jvm, jvm, jvm, bin))
+`, bin, jvm, jvm, jvm, jvm))
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
 engine: { backend: auto }
