@@ -192,7 +192,17 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 			r.Status = "ok"
 		}
 		if r.OK && len(version.argv) > 0 {
-			r.Version, r.VersionShort = captureVersion(ctx, runner, resolved.Tree, version)
+			vres := runVersionProbe(ctx, runner, resolved.Tree, version)
+			if !vres.ok && (vres.identityMismatch || version.identityRequired()) {
+				r.Installed = false
+				r.OK = false
+				r.Status = versionIdentityStatus(vres.status)
+				return r
+			}
+			if vres.ok {
+				r.Version = vres.raw
+				r.VersionShort = vres.short
+			}
 		}
 		return r
 	}
@@ -203,17 +213,30 @@ func Inspect(ctx context.Context, runner execx.Runner, name string, resolved con
 		return r
 	}
 
-	ok, status, raw, short := runVersionProbe(ctx, runner, resolved.Tree, version)
-	if !ok && (version.optional || options.versionOptional) {
+	vres := runVersionProbe(ctx, runner, resolved.Tree, version)
+	if !vres.ok && (vres.identityMismatch || version.identityRequired()) {
+		r.Installed = false
+		r.OK = false
+		r.Status = versionIdentityStatus(vres.status)
+		return r
+	}
+	if !vres.ok && (version.optional || options.versionOptional) {
 		r.OK = true
 		r.Status = "ok"
 		return r
 	}
-	r.OK = ok
-	r.Status = status
-	r.Version = raw
-	r.VersionShort = short
+	r.OK = vres.ok
+	r.Status = vres.status
+	r.Version = vres.raw
+	r.VersionShort = vres.short
 	return r
+}
+
+func versionIdentityStatus(status string) string {
+	if strings.HasPrefix(status, "not installed:") {
+		return status
+	}
+	return "not installed: version " + strings.TrimPrefix(status, "error: ")
 }
 
 func inspectOptions(opts []Option) options {
@@ -236,37 +259,46 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 	}
 }
 
-func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) (bool, string, string, string) {
+type versionProbeResult struct {
+	ok               bool
+	identityMismatch bool
+	status           string
+	raw              string
+	short            string
+}
+
+func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) versionProbeResult {
+	fail := func(status string) versionProbeResult {
+		return versionProbeResult{status: status}
+	}
 	res, err := runProbeCommand(ctx, runner, cmd)
 	switch {
 	case err != nil && res.ExitCode == 0:
-		return false, "error: " + err.Error(), "", ""
+		return fail("error: " + err.Error())
 	case !checks.ExitCodeExpected(res.ExitCode, cmd.expectExit):
 		status := fmt.Sprintf("error: exit %d (want %s)", res.ExitCode, checks.ExpectExitText(cmd.expectExit))
 		if line := checks.FirstNonEmptyLine(res.Stderr); line != "" {
 			status += ": " + line
 		}
-		return false, status, "", ""
+		return fail(status)
 	}
 	if ok, detail := cmd.stdout.Match(res.Stdout); !ok {
-		return false, "error: stdout " + detail, "", ""
+		return fail("error: stdout " + detail)
 	}
 	if ok, detail := cmd.stderr.Match(res.Stderr); !ok {
-		return false, "error: stderr " + detail, "", ""
+		return fail("error: stderr " + detail)
+	}
+	if cmd.versionMatchWarn != "" {
+		return fail("error: version_match " + cmd.versionMatchWarn)
+	}
+	if ok, detail := cmd.versionMatch.Match(checks.VersionOutput(res.Stdout, res.Stderr)); !ok {
+		return versionProbeResult{identityMismatch: true, status: "not installed: version " + detail}
 	}
 	raw := checks.FirstNonEmptyLine(res.Stdout)
 	if raw == "" {
 		raw = checks.FirstNonEmptyLine(res.Stderr)
 	}
-	return true, "ok", raw, shortVersionFor(ctx, runner, tree, raw)
-}
-
-func captureVersion(ctx context.Context, runner execx.Runner, tree map[string]any, cmd probeCommand) (string, string) {
-	ok, _, raw, short := runVersionProbe(ctx, runner, tree, cmd)
-	if !ok {
-		return "", ""
-	}
-	return raw, short
+	return versionProbeResult{ok: true, status: "ok", raw: raw, short: shortVersionFor(ctx, runner, tree, raw)}
 }
 
 // modeString renders the binary's permissions like `ls -l` does, with the octal
@@ -354,12 +386,18 @@ func namespacedBinaryPrefixes(preflight map[string]any) []string {
 // probeCommand is a daemon's resolved app probe command and the expectations
 // its result must meet: the exit code and optional stdout/stderr matchers.
 type probeCommand struct {
-	argv       []string
-	user       string
-	expectExit []int
-	optional   bool
-	stdout     checks.OutputMatcher
-	stderr     checks.OutputMatcher
+	argv             []string
+	user             string
+	expectExit       []int
+	optional         bool
+	stdout           checks.OutputMatcher
+	stderr           checks.OutputMatcher
+	versionMatch     checks.VersionMatcher
+	versionMatchWarn string
+}
+
+func (cmd probeCommand) identityRequired() bool {
+	return cmd.versionMatch.Active() || cmd.versionMatchWarn != ""
 }
 
 // probeCommandFor returns a daemon's app probe command and outcome expectations
@@ -381,6 +419,12 @@ func probeCommandFor(tree map[string]any, key string) probeCommand {
 	vc.optional = cfgval.Bool(entry["optional"])
 	vc.stdout, _ = checks.ParseOutputMatcher(entry["expect_stdout"])
 	vc.stderr, _ = checks.ParseOutputMatcher(entry["expect_stderr"])
+	if key == "version" {
+		vc.versionMatch, vc.versionMatchWarn = checks.ParseVersionMatcher(entry["version_match"])
+		if !vc.versionMatch.Active() && vc.versionMatchWarn == "" {
+			vc.versionMatch, vc.versionMatchWarn = checks.ParseVersionMatcher(tree["version_match"])
+		}
+	}
 	return vc
 }
 

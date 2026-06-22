@@ -2,6 +2,7 @@ kind: app
 name: mysql
 display_name: "MySQL"
 category: database
+version_match: { excludes: MariaDB }
 variables:
   binary:
     - /usr/sbin/mysqld

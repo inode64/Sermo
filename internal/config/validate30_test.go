@@ -1121,6 +1121,76 @@ service: not-app
 	mustHave(t, issues, "version_from is only supported on app catalog documents")
 }
 
+func TestValidateAppVersionMatch(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/apps/mysql.yml": `
+kind: app
+name: mysql
+variables:
+  binary: /usr/sbin/mysqld
+version_match: { excludes: MariaDB }
+preflight:
+  version: { type: command, command: ["/usr/sbin/mysqld", "--version"] }
+`,
+		"catalog/apps/bad-shape.yml": `
+kind: app
+name: bad-shape
+variables:
+  binary: /usr/bin/bad-shape
+version_match: MariaDB
+preflight:
+  version: { type: command, command: ["/usr/bin/bad-shape", "--version"] }
+`,
+		"catalog/apps/bad-key.yml": `
+kind: app
+name: bad-key
+variables:
+  binary: /usr/bin/bad-key
+version_match: { rejects: MariaDB }
+preflight:
+  version: { type: command, command: ["/usr/bin/bad-key", "--version"] }
+`,
+		"catalog/apps/bad-regex.yml": `
+kind: app
+name: bad-regex
+variables:
+  binary: /usr/bin/bad-regex
+version_match: { regex: "[" }
+preflight:
+  version: { type: command, command: ["/usr/bin/bad-regex", "--version"] }
+`,
+		"catalog/apps/no-version.yml": `
+kind: app
+name: no-version
+variables:
+  binary: /usr/bin/no-version
+version_match: { contains: Demo }
+`,
+		"catalog/services/not-app.yml": `
+kind: daemon
+name: not-app
+version_match: { contains: Demo }
+service: not-app
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	for _, issue := range issues {
+		if issue.Scope == "app mysql" {
+			t.Fatalf("valid version_match flagged: %v", issues)
+		}
+	}
+	mustHave(t, issues, "version_match must be a mapping")
+	mustHave(t, issues, `version_match unknown key "rejects"`)
+	mustHave(t, issues, "version_match regex")
+	mustHave(t, issues, "version_match requires a version command")
+	mustHave(t, issues, "version_match is only supported on app catalog documents")
+}
+
 func TestValidateCommandExpectExit(t *testing.T) {
 	issues := validateService(t, `
 kind: service

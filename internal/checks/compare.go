@@ -2,8 +2,10 @@ package checks
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"sermo/internal/cfgval"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -115,6 +117,113 @@ func (m OutputMatcher) Match(output string) (ok bool, detail string) {
 		}
 	}
 	return true, ""
+}
+
+// VersionMatcher checks the complete output of a version command against an app
+// identity declaration. It is stricter than a generic stdout matcher because a
+// successful match proves that a compatibility binary belongs to the expected
+// implementation, such as distinguishing MariaDB's mysqld from Oracle MySQL.
+type VersionMatcher struct {
+	Contains []string
+	Excludes []string
+	Regex    []string
+	regexps  []*regexp.Regexp
+}
+
+// ParseVersionMatcher reads a version_match mapping. Supported keys are:
+// contains, excludes and regex; each accepts either a string or a non-empty list
+// of strings. The zero matcher is inactive and matches anything.
+func ParseVersionMatcher(v any) (VersionMatcher, string) {
+	if v == nil {
+		return VersionMatcher{}, ""
+	}
+	spec, ok := v.(map[string]any)
+	if !ok {
+		return VersionMatcher{}, "must be a mapping with contains, excludes or regex"
+	}
+	var matcher VersionMatcher
+	for _, key := range slices.Sorted(maps.Keys(spec)) {
+		values := cfgval.StringList(spec[key])
+		if len(values) == 0 {
+			return VersionMatcher{}, fmt.Sprintf("%s must be a non-empty string or list", key)
+		}
+		switch key {
+		case "contains":
+			matcher.Contains = append(matcher.Contains, values...)
+		case "excludes":
+			matcher.Excludes = append(matcher.Excludes, values...)
+		case "regex":
+			for _, value := range values {
+				re, err := regexp.Compile(value)
+				if err != nil {
+					return VersionMatcher{}, fmt.Sprintf("regex %q is not valid: %v", value, err)
+				}
+				matcher.Regex = append(matcher.Regex, value)
+				matcher.regexps = append(matcher.regexps, re)
+			}
+		default:
+			return VersionMatcher{}, fmt.Sprintf("unknown key %q (expected contains, excludes or regex)", key)
+		}
+	}
+	if !matcher.Active() {
+		return VersionMatcher{}, "must declare contains, excludes or regex"
+	}
+	return matcher, ""
+}
+
+// Active reports whether the matcher carries an identity expectation.
+func (m VersionMatcher) Active() bool {
+	return len(m.Contains) > 0 || len(m.Excludes) > 0 || len(m.Regex) > 0
+}
+
+// Match evaluates output against the configured identity rules.
+func (m VersionMatcher) Match(output string) (ok bool, detail string) {
+	if !m.Active() {
+		return true, ""
+	}
+	if strings.TrimSpace(output) == "" {
+		return false, "has no version output"
+	}
+	for _, value := range m.Contains {
+		if !strings.Contains(output, value) {
+			return false, fmt.Sprintf("does not contain required %q", value)
+		}
+	}
+	for _, value := range m.Excludes {
+		if strings.Contains(output, value) {
+			return false, fmt.Sprintf("contains excluded %q", value)
+		}
+	}
+	regexps := m.regexps
+	if len(regexps) != len(m.Regex) {
+		regexps = make([]*regexp.Regexp, 0, len(m.Regex))
+		for _, value := range m.Regex {
+			re, err := regexp.Compile(value)
+			if err != nil {
+				return false, fmt.Sprintf("regex %q is not valid: %v", value, err)
+			}
+			regexps = append(regexps, re)
+		}
+	}
+	for i, re := range regexps {
+		if !re.MatchString(output) {
+			return false, fmt.Sprintf("does not match regex %q", m.Regex[i])
+		}
+	}
+	return true, ""
+}
+
+// VersionOutput joins stdout and stderr for identity matching. Some programs
+// print versions to stderr, so matchers must see both streams.
+func VersionOutput(stdout, stderr string) string {
+	switch {
+	case stdout == "":
+		return stderr
+	case stderr == "":
+		return stdout
+	default:
+		return stdout + "\n" + stderr
+	}
 }
 
 // parseExpectLatency reads an optional `expect_latency: {op, value}` field shared
