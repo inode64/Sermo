@@ -1,19 +1,16 @@
 kind: daemon
-name: nebula
-display_name: "Nebula"
-category: network
+name: nebula-%i
+display_name: "Nebula ${instance}"
 description: "Nebula mesh-VPN node (Slack/Defined Networking)."
-type: tunnel
+category: vpn
 
-# Nebula commonly runs as a systemd instance per config (nebula@config) or as a
-# plain OpenRC service. Override `service` if your instance is named differently.
 service:
-  systemd: [nebula@config, nebula]
-  openrc: [nebula]
+  systemd: ["nebula@${instance}", "nebula-${instance}", "nebula.${instance}"]
+  openrc: ["nebula.${instance}"]
+apps: ["nebula"]
 
-apps: [nebula]
 variables:
-  config: /etc/nebula/config.yml
+  config: "/etc/nebula/${instance}.yml"
   # Probe the node's own lighthouse/listen port; the default is 4242/udp.
   host: 127.0.0.1
   port: 4242
@@ -23,6 +20,8 @@ config_files: ["${config}"]
 
 preflight:
   config: { type: command, command: ["${nebula_binary}", "-test", "-config", "${config}"], timeout: 30s }
+
+pidfile: "/run/supervise-nebula.${instance}.pid"
 
 processes:
   main:
