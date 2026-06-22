@@ -48,6 +48,20 @@ checks:
     port: "${port}"
     timeout: 3s
 
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: ">"
+        value: 90%
+    # 12 consecutive 30s cycles = 6 minutes.
+    for:
+      cycles: 12
+    then:
+      action: restart
+
   # Same native RESP probe, but asserting the last background save succeeded
   # (reported "ok" even when persistence is disabled, so it never false-alarms).
   # It exposes role, replication, persistence and memory for expect. Kept

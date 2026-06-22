@@ -64,6 +64,20 @@ checks:
       key: daemon_list
       contains: winbindd
 
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: ">"
+        value: 90%
+    # 12 consecutive 30s cycles = 6 minutes.
+    for:
+      cycles: 12
+    then:
+      action: restart
+
 rules:
   block-restart-if-config-invalid:
     type: guard
