@@ -6,14 +6,19 @@ description: "Performance Co-Pilot pmlogger farm service."
 service:
   systemd: [pmlogger_farm]
 apps: [pmlogger_farm]
+variables:
+  user: pcp
 
 processes:
   main:
     exe: "${pmlogger_farm_binary}"
+    user: "${user}"
   pmpause:
     exe: "${pmlogger_farm_pmpause_binary}"
+    user: "${user}"
   pmsleep:
     exe: "${pmlogger_farm_pmsleep_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

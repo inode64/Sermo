@@ -17,13 +17,12 @@ variables:
   user: rabbitmq
   host: 127.0.0.1
   port: 5672
-  pidfile: /run/rabbitmq.pid
 
 # The init script writes the wrapper PID here; the Erlang broker (beam.smp,
 # a version-specific exe under /usr/lib64/erlang) runs as a descendant and is
 # picked up automatically. Matching by ${binary} would not match the broker, so
 # the pidfile is the reliable anchor.
-pidfile: "${pidfile}"
+pidfile: /run/rabbitmq.pid
 
 checks:
   service:

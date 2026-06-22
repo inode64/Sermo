@@ -6,12 +6,16 @@ description: "Performance Co-Pilot pmie farm service."
 service:
   systemd: [pmie_farm]
 apps: [pmie_farm]
+variables:
+  user: pcp
 
 processes:
   main:
     exe: "${pmie_farm_binary}"
+    user: "${user}"
   pmpause:
     exe: "${pmie_farm_pmpause_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

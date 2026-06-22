@@ -3,7 +3,9 @@ name: nginx
 display_name: "Nginx"
 category: web
 variables:
-  binary: "/usr/bin/nginx"
+  binary:
+    - "/usr/sbin/nginx"
+    - "/usr/bin/nginx"
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

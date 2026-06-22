@@ -20,6 +20,7 @@ pidfile: /run/backrest.pid
 processes:
   main:
     exe: "${backrest_binary}"
+    user: root
 
 checks:
   service:

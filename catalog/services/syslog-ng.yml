@@ -21,6 +21,7 @@ socket: /run/syslog-ng.ctl
 processes:
   main:
     exe: "${syslog_ng_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

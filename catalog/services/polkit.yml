@@ -6,10 +6,13 @@ description: "PolicyKit authorization service."
 service:
   systemd: [polkit]
 apps: [polkit]
+variables:
+  user: polkitd
 
 processes:
   main:
     exe: "${polkit_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

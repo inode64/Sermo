@@ -15,9 +15,10 @@ variables:
   user: redis
   host: 127.0.0.1
   port: 6379
-  pidfile: /run/redis/redis.pid
 
-pidfile: "${pidfile}"
+pidfile:
+  - /run/redis/redis.pid
+  - /run/redis.pid
 
 processes:
   redis:

@@ -10,10 +10,12 @@ apps: [memcached]
 variables:
   host: 127.0.0.1
   port: 11211
+  user: memcached
 
 processes:
   main:
     exe: "${memcached_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

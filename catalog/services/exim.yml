@@ -10,6 +10,7 @@ variables:
   host: 127.0.0.1
   port: 25
   tls_port: 465
+  user: mail
 preflight:
   config: { type: command, command: ["${exim_binary}","-bV"], timeout: 10s }
 
@@ -20,6 +21,7 @@ pidfile: /run/exim.pid
 processes:
   main:
     exe: "${exim_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

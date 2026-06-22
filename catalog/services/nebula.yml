@@ -17,6 +17,7 @@ variables:
   # Probe the node's own lighthouse/listen port; the default is 4242/udp.
   host: 127.0.0.1
   port: 4242
+  user: root
 
 config_files: ["${config}"]
 
@@ -26,6 +27,7 @@ preflight:
 processes:
   main:
     exe: "${binary}"
+    user: "${user}"
 
 checks:
   service:

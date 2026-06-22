@@ -2,21 +2,27 @@ kind: daemon
 name: dhcpd
 display_name: "DHCP Server"
 category: network
-service: dhcpd
+service:
+  systemd: [dhcpd, dhcpd4]
+  openrc: [dhcpd]
 apps: [dhcpd]
 
 variables:
   port: 67
+  user: dhcp
+  config: /etc/dhcp/dhcpd.conf
 preflight:
-  config: { type: command, command: ["/etc/init.d/dhcpd","configtest"], timeout: 30s }
+  config: { type: command, command: ["${dhcpd_binary}", "-t", "-cf", "${config}"], timeout: 30s }
 
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
-pidfile: /run/dhcp/dhcpd.pid
+os:
+  gentoo:
+    # Gentoo/OpenRC writes a pidfile; systemd dhcpd4 commonly runs with --no-pid.
+    pidfile: /run/dhcp/dhcpd.pid
 
 processes:
   main:
     exe: "${dhcpd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

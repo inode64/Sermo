@@ -2,20 +2,22 @@ kind: daemon
 name: clamd
 display_name: "ClamAV Daemon"
 category: security
-service: clamd
+service:
+  systemd: [clamd, clamav-daemon]
+  openrc: [clamd]
 apps: [clamd]
 
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 variables:
-  pidfile: /run/clamav/clamd.pid
+  user: root
 
-os:
-  gentoo:
-    variables:
-      pidfile: /run/clamd.pid
+pidfile:
+  - /run/clamd.pid
+  - /run/clamav/clamd.pid
 
-pidfile: "${pidfile}"
+processes:
+  main:
+    exe: "${clamd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

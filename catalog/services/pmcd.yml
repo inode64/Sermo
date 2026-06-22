@@ -12,6 +12,7 @@ apps: [pmcd]
 variables:
   host: 127.0.0.1
   port: 44321
+  user: pcp
 
 restart_on_change:
   # Restart when a linked critical library changes on disk (e.g. an
@@ -29,16 +30,22 @@ socket:
 processes:
   main:
     exe: "${pmcd_binary}"
+    user: "${user}"
   pmdaroot:
     exe: "${pmcd_pmdaroot_binary}"
+    user: root
   pmdaproc:
     exe: "${pmcd_pmdaproc_binary}"
+    user: root
   pmdaxfs:
     exe: "${pmcd_pmdaxfs_binary}"
+    user: root
   pmdalinux:
     exe: "${pmcd_pmdalinux_binary}"
+    user: root
   pmdakvm:
     exe: "${pmcd_pmdakvm_binary}"
+    user: root
 
 checks:
   service:

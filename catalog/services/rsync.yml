@@ -16,6 +16,7 @@ pidfile: /run/rsyncd.pid
 processes:
   main:
     exe: "${rsync_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

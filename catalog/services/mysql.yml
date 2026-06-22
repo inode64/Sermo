@@ -15,7 +15,6 @@ variables:
   user: mysql
   host: 127.0.0.1
   port: 3306
-  pidfile: /run/mysqld/mysqld.pid
   config:
     - /etc/mysql/my.cnf
     - /etc/my.cnf
@@ -28,7 +27,9 @@ preflight:
     command: ["${mysql_binary}", "--help", "--verbose"]
     timeout: 15s
 
-pidfile: "${pidfile}"
+pidfile:
+  - /run/mysqld/mysqld.pid
+  - /run/mysqld/mariadb.pid
 
 processes:
   mysqld:

@@ -11,6 +11,7 @@ apps: [rpc-mountd]
 processes:
   main:
     exe: "${rpc_mountd_binary}"
+    user: root
 
 checks:
   service: { type: service, expect: active }

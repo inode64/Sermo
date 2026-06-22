@@ -6,12 +6,15 @@ service:
   systemd: [rpc-statd]
   openrc: [rpc.statd, rpc-statd]
 apps: [rpc-statd]
+variables:
+  user: nobody
 
 pidfile: /run/rpc.statd.pid
 
 processes:
   main:
     exe: "${rpc_statd_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }

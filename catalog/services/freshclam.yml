@@ -9,23 +9,14 @@ service:
 apps: [freshclam]
 
 variables:
-  pidfile: /run/freshclam.pid
+  user: clamav
 
-os:
-  debian:
-    variables:
-      pidfile: /run/clamav/freshclam.pid
-  ubuntu:
-    variables:
-      pidfile: /run/clamav/freshclam.pid
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
-pidfile: "${pidfile}"
+pidfile: /run/clamav/freshclam.pid
 
 processes:
   main:
     exe: "${freshclam_binary}"
+    user: "${user}"
 
 checks:
   service: { type: service, expect: active }
