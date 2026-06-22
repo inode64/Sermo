@@ -1,0 +1,15 @@
+kind: app
+name: upower
+display_name: "UPower"
+category: hardware
+description: "Power device and battery status daemon."
+variables:
+  binary:
+    - /usr/libexec/upowerd
+    - /usr/lib/upower/upowerd
+  client: /usr/bin/upower
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  client: { type: binary, path: "${client}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }
+  version: { type: command, command: ["${client}", "--version"], timeout: 10s, optional: true }
