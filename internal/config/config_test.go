@@ -2672,7 +2672,7 @@ func TestMaterializedVersionValuesUsesAllBinaryCandidates(t *testing.T) {
 	}
 	got := materializedVersionValues(paths, nil, *tok)
 	want := []string{"8.2", "8.3"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
+	if strings.Join(got.values, ",") != strings.Join(want, ",") {
 		t.Fatalf("materializedVersionValues = %v, want %v", got, want)
 	}
 }
@@ -3169,6 +3169,118 @@ defaults: { policy: { cooldown: 5m } }
 			preflight := nested(t, resolved.Tree, "preflight", "binary")
 			if got := cfgval.String(preflight["path"]); got != tt.binary {
 				t.Fatalf("%s resolved binary path = %q, want %q", tt.name, got, tt.binary)
+			}
+		})
+	}
+}
+
+func TestVersionTemplateCurrentMarker(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "bin")
+	sbin := filepath.Join(root, "sbin")
+	for _, dir := range []string{bin, sbin} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeBin := func(dir, name string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	linkBin := func(dir, link, target string) {
+		t.Helper()
+		if err := os.Symlink(target, filepath.Join(dir, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, name := range []string{"php8.1", "php8.2", "python2", "python3"} {
+		writeBin(bin, name)
+	}
+	for _, name := range []string{"php-fpm8.2", "php-fpm8.3"} {
+		writeBin(sbin, name)
+	}
+	linkBin(bin, "php", "php8.2")
+	linkBin(bin, "python", "python3")
+	linkBin(sbin, "php-fpm", "php-fpm8.3")
+
+	catalogDir := filepath.Join(root, "catalog")
+	appsDir := filepath.Join(catalogDir, "apps")
+	enabledDir := filepath.Join(root, "enabled")
+	for _, dir := range []string{appsDir, enabledDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeApp := func(file, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(appsDir, file), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeApp("php%v.yml", fmt.Sprintf(`
+kind: app
+name: php%%v
+display_name: "PHP ${version} ${current}"
+variables:
+  binary: "%s/php${version}"
+`, bin))
+	writeApp("php-fpm%v.yml", fmt.Sprintf(`
+kind: app
+name: php-fpm%%v
+display_name: "PHP-FPM ${version} ${current}"
+variables:
+  binary:
+    - "%s/missing/php-fpm${version}"
+    - "%s/php-fpm${version}"
+`, root, sbin))
+	writeApp("python%n.yml", fmt.Sprintf(`
+kind: app
+name: python%%n
+display_name: "Python ${n} ${current}"
+variables:
+  binary: "%s/python${n}"
+`, bin))
+	global := filepath.Join(root, "sermo.yml")
+	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: auto }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, catalogDir, enabledDir)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	tests := []struct {
+		name string
+		want string
+	}{
+		{"php", "PHP"},
+		{"php8.1", "PHP 8.1"},
+		{"php8.2", "PHP 8.2 current"},
+		{"php-fpm", "PHP-FPM"},
+		{"php-fpm8.2", "PHP-FPM 8.2"},
+		{"php-fpm8.3", "PHP-FPM 8.3 current"},
+		{"python", "Python"},
+		{"python2", "Python 2"},
+		{"python3", "Python 3 current"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc, ok := cfg.Apps[tt.name]
+			if !ok {
+				t.Fatalf("app %q was not materialized", tt.name)
+			}
+			if got := DisplayName(doc.Body, tt.name); got != tt.want {
+				t.Fatalf("%s display_name = %q, want %q", tt.name, got, tt.want)
+			}
+			if resolved, errs := cfg.ResolveCatalog(CategoryApp, tt.name); len(errs) > 0 {
+				t.Fatalf("ResolveCatalog(%s) = %+v, %v", tt.name, resolved, errs)
 			}
 		})
 	}
