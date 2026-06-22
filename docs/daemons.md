@@ -43,6 +43,17 @@ by the web UI and `GET /api/services`, not by `sermoctl services` — see
 `sermoctl patterns` lists the pattern sets and their rule counts (see the
 `analyze:` block in [rules.md](rules.md)).
 
+Catalog documents may declare `aliases: [...]` for distro or package names that
+operators naturally type. For example, the canonical daemon `name: apache` can
+carry aliases such as `apache2` and `httpd`, so a service may write
+`uses: apache2` while resolving to the same catalog profile. A configured
+`kind: service` may also declare aliases; `sermoctl` normalizes those aliases to
+the canonical configured service name before status, start, stop, restart,
+reload, monitor, SLA and process/lock commands. Catalog aliases are also usable
+as service names only in the conservative one-service case where a configured
+service has the same name as the daemon, such as `name: smb`, `uses: smb`,
+with catalog alias `samba`.
+
 ## Library daemons
 
 A library daemon describes a shared library so services can restart when it is

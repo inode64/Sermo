@@ -1,11 +1,12 @@
 kind: daemon
 name: smb
+aliases: [samba]
 display_name: "Samba SMB/NMB"
 category: storage
 description: "Combined Samba service unit that supervises SMB and NetBIOS daemons."
 service:
   systemd: [smb]
-  openrc: [samba]
+  openrc: [samba, smb]
 apps: [smbd, nmbd]
 
 variables:

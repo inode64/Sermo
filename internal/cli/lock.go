@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"sermo/internal/config"
 	"sermo/internal/locks"
 )
 
@@ -29,15 +30,15 @@ func (a App) runLock(ctx context.Context, opts options) int {
 
 	switch opts.args[0] {
 	case "acquire":
-		return a.runLockAcquire(opts, locker, opts.args[1:])
+		return a.runLockAcquire(opts, cfg, locker, opts.args[1:])
 	case "release":
-		return a.runLockRelease(opts, locker, opts.args[1:])
+		return a.runLockRelease(opts, cfg, locker, opts.args[1:])
 	default:
-		return a.runLockWrap(ctx, opts, locker, opts.args[0])
+		return a.runLockWrap(ctx, opts, cfg, locker, opts.args[0])
 	}
 }
 
-func (a App) runLockAcquire(opts options, locker locks.NamedLocker, args []string) int {
+func (a App) runLockAcquire(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
 		return a.commandUsageError("lock", "lock acquire requires a service name")
 	}
@@ -47,7 +48,7 @@ func (a App) runLockAcquire(opts options, locker locks.NamedLocker, args []strin
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
 	}
-	service := args[0]
+	service := canonicalServiceIfKnown(cfg, args[0])
 
 	path, err := locker.Pin(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {
@@ -57,14 +58,14 @@ func (a App) runLockAcquire(opts options, locker locks.NamedLocker, args []strin
 	return exitSuccess
 }
 
-func (a App) runLockRelease(opts options, locker locks.NamedLocker, args []string) int {
+func (a App) runLockRelease(opts options, cfg *config.Config, locker locks.NamedLocker, args []string) int {
 	if len(args) == 0 {
 		return a.commandUsageError("lock", "lock release requires a service name")
 	}
 	if len(args) > 1 {
 		return a.commandUsageError("lock", "lock release takes exactly one service name")
 	}
-	service := args[0]
+	service := canonicalServiceIfKnown(cfg, args[0])
 	if err := locker.Release(service, opts.name); err != nil {
 		return a.fail(opts, fmt.Sprintf("release failed: %v", err))
 	}
@@ -72,7 +73,7 @@ func (a App) runLockRelease(opts options, locker locks.NamedLocker, args []strin
 	return exitSuccess
 }
 
-func (a App) runLockWrap(ctx context.Context, opts options, locker locks.NamedLocker, service string) int {
+func (a App) runLockWrap(ctx context.Context, opts options, cfg *config.Config, locker locks.NamedLocker, service string) int {
 	if len(opts.args) > 1 {
 		return a.commandUsageError("lock", "lock wrap takes exactly one service name before --")
 	}
@@ -82,6 +83,7 @@ func (a App) runLockWrap(ctx context.Context, opts options, locker locks.NamedLo
 	if code := requireLockMeta(a, opts); code != exitSuccess {
 		return code
 	}
+	service = canonicalServiceIfKnown(cfg, service)
 
 	handle, err := locker.Hold(service, opts.name, opts.reason, opts.ttl)
 	if err != nil {

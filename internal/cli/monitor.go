@@ -31,7 +31,8 @@ func (a App) runMonitor(opts options, pause bool) int {
 	if code != exitSuccess {
 		return code
 	}
-	if code := a.requireService(opts, cfg, service); code != exitSuccess {
+	service, code = a.canonicalService(opts, cfg, service)
+	if code != exitSuccess {
 		return code
 	}
 
