@@ -817,6 +817,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 		{name: "libvirt-dbus", app: "libvirt-dbus", binaryVar: "${libvirt_dbus_binary}", wantProcess: true},
 		{name: "nfsdcld", app: "nfsdcld", binaryVar: "${nfsdcld_binary}", wantProcess: true},
 		{name: "lm_sensors", app: "lm_sensors", wantProcess: false},
+		{name: "upower", app: "upower", binaryVar: "${upower_binary}", wantProcess: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
