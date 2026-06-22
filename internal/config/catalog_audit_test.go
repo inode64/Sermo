@@ -368,6 +368,42 @@ func TestCatalogUnifiUsesMongodAppBinary(t *testing.T) {
 	}
 }
 
+func TestSMBCatalogUsesPerRolePidfiles(t *testing.T) {
+	root := repoRoot(t)
+	dir := t.TempDir()
+	global := filepath.Join(dir, "sermo.yml")
+	body := "paths:\n  catalog: [" + filepath.Join(root, "catalog") + "]\n  services: []\n" +
+		"defaults:\n  policy: { cooldown: 5m }\n"
+	if err := os.WriteFile(global, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	resolved, errs := cfg.ResolveCatalog(CategoryService, "smb")
+	if len(errs) > 0 {
+		t.Fatalf("ResolveCatalog(smb): %v", errs)
+	}
+	pidfiles := nested(t, resolved.Tree, "pidfiles")
+	for _, role := range []string{"smbd", "nmbd"} {
+		if got := cfgval.String(pidfiles[role]); got == "" {
+			t.Fatalf("pidfiles.%s missing in %v", role, pidfiles)
+		}
+		process := nested(t, resolved.Tree, "processes", role)
+		if cfgval.String(process["exe"]) == "" || cfgval.String(process["user"]) == "" {
+			t.Fatalf("processes.%s lacks exact identity: %v", role, process)
+		}
+		check := nested(t, resolved.Tree, "checks", "pidfile-"+role)
+		if cfgval.String(check["type"]) != "pidfile" || cfgval.String(check["path"]) == "" {
+			t.Fatalf("checks.pidfile-%s = %v, want pidfile check", role, check)
+		}
+	}
+	if _, hasLegacy := resolved.Tree["pidfile"]; hasLegacy {
+		t.Fatalf("smb must use pidfiles, not pidfile: %v", resolved.Tree["pidfile"])
+	}
+}
+
 func TestCatalogDaemonsUseCanonicalServiceNames(t *testing.T) {
 	root := repoRoot(t)
 	catalogDir := filepath.Join(root, "catalog")
@@ -821,6 +857,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 		name        string
 		app         string
 		binaryVar   string
+		processRole string
 		wantProcess bool
 	}{
 		{name: "atftp", app: "atftp", binaryVar: "${atftp_binary}", wantProcess: true},
@@ -831,7 +868,7 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 		{name: "nfsdcld", app: "nfsdcld", binaryVar: "${nfsdcld_binary}", wantProcess: true},
 		{name: "lm_sensors", app: "lm_sensors", wantProcess: false},
 		{name: "qemu-ga", app: "qemu-ga", binaryVar: "${qemu_ga_binary}", wantProcess: true},
-		{name: "smb", app: "smbd", binaryVar: "${smbd_binary}", wantProcess: true},
+		{name: "smb", app: "smbd", binaryVar: "${smbd_binary}", processRole: "smbd", wantProcess: true},
 		{name: "upower", app: "upower", binaryVar: "${upower_binary}", wantProcess: true},
 	}
 	for _, tc := range tests {
@@ -867,7 +904,11 @@ func TestRequestedHostProfilesExist(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s missing process selector", tc.name)
 			}
-			main := nested(t, doc.Body, "processes", "main")
+			role := tc.processRole
+			if role == "" {
+				role = "main"
+			}
+			main := nested(t, doc.Body, "processes", role)
 			if got := cfgval.String(main["exe"]); got != tc.binaryVar {
 				t.Fatalf("%s process exe = %q, want %q", tc.name, got, tc.binaryVar)
 			}

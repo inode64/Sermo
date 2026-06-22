@@ -369,8 +369,9 @@ func ReadPidfile(path string) (int, error) {
 }
 
 // ParseSelectors extracts typed process selectors from a resolved service tree.
-// Top-level `pidfile:` becomes an internal pidfile selector. Public
-// `processes:` entries are command-match selectors and use exe/cmd directly.
+// Top-level `pidfile:` becomes one internal pidfile selector. `pidfiles:`
+// becomes one pidfile selector per process role. Public `processes:` entries
+// are command-match selectors and use exe/cmd directly.
 func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 	var selectors []Selector
 	if paths := cfgval.StringList(tree["pidfile"]); len(paths) > 0 {
@@ -380,6 +381,19 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 			Paths: paths,
 		})
 	}
+	if pidfiles, ok := tree["pidfiles"].(map[string]any); ok {
+		for _, role := range sortedMapKeys(pidfiles) {
+			paths := cfgval.StringList(pidfiles[role])
+			if len(paths) == 0 {
+				continue
+			}
+			selectors = append(selectors, Selector{
+				Name:  role,
+				Type:  SelectorPidfile,
+				Paths: paths,
+			})
+		}
+	}
 
 	raw, ok := tree["processes"].(map[string]any)
 	if !ok {
@@ -387,13 +401,7 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 	}
 
 	var warnings []string
-	names := make([]string, 0, len(raw))
-	for name := range raw {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
+	for _, name := range sortedMapKeys(raw) {
 		entry, ok := raw[name].(map[string]any)
 		if !ok {
 			warnings = append(warnings, fmt.Sprintf("process selector %q is not a mapping", name))
@@ -425,4 +433,13 @@ func ParseSelectors(tree map[string]any) ([]Selector, []string) {
 		selectors = append(selectors, sel)
 	}
 	return selectors, warnings
+}
+
+func sortedMapKeys(m map[string]any) []string {
+	names := make([]string, 0, len(m))
+	for name := range m {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

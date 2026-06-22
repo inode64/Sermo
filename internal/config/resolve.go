@@ -43,6 +43,7 @@ func (c *Config) Resolve(name string) (Resolved, []string) {
 	errs = append(errs, c.expandApps(expanded)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
+	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
 
 	return Resolved{Name: canonicalName, Tree: expanded}, errs
@@ -120,6 +121,60 @@ func expandPidfile(tree map[string]any) []string {
 			"requires": []any{"service"},
 		}
 	}
+	tree["checks"] = checksMap
+	return errs
+}
+
+// expandPidfiles validates `pidfiles: {role: path-or-candidates}` and adds one
+// gated pidfile health check per role. Unlike `pidfile: [...]`, whose list is a
+// set of alternative paths for one process, `pidfiles` declares several process
+// roles that must each have a live pidfile while the service is active.
+func expandPidfiles(tree map[string]any) []string {
+	raw, present := tree["pidfiles"]
+	if !present {
+		return nil
+	}
+	var errs []string
+	if _, hasPidfile := tree["pidfile"]; hasPidfile {
+		errs = append(errs, "pidfile and pidfiles are mutually exclusive")
+	}
+	pidfiles, ok := raw.(map[string]any)
+	if !ok {
+		return append(errs, "pidfiles must be a mapping of process role to path string or candidate list")
+	}
+
+	normalized := make(map[string]any, len(pidfiles))
+	checksMap, _ := tree["checks"].(map[string]any)
+	if checksMap == nil {
+		checksMap = map[string]any{}
+	}
+	for _, role := range slices.Sorted(maps.Keys(pidfiles)) {
+		if !validDocumentName(role) {
+			errs = append(errs, fmt.Sprintf("pidfiles.%s role must be a simple name without path separators", role))
+			continue
+		}
+		paths := cfgval.StringList(pidfiles[role])
+		if len(paths) == 0 {
+			errs = append(errs, fmt.Sprintf("pidfiles.%s must be a non-empty path string or list", role))
+			continue
+		}
+		for _, path := range paths {
+			if !filepath.IsAbs(path) {
+				errs = append(errs, fmt.Sprintf("pidfiles.%s path %q must be absolute", role, path))
+			}
+		}
+		pathValue := pidfilePathValue(paths)
+		normalized[role] = pathValue
+		checkName := "pidfile-" + role
+		if _, exists := checksMap[checkName]; !exists {
+			checksMap[checkName] = map[string]any{
+				"type":     "pidfile",
+				"path":     pathValue,
+				"requires": []any{"service"},
+			}
+		}
+	}
+	tree["pidfiles"] = normalized
 	tree["checks"] = checksMap
 	return errs
 }
@@ -746,6 +801,7 @@ func (c *Config) resolveDocBody(doc *Document, name string, appChain []string) (
 	errs = append(errs, c.expandAppsChain(expanded, appChain)...)
 	errs = append(errs, c.expandAnalyze(expanded)...)
 	errs = append(errs, expandPidfile(expanded)...)
+	errs = append(errs, expandPidfiles(expanded)...)
 	errs = append(errs, expandSocket(expanded)...)
 	return Resolved{Name: name, Tree: expanded}, errs
 }
