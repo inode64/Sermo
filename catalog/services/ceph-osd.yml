@@ -6,15 +6,18 @@ description: "Ceph object storage daemon (one per backing device). Binds dynamic
 
 # OSDs run as systemd instances keyed by the numeric OSD id (ceph-osd@0, @1, …).
 # This is a `%n` template: on the OSD host it materializes from the matching
-# ceph-osd${n} app template, one concrete daemon per local OSD id
-# (ceph-osd0, ceph-osd1, …) with ${n} filled in. On a host with no OSDs it
+# /var/lib/ceph/osd/ceph-N directory, one concrete daemon per local OSD id
+# (ceph-osd-0, ceph-osd-1, …) with ${n} filled in. On a host with no OSDs it
 # materializes nothing (no error). The operator still enables one `kind: service`
 # per OSD that `uses:` the materialized daemon.
 
 service: "ceph-osd@${n}"
 
-# Binary + version discovery are owned by the ceph-osd${n} app and linked here;
-# the link survives materialization for every ceph-osdN.
+# OSD instance discovery belongs to the daemon; the generic ceph-osd app owns
+# the binary/version checks linked into each materialized ceph-osdN.
+versions:
+  from: "/var/lib/ceph/osd/ceph-${n}"
+
 apps: ["ceph-osd"]
 
 variables:

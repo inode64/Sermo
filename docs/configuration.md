@@ -1824,10 +1824,16 @@ Worked examples (cloning, disabling, multiple instances) live in
 [daemons](daemons.md#cloning).
 Catalog templates for installed versions/instances use `%v`, `%n` and `%i`; see
 [versioned daemons](daemons.md#versioned-daemons).
-When `%v` or `%n` templates also have an active-slot binary without a suffix,
-such as `php` next to `php8.4` or `python` next to `python3`, Sermo materializes
-that unversioned entry automatically. Set `versions.unversioned: false` on the
-app template only when the marker-less binary should be ignored.
+When simple `%v` or `%n` templates also have an active-slot binary without a
+suffix, such as `php` next to `php8.4` or `python` next to `python3`, Sermo
+materializes that unversioned entry automatically. Composite templates with
+extra tokens do not infer an active slot from `versions.from`; declare
+`versions.current_from` for compatibility entries such as `/usr/bin/java`
+alongside Java version discovery. `current_from` may be a path or a list of
+paths. Set `versions.unversioned: false` only when the marker-less or
+`current_from` active slot should be ignored. A materialized name must not
+collide with an explicit document in the same category; validation reports that
+as a configuration error.
 
 ## Binary resource variables
 

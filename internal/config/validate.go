@@ -49,6 +49,7 @@ var validGlobalPathKeys = set(
 func Validate(cfg *Config) []Issue {
 	var issues []Issue
 	issues = append(issues, validateGlobal(cfg)...)
+	issues = append(issues, cfg.validationIssues...)
 	issues = append(issues, validateDocuments(cfg)...)
 	issues = append(issues, validateServices(cfg)...)
 	issues = append(issues, validateMounts(cfg)...)
@@ -213,6 +214,8 @@ func validateDocuments(cfg *Config) []Issue {
 		validateFromFileVariables("variables", doc.Body["variables"], addDoc)
 		issues = append(issues, validateBinaryVariables(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
+		issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
+		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
 		switch doc.Kind {
 		case kindDaemon, kindApp, kindLibrary, kindPatterns, kindService, kindMount:
@@ -282,6 +285,24 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: kind + " " + name, Msg: "duplicate " + kind + " name"})
 			}
 		}
+	}
+	issues = append(issues, validateMaterializedNameCollisions(cfg)...)
+	return issues
+}
+
+func validateMaterializedNameCollisions(cfg *Config) []Issue {
+	var issues []Issue
+	for _, collision := range cfg.materializedNameCollisions {
+		scope := collision.Kind + " " + collision.Name
+		msg := fmt.Sprintf("materialized %s name %q from template %q conflicts with existing %s name", collision.Kind, collision.Name, collision.TemplateName, collision.Kind)
+		if collision.ExistingPath != "" {
+			msg += fmt.Sprintf(" at %s", collision.ExistingPath)
+		}
+		if collision.TemplatePath != "" {
+			msg += fmt.Sprintf("; template path %s", collision.TemplatePath)
+		}
+		msg += "; remove one definition or adjust the template discovery"
+		issues = append(issues, Issue{Scope: scope, Msg: msg})
 	}
 	return issues
 }
@@ -378,6 +399,55 @@ func versionFromCycle(cfg *Config, start string) []string {
 		}
 		name = provider.Name
 	}
+}
+
+func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
+	versions, ok := doc.Body["versions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, present := versions["current_from"]
+	if !present {
+		return nil
+	}
+	var issues []Issue
+	add := func(format string, args ...any) {
+		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
+	}
+	validateVersionsCurrentFromValue("versions.current_from", raw, add)
+	return issues
+}
+
+func validateVersionsCurrentFromValue(path string, raw any, add addFunc) {
+	switch v := raw.(type) {
+	case string:
+		if v == "" {
+			add("%s must be a non-empty path string", path)
+		}
+	case []any:
+		for i, item := range v {
+			validateVersionsCurrentFromValue(fmt.Sprintf("%s[%d]", path, i), item, add)
+		}
+	default:
+		add("%s must be a path string or list of path strings", path)
+	}
+}
+
+func validateAppLinks(cfg *Config, doc *Document, scope string) []Issue {
+	var issues []Issue
+	for _, name := range cfgval.StringList(doc.Body["apps"]) {
+		if name == "" || strings.Contains(name, "${") {
+			continue
+		}
+		if !validDocumentName(name) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("apps references invalid app name %q", name)})
+			continue
+		}
+		if _, ok := cfg.Apps[name]; !ok {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf("apps references unknown app %q", name)})
+		}
+	}
+	return issues
 }
 
 func validateBinaryVariables(doc *Document, scope string) []Issue {

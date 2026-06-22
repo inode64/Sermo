@@ -454,6 +454,11 @@ type Config struct {
 	Patterns  map[string]*Document // kind patterns (output-analysis rule sets)
 	Services  map[string]*Document // kind service (enabled instances)
 	Mounts    map[string]*Document // kind mount (fstab-backed mount units)
+	docs      []*Document          // every document in load order
+
+	materializedNameCollisions []materializedNameCollision
+	validationIssues           []Issue
+
 	// Load order per registry, for stable reporting.
 	DaemonNames  []string
 	AppNames     []string
@@ -461,5 +466,12 @@ type Config struct {
 	PatternNames []string
 	ServiceNames []string
 	MountNames   []string
-	docs         []*Document // every document in load order
+}
+
+type materializedNameCollision struct {
+	Kind         string
+	Name         string
+	TemplateName string
+	TemplatePath string
+	ExistingPath string
 }

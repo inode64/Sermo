@@ -233,7 +233,7 @@ perl, …). An app owns the tool's **binary**, **health** and **version** checks
 Link them with `apps:`:
 
 ```yaml
-# catalog/services/tomcat-%v%s%i.yml — Tomcat runs on the JVM
+# catalog/services/tomcat.yml — Tomcat runs on the JVM
 apps: [java, "tomcat-${version}"]
 ```
 
@@ -267,7 +267,9 @@ service's preflight, which **blocks start/restart/reload/resume** (a preflight-f
 operation never executes the action) — you do not start, restart, reload or
 resume a service whose runtime is absent.
 The link is many-to-many: a service lists several apps, and one app is shared by
-every service that lists it. The service keeps its own `variables.binary`,
+every service that lists it. Validation reports an `apps:` entry that does not
+resolve to a catalog app, so dangling runtime links are caught before deployment.
+The service keeps its own `variables.binary`,
 `version` and `config` checks (the **config** test is always service-specific,
 never moved to an app). Referenced names must be `app` daemons.
 
@@ -800,10 +802,10 @@ block start/stop/restart/reload/resume and must not point under
 ## Versioned daemons
 
 Some applications ship one binary per version and several can be installed at
-once (php-fpm, postgres, tomcat, erlang/beam, berkeley db). Instead of one file per
-version, write a single **app version template** whose name (and filename)
-contains `%v`, with `${version}` in the discovery path. A daemon template with
-the same token links that app.
+once (php-fpm, postgres, tomcat, erlang/beam, berkeley db). Instead of one file
+per version, write a single **app version template** whose `name:` contains
+`%v`, with `${version}` in the discovery path. A daemon template with the same
+token links that app.
 
 ```yaml
 kind: app
@@ -830,16 +832,24 @@ candidate list is checked as a list, so distro-specific locations can stay in
 one app template. Each match becomes a concrete app and concrete daemon with
 `%v` and `${version}` substituted everywhere (name, display_name, service, app
 links, ...) — `postgres-14`, `postgres-16`, ... — and the templates themselves
-are dropped. If nothing is installed the template yields nothing. The filename
-mirrors the name (`postgres-%v.yml`); only that one file is needed. `%v` may sit
-anywhere in the name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in
-the name; inside the body always use `${version}` (e.g. in `service` or `apps`).
+are dropped. If nothing is installed the template yields nothing. The YAML
+filename does not have to match `name:`; keep one descriptive file for the
+template and treat `name:` as the catalog identifier. `%v` may sit anywhere in
+the name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name;
+inside the body always use `${version}` (e.g. in `service` or `apps`).
 
 Prefer application discovery in `catalog/apps` when the installed binary path
 identifies the version or instance. A versioned or instanced daemon that links a
 matching app, such as `apps: ["postgres-${version}"]` or
 `apps: ["php-fpm${version}"]`, can materialize from that app's
 `variables.binary` or `versions.from`.
+
+`versions.from` may be a string or a candidate list. For app and library
+templates that discover from `versions.from` and do not declare
+`variables.binary`, the materialized document binds `${binary}` to the path that
+matched. This keeps profiles such as Java readable: discovery can enumerate
+several distro-specific JVM layouts without repeating the same candidates in
+`variables.binary`.
 
 When discovery belongs to the daemon instead — for example the instances are
 configuration files or init scripts and the application binary is generic — put
@@ -864,7 +874,9 @@ service: "mydaemon@${instance}"
 ```
 
 `versions.from` is discovery-only metadata; it never appears in materialized apps
-or daemons.
+or daemons. Matches are de-duplicated by their resolved filesystem path, so a
+short symlink and its full-version target do not create duplicate catalog
+entries.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
@@ -891,22 +903,41 @@ preflight:
 `/usr/bin/python*` then materializes `python2`/`python3`, but not `python3.11` or
 `python-config`.
 
-When a `%v` or `%n` template also has an unversioned active-slot binary, Sermo
-materializes it automatically. If `/usr/bin/python` exists, this registers
+When a simple `%v` or `%n` template also has an unversioned active-slot binary,
+Sermo materializes it automatically. If `/usr/bin/python` exists, this registers
 `python` in addition to `python2`/`python3`; when it is absent, only the numbered
 binaries are registered. The empty token is substituted before `name`,
 `display_name` and `description` are trimmed, so `display_name: "Python ${n}"`
-becomes `Python` for the active slot. Set `versions.unversioned: false` to ignore
-the marker-less binary; a map form can still override fields for the unversioned
-instance when a template needs a custom label:
+becomes `Python` for the active slot. Composite templates (`%i` plus `%v`, a
+separator token, etc.) do not infer that entry from `versions.from`; declare
+`versions.current_from` when they have a concrete active-slot executable such as
+`/usr/bin/java`. That path materializes the unversioned base name before the
+first token (`java-%i-%v` -> `java`) and becomes its `${binary}` when the
+template does not declare one. `current_from` may also be a list of direct paths:
+
+```yaml
+versions:
+  current_from: /usr/bin/java
+```
+
+Set `versions.unversioned: false` to ignore the marker-less or `current_from`
+active slot; a map form can still override fields for the unversioned instance
+when a template needs a custom label:
+
+If a template would materialize a `name:` that already exists as an explicit
+document in the same catalog category, validation reports a collision. Remove
+one definition or adjust the template discovery; Sermo does not silently choose
+between an explicit document and a generated one.
 
 Templates may also use `${current}` in `display_name` or `description`. During
 materialization it becomes `current` only for the versioned entry whose binary is
-the same filesystem entry as the marker-less active-slot binary (for example
-`/usr/bin/php -> /usr/bin/php8.2`); otherwise it becomes empty before metadata is
-trimmed. This lets `display_name: "PHP ${version} ${current}"` render as
-`PHP 8.2 current` for the active version and `PHP 8.3` for the others without
-running version commands during config load.
+the same filesystem entry as the active-slot binary, whether discovered from the
+marker-less path or declared with `versions.current_from` (for example
+`/usr/bin/php -> /usr/bin/php8.2` or `/usr/bin/java` pointing at the active JVM);
+otherwise it becomes empty before metadata is trimmed. This lets
+`display_name: "PHP ${version} ${current}"` render as `PHP 8.2 current` for the
+active version and `PHP 8.3` for the others without running version commands
+during config load. Symlinks are resolved before comparison.
 
 ```yaml
 kind: app
