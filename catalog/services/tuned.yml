@@ -8,5 +8,9 @@ service:
   openrc: [tuned]
 apps: [tuned]
 
+pidfile:
+  - /run/tuned/tuned.pid
+  - /run/tuned.pid
+
 checks:
   service: { type: service, expect: active }
