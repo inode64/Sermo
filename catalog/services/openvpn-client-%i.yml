@@ -1,0 +1,26 @@
+kind: daemon
+name: openvpn-client-%i
+display_name: "OpenVPN client ${instance}"
+category: network
+apps: [openvpn]
+
+# systemd lays client configs out under /etc/openvpn/client/<instance>.conf; the
+# daemon owns discovery from there (the generic openvpn app supplies the binary).
+versions:
+  from: "/etc/openvpn/client/${instance}.conf"
+
+service:
+  systemd: ["openvpn-client@${instance}"]
+
+variables:
+  config: "/etc/openvpn/client/${instance}.conf"
+  port:
+    from_file: "${config}"
+    directive: port
+    default: 1194
+
+config_files: ["${config}"]
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: openvpn, optional: true, port: "${port}" }

@@ -61,6 +61,8 @@ func validateGlobal(cfg *Config) []Issue {
 		issues = append(issues, Issue{Scope: "global", Msg: fmt.Sprintf(format, args...)})
 	}
 
+	validateEnableIfTree(raw, add)
+
 	if engine, ok := raw["engine"].(map[string]any); ok {
 		if backend := cfgval.String(engine["backend"]); !isValidBackend(backend) {
 			add("engine.backend %q is not one of auto, systemd, openrc", backend)
@@ -203,6 +205,11 @@ func validateDocuments(cfg *Config) []Issue {
 				issues = append(issues, Issue{Scope: scope, Msg: "category must be a string"})
 			}
 		}
+		addDoc := func(format string, args ...any) {
+			issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
+		}
+		validateEnableIfTree(doc.Body, addDoc)
+		validateFromFileVariables("variables", doc.Body["variables"], addDoc)
 		issues = append(issues, validateBinaryVariables(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
 		switch doc.Kind {
@@ -386,18 +393,31 @@ func validateServices(cfg *Config) []Issue {
 	for _, n := range cfg.ServiceNames {
 		services[n] = struct{}{}
 	}
+	seen := map[string]struct{}{}
+	addIssue := func(issue Issue) {
+		key := issue.Scope + "\x00" + issue.Msg
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		issues = append(issues, issue)
+	}
 	for _, name := range cfg.ServiceNames {
 		if name == "" {
 			continue
 		}
-		resolved, errs := cfg.Resolve(name)
-		for _, e := range errs {
-			issues = append(issues, Issue{Scope: name, Msg: e})
+		for _, pruneOptional := range []bool{false, true} {
+			resolved, errs := cfg.resolveService(name, pruneOptional)
+			for _, e := range errs {
+				addIssue(Issue{Scope: name, Msg: e})
+			}
+			if resolved.Tree == nil {
+				continue
+			}
+			for _, issue := range validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, effectiveBackend(cfg)) {
+				addIssue(issue)
+			}
 		}
-		if resolved.Tree == nil {
-			continue
-		}
-		issues = append(issues, validateResolved(name, resolved.Tree, cfg.Global.RuntimeDir(), defined, services, effectiveBackend(cfg))...)
 	}
 	return issues
 }

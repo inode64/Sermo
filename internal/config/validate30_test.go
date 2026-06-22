@@ -1214,6 +1214,90 @@ processes:
 	mustHave(t, issues, "processes.worker.unexpected is not supported")
 }
 
+func TestValidateEnableIfIsLimitedAndDisabledBranchesStillValidate(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+checks:
+  service: { type: service, expect: active }
+processes:
+  optional:
+    cmd: "("
+    enable_if: { file: /no/such/conf, key: daemon_list, contains: optional }
+rules:
+  guarded:
+    type: guard
+    enable_if: { file: /etc/conf.d/svc, key: daemon_list, contains: guarded }
+    blocks: [restart]
+    if: { failed: { check: service } }
+    then: { action: block, message: "blocked" }
+`)
+	mustHave(t, issues, "processes.optional.cmd is not a valid regex")
+	mustHave(t, issues, "rules.guarded.enable_if is only supported")
+}
+
+func TestValidateEnableIfSpec(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+checks:
+  bad:
+    type: binary
+    path: /bin/true
+    enable_if:
+      file: relative.conf
+      key: daemon_list
+      contains: ""
+      matches: "["
+      extra: true
+`)
+	mustHave(t, issues, `checks.bad.enable_if.file "relative.conf" must be absolute`)
+	mustHave(t, issues, "checks.bad.enable_if.contains must be non-empty")
+	mustHave(t, issues, "checks.bad.enable_if.matches is not a valid regex")
+	mustHave(t, issues, "checks.bad.enable_if must define exactly one")
+	mustHave(t, issues, "checks.bad.enable_if.extra is not supported")
+}
+
+func TestValidateFromFileVariableSpecs(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+variables:
+  no-default: { from_file: /etc/svc.conf, directive: port }
+  no-reader: { from_file: /etc/svc.conf, default: 1194 }
+  both: { from_file: /etc/svc.conf, directive: port, pattern: 'port (\d+)', default: 1194 }
+  bad-pattern: { from_file: /etc/svc.conf, pattern: '(', default: 1194 }
+  no-capture: { from_file: /etc/svc.conf, pattern: 'port \d+', default: 1194 }
+  extra: { from_file: /etc/svc.conf, directive: port, default: 1194, unexpected: true }
+  empty-path: { from_file: "", directive: port, default: 1194 }
+checks:
+  service: { type: service, expect: active }
+`)
+	mustHave(t, issues, "variables.no-default.default is required")
+	mustHave(t, issues, "variables.no-reader must define exactly one of directive or pattern")
+	mustHave(t, issues, "variables.both must define exactly one of directive or pattern")
+	mustHave(t, issues, "variables.bad-pattern.pattern is not a valid regex")
+	mustHave(t, issues, "variables.no-capture.pattern must define at least one capture group")
+	mustHave(t, issues, "variables.extra.unexpected is not supported")
+	mustHave(t, issues, "variables.empty-path.from_file is required")
+}
+
+func TestValidateFromFileVariablePathReferences(t *testing.T) {
+	issues := validateService(t, `
+kind: service
+name: svc
+service: x
+variables:
+  port: { from_file: "${missing_config}", directive: port, default: 1194 }
+checks:
+  tcp: { type: tcp, host: 127.0.0.1, port: "${port}" }
+`)
+	mustHave(t, issues, "variable ${missing_config} used in variables.port.from_file but not defined")
+}
+
 func TestValidateCleanServicePasses(t *testing.T) {
 	issues := validateService(t, `
 kind: service

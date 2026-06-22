@@ -1,0 +1,34 @@
+kind: daemon
+name: tomcat-%v%s%i
+display_name: "Apache Tomcat ${version} ${instance}"
+category: web
+
+# A Tomcat install is identified by version AND environment: /etc/tomcat-8.5-main,
+# /etc/tomcat-9-guacamole, ... A bare /etc/tomcat-8.5 (no environment) materializes
+# as tomcat-8.5 with no trailing separator. The daemon owns its discovery from the
+# config directory; the matching tomcat-${version} app owns catalina.sh/version and
+# the java app owns the JVM (both run in preflight via apps:).
+versions:
+  from: "/etc/tomcat-${version}${sep}${instance}/server.xml"
+  require: "/usr/share/tomcat-${version}/bin/catalina.sh"
+
+apps: [java, "tomcat-${version}"]
+
+service:
+  openrc: "tomcat-${version}${sep}${instance}"
+  systemd: "tomcat@${version}${sep}${instance}"
+
+variables:
+  config: "/etc/tomcat-${version}${sep}${instance}/server.xml"
+  port:
+    from_file: "${config}"
+    # The HTTP Connector port, e.g. <Connector port="8081" protocol="HTTP/1.1"/>.
+    pattern: '<Connector[^>]*?\bport="(\d+)"'
+    default: 8080
+
+config_files: ["${config}"]
+pidfile: "/run/tomcat-${version}${sep}${instance}.pid"
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, port: "${port}" }

@@ -7,13 +7,6 @@ import (
 	"sermo/internal/config"
 )
 
-// requireService reports an unknown-service error unless name is configured.
-// It returns exitSuccess when the service exists.
-func (a App) requireService(opts options, cfg *config.Config, name string) int {
-	_, code := a.canonicalService(opts, cfg, name)
-	return code
-}
-
 // canonicalService resolves name to the configured service name, accepting
 // service aliases and safe catalog aliases.
 func (a App) canonicalService(opts options, cfg *config.Config, name string) (string, int) {

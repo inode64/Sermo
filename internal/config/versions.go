@@ -32,7 +32,8 @@ func (t tmplToken) marker() string { return "${" + t.variable + "}" }
 var tmplTokens = []tmplToken{
 	{placeholder: "%v", variable: "version", capture: "[0-9][^/]*", allowEmpty: true},
 	{placeholder: "%n", variable: "n", capture: "[0-9]+", allowEmpty: true},
-	{placeholder: "%i", variable: "instance", capture: "[A-Za-z0-9][A-Za-z0-9_.-]*"},
+	{placeholder: "%s", variable: "sep", capture: "[-_]?"},
+	{placeholder: "%i", variable: "instance", capture: "(?:[A-Za-z0-9][A-Za-z0-9_.-]*)?"},
 }
 
 // tokenFor returns the template token a name carries, or nil if it is not a
@@ -46,17 +47,43 @@ func tokenFor(name string) *tmplToken {
 	return nil
 }
 
+// tokensFor returns every template token a name carries, in left-to-right order
+// of appearance (e.g. tomcat-%v%s%i → [%v, %s, %i]). A name may combine a
+// version (%v/%n), an optional separator (%s) and an instance (%i) so that one
+// template materializes a structured identity such as tomcat-8.5-main.
+func tokensFor(name string) []tmplToken {
+	var out []tmplToken
+	for i := 0; i < len(name); {
+		if name[i] == '%' {
+			matched := false
+			for _, t := range tmplTokens {
+				if strings.HasPrefix(name[i:], t.placeholder) {
+					out = append(out, t)
+					i += len(t.placeholder)
+					matched = true
+					break
+				}
+			}
+			if matched {
+				continue
+			}
+		}
+		i++
+	}
+	return out
+}
+
 // materializeVersionTemplates replaces every version-template document with one
 // concrete document per installed value. Multiple versions of the same
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // yields `foo1.2`, `foo3.4`, ... with the token's `${...}` wildcarded. Apps and
 // libraries discover from their own `versions.from`/`binary`; daemons discover
-// exclusively from a linked app template (`apps: ["php-fpm${version}"]`). `%v`
-// and `%n` may also register an empty active-slot value when the marker-less app
-// binary exists (e.g. `php%v` -> `php`). The template itself is dropped; if
-// nothing is installed it yields nothing. A daemon template may `uses` a base
-// daemon (e.g. php-fpm%v uses php-fpm) to inherit its checks, rules and
-// processes.
+// from an explicit token-bearing `versions.from` or a linked app template
+// (`apps: ["php-fpm${version}"]`). `%v` and `%n` may also register an empty
+// active-slot value when the marker-less app binary exists (e.g. `php%v` ->
+// `php`). The template itself is dropped; if nothing is installed it yields
+// nothing. A daemon template may `uses` a base daemon (e.g. php-fpm%v uses
+// php-fpm) to inherit its checks, rules and processes.
 func (c *Config) materializeVersionTemplates() {
 	c.materializeRegistry(c.DaemonNames, c.Daemons, kindDaemon)
 	c.materializeRegistry(c.AppNames, c.Apps, kindApp)
@@ -76,12 +103,19 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		}
 	}
 	for _, tmpl := range templates {
-		tok := tokenFor(tmpl.Name)
 		body := c.templateBody(tmpl, kind)
-		source := c.versionDiscoverySource(body, *tok, kind)
-		values := materializedVersionValues(source.paths, source.options, *tok)
-		for _, value := range values {
-			inst := instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind)
+		var instances []*Document
+		if toks := tokensFor(tmpl.Name); len(toks) > 1 {
+			instances = c.materializeMultiToken(tmpl, body, toks, kind)
+		} else {
+			tok := tokenFor(tmpl.Name)
+			source := c.versionDiscoverySource(body, *tok, kind)
+			values := materializedVersionValues(source.paths, source.options, *tok)
+			for _, value := range values {
+				instances = append(instances, instantiateVersion(body, tmpl.Name, value, *tok, tmpl.Path, kind))
+			}
+		}
+		for _, inst := range instances {
 			if existing, ok := reg[inst.Name]; ok && existing.Name == inst.Name {
 				continue
 			}
@@ -90,6 +124,227 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		}
 		c.dropTemplate(tmpl.Name, reg, kind)
 	}
+}
+
+// materializeMultiToken materializes a template whose name carries more than one
+// token (e.g. tomcat-%v%s%i). All markers are discovered together from a single
+// glob whose matches yield one value per token; each present combination becomes
+// a concrete document with every token bound in the name and body at once.
+func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
+	path := c.multiTokenDiscoveryPath(body, toks, kind)
+	if path == "" {
+		return nil
+	}
+	require := versionsRequire(body)
+	var out []*Document
+	for _, vals := range discoverTokenTuples(path, toks) {
+		if !requireSatisfied(require, vals, toks) {
+			continue
+		}
+		out = append(out, instantiateMulti(body, tmpl.Name, vals, toks, tmpl.Path, kind))
+	}
+	return out
+}
+
+// versionsRequire returns the optional `versions.require` candidate paths. When
+// set, a discovered instance materializes only if at least one of them exists on
+// disk (with the captured tokens bound) — so a config directory whose runtime
+// binary is not installed (e.g. /etc/php/fpm-php5.6 without php-fpm5.6) does not
+// produce a daemon that would dangle a link to an unmaterialized binary app.
+func versionsRequire(body map[string]any) []string {
+	v, ok := body["versions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return cfgval.StringList(v["require"])
+}
+
+func requireSatisfied(require []string, vals map[string]string, toks []tmplToken) bool {
+	if len(require) == 0 {
+		return true
+	}
+	pairs := make([]string, 0, len(toks)*2)
+	for _, t := range toks {
+		pairs = append(pairs, t.marker(), vals[t.variable])
+	}
+	repl := strings.NewReplacer(pairs...)
+	for _, cand := range require {
+		if _, err := os.Stat(repl.Replace(cand)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// multiTokenDiscoveryPath returns the glob (carrying all markers) that enumerates
+// a multi-token template's instances: the daemon's own `versions.from` when it
+// carries every marker, else a linked app template that does.
+func (c *Config) multiTokenDiscoveryPath(body map[string]any, toks []tmplToken, kind string) string {
+	if from := versionsFromPath(body); containsAllMarkers(from, toks) {
+		return from
+	}
+	if kind != kindDaemon {
+		return ""
+	}
+	for _, name := range cfgval.StringList(body["apps"]) {
+		doc, ok := c.Apps[linkedAppTemplateNameMulti(name, toks)]
+		if !ok {
+			continue
+		}
+		if from := versionsFromPath(stripMeta(doc.Body)); containsAllMarkers(from, toks) {
+			return from
+		}
+	}
+	return ""
+}
+
+func containsAllMarkers(path string, toks []tmplToken) bool {
+	if path == "" {
+		return false
+	}
+	for _, t := range toks {
+		if !strings.Contains(path, t.marker()) {
+			return false
+		}
+	}
+	return true
+}
+
+func linkedAppTemplateNameMulti(name string, toks []tmplToken) string {
+	pairs := make([]string, 0, len(toks)*2)
+	for _, t := range toks {
+		pairs = append(pairs, t.marker(), t.placeholder)
+	}
+	return strings.NewReplacer(pairs...).Replace(name)
+}
+
+// discoverTokenTuples globs the discovery path with every marker wildcarded and,
+// for each match, captures one value per token via a regex with a group per
+// token. An empty trailing instance drops its separator so no dangling `-`/`_`
+// survives. Tuples are de-duplicated and ordered by version then instance.
+func discoverTokenTuples(path string, toks []tmplToken) []map[string]string {
+	pairs := make([]string, 0, len(toks)*2)
+	for _, t := range toks {
+		pairs = append(pairs, t.marker(), "*")
+	}
+	matches, err := filepath.Glob(strings.NewReplacer(pairs...).Replace(path))
+	if err != nil {
+		return nil
+	}
+	re, order := buildMultiRegex(path, toks)
+	if re == nil {
+		return nil
+	}
+	var out []map[string]string
+	seen := map[string]bool{}
+	for _, m := range matches {
+		sub := re.FindStringSubmatch(m)
+		if sub == nil {
+			continue
+		}
+		vals := make(map[string]string, len(order))
+		for i, tk := range order {
+			vals[tk.variable] = sub[i+1]
+		}
+		if vals["instance"] == "" {
+			vals["sep"] = ""
+		}
+		key := tupleKey(toks, vals)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, vals)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i]["version"] != out[j]["version"] {
+			return versionLess(out[i]["version"], out[j]["version"])
+		}
+		return out[i]["instance"] < out[j]["instance"]
+	})
+	return out
+}
+
+// buildMultiRegex compiles an anchored regex matching the discovery path with one
+// capture group per token, and returns the tokens in capture order. A non-final
+// %v is bounded so it cannot swallow the separator before the instance.
+func buildMultiRegex(path string, toks []tmplToken) (*regexp.Regexp, []tmplToken) {
+	terminal := ""
+	if len(toks) > 0 {
+		terminal = toks[len(toks)-1].placeholder
+	}
+	var sb strings.Builder
+	sb.WriteString("^")
+	var order []tmplToken
+	rest := path
+	for len(rest) > 0 {
+		idx, tk := earliestMarker(rest, toks)
+		if tk == nil {
+			sb.WriteString(regexp.QuoteMeta(rest))
+			break
+		}
+		sb.WriteString(regexp.QuoteMeta(rest[:idx]))
+		sb.WriteString("(" + captureFor(*tk, tk.placeholder == terminal) + ")")
+		order = append(order, *tk)
+		rest = rest[idx+len(tk.marker()):]
+	}
+	sb.WriteString("$")
+	re, err := regexp.Compile(sb.String())
+	if err != nil {
+		return nil, nil
+	}
+	return re, order
+}
+
+// earliestMarker returns the index and token of the marker that appears first in
+// s, or (-1, nil) when none is present.
+func earliestMarker(s string, toks []tmplToken) (int, *tmplToken) {
+	best := -1
+	var bestTok *tmplToken
+	for i := range toks {
+		idx := strings.Index(s, toks[i].marker())
+		if idx >= 0 && (best < 0 || idx < best) {
+			best, bestTok = idx, &toks[i]
+		}
+	}
+	return best, bestTok
+}
+
+// captureFor returns a token's capture regex. A non-terminal %v excludes the
+// `-`/`_` separators so a structured name like tomcat-8.5-main splits cleanly.
+func captureFor(tk tmplToken, terminal bool) string {
+	if tk.placeholder == "%v" && !terminal {
+		return "[0-9][^/_-]*"
+	}
+	return tk.capture
+}
+
+func tupleKey(toks []tmplToken, vals map[string]string) string {
+	parts := make([]string, 0, len(toks))
+	for _, t := range toks {
+		parts = append(parts, vals[t.variable])
+	}
+	return strings.Join(parts, "\x00")
+}
+
+// instantiateMulti bakes one discovered tuple into a concrete document: each
+// token placeholder in the name and each `${...}` marker in the body is bound to
+// its captured value in a single pass.
+func instantiateMulti(body map[string]any, templateName string, vals map[string]string, toks []tmplToken, path, kind string) *Document {
+	name := templateName
+	bodyPairs := make([]string, 0, len(toks)*2)
+	for _, t := range toks {
+		v := vals[t.variable]
+		name = strings.ReplaceAll(name, t.placeholder, v)
+		bodyPairs = append(bodyPairs, t.marker(), v)
+	}
+	name = strings.TrimSpace(name)
+	out := bindTokens(cloneMap(body), strings.NewReplacer(bodyPairs...)).(map[string]any)
+	out["kind"] = kind
+	out["name"] = name
+	trimMaterializedMetadata(out)
+	delete(out, "versions")
+	return &Document{Kind: kind, Name: name, Path: path, Body: out}
 }
 
 func materializedVersionValues(discoverPaths []string, options map[string]any, tok tmplToken) []string {
@@ -153,6 +408,15 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 	if kind != kindDaemon {
 		return versionDiscovery{paths: directVersionDiscoverySources(body), options: body}
 	}
+	// A daemon may own its discovery via an explicit token-bearing
+	// `versions.from`: instance configs live on the daemon, not on the version
+	// binary the linked app knows about (e.g. /etc/tomcat-${version}${sep}
+	// ${instance}/server.xml). Prefer it when present. A daemon still never
+	// discovers from its own *binary* — that remains the linked app's job — so
+	// only an explicit versions.from qualifies, not documentBinaryCandidates.
+	if from := versionsFromPath(body); strings.Contains(from, tok.marker()) {
+		return versionDiscovery{paths: []string{from}, options: body}
+	}
 	for _, name := range cfgval.StringList(body["apps"]) {
 		doc, ok := c.Apps[linkedAppTemplateName(name, tok)]
 		if !ok {
@@ -168,12 +432,18 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 }
 
 func directVersionDiscoverySources(body map[string]any) []string {
-	if v, ok := body["versions"].(map[string]any); ok {
-		if from := cfgval.String(v["from"]); from != "" {
-			return []string{from}
-		}
+	if from := versionsFromPath(body); from != "" {
+		return []string{from}
 	}
 	return documentBinaryCandidates(body)
+}
+
+// versionsFromPath returns the explicit `versions.from` discovery glob, or "".
+func versionsFromPath(body map[string]any) string {
+	if v, ok := body["versions"].(map[string]any); ok {
+		return cfgval.String(v["from"])
+	}
+	return ""
 }
 
 func anyContains(values []string, marker string) bool {

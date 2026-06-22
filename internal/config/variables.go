@@ -14,6 +14,8 @@ import (
 // `${` always begins a reference.
 var varRef = regexp.MustCompile(`\$\{([^}]*)\}`)
 
+var fromFileVariableKeys = set("from_file", "directive", "pattern", "default")
+
 // collectVariables reads the merged `variables` section into a flat string map.
 // Values are stringified (a YAML int like `port: 8080` becomes "8080"). A
 // list-valued variable is treated as candidate paths and resolves to the first
@@ -34,6 +36,15 @@ func collectVariablesForKind(tree map[string]any, _ string) map[string]string {
 			if list, ok := v.([]any); ok {
 				vars[k] = expandEnvString(firstExistingPath(list))
 				continue
+			}
+			// A map-valued variable that reads from a config file (from_file)
+			// resolves to its `default` here; resolveFileVars overrides it once
+			// the other variables it references (e.g. ${config}) are known.
+			if m, ok := v.(map[string]any); ok {
+				if _, isFile := m["from_file"]; isFile {
+					vars[k] = expandEnvString(cfgval.String(m["default"]))
+					continue
+				}
 			}
 			// Resolve ${env:...} in a variable value here (before nested-variable
 			// validation) so a variable can hold a secret from the environment.
@@ -86,6 +97,71 @@ func documentBinaryCandidates(tree map[string]any) []string {
 	return cfgval.StringList(vars["binary"])
 }
 
+// resolveFileVars overrides each from_file variable with the value read from its
+// config file. It runs after the rest of the variable map (and builtins) is
+// assembled so the file path may reference other variables such as ${config}. A
+// missing file or unmatched key leaves the default already set by
+// collectVariablesForKind in place. Malformed specs and unresolved path
+// variables are configuration errors.
+func resolveFileVars(vars map[string]string, tree map[string]any) []string {
+	raw, ok := tree["variables"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	var errs []string
+	for name, v := range raw {
+		spec, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+		from, ok := spec["from_file"]
+		if !ok {
+			continue
+		}
+		var specErrs []string
+		validateFromFileSpec("variables."+name, spec, func(format string, args ...any) {
+			specErrs = append(specErrs, fmt.Sprintf(format, args...))
+		})
+		if len(specErrs) > 0 {
+			errs = append(errs, specErrs...)
+			continue
+		}
+		path, pathErrs := substituteVars(cfgval.String(from), vars, "variables."+name+".from_file")
+		errs = append(errs, pathErrs...)
+		if len(pathErrs) > 0 {
+			continue
+		}
+		val, found, err := extractFileValue(path, spec)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("variables.%s: %v", name, err))
+			continue
+		}
+		if found {
+			vars[name] = val
+		}
+	}
+	return errs
+}
+
+// substituteVars replaces ${name} references in s using vars. Unknown
+// references are errors because from_file paths are evaluated during config
+// resolution, not at runtime.
+func substituteVars(s string, vars map[string]string, path string) (string, []string) {
+	var errs []string
+	out := varRef.ReplaceAllStringFunc(s, func(ref string) string {
+		name := strings.TrimSpace(varRef.FindStringSubmatch(ref)[1])
+		if rest, ok := strings.CutPrefix(name, "env:"); ok {
+			return resolveEnvRef(rest)
+		}
+		if val, ok := vars[name]; ok {
+			return val
+		}
+		errs = append(errs, fmt.Sprintf("variable ${%s} used in %s but not defined", name, path))
+		return ref
+	})
+	return out, errs
+}
+
 // validateVariableValues rejects variable values that themselves contain
 // ${...} (no nested variables).
 func validateVariableValues(vars map[string]string) []string {
@@ -96,6 +172,62 @@ func validateVariableValues(vars map[string]string) []string {
 		}
 	}
 	return errs
+}
+
+func validateFromFileVariables(prefix string, raw any, add addFunc) {
+	vars, ok := raw.(map[string]any)
+	if !ok {
+		return
+	}
+	for _, name := range slices.Sorted(maps.Keys(vars)) {
+		spec, ok := vars[name].(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, has := spec["from_file"]; !has {
+			continue
+		}
+		validateFromFileSpec(prefix+"."+name, spec, add)
+	}
+}
+
+func validateFromFileSpec(path string, spec map[string]any, add addFunc) {
+	for _, key := range slices.Sorted(maps.Keys(spec)) {
+		if _, ok := fromFileVariableKeys[key]; !ok {
+			add("%s.%s is not supported; from_file variables accept from_file, directive, pattern and default", path, key)
+		}
+	}
+	if cfgval.String(spec["from_file"]) == "" {
+		add("%s.from_file is required", path)
+	}
+	if _, has := spec["default"]; !has {
+		add("%s.default is required", path)
+	}
+	readers := 0
+	if _, has := spec["directive"]; has {
+		readers++
+		if cfgval.String(spec["directive"]) == "" {
+			add("%s.directive must be non-empty", path)
+		}
+	}
+	if _, has := spec["pattern"]; has {
+		readers++
+		pat := cfgval.String(spec["pattern"])
+		switch {
+		case pat == "":
+			add("%s.pattern must be non-empty", path)
+		default:
+			re, err := regexp.Compile(pat)
+			if err != nil {
+				add("%s.pattern is not a valid regex: %v", path, err)
+			} else if re.NumSubexp() < 1 {
+				add("%s.pattern must define at least one capture group", path)
+			}
+		}
+	}
+	if readers != 1 {
+		add("%s must define exactly one of directive or pattern", path)
+	}
 }
 
 // expandTree substitutes ${var} references across every string in the tree,
