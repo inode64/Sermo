@@ -1,5 +1,6 @@
 kind: daemon
 name: apache
+aliases: [apache2, httpd]
 display_name: "Apache HTTP Server"
 category: web
 type: webserver

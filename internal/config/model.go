@@ -74,10 +74,11 @@ func categoryFromDir(name string) string {
 // metaKeys are the document keys that control resolution and are not part of a
 // service's merged body.
 var metaKeys = map[string]struct{}{
-	"kind":  {},
-	"name":  {},
-	"uses":  {},
-	"clone": {},
+	"aliases": {},
+	"kind":    {},
+	"name":    {},
+	"uses":    {},
+	"clone":   {},
 }
 
 // perServiceDefaults are the only parts of global `defaults` that merge into a
@@ -91,6 +92,123 @@ type Document struct {
 	Path     string
 	Category string // service | app | library (daemons only; from the directory)
 	Body     map[string]any
+}
+
+// DocumentAliases returns the alternate public names declared by a catalog or
+// configured document. Aliases identify the document during resolution, but do
+// not merge into the runtime service body.
+func DocumentAliases(doc *Document) []string {
+	if doc == nil {
+		return nil
+	}
+	return cfgval.StringList(doc.Body["aliases"])
+}
+
+// CanonicalCatalogName returns the canonical name for a catalog document in
+// category, accepting exact names and `aliases`.
+func (c *Config) CanonicalCatalogName(category, name string) (string, bool) {
+	if c == nil || name == "" {
+		return "", false
+	}
+	if doc := c.catalogRegistry(category)[name]; doc != nil {
+		return documentCanonicalName(doc, name), true
+	}
+	return canonicalAlias(c.catalogRegistry(category), c.catalogNames(category), name)
+}
+
+// CanonicalServiceName returns the configured service name for name, accepting
+// exact service names, configured service aliases, and a conservative catalog
+// alias fallback. The fallback only maps a catalog daemon alias to a configured
+// service when that service uses the daemon and has the same canonical name as
+// the daemon, avoiding surprising alias matches for instance names such as
+// `apache-main`.
+func (c *Config) CanonicalServiceName(name string) (string, bool) {
+	if c == nil || name == "" {
+		return "", false
+	}
+	if doc := c.Services[name]; doc != nil {
+		return documentCanonicalName(doc, name), true
+	}
+	if canonical, ok := canonicalAlias(c.Services, c.ServiceNames, name); ok {
+		return canonical, true
+	}
+	return c.canonicalServiceNameFromDaemonAlias(name)
+}
+
+func (c *Config) canonicalServiceNameFromDaemonAlias(alias string) (string, bool) {
+	daemonName, ok := c.CanonicalCatalogName(CategoryService, alias)
+	if !ok {
+		return "", false
+	}
+	var match string
+	seen := map[string]bool{}
+	for _, serviceName := range c.ServiceNames {
+		if seen[serviceName] {
+			continue
+		}
+		seen[serviceName] = true
+		doc := c.Services[serviceName]
+		docName := documentCanonicalName(doc, serviceName)
+		if doc == nil || docName != daemonName {
+			continue
+		}
+		uses := cfgval.String(doc.Body["uses"])
+		if uses == "" {
+			continue
+		}
+		canonicalUses, ok := c.CanonicalCatalogName(CategoryService, uses)
+		if !ok || canonicalUses != daemonName {
+			continue
+		}
+		if match != "" && match != docName {
+			return "", false
+		}
+		match = docName
+	}
+	return match, match != ""
+}
+
+func canonicalAlias(reg map[string]*Document, names []string, alias string) (string, bool) {
+	var match string
+	seen := map[*Document]bool{}
+	for _, name := range names {
+		doc := reg[name]
+		if doc == nil || seen[doc] {
+			continue
+		}
+		seen[doc] = true
+		docName := documentCanonicalName(doc, name)
+		for _, candidate := range DocumentAliases(doc) {
+			if candidate != alias {
+				continue
+			}
+			if match != "" && match != docName {
+				return "", false
+			}
+			match = docName
+		}
+	}
+	return match, match != ""
+}
+
+func documentCanonicalName(doc *Document, fallback string) string {
+	if doc != nil && doc.Name != "" {
+		return doc.Name
+	}
+	return fallback
+}
+
+func (c *Config) catalogNames(category string) []string {
+	switch category {
+	case CategoryApp:
+		return c.AppNames
+	case CategoryLibrary:
+		return c.LibraryNames
+	case CategoryPatterns:
+		return c.PatternNames
+	default:
+		return c.DaemonNames
+	}
 }
 
 // DefaultRuntime is the runtime root used when paths.runtime is unset.

@@ -107,6 +107,159 @@ checks:
 	}
 }
 
+func TestCatalogAliasResolvesUsesAndCatalogLookup(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/smb.yml": `
+kind: daemon
+name: smb
+aliases: [samba]
+service: smb
+`,
+		"enabled/files.yml": `
+kind: service
+name: files
+uses: samba
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	catalog, errs := cfg.ResolveCatalog(CategoryService, "samba")
+	if len(errs) != 0 {
+		t.Fatalf("ResolveCatalog() errors = %v", errs)
+	}
+	if catalog.Name != "smb" {
+		t.Fatalf("ResolveCatalog() name = %q, want smb", catalog.Name)
+	}
+
+	resolved, errs := cfg.Resolve("files")
+	if len(errs) != 0 {
+		t.Fatalf("Resolve() errors = %v", errs)
+	}
+	if got := ServiceUnit(resolved.Tree, resolved.Name); got != "smb" {
+		t.Fatalf("service unit = %q, want smb", got)
+	}
+}
+
+func TestServiceAliasesResolveToCanonicalName(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/smb.yml": `
+kind: daemon
+name: smb
+aliases: [samba]
+service: smb
+`,
+		"enabled/smb.yml": `
+kind: service
+name: smb
+aliases: [fileshare]
+uses: smb
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	for _, alias := range []string{"fileshare", "samba"} {
+		canonical, ok := cfg.CanonicalServiceName(alias)
+		if !ok {
+			t.Fatalf("CanonicalServiceName(%q) was not found", alias)
+		}
+		if canonical != "smb" {
+			t.Fatalf("CanonicalServiceName(%q) = %q, want smb", alias, canonical)
+		}
+		resolved, errs := cfg.Resolve(alias)
+		if len(errs) != 0 {
+			t.Fatalf("Resolve(%q) errors = %v", alias, errs)
+		}
+		if resolved.Name != "smb" {
+			t.Fatalf("Resolve(%q) name = %q, want smb", alias, resolved.Name)
+		}
+	}
+}
+
+func TestCatalogAliasDoesNotResolveNonCanonicalServiceInstance(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/smb.yml": `
+kind: daemon
+name: smb
+aliases: [samba]
+service: smb
+`,
+		"enabled/files.yml": `
+kind: service
+name: files
+uses: smb
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if canonical, ok := cfg.CanonicalServiceName("samba"); ok {
+		t.Fatalf("CanonicalServiceName(samba) = %q, want no match", canonical)
+	}
+	if _, errs := cfg.Resolve("samba"); len(errs) == 0 {
+		t.Fatalf("Resolve(samba) succeeded, want unknown service")
+	}
+}
+
+func TestValidateDocumentAliases(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/web.yml": `
+kind: daemon
+name: web
+aliases: [web]
+`,
+		"catalog/services/db.yml": `
+kind: daemon
+name: db
+aliases: [bad/name]
+`,
+		"catalog/services/cache.yml": `
+kind: daemon
+name: cache
+aliases: ["", alt, alt]
+`,
+		"catalog/services/api.yml": `
+kind: daemon
+name: api
+aliases: [alt]
+`,
+		"catalog/services/plain.yml": `
+kind: daemon
+name: plain
+aliases: nope
+`,
+	})
+
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	for _, want := range []string{
+		`alias "web" duplicates the document name`,
+		`alias "bad/name" must be a simple name without path separators`,
+		"aliases must not contain empty names",
+		`duplicate alias "alt"`,
+		`alias "alt" is already used by daemon`,
+		"aliases must be a list of simple names",
+	} {
+		if !hasIssue(issues, want) {
+			t.Errorf("missing issue containing %q in %v", want, issues)
+		}
+	}
+}
+
 func TestCloneOverridesVariableBeforeExpansion(t *testing.T) {
 	global := writeConfig(t, map[string]string{
 		"sermo.yml": baseGlobal,

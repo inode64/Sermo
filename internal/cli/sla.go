@@ -37,10 +37,11 @@ func (a App) runSLA(opts options) int {
 
 	var services []string
 	if s := opts.service(); s != "" {
-		if _, ok := cfg.Services[s]; !ok {
+		canonical, ok := cfg.CanonicalServiceName(s)
+		if !ok {
 			return a.fail(opts, fmt.Sprintf("unknown service %q", s))
 		}
-		services = []string{s}
+		services = []string{canonical}
 	} else {
 		services = sortedUnique(cfg.Services)
 	}
@@ -76,9 +77,11 @@ func (a App) runSLASeries(opts options, cfg *config.Config) int {
 	if service == "" {
 		return a.commandUsageError("sla", "sla --series requires a service name")
 	}
-	if _, ok := cfg.Services[service]; !ok {
+	canonical, ok := cfg.CanonicalServiceName(service)
+	if !ok {
 		return a.fail(opts, fmt.Sprintf("unknown service %q", service))
 	}
+	service = canonical
 
 	window := opts.since
 	if window <= 0 {

@@ -153,6 +153,14 @@ app addressed by its canonical name, and `version_from` chains must not cycle.
 This is not an operational dependency and does not inject preflight checks into
 services.
 
+Catalog and service documents may declare `aliases: [...]`, a list of alternate
+simple names. Aliases are metadata: they resolve names but never merge into the
+runtime service body. Catalog aliases let `uses:` accept distro spellings such
+as `apache2` for the canonical `apache` profile. Service aliases let
+`sermoctl` commands accept alternate names and operate on the canonical
+configured service. Aliases must not duplicate another name or alias of the same
+document kind.
+
 When a daemon or service lists apps, every app variable is also available to that
 daemon/service with a normalized app-name prefix: an app with
 `variables: { binary: /usr/bin/cupsd, cups_config: /usr/bin/cups-config }`

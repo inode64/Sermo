@@ -113,6 +113,44 @@ func TestRestartOKThroughEngine(t *testing.T) {
 	}
 }
 
+func TestRestartUsesCanonicalServiceAlias(t *testing.T) {
+	root := t.TempDir()
+	global := filepath.Join(root, "sermo.yml")
+	mustWrite(t, global, `
+paths:
+  services: [ `+root+`/enabled ]
+  runtime: `+root+`/run
+defaults:
+  policy:
+    cooldown: 5m
+`)
+	mustWrite(t, filepath.Join(root, "enabled", "web.yml"), `
+kind: service
+name: web
+aliases: [frontend]
+service: web
+`)
+
+	var stdout bytes.Buffer
+	var gotService string
+	app := actionApp(operation.Result{}, nil, &stdout, nil)
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		gotService = service
+		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "restart", "frontend"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if gotService != "web" {
+		t.Fatalf("Operate service = %q, want web", gotService)
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "web restart ok" {
+		t.Fatalf("stdout = %q", got)
+	}
+}
+
 func TestRestartBlockedExit75(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
