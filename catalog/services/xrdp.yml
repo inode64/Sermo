@@ -1,0 +1,50 @@
+kind: daemon
+name: xrdp
+display_name: "xrdp"
+category: remote
+description: "Open-source RDP server for Linux remote desktop."
+service:
+  systemd: [xrdp]
+  openrc: [xrdp]
+apps: [xrdp]
+
+variables:
+  host: 127.0.0.1
+  port: 3389
+
+pidfile: /run/xrdp.pid
+
+checks:
+  service: { type: service, expect: active }
+  port: { type: tcp, host: "${host}", port: "${port}", timeout: 3s }
+  rdp:
+    type: rdp
+    host: "${host}"
+    port: "${port}"
+    timeout: 5s
+
+postflight:
+  rdp:
+    type: rdp
+    host: "${host}"
+    port: "${port}"
+    timeout: 5s
+
+rules:
+  restart-if-rdp-failed:
+    type: remediation
+    if:
+      failed: { check: rdp }
+    for:
+      cycles: 3
+    then:
+      action: restart
+
+  restart-if-port-failed:
+    type: remediation
+    if:
+      failed: { check: port }
+    for:
+      cycles: 3
+    then:
+      action: restart

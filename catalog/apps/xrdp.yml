@@ -1,0 +1,9 @@
+kind: app
+name: xrdp
+display_name: "xrdp"
+category: remote
+variables:
+  binary: /usr/sbin/xrdp
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }
