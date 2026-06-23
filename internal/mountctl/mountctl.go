@@ -319,7 +319,11 @@ func (c Controller) unmount(ctx context.Context, spec Spec) (Result, error) {
 		// A discovery failure must not masquerade as "no blockers": surface it so
 		// the operator knows escalation could not be attempted, rather than
 		// silently reporting a clean busy mount.
-		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %v)", derr)
+		timeout := c.CommandTimeout
+		if timeout <= 0 {
+			timeout = DefaultCommandTimeout
+		}
+		result.Message = fmt.Sprintf("mount is busy (could not enumerate blockers: %s)", execx.FormatContextOrError(derr, timeout))
 	}
 	if spec.Umount.AllowSIGKILL && len(blockers) > 0 {
 		reaper := process.Reaper{
