@@ -3,8 +3,8 @@ name: rabbitmq
 display_name: "RabbitMQ"
 category: messaging
 variables:
-  binary: /usr/bin/rabbitmq-server
-  ctl: /usr/bin/rabbitmqctl
+  binary: ${bindir}/rabbitmq-server
+  ctl: ${bindir}/rabbitmqctl
 preflight:
   binary: { type: binary, path: "${binary}" }
   ctl: { type: binary, path: "${ctl}" }

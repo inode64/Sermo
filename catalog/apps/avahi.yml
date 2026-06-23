@@ -3,7 +3,7 @@ name: avahi
 display_name: "Avahi"
 category: network
 variables:
-  binary: "/usr/bin/avahi-daemon"
+  binary: ${bindir}/avahi-daemon
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -4,6 +4,6 @@ display_name: "RPC Bind"
 category: storage
 version_from: rpc-mountd
 variables:
-  binary: "/usr/bin/rpcbind"
+  binary: ${bindir}/rpcbind
 preflight:
   binary: { type: binary, path: "${binary}" }

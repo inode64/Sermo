@@ -3,7 +3,7 @@ name: rpc-mountd
 display_name: "NFS Mount Daemon"
 category: storage
 variables:
-  binary: "/usr/bin/rpc.mountd"
+  binary: ${bindir}/rpc.mountd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

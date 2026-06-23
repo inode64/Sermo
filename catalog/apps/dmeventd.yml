@@ -4,7 +4,7 @@ display_name: "Device-mapper event daemon"
 category: system
 description: "Monitors and auto-repairs DM devices (mirrors, snapshots, thin pools)"
 variables:
-  binary: /usr/bin/dmeventd
+  binary: ${bindir}/dmeventd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

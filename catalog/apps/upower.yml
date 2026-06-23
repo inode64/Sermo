@@ -7,7 +7,7 @@ variables:
   binary:
     - /usr/libexec/upowerd
     - /usr/lib/upower/upowerd
-  client: /usr/bin/upower
+  client: ${bindir}/upower
 preflight:
   binary: { type: binary, path: "${binary}" }
   client: { type: binary, path: "${client}" }

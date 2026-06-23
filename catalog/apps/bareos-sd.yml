@@ -3,7 +3,7 @@ name: bareos-sd
 display_name: "Bareos Storage Daemon"
 category: storage
 variables:
-  binary: "/usr/bin/bareos-sd"
+  binary: ${bindir}/bareos-sd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

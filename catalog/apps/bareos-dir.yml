@@ -3,7 +3,7 @@ name: bareos-dir
 display_name: "Bareos Director"
 category: storage
 variables:
-  binary: "/usr/bin/bareos-dir"
+  binary: ${bindir}/bareos-dir
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

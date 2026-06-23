@@ -3,7 +3,7 @@ name: bacula-dir
 display_name: "Bacula Director"
 category: storage
 variables:
-  binary: "/usr/bin/bacula-dir"
+  binary: ${bindir}/bacula-dir
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-?"], expect_exit: 1, timeout: 10s }

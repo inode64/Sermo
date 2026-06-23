@@ -3,7 +3,7 @@ name: squid
 display_name: "Squid"
 category: web
 variables:
-  binary: "/usr/bin/squid"
+  binary: ${bindir}/squid
   pinger_binary:
     - /usr/libexec/squid/pinger
     - /usr/lib/squid/pinger

@@ -3,7 +3,7 @@ name: node
 display_name: "Node.js"
 category: runtime
 variables:
-  binary: "/usr/bin/node"
+  binary: ${bindir}/node
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

@@ -3,8 +3,8 @@ name: cupsd
 display_name: "CUPS"
 category: system
 variables:
-  binary: /usr/bin/cupsd
-  cups_config: /usr/bin/cups-config
+  binary: ${bindir}/cupsd
+  cups_config: ${bindir}/cups-config
 preflight:
   binary: { type: binary, path: "${binary}" }
   cups-config: { type: binary, path: "${cups_config}" }

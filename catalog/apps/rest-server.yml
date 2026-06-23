@@ -3,7 +3,7 @@ name: rest-server
 display_name: "Restic REST Server"
 category: storage
 variables:
-  binary: /usr/bin/rest-server
+  binary: ${bindir}/rest-server
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

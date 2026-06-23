@@ -4,7 +4,7 @@ display_name: "Polkit"
 category: system
 variables:
   binary: /usr/lib/polkit-1/polkitd
-  pkexec: /usr/bin/pkexec
+  pkexec: ${bindir}/pkexec
 preflight:
   binary: { type: binary, path: "${binary}" }
   pkexec: { type: binary, path: "${pkexec}" }

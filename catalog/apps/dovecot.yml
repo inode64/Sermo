@@ -3,8 +3,8 @@ name: dovecot
 display_name: "Dovecot"
 category: messaging
 variables:
-  binary: "/usr/bin/dovecot"
-  doveconf: "/usr/bin/doveconf"
+  binary: ${bindir}/dovecot
+  doveconf: ${bindir}/doveconf
   anvil_binary:
     - /usr/libexec/dovecot/anvil
     - /usr/lib/dovecot/anvil

@@ -3,7 +3,7 @@ name: acpid
 display_name: "ACPI Daemon"
 category: hardware
 variables:
-  binary: "/usr/bin/acpid"
+  binary: ${bindir}/acpid
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

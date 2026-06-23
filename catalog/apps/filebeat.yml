@@ -3,7 +3,7 @@ name: filebeat
 display_name: "Filebeat"
 category: observability
 variables:
-  binary: "/usr/bin/filebeat"
+  binary: ${bindir}/filebeat
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","version"], timeout: 10s }

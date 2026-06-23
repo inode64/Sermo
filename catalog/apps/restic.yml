@@ -3,7 +3,7 @@ name: restic
 display_name: "restic"
 category: storage
 variables:
-  binary: /usr/bin/restic
+  binary: ${bindir}/restic
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }

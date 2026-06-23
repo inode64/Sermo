@@ -4,7 +4,7 @@ display_name: "systemd"
 category: system
 description: "systemd system and service manager"
 variables:
-  binary: /usr/bin/systemctl
+  binary: ${bindir}/systemctl
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

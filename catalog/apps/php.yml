@@ -4,7 +4,7 @@ display_name: "PHP ${version} ${current}"
 category: runtime
 description: "PHP interpreter"
 variables:
-  binary: "/usr/bin/php${version}"
+  binary: ${bindir}/php${version}
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-v"], timeout: 10s }

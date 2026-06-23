@@ -3,7 +3,7 @@ name: dhcpd
 display_name: "DHCP Server"
 category: network
 variables:
-  binary: "/usr/bin/dhcpd"
+  binary: ${bindir}/dhcpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

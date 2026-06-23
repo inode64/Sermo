@@ -3,7 +3,7 @@ name: ntpd
 display_name: "NTP Daemon"
 category: network
 variables:
-  binary: "/usr/bin/ntpd"
+  binary: ${bindir}/ntpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

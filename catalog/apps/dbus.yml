@@ -3,7 +3,7 @@ name: dbus
 display_name: "D-Bus"
 category: system
 variables:
-  binary: "/usr/bin/dbus-daemon"
+  binary: ${bindir}/dbus-daemon
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

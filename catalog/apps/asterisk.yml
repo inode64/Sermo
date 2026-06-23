@@ -3,7 +3,7 @@ name: asterisk
 display_name: "Asterisk PBX"
 category: messaging
 variables:
-  binary: "/usr/bin/asterisk"
+  binary: ${bindir}/asterisk
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

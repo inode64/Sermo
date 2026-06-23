@@ -4,8 +4,8 @@ display_name: "MariaDB Backup"
 category: database
 variables:
   binary:
-    - "/usr/bin/mariadb-backup"
-    - "/usr/bin/mariadbbackup"
+    - ${bindir}/mariadb-backup
+    - ${bindir}/mariadbbackup
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

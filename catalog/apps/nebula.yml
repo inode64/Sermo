@@ -3,7 +3,7 @@ name: nebula
 display_name: "Nebula"
 category: network
 variables:
-  binary: /usr/bin/nebula
+  binary: ${bindir}/nebula
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-version"], timeout: 10s }

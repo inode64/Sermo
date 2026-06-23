@@ -3,7 +3,7 @@ name: clamd
 display_name: "ClamAV Daemon"
 category: security
 variables:
-  binary: "/usr/bin/clamd"
+  binary: ${bindir}/clamd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

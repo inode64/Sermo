@@ -3,7 +3,7 @@ name: git
 display_name: "Git"
 category: runtime
 variables:
-  binary: "/usr/bin/git"
+  binary: ${bindir}/git
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

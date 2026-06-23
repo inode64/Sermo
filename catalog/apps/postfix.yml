@@ -3,7 +3,7 @@ name: postfix
 display_name: "Postfix"
 category: messaging
 variables:
-  binary: /usr/sbin/postfix
+  binary: ${bindir}/postfix
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }
