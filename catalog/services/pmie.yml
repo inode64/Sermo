@@ -1,20 +1,48 @@
 kind: daemon
 name: pmie
-display_name: "PCP Inference Engine"
+display_name: PCP Inference Engine
 category: observability
-description: "Performance Co-Pilot inference engine daemon."
+description: Performance Co-Pilot inference engine daemon.
 service:
-  systemd: [pmie]
-apps: [pmie]
+  systemd:
+  - pmie
+apps:
+- pmie
 variables:
   user: pcp
-
 pidfile: /run/pcp/pmie.pid
-
 processes:
   main:
-    exe: "${pmie_binary}"
-    user: "${user}"
-
+    exe: ${pmie_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${pmie_binary}
+    user: ${user}
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${pmie_binary}
+    user: ${user}
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

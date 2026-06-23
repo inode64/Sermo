@@ -1,24 +1,28 @@
 kind: daemon
 name: pmlogger
-display_name: "PCP Archive Logger"
+display_name: PCP Archive Logger
 category: observability
-description: "Performance Co-Pilot primary archive logger."
+description: Performance Co-Pilot primary archive logger.
 service:
-  systemd: [pmlogger]
-apps: [pmlogger]
-
+  systemd:
+  - pmlogger
+apps:
+- pmlogger
 variables:
   host: 127.0.0.1
   port: 4330
   user: pcp
-
 pidfile: /run/pcp/pmlogger.pid
-
 processes:
   main:
-    exe: "${pmlogger_binary}"
-    user: "${user}"
-
+    exe: ${pmlogger_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, host: "${host}", port: "${port}", timeout: 2s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    host: ${host}
+    port: ${port}
+    timeout: 2s

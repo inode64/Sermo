@@ -1,51 +1,39 @@
 kind: daemon
 name: rabbitmq
-display_name: "RabbitMQ"
+display_name: RabbitMQ
 category: messaging
 type: queue
-
 service:
-  systemd: [rabbitmq-server, rabbitmq]
-  openrc: [rabbitmq]
-
-# RabbitMQ runs on the Erlang VM: the runtime is owned by the `erlang` app, and
-# rabbitmq-server/rabbitmqctl are owned by the `rabbitmq` app. Both are linked
-# here so their binary + version checks run in this service's preflight.
-apps: [erlang, rabbitmq]
-
+  systemd:
+  - rabbitmq-server
+  - rabbitmq
+  openrc:
+  - rabbitmq
+apps:
+- erlang
+- rabbitmq
 variables:
   user: rabbitmq
   host: 127.0.0.1
   port: 5672
-
-# The init script writes the wrapper PID here; the Erlang broker (beam.smp,
-# a version-specific exe under /usr/lib64/erlang) runs as a descendant and is
-# picked up automatically. Matching by ${binary} would not match the broker, so
-# the pidfile is the reliable anchor.
 pidfile: /run/rabbitmq.pid
-
 checks:
   service:
     type: service
     expect: active
-
   amqp:
     type: amqp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s
-
 stop_policy:
   graceful_timeout: 60s
   term_timeout: 30s
-  # exe_any is an exact-path match, so only the wrapper script is listed; the
-  # Erlang VM (beam.smp, under a version-specific erts dir) is intentionally
-  # absent and therefore never force-killable — fail-safe by design.
   kill_only_if:
-    users: ["${user}"]
+    users:
+    - ${user}
     exe_any:
-      - "${rabbitmq_binary}"
-
+    - ${rabbitmq_binary}
 rules:
   restart-if-amqp-failed:
     type: remediation

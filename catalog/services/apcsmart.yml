@@ -1,9 +1,38 @@
 kind: daemon
 name: apcsmart
-display_name: "APC Smart UPS Driver"
+display_name: APC Smart UPS Driver
 category: hardware
 service: apcsmart
-apps: [apcsmart]
-
+apps:
+- apcsmart
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${apcsmart_binary}
+    user: root
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${apcsmart_binary}
+    user: root
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

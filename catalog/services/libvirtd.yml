@@ -1,10 +1,42 @@
 kind: daemon
 name: libvirtd
-display_name: "libvirt"
+display_name: libvirt
 category: virtualization
 service: libvirtd
-apps: [libvirtd]
-
+apps:
+- libvirtd
 checks:
-  service: { type: service, expect: active }
-  libvirt: { type: libvirt, timeout: 5s }
+  service:
+    type: service
+    expect: active
+  libvirt:
+    type: libvirt
+    timeout: 5s
+postflight:
+  libvirt:
+    type: libvirt
+    timeout: 5s
+rules:
+  restart-if-libvirt-failed:
+    type: remediation
+    if:
+      failed:
+        check: libvirt
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

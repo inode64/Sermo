@@ -2,22 +2,55 @@ kind: daemon
 name: rsync
 category: storage
 service:
-  systemd: [rsync, rsyncd]
-  openrc: [rsyncd, rsync]
-apps: [rsync]
-
+  systemd:
+  - rsync
+  - rsyncd
+  openrc:
+  - rsyncd
+  - rsync
+apps:
+- rsync
 variables:
   port: 873
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/rsyncd.pid
-
 processes:
   main:
-    exe: "${rsync_binary}"
+    exe: ${rsync_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  rsync:
+    type: rsync
+    host: 127.0.0.1
+    port: ${port}
+    timeout: 3s
+postflight:
+  rsync:
+    type: rsync
+    host: 127.0.0.1
+    port: ${port}
+    timeout: 3s
+rules:
+  restart-if-rsync-failed:
+    type: remediation
+    if:
+      failed:
+        check: rsync
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-port-failed:
+    type: remediation
+    if:
+      failed:
+        check: port
+    for:
+      cycles: 3
+    then:
+      action: restart

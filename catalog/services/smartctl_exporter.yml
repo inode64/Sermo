@@ -1,38 +1,34 @@
 kind: daemon
 name: smartctl_exporter
-display_name: "Prometheus smartctl Exporter"
+display_name: Prometheus smartctl Exporter
 category: observability
-description: "Prometheus smartctl_exporter: S.M.A.R.T. disk metrics over HTTP /metrics."
-
+description: 'Prometheus smartctl_exporter: S.M.A.R.T. disk metrics over HTTP /metrics.'
 service:
-  systemd: [smartctl_exporter]
-  openrc: [smartctl_exporter]
-
-apps: [smartctl_exporter]
+  systemd:
+  - smartctl_exporter
+  openrc:
+  - smartctl_exporter
+apps:
+- smartctl_exporter
 variables:
   host: 127.0.0.1
   port: 9633
-
 pidfile: /run/smartctl_exporter.pid
-
 processes:
   main:
-    exe: "${smartctl_exporter_binary}"
+    exe: ${smartctl_exporter_binary}
     user: root
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
   metrics:
     type: http
-    url: "http://${host}:${port}/metrics"
+    url: http://${host}:${port}/metrics
     expect_status: 200
     timeout: 5s

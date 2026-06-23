@@ -1,20 +1,24 @@
 kind: daemon
 name: firehol
-display_name: "FireHOL"
+display_name: FireHOL
 category: security
-description: "Firewall ruleset applied through FireHOL."
+description: Firewall ruleset applied through FireHOL.
 service:
-  systemd: [firehol]
-  openrc: [firehol]
-apps: [firehol, iptables]
-
-# FireHOL is a oneshot firewall loader: it applies rules and exits. The explicit
-# empty process map prevents derived process CPU/memory tracking in the WebUI.
+  systemd:
+  - firehol
+  openrc:
+  - firehol
+apps:
+- firehol
+- iptables
 processes: {}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
   firewall:
     type: firewall_rules
     backend: auto
     min_rules: 1
-    requires: [service]
+    requires:
+    - service

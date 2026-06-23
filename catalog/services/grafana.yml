@@ -1,43 +1,54 @@
 kind: daemon
 name: grafana
-display_name: "Grafana"
+display_name: Grafana
 category: observability
-description: "Grafana observability and dashboarding server."
-
+description: Grafana observability and dashboarding server.
 service:
-  systemd: [grafana]
-  openrc: [grafana]
-
-apps: [grafana]
+  systemd:
+  - grafana
+  openrc:
+  - grafana
+apps:
+- grafana
 variables:
   host: 127.0.0.1
   port: 3000
   user: grafana
-
 pidfile:
-  - /run/grafana.pid
-  - /run/grafana/grafana.pid
-
+- /run/grafana.pid
+- /run/grafana/grafana.pid
 processes:
   main:
-    exe: "${grafana_binary}"
-    user: "${user}"
-
+    exe: ${grafana_binary}
+    user: ${user}
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # /api/health is the unauthenticated liveness endpoint (returns 200 with a JSON
-  # database status when Grafana is up).
   health:
     type: http
-    url: "http://${host}:${port}/api/health"
-    expect_status: { op: "<", value: 500 }
+    url: http://${host}:${port}/api/health
+    expect_status:
+      op: <
+      value: 500
     timeout: 5s
+rules:
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

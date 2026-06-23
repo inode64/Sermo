@@ -1,18 +1,37 @@
 kind: daemon
 name: polkit
-display_name: "Polkit"
+display_name: Polkit
 category: system
-description: "PolicyKit authorization service."
+description: PolicyKit authorization service.
 service:
-  systemd: [polkit]
-apps: [polkit]
+  systemd:
+  - polkit
+apps:
+- polkit
 variables:
   user: polkitd
-
 processes:
   main:
-    exe: "${polkit_binary}"
-    user: "${user}"
-
+    exe: ${polkit_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  dbus:
+    type: dbus
+    timeout: 5s
+postflight:
+  dbus:
+    type: dbus
+    timeout: 5s
+rules:
+  restart-if-dbus-failed:
+    type: remediation
+    if:
+      failed:
+        check: dbus
+    for:
+      cycles: 3
+    then:
+      action: restart

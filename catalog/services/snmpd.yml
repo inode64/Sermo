@@ -1,33 +1,27 @@
 kind: daemon
 name: snmpd
-display_name: "Net-SNMP Daemon"
+display_name: Net-SNMP Daemon
 category: observability
 service: snmpd
-apps: [snmpd]
-
+apps:
+- snmpd
 variables:
   user: root
   port: 161
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/snmpd.pid
-
 processes:
   main:
-    exe: "${snmpd_binary}"
-    user: "${user}"
-
-# Net-SNMP reloads its config on SIGHUP; the systemd unit usually has no
-# ExecReload while OpenRC's init script reloads; the default `when: auto`
-# bridges both.
+    exe: ${snmpd_binary}
+    user: ${user}
 reload:
   signal: HUP
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: snmp, port: "${port}" }
-
+  service:
+    type: service
+    expect: active
+  port:
+    type: snmp
+    port: ${port}
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -35,7 +29,7 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m

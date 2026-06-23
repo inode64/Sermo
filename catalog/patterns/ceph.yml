@@ -1,0 +1,10 @@
+kind: patterns
+name: ceph
+display_name: "Ceph output signals"
+description: "Escalate Ceph admin-daemon and CLI output to warning/error."
+rules:
+  - { id: health-err, match: '(?i)"health"\s*:\s*"HEALTH_ERR"', severity: error }
+  - { id: health-warn, match: '(?i)"health"\s*:\s*"HEALTH_WARN"', severity: warning }
+  - { id: failed, match: '(?i)\bfailed\b', severity: warning }
+  - { id: degraded, match: '(?i)\bdegraded\b', severity: warning }
+  - { id: stuck, match: '(?i)\bstuck\b', severity: error }

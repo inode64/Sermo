@@ -1,9 +1,14 @@
 kind: daemon
 name: lvmpolld
-display_name: "LVM poll daemon"
+display_name: LVM poll daemon
 category: storage
 service: lvmpolld
-apps: [lvmpolld]
+apps:
+- lvmpolld
 checks:
-  service: { type: service, expect: active }
-  lvmpolld: { type: lvmpolld, timeout: 3s }
+  service:
+    type: service
+    expect: active
+  lvmpolld:
+    type: lvmpolld
+    timeout: 3s

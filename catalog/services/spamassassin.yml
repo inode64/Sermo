@@ -1,32 +1,47 @@
 kind: daemon
 name: spamassassin
-display_name: "SpamAssassin"
+display_name: SpamAssassin
 category: messaging
-description: "Anti-spam filter for email servers"
+description: Anti-spam filter for email servers
 service:
-  systemd: [spamassassin, spamd]
-  openrc: [spamd, spamassassin]
-
-# SpamAssassin is a Perl application: the Perl runtime is owned by the `perl`
-# app and linked here, so its binary + version checks run in this service's
-# preflight (a missing Perl blocks start/restart/reload).
-apps: [perl, spamassassin]
-
+  systemd:
+  - spamassassin
+  - spamd
+  openrc:
+  - spamd
+  - spamassassin
+apps:
+- perl
+- spamassassin
 variables:
   port: 783
 preflight:
-  config: { type: command, command: ["${spamassassin_binary}","--lint"], timeout: 30s }
-
+  config:
+    type: command
+    command:
+    - ${spamassassin_binary}
+    - --lint
+    timeout: 30s
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  spamd: { type: spamd, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  spamd:
+    type: spamd
+    port: ${port}
+    timeout: 3s
 rules:
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

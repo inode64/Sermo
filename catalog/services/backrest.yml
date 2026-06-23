@@ -1,42 +1,37 @@
 kind: daemon
 name: backrest
-display_name: "Backrest"
+display_name: Backrest
 category: storage
-description: "Backrest web UI/orchestrator for restic backups."
-
+description: Backrest web UI/orchestrator for restic backups.
 service:
-  systemd: [backrest]
-  openrc: [backrest]
-
-apps: [backrest, restic]
+  systemd:
+  - backrest
+  openrc:
+  - backrest
+apps:
+- backrest
+- restic
 variables:
   host: 127.0.0.1
   port: 9898
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/backrest.pid
-
 processes:
   main:
-    exe: "${backrest_binary}"
+    exe: ${backrest_binary}
     user: root
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # The web UI/API answers on the root path; accept any non-5xx (it may redirect
-  # or require auth) so the check tracks "the server responds", not the page.
   http:
     type: http
-    url: "http://${host}:${port}/"
-    expect_status: { op: "<", value: 500 }
+    url: http://${host}:${port}/
+    expect_status:
+      op: <
+      value: 500
     timeout: 5s

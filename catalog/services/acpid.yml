@@ -1,22 +1,19 @@
 kind: daemon
 name: acpid
-display_name: "ACPI Daemon"
+display_name: ACPI Daemon
 category: hardware
 service: acpid
-
-# Binary + version are owned by the `acpid` app (same name, kind app) and linked
-# here, so they run in this service's preflight.
-apps: [acpid]
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+apps:
+- acpid
 pidfile: /run/acpid.pid
-
 processes:
   main:
-    exe: "${acpid_binary}"
+    exe: ${acpid_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  acpid: { type: acpid, timeout: 3s }
+  service:
+    type: service
+    expect: active
+  acpid:
+    type: acpid
+    timeout: 3s

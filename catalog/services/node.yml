@@ -1,10 +1,67 @@
 kind: daemon
 name: node
-display_name: "Node.js"
+display_name: Node.js
 category: runtime
-description: "A JavaScript runtime built on Chrome's V8 JavaScript engine"
+description: A JavaScript runtime built on Chrome's V8 JavaScript engine
 service: node
-apps: [node]
-
+apps:
+- node
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${node_binary}
+    user: root
+    state: running
+    requires:
+    - service
+    optional: true
+postflight:
+  process:
+    type: process
+    exe: ${node_binary}
+    user: root
+    state: running
+    optional: true
+rules:
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: '>'
+        value: 90%
+    for:
+      duration: 6m
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

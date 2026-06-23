@@ -1,38 +1,42 @@
 kind: daemon
 name: squid
-display_name: "Squid"
+display_name: Squid
 category: web
 service: squid
-apps: [squid]
-
+apps:
+- squid
 variables:
   port: 3128
   user: squid
 preflight:
-  config: { type: command, command: ["${squid_binary}","-k","check"], timeout: 30s }
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  config:
+    type: command
+    command:
+    - ${squid_binary}
+    - -k
+    - check
+    timeout: 30s
 pidfile: /run/squid.pid
-
 processes:
   main:
-    exe: "${squid_binary}"
+    exe: ${squid_binary}
     user: root
   pinger:
-    exe: "${squid_pinger_binary}"
-    user: "${user}"
+    exe: ${squid_pinger_binary}
+    user: ${user}
   log-file-daemon:
-    exe: "${squid_log_file_daemon_binary}"
-    user: "${user}"
+    exe: ${squid_log_file_daemon_binary}
+    user: ${user}
   security-file-certgen:
-    exe: "${squid_security_file_certgen_binary}"
-    user: "${user}"
-
+    exe: ${squid_security_file_certgen_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -40,18 +44,20 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
-
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

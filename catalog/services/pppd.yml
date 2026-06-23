@@ -1,76 +1,51 @@
 kind: daemon
 name: pppd
-display_name: "PPP Daemon"
+display_name: PPP Daemon
 category: network
-description: "PPP daemon — PPPoE/dial-up uplink to an internet provider."
+description: PPP daemon — PPPoE/dial-up uplink to an internet provider.
 type: tunnel
 service: pppd
-apps: [pppd]
-
+apps:
+- pppd
 variables:
-  ppp_iface: ppp0          # PPP unit interface (pppd option `unit 0` -> ppp0)
-  probe_host: 1.1.1.1      # well-known anycast host pinged through the uplink
-  probe_name: example.com  # stable public name resolved through the uplink
-
-# pppd writes /run/<iface>.pid for the session. Defining pidfile auto-wires
-# process-tree monitoring and a requires:[service] pidfile health check (error
-# if missing while active).
+  ppp_iface: ppp0
+  probe_host: 1.1.1.1
+  probe_name: example.com
 pidfile: /run/${ppp_iface}.pid
-
 restart_on_change:
-  # Restart when a linked critical library changes on disk (e.g. a glibc
-  # security update), so the daemon picks up the new code.
-  libraries: [glibc]
-
+  libraries:
+  - glibc
 checks:
   service:
     type: service
     expect: active
-
-  # Layer 1 — the PPP session interface exists and is up. Catches a dropped
-  # session (pppd running but renegotiation failed, interface gone or down).
   link:
     type: net
-    interface: "${ppp_iface}"
+    interface: ${ppp_iface}
     metric: state
     expect: up
-
-  # Layer 1.5 — the session negotiated an IP address. A PPP interface can be
-  # up while IPCP failed and left it address-less: a dead session.
   ip:
     type: net
-    interface: "${ppp_iface}"
+    interface: ${ppp_iface}
     metric: address
     expect: present
-
-  # Layer 2 — the kernel still has a default route out through the PPP
-  # interface. After a failed renegotiation the interface can stay up with the
-  # route gone; ping alone cannot tell "no route" from "provider down".
   route:
     type: route
-    interface: "${ppp_iface}"
-
-  # Layer 3 — the provider actually routes traffic: ping a well-known host
-  # bound to the PPP interface, so a backup route (4G, second uplink) cannot
-  # mask a dead uplink. Sends 3 echoes per cycle; needs CAP_NET_RAW (sermod
-  # normally runs as root).
+    interface: ${ppp_iface}
   internet:
     type: icmp
-    host: "${probe_host}"
-    interface: "${ppp_iface}"
+    host: ${probe_host}
+    interface: ${ppp_iface}
     metric: state
     expect: up
     timeout: 5s
-
-  # Layer 4 — name resolution works through the system resolver selected in
-  # resolv.conf and require an actual answer for a stable public name. Route and
-  # ping checks above already verify the PPP egress; do not bind this DNS packet
-  # because resolv.conf may point at a local caching resolver.
   dns:
     type: dns
     resolvconf: true
-    query: "${probe_name}"
+    query: ${probe_name}
     expect:
       rcode: NOERROR
-      answers: { op: ">", value: 0 }
+      answers:
+        op: '>'
+        value: 0
     timeout: 5s

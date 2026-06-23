@@ -1,24 +1,28 @@
 kind: daemon
 name: dbus
-display_name: "D-Bus"
+display_name: D-Bus
 category: system
-description: "DBus Daemon"
+description: DBus Daemon
 service:
-  systemd: [dbus, dbus-daemon]
-  openrc: [dbus, dbus-daemon]
-apps: [dbus]
+  systemd:
+  - dbus
+  - dbus-daemon
+  openrc:
+  - dbus
+  - dbus-daemon
+apps:
+- dbus
 variables:
   user: messagebus
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/dbus.pid
-
 processes:
   main:
-    exe: "${dbus_binary}"
-    user: "${user}"
-
+    exe: ${dbus_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  dbus: { type: dbus, timeout: 3s }
+  service:
+    type: service
+    expect: active
+  dbus:
+    type: dbus
+    timeout: 3s

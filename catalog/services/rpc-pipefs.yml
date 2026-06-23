@@ -1,11 +1,15 @@
 kind: daemon
 name: rpc-pipefs
-display_name: "RPC pipefs"
+display_name: RPC pipefs
 category: storage
-description: "RPC pipefs mount helper used by NFS services."
+description: RPC pipefs mount helper used by NFS services.
 service:
-  systemd: [rpc-pipefs]
-  openrc: [rpc.pipefs, rpc-pipefs]
-
+  systemd:
+  - rpc-pipefs
+  openrc:
+  - rpc.pipefs
+  - rpc-pipefs
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active

@@ -1,19 +1,37 @@
 kind: daemon
 name: upower
-display_name: "UPower"
+display_name: UPower
 category: hardware
-description: "D-Bus service for power device and battery status."
+description: D-Bus service for power device and battery status.
 service:
-  systemd: [upower]
-apps: [upower]
-
+  systemd:
+  - upower
+apps:
+- upower
 variables:
   user: root
-
 processes:
   main:
-    exe: "${upower_binary}"
-    user: "${user}"
-
+    exe: ${upower_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  dbus:
+    type: dbus
+    timeout: 5s
+postflight:
+  dbus:
+    type: dbus
+    timeout: 5s
+rules:
+  restart-if-dbus-failed:
+    type: remediation
+    if:
+      failed:
+        check: dbus
+    for:
+      cycles: 3
+    then:
+      action: restart

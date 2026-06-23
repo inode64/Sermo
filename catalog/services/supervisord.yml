@@ -1,9 +1,81 @@
 kind: daemon
 name: supervisord
-display_name: "Supervisor"
+display_name: Supervisor
 category: system
 service: supervisord
-apps: [supervisord]
-
+apps:
+- supervisord
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  ping:
+    type: command
+    command:
+    - supervisorctl
+    - status
+    timeout: 15s
+    optional: true
+preflight:
+  config:
+    type: command
+    command:
+    - ${supervisord_binary}
+    - check
+    timeout: 30s
+    optional: true
+postflight:
+  ping:
+    type: command
+    command:
+    - supervisorctl
+    - status
+    timeout: 15s
+    optional: true
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  restart-if-ping-failed:
+    type: remediation
+    if:
+      failed:
+        check: ping
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: '>'
+        value: 90%
+    for:
+      duration: 6m
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

@@ -1,17 +1,23 @@
 kind: daemon
 name: ovsdb-server
-display_name: "Open vSwitch Database Server"
+display_name: Open vSwitch Database Server
 category: virtualization
 service:
-  systemd: [ovsdb-server]
-  openrc: [ovsdb-server]
-apps: [ovsdb-server]
-
+  systemd:
+  - ovsdb-server
+  openrc:
+  - ovsdb-server
+apps:
+- ovsdb-server
 processes:
   main:
-    exe: "${ovsdb_server_binary}"
+    exe: ${ovsdb_server_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  openvswitch: { type: openvswitch, socket: /run/openvswitch/db.sock, timeout: 3s }
+  service:
+    type: service
+    expect: active
+  openvswitch:
+    type: openvswitch
+    socket: /run/openvswitch/db.sock
+    timeout: 3s

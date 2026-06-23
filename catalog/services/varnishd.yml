@@ -1,24 +1,35 @@
 kind: daemon
 name: varnishd
-display_name: "Varnish"
+display_name: Varnish
 category: web
-description: "Varnish"
+description: Varnish
 service: varnishd
-apps: [varnishd]
-
+apps:
+- varnishd
 variables:
   port: 6082
 preflight:
-  config: { type: command, command: ["${varnishd_binary}","-C","-f","/etc/varnish/default.vcl"], timeout: 30s }
-
+  config:
+    type: command
+    command:
+    - ${varnishd_binary}
+    - -C
+    - -f
+    - /etc/varnish/default.vcl
+    timeout: 30s
 checks:
-  service: { type: service, expect: active }
-  # The Varnish CLI TCP listener is optional in common OpenRC setups. Keep it as
-  # a warning so catalog daemons still report whether varnishadm is reachable without
-  # marking an otherwise active HTTP cache as failed.
-  port: { type: tcp, port: "${port}", optional: true }
-  varnish: { type: varnish, port: "${port}", timeout: 3s, optional: true }
-
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+    optional: true
+  varnish:
+    type: varnish
+    port: ${port}
+    timeout: 3s
+    optional: true
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -26,18 +37,20 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
-
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

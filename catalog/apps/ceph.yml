@@ -1,0 +1,10 @@
+kind: app
+name: ceph
+display_name: "Ceph CLI"
+category: storage
+description: "Ceph cluster administration utility (admin-daemon, status, …)."
+variables:
+  binary: /usr/bin/ceph
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

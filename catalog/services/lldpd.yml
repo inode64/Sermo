@@ -1,23 +1,47 @@
 kind: daemon
 name: lldpd
-display_name: "LLDP Daemon"
+display_name: LLDP Daemon
 category: network
-description: "Link Layer Discovery Protocol"
+description: Link Layer Discovery Protocol
 service: lldpd
-apps: [lldpd]
+apps:
+- lldpd
 variables:
   user: lldpd
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/lldpd.pid
-
 socket: /run/lldpd.socket
-
 processes:
   main:
-    exe: "${lldpd_binary}"
-    user: "${user}"
-
+    exe: ${lldpd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${lldpd_binary}
+    user: ${user}
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${lldpd_binary}
+    user: ${user}
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

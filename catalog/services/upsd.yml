@@ -1,22 +1,26 @@
 kind: daemon
 name: upsd
-display_name: "NUT UPS Daemon"
+display_name: NUT UPS Daemon
 category: hardware
 service: upsd
-apps: [upsd]
-
+apps:
+- upsd
 variables:
   port: 3493
   user: nut
-
 pidfile: /run/nut/upsd.pid
-
 processes:
   main:
-    exe: "${upsd_binary}"
-    user: "${user}"
-
+    exe: ${upsd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  nut: { type: nut, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  nut:
+    type: nut
+    port: ${port}
+    timeout: 3s

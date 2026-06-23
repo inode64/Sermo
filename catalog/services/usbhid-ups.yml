@@ -1,9 +1,26 @@
 kind: daemon
 name: usbhid-ups
-display_name: "USB HID UPS Driver"
+display_name: USB HID UPS Driver
 category: hardware
 service: usbhid-ups
-apps: [usbhid-ups]
-
+apps:
+- usbhid-ups
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${usbhid_ups_binary}
+    user: root
+    state: running
+    requires:
+    - service
+    optional: true
+postflight:
+  process:
+    type: process
+    exe: ${usbhid_ups_binary}
+    user: root
+    state: running
+    optional: true

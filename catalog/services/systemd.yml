@@ -1,28 +1,17 @@
 kind: daemon
 name: systemd
-display_name: "systemd"
+display_name: systemd
 category: system
-description: "systemd system and service manager"
+description: systemd system and service manager
 service: systemd
-
-# Binary + version are owned by the same-named app (systemctl --version).
-apps: [systemd]
-
-# No `preflight: config` here: `systemd-analyze verify` has no "verify all units"
-# mode (it requires explicit unit arguments and errors with "Too few arguments"
-# otherwise), and scoping it to the unit directories yields host-dependent false
-# positives — e.g. it exits non-zero merely because a referenced unit is masked.
-# A preflight that can spuriously block daemon-reload is worse than none.
-
+apps:
+- systemd
 reload:
-  # Reloading systemd itself is `daemon-reload` (re-reads unit files), not a
-  # per-unit reload — so the daemon declares its own native reload command.
-  command: ["systemctl", "daemon-reload"]
+  command:
+  - systemctl
+  - daemon-reload
   when: always
-
-# When unit files change, run `systemctl daemon-reload` (re-reads unit files)
-# instead of anything disruptive.
 reload_on_change:
   paths:
-    - /etc/systemd/system
-    - /lib/systemd/system
+  - /etc/systemd/system
+  - /lib/systemd/system

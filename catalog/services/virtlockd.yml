@@ -1,9 +1,30 @@
 kind: daemon
 name: virtlockd
-display_name: "libvirt Lock Daemon"
+display_name: libvirt Lock Daemon
 category: virtualization
 service: virtlockd
-apps: [virtlockd]
-
+apps:
+- virtlockd
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtlockd-sock
+    timeout: 5s
+postflight:
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtlockd-sock
+    timeout: 5s
+rules:
+  restart-if-libvirt-failed:
+    type: remediation
+    if:
+      failed:
+        check: libvirt
+    for:
+      cycles: 3
+    then:
+      action: restart

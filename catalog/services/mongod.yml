@@ -1,33 +1,35 @@
 kind: daemon
 name: mongod
-display_name: "MongoDB"
+display_name: MongoDB
 category: database
-description: "Mongo DB"
+description: Mongo DB
 service: mongod
-apps: [mongod]
-
+apps:
+- mongod
 variables:
   host: 127.0.0.1
   port: 27017
   config: /etc/mongod.conf
-
-# `--outputConfig` parses and validates the YAML config (resolving includes and
-# expansions), prints the canonicalized config to stdout and exits without
-# starting the server (MongoDB >= 4.2), so a syntax error blocks start/restart.
 preflight:
-  config: { type: command, command: ["${mongod_binary}", "--config", "${config}", "--outputConfig"], timeout: 15s }
-
-config_files: ["${config}"]
-
+  config:
+    type: command
+    command:
+    - ${mongod_binary}
+    - --config
+    - ${config}
+    - --outputConfig
+    timeout: 15s
+config_files:
+- ${config}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-
-  # Native probe: connects, pings and (via hello/isMaster) exposes the
-  # replica-set role, set_name and read_only flag in its result data — assertable
-  # via expect:, e.g. `role: primary` on the node that must accept writes.
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
   mongodb:
     type: mongodb
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s

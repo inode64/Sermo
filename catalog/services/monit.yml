@@ -1,48 +1,48 @@
 kind: daemon
 name: monit
-display_name: "Monit"
+display_name: Monit
 category: observability
-description: "Monit process supervision and monitoring daemon."
-
+description: Monit process supervision and monitoring daemon.
 service:
-  systemd: [monit]
-  openrc: [monit]
-
-apps: [monit]
+  systemd:
+  - monit
+  openrc:
+  - monit
+apps:
+- monit
 variables:
   host: 127.0.0.1
   config: /etc/monitrc
-  # Monit's HTTP interface (set httpd in monitrc). Default 2812.
   port: 2812
-
 preflight:
-  config: { type: command, command: ["${monit_binary}", "-t", "-c", "${config}"], timeout: 30s }
-
+  config:
+    type: command
+    command:
+    - ${monit_binary}
+    - -t
+    - -c
+    - ${config}
+    timeout: 30s
 restart_on_change:
-  # Restart when a linked critical library changes on disk (e.g. an
-  # OpenSSL CVE update), so the service picks up the new code.
-  libraries: [glibc, openssl, zlib]
-
-config_files: ["${config}", /etc/monit/conf.d, /etc/monit.d]
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  libraries:
+  - glibc
+  - openssl
+  - zlib
+config_files:
+- ${config}
+- /etc/monit/conf.d
+- /etc/monit.d
 pidfile: /run/monit.pid
-
 processes:
   main:
-    exe: "${monit_binary}"
+    exe: ${monit_binary}
     user: root
-
 checks:
   service:
     type: service
     expect: active
-
-  # The HTTP interface is usually behind basic auth (so an http check would 401);
-  # a tcp probe verifies the interface is listening without needing credentials.
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s

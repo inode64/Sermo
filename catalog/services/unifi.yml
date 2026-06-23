@@ -1,50 +1,38 @@
 kind: daemon
 name: unifi
-display_name: "UniFi Network Controller"
+display_name: UniFi Network Controller
 category: web
-description: "Ubiquiti UniFi Network controller (management API over HTTPS)."
-
+description: Ubiquiti UniFi Network controller (management API over HTTPS).
 service:
-  systemd: [unifi]
-  openrc: [unifi]
-
-# The controller runs on the JVM and embeds MongoDB: both runtimes are owned by
-# apps, so missing Java or mongod blocks start/restart/reload and their preflight
-# runs first.
-apps: [java, mongod]
-
+  systemd:
+  - unifi
+  openrc:
+  - unifi
+apps:
+- java
+- mongod
 variables:
   host: 127.0.0.1
   port: 8443
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/unifi.pid
-
-# The controller is a JVM process (shared `java` exe) plus its bundled mongod, so
-# match the controller by cmdline and the db by exe+user when one java binary
-# serves several JVM apps. These also feed the residual reaper on stop.
 processes:
-  controller: { cmd: "java .*unifi", user: unifi }
-  mongo: { exe: "${mongod_binary}", user: unifi }
-
+  controller:
+    cmd: java .*unifi
+    user: unifi
+  mongo:
+    exe: ${mongod_binary}
+    user: unifi
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # Native UniFi probe: GETs the unauthenticated /status endpoint over HTTPS and
-  # verifies meta.rc == "ok", reporting server_version. The controller ships a
-  # self-signed certificate, so verification is skipped by default (set tls: true
-  # to require a valid one).
   api:
     type: unifi
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 5s

@@ -1,42 +1,44 @@
 kind: daemon
 name: dnsmasq
-display_name: "dnsmasq"
+display_name: dnsmasq
 category: network
-description: "dnsmasq lightweight DNS forwarder and DHCP/TFTP server."
-
+description: dnsmasq lightweight DNS forwarder and DHCP/TFTP server.
 service:
-  systemd: [dnsmasq]
-  openrc: [dnsmasq]
-
-apps: [dnsmasq]
+  systemd:
+  - dnsmasq
+  openrc:
+  - dnsmasq
+apps:
+- dnsmasq
 variables:
   host: 127.0.0.1
   port: 53
   config: /etc/dnsmasq.conf
-  # Name resolved to prove the resolver answers; override per deployment.
   query: localhost
-
 preflight:
-  config: { type: command, command: ["${dnsmasq_binary}", "--test", "--conf-file=${config}"], timeout: 30s }
-
+  config:
+    type: command
+    command:
+    - ${dnsmasq_binary}
+    - --test
+    - --conf-file=${config}
+    timeout: 30s
 restart_on_change:
-  # Restart when a linked critical library changes on disk (e.g. an
-  # OpenSSL CVE update), so the service picks up the new code.
-  libraries: [glibc, systemd-libs, nettle, libidn2]
-
-config_files: ["${config}", /etc/dnsmasq.d]
-
+  libraries:
+  - glibc
+  - systemd-libs
+  - nettle
+  - libidn2
+config_files:
+- ${config}
+- /etc/dnsmasq.d
 checks:
   service:
     type: service
     expect: active
-
-  # Native DNS probe: sends an A query for ${query} and verifies the server
-  # answers (NOERROR or NXDOMAIN). SERVFAIL/REFUSED, a transport error or a
-  # timeout fail the check.
   dns:
     type: dns
-    host: "${host}"
-    port: "${port}"
-    query: "${query}"
+    host: ${host}
+    port: ${port}
+    query: ${query}
     timeout: 3s
