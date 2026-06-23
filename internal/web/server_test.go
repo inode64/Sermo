@@ -99,6 +99,15 @@ func (f *fakeBackend) ServiceEvents(_ context.Context, name string, limit int) (
 	}
 	return nil, false
 }
+
+func (f *fakeBackend) ApplicationEvents(_ context.Context, name string, limit int) ([]Event, bool) {
+	for _, a := range f.applications {
+		if a.Name == name {
+			return []Event{{Time: "2026-06-07T10:00:00Z", App: name, Kind: "firing", Message: "error: exit 1"}}, true
+		}
+	}
+	return nil, false
+}
 func (f *fakeBackend) PruneEvents(_ context.Context, before time.Time) int {
 	if before.IsZero() {
 		n := len(f.events)

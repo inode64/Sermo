@@ -116,6 +116,29 @@ func (l *EventLog) Recent(service string, limit int) []LoggedEvent {
 	return out
 }
 
+// RecentApp returns up to limit events for one application (Event.App), newest
+// first. limit <= 0 returns all retained events for the app.
+func (l *EventLog) RecentApp(app string, limit int) []LoggedEvent {
+	if l == nil || app == "" {
+		return nil
+	}
+	l.mu.Lock()
+	ordered := l.orderedLocked() // oldest..newest
+	l.mu.Unlock()
+
+	out := make([]LoggedEvent, 0, len(ordered))
+	for i := len(ordered) - 1; i >= 0; i-- {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+		if ordered[i].App != app {
+			continue
+		}
+		out = append(out, ordered[i])
+	}
+	return out
+}
+
 // LastService returns the newest retained event for service, if any.
 func (l *EventLog) LastService(service string) (LoggedEvent, bool) {
 	if l == nil || service == "" {
@@ -291,6 +314,7 @@ func eventRecordFromLogged(e LoggedEvent) state.EventRecord {
 		At:      e.Time,
 		Service: e.Service,
 		Watch:   e.Watch,
+		App:     e.App,
 		Kind:    e.Kind,
 		Rule:    e.Rule,
 		Action:  e.Action,
@@ -305,6 +329,7 @@ func loggedEventFromRecord(e state.EventRecord) LoggedEvent {
 		Event: Event{
 			Service: e.Service,
 			Watch:   e.Watch,
+			App:     e.App,
 			Kind:    e.Kind,
 			Rule:    e.Rule,
 			Action:  e.Action,

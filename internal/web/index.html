@@ -1249,7 +1249,7 @@ function eventMessageHTML(e, key) {
 }
 
 function eventSubject(e) {
-  return e.service || e.watch || "";
+  return e.service || e.watch || e.app || "";
 }
 
 function eventGroupKey(e) {
@@ -1319,7 +1319,7 @@ function eventRows(events, withService, opts = {}) {
   if (!events || !events.length) return `<tr><td class="muted">No events yet.</td></tr>`;
   const prefix = opts.prefix || "event";
   return events.map((e, i) => {
-    const who = e.service || e.watch || "";
+    const who = e.service || e.watch || e.app || "";
     const subject = withService && who ? `<td>${esc(who)}</td>` : "";
     const detail = [e.rule, e.action, e.status].filter(Boolean).map(esc).join(" ");
     const key = eventKey(prefix, e, i);
@@ -3710,6 +3710,9 @@ function renderApps(apps) {
     ? renderGroupedRows(list, appCollapsedGroups, "app", "app", 4, appRow, appSort.key === "category" ? appSort.dir : 1)
     : list.map(appRow).join("");
   tbody.innerHTML = rows || `<tr><td colspan="4" class="muted">No applications match the filter.</td></tr>`;
+  // Fill the recent-events table of each expanded app (async), mirroring how
+  // expanded services load their events.
+  (allApps || []).forEach((a) => { if (expanded.has("app:" + a.name)) loadAppEvents(a.name); });
   applyHash();
 }
 
@@ -3725,6 +3728,12 @@ function renderAppExpansion(a) {
     : (a.version ? '<span class="muted">local</span>' : '<span class="muted">—</span>');
   const category = categoryOf(a, "app");
   const sla = renderSLAWindows(a.sla, true);
+  const st = appStateText(a);
+  const statusCls = st === "failed" ? "lvl-error" : (st === "warning" ? "lvl-warning" : "");
+  const statusHTML = a.status
+    ? `<span class="${statusCls}">${esc(a.status)}</span>`
+    : "—";
+  const eventsId = detailDomId(a.name, "app-events");
   return `<div class="watch-grid">
     <div><span class="muted">Version</span><br>${esc(a.version || "—")}</div>
     <div><span class="muted">Version source</span><br>${source}</div>
@@ -3733,9 +3742,25 @@ function renderAppExpansion(a) {
     <div><span class="muted">Permissions</span><br>${perm}</div>
     <div><span class="muted">User</span><br>${usr}</div>
     <div><span class="muted">Group</span><br>${grp}</div>
-    <div><span class="muted">Status</span><br>${esc(a.status || "—")}</div>
+    <div><span class="muted">Status</span><br>${statusHTML}</div>
     <div class="app-sla"><span class="muted">SLA</span><br>${sla}</div>
-  </div>`;
+  </div>
+  <h3 style="font-size:.95rem; margin:.8rem 0 .3rem">Recent events</h3>
+  <table class="events"><tbody id="${esc(eventsId)}"><tr><td class="muted">loading…</td></tr></tbody></table>`;
+}
+
+// loadAppEvents fills an expanded application's "Recent events" table with its
+// monitoring history (errors/recoveries), mirroring loadServiceEvents.
+async function loadAppEvents(name) {
+  const target = document.getElementById(detailDomId(name, "app-events"));
+  if (!target) return;
+  try {
+    const res = await fetch(`api/applications/${encodeURIComponent(name)}/events?limit=50`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    target.innerHTML = eventRows(await res.json(), false);
+  } catch (e) {
+    target.innerHTML = `<tr><td class="muted">Failed to load events: ${esc(e.message)}</td></tr>`;
+  }
 }
 
 // renderWatchExpansion shows a host watch's config summary and its recent

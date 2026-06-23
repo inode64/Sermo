@@ -169,6 +169,11 @@ var migrations = []string{
 		source     TEXT NOT NULL,
 		updated_at TEXT NOT NULL
 	);`,
+	// event_log gains an `app` dimension (alongside service/watch) so installed
+	// application monitoring can record per-app errors/recoveries queryable on
+	// their own, like per-service events.
+	`ALTER TABLE event_log ADD COLUMN app TEXT NOT NULL DEFAULT '';`,
+	`CREATE INDEX event_log_app_at_idx ON event_log (app, at DESC, id DESC);`,
 }
 
 // Store is a handle to the persistent state database. It is safe for concurrent
@@ -627,6 +632,7 @@ type EventRecord struct {
 	At      time.Time
 	Service string
 	Watch   string
+	App     string
 	Kind    string
 	Rule    string
 	Action  string
@@ -641,9 +647,9 @@ func (s *Store) RecordEvent(e EventRecord) error {
 		at = s.now()
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO event_log (at, service, watch, kind, rule, action, status, message)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-		at.UTC().UnixNano(), e.Service, e.Watch, e.Kind, e.Rule, e.Action, e.Status, e.Message,
+		`INSERT INTO event_log (at, service, watch, app, kind, rule, action, status, message)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+		at.UTC().UnixNano(), e.Service, e.Watch, e.App, e.Kind, e.Rule, e.Action, e.Status, e.Message,
 	)
 	return err
 }
@@ -655,7 +661,7 @@ func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
 		limit = -1
 	}
 	rows, err := s.db.Query(
-		`SELECT at, service, watch, kind, rule, action, status, message
+		`SELECT at, service, watch, app, kind, rule, action, status, message
 		   FROM event_log ORDER BY at DESC, id DESC LIMIT ?;`,
 		limit,
 	)
@@ -668,7 +674,7 @@ func (s *Store) RecentEvents(limit int) ([]EventRecord, error) {
 	for rows.Next() {
 		var rec EventRecord
 		var at int64
-		if err := rows.Scan(&at, &rec.Service, &rec.Watch, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message); err != nil {
+		if err := rows.Scan(&at, &rec.Service, &rec.Watch, &rec.App, &rec.Kind, &rec.Rule, &rec.Action, &rec.Status, &rec.Message); err != nil {
 			return nil, err
 		}
 		rec.At = time.Unix(0, at).UTC()

@@ -32,7 +32,11 @@ type ExpandSpec struct {
 // window, and fires its hook when the condition (check.OK) holds for the window.
 // It is independent of services and does not use the operation engine.
 type Watch struct {
-	Name      string
+	Name string
+	// App, when set, marks this as an application-monitoring watch: its events are
+	// emitted on the App dimension (instead of Watch) so they are queryable and
+	// shown per application, separate from host watches. Built by BuildAppWatches.
+	App       string
 	CheckType string // e.g. "storage"; for SERMO_CHECK_TYPE (Result.Check is the watch name)
 	Check     checks.Check
 	Window    rules.Rule // carries only For/Within; used by rules.WindowState.Fires
@@ -226,6 +230,14 @@ func (w *Watch) dryRunMessage() string {
 }
 
 func (w *Watch) emit(e Event) {
+	// App-watches reuse the whole Watch cycle but record their events on the App
+	// dimension so they are queryable and displayed per application, not mixed
+	// with host watches. RunCycle/dispatchNotify build events with Watch set;
+	// reroute that identity to App here in one place.
+	if w.App != "" {
+		e.App = w.App
+		e.Watch = ""
+	}
 	if w.Emit != nil {
 		w.Emit(e)
 	}

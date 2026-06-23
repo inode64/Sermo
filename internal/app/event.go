@@ -13,6 +13,7 @@ import (
 type Event struct {
 	Service string
 	Watch   string // set for host-watch events (instead of Service)
+	App     string // set for installed-application monitoring events (instead of Service/Watch)
 	Kind    string // cycle | action | suppressed | shadow | alert | error | firing | recovered | dry-run | hook | hook-failed | notify | notify-failed | cascade
 	Rule    string
 	Action  string
@@ -62,6 +63,9 @@ func SlogEmitter(logger *slog.Logger) func(Event) {
 		attrs := []any{"service", e.Service, "kind", e.Kind}
 		if e.Watch != "" {
 			attrs = append(attrs, "watch", e.Watch)
+		}
+		if e.App != "" {
+			attrs = append(attrs, "app", e.App)
 		}
 		if e.Rule != "" {
 			attrs = append(attrs, "rule", e.Rule)
