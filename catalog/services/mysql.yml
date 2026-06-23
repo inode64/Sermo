@@ -32,13 +32,9 @@ preflight:
     timeout: 15s
 pidfile:
 - /run/mysqld/mysqld.pid
-- /run/mysqld/mariadb.pid
 processes:
   mysqld:
     exe: ${mysql_binary}
-    user: ${user}
-  mariadbd:
-    exe: ${mysql_mariadbd_binary}
     user: ${user}
 config_files:
 - ${config}
@@ -78,7 +74,6 @@ stop_policy:
     - ${user}
     exe_any:
     - ${mysql_binary}
-    - ${mysql_mariadbd_binary}
 policy:
   cooldown: 15m
   max_actions: 2

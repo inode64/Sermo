@@ -9,11 +9,13 @@ variables:
     - /usr/bin/mariadbd
     - /usr/sbin/mysqld
     - /usr/bin/mysqld
-  mysqld_binary:
-    - /usr/sbin/mysqld
-    - /usr/bin/mysqld
+  client_binary:
+    - /usr/sbin/mariadb
+    - /usr/bin/mariadb
+    - /usr/sbin/mysql
+    - /usr/bin/mysql
 preflight:
   binary: { type: binary, path: "${binary}" }
-  mysqld: { type: binary, path: "${mysqld_binary}", optional: true }
+  client: { type: binary, path: "${client_binary}", optional: true }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
   libraries: { type: libraries, binary: "${binary}" }
