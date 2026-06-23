@@ -3,6 +3,7 @@ package execx
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -35,5 +36,29 @@ func TestOperatorFailureStripsRunPrefix(t *testing.T) {
 	msg := OperatorFailure(err, Result{ExitCode: 1}, time.Second)
 	if msg != "exit code 1" {
 		t.Fatalf("OperatorFailure() = %q, want stripped prefix", msg)
+	}
+}
+
+func TestContextFailureCanceled(t *testing.T) {
+	msg := ContextFailure(context.Canceled, time.Second)
+	if msg != "cancelled" {
+		t.Fatalf("ContextFailure() = %q, want cancelled", msg)
+	}
+}
+
+func TestOperatorFailureCanceledStripsRunPrefix(t *testing.T) {
+	err := fmt.Errorf("run hdparm: %w", context.Canceled)
+	msg := OperatorFailure(err, Result{ExitCode: -1}, time.Second)
+	if msg != "cancelled" {
+		t.Fatalf("OperatorFailure() = %q, want cancelled", msg)
+	}
+}
+
+func TestFormatContextOrError(t *testing.T) {
+	if got := FormatContextOrError(context.DeadlineExceeded, 500*time.Millisecond); got != "timeout after 500ms" {
+		t.Fatalf("FormatContextOrError(deadline) = %q", got)
+	}
+	if got := FormatContextOrError(errors.New("mount busy"), time.Second); got != "mount busy" {
+		t.Fatalf("FormatContextOrError(other) = %q", got)
 	}
 }
