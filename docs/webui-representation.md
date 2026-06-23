@@ -169,7 +169,7 @@ Row expansion:
 
 | Area | Content |
 | --- | --- |
-| General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals |
+| General data | state, category, unit/backend, uptime, interval, policy, locks, last event, next remediation, remediation state and process totals; while the row badge is `starting`, expansion may still show the raw init backend (`inactive`) and in-flight check samples from the observe-only cycle |
 | Graphs | full-width SLA timeline followed by latency, CPU, memory and IO charts; all use the shared `1h`, `24h`, `7d`, `30d`, `1y` window selector |
 | Processes | full-width detected process tree table, with child processes marked in CMD and kept under their parent; omitted when `no_resident_process` is true |
 | Checks | configured checks and current result |
