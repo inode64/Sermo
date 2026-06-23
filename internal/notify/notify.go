@@ -75,6 +75,7 @@ var builders = map[string]func(name string, entry map[string]any) (Notifier, err
 	"slack": buildSlack,
 	"teams": buildTeams,
 	"tty":   buildTTY,
+	"wall":  buildWall,
 }
 
 // Build constructs global notifiers. Malformed or unknown-type entries become

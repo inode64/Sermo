@@ -38,6 +38,8 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return users[0]
 		}
 		return fmt.Sprintf("%s (+%d)", users[0], len(users)-1)
+	case "wall":
+		return "all active terminals"
 	default:
 		return ""
 	}

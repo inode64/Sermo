@@ -16,12 +16,18 @@ import (
 
 type fakeReportNotifier struct {
 	name string
+	typ  string
 	msg  notify.Message
 }
 
 func (f *fakeReportNotifier) Name() string { return f.name }
 
-func (f *fakeReportNotifier) Type() string { return "email" }
+func (f *fakeReportNotifier) Type() string {
+	if f.typ != "" {
+		return f.typ
+	}
+	return "email"
+}
 
 func (f *fakeReportNotifier) Send(_ context.Context, msg notify.Message) error {
 	f.msg = msg
@@ -118,5 +124,19 @@ func TestSelectServicesReportNotifiers(t *testing.T) {
 	}
 	if _, _, err := selectServicesReportNotifiers([]string{"ghost"}, registry); err == nil {
 		t.Fatal("unknown notifier must fail")
+	}
+}
+
+func TestSelectServicesReportNotifiersWallSuppressesTTY(t *testing.T) {
+	registry := map[string]notify.Notifier{
+		"tty":  &fakeReportNotifier{name: "tty", typ: "tty"},
+		"wall": &fakeReportNotifier{name: "wall", typ: "wall"},
+	}
+	selected, names, err := selectServicesReportNotifiers([]string{"tty", "wall"}, registry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(selected) != 1 || strings.Join(names, ",") != "wall" {
+		t.Fatalf("selected names=%v selected=%d, want wall only", names, len(selected))
 	}
 }
