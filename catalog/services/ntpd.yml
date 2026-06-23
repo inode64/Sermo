@@ -1,24 +1,23 @@
 kind: daemon
 name: ntpd
-display_name: "NTP Daemon"
+display_name: NTP Daemon
 category: network
-description: "Network Time Protocol Daemon"
+description: Network Time Protocol Daemon
 service: ntpd
-apps: [ntpd]
-
+apps:
+- ntpd
 variables:
   port: 123
   user: ntp
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/ntpd.pid
-
 processes:
   main:
-    exe: "${ntpd_binary}"
-    user: "${user}"
-
+    exe: ${ntpd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: ntp, port: "${port}" }
+  service:
+    type: service
+    expect: active
+  port:
+    type: ntp
+    port: ${port}

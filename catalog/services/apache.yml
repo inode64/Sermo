@@ -1,86 +1,104 @@
 kind: daemon
 name: apache
-aliases: [apache2, httpd]
-display_name: "Apache HTTP Server"
+aliases:
+- apache2
+- httpd
+display_name: Apache HTTP Server
 category: web
 type: webserver
-
 service:
-  systemd: [apache2, httpd]
-  openrc: [apache2, apache]
-
-# Binary + version are owned by the `apache` app (same name) and linked here.
-apps: [apache]
-
+  systemd:
+  - apache2
+  - httpd
+  openrc:
+  - apache2
+  - apache
+apps:
+- apache
 variables:
   user: www-data
   host: 127.0.0.1
   port: 80
   tls_port: 443
   health_path: /
-
 preflight:
   config:
     type: command
-    command: ["sh", "-c", "if command -v apache2ctl >/dev/null 2>&1; then exec apache2ctl configtest; else exec apachectl configtest; fi"]
+    command:
+    - sh
+    - -c
+    - if command -v apache2ctl >/dev/null 2>&1; then exec apache2ctl configtest; else
+      exec apachectl configtest; fi
     timeout: 10s
-
+    analyze:
+      use:
+      - web
 processes:
   main:
-    exe: "${apache_binary}"
+    exe: ${apache_binary}
     user: root
-
   workers:
-    exe: "${apache_binary}"
-    user: "${user}"
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+    exe: ${apache_binary}
+    user: ${user}
 pidfile: /run/apache2.pid
-
-config_files: [/etc/apache2/httpd.conf, /etc/apache2/apache2.conf, /etc/httpd/conf/httpd.conf]
-
+config_files:
+- /etc/apache2/httpd.conf
+- /etc/apache2/apache2.conf
+- /etc/httpd/conf/httpd.conf
 checks:
   service:
     type: service
     expect: active
-
   http:
     type: http
-    url: "http://${host}:${port}${health_path}"
-    expect_status: { op: "<", value: 500 }
+    url: http://${host}:${port}${health_path}
+    expect_status:
+      op: <
+      value: 500
     timeout: 5s
-
-  # HTTPS certificate expiry. verify:false avoids alarms on self-signed certs; a
-  # TLS/connection error is not an alert, so a host without 443 stays quiet.
   cert:
     type: cert
     optional: true
-    host: "${host}"
-    port: "${tls_port}"
+    host: ${host}
+    port: ${tls_port}
     verify: false
     expires_in_days: 21
     timeout: 5s
-
+  fds:
+    type: metric
+    scope: service
+    name: fds
+    op: '>'
+    value: 50000
+    optional: true
+  memory:
+    type: metric
+    scope: service
+    name: memory
+    op: '>'
+    value: 60%
+    optional: true
 stop_policy:
   term_timeout: 10s
   force_kill: true
   kill_only_if:
-    users: ["${user}", root]
+    users:
+    - ${user}
+    - root
     exe_any:
-      - "${apache_binary}"
-
+    - ${apache_binary}
 rules:
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
       failed:
         check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
-
+      message: ${display_name} configuration is invalid
   restart-if-http-failed:
     type: remediation
     if:
@@ -90,16 +108,55 @@ rules:
       cycles: 3
     then:
       action: restart
-
   restart-if-worker-thread-hot:
     type: remediation
     if:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
+postflight:
+  http:
+    type: http
+    url: http://${host}:${port}${health_path}
+    expect_status:
+      op: <
+      value: 500
+    timeout: 5s
+reload_on_change:
+  paths:
+  - /etc/apache2/httpd.conf
+  - /etc/apache2/apache2.conf
+  - /etc/httpd/conf/httpd.conf

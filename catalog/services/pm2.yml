@@ -1,0 +1,95 @@
+kind: daemon
+name: pm2
+display_name: PM2
+category: system
+description: Node.js process manager supervising application processes.
+service:
+  systemd:
+  - pm2-root
+  - pm2
+  openrc:
+  - pm2
+apps:
+- pm2
+- node
+variables:
+  user: root
+pidfile:
+- /run/pm2.pid
+- /root/.pm2/pm2.pid
+processes:
+  main:
+    exe: ${pm2_binary}
+    user: ${user}
+preflight:
+  config:
+    type: command
+    command:
+    - ${pm2_binary}
+    - ping
+    timeout: 15s
+checks:
+  service:
+    type: service
+    expect: active
+  ping:
+    type: command
+    command:
+    - ${pm2_binary}
+    - ping
+    timeout: 10s
+postflight:
+  ping:
+    type: command
+    command:
+    - ${pm2_binary}
+    - ping
+    timeout: 10s
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} is not responding to pm2 ping
+  restart-if-ping-failed:
+    type: remediation
+    if:
+      failed:
+        check: ping
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

@@ -1,67 +1,66 @@
 kind: daemon
 name: redis
-display_name: "Redis"
+display_name: Redis
 category: database
 type: cache
-
 service:
-  systemd: [redis, redis-server]
-  openrc: [redis, redis-server]
-
-# Binary + version are owned by the `redis` app (same name) and linked here.
-apps: [redis]
-
+  systemd:
+  - redis
+  - redis-server
+  openrc:
+  - redis
+  - redis-server
+apps:
+- redis
 variables:
   user: redis
   host: 127.0.0.1
   port: 6379
-
 pidfile:
-  - /run/redis/redis.pid
-  - /run/redis.pid
-
+- /run/redis/redis.pid
+- /run/redis.pid
 processes:
   redis:
-    exe: "${redis_binary}"
-    user: "${user}"
-
-config_files: [/etc/redis/redis.conf, /etc/redis.conf]
-
+    exe: ${redis_binary}
+    user: ${user}
+config_files:
+- /etc/redis/redis.conf
+- /etc/redis.conf
 checks:
   service:
     type: service
     expect: active
-
   tcp:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # Native RESP liveness: connects and verifies the server answers PING with
-  # PONG (the redis probe does AUTH+PING+INFO over a socket), so no external
-  # redis-cli is needed. This is the bare liveness check wired to the restart
-  # rule below; set password/user (and tls) here if the server requires auth.
   ping:
     type: redis
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s
-
-  # Same native RESP probe, but asserting the last background save succeeded
-  # (reported "ok" even when persistence is disabled, so it never false-alarms).
-  # It exposes role, replication, persistence and memory for expect. Kept
-  # separate from `ping` and NOT wired to a remediation rule: a failed save is
-  # surfaced for alerting, not fixed by a restart.
   persistence:
     type: redis
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s
     expect:
       rdb_last_bgsave_status: ok
-
-
+  fds:
+    type: metric
+    scope: service
+    name: fds
+    op: '>'
+    value: 50000
+    optional: true
+  memory:
+    type: metric
+    scope: service
+    name: memory
+    op: '>'
+    value: 60%
+    optional: true
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -69,13 +68,12 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
-
   restart-if-tcp-failed:
     type: remediation
     if:
@@ -85,7 +83,6 @@ rules:
       cycles: 3
     then:
       action: restart
-
   restart-if-ping-failed:
     type: remediation
     if:
@@ -95,3 +92,40 @@ rules:
       cycles: 3
     then:
       action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
+postflight:
+  ping:
+    type: redis
+    host: ${host}
+    port: ${port}
+    timeout: 3s
+reload_on_change:
+  paths:
+  - /etc/redis/redis.conf
+  - /etc/redis.conf

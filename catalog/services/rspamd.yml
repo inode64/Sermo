@@ -1,40 +1,51 @@
 kind: daemon
 name: rspamd
-display_name: "Rspamd"
+display_name: Rspamd
 category: messaging
 service: rspamd
-apps: [rspamd]
-
+apps:
+- rspamd
 variables:
   port: 11334
   user: rspamd
 preflight:
-  config: { type: command, command: ["${rspamd_rspamadm}", "configtest"], timeout: 30s }
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  config:
+    type: command
+    command:
+    - ${rspamd_rspamadm}
+    - configtest
+    timeout: 30s
 pidfile: /run/rspamd.pid
-
-socket: { path: /var/lib/rspamd/rspamd.sock, optional: true }
-
+socket:
+  path: /var/lib/rspamd/rspamd.sock
+  optional: true
 processes:
   main:
-    exe: "${rspamd_binary}"
+    exe: ${rspamd_binary}
     user: root
   worker:
-    exe: "${rspamd_binary}"
-    user: "${user}"
-
+    exe: ${rspamd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  rspamd: { type: rspamd, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  rspamd:
+    type: rspamd
+    port: ${port}
+    timeout: 3s
 rules:
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

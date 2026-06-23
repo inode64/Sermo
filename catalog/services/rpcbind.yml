@@ -1,22 +1,25 @@
 kind: daemon
 name: rpcbind
-display_name: "RPC Bind"
+display_name: RPC Bind
 category: storage
-description: "ONC RPC portmapper."
+description: ONC RPC portmapper.
 service: rpcbind
-apps: [rpcbind]
-
+apps:
+- rpcbind
 variables:
   host: 127.0.0.1
   port: 111
-
 socket: /run/rpcbind.sock
-
 processes:
   main:
-    exe: "${rpcbind_binary}"
+    exe: ${rpcbind_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  rpcbind: { type: rpcbind, host: "${host}", port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  rpcbind:
+    type: rpcbind
+    host: ${host}
+    port: ${port}
+    timeout: 3s

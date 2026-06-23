@@ -1,13 +1,21 @@
 kind: daemon
 name: avahi
-display_name: "Avahi"
+display_name: Avahi
 category: network
-description: "Zero Configuration Networking"
+description: Zero Configuration Networking
 service:
-  systemd: [avahi, avahi-daemon]
-  openrc: [avahi, avahi-daemon]
-apps: [avahi]
-
+  systemd:
+  - avahi
+  - avahi-daemon
+  openrc:
+  - avahi
+  - avahi-daemon
+apps:
+- avahi
 checks:
-  service: { type: service, expect: active }
-  avahi: { type: avahi, timeout: 3s }
+  service:
+    type: service
+    expect: active
+  avahi:
+    type: avahi
+    timeout: 3s

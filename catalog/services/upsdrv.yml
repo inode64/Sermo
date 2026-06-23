@@ -1,9 +1,25 @@
 kind: daemon
 name: upsdrv
-display_name: "NUT UPS Drivers"
+display_name: NUT UPS Drivers
 category: hardware
-description: "Network UPS Tools driver supervisor."
+description: Network UPS Tools driver supervisor.
 service: upsdrv
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: /sbin/upsdrvctl
+    user: root
+    state: running
+    requires:
+    - service
+    optional: true
+postflight:
+  process:
+    type: process
+    exe: /sbin/upsdrvctl
+    user: root
+    state: running
+    optional: true

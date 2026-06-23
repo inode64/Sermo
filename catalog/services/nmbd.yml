@@ -1,19 +1,66 @@
 kind: daemon
 name: nmbd
-display_name: "Samba NMB"
+display_name: Samba NMB
 category: storage
 service: nmbd
-apps: [nmbd]
-
+apps:
+- nmbd
 preflight:
   config:
     type: command
-    command: ["${nmbd_testparm}", "-s"]
+    command:
+    - ${nmbd_testparm}
+    - -s
     timeout: 30s
     analyze:
-      use: [common]
+      use:
+      - common
       rules:
-        - { id: dir-artifact, match: '(?i)(lock|pid) directory .* does not exist', severity: ok }
-
+      - id: dir-artifact
+        match: (?i)(lock|pid) directory .* does not exist
+        severity: ok
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  netbios:
+    type: tcp
+    port: 137
+    timeout: 3s
+    optional: true
+  smb:
+    type: smb
+    port: 445
+    timeout: 3s
+    optional: true
+postflight:
+  netbios:
+    type: tcp
+    port: 137
+    timeout: 3s
+    optional: true
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

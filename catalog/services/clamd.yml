@@ -1,24 +1,29 @@
 kind: daemon
 name: clamd
-display_name: "ClamAV Daemon"
+display_name: ClamAV Daemon
 category: security
 service:
-  systemd: [clamd, clamav-daemon]
-  openrc: [clamd]
-apps: [clamd]
-
+  systemd:
+  - clamd
+  - clamav-daemon
+  openrc:
+  - clamd
+apps:
+- clamd
 variables:
   user: root
-
 pidfile:
-  - /run/clamd.pid
-  - /run/clamav/clamd.pid
-
+- /run/clamd.pid
+- /run/clamav/clamd.pid
 processes:
   main:
-    exe: "${clamd_binary}"
-    user: "${user}"
-
+    exe: ${clamd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  clamd: { type: clamd, socket: /run/clamav/clamd.sock, timeout: 3s }
+  service:
+    type: service
+    expect: active
+  clamd:
+    type: clamd
+    socket: /run/clamav/clamd.sock
+    timeout: 3s

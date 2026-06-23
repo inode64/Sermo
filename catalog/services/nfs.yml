@@ -1,22 +1,29 @@
 kind: daemon
 name: nfs
-display_name: "NFS Server"
+display_name: NFS Server
 category: storage
-description: "Kernel NFS server."
+description: Kernel NFS server.
 service:
-  systemd: [nfs-server, nfs]
-  openrc: [nfs]
-apps: [rpc-mountd]
-
+  systemd:
+  - nfs-server
+  - nfs
+  openrc:
+  - nfs
+apps:
+- rpc-mountd
 variables:
   host: 127.0.0.1
   port: 2049
-
 processes:
   mountd:
-    exe: "${rpc_mountd_binary}"
+    exe: ${rpc_mountd_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  nfs: { type: nfs, host: "${host}", port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  nfs:
+    type: nfs
+    host: ${host}
+    port: ${port}
+    timeout: 3s

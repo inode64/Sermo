@@ -1,9 +1,11 @@
 kind: daemon
 name: lvm
-display_name: "LVM"
+display_name: LVM
 category: storage
 service: lvm
-apps: [lvm]
-
+apps:
+- lvm
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active

@@ -1,16 +1,42 @@
 kind: daemon
 name: bitbucketrunner
-display_name: "Bitbucket Pipelines Runner"
+display_name: Bitbucket Pipelines Runner
 category: vpn
-description: "Atlassian Bitbucket self-hosted Pipelines runner."
-
+description: Atlassian Bitbucket self-hosted Pipelines runner.
 service:
-  systemd: [bitbucketrunner]
-  openrc: [bitbucketrunner]
-
-# The runner is an outbound CI agent: it polls Bitbucket and runs jobs (often via
-# Docker), exposing no listening port, so its liveness is the unit state alone.
+  systemd:
+  - bitbucketrunner
+  openrc:
+  - bitbucketrunner
 checks:
   service:
     type: service
     expect: active
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

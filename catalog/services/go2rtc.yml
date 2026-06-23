@@ -1,35 +1,33 @@
 kind: daemon
 name: go2rtc
-display_name: "go2rtc"
+display_name: go2rtc
 category: web
-description: "go2rtc real-time camera streaming server (WebRTC/RTSP)."
-
-# go2rtc runs as a plain OpenRC service or a systemd instance (go2rtc@<config>).
+description: go2rtc real-time camera streaming server (WebRTC/RTSP).
 service:
-  systemd: [go2rtc, "go2rtc@config"]
-  openrc: [go2rtc]
-
-apps: [go2rtc]
+  systemd:
+  - go2rtc
+  - go2rtc@config
+  openrc:
+  - go2rtc
+apps:
+- go2rtc
 variables:
   host: 127.0.0.1
-  # Web UI / API port; default 1984.
   port: 1984
-
 pidfile: /run/go2rtc.pid
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
   http:
     type: http
-    url: "http://${host}:${port}/"
-    expect_status: { op: "<", value: 500 }
+    url: http://${host}:${port}/
+    expect_status:
+      op: <
+      value: 500
     timeout: 5s

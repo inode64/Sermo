@@ -1,33 +1,31 @@
 kind: daemon
 name: listmonk
-display_name: "listmonk"
+display_name: listmonk
 category: web
-description: "listmonk newsletter and mailing-list manager."
-
+description: listmonk newsletter and mailing-list manager.
 service:
-  systemd: [listmonk]
-  openrc: [listmonk]
-
-apps: [listmonk]
+  systemd:
+  - listmonk
+  openrc:
+  - listmonk
+apps:
+- listmonk
 variables:
   host: 127.0.0.1
   port: 9000
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # The admin/public UI answers on the root path; accept any non-5xx (it serves a
-  # login/landing page) so the check tracks server responsiveness.
   http:
     type: http
-    url: "http://${host}:${port}/"
-    expect_status: { op: "<", value: 500 }
+    url: http://${host}:${port}/
+    expect_status:
+      op: <
+      value: 500
     timeout: 5s

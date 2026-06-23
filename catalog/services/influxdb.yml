@@ -1,47 +1,44 @@
 kind: daemon
 name: influxdb
-display_name: "InfluxDB"
+display_name: InfluxDB
 category: database
-description: "InfluxDB time-series database."
+description: InfluxDB time-series database.
 type: database
-
 service:
-  systemd: [influxdb]
-  openrc: [influxdb]
-
-apps: [influxdb]
+  systemd:
+  - influxdb
+  openrc:
+  - influxdb
+apps:
+- influxdb
 variables:
   host: 127.0.0.1
   port: 8086
   config: /etc/influxdb2/config.toml
-
-config_files: ["${config}"]
-
+config_files:
+- ${config}
 preflight:
-  # influxd validates the v2 config without starting the daemon.
   config:
     type: command
-    command: ["${influxdb_binary}", "config", "validate", "--config", "${config}"]
+    command:
+    - ${influxdb_binary}
+    - config
+    - validate
+    - --config
+    - ${config}
     timeout: 30s
-
 pidfile: /run/supervise-influxdb.pid
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # Native InfluxDB probe: GETs /health (2.x and 1.8+) and verifies status "pass",
-  # reporting the server version; falls back to /ping (all versions) when /health
-  # is unavailable. Set tls: true if the API is served over https.
   health:
     type: influxdb
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s

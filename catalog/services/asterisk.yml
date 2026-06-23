@@ -1,18 +1,23 @@
 kind: daemon
 name: asterisk
-display_name: "Asterisk PBX"
+display_name: Asterisk PBX
 category: messaging
 service: asterisk
-apps: [asterisk]
-
+apps:
+- asterisk
 variables:
   port: 5038
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  asterisk: { type: asterisk, port: "${port}", timeout: 3s }
-
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  asterisk:
+    type: asterisk
+    port: ${port}
+    timeout: 3s
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -20,7 +25,7 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m

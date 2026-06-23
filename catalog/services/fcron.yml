@@ -1,20 +1,44 @@
 kind: daemon
 name: fcron
-display_name: "Fcron"
+display_name: Fcron
 category: system
 service: fcron
-apps: [fcron]
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+apps:
+- fcron
 pidfile: /run/fcron.pid
-
 socket: /run/fcron.fifo
-
 processes:
   main:
-    exe: "${fcron_binary}"
+    exe: ${fcron_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${fcron_binary}
+    user: root
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${fcron_binary}
+    user: root
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

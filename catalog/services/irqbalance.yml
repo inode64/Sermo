@@ -2,7 +2,36 @@ kind: daemon
 name: irqbalance
 category: hardware
 service: irqbalance
-apps: [irqbalance]
-
+apps:
+- irqbalance
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${irqbalance_binary}
+    user: root
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${irqbalance_binary}
+    user: root
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

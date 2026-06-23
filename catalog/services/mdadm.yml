@@ -2,19 +2,19 @@ kind: daemon
 name: mdadm
 category: storage
 service: mdadm
-apps: [mdadm]
-
+apps:
+- mdadm
 pidfile: /run/mdadm.pid
-
 processes:
   main:
-    exe: "${mdadm_binary}"
+    exe: ${mdadm_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-
-  # md software-RAID health from /proc/mdstat (native, zero-config): alerts when
-  # any array is degraded. A host with no md arrays never alerts, so it is safe
-  # as a bundled default. This is what mdadm exists to watch.
-  raid: { type: raid, degraded: { op: ">", value: 0 } }
+  service:
+    type: service
+    expect: active
+  raid:
+    type: raid
+    degraded:
+      op: '>'
+      value: 0

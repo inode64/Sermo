@@ -1,19 +1,46 @@
 kind: daemon
 name: qemu-ga
-display_name: "QEMU Guest Agent"
+display_name: QEMU Guest Agent
 category: virtualization
 service:
-  systemd: [qemu-ga, qemu-guest-agent]
-  openrc: [qemu-guest-agent, qemu-ga]
-apps: [qemu-ga]
-
+  systemd:
+  - qemu-ga
+  - qemu-guest-agent
+  openrc:
+  - qemu-guest-agent
+  - qemu-ga
+apps:
+- qemu-ga
 variables:
   user: root
-
 processes:
   main:
-    exe: "${qemu_ga_binary}"
-    user: "${user}"
-
+    exe: ${qemu_ga_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  version:
+    type: command
+    command:
+    - ${qemu_ga_binary}
+    - --version
+    timeout: 5s
+postflight:
+  version:
+    type: command
+    command:
+    - ${qemu_ga_binary}
+    - --version
+    timeout: 5s
+rules:
+  restart-if-version-failed:
+    type: remediation
+    if:
+      failed:
+        check: version
+    for:
+      cycles: 3
+    then:
+      action: restart

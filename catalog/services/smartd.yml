@@ -1,16 +1,43 @@
 kind: daemon
 name: smartd
-display_name: "S.M.A.R.T. Daemon"
+display_name: S.M.A.R.T. Daemon
 category: storage
 service: smartd
-apps: [smartd]
-
+apps:
+- smartd
 pidfile: /run/smartd.pid
-
 processes:
   main:
-    exe: "${smartd_binary}"
+    exe: ${smartd_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${smartd_binary}
+    user: root
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${smartd_binary}
+    user: root
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

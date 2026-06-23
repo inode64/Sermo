@@ -1,9 +1,22 @@
 kind: daemon
 name: ovsdb-client
-display_name: "Open vSwitch Client"
+display_name: Open vSwitch Client
 category: virtualization
 service: ovsdb-client
-apps: [ovsdb-client]
-
+apps:
+- ovsdb-client
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  openvswitch:
+    type: openvswitch
+    socket: /run/openvswitch/db.sock
+    timeout: 5s
+    optional: true
+postflight:
+  openvswitch:
+    type: openvswitch
+    socket: /run/openvswitch/db.sock
+    timeout: 5s
+    optional: true

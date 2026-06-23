@@ -1,17 +1,24 @@
 kind: daemon
 name: postgres-%v
-display_name: "PostgreSQL ${version}"
+display_name: PostgreSQL ${version}
 category: database
 service:
-  systemd: [postgres, postgresql, "postgresql-${version}", "postgres-${version}"]
-  openrc: ["postgresql-${version}", "postgres-${version}", postgres]
-apps: ["postgres-${version}"]
+  systemd:
+  - postgres
+  - postgresql
+  - postgresql-${version}
+  - postgres-${version}
+  openrc:
+  - postgresql-${version}
+  - postgres-${version}
+  - postgres
+apps:
+- postgres-${version}
 variables:
   port: 5432
   user: postgres
   data_dir: /var/lib/postgresql/${version}/data
   config_dir: /var/lib/postgresql/${version}/data
-
 os:
   debian:
     variables:
@@ -24,14 +31,100 @@ os:
   gentoo:
     variables:
       config_dir: /etc/postgresql-${version}
-
+config_files:
+- ${config_dir}
 preflight:
   config:
     type: command
-    user: "${user}"
-    command: ["${binary}", "-D", "${config_dir}", "-C", "config_file", "--data-directory=${data_dir}"]
+    user: ${user}
+    command:
+    - ${binary}
+    - -D
+    - ${config_dir}
+    - -C
+    - config_file
+    - --data-directory=${data_dir}
     timeout: 30s
-
+    analyze:
+      use:
+      - postgres
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  ready:
+    type: postgres
+    host: 127.0.0.1
+    port: ${port}
+    user: ${user}
+    timeout: 5s
+  fds:
+    type: metric
+    scope: service
+    name: fds
+    op: '>'
+    value: 50000
+    optional: true
+  memory:
+    type: metric
+    scope: service
+    name: memory
+    op: '>'
+    value: 60%
+    optional: true
+postflight:
+  ready:
+    type: postgres
+    host: 127.0.0.1
+    port: ${port}
+    user: ${user}
+    timeout: 5s
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  restart-if-ready-failed:
+    type: remediation
+    if:
+      failed:
+        check: ready
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-port-failed:
+    type: remediation
+    if:
+      failed:
+        check: port
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
+reload_on_change:
+  paths:
+  - ${config_dir}

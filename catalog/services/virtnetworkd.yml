@@ -1,26 +1,60 @@
 kind: daemon
 name: virtnetworkd
-display_name: "libvirt Network Daemon"
+display_name: libvirt Network Daemon
 category: virtualization
-description: "Modular libvirt daemon for virtual network management."
+description: Modular libvirt daemon for virtual network management.
 service:
-  systemd: [virtnetworkd]
-apps: [virtnetworkd]
-
+  systemd:
+  - virtnetworkd
+apps:
+- virtnetworkd
 socket: /run/libvirt/virtnetworkd-sock
-
 processes:
   main:
-    exe: "${virtnetworkd_binary}"
+    exe: ${virtnetworkd_binary}
     user: root
   dnsmasq-root:
-    exe: "${virtnetworkd_dnsmasq_binary}"
-    cmd: "/var/lib/libvirt/dnsmasq/"
+    exe: ${virtnetworkd_dnsmasq_binary}
+    cmd: /var/lib/libvirt/dnsmasq/
     user: root
   dnsmasq-nobody:
-    exe: "${virtnetworkd_dnsmasq_binary}"
-    cmd: "/var/lib/libvirt/dnsmasq/"
+    exe: ${virtnetworkd_dnsmasq_binary}
+    cmd: /var/lib/libvirt/dnsmasq/
     user: nobody
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtnetworkd-sock
+    timeout: 5s
+postflight:
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtnetworkd-sock
+    timeout: 5s
+rules:
+  restart-if-libvirt-failed:
+    type: remediation
+    if:
+      failed:
+        check: libvirt
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

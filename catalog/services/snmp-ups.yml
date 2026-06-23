@@ -1,9 +1,26 @@
 kind: daemon
 name: snmp-ups
-display_name: "SNMP UPS Driver"
+display_name: SNMP UPS Driver
 category: hardware
 service: snmp-ups
-apps: [snmp-ups]
-
+apps:
+- snmp-ups
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${snmp_ups_binary}
+    user: root
+    state: running
+    requires:
+    - service
+    optional: true
+postflight:
+  process:
+    type: process
+    exe: ${snmp_ups_binary}
+    user: root
+    state: running
+    optional: true

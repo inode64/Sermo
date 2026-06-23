@@ -1,14 +1,15 @@
 kind: daemon
 name: lvm2-monitor
-display_name: "LVM2 monitor"
+display_name: LVM2 monitor
 category: storage
-description: "LVM2 dmeventd monitoring activation service."
+description: LVM2 dmeventd monitoring activation service.
 service:
-  systemd: [lvm2-monitor]
-apps: [lvm]
-
-# lvm2-monitor is commonly active/exited after enabling volume monitoring.
+  systemd:
+  - lvm2-monitor
+apps:
+- lvm
 processes: {}
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active

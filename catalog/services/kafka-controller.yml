@@ -1,52 +1,39 @@
 kind: daemon
 name: kafka-controller
-display_name: "Apache Kafka Controller"
+display_name: Apache Kafka Controller
 category: messaging
-description: "Kafka controller: maintains the KRaft metadata quorum on the controller listener."
+description: 'Kafka controller: maintains the KRaft metadata quorum on the controller
+  listener.'
 type: queue
-
-# Controller role running as its own systemd unit. On a combined KRaft node the
-# controller shares the broker process; this catalog splits the roles so a
-# deployment that runs dedicated controllers monitors the quorum independently.
 service:
-  systemd: [kafka-controller, kafka]
-  openrc: [kafka-controller, kafka]
-
-# Kafka runs on the JVM: the runtime is owned by the `java` app and the launcher
-# scripts + version by the `kafka` app. Both are linked here so a missing Java
-# or Kafka install blocks start/restart/reload, and their preflight runs before
-# this service.
-apps: [java, kafka]
-
+  systemd:
+  - kafka-controller
+  - kafka
+  openrc:
+  - kafka-controller
+  - kafka
+apps:
+- java
+- kafka
 variables:
   host: 127.0.0.1
-  # Controller (KRaft metadata quorum) listener.
   port: 9093
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # Native Kafka wire-protocol probe: an unauthenticated ApiVersions request the
-  # controller answers before login, proving it speaks Kafka (not just that the
-  # port is open). The KRaft controller listener advertises the Vote quorum API
-  # and not Produce, so expect role=controller confirms this listener is actually
-  # the controller and the quorum endpoint is live.
   protocol:
     type: kafka
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s
     expect:
       role: controller
-
 rules:
   restart-if-protocol-failed:
     type: remediation

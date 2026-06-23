@@ -1,34 +1,107 @@
 kind: daemon
 name: tomcat-%v%s%i
-display_name: "Apache Tomcat ${version} ${instance}"
+display_name: Apache Tomcat ${version} ${instance}
 category: web
-
-# A Tomcat install is identified by version AND environment: /etc/tomcat-8.5-main,
-# /etc/tomcat-9-guacamole, ... A bare /etc/tomcat-8.5 (no environment) materializes
-# as tomcat-8.5 with no trailing separator. The daemon owns its discovery from the
-# config directory; the matching tomcat-${version} app owns catalina.sh/version and
-# the java app owns the JVM (both run in preflight via apps:).
 versions:
-  from: "/etc/tomcat-${version}${sep}${instance}/server.xml"
-  require: "/usr/share/tomcat-${version}/bin/catalina.sh"
-
-apps: [java, "tomcat-${version}"]
-
+  from: /etc/tomcat-${version}${sep}${instance}/server.xml
+  require: /usr/share/tomcat-${version}/bin/catalina.sh
+apps:
+- java
+- tomcat-${version}
 service:
-  openrc: "tomcat-${version}${sep}${instance}"
-  systemd: "tomcat@${version}${sep}${instance}"
-
+  openrc: tomcat-${version}${sep}${instance}
+  systemd: tomcat@${version}${sep}${instance}
 variables:
-  config: "/etc/tomcat-${version}${sep}${instance}/server.xml"
+  config: /etc/tomcat-${version}${sep}${instance}/server.xml
   port:
-    from_file: "${config}"
-    # The HTTP Connector port, e.g. <Connector port="8081" protocol="HTTP/1.1"/>.
-    pattern: '<Connector[^>]*?\bport="(\d+)"'
+    from_file: ${config}
+    pattern: <Connector[^>]*?\bport="(\d+)"
     default: 8080
-
-config_files: ["${config}"]
-pidfile: "/run/tomcat-${version}${sep}${instance}.pid"
-
+  # AJP connector (reverse-proxy backends). Falls back to 8009 when absent from server.xml.
+  ajp_port:
+    from_file: ${config}
+    pattern: <Connector[^>]*?\bprotocol="(?:AJP/1\.3|org\.apache\.coyote\.ajp\.[^"]+)"[^>]*?\bport="(\d+)"
+    default: 8009
+config_files:
+- ${config}
+pidfile: /run/tomcat-${version}${sep}${instance}.pid
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  http:
+    type: http
+    url: http://127.0.0.1:${port}/
+    expect_status:
+      op: <
+      value: 500
+    timeout: 5s
+
+  # AJP13 CPing/CPong — proves the AJP connector answers, not only HTTP.
+  # optional: many installs disable AJP and terminate TLS at a reverse proxy.
+  ajp:
+    type: ajp
+    host: 127.0.0.1
+    port: ${ajp_port}
+    timeout: 3s
+    optional: true
+
+postflight:
+  http:
+    type: http
+    url: http://127.0.0.1:${port}/
+    expect_status:
+      op: <
+      value: 500
+    timeout: 5s
+reload_on_change:
+  paths:
+  - ${config}
+rules:
+  restart-if-http-failed:
+    type: remediation
+    if:
+      failed:
+        check: http
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-port-failed:
+    type: remediation
+    if:
+      failed:
+        check: port
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: '>'
+        value: 90%
+    for:
+      duration: 6m
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

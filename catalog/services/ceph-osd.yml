@@ -1,38 +1,66 @@
 kind: daemon
 name: ceph-osd-%n
-display_name: "Ceph OSD ${n}"
+display_name: Ceph OSD ${n}
 category: storage
-description: "Ceph object storage daemon (one per backing device). Binds dynamic ports in the 6800-7300 range across the public and cluster networks, so it is monitored by service state rather than a fixed port."
-
-# OSDs run as systemd instances keyed by the numeric OSD id (ceph-osd@0, @1, …).
-# This is a `%n` template: on the OSD host it materializes from the matching
-# /var/lib/ceph/osd/ceph-N directory, one concrete daemon per local OSD id
-# (ceph-osd-0, ceph-osd-1, …) with ${n} filled in. On a host with no OSDs it
-# materializes nothing (no error). The operator still enables one `kind: service`
-# per OSD that `uses:` the materialized daemon.
-
-service: "ceph-osd@${n}"
-
-# OSD instance discovery belongs to the daemon; the generic ceph-osd app owns
-# the binary/version checks linked into each materialized ceph-osdN.
+description: Ceph object storage daemon (one per backing device). Binds dynamic ports
+  in the 6800-7300 range across the public and cluster networks, so it is monitored
+  by service state rather than a fixed port.
+service: ceph-osd@${n}
 versions:
-  from: "/var/lib/ceph/osd/ceph-${n}"
-
-apps: ["ceph-osd"]
-
+  from: /var/lib/ceph/osd/ceph-${n}
+apps:
+- ceph-osd
+- ceph
 variables:
   user: ceph
-
-socket: "/run/ceph/ceph-osd.${n}.asok"
-
-# No `processes:` block on purpose. Every OSD on a host shares the same binary
-# and user, so an exe+user match cannot isolate one instance from its siblings
-# (the process model matches on exe+user only — OSD instances are separable just
-# by their systemd cgroup, e.g. ceph-osd@1.service). Matching by exe would make a
-# restart of one OSD treat its still-running siblings as residual processes and
-# abort. Per-instance liveness therefore comes from the systemd unit below.
-
+socket: /run/ceph/ceph-osd.${n}.asok
 checks:
   service:
     type: service
     expect: active
+  status:
+    type: command
+    command:
+    - ${ceph_binary}
+    - --admin-daemon
+    - /run/ceph/ceph-osd.${n}.asok
+    - status
+    timeout: 5s
+    analyze:
+      use:
+      - ceph
+postflight:
+  status:
+    type: command
+    command:
+    - ${ceph_binary}
+    - --admin-daemon
+    - /run/ceph/ceph-osd.${n}.asok
+    - status
+    timeout: 5s
+    analyze:
+      use:
+      - ceph
+rules:
+  restart-if-status-failed:
+    type: remediation
+    if:
+      failed:
+        check: status
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

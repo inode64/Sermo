@@ -28,9 +28,8 @@ exists. Nothing here is committed scope; pick items deliberately.
 
 - [x] D-Bus system bus health probe (`type: dbus` in `internal/conn`) and
       `dbus` catalog daemon (service + native handshake check)
-- [ ] UDisks2: native probe and richer checks (catalog daemon exists today;
-      only `service` check — no `udisks` / D-Bus object probe, no preflight
-      `config`)
+- [x] UDisks2: native `udisks2` D-Bus probe on the catalog daemon (Manager
+      `Peer.Ping` + name-owner check); preflight `config` still pending
 - [x] `libvirt-dbus` catalog daemon (process match; no dedicated bus probe yet)
 
 ### Observability
@@ -49,10 +48,10 @@ exists. Nothing here is committed scope; pick items deliberately.
 
 ### Process managers and runtimes
 
-- [ ] PM2 (Node.js process manager): catalog daemon, health checks, safe start/
-      stop/restart integration
-- [x] Supervisor (`supervisord`) catalog daemon (service check only; no
-      `preflight.config` yet)
+- [x] PM2 (Node.js process manager): catalog daemon + `pm2 ping` preflight/
+      health/postflight checks
+- [x] Supervisor (`supervisord`) catalog daemon (`supervisorctl status` health,
+      optional `supervisord check` preflight)
 
 ## Catalog — preflight `config` checks
 

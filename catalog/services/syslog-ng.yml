@@ -2,30 +2,52 @@ kind: daemon
 name: syslog-ng
 category: observability
 service: syslog-ng
-apps: [syslog-ng]
-
+apps:
+- syslog-ng
 variables:
   config: /etc/syslog-ng/syslog-ng.conf
-
 preflight:
-  config: { type: command, command: ["${syslog_ng_binary}", "--syntax-only", "--cfgfile=${config}"], timeout: 30s }
-
-config_files: ["${config}", /etc/syslog-ng/conf.d]
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  config:
+    type: command
+    command:
+    - ${syslog_ng_binary}
+    - --syntax-only
+    - --cfgfile=${config}
+    timeout: 30s
+config_files:
+- ${config}
+- /etc/syslog-ng/conf.d
 pidfile: /run/syslog-ng.pid
-
 socket: /run/syslog-ng.ctl
-
 processes:
   main:
-    exe: "${syslog_ng_binary}"
+    exe: ${syslog_ng_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-
+  service:
+    type: service
+    expect: active
+  ctl:
+    type: command
+    command:
+    - ${syslog_ng_binary}
+    - stats
+    timeout: 10s
+    optional: true
+  fds:
+    type: metric
+    scope: service
+    name: fds
+    op: '>'
+    value: 50000
+    optional: true
+  memory:
+    type: metric
+    scope: service
+    name: memory
+    op: '>'
+    value: 60%
+    optional: true
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -33,9 +55,46 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+postflight:
+  ctl:
+    type: command
+    command:
+    - ${syslog_ng_binary}
+    - stats
+    timeout: 10s
+    optional: true
+reload_on_change:
+  paths:
+  - ${config}
+  - /etc/syslog-ng/conf.d

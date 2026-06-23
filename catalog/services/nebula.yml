@@ -1,56 +1,53 @@
 kind: daemon
 name: nebula-%i
-display_name: "Nebula ${instance}"
-description: "Nebula mesh-VPN node (Slack/Defined Networking)."
+display_name: Nebula ${instance}
+description: Nebula mesh-VPN node (Slack/Defined Networking).
 category: vpn
-
 service:
-  systemd: ["nebula@${instance}", "nebula-${instance}", "nebula.${instance}"]
-  openrc: ["nebula.${instance}"]
-apps: ["nebula"]
-
+  systemd:
+  - nebula@${instance}
+  - nebula-${instance}
+  - nebula.${instance}
+  openrc:
+  - nebula.${instance}
+apps:
+- nebula
 versions:
-  from: "/etc/nebula/${instance}.yml"
-
+  from: /etc/nebula/${instance}.yml
 variables:
-  config: "/etc/nebula/${instance}.yml"
-  # Probe the first endpoint published in static_host_map. Nebula clients often
-  # bind a random local UDP port when no listen.port is configured, so 127.0.0.1
-  # is only a fallback for configs without a static map.
+  config: /etc/nebula/${instance}.yml
   host:
-    from_file: "${config}"
-    pattern: '(?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"\[?([^"\]]+)\]?:(?:\d+)"'
+    from_file: ${config}
+    pattern: (?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"\[?([^"\]]+)\]?:(?:\d+)"
     default: 127.0.0.1
   port:
-    from_file: "${config}"
-    pattern: '(?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"[^"]+:(\d+)"'
+    from_file: ${config}
+    pattern: (?m)^\s*static_host_map:\s*\n\s*(?:"[^"]+"|[^:\n]+)\s*:\s*\[\s*"[^"]+:(\d+)"
     default: 4242
   user: root
-
-config_files: ["${config}"]
-
+config_files:
+- ${config}
 preflight:
-  config: { type: command, command: ["${nebula_binary}", "-test", "-config", "${config}"], timeout: 30s }
-
-pidfile: "/run/supervise-nebula.${instance}.pid"
-
+  config:
+    type: command
+    command:
+    - ${nebula_binary}
+    - -test
+    - -config
+    - ${config}
+    timeout: 30s
+pidfile: /run/supervise-nebula.${instance}.pid
 processes:
   main:
-    exe: "${binary}"
-    user: "${user}"
-
+    exe: ${binary}
+    user: ${user}
 checks:
   service:
     type: service
     expect: active
-
-  # Native Nebula probe over the UDP control protocol: sends a Message packet for
-  # an unknown tunnel index and verifies the node answers a plaintext recv_error
-  # echoing it — proof the node is up and speaking Nebula, no credentials needed.
-  # Requires listen.send_recv_error "always" (the default).
   handshake:
     type: nebula
     optional: true
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s

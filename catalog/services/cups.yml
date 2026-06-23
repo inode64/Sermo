@@ -1,32 +1,46 @@
 kind: daemon
 name: cups
-display_name: "CUPS"
+display_name: CUPS
 category: system
 service:
-  systemd: [cups]
-  openrc: [cupsd]
-apps: [cupsd]
-
+  systemd:
+  - cups
+  openrc:
+  - cupsd
+apps:
+- cupsd
 variables:
   port: 631
-
 pidfile:
-  - /run/cupsd.pid
-  - /run/cups/cupsd.pid
-
+- /run/cupsd.pid
+- /run/cups/cupsd.pid
 preflight:
-  config: { type: command, command: ["${cupsd_binary}", "-t"], timeout: 30s }
-
+  config:
+    type: command
+    command:
+    - ${cupsd_binary}
+    - -t
+    timeout: 30s
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  ipp: { type: ipp, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  ipp:
+    type: ipp
+    port: ${port}
+    timeout: 3s
 rules:
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

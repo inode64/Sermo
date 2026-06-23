@@ -1,44 +1,47 @@
 kind: daemon
 name: exim
-display_name: "Exim"
+display_name: Exim
 category: messaging
-description: "Gestor de correo SMTP Exim"
+description: Gestor de correo SMTP Exim
 service: exim
-apps: [exim]
-
+apps:
+- exim
 variables:
   host: 127.0.0.1
   port: 25
   tls_port: 465
   user: mail
 preflight:
-  config: { type: command, command: ["${exim_binary}","-bV"], timeout: 10s }
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  config:
+    type: command
+    command:
+    - ${exim_binary}
+    - -bV
+    timeout: 10s
 pidfile: /run/exim.pid
-
 processes:
   main:
-    exe: "${exim_binary}"
-    user: "${user}"
-
+    exe: ${exim_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  smtp: { type: smtp, port: "${port}", timeout: 3s }
-
-  # SMTPS certificate expiry. verify:false avoids alarms on self-signed internal
-  # certs; a TLS/connection error is not an alert, so a non-TLS server stays quiet.
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  smtp:
+    type: smtp
+    port: ${port}
+    timeout: 3s
   cert:
     type: cert
     optional: true
-    host: "${host}"
-    port: "${tls_port}"
+    host: ${host}
+    port: ${tls_port}
     verify: false
     expires_in_days: 21
     timeout: 5s
-
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -46,18 +49,20 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
-
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

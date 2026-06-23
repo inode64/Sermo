@@ -1,16 +1,35 @@
 kind: daemon
 name: virtlogd
-display_name: "libvirt Log Daemon"
+display_name: libvirt Log Daemon
 category: virtualization
 service: virtlogd
-apps: [virtlogd]
-
+apps:
+- virtlogd
 socket: /run/libvirt/virtlogd-sock
-
 processes:
   main:
-    exe: "${virtlogd_binary}"
+    exe: ${virtlogd_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtlogd-sock
+    timeout: 5s
+postflight:
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtlogd-sock
+    timeout: 5s
+rules:
+  restart-if-libvirt-failed:
+    type: remediation
+    if:
+      failed:
+        check: libvirt
+    for:
+      cycles: 3
+    then:
+      action: restart

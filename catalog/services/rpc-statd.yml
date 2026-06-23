@@ -1,20 +1,50 @@
 kind: daemon
 name: rpc-statd
-display_name: "NFS Status Monitor"
+display_name: NFS Status Monitor
 category: storage
 service:
-  systemd: [rpc-statd]
-  openrc: [rpc.statd, rpc-statd]
-apps: [rpc-statd]
+  systemd:
+  - rpc-statd
+  openrc:
+  - rpc.statd
+  - rpc-statd
+apps:
+- rpc-statd
 variables:
   user: nobody
-
 pidfile: /run/rpc.statd.pid
-
 processes:
   main:
-    exe: "${rpc_statd_binary}"
-    user: "${user}"
-
+    exe: ${rpc_statd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  statd:
+    type: statd
+    host: 127.0.0.1
+    port: 662
+    timeout: 3s
+    optional: true
+postflight:
+  statd:
+    type: statd
+    host: 127.0.0.1
+    port: 662
+    timeout: 3s
+    optional: true
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
