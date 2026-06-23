@@ -79,6 +79,28 @@ func (n *ttyNotifier) Type() string {
 	return n.typ
 }
 
+// ActiveUserCount reports the number of distinct users with an active login
+// session, read from utmp. It returns 0 when utmp is unreadable or empty, so it
+// is safe to call as a best-effort header stat. Reuses the same utmp parsing as
+// the tty/wall notifiers.
+func ActiveUserCount() int {
+	sessions, err := readUtmpSessions(nil)
+	if err != nil {
+		return 0
+	}
+	return distinctUsers(sessions)
+}
+
+func distinctUsers(sessions []ttySession) int {
+	users := make(map[string]struct{}, len(sessions))
+	for _, s := range sessions {
+		if s.User != "" {
+			users[s.User] = struct{}{}
+		}
+	}
+	return len(users)
+}
+
 func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
 	sessions, err := readUtmpSessions(n.utmpPaths)
 	if err != nil {

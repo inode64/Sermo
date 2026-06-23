@@ -4068,6 +4068,9 @@ function renderStatus(ctx) {
       if ((ops.in_use || 0) > 0) opsStr += ` <span class="muted">(in use)</span>`;
       parts.push(opsStr);
     }
+    if (ops.active_users != null) {
+      parts.push(`users: <b>${ops.active_users || 0}</b>`);
+    }
     const activeLocks = (locks || []).filter(l => l.state === "active").length;
     if (activeLocks > 0 || (locks || []).length > 0) {
       let lockStr = `locks: <b>${activeLocks}</b>`;

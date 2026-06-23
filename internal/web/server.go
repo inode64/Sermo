@@ -548,6 +548,9 @@ type Finding struct {
 type OperationSlots struct {
 	InUse int `json:"in_use"`
 	Total int `json:"total"`
+	// ActiveUsers is the number of distinct users with an active login session,
+	// surfaced on this payload so the header can show it alongside slot usage.
+	ActiveUsers int `json:"active_users"`
 }
 
 // ReadyReport is the /readyz readiness probe payload.
