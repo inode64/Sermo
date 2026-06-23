@@ -3,7 +3,7 @@ name: backrest
 display_name: "Backrest"
 category: storage
 variables:
-  binary: /usr/bin/backrest
+  binary: ${bindir}/backrest
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

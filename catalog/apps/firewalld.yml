@@ -3,8 +3,8 @@ name: firewalld
 display_name: "firewalld"
 category: security
 variables:
-  binary: /usr/bin/firewalld
-  binary_offline: /usr/bin/firewall-offline-cmd
+  binary: ${bindir}/firewalld
+  binary_offline: ${bindir}/firewall-offline-cmd
 preflight:
   binary: { type: binary, path: "${binary}" }
   binary_offline: { type: binary, path: "${binary_offline}" }

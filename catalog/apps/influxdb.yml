@@ -3,7 +3,7 @@ name: influxdb
 display_name: "InfluxDB"
 category: database
 variables:
-  binary: /usr/bin/influxd
+  binary: ${bindir}/influxd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "version"], timeout: 10s }

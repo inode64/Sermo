@@ -3,7 +3,7 @@ name: ovsdb-client
 display_name: "Open vSwitch Database"
 category: virtualization
 variables:
-  binary: "/usr/bin/ovsdb-client"
+  binary: ${bindir}/ovsdb-client
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

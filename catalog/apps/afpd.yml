@@ -3,7 +3,7 @@ name: afpd
 display_name: "Netatalk AFP Daemon"
 category: storage
 variables:
-  binary: "/usr/bin/afpd"
+  binary: ${bindir}/afpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

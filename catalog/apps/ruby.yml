@@ -4,7 +4,7 @@ display_name: "Ruby"
 category: runtime
 description: "An object-oriented scripting language"
 variables:
-  binary: "/usr/bin/ruby"
+  binary: ${bindir}/ruby
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

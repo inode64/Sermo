@@ -3,7 +3,7 @@ name: libvirtd
 display_name: "libvirt"
 category: virtualization
 variables:
-  binary: "/usr/bin/libvirtd"
+  binary: ${bindir}/libvirtd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

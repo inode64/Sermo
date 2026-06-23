@@ -3,7 +3,7 @@ name: rngd
 display_name: "RNG Daemon"
 category: hardware
 variables:
-  binary: /usr/sbin/rngd
+  binary: ${bindir}/rngd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

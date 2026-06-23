@@ -3,8 +3,8 @@ name: prometheus
 display_name: "Prometheus"
 category: observability
 variables:
-  binary: /usr/bin/prometheus
-  promtool: /usr/bin/promtool
+  binary: ${bindir}/prometheus
+  promtool: ${bindir}/promtool
 preflight:
   binary: { type: binary, path: "${binary}" }
   promtool: { type: binary, path: "${promtool}" }

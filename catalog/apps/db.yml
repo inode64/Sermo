@@ -4,7 +4,7 @@ display_name: "Berkeley DB ${version}"
 category: database
 description: "Oracle Berkeley DB"
 variables:
-  binary: "/usr/bin/db${version}"
+  binary: ${bindir}/db${version}
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

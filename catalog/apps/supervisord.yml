@@ -3,7 +3,7 @@ name: supervisord
 display_name: "Supervisor"
 category: system
 variables:
-  binary: "/usr/bin/supervisord"
+  binary: ${bindir}/supervisord
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

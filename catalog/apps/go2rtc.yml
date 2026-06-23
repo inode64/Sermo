@@ -3,7 +3,7 @@ name: go2rtc
 display_name: "go2rtc"
 category: web
 variables:
-  binary: /usr/bin/go2rtc
+  binary: ${bindir}/go2rtc
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

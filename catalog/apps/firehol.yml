@@ -3,7 +3,7 @@ name: firehol
 display_name: "FireHOL"
 category: security
 variables:
-  binary: "/usr/bin/firehol"
+  binary: ${bindir}/firehol
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}"], expect_exit: 1, timeout: 10s }

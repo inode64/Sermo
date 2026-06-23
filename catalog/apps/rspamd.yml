@@ -3,8 +3,8 @@ name: rspamd
 display_name: "Rspamd"
 category: messaging
 variables:
-  binary: "/usr/bin/rspamd"
-  rspamadm: "/usr/bin/rspamadm"
+  binary: ${bindir}/rspamd
+  rspamadm: ${bindir}/rspamadm
 preflight:
   binary: { type: binary, path: "${binary}" }
   rspamadm: { type: binary, path: "${rspamadm}" }

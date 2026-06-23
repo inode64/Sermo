@@ -4,7 +4,7 @@ display_name: "PM2"
 category: system
 description: "Node.js process manager."
 variables:
-  binary: /usr/bin/pm2
+  binary: ${bindir}/pm2
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

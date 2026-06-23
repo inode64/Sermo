@@ -3,7 +3,7 @@ name: in.tftpd
 display_name: "TFTP Server"
 category: network
 variables:
-  binary: "/usr/bin/in.tftpd"
+  binary: ${bindir}/in.tftpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -3,7 +3,7 @@ name: perl
 display_name: "Perl"
 category: runtime
 variables:
-  binary: "/usr/bin/perl"
+  binary: ${bindir}/perl
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

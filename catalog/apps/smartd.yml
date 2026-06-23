@@ -3,7 +3,7 @@ name: smartd
 display_name: "S.M.A.R.T. Daemon"
 category: storage
 variables:
-  binary: "/usr/bin/smartd"
+  binary: ${bindir}/smartd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

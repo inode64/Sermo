@@ -3,7 +3,7 @@ name: syncthing
 display_name: "Syncthing"
 category: storage
 variables:
-  binary: /usr/bin/syncthing
+  binary: ${bindir}/syncthing
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

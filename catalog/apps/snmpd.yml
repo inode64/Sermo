@@ -3,7 +3,7 @@ name: snmpd
 display_name: "Net-SNMP Daemon"
 category: observability
 variables:
-  binary: "/usr/bin/snmpd"
+  binary: ${bindir}/snmpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

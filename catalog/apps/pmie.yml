@@ -4,7 +4,7 @@ display_name: "PCP Inference Engine"
 category: observability
 version_from: pcp
 variables:
-  binary: /usr/bin/pmie
+  binary: ${bindir}/pmie
 preflight:
   binary: { type: binary, path: "${binary}" }
   health: { type: command, command: ["${binary}", "-?"], timeout: 10s, expect_exit: [0, 1] }

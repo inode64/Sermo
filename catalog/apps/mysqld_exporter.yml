@@ -3,7 +3,7 @@ name: mysqld_exporter
 display_name: "Prometheus MySQL Exporter"
 category: observability
 variables:
-  binary: /usr/bin/mysqld_exporter
+  binary: ${bindir}/mysqld_exporter
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

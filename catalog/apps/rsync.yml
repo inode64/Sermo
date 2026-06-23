@@ -2,7 +2,7 @@ kind: app
 name: rsync
 category: storage
 variables:
-  binary: "/usr/bin/rsync"
+  binary: ${bindir}/rsync
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

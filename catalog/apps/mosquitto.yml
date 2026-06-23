@@ -3,7 +3,7 @@ name: mosquitto
 display_name: "Eclipse Mosquitto"
 category: messaging
 variables:
-  binary: /usr/bin/mosquitto
+  binary: ${bindir}/mosquitto
 preflight:
   binary: { type: binary, path: "${binary}" }
   # mosquitto has no --version flag; -h prints the usage with

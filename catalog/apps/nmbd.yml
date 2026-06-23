@@ -3,7 +3,7 @@ name: nmbd
 display_name: "Samba NMB"
 category: storage
 variables:
-  binary: "/usr/bin/nmbd"
+  binary: ${bindir}/nmbd
   testparm:
     - /usr/bin/testparm
     - /usr/sbin/testparm

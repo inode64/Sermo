@@ -5,8 +5,8 @@ category: messaging
 description: "Mailx compatible client"
 variables:
   binary:
-    - /usr/bin/s-nail
-    - /usr/bin/mailx
+    - ${bindir}/s-nail
+    - ${bindir}/mailx
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }
