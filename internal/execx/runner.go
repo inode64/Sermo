@@ -194,11 +194,25 @@ func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, 
 	return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
 }
 
+// IsContextErr reports whether err is a context cancellation or deadline.
+func IsContextErr(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
 // ContextFailure formats a context deadline or cancel error for operator-facing
 // check messages when the timeout is enforced by context.WithTimeout rather than
 // execx.Run directly.
 func ContextFailure(err error, timeout time.Duration) string {
 	return OperatorFailure(err, Result{ExitCode: -1}, timeout)
+}
+
+// FormatContextOrError returns an operator-facing message for context errors, or
+// err.Error() for other failures.
+func FormatContextOrError(err error, timeout time.Duration) string {
+	if IsContextErr(err) {
+		return ContextFailure(err, timeout)
+	}
+	return err.Error()
 }
 
 // OperatorFailure formats a command run failure for check, probe and hook status
@@ -209,7 +223,10 @@ func OperatorFailure(err error, res Result, timeout time.Duration) string {
 	if err == nil {
 		return ""
 	}
-	if res.ExitCode == -1 && errors.Is(err, context.DeadlineExceeded) {
+	if errors.Is(err, context.Canceled) {
+		return "cancelled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
 		d := timeout
 		if d <= 0 && res.Duration > 0 {
 			d = res.Duration.Round(time.Millisecond)
