@@ -6,6 +6,7 @@ package app
 import (
 	"log/slog"
 
+	"sermo/internal/checks"
 	"sermo/internal/operation"
 )
 
@@ -19,6 +20,23 @@ type Event struct {
 	Action  string
 	Status  string
 	Message string
+	// Output is the bounded stdout/stderr of the failing command behind this
+	// event (app probe or service `command` check), shown expandable in the UI so
+	// operators can see why it failed. Empty for events without command output.
+	Output string
+}
+
+// resultOutput extracts the bounded command output a check stored under
+// Data["output"] (set by `command` checks and app probes on failure), for
+// threading into an event's Output field. Empty when absent.
+func resultOutput(r checks.Result) string {
+	if r.Data == nil {
+		return ""
+	}
+	if s, ok := r.Data["output"].(string); ok {
+		return s
+	}
+	return ""
 }
 
 // operationEventEmitter adapts the daemon event log to the operation engine's

@@ -338,6 +338,15 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	defer cancel()
 
 	res, err := c.runCommand(ctx)
+	// fail builds a failing result and attaches the bounded command output so the
+	// emitted event can show WHY the command failed.
+	fail := func(msg string) Result {
+		r := c.result(false, msg, start)
+		if out := BoundedOutput(res.Stdout, res.Stderr); out != "" {
+			r.Data = map[string]any{"output": out}
+		}
+		return r
+	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
 		if stderr := FirstNonEmptyLine(res.Stderr); stderr != "" {
@@ -345,22 +354,25 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		} else if err != nil {
 			msg += ": " + err.Error()
 		}
-		return c.result(false, msg, start)
+		return fail(msg)
 	}
 	if ok, detail := c.stdout.Match(res.Stdout); !ok {
-		return c.result(false, fmt.Sprintf("exit %d; stdout %s", res.ExitCode, detail), start)
+		return fail(fmt.Sprintf("exit %d; stdout %s", res.ExitCode, detail))
 	}
 	if ok, detail := c.stderr.Match(res.Stderr); !ok {
-		return c.result(false, fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail), start)
+		return fail(fmt.Sprintf("exit %d; stderr %s", res.ExitCode, detail))
 	}
 	if ok, detail := c.version.Match(VersionOutput(res.Stdout, res.Stderr)); !ok {
-		return c.result(false, fmt.Sprintf("exit %d; version %s", res.ExitCode, detail), start)
+		return fail(fmt.Sprintf("exit %d; version %s", res.ExitCode, detail))
 	}
 	if c.analyzer.Active() {
 		if sev, id, line := c.analyzer.Analyze(res.Stdout, res.Stderr); sev != SevOK {
 			r := c.result(false, fmt.Sprintf("exit %d; %s pattern %q: %s", res.ExitCode, sev, id, FirstNonEmptyLine(line)), start)
 			r.Optional = sev == SevWarning
 			r.Data = map[string]any{"pattern_id": id, "pattern_severity": sev.String(), "pattern_line": line}
+			if out := BoundedOutput(res.Stdout, res.Stderr); out != "" {
+				r.Data["output"] = out
+			}
 			return r
 		}
 	}
@@ -873,4 +885,54 @@ func FirstNonEmptyLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// Bounds for BoundedOutput: command output kept in an event is capped so a
+// chatty command cannot bloat the event log or the dashboard.
+const (
+	boundedOutputMaxLines = 40
+	boundedOutputMaxBytes = 4096
+)
+
+// BoundedOutput combines a failing command's stdout and stderr into the diagnostic
+// blob stored on an event's Output field. It keeps the TAIL (errors usually print
+// last) within ~40 lines / ~4 KB, labelling each stream, and prefixes a
+// "… (truncated)" marker when anything was dropped. Returns "" when both streams
+// are empty.
+func BoundedOutput(stdout, stderr string) string {
+	var parts []string
+	if s := TrimOutput(stdout); s != "" {
+		parts = append(parts, "stdout:\n"+s)
+	}
+	if s := TrimOutput(stderr); s != "" {
+		parts = append(parts, "stderr:\n"+s)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return boundTail(strings.Join(parts, "\n"))
+}
+
+// boundTail trims s to the last boundedOutputMaxLines lines and boundedOutputMaxBytes
+// bytes, marking the cut with a leading "… (truncated)" line.
+func boundTail(s string) string {
+	truncated := false
+	lines := strings.Split(s, "\n")
+	if len(lines) > boundedOutputMaxLines {
+		lines = lines[len(lines)-boundedOutputMaxLines:]
+		truncated = true
+	}
+	s = strings.Join(lines, "\n")
+	if len(s) > boundedOutputMaxBytes {
+		s = s[len(s)-boundedOutputMaxBytes:]
+		// Drop a partial first line left by the byte cut.
+		if i := strings.IndexByte(s, '\n'); i >= 0 {
+			s = s[i+1:]
+		}
+		truncated = true
+	}
+	if truncated {
+		return "… (truncated)\n" + s
+	}
+	return s
 }

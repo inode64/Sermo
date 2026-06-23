@@ -116,7 +116,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	// satisfied. This makes the alert visible in the web UI (state=failed,
 	// Alerts/Watches counts, failed filter) and in the event log even for
 	// bare watches that have no `then` (pure monitor-only / alert-only case).
-	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message})
+	w.emit(Event{Watch: w.Name, Kind: "firing", Message: res.Message, Output: resultOutput(res)})
 	if w.DryRun {
 		w.emit(Event{Watch: w.Name, Kind: "dry-run", Message: w.dryRunMessage()})
 		return
