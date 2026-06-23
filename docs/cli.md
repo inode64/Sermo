@@ -148,7 +148,8 @@ daemon's computed state (including `starting` during startup settling); if the
 web API is unreachable it falls back to the init backend plus local monitor
 metadata, as before. The same preference applies to `sermoctl watch status
 WATCH` and to the STATUS column of `sermoctl apps` for installed applications
-monitored by the daemon.
+monitored by the daemon. Catalog apps whose binary is not installed are omitted
+from `sermoctl apps` and do not participate in startup settling.
 Sermo reads the service's `service:` candidates, picks the first unit known by
 the active backend, and normalizes systemd names with `.service` when needed.
 
