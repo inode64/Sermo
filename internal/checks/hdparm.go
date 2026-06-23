@@ -45,7 +45,7 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return c.result(false, "hdparm "+c.device+": "+msg, start)
 	}
@@ -89,7 +89,7 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return nil, errors.New(msg)
 	}

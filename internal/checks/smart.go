@@ -32,7 +32,7 @@ func (c smartCheck) Run(ctx context.Context) Result {
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, c.timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return c.result(false, "smart "+c.device+": "+msg, start)
 	}
@@ -83,7 +83,7 @@ func SampleSmart(ctx context.Context, runner execx.Runner, device string, timeou
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(runErr, res, timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return SmartSample{}, fmt.Errorf("%s", msg)
 	}

@@ -311,7 +311,7 @@ func runExitProbe(ctx context.Context, runner execx.Runner, cmd probeCommand) (b
 	case res.ExitCode == -1:
 		msg := execx.OperatorFailure(err, res, cmd.timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return false, "error: " + msg, checks.BoundedOutput(res.Stdout, res.Stderr)
 	case err != nil && res.ExitCode == 0:
@@ -341,7 +341,7 @@ func runVersionProbe(ctx context.Context, runner execx.Runner, tree map[string]a
 	case res.ExitCode == -1:
 		msg := execx.OperatorFailure(err, res, cmd.timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return fail("error: " + msg)
 	case err != nil && res.ExitCode == 0:

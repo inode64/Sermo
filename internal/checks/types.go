@@ -350,7 +350,7 @@ func (c commandCheck) Run(ctx context.Context) Result {
 	if res.ExitCode == -1 {
 		msg := execx.OperatorFailure(err, res, c.timeout)
 		if msg == "" {
-			msg = "command failed to run"
+			msg = execx.CommandDidNotStart
 		}
 		return fail(msg)
 	}
