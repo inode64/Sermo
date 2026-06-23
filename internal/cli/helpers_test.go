@@ -33,11 +33,11 @@ func TestNotifierNamesSorted(t *testing.T) {
 		},
 	}}}
 	got := notifierNames(cfg)
-	if len(got) != 3 || got[0] != "alfa" || got[1] != "tty" || got[2] != "zeta" {
-		t.Fatalf("notifierNames = %v, want sorted [alfa tty zeta]", got)
+	if len(got) != 4 || got[0] != "alfa" || got[1] != "tty" || got[2] != "wall" || got[3] != "zeta" {
+		t.Fatalf("notifierNames = %v, want sorted [alfa tty wall zeta]", got)
 	}
-	if got := notifierNames(&config.Config{}); len(got) != 1 || got[0] != "tty" {
-		t.Fatalf("builtin notifiers = %v, want [tty]", got)
+	if got := notifierNames(&config.Config{}); len(got) != 2 || got[0] != "tty" || got[1] != "wall" {
+		t.Fatalf("builtin notifiers = %v, want [tty wall]", got)
 	}
 }
 

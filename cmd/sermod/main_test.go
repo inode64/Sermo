@@ -236,16 +236,16 @@ func TestEngineAndNotifierAccessors(t *testing.T) {
 	if got := app.EngineString(cfg, "missing"); got != "" {
 		t.Fatalf("engineString(missing) = %q, want empty", got)
 	}
-	if raw := cfg.Notifiers(); len(raw) != 2 || raw["ops"] == nil || raw["tty"] == nil {
-		t.Fatalf("Notifiers() = %v, want ops plus builtin tty", raw)
+	if raw := cfg.Notifiers(); len(raw) != 3 || raw["ops"] == nil || raw["tty"] == nil || raw["wall"] == nil {
+		t.Fatalf("Notifiers() = %v, want ops plus builtin terminal notifiers", raw)
 	}
 
 	bare := &config.Config{Global: config.Global{Raw: map[string]any{}}}
 	if app.EngineString(bare, "backend") != "" {
 		t.Fatal("engine accessor on an empty config must return zero value")
 	}
-	if raw := bare.Notifiers(); len(raw) != 1 || raw["tty"] == nil {
-		t.Fatalf("empty config notifiers = %v, want builtin tty", raw)
+	if raw := bare.Notifiers(); len(raw) != 2 || raw["tty"] == nil || raw["wall"] == nil {
+		t.Fatalf("empty config notifiers = %v, want builtin terminal notifiers", raw)
 	}
 
 	// Exercise improved coercion (now via cfgval): string forms for ints and durations are accepted

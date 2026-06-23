@@ -17,6 +17,17 @@ func cfgWithWatches(raw map[string]any) *config.Config {
 	return &config.Config{Global: config.Global{Raw: map[string]any{"watches": raw}}}
 }
 
+type typedNotifier struct {
+	name string
+	typ  string
+}
+
+func (n typedNotifier) Name() string { return n.name }
+func (n typedNotifier) Type() string { return n.typ }
+func (n typedNotifier) Send(context.Context, notify.Message) error {
+	return nil
+}
+
 func TestBuildWatchesStorageExpandAction(t *testing.T) {
 	cfg := cfgWithWatches(map[string]any{
 		"expand-backup": map[string]any{
@@ -88,6 +99,16 @@ func TestBuildWatchesStorageExpandNotifyNoneSuppressesDefault(t *testing.T) {
 	}
 	if len(watches[0].Notifiers) != 0 {
 		t.Fatalf("notify none must suppress global default, got %v", watches[0].Notifiers)
+	}
+}
+
+func TestResolveNotifiersWallSuppressesTTY(t *testing.T) {
+	got := resolveNotifiers([]string{"tty", "wall"}, map[string]notify.Notifier{
+		"tty":  typedNotifier{name: "tty", typ: "tty"},
+		"wall": typedNotifier{name: "wall", typ: "wall"},
+	})
+	if len(got) != 1 || got[0].Name() != "wall" {
+		t.Fatalf("resolveNotifiers = %v, want wall only", got)
 	}
 }
 

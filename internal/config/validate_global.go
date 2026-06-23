@@ -92,6 +92,10 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			if users, present := entry["users"]; present && !validStringOrStringList(users) {
 				add("notifiers.%s.users must be a string or list of strings", name)
 			}
+		case "wall":
+			if _, present := entry["users"]; present {
+				add("notifiers.%s.users is not supported for a wall notifier; use type tty to target specific users", name)
+			}
 		case "":
 			add("notifiers.%s.type is required", name)
 		default:

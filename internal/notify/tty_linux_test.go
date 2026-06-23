@@ -36,6 +36,24 @@ func TestTTYNotifierTargetsFilterUsersAndUnsafeLines(t *testing.T) {
 	}
 }
 
+func TestWallNotifierTargetsAllUsers(t *testing.T) {
+	n, err := buildWall("wall", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wn := n.(*ttyNotifier)
+	got := wn.targetTTYs([]ttySession{
+		{User: "root", Line: "pts/0"},
+		{User: "fran", Line: "pts/1"},
+	})
+	if len(got) != 2 || got[0] != "/dev/pts/0" || got[1] != "/dev/pts/1" {
+		t.Fatalf("wall targetTTYs = %v, want every active terminal", got)
+	}
+	if wn.Type() != "wall" {
+		t.Fatalf("wall type = %q", wn.Type())
+	}
+}
+
 func TestTTYNotifierSendToTargetsWritesEachTarget(t *testing.T) {
 	var paths []string
 	n := &ttyNotifier{

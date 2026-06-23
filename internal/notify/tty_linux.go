@@ -36,6 +36,7 @@ type ttySession struct {
 
 type ttyNotifier struct {
 	name      string
+	typ       string
 	users     map[string]struct{}
 	utmpPaths []string
 	devRoot   string
@@ -47,7 +48,20 @@ type ttyNotifier struct {
 func buildTTY(name string, entry map[string]any) (Notifier, error) {
 	return &ttyNotifier{
 		name:      name,
+		typ:       "tty",
 		users:     stringSet(cfgval.StringList(entry["users"])),
+		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
+		devRoot:   "/dev",
+		writeTTY:  writeTTYLinux,
+		hostname:  os.Hostname,
+		now:       time.Now,
+	}, nil
+}
+
+func buildWall(name string, entry map[string]any) (Notifier, error) {
+	return &ttyNotifier{
+		name:      name,
+		typ:       "wall",
 		utmpPaths: []string{"/run/utmp", "/var/run/utmp"},
 		devRoot:   "/dev",
 		writeTTY:  writeTTYLinux,
@@ -58,7 +72,12 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 
 func (n *ttyNotifier) Name() string { return n.name }
 
-func (n *ttyNotifier) Type() string { return "tty" }
+func (n *ttyNotifier) Type() string {
+	if n.typ == "" {
+		return "tty"
+	}
+	return n.typ
+}
 
 func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
 	sessions, err := readUtmpSessions(n.utmpPaths)
@@ -67,7 +86,7 @@ func (n *ttyNotifier) Send(ctx context.Context, msg Message) error {
 	}
 	targets := n.targetTTYs(sessions)
 	if len(targets) == 0 {
-		return errors.New("tty notifier found no active terminal sessions")
+		return fmt.Errorf("%s notifier found no active terminal sessions", n.Type())
 	}
 	return n.sendToTargets(ctx, targets, msg)
 }
@@ -101,7 +120,7 @@ func (n *ttyNotifier) sendToTargets(ctx context.Context, targets []string, msg M
 	if len(errs) > 0 {
 		err := errors.Join(errs...)
 		if delivered > 0 {
-			return fmt.Errorf("tty notifier delivered to %d terminal(s), failed on %d: %w", delivered, len(errs), err)
+			return fmt.Errorf("%s notifier delivered to %d terminal(s), failed on %d: %w", n.Type(), delivered, len(errs), err)
 		}
 		return err
 	}
