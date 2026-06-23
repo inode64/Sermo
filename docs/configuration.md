@@ -669,7 +669,11 @@ actually has data rather than merely having launched. While settling, the verbos
 `message` reports progress (`starting: 3/10 monitored targets have reported`) and
 the web UI header shows `status: starting` with a neutral grey tab favicon. Each
 monitored service, host watch and installed app also reports `state: starting`
-until its init backend is `active` and its first observation cycle has completed;
+until its init backend is `active` and its first observation cycle has completed.
+Only **installed** catalog applications with an active app-monitor participate in
+that settling registry; catalog entries whose binary is not present are omitted
+from `GET /api/applications` and never show `starting`. During settling, installed
+apps may appear with `state: starting` before their first app-watch cycle completes;
 during that window Sermo does not run service checks (while the backend is still
 inactive), and it suppresses alerts, hooks, notifications and automatic
 remediation on the first active observation cycle. During
