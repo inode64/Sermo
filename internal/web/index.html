@@ -4170,6 +4170,12 @@ function renderOverview(ctx) {
       target: "watches-section",
     }));
   }
+  const alertsTarget = alerts
+    ? (failedSvcs.length ? "failed-services"
+      : (failedWatches.length ? "failed-watches"
+        : (failedApps.length ? "failed-apps"
+          : (activeLocks.length ? "locks-section" : "services-section"))))
+    : "services-section";
   tiles.push(tile({
     label: "Alerts",
     value: String(alerts),
@@ -4177,7 +4183,7 @@ function renderOverview(ctx) {
     sub: alerts
       ? [failedSvcs.length && `${failedSvcs.length} svc`, failedWatches.length && `${failedWatches.length} watch`, failedApps.length && `${failedApps.length} app`, activeLocks.length && `${activeLocks.length} lock`].filter(Boolean).join(" · ")
       : "nothing on fire",
-    target: alerts ? "failed-services" : "services-section",
+    target: alertsTarget,
   }));
   if (mon && mon.total != null) {
     tiles.push(tile({
