@@ -1239,6 +1239,9 @@ func TestWebBackendSwapWatchIncludesUsage(t *testing.T) {
 	if len(watches) != 1 || watches[0].Swap == nil {
 		t.Fatalf("watches = %+v, want one with swap usage", watches)
 	}
+	if watches[0].State == "failed" || len(watches[0].Readings) != 0 {
+		t.Fatalf("swap watch state/readings = %q/%+v, want no probe failure", watches[0].State, watches[0].Readings)
+	}
 	sw := watches[0].Swap
 	if sw.TotalBytes != 2048 || sw.UsedBytes != 512 || sw.FreeBytes != 1536 || sw.UsedPct != 25 {
 		t.Fatalf("swap view = %+v, want 512/2048 used (25%%, 1536 free)", sw)

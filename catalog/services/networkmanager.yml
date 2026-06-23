@@ -21,16 +21,18 @@ checks:
     expect: active
   status:
     type: command
+    optional: true
     command:
-    - nmcli
+    - ${networkmanager_nmcli}
     - general
     - status
     timeout: 10s
 postflight:
   status:
     type: command
+    optional: true
     command:
-    - nmcli
+    - ${networkmanager_nmcli}
     - general
     - status
     timeout: 10s
@@ -42,15 +44,6 @@ policy:
     initial: 15m
     max: 1h
 rules:
-  restart-if-status-failed:
-    type: remediation
-    if:
-      failed:
-        check: status
-    for:
-      cycles: 3
-    then:
-      action: restart
   restart-if-worker-thread-hot:
     type: remediation
     if:

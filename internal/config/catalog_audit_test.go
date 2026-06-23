@@ -1043,9 +1043,24 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	if got := cfgval.String(nested(t, body, "variables")["config"]); got != "/etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf" {
 		t.Fatalf("php-fpm config variable = %q", got)
 	}
+	wantPidfiles := []string{
+		"/run/php-fpm/php-fpm-${version}${sep}${instance}.pid",
+		"/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid",
+		"/run/php-fpm-php${version}${sep}${instance}.pid",
+	}
+	if got := cfgval.StringList(body["pidfile"]); !slices.Equal(got, wantPidfiles) {
+		t.Fatalf("php-fpm pidfile candidates = %v, want %v", got, wantPidfiles)
+	}
+	pidfileCheck := nested(t, body, "checks", "pidfile")
+	if !cfgval.Bool(pidfileCheck["optional"]) {
+		t.Fatalf("php-fpm pidfile check optional = %v, want true", pidfileCheck["optional"])
+	}
+	if got := cfgval.StringList(pidfileCheck["path"]); !slices.Equal(got, wantPidfiles) {
+		t.Fatalf("php-fpm pidfile check paths = %v, want %v", got, wantPidfiles)
+	}
 	config := nested(t, body, "preflight", "config")
 	command, _ := config["command"].([]any)
-	want := []any{"${binary}", "--test", "--fpm-config", "${config}", "--pid", "${pidfile}"}
+	want := []any{"${binary}", "--test", "--fpm-config", "${config}", "--pid", "${config_test_pidfile}"}
 	if len(command) != len(want) {
 		t.Fatalf("php-fpm config command = %v, want %v", command, want)
 	}
@@ -1057,6 +1072,39 @@ func TestCatalogPHPFPMVersionedConfigTestUsesConfigFile(t *testing.T) {
 	rules := nested(t, body, "rules")
 	if _, ok := rules["restart-if-tcp-failed"]; ok {
 		t.Fatal("php-fpm must not remediate on the optional tcp check by default")
+	}
+}
+
+func TestCatalogNetworkManagerStatusIsAuxiliary(t *testing.T) {
+	root := repoRoot(t)
+	app := catalogDocByName(t, root, "apps", "networkmanager")
+	body := catalogDocByName(t, root, "services", "networkmanager")
+
+	appVariables := nested(t, app, "variables")
+	for _, path := range []string{"/usr/bin/nmcli", "/usr/sbin/nmcli"} {
+		if !slices.Contains(cfgval.StringList(appVariables["nmcli"]), path) {
+			t.Fatalf("networkmanager nmcli candidates = %v, want %s", appVariables["nmcli"], path)
+		}
+	}
+	nmcliPreflight := nested(t, app, "preflight", "nmcli")
+	if !cfgval.Bool(nmcliPreflight["optional"]) {
+		t.Fatalf("networkmanager nmcli preflight optional = %v, want true", nmcliPreflight["optional"])
+	}
+
+	for _, section := range []string{"checks", "postflight"} {
+		status := nested(t, body, section, "status")
+		if !cfgval.Bool(status["optional"]) {
+			t.Fatalf("networkmanager %s.status optional = %v, want true", section, status["optional"])
+		}
+		command := cfgval.StringList(status["command"])
+		want := []string{"${networkmanager_nmcli}", "general", "status"}
+		if !slices.Equal(command, want) {
+			t.Fatalf("networkmanager %s.status command = %v, want %v", section, command, want)
+		}
+	}
+	rules := nested(t, body, "rules")
+	if _, ok := rules["restart-if-status-failed"]; ok {
+		t.Fatal("networkmanager must not remediate on the auxiliary nmcli status check")
 	}
 }
 
