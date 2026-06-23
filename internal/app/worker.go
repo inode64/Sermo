@@ -143,7 +143,14 @@ func (w *Worker) RunCycle(ctx context.Context) {
 
 	observeOnly := w.Settling != nil && !w.Settling.Observed(w.Service)
 	if observeOnly && !w.backendActive(ctx) {
-		return // wait for the init backend to report active before the first check
+		// The init backend is inactive: complete startup observation without
+		// running checks so stopped services do not block daemon readiness or
+		// stay in state "starting" forever. The web/CLI surface the inactive
+		// backend as failed once observed.
+		if w.Settling != nil {
+			w.Settling.MarkObserved(w.Service)
+		}
+		return
 	}
 
 	now := w.Now
