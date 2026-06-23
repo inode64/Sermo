@@ -116,7 +116,7 @@ func (b *WebBackend) firewallRulesWatchView(w *webWatch) (*web.WatchMeter, []web
 	defer cancel()
 	sample, err := sampler(ctx, backend, runner)
 	if err != nil {
-		msg := err.Error()
+		msg := execx.FormatContextOrError(err, b.probeTimeout())
 		return nil, watchErrorReadings(msg), "firewall: " + msg
 	}
 	minRules := uint64(1)
