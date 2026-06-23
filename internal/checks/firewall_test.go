@@ -173,6 +173,25 @@ type firewallRun struct {
 	err    error
 }
 
+func TestFirewallRulesCheckCanceledSampler(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c := firewallRulesCheck{
+		base:    base{name: "fw", timeout: time.Millisecond},
+		backend: firewallBackendNftables,
+		sampler: func(context.Context, string, execx.Runner) (FirewallRulesSample, error) {
+			return FirewallRulesSample{}, context.Canceled
+		},
+	}
+	res := c.Run(ctx)
+	if res.OK {
+		t.Fatal("canceled firewall sampler must fail")
+	}
+	if !strings.Contains(res.Message, "firewall: cancelled") {
+		t.Fatalf("message = %q, want firewall: cancelled", res.Message)
+	}
+}
+
 type firewallRunner map[string]firewallRun
 
 func (r firewallRunner) Run(_ context.Context, name string, args ...string) (execx.Result, error) {
