@@ -669,7 +669,10 @@ actually has data rather than merely having launched. While settling, the verbos
 `message` reports progress (`starting: 3/10 monitored targets have reported`) and
 the web UI header shows `status: starting` with a neutral grey tab favicon. Each
 monitored service, host watch and installed app also reports `state: starting`
-until its init backend is `active` and its first observation cycle has completed.
+until its first observation cycle has completed. Services still waiting for an
+`active` init backend complete settling on the first status probe (they surface
+as `failed` while inactive); checks and remediation wait until the backend is
+active.
 Only **installed** catalog applications with an active app-monitor participate in
 that settling registry; catalog entries whose binary is not present are omitted
 from `GET /api/applications` and never show `starting`. During settling, installed
@@ -698,11 +701,9 @@ Use `/livez` to know the process is alive; use `/readyz` before sending traffic 
 to gate a reverse proxy until monitoring has actually begun.
 
 A **monitored service whose init backend stays inactive** (for example a unit you
-intentionally keep stopped) never completes its startup observation cycle, so it
-remains `state: starting` and **`/readyz` keeps returning 503** until that unit
-becomes active or you unmonitor/disable it. This is deliberate: readiness means
-every monitored target has been observed at least once while active, not merely
-configured.
+intentionally keep stopped) completes startup observation on the first status
+probe: it reports `state: failed` and no longer blocks `/readyz`. Sermo still
+defers service checks and automatic remediation until that unit becomes active.
 
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
 results and errors — kept in an in-memory ring (the last 1000); they also go to

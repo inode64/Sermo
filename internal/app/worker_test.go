@@ -63,8 +63,8 @@ func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
 	if _, ok := h.eventOf("alert"); ok {
 		t.Fatal("inactive backend must not fire alerts during startup")
 	}
-	if settling.Observed("web") {
-		t.Fatal("inactive backend must not mark the service observed")
+	if !settling.Observed("web") {
+		t.Fatal("inactive backend must complete startup observation without running checks")
 	}
 }
 
@@ -907,5 +907,39 @@ func TestWorkerShadowModeReportsSuppression(t *testing.T) {
 	}
 	if !w.State.LastActionAt.Equal(t0.Add(-30 * time.Second)) {
 		t.Errorf("shadow must not mutate the seeded cooldown state, LastActionAt=%v", w.State.LastActionAt)
+	}
+}
+
+func TestWorkerSettlesInactiveBackendOnObserveOnly(t *testing.T) {
+	ready := NewReadiness("systemd", 1, 0)
+	settling := NewSettling(ready)
+	settling.Reset([]string{"web"})
+	ready.ExpectFirstCycles(1)
+
+	var checksRan int
+	w := &Worker{
+		Service:  "web",
+		Settling: settling,
+		CheckDeps: checks.Deps{
+			Status: func(context.Context) (servicemgr.Status, error) {
+				return servicemgr.StatusInactive, nil
+			},
+		},
+		Checks: func(context.Context, checks.Deps) map[string]checks.Result {
+			checksRan++
+			return nil
+		},
+	}
+
+	w.RunCycle(context.Background())
+
+	if checksRan != 0 {
+		t.Fatalf("inactive observe-only cycle ran checks %d times, want 0", checksRan)
+	}
+	if !settling.Observed("web") {
+		t.Fatal("inactive backend must complete startup observation")
+	}
+	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
+		t.Fatalf("readiness = %+v, want ready after inactive observe-only cycle", rep)
 	}
 }
