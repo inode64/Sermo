@@ -9,6 +9,7 @@ const (
 	TargetStateRunning       = "running"
 	TargetStatePaused        = "paused"
 	TargetStateStopped       = "stopped"
+	TargetStateStarting      = "starting"
 	TargetStateOK            = "ok"
 	TargetStateMonitorized   = "monitorized"
 	TargetStateUnmonitorized = "unmonitorized"
@@ -17,9 +18,12 @@ const (
 
 // ServiceState folds config, backend status and monitoring health into the
 // single operator-facing state shown by sermoctl and the web dashboard.
-func ServiceState(enabled, monitored bool, backendStatus, checkHealth string) string {
+func ServiceState(enabled, monitored bool, backendStatus, checkHealth string, observed bool) string {
 	if !enabled {
 		return TargetStateDisabled
+	}
+	if monitored && !observed {
+		return TargetStateStarting
 	}
 	active := strings.EqualFold(backendStatus, "active")
 	paused := strings.EqualFold(backendStatus, "paused")
@@ -41,12 +45,15 @@ func ServiceState(enabled, monitored bool, backendStatus, checkHealth string) st
 // WatchState folds config, monitor state and the last known watch error into the
 // operator-facing state shown for host watches. Watches are not service-manager
 // units, so they do not have running/stopped states.
-func WatchState(enabled, monitored, failed bool) string {
+func WatchState(enabled, monitored, failed bool, observed bool) string {
 	if !enabled {
 		return TargetStateDisabled
 	}
 	if !monitored {
 		return TargetStateUnmonitorized
+	}
+	if monitored && !observed {
+		return TargetStateStarting
 	}
 	if failed {
 		return TargetStateFailed

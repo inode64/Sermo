@@ -28,7 +28,7 @@ Keep changes concrete:
 | Area | Endpoint | Notes |
 | --- | --- | --- |
 | Current user | `GET /api/whoami` | role and action permissions |
-| Readiness | `GET /readyz?verbose` | startup / shutdown banner |
+| Readiness | `GET /readyz?verbose` | daemon `status:` in the top bar (`starting` / `ok` / …) |
 | Services | `GET /api/services` | configured runtime services loaded by sermod (not `sermoctl services` catalog inventory) |
 | Service expansion | `GET /api/services/{name}` | checks, process info, rules |
 | Service check metrics | `GET /api/services/{name}/metrics?check=NAME[&metric=KEY]` | latency chart when `metric` is omitted; named numeric metric series when present |

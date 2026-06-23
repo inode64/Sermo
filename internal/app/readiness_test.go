@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sermo/internal/checks"
+	"sermo/internal/servicemgr"
 )
 
 func TestReadinessLifecycle(t *testing.T) {
@@ -71,8 +72,19 @@ func TestReadinessMarkReadyDoesNotUndoShutdown(t *testing.T) {
 
 func TestSchedulerMarksReadiness(t *testing.T) {
 	ready := NewReadiness("systemd", 1, 0)
+	settling := NewSettling(ready)
+	settling.Reset([]string{"a"})
 	workers := []*Worker{
-		{Service: "a", Checks: func(context.Context, checks.Deps) map[string]checks.Result { return nil }},
+		{
+			Service:  "a",
+			Settling: settling,
+			CheckDeps: checks.Deps{
+				Status: func(context.Context) (servicemgr.Status, error) {
+					return servicemgr.StatusActive, nil
+				},
+			},
+			Checks: func(context.Context, checks.Deps) map[string]checks.Result { return nil },
+		},
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

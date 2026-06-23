@@ -113,6 +113,7 @@ type WebBackend struct {
 	notifiers        map[string]*webNotifier
 	store            MonitorStore
 	snapshots        *Snapshots
+	settling         *Settling
 	sla              SLAReader
 	events           *EventLog
 	remediation      *RemediationRegistry
@@ -196,6 +197,7 @@ func NewWebBackend(cfg *config.Config, deps Deps) (*WebBackend, []string) {
 		notifiers:        map[string]*webNotifier{},
 		store:            deps.Monitor,
 		snapshots:        deps.Snapshots,
+		settling:         deps.Settling,
 		events:           deps.Events,
 		remediation:      deps.Remediation,
 		ruleWindows:      deps.RuleWindows,
@@ -424,7 +426,7 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 	svc.LastEvent = lastEvent
 	if e.disabled {
 		svc.Status = "disabled"
-		svc.State = ServiceState(false, false, svc.Status, "")
+		svc.State = ServiceState(false, false, svc.Status, "", true)
 		svc.Monitored = false
 		svc.CheckHealth = ""
 		svc.RemediationState = "disabled"
@@ -446,7 +448,8 @@ func (b *WebBackend) viewWithRuntime(ctx context.Context, name string, e *webEnt
 		svc.ActiveLocks = activeLocks
 	}
 	b.decorateRemediation(name, &svc)
-	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth)
+	observed := b.settling == nil || b.settling.Observed(name)
+	svc.State = ServiceState(svc.Enabled, svc.Monitored, svc.Status, svc.CheckHealth, observed)
 	if len(e.alsoApply) > 0 {
 		svc.AlsoApply = slices.Clone(e.alsoApply)
 	}
@@ -671,7 +674,9 @@ func (b *WebBackend) Watches(ctx context.Context) []web.Watch {
 			ww.LastActivity = activity.At
 			ww.LastActivityKind = activity.Kind
 		}
-		ww.State = WatchState(ww.Enabled, ww.Monitored, watchViewFailed(ww))
+		observed := b.settling == nil || b.settling.Observed(name)
+		failed := observed && watchViewFailed(ww)
+		ww.State = WatchState(ww.Enabled, ww.Monitored, failed, observed)
 		out = append(out, ww)
 	}
 	return out
@@ -1871,27 +1876,62 @@ func (b *WebBackend) loadApplications(ctx context.Context) []web.Application {
 	if b.applicationsList != nil {
 		return b.withApplicationSLA(b.applicationsList(ctx))
 	}
-	reports := appinspect.List(ctx, execx.CommandRunner{}, b.cfg, config.CategoryApp, false, appinspect.WithUserLookup(b.userLookup))
-	if len(reports) == 0 {
+	if b.cfg == nil {
 		return nil
 	}
-	out := make([]web.Application, 0, len(reports))
-	for _, r := range reports {
-		out = append(out, web.Application{
-			Name:          r.Name,
-			DisplayName:   r.DisplayName,
-			Category:      r.Category,
-			Binary:        r.Binary,
-			Permissions:   r.Permissions,
-			User:          r.User,
-			Group:         r.Group,
-			Version:       r.Version,
-			VersionShort:  r.VersionShort,
-			VersionSource: r.VersionSource,
-			Status:        r.Status,
-		})
+	names := b.cfg.DaemonsInCategory(config.CategoryApp)
+	if len(names) == 0 {
+		return nil
+	}
+	runner := execx.CommandRunner{}
+	opts := appinspect.WithUserLookup(b.userLookup)
+	out := make([]web.Application, 0, len(names))
+	for _, name := range names {
+		if b.settling != nil && !b.settling.Observed(name) {
+			resolved, _ := b.cfg.ResolveCatalog(config.CategoryApp, name)
+			out = append(out, web.Application{
+				Name:        name,
+				DisplayName: config.DisplayName(resolved.Tree, name),
+				Category:    config.CategoryLabel(resolved.Tree, config.CategoryApp),
+				State:       TargetStateStarting,
+			})
+			continue
+		}
+		r := appinspect.InspectOne(ctx, runner, b.cfg, name, opts)
+		if !r.Installed {
+			continue
+		}
+		out = append(out, applicationFromReport(r))
 	}
 	return b.withApplicationSLA(out)
+}
+
+func applicationFromReport(r appinspect.Report) web.Application {
+	return web.Application{
+		Name:          r.Name,
+		DisplayName:   r.DisplayName,
+		Category:      r.Category,
+		Binary:        r.Binary,
+		Permissions:   r.Permissions,
+		User:          r.User,
+		Group:         r.Group,
+		Version:       r.Version,
+		VersionShort:  r.VersionShort,
+		VersionSource: r.VersionSource,
+		Status:        r.Status,
+		State:         applicationStateFromReport(r),
+	}
+}
+
+func applicationStateFromReport(r appinspect.Report) string {
+	status := strings.TrimSpace(strings.ToLower(r.Status))
+	if status == "" || status == "ok" || r.OK {
+		return TargetStateOK
+	}
+	if status == "not installed" || status == "no binary configured" || strings.HasPrefix(status, "error:") {
+		return TargetStateFailed
+	}
+	return "warning"
 }
 
 func (b *WebBackend) withApplicationSLA(apps []web.Application) []web.Application {

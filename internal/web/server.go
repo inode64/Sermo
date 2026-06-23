@@ -105,6 +105,7 @@ type Application struct {
 	VersionShort  string      `json:"version_short"`            // numeric version, at most the patchlevel
 	VersionSource string      `json:"version_source,omitempty"` // app whose version probe supplied this version
 	Status        string      `json:"status"`                   // ok, or an error description
+	State         string      `json:"state,omitempty"`          // starting | ok | failed | warning
 	SLA           []SLAWindow `json:"sla,omitempty"`            // service SLA when this app maps to a monitored service
 }
 

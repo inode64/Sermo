@@ -15,6 +15,7 @@ type watchSnapshot struct {
 	policyState  *rules.RemediationState
 	firing       bool
 	lastNotifyAt time.Time
+	settled      bool
 }
 
 func captureWatchState(watches []*Watch) map[string]watchSnapshot {
@@ -23,7 +24,7 @@ func captureWatchState(watches []*Watch) map[string]watchSnapshot {
 		if w == nil {
 			continue
 		}
-		snap := watchSnapshot{firing: w.firing, lastNotifyAt: w.lastNotifyAt, policyState: cloneRemediationState(&w.policyState)}
+		snap := watchSnapshot{firing: w.firing, lastNotifyAt: w.lastNotifyAt, settled: w.settled, policyState: cloneRemediationState(&w.policyState)}
 		if cloned := w.state.Clone(); cloned != nil {
 			snap.state = *cloned
 		}
@@ -41,6 +42,7 @@ func applyWatchState(watches []*Watch, saved map[string]watchSnapshot) {
 		w.state = snap.state
 		w.firing = snap.firing
 		w.lastNotifyAt = snap.lastNotifyAt
+		w.settled = snap.settled
 		if snap.policyState != nil {
 			w.policyState = *snap.policyState
 		}
