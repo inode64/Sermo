@@ -34,6 +34,30 @@ func TestStoreMonitorStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStoreEventAppDimensionRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	if err := s.RecordEvent(EventRecord{Service: "web", Kind: "action", Message: "restart"}); err != nil {
+		t.Fatalf("RecordEvent service: %v", err)
+	}
+	if err := s.RecordEvent(EventRecord{App: "salt-minion", Kind: "firing", Message: "error: exit 1"}); err != nil {
+		t.Fatalf("RecordEvent app: %v", err)
+	}
+	recs, err := s.RecentEvents(0)
+	if err != nil {
+		t.Fatalf("RecentEvents: %v", err)
+	}
+	if len(recs) != 2 {
+		t.Fatalf("want 2 events, got %d", len(recs))
+	}
+	// newest first: the app event
+	if recs[0].App != "salt-minion" || recs[0].Service != "" || recs[0].Message != "error: exit 1" {
+		t.Fatalf("app event did not round-trip: %+v", recs[0])
+	}
+	if recs[1].Service != "web" || recs[1].App != "" {
+		t.Fatalf("service event did not round-trip: %+v", recs[1])
+	}
+}
+
 func TestStorePanicDefaultsToOff(t *testing.T) {
 	s := openTemp(t)
 
