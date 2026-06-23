@@ -777,88 +777,94 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 		t.Fatalf("nebula config command = %v, want app binary token first", nebulaCommand)
 	}
 
+	// wantBase lists the acceptable resolved-tool basenames. The catalog binary
+	// lists span several standard directories (and ${bindir} expands them
+	// further), and an app may legitimately resolve to a fallback binary present
+	// on the test host (e.g. mariadb -> mysqld), so the assertion is on the
+	// program name, not its exact path — that path is verified host-independently
+	// by the command-uses-resolved-tool check below.
 	tests := []struct {
 		service      string
 		appToolCheck string
 		toolArgIndex int
-		wantTool     []string
+		wantBase     []string
 		wantContains []string
 	}{
 		{
 			service:      "docker",
 			appToolCheck: "docker-daemon",
 			toolArgIndex: 3,
-			wantTool:     []string{"/usr/bin/dockerd", "/usr/sbin/dockerd"},
+			wantBase:     []string{"dockerd"},
 			wantContains: []string{"--validate", "--config-file"},
 		},
 		{
 			service:      "firewalld",
 			appToolCheck: "firewalld-binary_offline",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/bin/firewall-offline-cmd"},
+			wantBase:     []string{"firewall-offline-cmd"},
 			wantContains: []string{"--check-config", "--system-config", "/etc/firewalld"},
 		},
 		{
 			service:      "fetchmail",
 			appToolCheck: "fetchmail-binary",
 			toolArgIndex: 3,
-			wantTool:     []string{"/usr/bin/fetchmail", "/usr/sbin/fetchmail"},
+			wantBase:     []string{"fetchmail"},
 			wantContains: []string{"--configdump", "-f"},
 		},
 		{
 			service:      "nmbd",
 			appToolCheck: "nmbd-testparm",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/bin/testparm", "/usr/sbin/testparm"},
+			wantBase:     []string{"testparm"},
 			wantContains: []string{"-s"},
 		},
 		{
 			service:      "slapd",
 			appToolCheck: "slapd-slaptest",
 			toolArgIndex: 3,
-			wantTool:     []string{"/usr/sbin/slaptest", "/usr/bin/slaptest", "/usr/bin/openldap/slaptest"},
+			wantBase:     []string{"slaptest"},
 			wantContains: []string{"-Q", "-u"},
 		},
 		{
 			service:      "loki",
 			appToolCheck: "loki-binary",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/bin/loki"},
+			wantBase:     []string{"loki"},
 			wantContains: []string{"-verify-config", "-config.file"},
 		},
 		{
 			service:      "influxdb",
 			appToolCheck: "influxdb-binary",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/bin/influxd"},
+			wantBase:     []string{"influxd"},
 			wantContains: []string{"config", "validate", "--config"},
 		},
 		{
 			service:      "cloudflared",
 			appToolCheck: "cloudflared-binary",
 			toolArgIndex: 3,
-			wantTool:     []string{"/usr/bin/cloudflared"},
+			wantBase:     []string{"cloudflared"},
 			wantContains: []string{"tunnel", "validate"},
 		},
 		{
 			service:      "mysql",
 			appToolCheck: "mysql-binary",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/sbin/mysqld", "/usr/bin/mysqld"},
+			wantBase:     []string{"mysqld"},
 			wantContains: []string{"--help", "--verbose"},
 		},
 		{
 			service:      "mariadb",
 			appToolCheck: "mariadb-binary",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/sbin/mariadbd", "/usr/bin/mariadbd"},
+			wantBase:     []string{"mariadbd", "mysqld"}, // catalog falls back to mysqld
 			wantContains: []string{"--help", "--verbose"},
 		},
 		{
 			service:      "nginx",
 			appToolCheck: "nginx-binary",
 			toolArgIndex: 0,
-			wantTool:     []string{"/usr/sbin/nginx", "/usr/bin/nginx"},
+			wantBase:     []string{"nginx"},
 			wantContains: []string{"-t"},
 		},
 	}
@@ -871,8 +877,8 @@ func TestCatalogConfigPreflightsUseResolvedAppTools(t *testing.T) {
 			}
 			preflight := nested(t, resolved.Tree, "preflight")
 			tool := cfgval.String(nested(t, preflight, tc.appToolCheck)["path"])
-			if !slices.Contains(tc.wantTool, tool) {
-				t.Fatalf("%s app tool path = %q, want one of %v", tc.service, tool, tc.wantTool)
+			if !slices.Contains(tc.wantBase, filepath.Base(tool)) {
+				t.Fatalf("%s app tool = %q (base %q), want one of %v", tc.service, tool, filepath.Base(tool), tc.wantBase)
 			}
 			command := nested(t, preflight, "config")["command"].([]any)
 			if tc.toolArgIndex >= len(command) {
