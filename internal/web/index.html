@@ -138,6 +138,7 @@
   .panic-btn:hover { filter: brightness(1.12); }
   .panic-btn.active { animation: panic-pulse 1.1s ease-in-out infinite; }
   .status-panic { color: var(--crit); font-weight: 700; }
+  .status-starting { color: var(--text-2); font-weight: 600; }
   #panic-banner { display: none; }
   #panic-banner.active { display: flex; align-items: center; gap: .55rem; margin: .5rem 0 0; padding: .55rem .85rem; border-radius: var(--radius); background: color-mix(in srgb, var(--crit) 15%, transparent); border: 1px solid var(--crit); color: var(--crit); font-weight: 600; }
   #panic-banner svg { flex: none; }
@@ -810,12 +811,13 @@ function renderReadyBanner(ready) {
     return;
   }
   const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
+  const labelCls = body.status === "starting" ? "status-starting" : "inactive";
   const msg = body.message ? " — " + esc(body.message) : "";
   const counts = (body.services != null)
     ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
     : "";
   el.style.display = "block";
-  el.innerHTML = `<span class="inactive">${esc(label)}</span>${msg}${counts}`;
+  el.innerHTML = `<span class="${labelCls}">${esc(label)}</span>${msg}${counts}`;
 }
 
 // Connection state: when a fetch fails the table is dimmed and a "disconnected,
@@ -1660,6 +1662,7 @@ function themeHealthColor(status) {
   const root = getComputedStyle(document.documentElement);
   if (status === "critical" || status === "crit") return root.getPropertyValue("--crit").trim() || "#cf222e";
   if (status === "warning" || status === "warn") return root.getPropertyValue("--warn").trim() || "#9a6700";
+  if (status === "starting") return root.getPropertyValue("--text-2").trim() || "#8b96a5"; // neutral grey while the daemon settles
   return root.getPropertyValue("--ok").trim() || "#1a7f37";
 }
 // setFavicon reflects overall health in the browser tab: green = ok,
@@ -1727,9 +1730,12 @@ function renderAttention() {
     });
   }
   if (latestReady && latestReady.ready === false) {
+    const startingTitle = latestReady.status === "shutting_down"
+      ? "Daemon shutting down"
+      : (latestReady.status === "starting" ? "Daemon starting" : "Daemon not ready");
     items.push({
       level: "warning",
-      title: latestReady.status === "shutting_down" ? "Daemon shutting down" : "Daemon not ready",
+      title: startingTitle,
       detail: latestReady.message || latestReady.status || "",
       target: "daemon-section",
     });
@@ -1754,15 +1760,23 @@ function renderAttention() {
       target: "diag-section",
     });
   }
-  if (!items.length) {
+  // While the daemon is settling (starting), the tab favicon is neutral grey and
+  // other health signals are premature, so it overrides the ok/warning/critical
+  // colour. The attention box still lists the "Daemon starting" item below.
+  const startingNow = latestReady && latestReady.ready === false && latestReady.status === "starting";
+  if (startingNow) {
+    setFavicon("starting");
+    if (healthIconReady) document.title = "Sermo · starting";
+  } else if (!items.length) {
     setFavicon("ok");
     if (healthIconReady) document.title = "Sermo · services";
     box.style.display = "none";
     box.innerHTML = "";
     return;
+  } else {
+    setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
+    if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
   }
-  setFavicon(items.some((it) => it.level === "critical") ? "critical" : "warning");
-  if (healthIconReady) document.title = `(${items.length}) Sermo · services`;
   box.style.display = "block";
   box.innerHTML = `
     <div class="attn-head">
@@ -4216,7 +4230,7 @@ function renderStatus(ctx) {
     const hostUp = fmtUptime(daemon.host_uptime_seconds);
     if (hostUp) parts.push(`uptime: <b>${esc(hostUp)}</b>`);
     if (ready.status) {
-      const cls = ready.panic ? "status-panic" : (ready.ready ? "ok" : "inactive");
+      const cls = ready.panic ? "status-panic" : (ready.status === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
       parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
     }
     bar.innerHTML = parts.join(" &middot; ");
@@ -4229,7 +4243,7 @@ function renderStatus(ctx) {
     set("#daemon-uptime", fmtUptime(live.uptime_seconds));
     if (live.go) set("#daemon-go", live.go);
     if (ready.status) {
-      const cls = ready.panic ? "status-panic" : (ready.ready ? "ok" : "inactive");
+      const cls = ready.panic ? "status-panic" : (ready.status === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
       const el = $("#daemon-ready");
       if (el) {
         el.textContent = ready.status;

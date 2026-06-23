@@ -192,16 +192,19 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 	m.genCancel = cancel
 
 	sched := m.scheduler
-	if m.booted || !firstBoot {
-		sched.StartupDelay = 0
-	} else {
+	// firstGen is the very first boot: it keeps the StartupDelay and gates
+	// readiness on first cycles. Reloads skip both (the daemon is already up).
+	firstGen := firstBoot && !m.booted
+	if firstGen {
 		m.booted = true
+	} else {
+		sched.StartupDelay = 0
 	}
 
 	m.genWG.Add(1)
 	go func() {
 		defer m.genWG.Done()
-		sched.Run(genCtx, m.workers, m.watches, m.deps.OpGate, m.readiness, false)
+		sched.Run(genCtx, m.workers, m.watches, m.deps.OpGate, m.readiness, false, firstGen)
 	}()
 }
 
