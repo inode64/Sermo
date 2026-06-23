@@ -53,7 +53,7 @@ func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
 	settling := NewSettling(nil)
-	settling.Reset([]string{"web"})
+	settling.Reset([]string{SettlingServiceKey("web")})
 	w.Settling = settling
 	w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
 		return servicemgr.StatusInactive, nil
@@ -63,7 +63,7 @@ func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
 	if _, ok := h.eventOf("alert"); ok {
 		t.Fatal("inactive backend must not fire alerts during startup")
 	}
-	if !settling.Observed("web") {
+	if !settling.Observed(SettlingServiceKey("web")) {
 		t.Fatal("inactive backend must complete startup observation without running checks")
 	}
 }
@@ -72,7 +72,7 @@ func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
 	settling := NewSettling(nil)
-	settling.Reset([]string{"web"})
+	settling.Reset([]string{SettlingServiceKey("web")})
 	w.Settling = settling
 	w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
 		return servicemgr.StatusActive, nil
@@ -82,7 +82,7 @@ func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
 	if _, ok := h.eventOf("alert"); ok {
 		t.Fatal("first active cycle must not fire alerts")
 	}
-	if !settling.Observed("web") {
+	if !settling.Observed(SettlingServiceKey("web")) {
 		t.Fatal("first active cycle must mark the service observed")
 	}
 
@@ -913,7 +913,7 @@ func TestWorkerShadowModeReportsSuppression(t *testing.T) {
 func TestWorkerSettlesInactiveBackendOnObserveOnly(t *testing.T) {
 	ready := NewReadiness("systemd", 1, 0)
 	settling := NewSettling(ready)
-	settling.Reset([]string{"web"})
+	settling.Reset([]string{SettlingServiceKey("web")})
 	ready.ExpectFirstCycles(1)
 
 	var checksRan int
@@ -936,10 +936,24 @@ func TestWorkerSettlesInactiveBackendOnObserveOnly(t *testing.T) {
 	if checksRan != 0 {
 		t.Fatalf("inactive observe-only cycle ran checks %d times, want 0", checksRan)
 	}
-	if !settling.Observed("web") {
+	if !settling.Observed(SettlingServiceKey("web")) {
 		t.Fatal("inactive backend must complete startup observation")
 	}
 	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
 		t.Fatalf("readiness = %+v, want ready after inactive observe-only cycle", rep)
+	}
+}
+
+func TestSettlingDuplicateServiceAndAppNamesAdvanceReadiness(t *testing.T) {
+	ready := NewReadiness("systemd", 2, 0)
+	settling := NewSettling(ready)
+	settling.Reset([]string{SettlingServiceKey("redis"), SettlingAppKey("redis")})
+	ready.ExpectFirstCycles(2)
+
+	settling.MarkObserved(SettlingServiceKey("redis"))
+	settling.MarkObserved(SettlingAppKey("redis"))
+
+	if !ready.Report(context.Background()).Ready {
+		t.Fatal("service and app monitors with the same display name must both advance readiness")
 	}
 }

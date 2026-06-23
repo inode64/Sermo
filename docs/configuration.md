@@ -704,6 +704,9 @@ A **monitored service whose init backend stays inactive** (for example a unit yo
 intentionally keep stopped) completes startup observation on the first status
 probe: it reports `state: failed` and no longer blocks `/readyz`. Sermo still
 defers service checks and automatic remediation until that unit becomes active.
+Service workers, host watches and installed-app monitors use separate settling
+keys, so a service and a catalog app that share a name (for example `redis`)
+both count toward readiness independently.
 
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
 results and errors — kept in an in-memory ring (the last 1000); they also go to
