@@ -150,9 +150,9 @@
   }
   input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
   #svc-controls input, #storage-controls input, #watch-controls input, #network-controls input, #app-controls input { min-width: 13rem; }
-  #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
-  #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover { background: var(--panel-2); color: var(--text); }
-  #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+  #svc-filters button, #storage-filters button, #watch-filters button, #network-filters button, #app-filters button { border-color: transparent; background: transparent; color: var(--text-2); }
+  #svc-filters button:hover, #storage-filters button:hover, #watch-filters button:hover, #network-filters button:hover, #app-filters button:hover { background: var(--panel-2); color: var(--text); }
+  #svc-filters button.f-active, #storage-filters button.f-active, #watch-filters button.f-active, #network-filters button.f-active, #app-filters button.f-active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
   #err { min-height: 1.2rem; }
   #err.status-err { color: var(--crit); }
   #err.status-ok { color: var(--ok); }
@@ -557,6 +557,13 @@
     <select id="app-category" title="Filter by category" aria-label="Filter applications by category">
       <option value="all">all categories</option>
     </select>
+    <span id="app-filters">
+      <button data-af="all" class="f-active">all</button>
+      <button data-af="ok">ok</button>
+      <button data-af="starting">starting</button>
+      <button data-af="warning">warning</button>
+      <button data-af="failed">failed</button>
+    </span>
     <span id="app-count" class="muted"></span>
   </div>
   <table class="apps-table">
@@ -1455,6 +1462,7 @@ function restoreUIState() {
       svcSort = { key: s.svcSort.key, dir: s.svcSort.dir === -1 ? -1 : 1 };
     }
     if (typeof s.appQuery === "string") appQuery = s.appQuery;
+    if (typeof s.appStatus === "string") appStatus = s.appStatus;
     if (s.appSort && typeof s.appSort.key === "string") {
       appSort = { key: s.appSort.key, dir: s.appSort.dir === -1 ? -1 : 1 };
     }
@@ -1497,7 +1505,7 @@ function saveUIState() {
   try {
     localStorage.setItem(UI_STATE_KEY, JSON.stringify({
       svcQuery, svcStatus, svcCategory, svcGrouped, svcSort,
-      appQuery, appSort, appGrouped,
+      appQuery, appStatus, appSort, appGrouped,
       metricWindow, daemonMetricWindow,
       expanded: [...expanded],
       svcCollapsedGroups: [...svcCollapsedGroups],
@@ -1526,6 +1534,8 @@ function applyUIStateToControls() {
   if (svcCategorySelect) svcCategorySelect.value = svcCategory;
   const appSearch = $("#app-search");
   if (appSearch) appSearch.value = appQuery;
+  document.querySelectorAll("#app-filters button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.af === appStatus));
   for (const key of Object.keys(watchPanels)) {
     const panel = watchPanels[key];
     const search = $(panel.search);
@@ -1637,6 +1647,13 @@ function openPanelTarget(target) {
     sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
     return;
   }
+  if (target === "failed-apps") {
+    const sec = $("#apps-section");
+    if (sec) sec.open = true;
+    setAppStatus("failed");
+    sec && sec.scrollIntoView({ block: "start", behavior: "smooth" });
+    return;
+  }
   if (target === "failed-watches") {
     // Storage and network watches live in their own panels; a firing one could be
     // in any of the three, so open all and scroll to whichever actually holds it.
@@ -1704,6 +1721,7 @@ function renderAttention() {
       target: "failed-watches",
     });
   }
+
   const activeLocks = (latestLocks || []).filter((l) => l.state === "active");
   if (activeLocks.length) {
     items.push({
@@ -1926,7 +1944,7 @@ function sortedBy(list, sort, sortKeys, fallbackKey) {
 
 function renderFilterButtonCounts(selector, counts) {
   document.querySelectorAll(`${selector} button`).forEach((b) => {
-    const key = b.dataset.f || b.dataset.wf;
+    const key = b.dataset.f || b.dataset.wf || b.dataset.af;
     if (counts[key] !== undefined) b.innerHTML = `${key} <span class="muted">${counts[key]}</span>`;
   });
 }
@@ -3582,6 +3600,7 @@ function renderWatchPanel(panelKey, watches) {
 let allApps = [];
 let appQuery = "";
 let appCategory = "all";
+let appStatus = "all";
 let appSort = { key: "", dir: 1 };
 const appSortKeys = {
   name: (a) => displayName(a).toLowerCase(),
@@ -3591,7 +3610,24 @@ const appSortKeys = {
 };
 function setAppSort(key) { toggleSort(appSort, key, renderApps); }
 function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
-function setAppCategory(v) { appCategory = v || "all"; renderApps(); }
+function setAppCategory(v) { appCategory = v || "all"; renderApps(); saveUIState(); }
+function setAppStatus(v) {
+  appStatus = v || "all";
+  document.querySelectorAll("#app-filters button").forEach((b) =>
+    b.classList.toggle("f-active", b.dataset.af === appStatus));
+  renderApps();
+  saveUIState();
+}
+function renderAppFilterCounts() {
+  const a = allApps || [];
+  renderFilterButtonCounts("#app-filters", {
+    all: a.length,
+    ok: a.filter((x) => appStateText(x) === "ok").length,
+    starting: a.filter((x) => appStateText(x) === "starting").length,
+    warning: a.filter((x) => appStateText(x) === "warning").length,
+    failed: a.filter((x) => appStateText(x) === "failed").length,
+  });
+}
 function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
 function appStateText(a) {
   if (a && a.state === "starting") return "starting";
@@ -3625,6 +3661,16 @@ function appStatusCell(a) {
 function appMatches(a) {
   const category = categoryOf(a, "app");
   if (appCategory !== "all" && category !== appCategory) return false;
+  switch (appStatus) {
+    case "ok":
+    case "starting":
+    case "warning":
+    case "failed":
+      if (appStateText(a) !== appStatus) return false;
+      break;
+    default:
+      break;
+  }
   if (!appQuery) return true;
   const q = appQuery.toLowerCase();
   return displayName(a).toLowerCase().includes(q)
@@ -3695,6 +3741,7 @@ function renderApps(apps) {
   section.style.display = "block";
   if (cnt) cnt.textContent = `(${total})`;
   appCategory = syncCategorySelect("#app-category", allApps || [], "app", appCategory);
+  renderAppFilterCounts();
   const list = (allApps || []).filter(appMatches);
   if (appSort.key && appSortKeys[appSort.key]) {
     sortedBy(list, appSort, appSortKeys, "name");
@@ -3703,7 +3750,7 @@ function renderApps(apps) {
   const visibleCategories = sortedCategories(list, "app");
   appCollapsedGroups.forEach((category) => { if (!visibleCategories.includes(category)) appCollapsedGroups.delete(category); });
   updateGroupButtons("app", appGrouped, visibleCategories, appCollapsedGroups, "applications");
-  if (filterCount) filterCount.textContent = (appQuery || appCategory !== "all") ? `showing ${list.length} of ${total}` : "";
+  if (filterCount) filterCount.textContent = (appQuery || appCategory !== "all" || appStatus !== "all") ? `showing ${list.length} of ${total}` : "";
   const appRow = (a) => {
     const category = categoryOf(a, "app");
     const state = appStateText(a);
@@ -4950,6 +4997,13 @@ function initStaticHandlers() {
 
   const appCategorySelect = $("#app-category");
   if (appCategorySelect) appCategorySelect.addEventListener("change", () => setAppCategory(appCategorySelect.value));
+  const appFilters = $("#app-filters");
+  if (appFilters) {
+    appFilters.addEventListener("click", (e) => {
+      const btn = closestFrom(e, "button[data-af]");
+      if (btn) setAppStatus(btn.dataset.af || "all");
+    });
+  }
 
   const appGroupToggle = $("#app-group-toggle");
   if (appGroupToggle) {
