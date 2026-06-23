@@ -2,15 +2,18 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"math"
 	"os"
 	"path/filepath"
-	"sermo/internal/cfgval"
 	"time"
 
 	"github.com/dustin/go-humanize"
+
+	"sermo/internal/cfgval"
+	"sermo/internal/execx"
 )
 
 // SizeSamplerFunc measures a file or directory in bytes.
@@ -54,7 +57,7 @@ func (c *sizeCheck) Run(ctx context.Context) Result {
 
 	size, err := sampler(ctx, c.path)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("size %s: %v", c.path, err), start)
+		return c.result(false, fmt.Sprintf("size %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
 	}
 	now := clock()
 
@@ -97,8 +100,13 @@ func humanizeSigned(n int64) string {
 
 // SamplePathSize returns the size of a regular file, or the recursive sum of
 // regular-file sizes under a directory. Used by size checks and the web UI.
-func SamplePathSize(ctx context.Context, path string) (int64, error) {
-	return dirOrFileSize(ctx, path)
+// timeout bounds the probe context and is used for operator-facing timeout messages.
+func SamplePathSize(ctx context.Context, path string, timeout time.Duration) (int64, error) {
+	size, err := dirOrFileSize(ctx, path)
+	if err != nil {
+		return 0, errors.New(execx.ContextFailure(err, timeout))
+	}
+	return size, nil
 }
 
 // dirOrFileSize returns the size of a regular file, or the recursive sum of

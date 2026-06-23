@@ -65,6 +65,14 @@ func (e Expander) timeout() time.Duration {
 	return 30 * time.Second
 }
 
+func commandFailure(prefix string, err error, res execx.Result, timeout time.Duration) error {
+	msg := execx.OperatorFailure(err, res, timeout)
+	if msg == "" {
+		msg = err.Error()
+	}
+	return fmt.Errorf("%s: %s", prefix, msg)
+}
+
 func (e Expander) mountTable() ([]Mount, error) {
 	if e.Mounts != nil {
 		return e.Mounts()
@@ -87,9 +95,10 @@ func (e Expander) Resolve(ctx context.Context, path string) (Target, error) {
 	}
 	t := Target{Path: path, Mountpoint: m.Mountpoint, FSType: m.FSType, Device: m.Device}
 
-	res, err := execx.Run(ctx, e.Runner, e.timeout(), "lvs", "--noheadings", "-o", "vg_name,lv_name", "--separator", ",", m.Device)
+	to := e.timeout()
+	res, err := execx.Run(ctx, e.Runner, to, "lvs", "--noheadings", "-o", "vg_name,lv_name", "--separator", ",", m.Device)
 	if err != nil {
-		return Target{}, fmt.Errorf("%q is not an LVM volume (lvs %s: %w)", path, m.Device, err)
+		return Target{}, commandFailure(fmt.Sprintf("%q is not an LVM volume (lvs %s)", path, m.Device), err, res, to)
 	}
 	vg, lv, ok := strings.Cut(strings.TrimSpace(res.Stdout), ",")
 	if !ok || vg == "" || lv == "" {
@@ -137,8 +146,10 @@ func (e Expander) Expand(ctx context.Context, t Target, by int64) (Result, error
 	}
 
 	lv := fmt.Sprintf("/dev/%s/%s", t.VG, t.LV)
-	if _, err := execx.Run(ctx, e.Runner, e.timeout(), "lvextend", fmt.Sprintf("-L+%db", grow), lv); err != nil {
-		return Result{}, fmt.Errorf("lvextend %s: %w", lv, err)
+	to := e.timeout()
+	res, err := execx.Run(ctx, e.Runner, to, "lvextend", fmt.Sprintf("-L+%db", grow), lv)
+	if err != nil {
+		return Result{}, commandFailure("lvextend "+lv, err, res, to)
 	}
 	if err := e.growFS(ctx, t); err != nil {
 		return Result{}, err
@@ -160,26 +171,31 @@ func growableFS(fstype string) bool {
 // device; xfs and btrfs resize by mount point.
 func (e Expander) growFS(ctx context.Context, t Target) error {
 	lv := fmt.Sprintf("/dev/%s/%s", t.VG, t.LV)
-	var err error
+	to := e.timeout()
+	var (
+		res execx.Result
+		err error
+	)
 	switch t.FSType {
 	case "ext2", "ext3", "ext4":
-		_, err = execx.Run(ctx, e.Runner, e.timeout(), "resize2fs", lv)
+		res, err = execx.Run(ctx, e.Runner, to, "resize2fs", lv)
 	case "xfs":
-		_, err = execx.Run(ctx, e.Runner, e.timeout(), "xfs_growfs", t.Mountpoint)
+		res, err = execx.Run(ctx, e.Runner, to, "xfs_growfs", t.Mountpoint)
 	case "btrfs":
-		_, err = execx.Run(ctx, e.Runner, e.timeout(), "btrfs", "filesystem", "resize", "max", t.Mountpoint)
+		res, err = execx.Run(ctx, e.Runner, to, "btrfs", "filesystem", "resize", "max", t.Mountpoint)
 	}
 	if err != nil {
-		return fmt.Errorf("grow %s filesystem on %s: %w", t.FSType, t.Mountpoint, err)
+		return commandFailure(fmt.Sprintf("grow %s filesystem on %s", t.FSType, t.Mountpoint), err, res, to)
 	}
 	return nil
 }
 
 // vgFreeBytes reports the free space of volume group vg in bytes.
 func (e Expander) vgFreeBytes(ctx context.Context, vg string) (int64, error) {
-	res, err := execx.Run(ctx, e.Runner, e.timeout(), "vgs", "--noheadings", "-o", "vg_free", "--units", "b", "--nosuffix", vg)
+	to := e.timeout()
+	res, err := execx.Run(ctx, e.Runner, to, "vgs", "--noheadings", "-o", "vg_free", "--units", "b", "--nosuffix", vg)
 	if err != nil {
-		return 0, fmt.Errorf("vgs %s: %w", vg, err)
+		return 0, commandFailure("vgs "+vg, err, res, to)
 	}
 	free, err := parseInt(res.Stdout)
 	if err != nil {

@@ -419,9 +419,13 @@ func (c Controller) run(ctx context.Context, name string, args ...string) error 
 	if timeout <= 0 {
 		timeout = DefaultCommandTimeout
 	}
-	_, err := execx.Run(ctx, runner, timeout, name, args...)
+	res, err := execx.Run(ctx, runner, timeout, name, args...)
 	if err != nil {
-		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+		msg := execx.OperatorFailure(err, res, timeout)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("%s %s: %s", name, strings.Join(args, " "), msg)
 	}
 	return nil
 }

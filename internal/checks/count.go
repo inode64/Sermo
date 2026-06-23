@@ -2,12 +2,15 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"sermo/internal/execx"
 )
 
 // Count entry kinds use lstat types, so symlinks are never followed.
@@ -35,7 +38,7 @@ func (c countCheck) Run(ctx context.Context) Result {
 
 	n, err := c.tally(ctx)
 	if err != nil {
-		return c.result(false, fmt.Sprintf("count %s: %v", c.path, err), start)
+		return c.result(false, fmt.Sprintf("count %s: %s", c.path, execx.ContextFailure(err, c.timeout)), start)
 	}
 
 	ok := compareFloat(float64(n), c.op, c.value)
@@ -125,13 +128,18 @@ func (c countCheck) matches(typ fs.FileMode) bool {
 
 // TallyEntries counts path entries matching kind (any, file, dir, symlink). The
 // root path itself is never included. Used by the web UI for live count-watch
-// readings without re-running the full check.
-func TallyEntries(ctx context.Context, path, kind string, recursive bool) (int, error) {
+// readings without re-running the full check. timeout bounds the probe context
+// and is used for operator-facing timeout messages.
+func TallyEntries(ctx context.Context, path, kind string, recursive bool, timeout time.Duration) (int, error) {
 	if kind == "" {
 		kind = countAny
 	}
-	c := countCheck{path: path, kind: kind, recursive: recursive, op: ">=", value: 0}
-	return c.tally(ctx)
+	c := countCheck{base: base{timeout: timeout}, path: path, kind: kind, recursive: recursive, op: ">=", value: 0}
+	n, err := c.tally(ctx)
+	if err != nil {
+		return 0, errors.New(execx.ContextFailure(err, timeout))
+	}
+	return n, nil
 }
 
 // validCountKind reports whether s is a supported `of` value.

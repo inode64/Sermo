@@ -166,7 +166,7 @@ func (m systemdManager) Status(ctx context.Context, service string) (ServiceStat
 	result, err := m.runner.Run(ctx, "systemctl", "is-active", "--", unit)
 	state := strings.TrimSpace(result.Stdout)
 	if state == "" && result.ExitCode < 0 {
-		return ServiceStatus{}, fmt.Errorf("query systemd status for %s: %w", unit, err)
+		return ServiceStatus{}, fmt.Errorf("query systemd status for %s: %s", unit, execx.OperatorFailure(err, result, 0))
 	}
 	return ServiceStatus{
 		Service: service,
@@ -201,8 +201,8 @@ func (m systemdManager) ResetState(ctx context.Context, service string) error {
 func (m systemdManager) SupportsReload(ctx context.Context, service string) (bool, error) {
 	unit := systemdUnit(service)
 	result, err := m.runner.Run(ctx, "systemctl", "show", "-p", "CanReload", "--value", "--", unit)
-	if err != nil && strings.TrimSpace(result.Stdout) == "" {
-		return false, fmt.Errorf("query CanReload for %s: %w", unit, err)
+	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
+		return false, fmt.Errorf("query CanReload for %s: %s", unit, execx.OperatorFailure(err, result, 0))
 	}
 	return strings.EqualFold(strings.TrimSpace(result.Stdout), "yes"), nil
 }
@@ -227,7 +227,7 @@ func (m openrcManager) Status(ctx context.Context, service string) (ServiceStatu
 	// the state on stdout, so a non-zero exit is not a failure to query.
 	result, err := m.runner.Run(ctx, "rc-service", service, "status")
 	if result.ExitCode < 0 && strings.TrimSpace(result.Stdout) == "" {
-		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %w", service, err)
+		return ServiceStatus{}, fmt.Errorf("query openrc status for %s: %s", service, execx.OperatorFailure(err, result, 0))
 	}
 	status := openrcStatus(result)
 	if status == StatusUnknown {
@@ -311,6 +311,9 @@ func (m openrcManager) action(ctx context.Context, verb, service string) error {
 // command's stderr/stdout for a useful message and falling back to the raw
 // runner error (which carries the exit code).
 func actionError(command string, result execx.Result, err error) error {
+	if result.ExitCode == -1 && err != nil {
+		return fmt.Errorf("%s: %s", command, execx.OperatorFailure(err, result, 0))
+	}
 	if msg := strings.TrimSpace(result.Stderr); msg != "" {
 		return fmt.Errorf("%s: %s", command, msg)
 	}

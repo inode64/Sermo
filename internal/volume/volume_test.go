@@ -2,8 +2,10 @@ package volume
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/execx"
 )
@@ -240,4 +242,31 @@ func TestResolveUnknownPath(t *testing.T) {
 		t.Fatal("a path with no containing mount must error")
 	}
 	_ = e
+}
+
+type slowVolumeRunner struct{}
+
+func (slowVolumeRunner) Run(ctx context.Context, name string, _ ...string) (execx.Result, error) {
+	<-ctx.Done()
+	return execx.Result{ExitCode: -1}, fmt.Errorf("run %s: %w", name, ctx.Err())
+}
+
+func TestResolveLVSTimeoutMessage(t *testing.T) {
+	e := Expander{
+		Runner:  slowVolumeRunner{},
+		Timeout: time.Millisecond,
+		Mounts: staticMounts(
+			Mount{Device: "/dev/mapper/vg0-data", Mountpoint: "/data", FSType: "ext4"},
+		),
+	}
+	_, err := e.Resolve(context.Background(), "/data/sub")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timeout after 1ms") {
+		t.Fatalf("error = %q, want timeout after duration", err.Error())
+	}
+	if strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("error = %q, want operator-facing timeout without raw context error", err.Error())
+	}
 }

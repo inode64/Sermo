@@ -2,6 +2,7 @@ package checks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -40,7 +41,14 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 	}
 	args = append(args, c.device)
 
-	res, _ := c.runner.Run(ctx, "hdparm", args...)
+	res, runErr := c.runner.Run(ctx, "hdparm", args...)
+	if res.ExitCode == -1 {
+		msg := execx.OperatorFailure(runErr, res, c.timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return c.result(false, "hdparm "+c.device+": "+msg, start)
+	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
 		if s := FirstNonEmptyLine(res.Stderr); s != "" {
@@ -60,7 +68,9 @@ func (c hdparmCheck) Run(ctx context.Context) Result {
 }
 
 // SampleHdparm runs hdparm -t and/or -T on device and returns MB/s rates.
-func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantCached, wantRead bool) (map[string]float64, error) {
+// timeout is used for operator-facing timeout messages when the probe context
+// expires before the command finishes.
+func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantCached, wantRead bool, timeout time.Duration) (map[string]float64, error) {
 	if runner == nil {
 		runner = execx.CommandRunner{}
 	}
@@ -75,7 +85,14 @@ func SampleHdparm(ctx context.Context, runner execx.Runner, device string, wantC
 		args = append(args, "-t")
 	}
 	args = append(args, device)
-	res, _ := runner.Run(ctx, "hdparm", args...)
+	res, runErr := runner.Run(ctx, "hdparm", args...)
+	if res.ExitCode == -1 {
+		msg := execx.OperatorFailure(runErr, res, timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return nil, errors.New(msg)
+	}
 	values, err := parseHdparm(res.Stdout)
 	if err != nil {
 		if s := FirstNonEmptyLine(res.Stderr); s != "" {

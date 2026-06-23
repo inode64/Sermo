@@ -268,3 +268,24 @@ func TestReleaseSignalsOnlyWithKillPolicy(t *testing.T) {
 		t.Fatalf("signals=%d mounted=%t res=%+v, want signalled and unmounted", sig.calls, mounted, res)
 	}
 }
+
+type slowMountRunner struct{}
+
+func (slowMountRunner) Run(ctx context.Context, name string, _ ...string) (execx.Result, error) {
+	<-ctx.Done()
+	return execx.Result{ExitCode: -1}, fmt.Errorf("run %s: %w", name, ctx.Err())
+}
+
+func TestControllerRunTimeoutMessage(t *testing.T) {
+	c := Controller{Runner: slowMountRunner{}, CommandTimeout: time.Millisecond}
+	err := c.run(context.Background(), "umount", "/mnt/backup")
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timeout after 1ms") {
+		t.Fatalf("error = %q, want timeout after duration", err.Error())
+	}
+	if strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("error = %q, want operator-facing timeout without raw context error", err.Error())
+	}
+}
