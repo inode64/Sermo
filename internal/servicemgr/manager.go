@@ -320,7 +320,11 @@ func actionError(command string, result execx.Result, err error) error {
 	if msg := strings.TrimSpace(result.Stdout); msg != "" {
 		return fmt.Errorf("%s: %s", command, msg)
 	}
-	return fmt.Errorf("%s: %w", command, err)
+	msg := execx.OperatorFailure(err, result, 0)
+	if msg == "" {
+		msg = err.Error()
+	}
+	return fmt.Errorf("%s: %s", command, msg)
 }
 
 // systemdUnitSuffixes are the unit types systemd recognizes; a service name that
