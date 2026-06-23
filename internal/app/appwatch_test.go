@@ -32,6 +32,40 @@ func TestAppCheckMapsStatus(t *testing.T) {
 // cycle: it notifies once on the rising edge (first error), does not re-notify
 // while it stays in error, emits recovered when it returns to ok, and tags every
 // event on the App dimension (not Watch).
+func TestAppWatchStartupObserveOnlySkipsNotify(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	var events []Event
+	settling := NewSettling(nil)
+	settling.Reset([]string{"salt-minion"})
+	check := &scriptedCheck{results: []checks.Result{
+		{Check: "salt-minion", OK: false, Message: "error: exit 1 (want 0): boom"},
+		{Check: "salt-minion", OK: false, Message: "error: exit 1 (want 0): boom"},
+	}}
+	w := &Watch{
+		Name:       "salt-minion",
+		App:        "salt-minion",
+		CheckType:  "app",
+		Check:      check,
+		FireOnFail: true,
+		Notifiers:  []notify.Notifier{n},
+		Settling:   settling,
+		Emit:       func(e Event) { events = append(events, e) },
+	}
+
+	w.RunCycle(context.Background())
+	if len(n.msgs) != 0 || hasEventKind(events, "firing") {
+		t.Fatalf("observe-only app-watch must not notify or fire, events=%v msgs=%d", events, len(n.msgs))
+	}
+	if !settling.Observed("salt-minion") {
+		t.Fatal("observe-only app-watch must mark the app observed")
+	}
+
+	w.RunCycle(context.Background())
+	if len(n.msgs) != 1 {
+		t.Fatalf("second cycle must notify once, got %d", len(n.msgs))
+	}
+}
+
 func TestAppWatchNotifiesOnceAndRecovers(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	var events []Event
