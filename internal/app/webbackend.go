@@ -2678,6 +2678,46 @@ func operationSlotFindings(inUse, total int) []web.Finding {
 	}}
 }
 
+// SetPanic enables or disables the daemon-wide panic mode, persisting the flag
+// so it survives daemon restarts. The running workers pick up the change within
+// the panic gate's refresh window.
+func (b *WebBackend) SetPanic(_ context.Context, on bool) web.ActionResult {
+	action := "panic-off"
+	if on {
+		action = "panic-on"
+	}
+	if b.store == nil {
+		msg := "panic mode state is unavailable"
+		b.emitMonitorEvent("", action, "error", "", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	prior, found, err := b.store.Panic()
+	if err != nil {
+		msg := fmt.Sprintf("panic mode failed: %v", err)
+		b.emitMonitorEvent("", action, "error", "", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if err := b.store.SetPanic(on, state.SourceWeb); err != nil {
+		msg := fmt.Sprintf("panic mode failed: %v", err)
+		b.emitMonitorEvent("", action, "error", "", msg)
+		return web.ActionResult{OK: false, Message: msg}
+	}
+	if found && prior.On == on {
+		msg := "panic mode already on"
+		if !on {
+			msg = "panic mode already off"
+		}
+		b.emitMonitorEvent("", action, "suppressed", "", msg)
+		return web.ActionResult{OK: true, Message: msg}
+	}
+	msg := "panic mode enabled: hooks, alerts and automatic remediation suspended"
+	if !on {
+		msg = "panic mode disabled: normal operation resumed"
+	}
+	b.emitMonitorEvent("", action, "action", "ok", msg)
+	return web.ActionResult{OK: true, Message: msg}
+}
+
 // Operations returns current operation-slot usage and the active-user count.
 func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
 	users := notify.ActiveUserCount()

@@ -17,6 +17,7 @@ type fakeBackend struct {
 	operated        []string // "name/action"
 	monitored       map[string]bool
 	watchMonitored  map[string]bool
+	panic           bool
 	watchExpanded   []string
 	failOp          bool
 	seriesSince     time.Duration
@@ -191,6 +192,10 @@ func (f *fakeBackend) SetWatchMonitored(_ context.Context, name string, monitore
 	f.watchMonitored[name] = monitored
 	return nil
 }
+func (f *fakeBackend) SetPanic(_ context.Context, on bool) ActionResult {
+	f.panic = on
+	return ActionResult{OK: true}
+}
 func (f *fakeBackend) ExpandWatch(_ context.Context, name string) ActionResult {
 	f.watchExpanded = append(f.watchExpanded, name)
 	return ActionResult{OK: true, Message: "expanded"}
@@ -217,6 +222,34 @@ func postReq(path string) *http.Request {
 	r := httptest.NewRequest(http.MethodPost, path, nil)
 	r.Header.Set(csrfHeader, "1")
 	return r
+}
+
+func TestHandlePanicToggles(t *testing.T) {
+	b := &fakeBackend{}
+	h := newServer(b)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/panic/on"))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /api/panic/on = %d", rec.Code)
+	}
+	if !b.panic {
+		t.Fatal("backend panic flag should be enabled")
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, postReq("/api/panic/off"))
+	if rec.Code != http.StatusOK || b.panic {
+		t.Fatalf("POST /api/panic/off = %d, panic=%v", rec.Code, b.panic)
+	}
+}
+
+func TestHandlePanicRejectsBadAction(t *testing.T) {
+	rec := httptest.NewRecorder()
+	newServer(&fakeBackend{}).ServeHTTP(rec, postReq("/api/panic/maybe"))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /api/panic/maybe = %d, want 400", rec.Code)
+	}
 }
 
 func TestServesDashboard(t *testing.T) {

@@ -94,6 +94,7 @@ type procWatcher struct {
 	hook      HookSpec
 	notifiers []notify.Notifier
 	dryRun    bool
+	inPanic   func() bool
 	runner    HookRunner
 	now       func() time.Time
 	emit      func(Event)
@@ -238,6 +239,10 @@ func (w *procWatcher) fire(ctx context.Context, msg string, env map[string]strin
 	env["SERMO_MESSAGE"] = msg
 	if w.dryRun {
 		w.emitEvent(Event{Watch: w.name, Kind: "dry-run", Message: watchDryRunMessage(w.hook, w.notifiers, nil) + ": " + msg})
+		return
+	}
+	if w.inPanic != nil && w.inPanic() {
+		w.emitEvent(Event{Watch: w.name, Kind: "panic-suppressed", Message: "panic mode: hook/notify suppressed: " + msg})
 		return
 	}
 

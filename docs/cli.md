@@ -74,6 +74,8 @@ sermoctl locks SERVICE
 sermoctl monitor SERVICE
 sermoctl unmonitor SERVICE
 
+sermoctl panic on|off|status          # daemon-wide emergency switch (see Panic mode)
+
 sermoctl config validate
 
 sermoctl daemon reload                 # reload sermod config, not services
@@ -113,6 +115,29 @@ sermoctl services --notify ops-email
 sermoctl daemon reload
 sermoctl state compact --before 720h
 ```
+
+## Panic mode
+
+Panic mode is a daemon-wide emergency switch for maintenance windows, attacks,
+denial-of-service, system malfunction or overload. While it is on, the daemon
+keeps running its checks (so status stays visible) but **suspends all hooks,
+alert notifications and automatic remediation**. Manual operations (`start`,
+`stop`, `restart`, `reload`, `resume`) stay available, so you can drive services
+by hand without the daemon fighting you.
+
+```bash
+sermoctl panic on        # suspend hooks, alerts and automatic remediation
+sermoctl panic status    # show the current state (default when no argument)
+sermoctl panic off       # resume normal operation
+```
+
+The flag is persisted in the state database (`paths.state`), so it survives
+daemon restarts until you turn it off, and the CLI works without the web UI
+enabled. The running daemon picks up a change within ~1 second. While active,
+the daemon status reported by `/readyz` and the web header shows **`panic
+mode`**. In the web UI the same toggle is the red **panic mode** button in the
+footer (it asks for confirmation in both directions so it is not triggered by
+accident). The CLI applies the change immediately without a prompt.
 
 ## Service target resolution
 

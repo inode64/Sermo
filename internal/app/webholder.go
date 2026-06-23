@@ -253,6 +253,14 @@ func (h *WebBackendHolder) SetMonitored(ctx context.Context, name string, monito
 	return nil
 }
 
+// SetPanic toggles the daemon-wide panic mode through the active backend.
+func (h *WebBackendHolder) SetPanic(ctx context.Context, on bool) web.ActionResult {
+	if b := h.backend(); b != nil {
+		return b.SetPanic(ctx, on)
+	}
+	return web.ActionResult{OK: false, Message: "backend unavailable"}
+}
+
 // SetWatchMonitored toggles a host watch's monitoring through the active backend.
 func (h *WebBackendHolder) SetWatchMonitored(ctx context.Context, name string, monitored bool) error {
 	if b := h.backend(); b != nil {

@@ -41,6 +41,10 @@ var commandGroups = []commandGroup{
 		Title:    "History And Diagnostics",
 		Commands: []string{"events", "activity", "sla", "diagnose", "state"},
 	},
+	{
+		Title:    "Emergency",
+		Commands: []string{"panic"},
+	},
 }
 
 var commandUsages = []commandUsage{
@@ -202,6 +206,23 @@ var commandUsages = []commandUsage{
 		},
 		Examples: []string{
 			"sermoctl unmonitor mysql-main",
+		},
+	},
+	{
+		Name:    "panic",
+		Summary: "Enable, disable or show the daemon-wide panic mode.",
+		Usage: []string{
+			"sermoctl panic on|off|status",
+		},
+		Notes: []string{
+			"Panic mode keeps monitoring running but suspends hooks, alerts and automatic remediation across the daemon.",
+			"Manual operations (start, stop, restart, reload, resume) remain available.",
+			"The flag is persisted, so it survives daemon restarts until turned off.",
+		},
+		Examples: []string{
+			"sermoctl panic on",
+			"sermoctl panic status",
+			"sermoctl panic off",
 		},
 	},
 	{

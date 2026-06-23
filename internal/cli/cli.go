@@ -296,6 +296,8 @@ func (a App) Run(ctx context.Context, args []string) int {
 		return a.runMonitor(opts, true)
 	case "monitor":
 		return a.runMonitor(opts, false)
+	case "panic":
+		return a.runPanic(opts)
 	case "sla":
 		return a.runSLA(opts)
 	case "diagnose":

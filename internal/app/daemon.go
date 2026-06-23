@@ -31,6 +31,11 @@ type MonitorStore interface {
 	Active(service string) (active, found bool, err error)
 	SetActive(service string, active bool, source string) error
 	MonitorState(service string) (state.MonitorRecord, bool, error)
+	// Panic / SetPanic back the daemon-wide "panic mode" flag (a single global
+	// row, not keyed by service). Panic mode suppresses hooks, alerts and
+	// automatic remediation while keeping monitoring/status running.
+	Panic() (state.GlobalRecord, bool, error)
+	SetPanic(on bool, source string) error
 }
 
 // SLARecorder persists one availability sample per observed monitoring cycle, so
@@ -122,6 +127,9 @@ type Deps struct {
 	// restarts and reboots. Optional: nil means every service/watch is always
 	// monitored.
 	Monitor MonitorStore
+	// Panic gates the daemon-wide panic mode (hooks, alerts and automatic
+	// remediation suppressed). Optional: nil means panic mode is never on.
+	Panic *PanicGate
 	// RuleState persists automatic remediation cooldown/backoff and rule-window
 	// progress. Optional: nil keeps those states in memory for this process only.
 	RuleState RuleStateStore
@@ -415,6 +423,7 @@ func buildWorker(name, unit string, tree map[string]any, deps Deps, collector *m
 			return engine.Do(ctx, action)
 		},
 		IsPaused:     monitorPaused(deps.Monitor, name),
+		InPanic:      deps.Panic.Active,
 		Shadow:       shadow,
 		ResolveRefs:  func() rules.RefResolver { return rules.NewCheckResolver(preflightBuilt, maxParallel) },
 		RecordHealth: healthRecorder(deps, name),

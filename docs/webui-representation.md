@@ -319,8 +319,18 @@ Section id: `daemon-section`
 
 Editable notes:
 
-- This panel is informational. Config reload and **compact state** live in the
-  page footer (admin only).
+- This panel is informational. Config reload, **compact state** and the
+  **panic mode** toggle live in the page footer (admin only).
+
+### Panic mode
+
+The footer's red **panic mode** button is the daemon-wide emergency switch. It
+asks for confirmation (with a warning icon) in both directions so it is not
+triggered by accident. While panic mode is on, the daemon status in the header
+shows **`panic mode`** (red), a banner appears under the header, and the daemon
+keeps monitoring while suppressing hooks, alert notifications and automatic
+remediation. The same toggle is available from the CLI as `sermoctl panic
+on|off|status`. See [cli.md](cli.md#panic-mode).
 
 ## Recent activity panel
 

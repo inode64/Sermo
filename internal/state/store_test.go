@@ -34,6 +34,42 @@ func TestStoreMonitorStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestStorePanicDefaultsToOff(t *testing.T) {
+	s := openTemp(t)
+
+	rec, found, err := s.Panic()
+	if err != nil {
+		t.Fatalf("Panic: %v", err)
+	}
+	if found || rec.On {
+		t.Errorf("a store with no panic row must report found=false, off (got %+v found=%v)", rec, found)
+	}
+}
+
+func TestStorePanicRoundTrip(t *testing.T) {
+	s := openTemp(t)
+	s.now = func() time.Time { return time.Date(2026, 6, 7, 9, 0, 0, 0, time.UTC) }
+
+	if err := s.SetPanic(true, SourceCLI); err != nil {
+		t.Fatalf("SetPanic: %v", err)
+	}
+	rec, found, err := s.Panic()
+	if err != nil || !found {
+		t.Fatalf("Panic: found=%v err=%v", found, err)
+	}
+	if !rec.On || rec.Source != SourceCLI || !rec.UpdatedAt.Equal(s.now()) {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	// Upsert flips the flag without duplicating the row.
+	if err := s.SetPanic(false, SourceWeb); err != nil {
+		t.Fatalf("SetPanic: %v", err)
+	}
+	if rec, found, _ = s.Panic(); !found || rec.On || rec.Source != SourceWeb {
+		t.Fatalf("after disable record = %+v found=%v", rec, found)
+	}
+}
+
 func TestStoreSetActiveRoundTrip(t *testing.T) {
 	s := openTemp(t)
 

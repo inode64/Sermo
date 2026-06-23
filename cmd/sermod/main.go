@@ -195,6 +195,7 @@ func run(args []string) int {
 	interval := config.EngineInterval(cfg, 30*time.Second)
 	runner := execx.CommandRunner{}
 	opGate := app.NewOpGate(app.EngineInt(cfg, "max_parallel_operations", 2), cfg.Global.RuntimeDir())
+	panicGate := app.NewPanicGate(store)
 	userLookup := app.EngineUserLookup(cfg, runner)
 	deps := app.Deps{
 		Backend:          detection.Backend,
@@ -209,6 +210,7 @@ func run(args []string) int {
 		// Events go to slog and to the persisted ring the web UI reads.
 		Emit:            app.MultiEmit(app.SlogEmitter(logger), eventLog.Add),
 		Monitor:         store,
+		Panic:           panicGate,
 		RuleState:       store,
 		SLA:             store,
 		DaemonMetrics:   store,
@@ -265,6 +267,7 @@ func run(args []string) int {
 		logger.Info("sermod waiting before first checks", "startup_delay", startupDelay)
 	}
 	readiness := app.NewReadiness(string(detection.Backend), len(workers), len(watches))
+	readiness.WatchPanic(panicGate.Active)
 
 	// Write a pidfile under the runtime directory so sermoctl daemon reload (and
 	// operators) can reliably signal the running daemon for config reload.
