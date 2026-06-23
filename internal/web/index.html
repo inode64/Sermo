@@ -188,6 +188,7 @@
   #last-refresh { font-size: .78rem; white-space: nowrap; }
   #system-status, #statusbar { margin: .25rem 0 0; font-size: .82rem; display: flex; gap: .4rem 1.1rem; flex-wrap: wrap; align-items: center; color: var(--text-2); }
   #system-status b, #statusbar b { color: var(--text); font-weight: 600; }
+  .status-tail { display: inline-flex; align-items: center; gap: 1.1rem; flex-wrap: nowrap; }
   #overview { display: grid; grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); gap: .65rem; margin: .8rem 0 .15rem; }
   .tile {
     background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
@@ -838,7 +839,7 @@ async function load() {
     getJSON(`api/daemon/metrics?since=${daemonMetricWindow}`, null),
     getJSON("api/locks", null),         // global runtime locks (active and stale)
     getJSON("api/activity", null),      // quick activity summary
-    getJSON("readyz?verbose", {}),
+    fetchReadyReport(),
     getJSON("livez?verbose", {}),
     getJSON("api/monitoring", {}),
     getJSON("api/ops", {}),
@@ -4302,6 +4303,19 @@ async function getJSON(url, dflt) {
   }
 }
 
+// fetchReadyReport loads GET /readyz?verbose. Unlike getJSON, it parses the JSON
+// body even when the probe returns 503 (starting / shutting_down), so the header
+// status line keeps showing the daemon lifecycle state.
+async function fetchReadyReport() {
+  try {
+    const r = await fetch("readyz?verbose");
+    const data = await r.json();
+    return (data && typeof data === "object") ? data : {};
+  } catch (_) {
+    return {};
+  }
+}
+
 function renderStatus(ctx) {
   const bar = $("#statusbar");
   if (!bar) return;
@@ -4356,15 +4370,19 @@ function renderStatus(ctx) {
       if (activeLocks > 0) lockStr += ` <span class="muted">(active)</span>`;
       parts.push(lockStr);
     }
+    // Host uptime and daemon lifecycle status are always the last two readings,
+    // paired so status stays immediately after uptime.
     const hostUp = fmtUptime(daemon.host_uptime_seconds);
-    if (hostUp) parts.push(`uptime: <b>${esc(hostUp)}</b>`);
-    if (ready.status) {
-      const cls = ready.panic ? "status-panic" : (ready.status === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
-      const statusLabel = ready.status === "starting" && ready.message
-        ? `${ready.status} <span class="muted">(${esc(ready.message)})</span>`
-        : esc(ready.status);
-      parts.push(`status: <span class="${cls}">${statusLabel}</span>`);
-    }
+    const statusText = ready.status || (ready.ready ? "ok" : "");
+    const statusCls = ready.panic ? "status-panic" : (statusText === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
+    const statusLabel = statusText === "starting" && ready.message
+      ? `${esc(statusText)} <span class="muted">(${esc(ready.message)})</span>`
+      : esc(statusText || "—");
+    const tail = [
+      `uptime: <b>${esc(hostUp || "—")}</b>`,
+      `status: <span class="${statusCls}">${statusLabel}</span>`,
+    ];
+    parts.push(`<span class="status-tail">${tail.join(" &middot; ")}</span>`);
     bar.innerHTML = parts.join(" &middot; ");
     updatePanicView(ready.panic);
     renderOverview({ ready, live, mon, ops, locks, hostMetrics });
