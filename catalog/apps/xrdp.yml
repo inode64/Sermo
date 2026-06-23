@@ -3,7 +3,7 @@ name: xrdp
 display_name: "xrdp"
 category: remote
 variables:
-  binary: /usr/sbin/xrdp
+  binary: ${bindir}/xrdp
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

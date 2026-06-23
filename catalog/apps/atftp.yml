@@ -3,7 +3,7 @@ name: atftp
 display_name: "atftp"
 category: network
 variables:
-  binary: "/usr/bin/atftpd"
+  binary: ${bindir}/atftpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

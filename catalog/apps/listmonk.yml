@@ -5,7 +5,7 @@ category: web
 # listmonk is a single self-contained binary; its path is deployment-specific
 # (often under the app's web root). Override `binary` to match your install.
 variables:
-  binary: /usr/bin/listmonk
+  binary: ${bindir}/listmonk
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

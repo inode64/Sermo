@@ -4,10 +4,8 @@ display_name: "WAL-G PostgreSQL"
 category: database
 variables:
   binary:
-    - "/usr/bin/wal-g-pg"
-    - "/usr/local/bin/wal-g-pg"
-    - "/usr/bin/wal-g"
-    - "/usr/local/bin/wal-g"
+    - ${bindir}/wal-g-pg
+    - ${bindir}/wal-g
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

@@ -3,7 +3,7 @@ name: lldpd
 display_name: "LLDP Daemon"
 category: network
 variables:
-  binary: "/usr/bin/lldpd"
+  binary: ${bindir}/lldpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

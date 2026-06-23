@@ -3,7 +3,7 @@ name: loki
 display_name: "Grafana Loki"
 category: observability
 variables:
-  binary: /usr/bin/loki
+  binary: ${bindir}/loki
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

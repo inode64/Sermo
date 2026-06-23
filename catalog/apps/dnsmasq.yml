@@ -3,7 +3,7 @@ name: dnsmasq
 display_name: "dnsmasq"
 category: network
 variables:
-  binary: /usr/bin/dnsmasq
+  binary: ${bindir}/dnsmasq
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

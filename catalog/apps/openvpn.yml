@@ -3,7 +3,7 @@ name: openvpn
 display_name: "OpenVPN"
 category: vpn
 variables:
-  binary: "/usr/bin/openvpn"
+  binary: ${bindir}/openvpn
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

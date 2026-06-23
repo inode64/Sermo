@@ -3,8 +3,8 @@ name: smbd
 display_name: "Samba SMB"
 category: storage
 variables:
-  binary: "/usr/bin/smbd"
-  testparm: "/usr/bin/testparm"
+  binary: ${bindir}/smbd
+  testparm: ${bindir}/testparm
 preflight:
   binary: { type: binary, path: "${binary}" }
   testparm: { type: binary, path: "${testparm}" }

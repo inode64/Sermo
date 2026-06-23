@@ -3,7 +3,7 @@ name: tuned
 display_name: "TuneD"
 category: system
 variables:
-  binary: /usr/sbin/tuned
+  binary: ${bindir}/tuned
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

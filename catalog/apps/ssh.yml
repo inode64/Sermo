@@ -3,7 +3,7 @@ name: ssh
 display_name: "OpenSSH"
 category: network
 variables:
-  binary: "/usr/bin/sshd"
+  binary: ${bindir}/sshd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

@@ -3,7 +3,7 @@ name: proftpd
 display_name: "ProFTPD"
 category: network
 variables:
-  binary: "/usr/bin/proftpd"
+  binary: ${bindir}/proftpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

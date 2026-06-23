@@ -4,7 +4,7 @@ display_name: "Go"
 category: runtime
 description: "A concurrent garbage collected and typesafe programming language"
 variables:
-  binary: "/usr/bin/go"
+  binary: ${bindir}/go
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","version"], timeout: 10s }

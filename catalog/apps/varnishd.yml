@@ -3,7 +3,7 @@ name: varnishd
 display_name: "Varnish"
 category: web
 variables:
-  binary: "/usr/bin/varnishd"
+  binary: ${bindir}/varnishd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

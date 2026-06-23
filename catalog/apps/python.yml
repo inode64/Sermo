@@ -4,7 +4,7 @@ display_name: "Python ${n} ${current}"
 category: runtime
 description: "Python interpreter"
 variables:
-  binary: "/usr/bin/python${n}"
+  binary: ${bindir}/python${n}
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

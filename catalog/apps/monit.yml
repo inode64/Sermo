@@ -3,7 +3,7 @@ name: monit
 display_name: "Monit"
 category: observability
 variables:
-  binary: /usr/bin/monit
+  binary: ${bindir}/monit
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

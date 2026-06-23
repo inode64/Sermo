@@ -3,7 +3,7 @@ name: virtlockd
 display_name: "libvirt Lock Daemon"
 category: virtualization
 variables:
-  binary: "/usr/bin/virtlockd"
+  binary: ${bindir}/virtlockd
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","-V"], timeout: 10s }

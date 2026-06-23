@@ -4,10 +4,8 @@ display_name: "Apache HTTP Server"
 category: web
 variables:
   binary:
-    - /usr/sbin/apache2
-    - /usr/sbin/httpd
-    - /usr/bin/apache2
-    - /usr/bin/httpd
+    - ${bindir}/apache2
+    - ${bindir}/httpd
 preflight:
   binary: { type: binary, path: "${binary}" }
   # Use the configured binary directly (httpd/apache2 -v), not `apachectl`: the

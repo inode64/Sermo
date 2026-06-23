@@ -4,7 +4,7 @@ display_name: "Certbot"
 category: security
 description: "Let's Encrypt client for obtaining SSL/TLS certificates"
 variables:
-  binary: "/usr/bin/certbot"
+  binary: ${bindir}/certbot
 preflight:
   binary: { type: binary, path: "${binary}" }
   version: { type: command, command: ["${binary}","--version"], timeout: 10s }

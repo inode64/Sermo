@@ -5,15 +5,11 @@ category: database
 version_match: { contains: MariaDB }
 variables:
   binary:
-    - /usr/sbin/mariadbd
-    - /usr/bin/mariadbd
-    - /usr/sbin/mysqld
-    - /usr/bin/mysqld
+    - ${bindir}/mariadbd
+    - ${bindir}/mysqld
   client_binary:
-    - /usr/sbin/mariadb
-    - /usr/bin/mariadb
-    - /usr/sbin/mysql
-    - /usr/bin/mysql
+    - ${bindir}/mariadb
+    - ${bindir}/mysql
 preflight:
   binary: { type: binary, path: "${binary}" }
   client: { type: binary, path: "${client_binary}", optional: true }
