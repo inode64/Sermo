@@ -4,7 +4,7 @@ display_name: Fcron
 category: system
 service: fcron
 apps:
-- fcron
+  - fcron
 pidfile: /run/fcron.pid
 socket: /run/fcron.fifo
 processes:
@@ -21,7 +21,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

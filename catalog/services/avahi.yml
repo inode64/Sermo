@@ -5,13 +5,13 @@ category: network
 description: Zero Configuration Networking
 service:
   systemd:
-  - avahi
-  - avahi-daemon
+    - avahi
+    - avahi-daemon
   openrc:
-  - avahi
-  - avahi-daemon
+    - avahi
+    - avahi-daemon
 apps:
-- avahi
+  - avahi
 checks:
   service:
     type: service

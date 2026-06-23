@@ -5,13 +5,13 @@ category: system
 description: systemd system and service manager
 service: systemd
 apps:
-- systemd
+  - systemd
 reload:
   command:
-  - systemctl
-  - daemon-reload
+    - systemctl
+    - daemon-reload
   when: always
 reload_on_change:
   paths:
-  - /etc/systemd/system
-  - /lib/systemd/system
+    - /etc/systemd/system
+    - /lib/systemd/system

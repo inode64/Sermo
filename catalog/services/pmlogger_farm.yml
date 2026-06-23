@@ -5,9 +5,9 @@ category: observability
 description: Performance Co-Pilot pmlogger farm service.
 service:
   systemd:
-  - pmlogger_farm
+    - pmlogger_farm
 apps:
-- pmlogger_farm
+  - pmlogger_farm
 variables:
   user: pcp
 processes:
@@ -30,7 +30,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

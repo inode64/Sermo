@@ -5,9 +5,9 @@ category: observability
 description: Performance Co-Pilot primary archive logger.
 service:
   systemd:
-  - pmlogger
+    - pmlogger
 apps:
-- pmlogger
+  - pmlogger
 variables:
   host: 127.0.0.1
   port: 4330

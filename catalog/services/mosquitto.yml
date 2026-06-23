@@ -6,19 +6,19 @@ description: Mosquitto MQTT message broker.
 type: queue
 service:
   systemd:
-  - mosquitto
+    - mosquitto
   openrc:
-  - mosquitto
+    - mosquitto
 apps:
-- mosquitto
+  - mosquitto
 variables:
   host: 127.0.0.1
   port: 1883
 restart_on_change:
   libraries:
-  - glibc
-  - openssl
-  - systemd-libs
+    - glibc
+    - openssl
+    - systemd-libs
 pidfile: /run/mosquitto.pid
 checks:
   service:
@@ -52,9 +52,9 @@ preflight:
   config:
     type: command
     command:
-    - ${mosquitto_binary}
-    - -c
-    - /etc/mosquitto/mosquitto.conf
+      - ${mosquitto_binary}
+      - -c
+      - /etc/mosquitto/mosquitto.conf
     timeout: 15s
     optional: true
 postflight:
@@ -67,8 +67,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

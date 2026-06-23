@@ -5,11 +5,11 @@ category: observability
 description: Prometheus monitoring server and time-series database.
 service:
   systemd:
-  - prometheus
+    - prometheus
   openrc:
-  - prometheus
+    - prometheus
 apps:
-- prometheus
+  - prometheus
 variables:
   user: prometheus
   host: 127.0.0.1
@@ -20,15 +20,15 @@ preflight:
   config:
     type: command
     command:
-    - ${prometheus_promtool}
-    - check
-    - config
-    - ${config}
+      - ${prometheus_promtool}
+      - check
+      - config
+      - ${config}
     timeout: 30s
 config_files:
-- ${config}
-- /etc/prometheus/rules
-- /etc/prometheus/rules.d
+  - ${config}
+  - /etc/prometheus/rules
+  - /etc/prometheus/rules.d
 processes:
   main:
     exe: ${prometheus_binary}
@@ -51,15 +51,15 @@ checks:
     timeout: 3s
 reload_on_change:
   paths:
-  - ${config}
-  - /etc/prometheus/rules
-  - /etc/prometheus/rules.d
+    - ${config}
+    - /etc/prometheus/rules
+    - /etc/prometheus/rules.d
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

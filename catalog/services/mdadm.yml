@@ -3,7 +3,7 @@ name: mdadm
 category: storage
 service: mdadm
 apps:
-- mdadm
+  - mdadm
 pidfile: /run/mdadm.pid
 processes:
   main:

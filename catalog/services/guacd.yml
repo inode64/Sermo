@@ -5,7 +5,7 @@ category: web
 description: Guacamole daemon
 service: guacd
 apps:
-- guacd
+  - guacd
 variables:
   port: 4822
   user: guacamole

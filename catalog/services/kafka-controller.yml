@@ -2,19 +2,18 @@ kind: daemon
 name: kafka-controller
 display_name: Apache Kafka Controller
 category: messaging
-description: 'Kafka controller: maintains the KRaft metadata quorum on the controller
-  listener.'
+description: 'Kafka controller: maintains the KRaft metadata quorum on the controller listener.'
 type: queue
 service:
   systemd:
-  - kafka-controller
-  - kafka
+    - kafka-controller
+    - kafka
   openrc:
-  - kafka-controller
-  - kafka
+    - kafka-controller
+    - kafka
 apps:
-- java
-- kafka
+  - java
+  - kafka
 variables:
   host: 127.0.0.1
   port: 9093

@@ -5,11 +5,11 @@ category: web
 description: listmonk newsletter and mailing-list manager.
 service:
   systemd:
-  - listmonk
+    - listmonk
   openrc:
-  - listmonk
+    - listmonk
 apps:
-- listmonk
+  - listmonk
 variables:
   host: 127.0.0.1
   port: 9000

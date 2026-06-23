@@ -6,7 +6,7 @@ description: PPP daemon — PPPoE/dial-up uplink to an internet provider.
 type: tunnel
 service: pppd
 apps:
-- pppd
+  - pppd
 variables:
   ppp_iface: ppp0
   probe_host: 1.1.1.1
@@ -21,7 +21,7 @@ policy:
     max: 1h
 restart_on_change:
   libraries:
-  - glibc
+    - glibc
 checks:
   service:
     type: service

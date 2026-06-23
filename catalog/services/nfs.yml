@@ -5,12 +5,12 @@ category: storage
 description: Kernel NFS server.
 service:
   systemd:
-  - nfs-server
-  - nfs
+    - nfs-server
+    - nfs
   openrc:
-  - nfs
+    - nfs
 apps:
-- rpc-mountd
+  - rpc-mountd
 variables:
   host: 127.0.0.1
   port: 2049

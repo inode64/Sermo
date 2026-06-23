@@ -5,10 +5,10 @@ category: storage
 description: RPC pipefs mount helper used by NFS services.
 service:
   systemd:
-  - rpc-pipefs
+    - rpc-pipefs
   openrc:
-  - rpc.pipefs
-  - rpc-pipefs
+    - rpc.pipefs
+    - rpc-pipefs
 checks:
   service:
     type: service

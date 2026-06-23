@@ -4,7 +4,7 @@ display_name: libvirt Log Daemon
 category: virtualization
 service: virtlogd
 apps:
-- virtlogd
+  - virtlogd
 socket: /run/libvirt/virtlogd-sock
 processes:
   main:

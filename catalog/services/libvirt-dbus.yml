@@ -5,11 +5,11 @@ category: virtualization
 description: D-Bus bridge exposing libvirt objects to desktop and management clients.
 service:
   systemd:
-  - libvirt-dbus
+    - libvirt-dbus
   openrc:
-  - libvirt-dbus
+    - libvirt-dbus
 apps:
-- libvirt-dbus
+  - libvirt-dbus
 variables:
   user: root
 processes:

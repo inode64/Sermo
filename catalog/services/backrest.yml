@@ -5,12 +5,12 @@ category: storage
 description: Backrest web UI/orchestrator for restic backups.
 service:
   systemd:
-  - backrest
+    - backrest
   openrc:
-  - backrest
+    - backrest
 apps:
-- backrest
-- restic
+  - backrest
+  - restic
 variables:
   host: 127.0.0.1
   port: 9898

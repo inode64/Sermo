@@ -4,13 +4,13 @@ display_name: Automount
 category: system
 service:
   systemd:
-  - autofs
-  - automount
+    - autofs
+    - automount
   openrc:
-  - autofs
-  - automount
+    - autofs
+    - automount
 apps:
-- automount
+  - automount
 checks:
   service:
     type: service

@@ -4,11 +4,11 @@ display_name: Open vSwitch Database Server
 category: virtualization
 service:
   systemd:
-  - ovsdb-server
+    - ovsdb-server
   openrc:
-  - ovsdb-server
+    - ovsdb-server
 apps:
-- ovsdb-server
+  - ovsdb-server
 processes:
   main:
     exe: ${ovsdb_server_binary}

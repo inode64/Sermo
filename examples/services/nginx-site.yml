@@ -24,7 +24,7 @@ checks:
     type: cert
     path: "${cert_file}"
     expires_in_days: 21
-    on_issuer_change: true # alert on a CA change / re-issue between cycles
+    on_issuer_change: true  # alert on a CA change / re-issue between cycles
 
 rules:
   # Sustained high resident memory across the whole nginx process tree (workers

@@ -1,0 +1,23 @@
+formatter:
+  type: basic
+  indent: 2
+  include_document_start: false
+  indentless_arrays: false
+  eof_newline: true
+  retain_line_breaks: true
+  pad_line_comments: 2
+
+match_type: doublestar
+gitignore_excludes: true
+
+include:
+  - catalog/**/*.yml
+  - examples/**/*.yml
+  - templates/**/*.yml
+  - docs/**/*.yml
+  - .github/**/*.yml
+  - .golangci.yml
+
+exclude:
+  - graphify-out/**
+  - .agents/**

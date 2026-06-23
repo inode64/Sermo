@@ -5,14 +5,14 @@ category: system
 description: Dynamic system tuning daemon.
 service:
   systemd:
-  - tuned
+    - tuned
   openrc:
-  - tuned
+    - tuned
 apps:
-- tuned
+  - tuned
 pidfile:
-- /run/tuned/tuned.pid
-- /run/tuned.pid
+  - /run/tuned/tuned.pid
+  - /run/tuned.pid
 checks:
   service:
     type: service
@@ -20,15 +20,15 @@ checks:
   active:
     type: command
     command:
-    - tuned-adm
-    - active
+      - tuned-adm
+      - active
     timeout: 10s
 postflight:
   active:
     type: command
     command:
-    - tuned-adm
-    - active
+      - tuned-adm
+      - active
     timeout: 10s
 policy:
   cooldown: 15m

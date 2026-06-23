@@ -14,7 +14,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
     optional: true
 postflight:
   process:

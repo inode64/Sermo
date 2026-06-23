@@ -5,30 +5,30 @@ category: virtualization
 description: Docker Engine container runtime.
 service:
   systemd:
-  - docker
+    - docker
   openrc:
-  - docker
+    - docker
 also_service:
   systemd:
-  - docker.socket
+    - docker.socket
 apps:
-- docker
+  - docker
 variables:
   socket: /run/docker.sock
   config: /etc/docker/daemon.json
 config_files:
-- ${config}
+  - ${config}
 preflight:
   config:
     type: command
     # Docker's config file is optional: validate it when present, but let a host
     # without /etc/docker/daemon.json start normally.
     command:
-    - sh
-    - -c
-    - test ! -e "$1" || exec "$0" --validate --config-file="$1"
-    - ${docker_daemon}
-    - ${config}
+      - sh
+      - -c
+      - test ! -e "$1" || exec "$0" --validate --config-file="$1"
+      - ${docker_daemon}
+      - ${config}
     timeout: 30s
 processes:
   main:
@@ -59,13 +59,13 @@ policy:
     max: 1h
 reload_on_change:
   paths:
-  - ${config}
+    - ${config}
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

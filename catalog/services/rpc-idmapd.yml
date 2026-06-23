@@ -5,13 +5,13 @@ category: storage
 description: NFSv4 ID mapping daemon.
 service:
   systemd:
-  - nfs-idmapd
-  - rpc-idmapd
+    - nfs-idmapd
+    - rpc-idmapd
   openrc:
-  - rpc.idmapd
-  - rpc-idmapd
+    - rpc.idmapd
+    - rpc-idmapd
 apps:
-- rpc-idmapd
+  - rpc-idmapd
 processes:
   main:
     exe: ${rpc_idmapd_binary}
@@ -26,7 +26,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

@@ -4,7 +4,7 @@ display_name: Nginx
 category: web
 service: nginx
 apps:
-- nginx
+  - nginx
 variables:
   host: 127.0.0.1
   port: 80
@@ -13,16 +13,16 @@ preflight:
   config:
     type: command
     command:
-    - ${nginx_binary}
-    - -t
+      - ${nginx_binary}
+      - -t
     timeout: 30s
     analyze:
       use:
-      - common
-      - web
+        - common
+        - web
 pidfile: /run/nginx/nginx.pid
 config_files:
-- /etc/nginx/nginx.conf
+  - /etc/nginx/nginx.conf
 processes:
   main:
     exe: ${nginx_binary}
@@ -78,8 +78,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config
@@ -123,4 +123,4 @@ postflight:
     timeout: 5s
 reload_on_change:
   paths:
-  - /etc/nginx/nginx.conf
+    - /etc/nginx/nginx.conf

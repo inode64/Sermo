@@ -43,4 +43,4 @@ preflight:
   auth: { type: binary, path: "${auth_binary}", optional: true }
   imap-login: { type: binary, path: "${imap_login_binary}", optional: true }
   imap: { type: binary, path: "${imap_binary}", optional: true }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

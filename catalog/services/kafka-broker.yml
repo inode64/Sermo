@@ -2,19 +2,18 @@ kind: daemon
 name: kafka-broker
 display_name: Apache Kafka Broker
 category: messaging
-description: 'Kafka broker: serves the client data plane (produce/fetch) on the broker
-  listener.'
+description: 'Kafka broker: serves the client data plane (produce/fetch) on the broker listener.'
 type: queue
 service:
   systemd:
-  - kafka-broker
-  - kafka
+    - kafka-broker
+    - kafka
   openrc:
-  - kafka-broker
-  - kafka
+    - kafka-broker
+    - kafka
 apps:
-- java
-- kafka
+  - java
+  - kafka
 variables:
   host: 127.0.0.1
   port: 9092

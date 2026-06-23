@@ -5,11 +5,11 @@ category: network
 description: atftp TFTP server daemon.
 service:
   systemd:
-  - atftp
+    - atftp
   openrc:
-  - atftp
+    - atftp
 apps:
-- atftp
+  - atftp
 variables:
   port: 69
   user: nobody

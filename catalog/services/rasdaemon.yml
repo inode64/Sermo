@@ -5,9 +5,9 @@ category: hardware
 description: Logs hardware RAS events such as memory and PCIe errors.
 service:
   systemd:
-  - rasdaemon
+    - rasdaemon
 apps:
-- rasdaemon
+  - rasdaemon
 processes:
   main:
     exe: ${rasdaemon_binary}
@@ -22,7 +22,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

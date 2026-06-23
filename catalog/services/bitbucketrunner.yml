@@ -5,9 +5,9 @@ category: vpn
 description: Atlassian Bitbucket self-hosted Pipelines runner.
 service:
   systemd:
-  - bitbucketrunner
+    - bitbucketrunner
   openrc:
-  - bitbucketrunner
+    - bitbucketrunner
 checks:
   service:
     type: service

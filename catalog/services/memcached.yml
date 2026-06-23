@@ -6,7 +6,7 @@ description: Memcached in-memory cache
 type: cache
 service: memcached
 apps:
-- memcached
+  - memcached
 variables:
   host: 127.0.0.1
   port: 11211

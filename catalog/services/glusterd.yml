@@ -5,7 +5,7 @@ category: storage
 description: GlusterFS
 service: glusterd
 apps:
-- glusterd
+  - glusterd
 variables:
   port: 24007
 socket: /run/glusterd.socket

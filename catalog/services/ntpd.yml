@@ -5,7 +5,7 @@ category: network
 description: Network Time Protocol Daemon
 service: ntpd
 apps:
-- ntpd
+  - ntpd
 variables:
   port: 123
   user: ntp

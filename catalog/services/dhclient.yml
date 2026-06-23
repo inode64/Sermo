@@ -4,7 +4,7 @@ display_name: DHCP Client
 category: network
 service: dhclient
 apps:
-- dhclient
+  - dhclient
 variables:
   host: 0.0.0.0
   port: 68

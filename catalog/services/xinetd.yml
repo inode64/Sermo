@@ -3,7 +3,7 @@ name: xinetd
 category: network
 service: xinetd
 apps:
-- xinetd
+  - xinetd
 pidfile: /run/xinetd.pid
 processes:
   main:
@@ -19,7 +19,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

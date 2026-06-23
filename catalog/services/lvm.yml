@@ -4,7 +4,7 @@ display_name: LVM
 category: storage
 service: lvm
 apps:
-- lvm
+  - lvm
 checks:
   service:
     type: service

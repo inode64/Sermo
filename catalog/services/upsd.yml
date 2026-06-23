@@ -4,7 +4,7 @@ display_name: NUT UPS Daemon
 category: hardware
 service: upsd
 apps:
-- upsd
+  - upsd
 variables:
   port: 3493
   user: nut

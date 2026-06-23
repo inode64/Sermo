@@ -4,7 +4,7 @@ display_name: Squid
 category: web
 service: squid
 apps:
-- squid
+  - squid
 variables:
   port: 3128
   user: squid
@@ -12,9 +12,9 @@ preflight:
   config:
     type: command
     command:
-    - ${squid_binary}
-    - -k
-    - check
+      - ${squid_binary}
+      - -k
+      - check
     timeout: 30s
 pidfile: /run/squid.pid
 processes:
@@ -53,8 +53,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

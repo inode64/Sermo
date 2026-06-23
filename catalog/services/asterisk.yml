@@ -4,7 +4,7 @@ display_name: Asterisk PBX
 category: messaging
 service: asterisk
 apps:
-- asterisk
+  - asterisk
 variables:
   port: 5038
 checks:

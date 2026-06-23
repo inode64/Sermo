@@ -5,14 +5,14 @@ category: hardware
 description: Hardware sensor initialization service.
 service:
   systemd:
-  - lm_sensors
-  - lm-sensors
+    - lm_sensors
+    - lm-sensors
   openrc:
-  - lm_sensors
-  - lm-sensors
+    - lm_sensors
+    - lm-sensors
 apps:
-- lm_sensors
-processes: {}
+  - lm_sensors
+processes: { }
 checks:
   service:
     type: service
@@ -20,15 +20,15 @@ checks:
   sensors:
     type: command
     command:
-    - ${lm_sensors_binary}
-    - -A
+      - ${lm_sensors_binary}
+      - -A
     timeout: 10s
     optional: true
 postflight:
   sensors:
     type: command
     command:
-    - ${lm_sensors_binary}
-    - -A
+      - ${lm_sensors_binary}
+      - -A
     timeout: 10s
     optional: true

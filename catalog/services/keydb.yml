@@ -4,13 +4,13 @@ display_name: KeyDB
 category: database
 service:
   systemd:
-  - keydb
-  - keydb-server
+    - keydb
+    - keydb-server
   openrc:
-  - keydb
-  - keydb-server
+    - keydb
+    - keydb-server
 apps:
-- keydb
+  - keydb
 variables:
   host: 127.0.0.1
   port: 6379

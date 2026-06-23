@@ -24,4 +24,4 @@ preflight:
   pinger: { type: binary, path: "${pinger_binary}", optional: true }
   log-file-daemon: { type: binary, path: "${log_file_daemon_binary}", optional: true }
   security-file-certgen: { type: binary, path: "${security_file_certgen_binary}", optional: true }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }

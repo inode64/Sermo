@@ -5,11 +5,11 @@ category: storage
 description: 'restic rest-server: HTTP backend for restic backups.'
 service:
   systemd:
-  - rest-server
+    - rest-server
   openrc:
-  - rest-server
+    - rest-server
 apps:
-- rest-server
+  - rest-server
 variables:
   host: 127.0.0.1
   port: 8000

@@ -5,22 +5,22 @@ category: messaging
 description: Anti-spam filter for email servers
 service:
   systemd:
-  - spamassassin
-  - spamd
+    - spamassassin
+    - spamd
   openrc:
-  - spamd
-  - spamassassin
+    - spamd
+    - spamassassin
 apps:
-- perl
-- spamassassin
+  - perl
+  - spamassassin
 variables:
   port: 783
 preflight:
   config:
     type: command
     command:
-    - ${spamassassin_binary}
-    - --lint
+      - ${spamassassin_binary}
+      - --lint
     timeout: 30s
 checks:
   service:
@@ -37,8 +37,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

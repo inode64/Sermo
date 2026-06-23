@@ -5,27 +5,27 @@ category: database
 type: cache
 service:
   systemd:
-  - redis
-  - redis-server
+    - redis
+    - redis-server
   openrc:
-  - redis
-  - redis-server
+    - redis
+    - redis-server
 apps:
-- redis
+  - redis
 variables:
   user: redis
   host: 127.0.0.1
   port: 6379
 pidfile:
-- /run/redis/redis.pid
-- /run/redis.pid
+  - /run/redis/redis.pid
+  - /run/redis.pid
 processes:
   redis:
     exe: ${redis_binary}
     user: ${user}
 config_files:
-- /etc/redis/redis.conf
-- /etc/redis.conf
+  - /etc/redis/redis.conf
+  - /etc/redis.conf
 checks:
   service:
     type: service
@@ -66,9 +66,9 @@ stop_policy:
   term_timeout: 60s
   kill_only_if:
     users:
-    - ${user}
+      - ${user}
     exe_any:
-    - ${redis_binary}
+      - ${redis_binary}
 policy:
   cooldown: 15m
   max_actions: 2
@@ -150,5 +150,5 @@ postflight:
     timeout: 3s
 reload_on_change:
   paths:
-  - /etc/redis/redis.conf
-  - /etc/redis.conf
+    - /etc/redis/redis.conf
+    - /etc/redis.conf

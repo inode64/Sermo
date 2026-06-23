@@ -8,4 +8,4 @@ variables:
 preflight:
   binary: { type: binary, path: "${binary}" }
   checkconf: { type: binary, path: "${checkconf}" }
-  version: { type: command, command: ["${binary}","-v"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "-v"], timeout: 10s }

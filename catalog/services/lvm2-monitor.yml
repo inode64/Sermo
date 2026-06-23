@@ -5,10 +5,10 @@ category: storage
 description: LVM2 dmeventd monitoring activation service.
 service:
   systemd:
-  - lvm2-monitor
+    - lvm2-monitor
 apps:
-- lvm
-processes: {}
+  - lvm
+processes: { }
 checks:
   service:
     type: service

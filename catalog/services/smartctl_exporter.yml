@@ -5,11 +5,11 @@ category: observability
 description: 'Prometheus smartctl_exporter: S.M.A.R.T. disk metrics over HTTP /metrics.'
 service:
   systemd:
-  - smartctl_exporter
+    - smartctl_exporter
   openrc:
-  - smartctl_exporter
+    - smartctl_exporter
 apps:
-- smartctl_exporter
+  - smartctl_exporter
 variables:
   host: 127.0.0.1
   port: 9633

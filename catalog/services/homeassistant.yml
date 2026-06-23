@@ -5,12 +5,12 @@ category: web
 description: Home Assistant home-automation platform.
 service:
   systemd:
-  - homeassistant
-  - home-assistant@homeassistant
+    - homeassistant
+    - home-assistant@homeassistant
   openrc:
-  - homeassistant
+    - homeassistant
 apps:
-- python3
+  - python3
 variables:
   host: 127.0.0.1
   port: 8123

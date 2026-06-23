@@ -5,24 +5,24 @@ category: database
 type: database
 service:
   systemd:
-  - mariadb
-  - mysql
+    - mariadb
+    - mysql
   openrc:
-  - mariadb
-  - mysql
+    - mariadb
+    - mysql
 apps:
-- mariadb
+  - mariadb
 variables:
   user: mysql
   backup_user: mysql
   host: 127.0.0.1
   port: 3306
   config:
-  - /etc/mysql/my.cnf
-  - /etc/my.cnf
+    - /etc/mysql/my.cnf
+    - /etc/my.cnf
 pidfile:
-- /run/mysqld/mariadb.pid
-- /run/mysqld/mysqld.pid
+  - /run/mysqld/mariadb.pid
+  - /run/mysqld/mysqld.pid
 socket:
   path: /run/mysqld/mysqld.sock
   optional: true
@@ -30,16 +30,16 @@ preflight:
   config:
     type: command
     command:
-    - ${mariadb_binary}
-    - --help
-    - --verbose
+      - ${mariadb_binary}
+      - --help
+      - --verbose
     timeout: 15s
 processes:
   mariadbd:
     exe: ${mariadb_binary}
     user: ${user}
 config_files:
-- ${config}
+  - ${config}
 checks:
   service:
     type: service
@@ -72,15 +72,15 @@ checks:
     type: process
     optional: true
     exe_any:
-    - /usr/bin/mariadb-dump
-    - /usr/bin/mysqldump
-    - /usr/bin/mariadb-backup
-    - /usr/bin/mariadbbackup
-    - /usr/bin/xtrabackup
-    - /usr/bin/wal-g-mysql
-    - /usr/local/bin/wal-g-mysql
-    - /usr/bin/wal-g
-    - /usr/local/bin/wal-g
+      - /usr/bin/mariadb-dump
+      - /usr/bin/mysqldump
+      - /usr/bin/mariadb-backup
+      - /usr/bin/mariadbbackup
+      - /usr/bin/xtrabackup
+      - /usr/bin/wal-g-mysql
+      - /usr/local/bin/wal-g-mysql
+      - /usr/bin/wal-g
+      - /usr/local/bin/wal-g
     user: ${backup_user}
     state: running
 stop_policy:
@@ -88,9 +88,9 @@ stop_policy:
   term_timeout: 60s
   kill_only_if:
     users:
-    - ${user}
+      - ${user}
     exe_any:
-    - ${mariadb_binary}
+      - ${mariadb_binary}
 policy:
   cooldown: 15m
   max_actions: 2
@@ -102,8 +102,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config
@@ -113,7 +113,7 @@ rules:
   block-restart-during-backup:
     type: guard
     blocks:
-    - restart
+      - restart
     if:
       active:
         check: backup

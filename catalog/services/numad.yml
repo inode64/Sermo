@@ -4,7 +4,7 @@ display_name: NUMA Daemon
 category: hardware
 service: numad
 apps:
-- numad
+  - numad
 checks:
   service:
     type: service
@@ -15,7 +15,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

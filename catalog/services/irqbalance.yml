@@ -3,7 +3,7 @@ name: irqbalance
 category: hardware
 service: irqbalance
 apps:
-- irqbalance
+  - irqbalance
 checks:
   service:
     type: service
@@ -14,7 +14,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

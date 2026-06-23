@@ -5,13 +5,13 @@ category: security
 description: Firewall ruleset applied through FireHOL.
 service:
   systemd:
-  - firehol
+    - firehol
   openrc:
-  - firehol
+    - firehol
 apps:
-- firehol
-- iptables
-processes: {}
+  - firehol
+  - iptables
+processes: { }
 checks:
   service:
     type: service
@@ -21,4 +21,4 @@ checks:
     backend: auto
     min_rules: 1
     requires:
-    - service
+      - service

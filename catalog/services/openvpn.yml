@@ -3,10 +3,10 @@ name: openvpn%s%i
 display_name: OpenVPN ${instance}
 category: vpn
 apps:
-- openvpn
+  - openvpn
 service:
   openrc:
-  - openvpn.${instance}
+    - openvpn.${instance}
 variables:
   config: /etc/openvpn/${instance}.conf
   port:
@@ -14,7 +14,7 @@ variables:
     directive: port
     default: 1194
 config_files:
-- ${config}
+  - ${config}
 pidfile: /run/openvpn.${instance}.pid
 checks:
   service:

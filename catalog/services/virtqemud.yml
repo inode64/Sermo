@@ -5,9 +5,9 @@ category: virtualization
 description: Modular libvirt daemon for QEMU/KVM domains.
 service:
   systemd:
-  - virtqemud
+    - virtqemud
 apps:
-- virtqemud
+  - virtqemud
 processes:
   main:
     exe: ${virtqemud_binary}

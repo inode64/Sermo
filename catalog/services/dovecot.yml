@@ -5,7 +5,7 @@ category: messaging
 description: Dovecot IMAP/POP3
 service: dovecot
 apps:
-- dovecot
+  - dovecot
 variables:
   host: 127.0.0.1
   port: 143
@@ -20,8 +20,8 @@ preflight:
   config:
     type: command
     command:
-    - ${dovecot_doveconf}
-    - -n
+      - ${dovecot_doveconf}
+      - -n
     timeout: 30s
 pidfile: /run/dovecot/master.pid
 socket: /run/dovecot/master
@@ -106,8 +106,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

@@ -5,12 +5,12 @@ category: network
 description: NetworkManager system network management daemon.
 service:
   systemd:
-  - NetworkManager
+    - NetworkManager
   openrc:
-  - NetworkManager
-  - networkmanager
+    - NetworkManager
+    - networkmanager
 apps:
-- networkmanager
+  - networkmanager
 processes:
   main:
     exe: ${networkmanager_binary}
@@ -23,18 +23,18 @@ checks:
     type: command
     optional: true
     command:
-    - ${networkmanager_nmcli}
-    - general
-    - status
+      - ${networkmanager_nmcli}
+      - general
+      - status
     timeout: 10s
 postflight:
   status:
     type: command
     optional: true
     command:
-    - ${networkmanager_nmcli}
-    - general
-    - status
+      - ${networkmanager_nmcli}
+      - general
+      - status
     timeout: 10s
 policy:
   cooldown: 15m
