@@ -178,7 +178,7 @@ func (b *WebBackend) hdparmWatchView(w *webWatch) (*web.WatchMeter, []web.WatchR
 	}
 	ctx, cancel := b.probeContext()
 	defer cancel()
-	values, err := checks.SampleHdparm(ctx, b.execRunner, device, wantCached, wantRead)
+	values, err := checks.SampleHdparm(ctx, b.execRunner, device, wantCached, wantRead, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "hdparm: " + msg
@@ -204,7 +204,7 @@ func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	}
 	ctx, cancel := b.probeContext()
 	defer cancel()
-	sample, err := checks.SampleSmart(ctx, b.execRunner, device)
+	sample, err := checks.SampleSmart(ctx, b.execRunner, device, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "smart: " + msg
