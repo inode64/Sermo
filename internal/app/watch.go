@@ -102,7 +102,7 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	}
 	observeOnly := w.Settling != nil && !w.Settling.Observed(w.Name)
 	if w.Cycle != nil {
-		w.Cycle(ctx)
+		w.Cycle(withObserveOnly(ctx, observeOnly))
 		if observeOnly {
 			w.markSettled()
 		}
@@ -156,6 +156,20 @@ func (w *Watch) RunCycle(ctx context.Context) {
 	if w.shouldNotify(wasFiring) {
 		dispatchNotify(ctx, w.Notifiers, watchMessage(w.Name, res.Message, env), w.Name, w.emit)
 	}
+}
+
+type observeOnlyKey struct{}
+
+func withObserveOnly(ctx context.Context, observe bool) context.Context {
+	if observe {
+		return context.WithValue(ctx, observeOnlyKey{}, true)
+	}
+	return ctx
+}
+
+func observeOnlyCycle(ctx context.Context) bool {
+	v, _ := ctx.Value(observeOnlyKey{}).(bool)
+	return v
 }
 
 func (w *Watch) markSettled() {

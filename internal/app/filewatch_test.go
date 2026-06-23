@@ -121,6 +121,23 @@ func TestFileWatchSizeThresholdIsEdgeTriggered(t *testing.T) {
 	}
 }
 
+func TestFileWatchObserveOnlySkipsFire(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "a.txt")
+	writeSize(t, f, 10)
+	h := &fileWatchHarness{}
+	w := h.watcher(f, false, fileCond{sizeChange: true})
+
+	w.runCycle(withObserveOnly(context.Background(), true)) // adopt baseline only
+	if len(h.fired) != 0 {
+		t.Fatalf("observe-only adopt fired %d times, want 0", len(h.fired))
+	}
+	writeSize(t, f, 99)
+	w.runCycle(context.Background()) // settled: size change fires
+	if len(h.fired) != 1 {
+		t.Fatalf("settled cycle fired %d times, want 1", len(h.fired))
+	}
+}
+
 func TestFileWatchPermissions(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "a.txt")
 	writeSize(t, f, 1)

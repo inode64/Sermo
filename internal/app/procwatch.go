@@ -140,10 +140,12 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		}
 
 		fire, env, msg := w.evaluate(st, t, s)
-		if fire && !st.fired {
+		if fire && !st.fired && !observeOnlyCycle(ctx) {
 			w.fire(ctx, msg, env)
 		}
-		st.fired = fire
+		if !observeOnlyCycle(ctx) {
+			st.fired = fire
+		}
 		// Remember this sample for next cycle's rate computation.
 		st.prevCPU, st.prevIO, st.prevAt, st.hadIO = s.CPUTicks, s.IOBytes, t, s.HasIO
 	}
@@ -161,7 +163,7 @@ func (w *procWatcher) runCycle(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if w.cond.onGone {
+		if w.cond.onGone && !observeOnlyCycle(ctx) {
 			st := w.state[pid]
 			env := map[string]string{
 				"SERMO_PID":         strconv.Itoa(pid),
