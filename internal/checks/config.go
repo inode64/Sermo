@@ -35,6 +35,13 @@ func (c configCheck) Run(ctx context.Context) Result {
 	// Validity: a non-zero exit from the config-test command means invalid config.
 	if len(c.argv) > 0 {
 		res, err := c.runConfigCommand(ctx)
+		if res.ExitCode == -1 {
+			msg := execx.OperatorFailure(err, res, c.timeout)
+			if msg == "" {
+				msg = "command failed to run"
+			}
+			return c.result(false, "config invalid: "+msg, start)
+		}
 		if res.ExitCode != 0 {
 			msg := "config invalid"
 			if s := FirstNonEmptyLine(res.Stderr); s != "" {

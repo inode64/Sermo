@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"sermo/internal/conn"
+	"sermo/internal/execx"
 )
 
 // maxPorts caps a single ports check to keep a scan bounded.
@@ -57,7 +58,7 @@ func (c *portsCheck) Run(ctx context.Context) Result {
 
 	states := c.scan(ctx)
 	if err := ctx.Err(); err != nil {
-		return c.result(false, fmt.Sprintf("%s: scan timed out: %v", c.host, err), start)
+		return c.result(false, fmt.Sprintf("%s: %s", c.host, execx.ContextFailure(err, c.timeout)), start)
 	}
 	matchHolds := c.evaluateMatch(states)
 

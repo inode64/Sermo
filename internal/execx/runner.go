@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -94,6 +95,12 @@ func runPrepared(ctx context.Context, cmd *exec.Cmd, start time.Time, displayNam
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		result.ExitCode = -1
+		if errors.Is(ctxErr, context.DeadlineExceeded) {
+			if d := result.Duration.Round(time.Millisecond); d > 0 {
+				return result, fmt.Errorf("run %s: timeout after %s: %w", displayName, d, ctxErr)
+			}
+			return result, fmt.Errorf("run %s: timeout: %w", displayName, ctxErr)
+		}
 		return result, fmt.Errorf("run %s: %w", displayName, ctxErr)
 	}
 
@@ -185,4 +192,38 @@ func RunEnv(ctx context.Context, r Runner, env []string, timeout time.Duration, 
 		return er.RunEnv(ctx, env, name, args...)
 	}
 	return Result{}, fmt.Errorf("execx: runner does not support custom environment (got %T)", r)
+}
+
+// ContextFailure formats a context deadline or cancel error for operator-facing
+// check messages when the timeout is enforced by context.WithTimeout rather than
+// execx.Run directly.
+func ContextFailure(err error, timeout time.Duration) string {
+	return OperatorFailure(err, Result{ExitCode: -1}, timeout)
+}
+
+// OperatorFailure formats a command run failure for check, probe and hook status
+// messages. Exit code -1 from execx marks a run failure (timeout, missing
+// binary, …), not a real process exit status. Timeouts are reported as
+// "timeout after <duration>" instead of "exit -1" or "context deadline exceeded".
+func OperatorFailure(err error, res Result, timeout time.Duration) string {
+	if err == nil {
+		return ""
+	}
+	if res.ExitCode == -1 && errors.Is(err, context.DeadlineExceeded) {
+		d := timeout
+		if d <= 0 && res.Duration > 0 {
+			d = res.Duration.Round(time.Millisecond)
+		}
+		if d > 0 {
+			return fmt.Sprintf("timeout after %s", d)
+		}
+		return "timeout"
+	}
+	msg := err.Error()
+	if after, ok := strings.CutPrefix(msg, "run "); ok {
+		if i := strings.Index(after, ": "); i >= 0 {
+			return after[i+2:]
+		}
+	}
+	return msg
 }

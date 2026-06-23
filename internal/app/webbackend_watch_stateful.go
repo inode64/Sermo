@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/dustin/go-humanize"
 
@@ -45,7 +46,7 @@ func (b *WebBackend) fileWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 	if cfgval.Bool(w.check["recursive"]) && info.IsDir() {
 		ctx, cancel := b.probeContext()
 		defer cancel()
-		n, err := checks.TallyEntries(ctx, path, "any", true)
+		n, err := checks.TallyEntries(ctx, path, "any", true, b.probeTimeout())
 		if err != nil {
 			readings = append(readings, web.WatchReading{Field: "entries", Label: "Entries", Error: err.Error()})
 		} else {
@@ -81,7 +82,7 @@ func (b *WebBackend) countWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	recursive := cfgval.Bool(w.check["recursive"])
 	ctx, cancel := b.probeContext()
 	defer cancel()
-	n, err := checks.TallyEntries(ctx, path, kind, recursive)
+	n, err := checks.TallyEntries(ctx, path, kind, recursive, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "count: " + msg
@@ -140,7 +141,7 @@ func (b *WebBackend) sizeWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRea
 	}
 	ctx, cancel := b.probeContext()
 	defer cancel()
-	size, err := checks.SamplePathSize(ctx, path)
+	size, err := checks.SamplePathSize(ctx, path, b.probeTimeout())
 	if err != nil {
 		msg := err.Error()
 		return nil, watchErrorReadings(msg), "size: " + msg
@@ -230,11 +231,16 @@ func (b *WebBackend) smartWatchView(w *webWatch) (*web.WatchMeter, []web.WatchRe
 	return nil, readings, fmt.Sprintf("smart %s health=%s", device, sample.Health)
 }
 
-func (b *WebBackend) probeContext() (context.Context, context.CancelFunc) {
+func (b *WebBackend) probeTimeout() time.Duration {
 	timeout := b.defaultTimeout
 	if timeout <= 0 {
 		timeout = b.operationTimeout
 	}
+	return timeout
+}
+
+func (b *WebBackend) probeContext() (context.Context, context.CancelFunc) {
+	timeout := b.probeTimeout()
 	if timeout <= 0 {
 		return context.WithCancel(context.Background())
 	}

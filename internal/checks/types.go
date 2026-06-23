@@ -347,6 +347,13 @@ func (c commandCheck) Run(ctx context.Context) Result {
 		}
 		return r
 	}
+	if res.ExitCode == -1 {
+		msg := execx.OperatorFailure(err, res, c.timeout)
+		if msg == "" {
+			msg = "command failed to run"
+		}
+		return fail(msg)
+	}
 	if !ExitCodeExpected(res.ExitCode, c.expectExit) {
 		msg := fmt.Sprintf("exit %d (want %s)", res.ExitCode, ExpectExitText(c.expectExit))
 		if stderr := FirstNonEmptyLine(res.Stderr); stderr != "" {
@@ -709,7 +716,7 @@ func (c librariesCheck) Run(ctx context.Context) Result {
 
 	missing := resolveNeeded(ctx, needed, dirs, make(map[string]bool))
 	if err := ctx.Err(); err != nil {
-		return c.result(false, c.binary+": "+err.Error(), start)
+		return c.result(false, c.binary+": "+execx.ContextFailure(err, c.timeout), start)
 	}
 	if len(missing) > 0 {
 		return c.result(false, c.binary+": missing shared libraries", start)

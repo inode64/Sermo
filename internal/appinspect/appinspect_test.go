@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"sermo/internal/config"
 	"sermo/internal/execx"
@@ -282,6 +283,7 @@ func TestProbeCommandFor(t *testing.T) {
 			"version": map[string]any{
 				"command":       []any{"/bin/tool", "--version"},
 				"user":          "postgres",
+				"timeout":       "10s",
 				"expect_exit":   3,
 				"expect_stdout": "v1.",
 				"expect_stderr": map[string]any{"op": "==", "value": ""},
@@ -295,6 +297,9 @@ func TestProbeCommandFor(t *testing.T) {
 	if vc.user != "postgres" {
 		t.Errorf("user = %q, want postgres", vc.user)
 	}
+	if vc.timeout != 10*time.Second {
+		t.Errorf("timeout = %v, want 10s", vc.timeout)
+	}
 	if !slices.Equal(vc.expectExit, []int{3}) {
 		t.Errorf("expectExit = %v, want [3]", vc.expectExit)
 	}
@@ -303,6 +308,67 @@ func TestProbeCommandFor(t *testing.T) {
 	}
 	if vc.stderr.Op != "==" {
 		t.Errorf("stderr matcher = %+v, want op ==", vc.stderr)
+	}
+}
+
+type timeoutObserver struct {
+	timeout time.Duration
+}
+
+func (o *timeoutObserver) Run(ctx context.Context, name string, _ ...string) (execx.Result, error) {
+	if deadline, ok := ctx.Deadline(); ok {
+		o.timeout = time.Until(deadline)
+	}
+	return execx.Result{Stdout: "tool 1.2.3\n", ExitCode: 0}, nil
+}
+
+func TestInspectUsesCatalogProbeTimeout(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "salt-minion")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved := config.Resolved{Tree: map[string]any{
+		"preflight": map[string]any{
+			"binary":  map[string]any{"type": "binary", "path": binary},
+			"version": map[string]any{"type": "command", "command": []any{binary, "--version"}, "timeout": "10s"},
+		},
+	}}
+	obs := &timeoutObserver{}
+	report := Inspect(context.Background(), obs, "salt-minion", resolved)
+	if !report.OK || report.VersionShort != "1.2.3" {
+		t.Fatalf("Inspect() = %+v, want ok version 1.2.3", report)
+	}
+	if obs.timeout < 9*time.Second || obs.timeout > 10*time.Second {
+		t.Fatalf("probe timeout = %v, want ~10s from catalog entry", obs.timeout)
+	}
+}
+
+type slowRunner struct{}
+
+func (slowRunner) Run(ctx context.Context, _ string, _ ...string) (execx.Result, error) {
+	<-ctx.Done()
+	return execx.Result{ExitCode: -1}, fmt.Errorf("run tool: %w", ctx.Err())
+}
+
+func TestInspectProbeTimeoutFailureReportsUnderlyingError(t *testing.T) {
+	root := t.TempDir()
+	binary := filepath.Join(root, "slow-tool")
+	if err := os.WriteFile(binary, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved := config.Resolved{Tree: map[string]any{
+		"preflight": map[string]any{
+			"binary":  map[string]any{"type": "binary", "path": binary},
+			"version": map[string]any{"type": "command", "command": []any{binary, "--version"}, "timeout": "1ms"},
+		},
+	}}
+	report := Inspect(context.Background(), slowRunner{}, "slow-tool", resolved)
+	if report.OK {
+		t.Fatalf("Inspect() = %+v, want version probe failure", report)
+	}
+	if !strings.Contains(report.Status, "timeout after 1ms") {
+		t.Fatalf("status = %q, want timeout after duration instead of exit -1", report.Status)
 	}
 }
 
