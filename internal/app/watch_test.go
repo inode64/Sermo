@@ -254,6 +254,34 @@ func TestWatchDryRunSkipsHookNotifyAndExpand(t *testing.T) {
 	}
 }
 
+func TestWatchStartupObserveOnlySkipsFiring(t *testing.T) {
+	n := &fakeNotifier{name: "ops"}
+	var events []Event
+	settling := NewSettling(nil)
+	settling.Reset([]string{"storage-root"})
+	w := &Watch{
+		Name:      "storage-root",
+		CheckType: "storage",
+		Check:     stubCheck{name: "storage", ok: true, data: map[string]any{"path": "/"}},
+		Notifiers: []notify.Notifier{n},
+		Settling:  settling,
+		Emit:      func(e Event) { events = append(events, e) },
+	}
+
+	w.RunCycle(context.Background())
+	if len(n.msgs) != 0 || hasEventKind(events, "firing") {
+		t.Fatalf("observe-only watch must not fire or notify, events=%v msgs=%d", events, len(n.msgs))
+	}
+	if !settling.Observed("storage-root") {
+		t.Fatal("observe-only watch must mark the watch observed")
+	}
+
+	w.RunCycle(context.Background())
+	if !hasEventKind(events, "firing") {
+		t.Fatalf("second cycle must emit firing, events=%v", events)
+	}
+}
+
 func TestWatchNotifiesOnceByDefault(t *testing.T) {
 	n := &fakeNotifier{name: "ops"}
 	at := time.Date(2026, 6, 14, 12, 0, 0, 0, time.UTC)
