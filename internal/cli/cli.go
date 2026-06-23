@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -85,6 +86,9 @@ type App struct {
 	// the daemon web API). Defaults to fetching over HTTP using the config's web
 	// address/port (and password for auth if present).
 	FetchEvents func(ctx context.Context, opts options, service string, limit int) ([]event, error)
+	// FetchDaemonServiceState returns the daemon-computed service state when
+	// sermod is running and the web API is reachable. ok is false when unavailable.
+	FetchDaemonServiceState func(ctx context.Context, opts options, service string) (string, bool)
 	// PruneEvents is injectable for `sermoctl events clear` and
 	// `sermoctl activity clear`. Defaults to pruning the daemon's persisted event
 	// feed over HTTP using the config's web address/port (and password for auth if
@@ -200,6 +204,9 @@ func (a App) Run(ctx context.Context, args []string) int {
 	}
 	if a.FetchEvents == nil {
 		a.FetchEvents = a.fetchEvents
+	}
+	if a.FetchDaemonServiceState == nil {
+		a.FetchDaemonServiceState = a.fetchDaemonServiceState
 	}
 	if a.PruneEvents == nil {
 		a.PruneEvents = a.pruneDaemonEvents
@@ -360,15 +367,27 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 	}
 
 	mon := a.serviceMonitorState(opts)
+	state := a.serviceDisplayState(ctx, opts, status, mon)
 	if opts.json {
-		writeJSON(a.Stdout, statusToJSON(status, mon))
+		writeJSON(a.Stdout, statusToJSON(status, mon, state))
 		return exitSuccess
 	}
 
-	state := app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true)
 	fmt.Fprintf(a.Stdout, "%s state=%s backend=%s service=%s%s\n",
 		status.Service, state, status.Backend, status.Unit, formatStateMetadata(mon))
 	return exitSuccess
+}
+
+// serviceDisplayState returns the operator-facing state for status output.
+// When sermod is up it prefers the daemon's settled view (including starting);
+// otherwise it derives state from the local backend query only.
+func (a App) serviceDisplayState(ctx context.Context, opts options, status servicemgr.ServiceStatus, mon monitorView) string {
+	if a.FetchDaemonServiceState != nil {
+		if st, ok := a.FetchDaemonServiceState(ctx, opts, status.Service); ok && st != "" {
+			return st
+		}
+	}
+	return app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true)
 }
 
 // monitorView is the persisted monitoring metadata shown by status and monitor.
@@ -461,7 +480,8 @@ func (a App) runIsActive(ctx context.Context, opts options) int {
 
 	switch {
 	case opts.json:
-		writeJSON(a.Stdout, statusToJSON(status, a.serviceMonitorState(opts)))
+		mon := a.serviceMonitorState(opts)
+		writeJSON(a.Stdout, statusToJSON(status, mon, a.serviceDisplayState(ctx, opts, status, mon)))
 	case !opts.quiet:
 		fmt.Fprintln(a.Stdout, status.Status)
 	}
@@ -1157,10 +1177,10 @@ func defaultTimeout(command string) time.Duration {
 	}
 }
 
-func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
+func statusToJSON(status servicemgr.ServiceStatus, mon monitorView, state string) statusJSON {
 	out := statusJSON{
 		Service: status.Service,
-		State:   app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true),
+		State:   state,
 		Backend: string(status.Backend),
 		Status:  string(status.Status),
 		Unit:    status.Unit,
@@ -1412,6 +1432,52 @@ func (a App) fetchEvents(ctx context.Context, opts options, service string, limi
 		return nil, fmt.Errorf("decode events: %w", err)
 	}
 	return evs, nil
+}
+
+// fetchDaemonServiceState reads GET /api/services/{name} from the running
+// sermod web API and returns its computed state field.
+func (a App) fetchDaemonServiceState(ctx context.Context, opts options, service string) (string, bool) {
+	cfg, err := a.LoadConfig(opts.globalPath())
+	if err != nil || cfg == nil {
+		return "", false
+	}
+	name := service
+	if canonical, ok := cfg.CanonicalServiceName(service); ok {
+		name = canonical
+	} else if len(cfg.Services) > 0 {
+		return "", false
+	}
+	base, err := webAPIBase(cfg)
+	if err != nil {
+		return "", false
+	}
+	u := fmt.Sprintf("%s/api/services/%s", base, url.PathEscape(name))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", false
+	}
+	if wraw, ok := cfg.Global.Raw["web"].(map[string]any); ok {
+		if pw := cfgval.String(wraw["password"]); pw != "" {
+			cred := base64.StdEncoding.EncodeToString([]byte("admin:" + pw))
+			req.Header.Set("Authorization", "Basic "+cred)
+		}
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", false
+	}
+	var detail struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&detail); err != nil || detail.State == "" {
+		return "", false
+	}
+	return detail.State, true
 }
 
 func webAPIBase(cfg *config.Config) (string, error) {
