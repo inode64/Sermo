@@ -1648,6 +1648,49 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 }
 
+func TestWebBackendStartingStateUnsettled(t *testing.T) {
+	settling := NewSettling(nil)
+	settling.Reset([]string{"web", "disk"})
+
+	b := &WebBackend{
+		order: []string{"web"},
+		entries: map[string]*webEntry{
+			"web": {
+				displayName: "Web",
+				status: func(context.Context) (servicemgr.Status, error) {
+					return servicemgr.StatusInactive, nil
+				},
+			},
+		},
+		watchOrder: []string{"disk"},
+		watches: map[string]*webWatch{
+			"disk": {name: "disk", checkType: "storage"},
+		},
+		settling: settling,
+	}
+
+	svcs := b.Services(context.Background())
+	if len(svcs) != 1 || svcs[0].State != TargetStateStarting {
+		t.Fatalf("unsettled service = %+v, want state starting", svcs[0])
+	}
+	watches := b.Watches(context.Background())
+	if len(watches) != 1 || watches[0].State != TargetStateStarting {
+		t.Fatalf("unsettled watch = %+v, want state starting", watches[0])
+	}
+
+	settling.MarkObserved("web")
+	settling.MarkObserved("disk")
+
+	svcs = b.Services(context.Background())
+	if svcs[0].State != TargetStateFailed {
+		t.Fatalf("settled inactive service = %+v, want state failed", svcs[0])
+	}
+	watches = b.Watches(context.Background())
+	if watches[0].State != TargetStateOK {
+		t.Fatalf("settled healthy watch = %+v, want state ok", watches[0])
+	}
+}
+
 // fakeEnvRunnerForWeb is used to inject a custom execx runner via Deps.ExecxRunner
 // and verify that hooks in watches built for the web backend receive the expected env.
 type fakeEnvRunnerForWeb struct {
