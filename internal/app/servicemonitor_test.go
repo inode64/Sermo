@@ -35,6 +35,32 @@ func monitorTestDeps() Deps {
 	}
 }
 
+func TestVersionMonitorAdvancesSettling(t *testing.T) {
+	ready := NewReadiness("systemd", 1, 0)
+	settling := NewSettling(ready)
+	settling.Reset([]string{SettlingWatchKey("apache:version")})
+	ready.ExpectFirstCycles(1)
+
+	tree := map[string]any{
+		"commands": map[string]any{"version": map[string]any{"command": []any{"/bin/true"}}},
+		"version":  map[string]any{"on_change": map[string]any{"notify": []any{"ops"}}},
+	}
+	deps := monitorTestDeps()
+	deps.Settling = settling
+
+	w, warn := versionMonitor("apache", tree, deps, time.Minute)
+	if warn != "" || w == nil {
+		t.Fatalf("warn=%q w=%v", warn, w)
+	}
+	w.RunCycle(context.Background())
+	if !settling.Observed(SettlingWatchKey("apache:version")) {
+		t.Fatal("version monitor must complete startup observation")
+	}
+	if !ready.Report(context.Background()).Ready {
+		t.Fatal("version monitor must advance daemon readiness")
+	}
+}
+
 func TestVersionMonitor(t *testing.T) {
 	tree := map[string]any{
 		"commands": map[string]any{"version": map[string]any{"command": []any{"apachectl", "-v"}}},
