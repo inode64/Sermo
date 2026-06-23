@@ -621,20 +621,40 @@ func (c metricCheck) Run(_ context.Context) Result {
 // exact resolved-exe and real-UID rules .
 type processCheck struct {
 	base
-	exe     string
-	user    string
-	expect  string
-	observe func(exe, user string) string
+	exes       []string
+	user       string
+	expect     string
+	observe    func(exe, user string) string
+	observeAny func(exes []string, user string) string
 }
 
 func (c processCheck) Run(_ context.Context) Result {
 	start := time.Now()
-	if c.observe == nil {
+	if c.observe == nil && c.observeAny == nil {
 		return c.result(false, "process discovery unavailable", start)
 	}
-	state := c.observe(c.exe, c.user)
+	state := c.observedState()
 	ok := state == c.expect
 	return c.result(ok, fmt.Sprintf("state %s (want %s)", state, c.expect), start)
+}
+
+func (c processCheck) observedState() string {
+	if c.observeAny != nil {
+		return c.observeAny(c.exes, c.user)
+	}
+	matchedZombie := false
+	for _, exe := range c.exes {
+		switch c.observe(exe, c.user) {
+		case "running":
+			return "running"
+		case "zombie":
+			matchedZombie = true
+		}
+	}
+	if matchedZombie {
+		return "zombie"
+	}
+	return "absent"
 }
 
 // librariesCheck verifies that all DT_NEEDED shared libraries for a binary

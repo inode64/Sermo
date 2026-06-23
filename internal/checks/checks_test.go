@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -656,13 +657,38 @@ func TestProcessCheck(t *testing.T) {
 		}
 		return "absent"
 	}
-	ok := processCheck{base: base{name: "p"}, exe: "/usr/bin/mariadb-backup", expect: "running", observe: observe}
+	ok := processCheck{base: base{name: "p"}, exes: []string{"/usr/bin/mariadb-backup"}, expect: "running", observe: observe}
 	if res := ok.Run(context.Background()); !res.OK {
 		t.Errorf("running==running should pass: %s", res.Message)
 	}
-	absent := processCheck{base: base{name: "p"}, exe: "/usr/bin/mariadb-backup", expect: "absent", observe: observe}
+	absent := processCheck{base: base{name: "p"}, exes: []string{"/usr/bin/mariadb-backup"}, expect: "absent", observe: observe}
 	if res := absent.Run(context.Background()); res.OK {
 		t.Errorf("running!=absent should fail")
+	}
+}
+
+func TestBuildProcessCheckExeAny(t *testing.T) {
+	section := map[string]any{"p": map[string]any{
+		"type":    "process",
+		"exe_any": []any{"/usr/bin/mysqldump", "/usr/bin/xtrabackup"},
+		"user":    "mysql",
+		"state":   "running",
+	}}
+	var gotExes []string
+	var gotUser string
+	built, warnings := Build(section, Deps{ProcessesAny: func(exes []string, user string) string {
+		gotExes = append(gotExes, exes...)
+		gotUser = user
+		return "running"
+	}})
+	if len(warnings) != 0 || len(built) != 1 {
+		t.Fatalf("process exe_any should build: built=%d warnings=%v", len(built), warnings)
+	}
+	if res := built[0].Check.Run(context.Background()); !res.OK {
+		t.Fatalf("process exe_any result = %+v, want OK", res)
+	}
+	if !slices.Equal(gotExes, []string{"/usr/bin/mysqldump", "/usr/bin/xtrabackup"}) || gotUser != "mysql" {
+		t.Fatalf("ProcessesAny call = exes %v user %q", gotExes, gotUser)
 	}
 }
 
@@ -681,8 +707,8 @@ func TestBuildProcessCheckRequiresExe(t *testing.T) {
 	section := map[string]any{"p": map[string]any{"type": "process", "user": "mysql", "state": "running"}}
 	if _, warnings := Build(section, Deps{Processes: func(string, string) string { return "running" }}); len(warnings) != 1 {
 		t.Fatalf("process check without exe should warn, got %v", warnings)
-	} else if !strings.Contains(warnings[0], "requires exe") {
-		t.Fatalf("warning = %q, want requires exe", warnings[0])
+	} else if !strings.Contains(warnings[0], "requires exe or exe_any") {
+		t.Fatalf("warning = %q, want requires exe or exe_any", warnings[0])
 	}
 }
 
