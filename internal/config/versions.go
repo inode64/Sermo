@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sermo/internal/cfgval"
+	"sermo/internal/servicemgr"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,8 +83,9 @@ func tokensFor(name string) []tmplToken {
 // concrete document per installed value. Multiple versions of the same
 // application can be installed at once, so a single `name: foo%v` (or `foo%n`)
 // yields `foo1.2`, `foo3.4`, ... with the token's `${...}` wildcarded. Apps and
-// libraries discover from their own `versions.from`/`binary`; daemons discover
-// from an explicit token-bearing `versions.from` or a linked app template
+// libraries discover from their own `versions.from`/`binary`; daemons first
+// discover from token-bearing `service:` candidates matched against active init
+// units, then from explicit `versions.from` or a linked app template
 // (`apps: ["php-fpm${version}"]`). `%v` and `%n` may also register an empty
 // active-slot value when the marker-less app binary exists (e.g. `php%v` ->
 // `php`), and any template can declare `versions.current_from` to materialize
@@ -119,7 +121,7 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 		} else {
 			tok := toks[0]
 			source := c.versionDiscoverySource(body, tok, kind)
-			matches := materializedTemplateMatches(source.paths, source.binary, source.options, toks)
+			matches := source.templateMatches(toks)
 			matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
 			for _, match := range matches {
 				instances = append(instances, instantiateVersion(
@@ -140,6 +142,7 @@ func (c *Config) materializeRegistry(names []string, reg map[string]*Document, k
 }
 
 func (c *Config) recordTemplateValidationIssues(tmpl *Document) {
+	c.validationIssues = append(c.validationIssues, validateVersionsFrom(tmpl, documentScope(tmpl))...)
 	c.validationIssues = append(c.validationIssues, validateVersionsCurrentFrom(tmpl, documentScope(tmpl))...)
 }
 
@@ -159,12 +162,12 @@ func (c *Config) recordMaterializedNameCollision(kind string, tmpl, inst, existi
 // a concrete document with every token bound in the name and body at once.
 func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks []tmplToken, kind string) []*Document {
 	source := c.multiTokenDiscoverySource(body, toks, kind)
-	if len(source.paths) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
+	if len(source.paths) == 0 && len(source.matches) == 0 && len(versionsCurrentFromCandidates(body)) == 0 {
 		return nil
 	}
 	require := versionsRequire(body)
 	var out []*Document
-	matches := materializedTemplateMatches(source.paths, source.binary, body, toks)
+	matches := source.templateMatches(toks)
 	matches = c.withCurrentMatches(matches, tmpl.Name, toks, kind)
 	for _, match := range matches {
 		if !requireSatisfied(require, match.values, toks) {
@@ -177,9 +180,9 @@ func (c *Config) materializeMultiToken(tmpl *Document, body map[string]any, toks
 
 // versionsRequire returns the optional `versions.require` candidate paths. When
 // set, a discovered instance materializes only if at least one of them exists on
-// disk (with the captured tokens bound) — so a config directory whose runtime
-// binary is not installed (e.g. /etc/php/fpm-php5.6 without php-fpm5.6) does not
-// produce a daemon that would dangle a link to an unmaterialized binary app.
+// disk (with the captured tokens bound) — so stale service metadata whose
+// runtime binary is not installed does not produce a daemon that would dangle a
+// link to an unmaterialized binary app.
 func versionsRequire(body map[string]any) []string {
 	v, ok := body["versions"].(map[string]any)
 	if !ok {
@@ -205,12 +208,17 @@ func requireSatisfied(require []string, vals map[string]string, toks []tmplToken
 	return false
 }
 
-// multiTokenDiscoverySource returns the globs (carrying all markers) that
-// enumerate a multi-token template's instances. Daemons discover only from an
-// explicit `versions.from` or from a linked app template; apps and libraries can
-// discover from `versions.from` or their own `variables.binary` candidates.
+// multiTokenDiscoverySource returns the active-unit matches or globs (carrying
+// all markers) that enumerate a multi-token template's instances. Daemons prefer
+// token-bearing service candidates; apps and libraries can discover from
+// `versions.from` or their own `variables.binary` candidates.
 func (c *Config) multiTokenDiscoverySource(body map[string]any, toks []tmplToken, kind string) versionDiscovery {
-	if paths := pathsContainingAllMarkers(versionsFromPaths(body), toks); len(paths) > 0 {
+	if kind == kindDaemon {
+		if matches := c.serviceTemplateMatches(body, toks); len(matches) > 0 {
+			return versionDiscovery{matches: matches, options: body}
+		}
+	}
+	if paths := pathsContainingAllMarkers(c.versionsFromPaths(body), toks); len(paths) > 0 {
 		return versionDiscovery{paths: paths, options: body}
 	}
 	if kind != kindDaemon {
@@ -226,7 +234,7 @@ func (c *Config) multiTokenDiscoverySource(body map[string]any, toks []tmplToken
 			continue
 		}
 		appBody := stripMeta(doc.Body)
-		if paths := pathsContainingAllMarkers(versionsFromPaths(appBody), toks); len(paths) > 0 {
+		if paths := pathsContainingAllMarkers(c.versionsFromPaths(appBody), toks); len(paths) > 0 {
 			return versionDiscovery{paths: paths, options: appBody}
 		}
 		if paths := pathsContainingAllMarkers(documentBinaryCandidates(appBody), toks); len(paths) > 0 {
@@ -259,6 +267,98 @@ func containsAllMarkers(path string, toks []tmplToken) bool {
 		}
 	}
 	return true
+}
+
+func (c *Config) serviceTemplateMatches(body map[string]any, toks []tmplToken) []templateMatch {
+	backend := effectiveBackend(c)
+	if backend == "" || backend == string(servicemgr.BackendAuto) {
+		return nil
+	}
+	units := c.activeServiceUnits(backend)
+	if len(units) == 0 {
+		return nil
+	}
+	candidates, _ := ServiceCandidates(body, backend, "")
+	patterns := serviceUnitPatternsForBackend(backend, candidates, toks)
+	if len(patterns) == 0 {
+		return nil
+	}
+	return materializedServiceUnitMatches(patterns, units, toks)
+}
+
+func serviceUnitPatternsForBackend(backend string, candidates []string, toks []tmplToken) []string {
+	var out []string
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" || !containsServiceDiscoveryMarkers(candidate, toks) {
+			continue
+		}
+		out = append(out, servicemgr.NormalizeUnit(servicemgr.Backend(backend), candidate))
+	}
+	return out
+}
+
+func containsServiceDiscoveryMarkers(candidate string, toks []tmplToken) bool {
+	hasValueToken := false
+	hasAnyMarker := false
+	for _, tok := range toks {
+		if strings.Contains(candidate, tok.marker()) {
+			hasAnyMarker = true
+		}
+		switch tok.variable {
+		case "sep":
+			continue
+		case "instance":
+			if hasNumericTemplateToken(toks) {
+				continue
+			}
+		default:
+			hasValueToken = true
+		}
+		if !strings.Contains(candidate, tok.marker()) {
+			return false
+		}
+	}
+	return hasAnyMarker && (hasValueToken || !hasNumericTemplateToken(toks))
+}
+
+func hasNumericTemplateToken(toks []tmplToken) bool {
+	for _, tok := range toks {
+		if tok.variable == "version" || tok.variable == "n" {
+			return true
+		}
+	}
+	return false
+}
+
+func materializedServiceUnitMatches(patterns, units []string, toks []tmplToken) []templateMatch {
+	var out []templateMatch
+	for _, pattern := range patterns {
+		re, order := buildMultiRegex(pattern, toks)
+		if re == nil {
+			continue
+		}
+		for _, unit := range units {
+			sub := re.FindStringSubmatch(unit)
+			if sub == nil {
+				continue
+			}
+			values := make(map[string]string, len(order))
+			for i, tk := range order {
+				values[tk.variable] = sub[i+1]
+			}
+			addImplicitTokenValues(values, toks)
+			normalizeOptionalTupleValues(values)
+			out = append(out, templateMatch{
+				values:      values,
+				matchedPath: unit,
+				realPath:    unit,
+			})
+		}
+	}
+	matches := dedupeTemplateMatches(out, toks)
+	sortTemplateMatches(matches)
+	return matches
 }
 
 func linkedAppTemplateNameMulti(name string, toks []tmplToken) string {
@@ -469,7 +569,10 @@ func discoverTokenMatches(paths []string, toks []tmplToken, matchedBinary bool) 
 
 func addImplicitTokenValues(values map[string]string, toks []tmplToken) {
 	for _, tok := range toks {
-		if _, ok := values[tok.variable]; !ok && tok.variable == "sep" {
+		if _, ok := values[tok.variable]; ok {
+			continue
+		}
+		if tok.variable == "sep" || tok.variable == "instance" {
 			values[tok.variable] = ""
 		}
 	}
@@ -573,14 +676,15 @@ func dedupeTemplateMatches(matches []templateMatch, toks []tmplToken) []template
 	seen := map[string]bool{}
 	out := make([]templateMatch, 0, len(matches))
 	for _, match := range matches {
-		key := match.realPath
+		key := tupleKey(toks, match.values)
 		if templateMatchHasEmptyValue(match, toks) {
-			key = "unversioned:" + tupleKey(toks, match.values)
-		} else if key == "" {
-			key = match.matchedPath
+			key = "unversioned:" + key
 		}
 		if key == "" {
-			key = tupleKey(toks, match.values)
+			key = match.realPath
+		}
+		if key == "" {
+			key = match.matchedPath
 		}
 		if seen[key] {
 			continue
@@ -741,29 +845,40 @@ func versionLess(a, b string) bool {
 
 type versionDiscovery struct {
 	paths   []string
+	matches []templateMatch
 	options map[string]any
 	binary  bool
 }
 
-// versionDiscoverySource returns the placeholder-bearing filesystem path Sermo
-// globs to find installed values, plus the document whose `versions.unversioned`
-// option controls active-slot behavior. Apps and libraries own their discovery
-// path directly. Daemons intentionally do not: they must link a matching app
-// template, and that app owns the installed-version source.
+func (d versionDiscovery) templateMatches(toks []tmplToken) []templateMatch {
+	if len(d.matches) > 0 {
+		return d.matches
+	}
+	return materializedTemplateMatches(d.paths, d.binary, d.options, toks)
+}
+
+// versionDiscoverySource returns the active service-unit matches or
+// placeholder-bearing filesystem path Sermo uses to find installed values, plus
+// the document whose `versions.unversioned` option controls active-slot
+// behavior. Apps and libraries own their discovery path directly. Daemons prefer
+// their active `service:` units; their binary remains owned by linked apps.
 func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind string) versionDiscovery {
 	if kind != kindDaemon {
-		if paths := versionsFromPaths(body); len(paths) > 0 {
+		if paths := c.versionsFromPaths(body); len(paths) > 0 {
 			return versionDiscovery{paths: paths, options: body}
 		}
 		return versionDiscovery{paths: documentBinaryCandidates(body), options: body, binary: true}
 	}
+	if matches := c.serviceTemplateMatches(body, []tmplToken{tok}); len(matches) > 0 {
+		return versionDiscovery{matches: matches, options: body}
+	}
 	// A daemon may own its discovery via an explicit token-bearing
-	// `versions.from`: instance configs live on the daemon, not on the version
-	// binary the linked app knows about (e.g. /etc/tomcat-${version}${sep}
-	// ${instance}/server.xml). Prefer it when present. A daemon still never
+	// `versions.from`: instance metadata can live on the daemon, not on the
+	// version binary the linked app knows about (e.g. tomcat@${version}${sep}
+	// ${instance}.service). Prefer it when present. A daemon still never
 	// discovers from its own *binary* — that remains the linked app's job — so
 	// only an explicit versions.from qualifies, not documentBinaryCandidates.
-	if paths := pathsContainingMarker(versionsFromPaths(body), tok.marker()); len(paths) > 0 {
+	if paths := pathsContainingMarker(c.versionsFromPaths(body), tok.marker()); len(paths) > 0 {
 		return versionDiscovery{paths: paths, options: body}
 	}
 	for _, name := range cfgval.StringList(body["apps"]) {
@@ -772,7 +887,7 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 			continue
 		}
 		appBody := stripMeta(doc.Body)
-		if paths := versionsFromPaths(appBody); anyContains(paths, tok.marker()) {
+		if paths := c.versionsFromPaths(appBody); anyContains(paths, tok.marker()) {
 			return versionDiscovery{paths: paths, options: appBody}
 		}
 		if paths := documentBinaryCandidates(appBody); anyContains(paths, tok.marker()) {
@@ -783,7 +898,7 @@ func (c *Config) versionDiscoverySource(body map[string]any, tok tmplToken, kind
 }
 
 func directVersionDiscoverySources(body map[string]any) []string {
-	if from := versionsFromPaths(body); len(from) > 0 {
+	if from := allVersionsFromPaths(body); len(from) > 0 {
 		return from
 	}
 	return documentBinaryCandidates(body)
@@ -799,12 +914,44 @@ func pathsContainingMarker(paths []string, marker string) []string {
 	return out
 }
 
-// versionsFromPaths returns the explicit `versions.from` discovery globs.
-func versionsFromPaths(body map[string]any) []string {
+// versionsFromPaths returns the explicit `versions.from` discovery globs for the
+// configured init backend. A plain string/list is backend-neutral. A map selects
+// only the active backend branch (`systemd` or `openrc`) so stray unit files from
+// the inactive init system do not materialize daemons.
+func (c *Config) versionsFromPaths(body map[string]any) []string {
+	return versionsFromPathsForBackend(body, effectiveBackend(c))
+}
+
+func versionsFromPathsForBackend(body map[string]any, backend string) []string {
 	if v, ok := body["versions"].(map[string]any); ok {
-		return cfgval.StringList(v["from"])
+		return versionFromPaths(v["from"], backend)
 	}
 	return nil
+}
+
+func allVersionsFromPaths(body map[string]any) []string {
+	if v, ok := body["versions"].(map[string]any); ok {
+		return allVersionFromPaths(v["from"])
+	}
+	return nil
+}
+
+func versionFromPaths(raw any, backend string) []string {
+	if m, ok := raw.(map[string]any); ok {
+		return cfgval.StringList(m[backend])
+	}
+	return cfgval.StringList(raw)
+}
+
+func allVersionFromPaths(raw any) []string {
+	if m, ok := raw.(map[string]any); ok {
+		var out []string
+		for _, key := range []string{"systemd", "openrc"} {
+			out = append(out, cfgval.StringList(m[key])...)
+		}
+		return out
+	}
+	return cfgval.StringList(raw)
 }
 
 func versionsCurrentFromCandidates(body map[string]any) []string {

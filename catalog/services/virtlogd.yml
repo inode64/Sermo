@@ -23,6 +23,13 @@ postflight:
     type: libvirt
     socket: /run/libvirt/virtlogd-sock
     timeout: 5s
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 rules:
   restart-if-libvirt-failed:
     type: remediation

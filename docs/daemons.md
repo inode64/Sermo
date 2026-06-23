@@ -16,8 +16,11 @@ checks:
 
 The packaged catalog (`catalog/`) covers common service families such as web
 servers, databases, container runtimes, NFS/libvirt helpers and hardware/system
-daemons. They define variables, preflight, processes, checks, stop_policy and
-rules so a service usually only sets a few overrides.
+daemons. They define variables, preflight, processes, checks, stop_policy,
+remediation policy and rules so a service usually only sets a few overrides.
+High-impact daemons such as databases, caches and queues may carry stricter
+local `policy` settings than the global defaults, with longer cooldowns,
+rate limits and backoff to avoid restart loops.
 
 ## Categories
 
@@ -366,10 +369,10 @@ bind address like `127.0.0.1`); an explicit `host` always wins.
 detected hostname / bind-address fallback). Use it for systemd instance units
 keyed by host identity, e.g. `service: "ceph-mon@${hostname}"` → `ceph-mon@radon`.
 For numeric multi-instance daemons (e.g. one OSD per device) use a `%n` daemon
-template linked to a matching `%n` app template. The app owns discovery, for
-example `versions: { from: "/var/lib/ceph/osd/ceph-${n}" }`; the daemon links
-`apps: ["ceph-osd${n}"]` and materializes `ceph-osd0…N` with `service:
-"ceph-osd@${n}"`. An explicit `hostname` variable (or `SERMO_HOSTNAME`) wins.
+template whose `service:` carries `${n}`. Sermo materializes `ceph-osd0…N` from
+active units such as `ceph-osd@0.service`, then links the generic `ceph-osd` app
+for binary validation. An explicit `hostname` variable (or `SERMO_HOSTNAME`)
+wins.
 
 ⁴ `${user}` and `${pidfile}` are fallbacks: a daemon's own `user` (a service
 account such as `www-data`) or `pidfile` variable always wins. Put the pidfile
@@ -821,28 +824,33 @@ preflight:
 kind: daemon
 name: postgres-%v
 display_name: "PostgreSQL ${version}"
-service: postgres
+service:
+  systemd: ["postgresql-${version}", "postgres-${version}"]
+  openrc: ["postgresql-${version}", "postgres-${version}"]
 apps: ["postgres-${version}"]
 ```
 
-On load, Sermo discovers installed versions by globbing the linked app's
+On load, Sermo discovers app versions by globbing the linked app's
 `variables.binary` path with `${version}` wildcarded (here
-`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. A
-candidate list is checked as a list, so distro-specific locations can stay in
-one app template. Each match becomes a concrete app and concrete daemon with
-`%v` and `${version}` substituted everywhere (name, display_name, service, app
-links, ...) — `postgres-14`, `postgres-16`, ... — and the templates themselves
-are dropped. If nothing is installed the template yields nothing. The YAML
-filename does not have to match `name:`; keep one descriptive file for the
-template and treat `name:` as the catalog identifier. `%v` may sit anywhere in
-the name (`db%vsql` → `db4.8sql`). Note: `%v` is substituted only in the name;
-inside the body always use `${version}` (e.g. in `service` or `apps`).
+`/usr/lib64/postgresql-*/bin/postgres`) and extracting what filled it. Daemon
+templates in `catalog/services` prefer the active init service as source of
+truth: token-bearing `service:` candidates are matched against active
+systemd/OpenRC units, and only matching daemons materialize. Each match becomes a
+concrete app or daemon with `%v` and `${version}` substituted everywhere (name,
+display_name, service, app links, ...) — `postgres-14`, `postgres-16`, ... — and
+the templates themselves are dropped. If nothing is installed or no matching
+service is active, the template yields nothing. The YAML filename does not have
+to match `name:`; keep one descriptive file for the template and treat `name:`
+as the catalog identifier. `%v` may sit anywhere in the name (`db%vsql` →
+`db4.8sql`). Note: `%v` is substituted only in the name; inside the body always
+use `${version}` (e.g. in `service` or `apps`).
 
 Prefer application discovery in `catalog/apps` when the installed binary path
 identifies the version or instance. A versioned or instanced daemon that links a
 matching app, such as `apps: ["postgres-${version}"]` or
-`apps: ["php-fpm${version}"]`, can materialize from that app's
-`variables.binary` or `versions.from`.
+`apps: ["php-fpm${version}"]`, uses that app for runtime binary validation. For
+catalog services, put the same tokens in `service:` so the daemon materializes
+from the unit that is actually active on the selected init backend.
 
 `variables.binary` may be a string or a candidate list. Use it when the
 versioned path is also the runtime executable that preflight and version checks
@@ -851,32 +859,22 @@ and do not declare `variables.binary`, the materialized document binds
 `${binary}` to the path that matched; keep `versions.from` for discovery sources
 that are not the runtime executable.
 
-When discovery belongs to the daemon instead — for example the instances are
-configuration files or init scripts and the application binary is generic — put
-`versions.from` on the daemon template and link the generic or versioned app that
-owns the binary:
+When an app or library cannot discover from its runtime executable, use
+`versions.from` there and link the generic or versioned app that owns the binary:
 
 ```yaml
 kind: app
-name: mydaemon
+name: mydaemon-%i
+versions:
+  from: "/etc/mydaemon/${instance}.conf"
 variables:
   binary: /usr/sbin/mydaemon
 preflight:
   binary: { type: binary, path: "${binary}" }
-
----
-kind: daemon
-name: mydaemon-%i
-apps: ["mydaemon"]
-versions:
-  from: "/etc/mydaemon/${instance}.conf"
-service: "mydaemon@${instance}"
 ```
 
 `versions.from` is discovery-only metadata; it never appears in materialized apps
-or daemons. Matches are de-duplicated by their resolved filesystem path, so a
-short symlink and its full-version target do not create duplicate catalog
-entries.
+or daemons. Matches are de-duplicated by their materialized token tuple.
 
 A discovered version must start with a digit, so siblings of an unbounded
 trailing placeholder (a bare `php-fpm` symlink, a `php-fpm.conf`) are not mistaken
@@ -956,69 +954,80 @@ preflight:
   binary: { type: binary, path: "${binary}" }
 ```
 
-Use `%i`/`${instance}` for named init instances discovered from a bounded app
-path, for example `versions: { from: "/etc/init.d/openvpn.${instance}" }` on
-`kind: app`.
+Use `%i`/`${instance}` for named init instances discovered from bounded service
+metadata. Scope backend-specific discovery to matching service candidates; for
+example, a legacy OpenRC profile can expose only `service.openrc:
+["openvpn.${instance}"]`, while a systemd template can expose
+`service.systemd: ["openvpn-client@${instance}"]`.
 
 ### Composite names with a separator (`%s`)
 
 Some daemons encode **both** a version and an environment/pool in one name, joined
 by `-` or `_` — `tomcat-8.5-main`, `tomcat-9-guacamole`, `php-fpm8.4_airbnb`. Use
 `%s`/`${sep}` for that joining separator, which matches an empty string, `-` or
-`_`. A name may carry several tokens (`tomcat-%v%s%i`); all are discovered
-together from a single glob whose markers (`${version}${sep}${instance}`) are each
-captured per match, and bound everywhere at once. A non-final `%v` is bounded so
-it stops at the separator (`8.5`), and the instance may be empty — when it is, the
-separator collapses too, so a bare `/etc/tomcat-8.5` materializes `tomcat-8.5`
-with no trailing `-`:
+`_`. A name may carry several tokens (`tomcat-%v%s%i`); for daemon templates they
+are discovered together from active service units whose `service:` candidates
+contain the same markers, and bound everywhere at once. A non-final `%v` is
+bounded so it stops at the separator (`8.5`), and the instance may be empty —
+when it is, the separator collapses too, so a bare `tomcat@8.5.service`
+materializes `tomcat-8.5` with no trailing `-`:
 
 ```yaml
 kind: daemon
 name: tomcat-%v%s%i
-versions:
-  from: "/etc/tomcat-${version}${sep}${instance}/server.xml"
 service:
-  openrc: "tomcat-${version}${sep}${instance}"
-  systemd: "tomcat@${version}${sep}${instance}"
+  openrc: ["tomcat-${version}${sep}${instance}"]
+  systemd: ["tomcat@${version}${sep}${instance}"]
 ```
 
-### Daemon-owned discovery
+### Service-owned discovery
 
-A daemon template normally discovers through a linked app (the app owns the
-installed-binary source). When the instances live on the daemon side — config
-directories the binary cannot know about — the daemon may declare its **own**
-token-bearing `versions.from`, as above. The linked app (generic like `openvpn`,
-or versioned like `tomcat-${version}`) still supplies `${binary}` for preflight. A
-daemon never discovers from its own *binary*; only an explicit `versions.from`
-qualifies.
+A daemon template in `catalog/services` normally discovers from active init
+units. Put every supported service spelling in `service:` and split it by backend
+when systemd/OpenRC names differ. The linked app (generic like `openvpn`, or
+versioned like `php-fpm${version}`) still supplies `${binary}` for preflight and
+process identity. A daemon never discovers from its own *binary*.
 
-When discovery is config-driven, a stray config tree may exist without its runtime
-installed (e.g. `/etc/php/fpm-php5.6` after the 5.6 package was removed). Gate
-materialization on the binary with **`versions.require`** — one or more candidate
-paths (the captured tokens are bound) of which at least one must exist, or the
-instance is skipped. This keeps the daemon and its versioned binary app in step,
-so no daemon dangles a link to an app that never materialized:
+When discovery comes from init service metadata, let the linked app own runtime
+binary validation when it is versioned. For example, PHP-FPM links
+`php-fpm${version}`; that app already validates `/usr/sbin/php-fpm${version}` or
+`/usr/bin/php-fpm${version}`, so the daemon does not repeat the same candidates
+in `versions.require`:
 
 ```yaml
-versions:
-  from: "/etc/php/fpm-php${version}${sep}${instance}"
-  require:
-    - "/usr/sbin/php-fpm${version}"
-    - "/usr/bin/php-fpm${version}"
+service:
+  systemd:
+    - "php-fpm@${version}${sep}${instance}"
+    - "php-fpm@php${version}${sep}${instance}"
+    - "php-fpm-php${version}${sep}${instance}"
+    - "php${version}${sep}${instance}-fpm"
+    - "php-fpm${version}"
+  openrc:
+    - "php-fpm-php${version}${sep}${instance}"
+    - "php${version}${sep}${instance}"
+    - "php-fpm${version}${sep}${instance}"
+    - "php-fpm${version}"
+apps: ["php-fpm${version}"]
 ```
+
+Put the exact systemd instance first in `service.systemd`, e.g.
+`php-fpm@${version}${sep}${instance}` for `php-fpm@8.2.service`. Avoid a generic
+`php-fpm` systemd fallback in versioned templates: it can make several
+discovered PHP-FPM versions operate on the same unit.
 
 ### Optional components (`enable_if`)
 
 An entry under `processes`, `checks`, `preflight` or `postflight` may carry an
 `enable_if` guard that keeps it only when a key in a distro config file satisfies
 a predicate; otherwise the entry is dropped during service resolution. This
-models components that are optional per host — e.g. Samba runs `winbindd` only
-when `/etc/conf.d/samba`'s `daemon_list` names it:
+models components that are optional per host — e.g. a Samba profile that links a
+`winbindd` app can monitor `winbindd` only when `/etc/conf.d/samba`'s
+`daemon_list` names it:
 
 ```yaml
 processes:
   winbindd:
-    exe: /usr/sbin/winbindd
+    exe: ${winbindd_binary}
     enable_if:
       file: /etc/conf.d/samba
       key: daemon_list
@@ -1026,7 +1035,7 @@ processes:
 checks:
   winbindd:
     type: process
-    exe: /usr/sbin/winbindd
+    exe: ${winbindd_binary}
     state: running
     enable_if:
       file: /etc/conf.d/samba

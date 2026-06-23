@@ -460,6 +460,7 @@ type Config struct {
 
 	materializedNameCollisions []materializedNameCollision
 	validationIssues           []Issue
+	serviceUnits               map[string][]string
 
 	// Load order per registry, for stable reporting.
 	DaemonNames  []string

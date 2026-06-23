@@ -105,21 +105,27 @@ version when several can coexist (php-fpm, postgres, tomcat, beam, db, python).
 and matches only whole integers (`python%n` → `python2`, `python3`, not
 `python3.11`). The placeholder may sit anywhere in the name (`db%vsql` →
 `db4.8sql`). Put the matching `${...}` in `variables.binary`, or in
-`versions.from` when discovery needs a path that is not the runtime executable.
-`versions.from` may be a string or a candidate list. On load Sermo globs those
-paths with `${version}` wildcarded, extracts each installed version, and
-registers `name` with `%v`→version and every `${version}` substituted in the
-body. For app and library templates that discover from `versions.from` and do
-not declare `variables.binary`, the materialized document binds `${binary}` to
-the path that matched. Matches are de-duplicated by resolved filesystem path.
-The template is then dropped and yields nothing when no version is installed. Keep
+`versions.from` when an app/lib discovery source is not the runtime executable.
+For `catalog/services` daemon templates, put the tokens in `service:` and let
+active systemd/OpenRC units drive daemon materialization; linked apps keep owning
+binary discovery and validation.
+`versions.from` may be a backend-neutral string/list, or a map with `systemd`
+and `openrc` branches. Map branches are exclusive: Sermo selects only the active
+init branch from `engine.backend` or `SERMO_BACKEND`, falling back to detected
+`${init}`. On load Sermo globs those paths with `${version}` wildcarded, extracts
+each installed version, and registers `name` with `%v`→version and every
+`${version}` substituted in the body. For app and library templates that discover
+from `versions.from` and do not declare
+`variables.binary`, the materialized document binds `${binary}` to the path that
+matched. Matches are de-duplicated by materialized token tuple. The template is
+then dropped and yields nothing when no version is installed. Keep
 exactly one descriptive file per template, but the YAML filename does not have
 to match `name:`. `%v` is substituted only in the name; inside the body always
 use `${version}` (`variables.binary`, `display_name`, service candidates,
 commands, etc.).
-When the runtime executable is version-agnostic, point discovery at a
-version-specific path with `versions.from` (discovery-only; stripped from the
-materialized document). A template may also `uses` a base daemon to inherit
+When the runtime executable is version-agnostic in an app/lib, point discovery at
+a version-specific path with `versions.from` (discovery-only; stripped from the
+materialized document). A service template may also `uses` a base daemon to inherit
 checks/processes/rules and override only `variables.binary`. Simple `%v`/`%n`
 templates may materialize an unversioned active-slot entry by default when the
 marker-less path exists; composite templates with `%i`, `%s` or more than one

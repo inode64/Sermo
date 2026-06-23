@@ -338,6 +338,14 @@ func systemdUnit(service string) string {
 	return service + ".service"
 }
 
+// NormalizeUnit normalizes a backend-specific service name to its init unit.
+func NormalizeUnit(backend Backend, service string) string {
+	if backend == BackendSystemd {
+		return systemdUnit(service)
+	}
+	return service
+}
+
 func systemdStatus(state string) Status {
 	switch state {
 	case "active":

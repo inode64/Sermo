@@ -1,0 +1,10 @@
+kind: app
+name: winbindd
+display_name: "Samba winbindd"
+category: storage
+variables:
+  binary: "/usr/sbin/winbindd"
+preflight:
+  binary: { type: binary, path: "${binary}", optional: true }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s, optional: true }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

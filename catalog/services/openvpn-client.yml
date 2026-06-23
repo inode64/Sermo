@@ -4,8 +4,6 @@ display_name: OpenVPN client ${instance}
 category: vpn
 apps:
 - openvpn
-versions:
-  from: /etc/openvpn/client/${instance}.conf
 service:
   systemd:
   - openvpn-client@${instance}

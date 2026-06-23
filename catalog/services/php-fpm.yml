@@ -3,20 +3,14 @@ name: php-fpm%v%s%i
 display_name: PHP-FPM ${version} ${instance}
 category: web
 type: appserver
-versions:
-  from: /etc/php/fpm-php${version}${sep}${instance}
-  require:
-  - /usr/sbin/php-fpm${version}
-  - /usr/bin/php-fpm${version}
 service:
   systemd:
-  - php-fpm@php${version}${sep}${instance}
   - php-fpm@${version}${sep}${instance}
+  - php-fpm@php${version}${sep}${instance}
   - php-fpm-php${version}${sep}${instance}
   - php${version}${sep}${instance}-fpm
-  - php-fpm
-  - php${version}-fpm
   - php-fpm${version}
+  - php${version}-fpm
   openrc:
   - php-fpm-php${version}${sep}${instance}
   - php${version}${sep}${instance}

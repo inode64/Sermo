@@ -2,15 +2,14 @@ kind: daemon
 name: tomcat-%v%s%i
 display_name: Apache Tomcat ${version} ${instance}
 category: web
-versions:
-  from: /etc/tomcat-${version}${sep}${instance}/server.xml
-  require: /usr/share/tomcat-${version}/bin/catalina.sh
 apps:
 - java
 - tomcat-${version}
 service:
-  openrc: tomcat-${version}${sep}${instance}
-  systemd: tomcat@${version}${sep}${instance}
+  openrc:
+  - tomcat-${version}${sep}${instance}
+  systemd:
+  - tomcat@${version}${sep}${instance}
 variables:
   config: /etc/tomcat-${version}${sep}${instance}/server.xml
   port:

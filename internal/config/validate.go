@@ -214,6 +214,7 @@ func validateDocuments(cfg *Config) []Issue {
 		validateFromFileVariables("variables", doc.Body["variables"], addDoc)
 		issues = append(issues, validateBinaryVariables(doc, scope)...)
 		issues = append(issues, validateVersionFrom(cfg, doc, scope)...)
+		issues = append(issues, validateVersionsFrom(doc, scope)...)
 		issues = append(issues, validateVersionsCurrentFrom(doc, scope)...)
 		issues = append(issues, validateAppLinks(cfg, doc, scope)...)
 		issues = append(issues, validateVersionMatch(doc, scope)...)
@@ -418,6 +419,55 @@ func validateVersionsCurrentFrom(doc *Document, scope string) []Issue {
 	return issues
 }
 
+func validateVersionsFrom(doc *Document, scope string) []Issue {
+	versions, ok := doc.Body["versions"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	raw, present := versions["from"]
+	if !present {
+		return nil
+	}
+	var issues []Issue
+	add := func(format string, args ...any) {
+		issues = append(issues, Issue{Scope: scope, Msg: fmt.Sprintf(format, args...)})
+	}
+	validateVersionsFromValue("versions.from", raw, add)
+	return issues
+}
+
+func validateVersionsFromValue(path string, raw any, add addFunc) {
+	switch v := raw.(type) {
+	case string:
+		if v == "" {
+			add("%s must be a non-empty path string", path)
+		}
+	case []any:
+		for i, item := range v {
+			validateVersionsFromValue(fmt.Sprintf("%s[%d]", path, i), item, add)
+		}
+	case map[string]any:
+		for _, key := range slices.Sorted(maps.Keys(v)) {
+			if key != "systemd" && key != "openrc" {
+				add("%s.%s is not supported; use systemd or openrc", path, key)
+				continue
+			}
+			validateVersionsFromBranch(fmt.Sprintf("%s.%s", path, key), v[key], add)
+		}
+	default:
+		add("%s must be a path string, list of path strings, or map with systemd/openrc", path)
+	}
+}
+
+func validateVersionsFromBranch(path string, raw any, add addFunc) {
+	switch raw.(type) {
+	case string, []any:
+		validateVersionsFromValue(path, raw, add)
+	default:
+		add("%s must be a path string or list of path strings", path)
+	}
+}
+
 func validateVersionsCurrentFromValue(path string, raw any, add addFunc) {
 	switch v := raw.(type) {
 	case string:
@@ -617,9 +667,12 @@ func validateMount(name string, tree map[string]any) []Issue {
 	return issues
 }
 
-// effectiveBackend returns the init backend validation should assume: an explicit
-// engine.backend when set, otherwise the host-detected init (${init}).
+// effectiveBackend returns the init backend validation should assume:
+// SERMO_BACKEND, then explicit engine.backend, otherwise host-detected init.
 func effectiveBackend(cfg *Config) string {
+	if backend := strings.ToLower(envOverride("SERMO_BACKEND")); backend == "systemd" || backend == "openrc" {
+		return backend
+	}
 	if engine, ok := cfg.Global.Raw["engine"].(map[string]any); ok {
 		if backend := cfgval.String(engine["backend"]); backend != "" && backend != "auto" {
 			return backend

@@ -23,6 +23,13 @@ preflight:
     - -c
     - ${config}
     timeout: 30s
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 restart_on_change:
   libraries:
   - glibc
@@ -46,3 +53,15 @@ checks:
     host: ${host}
     port: ${port}
     timeout: 2s
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid

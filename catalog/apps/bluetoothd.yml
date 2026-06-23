@@ -1,0 +1,10 @@
+kind: app
+name: bluetoothd
+display_name: "Bluetooth daemon"
+category: hardware
+variables:
+  binary: "/usr/libexec/bluetooth/bluetoothd"
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  health: { type: command, command: ["${binary}", "--help"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s, optional: true }

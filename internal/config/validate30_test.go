@@ -1416,6 +1416,35 @@ preflight:
 	mustHave(t, issues, "versions.current_from[2] must be a path string or list of path strings")
 }
 
+func TestValidateVersionsFromInitBranches(t *testing.T) {
+	global := writeConfig(t, map[string]string{
+		"sermo.yml": baseGlobal,
+		"catalog/services/svc.yml": `
+kind: daemon
+name: svc%v
+versions:
+  from:
+    default: /etc/svc-${version}
+    systemd:
+      - /usr/lib/systemd/system/svc@${version}.service
+      - ""
+    openrc: 42
+    launchd: /Library/LaunchDaemons/svc-${version}.plist
+checks:
+  service: { type: service, expect: active }
+`,
+	})
+	cfg, err := Load(global)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	issues := Validate(cfg)
+	mustHave(t, issues, "versions.from.default is not supported; use systemd or openrc")
+	mustHave(t, issues, "versions.from.systemd[1] must be a non-empty path string")
+	mustHave(t, issues, "versions.from.openrc must be a path string or list of path strings")
+	mustHave(t, issues, "versions.from.launchd is not supported; use systemd or openrc")
+}
+
 func TestValidateFromFileVariablePathReferences(t *testing.T) {
 	issues := validateService(t, `
 kind: service
