@@ -1726,10 +1726,10 @@ function renderAttention() {
       target: "services-section",
     });
   }
-  if (latestReady && latestReady.ready === false && latestReady.status !== "starting") {
+  if (latestReady && latestReady.ready === false && latestReady.status === "shutting_down") {
     items.push({
       level: "warning",
-      title: "Daemon not ready",
+      title: "Daemon shutting down",
       detail: latestReady.message || latestReady.status || "",
       target: "daemon-section",
     });
