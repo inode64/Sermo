@@ -101,7 +101,9 @@ Editable notes:
 
 - Tiles should jump to the related panel. During startup settling, Services up and
   Watches tiles open the `starting` filter on the panel that still has unsettled
-  targets (`starting-services`, `starting-watches` or `starting-apps`).
+  targets (`starting-services`, `starting-watches` or `starting-apps`). After a
+  config reload the daemon header stays `ok` (no grey favicon) even when
+  individual targets are still `starting`.
 - Usage bars stay at the bottom of each tile.
 - Do not add explanatory text inside tiles.
 
