@@ -51,6 +51,42 @@ func pidsOf(procs []Process) []int {
 	return out
 }
 
+func TestCountMatching(t *testing.T) {
+	// Use paths that do not exist on the test host so canonicalizePath leaves them
+	// unchanged (it resolves symlinks only for existing paths). In production
+	// id.Exe is the already-resolved /proc/<pid>/exe, so this stays consistent.
+	reader := fakeReader{ids: map[int]Identity{
+		1: {PID: 1, UID: 0, Exe: "/srv/app/bin/nginx", ExeOK: true},
+		2: {PID: 2, UID: 33, Exe: "/srv/app/bin/nginx", ExeOK: true},
+		3: {PID: 3, UID: 33, Exe: "/srv/app/bin/php-fpm8.3", ExeOK: true},
+		4: {PID: 4, UID: 33, Exe: "/srv/application/bin/x", ExeOK: true}, // not under /srv/app
+		5: {PID: 5, UID: 0, Exe: "", ExeOK: false},                       // kernel thread / unresolved
+	}}
+	d := Discoverer{Reader: reader, ResolveUser: fakeUsers(map[string]uint32{"www-data": 33})}
+
+	cases := []struct {
+		name              string
+		user, exe, exeDir string
+		want              int
+	}{
+		{"total host", "", "", "", 5},
+		{"by user", "www-data", "", "", 3},
+		{"unknown user", "ghost", "", "", 0},
+		{"by exact exe", "", "/srv/app/bin/nginx", "", 2},
+		{"by exe + user", "www-data", "/srv/app/bin/nginx", "", 1},
+		{"by exe_dir prefix", "", "", "/srv/app", 3},
+		{"exe_dir excludes partial prefix", "", "", "/srv/ap", 0},
+		{"exe_dir + user", "www-data", "", "/srv/app", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := d.CountMatching(tc.user, tc.exe, tc.exeDir); got != tc.want {
+				t.Fatalf("CountMatching(%q,%q,%q) = %d, want %d", tc.user, tc.exe, tc.exeDir, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDiscoverCommandMatchExeAndUser(t *testing.T) {
 	reader := fakeReader{ids: map[int]Identity{
 		100: {PID: 100, PPID: 1, UID: 110, User: "mysql", Exe: "/opt/sermo-test/mysqld", ExeOK: true},

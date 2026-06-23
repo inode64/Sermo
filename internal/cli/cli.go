@@ -616,7 +616,7 @@ func (a App) defaultOperate(ctx context.Context, opts options, cfg *config.Confi
 		Scanner:          locks.NewScanner(filepath.Join(runtime, "locks")),
 		Discoverer:       discoverer,
 		ResolveUser:      discoverer.ResolveUser,
-		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner, Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState},
+		CheckDeps:        checks.Deps{DefaultTimeout: engineDefaultTimeout(cfg), Runner: a.Runner, Processes: discoverer.ObserveState, ProcessesAny: discoverer.ObserveAnyState, ProcessCount: discoverer.CountMatching},
 		MetricSample:     metricSample,
 		Changed:          app.LibChangedFunc(libBaseline),
 		OperationTimeout: operation.ResolveTimeout(opts.timeout, resolved.Tree),
@@ -789,6 +789,7 @@ func (a App) runPreflight(ctx context.Context, opts options) int {
 		DefaultTimeout: engineDefaultTimeout(cfg),
 		Status:         a.statusFunc(opts, resolved.Tree, config.ServiceUnit(resolved.Tree, service)),
 		Processes:      discoverer.ObserveState,
+		ProcessCount:   discoverer.CountMatching,
 	}
 	built, buildWarnings := checks.BuildWithWarnings(section, deps)
 	warnings := checks.BuildWarningStrings(buildWarnings)

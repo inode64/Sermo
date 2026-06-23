@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -746,6 +747,13 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateLoadFields(path, entry, add)
 	case "users":
 		validateThresholdPreds(path, entry, checks.UsersPredFields, add)
+	case "process_count":
+		validateThresholdPreds(path, entry, checks.ProcessCountPredFields, add)
+		for _, f := range []string{"exe", "exe_dir"} {
+			if p := cfgval.String(entry[f]); p != "" && !filepath.IsAbs(p) {
+				add("%s.%s must be an absolute path", path, f)
+			}
+		}
 	case "hdparm":
 		validateHdparmFields(path, entry, add)
 	case "sensors":
