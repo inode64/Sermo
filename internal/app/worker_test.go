@@ -13,6 +13,7 @@ import (
 	"sermo/internal/notify"
 	"sermo/internal/operation"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 var t0 = time.Date(2026, 6, 6, 12, 0, 0, 0, time.UTC)
@@ -48,6 +49,49 @@ func alertRuleTree(notify any) map[string]any {
 // TestCycleAlertCarriesFailingCheckOutput verifies the alert event (and
 // notification) carry the failing check's captured command output, so the
 // operator can see why the rule fired.
+func TestWorkerStartupSkipsChecksUntilBackendActive(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	settling := NewSettling(nil)
+	settling.Reset([]string{"web"})
+	w.Settling = settling
+	w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
+		return servicemgr.StatusInactive, nil
+	}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf("alert"); ok {
+		t.Fatal("inactive backend must not fire alerts during startup")
+	}
+	if settling.Observed("web") {
+		t.Fatal("inactive backend must not mark the service observed")
+	}
+}
+
+func TestWorkerStartupObserveOnlySuppressesAlerts(t *testing.T) {
+	h := &workerHarness{cache: failedCache("http")}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	settling := NewSettling(nil)
+	settling.Reset([]string{"web"})
+	w.Settling = settling
+	w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
+		return servicemgr.StatusActive, nil
+	}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf("alert"); ok {
+		t.Fatal("first active cycle must not fire alerts")
+	}
+	if !settling.Observed("web") {
+		t.Fatal("first active cycle must mark the service observed")
+	}
+
+	w.RunCycle(context.Background())
+	if _, ok := h.eventOf("alert"); !ok {
+		t.Fatal("second cycle should fire the alert")
+	}
+}
+
 func TestCycleAlertCarriesFailingCheckOutput(t *testing.T) {
 	h := &workerHarness{cache: map[string]checks.Result{
 		"http": {Check: "http", OK: false, Data: map[string]any{"output": "stderr:\nbind: address already in use"}},

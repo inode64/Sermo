@@ -109,7 +109,7 @@
     background: color-mix(in srgb, currentColor 11%, transparent);
   }
   .target-state::before { content: ""; width: .52em; height: .52em; border-radius: 50%; background: currentColor; flex: none; }
-  .state-disabled, .state-stopped, .state-unmonitorized { color: var(--text-2); }
+  .state-disabled, .state-stopped, .state-unmonitorized, .state-starting { color: var(--text-2); }
   .state-running { color: var(--info); }
   .state-paused { color: var(--warn); }
   .state-warning { color: var(--warn); }
@@ -278,7 +278,7 @@
      little more for its incident list below the graph. */
   .chart-box { width: 100%; max-width: 640px; aspect-ratio: 640 / 160; }
   .chart-box-wide { width: 100%; aspect-ratio: 640 / 160; }
-  #ready { margin: .6rem 0 0; }
+
 
   /* ---- responsive: tablet & phone ------------------------------------------
      The layout is fluid by default (auto-fit tiles, 100%-width tables). Below
@@ -425,7 +425,6 @@
   <span>PANIC MODE — hooks, alerts and automatic remediation are suspended.</span>
 </div>
 <div id="overview"></div>
-<p id="ready" class="muted" style="display:none"></p>
 <div id="err"></div>
 <div id="attention"></div>
 <div id="op-live"></div>
@@ -800,27 +799,6 @@ async function loadMe() {
   }
 }
 
-// renderReadyBanner shows or hides the startup/shutdown banner from an already-
-// fetched /readyz payload (load() fetches it once with the rest of the dashboard).
-function renderReadyBanner(ready) {
-  const el = $("#ready");
-  if (!el) return;
-  const body = ready || {};
-  if (body.ready) {
-    el.style.display = "none";
-    el.textContent = "";
-    return;
-  }
-  const label = body.status === "shutting_down" ? "Shutting down" : "Starting";
-  const labelCls = body.status === "starting" ? "status-starting" : "inactive";
-  const msg = body.message ? " — " + esc(body.message) : "";
-  const counts = (body.services != null)
-    ? ` <span class="muted">(${body.services} services, ${body.watches || 0} watches)</span>`
-    : "";
-  el.style.display = "block";
-  el.innerHTML = `<span class="${labelCls}">${esc(label)}</span>${msg}${counts}`;
-}
-
 // Connection state: when a fetch fails the table is dimmed and a "disconnected,
 // retrying" banner (with the age of the last good update) replaces the refresh
 // status, instead of silently showing stale data.
@@ -884,7 +862,6 @@ async function load() {
       daemon: daemon || {},
       hostMetrics: hostMetrics || [],
     });
-    renderReadyBanner(ready);
     renderOpsPanel(ops);
     loadEvents();
     await loadDiag();
@@ -1586,6 +1563,7 @@ function targetStateClass(state) {
     case "monitorized": return "state-monitorized";
     case "unmonitorized": return "state-unmonitorized";
     case "failed": return "state-failed";
+    case "starting": return "state-starting";
     default: return "muted";
   }
 }
@@ -1610,6 +1588,7 @@ function stateRank(state) {
     case "warning": return 6;
     case "monitorized": return 6;
     case "failed": return 7;
+    case "starting": return 1;
     default: return 5;
   }
 }
@@ -1639,10 +1618,12 @@ function serviceStateBadge(s) {
 
 function isFailing(s) { return serviceState(s) === "failed"; }
 function isServiceAttention(s) {
-  return serviceState(s) === "failed";
+  const st = serviceState(s);
+  return st === "failed";
 }
 function isWatchAttention(w) {
-  return watchStateText(w) === "failed";
+  const st = watchStateText(w);
+  return st === "failed";
 }
 function openPanelTarget(target) {
   if (target === "failed-services") {
@@ -1745,13 +1726,10 @@ function renderAttention() {
       target: "services-section",
     });
   }
-  if (latestReady && latestReady.ready === false) {
-    const startingTitle = latestReady.status === "shutting_down"
-      ? "Daemon shutting down"
-      : (latestReady.status === "starting" ? "Daemon starting" : "Daemon not ready");
+  if (latestReady && latestReady.ready === false && latestReady.status !== "starting") {
     items.push({
       level: "warning",
-      title: startingTitle,
+      title: "Daemon not ready",
       detail: latestReady.message || latestReady.status || "",
       target: "daemon-section",
     });
@@ -3608,6 +3586,7 @@ function setAppQuery(q) { appQuery = q || ""; renderApps(); saveUIState(); }
 function setAppCategory(v) { appCategory = v || "all"; renderApps(); }
 function updateAppSortIndicators() { updateSortIndicatorsFor("ai", appSort); }
 function appStateText(a) {
+  if (a && a.state === "starting") return "starting";
   const status = String((a && a.status) || "").trim().toLowerCase();
   if (!status || status === "ok") return "ok";
   if (status.startsWith("error:") || status === "not installed" || status === "no binary configured") return "failed";
@@ -3624,6 +3603,7 @@ function appStateRank(a) {
 function appStatusLabel(a) {
   switch (appStateText(a)) {
     case "ok": return "Ok";
+    case "starting": return "Starting";
     case "warning": return "Warning";
     case "failed": return "Failed";
     default: return "Unknown";
@@ -4076,12 +4056,16 @@ function renderOverview(ctx) {
   const svcs = allServices || [];
   const enabled = svcs.filter((s) => s.enabled);
   const failedSvcs = svcs.filter((s) => serviceState(s) === "failed");
+  const startingSvcs = svcs.filter((s) => serviceState(s) === "starting");
   const upSvcs = enabled.filter((s) => ["monitorized", "running", "ok"].includes(serviceState(s)));
   const watches = allWatches || [];
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === "failed");
+  const startingWatches = watches.filter((w) => watchStateText(w) === "starting");
+  const daemonStarting = ready && ready.status === "starting" && ready.ready === false;
   const activeLocks = (locks || []).filter((l) => l.state === "active");
   const alerts = failedSvcs.length + failedWatches.length + activeLocks.length;
+  const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0;
 
   const tile = (opts) => `
     <button class="tile ${opts.cls || ""}" data-panel-target="${esc(opts.target || "services-section")}">
@@ -4095,10 +4079,12 @@ function renderOverview(ctx) {
   tiles.push(tile({
     label: "Services up",
     value: `${upSvcs.length}<small> / ${enabled.length}</small>`,
-    cls: failedSvcs.length ? "t-crit" : (enabled.length ? "t-ok" : ""),
+    cls: failedSvcs.length ? "t-crit" : (settling ? "" : (enabled.length ? "t-ok" : "")),
     sub: failedSvcs.length
       ? `${failedSvcs.length} failed`
-      : (enabled.length === 0 ? "none enabled" : "all healthy"),
+      : (startingSvcs.length
+        ? `${startingSvcs.length} starting`
+        : (enabled.length === 0 ? "none enabled" : "all healthy")),
     target: failedSvcs.length ? "failed-services" : "services-section",
   }));
   if (watches.length) {
@@ -4247,7 +4233,10 @@ function renderStatus(ctx) {
     if (hostUp) parts.push(`uptime: <b>${esc(hostUp)}</b>`);
     if (ready.status) {
       const cls = ready.panic ? "status-panic" : (ready.status === "starting" ? "status-starting" : (ready.ready ? "ok" : "inactive"));
-      parts.push(`status: <span class="${cls}">${esc(ready.status)}</span>`);
+      const statusLabel = ready.status === "starting" && ready.message
+        ? `${ready.status} <span class="muted">(${esc(ready.message)})</span>`
+        : esc(ready.status);
+      parts.push(`status: <span class="${cls}">${statusLabel}</span>`);
     }
     bar.innerHTML = parts.join(" &middot; ");
     updatePanicView(ready.panic);

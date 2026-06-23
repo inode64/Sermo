@@ -13,6 +13,7 @@ import (
 	"sermo/internal/execx"
 	"sermo/internal/metrics"
 	"sermo/internal/rules"
+	"sermo/internal/servicemgr"
 )
 
 func TestMonitorReloadPreservesWorkerState(t *testing.T) {
@@ -55,12 +56,14 @@ checks:
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}}
+	ready := NewReadiness("systemd", 1, 0)
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
 	workers, _ := BuildWorkers(cfg, deps, collector)
 	if len(workers) != 1 {
 		t.Fatalf("workers = %d, want 1", len(workers))
 	}
+	forceWorkerBackendActive(workers)
 
 	t0 := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
 	workers[0].cycle = 11
@@ -73,7 +76,6 @@ checks:
 		"/etc/web.conf": "123:456789",
 	}
 
-	ready := NewReadiness("systemd", 1, 0)
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
 	mon.ConfigPath = global
 	mon.Logger = slog.Default()
@@ -152,12 +154,13 @@ checks:
 	if err != nil {
 		t.Fatal(err)
 	}
-	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}}
+	ready := NewReadiness("systemd", 1, 0)
+	deps := Deps{Interval: 100 * time.Millisecond, Now: time.Now, Emit: func(Event) {}, ExecxRunner: execx.CommandRunner{}, Settling: NewSettling(ready)}
 	collector := metrics.New(metrics.OSReader{})
 	workers, _ := BuildWorkers(cfg, deps, collector)
+	forceWorkerBackendActive(workers)
 	workers[0].cycle = 5
 
-	ready := NewReadiness("systemd", 1, 0)
 	mon := NewMonitor(cfg, deps, Scheduler{Interval: 20 * time.Millisecond}, ready, collector, nil)
 	mon.ConfigPath = global
 	mon.Logger = slog.Default()
@@ -199,6 +202,17 @@ defaults:
 	}
 	if rep := ready.Report(context.Background()); !rep.Ready || rep.Status != "ok" {
 		t.Fatalf("readiness = %+v, want ready during rejected reload", rep)
+	}
+}
+
+func forceWorkerBackendActive(workers []*Worker) {
+	for _, w := range workers {
+		if w == nil {
+			continue
+		}
+		w.CheckDeps.Status = func(context.Context) (servicemgr.Status, error) {
+			return servicemgr.StatusActive, nil
+		}
 	}
 }
 

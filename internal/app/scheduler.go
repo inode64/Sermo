@@ -52,15 +52,14 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		}
 	}
 
-	// On the first boot, hold the daemon at "starting" until every target has run
-	// its first cycle (so it has data); each cycler reports via onFirstCycle. On a
-	// config reload the daemon is already up, so mark it ready right away.
-	total := len(workers) + len(watches)
-	var onFirstCycle func()
+	// On the first boot, hold the daemon at "starting" until every active target
+	// has completed its startup observation cycle (workers and watches call
+	// Settling.MarkObserved when ready). Paused/disabled targets are excluded.
+	// On a config reload the daemon is already up, so mark it ready right away.
+	total := activeMonitorTargets(workers, watches)
 	if gateReady {
-		ready.ExpectFirstCycles(total)
 		if ready != nil {
-			onFirstCycle = ready.markFirstCycle
+			ready.ExpectFirstCycles(total)
 		}
 	} else if ready != nil {
 		ready.MarkReady()
@@ -71,6 +70,7 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 	// interval for that first cycle only. This avoids a startup stampede — every
 	// app probe firing at once — while still checking everything within ~one
 	// interval; runCycler then reverts each target to its own cadence.
+	staggerTotal := len(workers) + len(watches)
 	var wg sync.WaitGroup
 	idx := 0
 	for _, w := range workers {
@@ -79,12 +79,12 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		if wi <= 0 {
 			wi = interval
 		}
-		offset := staggerOffset(idx, total, interval)
+		offset := staggerOffset(idx, staggerTotal, interval)
 		idx++
 		wg.Add(1)
 		go func(w *Worker, wi, offset time.Duration) {
 			defer wg.Done()
-			runCycler(ctx, w, wi, offset, onFirstCycle)
+			runCycler(ctx, w, wi, offset)
 		}(w, wi, offset)
 	}
 	for _, wt := range watches {
@@ -92,18 +92,41 @@ func (s Scheduler) Run(ctx context.Context, workers []*Worker, watches []*Watch,
 		if wi <= 0 {
 			wi = interval
 		}
-		offset := staggerOffset(idx, total, interval)
+		offset := staggerOffset(idx, staggerTotal, interval)
 		idx++
 		wg.Add(1)
 		go func(wt *Watch, wi, offset time.Duration) {
 			defer wg.Done()
-			runCycler(ctx, wt, wi, offset, onFirstCycle)
+			runCycler(ctx, wt, wi, offset)
 		}(wt, wi, offset)
 	}
 	wg.Wait()
 	if finalShutdown && ready != nil {
 		ready.MarkShuttingDown()
 	}
+}
+
+func activeMonitorTargets(workers []*Worker, watches []*Watch) int {
+	n := 0
+	for _, w := range workers {
+		if monitorTargetActive(w) {
+			n++
+		}
+	}
+	for _, wt := range watches {
+		if watchTargetActive(wt) {
+			n++
+		}
+	}
+	return n
+}
+
+func monitorTargetActive(w *Worker) bool {
+	return w != nil && (w.IsPaused == nil || !w.IsPaused())
+}
+
+func watchTargetActive(wt *Watch) bool {
+	return wt != nil && (wt.IsPaused == nil || !wt.IsPaused())
 }
 
 // staggerOffset spreads target idx of total evenly across one interval, so the
@@ -119,27 +142,18 @@ func staggerOffset(idx, total int, interval time.Duration) time.Duration {
 
 // runCycler ticks a cycler from cycle completion: jitter, then cycle, then wait
 // one interval, repeat. A cancelled context stops between cycles (never start a
-// new operation during shutdown). onFirstCycle, when set, fires once right after
-// the first RunCycle returns — the readiness gate uses it to learn the target has
-// data.
-func runCycler(ctx context.Context, c cycler, interval, offset time.Duration, onFirstCycle func()) {
+// new operation during shutdown).
+func runCycler(ctx context.Context, c cycler, interval, offset time.Duration) {
 	if offset > 0 {
 		if !sleepCtx(ctx, offset) {
 			return
 		}
 	}
-	first := true
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		c.RunCycle(ctx)
-		if first {
-			first = false
-			if onFirstCycle != nil {
-				onFirstCycle()
-			}
-		}
 		if !sleepCtx(ctx, interval) {
 			return
 		}

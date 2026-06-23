@@ -667,7 +667,12 @@ finished `engine.startup_delay` (if any) **and every monitored target — servic
 host watches and installed apps — has completed its first cycle**, so the daemon
 actually has data rather than merely having launched. While settling, the verbose
 `message` reports progress (`starting: 3/10 monitored targets have reported`) and
-the web UI header shows `status: starting` with a neutral grey tab favicon. During
+the web UI header shows `status: starting` with a neutral grey tab favicon. Each
+monitored service, host watch and installed app also reports `state: starting`
+until its init backend is `active` and its first observation cycle has completed;
+during that window Sermo does not run service checks (while the backend is still
+inactive), and it suppresses alerts, hooks, notifications and automatic
+remediation on the first active observation cycle. During
 the startup grace period, the first-cycle settling, or while the daemon is shutting
 down, it returns **503**. To avoid a startup stampede the first cycle of the whole
 fleet is staggered across one `engine.interval` (the slow per-app cadence is used

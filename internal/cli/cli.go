@@ -365,7 +365,7 @@ func (a App) runStatus(ctx context.Context, opts options) int {
 		return exitSuccess
 	}
 
-	state := app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "")
+	state := app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true)
 	fmt.Fprintf(a.Stdout, "%s state=%s backend=%s service=%s%s\n",
 		status.Service, state, status.Backend, status.Unit, formatStateMetadata(mon))
 	return exitSuccess
@@ -1160,7 +1160,7 @@ func defaultTimeout(command string) time.Duration {
 func statusToJSON(status servicemgr.ServiceStatus, mon monitorView) statusJSON {
 	out := statusJSON{
 		Service: status.Service,
-		State:   app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), ""),
+		State:   app.ServiceState(mon.Enabled, mon.Monitored(), string(status.Status), "", true),
 		Backend: string(status.Backend),
 		Status:  string(status.Status),
 		Unit:    status.Unit,
