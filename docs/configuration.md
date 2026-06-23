@@ -680,7 +680,10 @@ remediation on the first active observation cycle. During
 the startup grace period, the first-cycle settling, or while the daemon is shutting
 down, it returns **503**. To avoid a startup stampede the first cycle of the whole
 fleet is staggered across one `engine.interval` (the slow per-app cadence is used
-only after that first check); a config reload does not return to `starting`. A
+only after that first check); a **config reload does not re-gate** `/readyz` — the
+daemon stays `ready` and the web header/favicon do not return to the grey
+`starting` state. Newly added or changed monitored targets can still report
+`state: starting` individually until their first observation cycle completes. A
 plain request returns `ok` or `starting` / `shutting_down` as `text/plain`;
 `GET /readyz?verbose` returns JSON with `ready`, `status`, `backend`, `services`,
 `watches` (host watches plus installed-app monitors) and an optional `message`. Like `/livez`, it is served **without
