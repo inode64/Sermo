@@ -198,6 +198,24 @@ func TestReleaseBusyWithoutLazyReportsBlockers(t *testing.T) {
 	}
 }
 
+func TestReleaseBusySurfacesCanceledDiscoveryError(t *testing.T) {
+	mounted := true
+	runner := &fakeRunner{mounted: &mounted, busy: true}
+	c := testController(t, &mounted, runner)
+	c.DiscoverUsers = func(string) ([]process.Process, error) {
+		return nil, context.Canceled
+	}
+	spec := EphemeralSpec("/mnt/backup")
+
+	res, err := c.Release(context.Background(), spec)
+	if err == nil {
+		t.Fatal("Release busy mount succeeded")
+	}
+	if !strings.Contains(res.Message, "could not enumerate blockers: cancelled") {
+		t.Fatalf("Release message = %q, want cancelled discovery error", res.Message)
+	}
+}
+
 func TestReleaseBusySurfacesDiscoveryError(t *testing.T) {
 	mounted := true
 	runner := &fakeRunner{mounted: &mounted, busy: true}
