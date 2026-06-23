@@ -1399,8 +1399,8 @@ func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
 	}
 
 	got := b.Notifiers(context.Background())
-	if len(got) != 2 {
-		t.Fatalf("notifiers = %+v, want 2 entries", got)
+	if len(got) != 3 {
+		t.Fatalf("notifiers = %+v, want 3 entries", got)
 	}
 	byName := map[string]web.Notifier{}
 	for _, n := range got {
@@ -1417,6 +1417,9 @@ func TestWebBackendNotifiersExposeEnabledState(t *testing.T) {
 	}
 	if byName["muted"].Summary != "hooks.example" {
 		t.Fatalf("muted summary = %q, want hooks.example", byName["muted"].Summary)
+	}
+	if !byName["tty"].Enabled || byName["tty"].Summary != "all active terminals" || byName["tty"].UsedBy != 0 {
+		t.Fatalf("tty notifier metadata = %+v", byName["tty"])
 	}
 }
 

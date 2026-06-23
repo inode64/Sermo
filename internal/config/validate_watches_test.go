@@ -371,11 +371,15 @@ func TestValidateNotifiers(t *testing.T) {
 				"type":    "slack",
 				"webhook": "https://hooks.slack.com/services/T/B/x",
 			},
+			"tty-root": map[string]any{
+				"type":  "tty",
+				"users": []any{"root"},
+			},
 			"staged": map[string]any{
 				"enabled": false,
 			},
 		},
-		"notify": []any{"staged"},
+		"notify": []any{"staged", "tty-root"},
 	})
 	for _, i := range good {
 		if strings.Contains(i.Msg, "notifiers.") {
@@ -393,6 +397,7 @@ func TestValidateNotifiers(t *testing.T) {
 			"bad-type":    map[string]any{"type": "smoke-signal"},
 			"no-type":     map[string]any{"dsn": "smtp://x"},
 			"bad-enabled": map[string]any{"enabled": "false", "type": "slack", "webhook": "https://hooks.example/x"},
+			"bad-users":   map[string]any{"type": "tty", "users": []any{"root", 7}},
 		},
 	})
 	for _, w := range []string{
@@ -401,9 +406,10 @@ func TestValidateNotifiers(t *testing.T) {
 		"notifiers.bad-dsn.dsn must be an smtp:// or smtps:// URL",
 		"notifiers.no-webhook.webhook is required for a slack notifier",
 		"notifiers.bad-webhook.webhook must be an http(s) URL",
-		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, slack, teams)",
+		"notifiers.bad-type.type \"smoke-signal\" is not supported (email, slack, teams, tty)",
 		"notifiers.no-type.type is required",
 		"notifiers.bad-enabled.enabled must be a boolean",
+		"notifiers.bad-users.users must be a string or list of strings",
 	} {
 		if !hasIssue(bad, w) {
 			t.Fatalf("missing issue %q in %v", w, bad)

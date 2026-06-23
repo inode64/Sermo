@@ -69,6 +69,19 @@ func TestValidateNotifySelection(t *testing.T) {
 	}
 }
 
+func TestValidateBuiltinTTYNotifyReference(t *testing.T) {
+	issues := validateRawGlobal(t, map[string]any{
+		"notify": []any{"tty"},
+	})
+	var got []string
+	for _, issue := range issues {
+		got = append(got, issue.Msg)
+	}
+	if strings.Contains(strings.Join(got, "\n"), `unknown notifier "tty"`) {
+		t.Fatalf("builtin tty notifier should validate without a notifier fragment: %v", got)
+	}
+}
+
 func TestValidateRulesNotifyRefs(t *testing.T) {
 	defined := map[string]struct{}{"ops": {}}
 	tree := map[string]any{"rules": map[string]any{
