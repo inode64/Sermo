@@ -50,7 +50,7 @@ func (c firewallRulesCheck) Run(ctx context.Context) Result {
 	}
 	sample, err := sampler(ctx, c.backend, c.runner)
 	if err != nil {
-		return c.result(false, "firewall: "+err.Error(), start)
+		return c.result(false, "firewall: "+execx.FormatContextOrError(err, c.timeout), start)
 	}
 	ok := sample.Rules >= c.minRules
 	msg := fmt.Sprintf("firewall %s has %d rules (min %d)", sample.Backend, sample.Rules, c.minRules)
