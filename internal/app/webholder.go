@@ -213,6 +213,7 @@ func (h *WebBackendHolder) ServiceEvents(ctx context.Context, name string, limit
 	return nil, false
 }
 
+// ApplicationEvents returns one application's recent events through the active backend.
 func (h *WebBackendHolder) ApplicationEvents(ctx context.Context, name string, limit int) ([]web.Event, bool) {
 	if b := h.backend(); b != nil {
 		return b.ApplicationEvents(ctx, name, limit)
