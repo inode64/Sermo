@@ -34,7 +34,7 @@ func TestStaggerOffsetSpreadsAcrossInterval(t *testing.T) {
 func TestSchedulerGateWaitsForFirstCycles(t *testing.T) {
 	ready := NewReadiness("systemd", 0, 0)
 	settling := NewSettling(ready)
-	settling.Reset([]string{"a", "b"})
+	settling.Reset([]string{SettlingWatchKey("a"), SettlingWatchKey("b")})
 	var ran int32
 	mkWatch := func(name string) *Watch {
 		return &Watch{
@@ -379,7 +379,7 @@ func TestSchedulerRunsWatchWithCustomInjectedRunnerVerifiesEnv(t *testing.T) {
 func TestSchedulerGateCompletesWithInactiveWorker(t *testing.T) {
 	ready := NewReadiness("systemd", 1, 0)
 	settling := NewSettling(ready)
-	settling.Reset([]string{"web"})
+	settling.Reset([]string{SettlingServiceKey("web")})
 
 	var checksRan int32
 	w := &Worker{

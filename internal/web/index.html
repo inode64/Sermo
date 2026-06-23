@@ -864,16 +864,18 @@ async function load() {
   if (locks) renderLocks(locks);
   if (activity) renderActivity(activity);
 
+  // Status/readyz updates every refresh even when api/services fails, so the
+  // header lifecycle line does not stay stuck on a stale "starting".
+  renderStatus({
+    ready,
+    live,
+    mon,
+    ops,
+    locks: locks || latestLocks,
+    daemon: daemon || {},
+    hostMetrics: hostMetrics || [],
+  });
   if (connOK) {
-    renderStatus({
-      ready,
-      live,
-      mon,
-      ops,
-      locks: locks || latestLocks,
-      daemon: daemon || {},
-      hostMetrics: hostMetrics || [],
-    });
     renderOpsPanel(ops);
     loadEvents();
     await loadDiag();

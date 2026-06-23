@@ -73,7 +73,7 @@ func TestReadinessMarkReadyDoesNotUndoShutdown(t *testing.T) {
 func TestSchedulerMarksReadiness(t *testing.T) {
 	ready := NewReadiness("systemd", 1, 0)
 	settling := NewSettling(ready)
-	settling.Reset([]string{"a"})
+	settling.Reset([]string{SettlingServiceKey("a")})
 	workers := []*Worker{
 		{
 			Service:  "a",

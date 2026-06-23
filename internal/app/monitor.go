@@ -208,12 +208,12 @@ func (m *Monitor) startGenerationLocked(ctx context.Context, firstBoot bool) {
 			var preserved []string
 			for _, w := range m.workers {
 				if w != nil && w.cycle > 0 {
-					preserved = append(preserved, w.Service)
+					preserved = append(preserved, SettlingServiceKey(w.Service))
 				}
 			}
 			for _, wt := range m.watches {
 				if wt != nil && wt.settled {
-					preserved = append(preserved, wt.Name)
+					preserved = append(preserved, settlingKeyForWatch(wt))
 				}
 			}
 			m.deps.Settling.MarkObservedBulk(preserved)
@@ -251,12 +251,12 @@ func monitorTargetNames(workers []*Worker, watches []*Watch) []string {
 	names := make([]string, 0, len(workers)+len(watches))
 	for _, w := range workers {
 		if monitorTargetActive(w) {
-			names = append(names, w.Service)
+			names = append(names, SettlingServiceKey(w.Service))
 		}
 	}
 	for _, wt := range watches {
 		if watchTargetActive(wt) {
-			names = append(names, wt.Name)
+			names = append(names, settlingKeyForWatch(wt))
 		}
 	}
 	return names
