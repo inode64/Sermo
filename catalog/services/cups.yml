@@ -4,22 +4,22 @@ display_name: CUPS
 category: system
 service:
   systemd:
-  - cups
+    - cups
   openrc:
-  - cupsd
+    - cupsd
 apps:
-- cupsd
+  - cupsd
 variables:
   port: 631
 pidfile:
-- /run/cupsd.pid
-- /run/cups/cupsd.pid
+  - /run/cupsd.pid
+  - /run/cups/cupsd.pid
 preflight:
   config:
     type: command
     command:
-    - ${cupsd_binary}
-    - -t
+      - ${cupsd_binary}
+      - -t
     timeout: 30s
 checks:
   service:
@@ -36,8 +36,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

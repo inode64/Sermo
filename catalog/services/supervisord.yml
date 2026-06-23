@@ -4,7 +4,7 @@ display_name: Supervisor
 category: system
 service: supervisord
 apps:
-- supervisord
+  - supervisord
 checks:
   service:
     type: service
@@ -12,32 +12,32 @@ checks:
   ping:
     type: command
     command:
-    - supervisorctl
-    - status
+      - supervisorctl
+      - status
     timeout: 15s
     optional: true
 preflight:
   config:
     type: command
     command:
-    - ${supervisord_binary}
-    - check
+      - ${supervisord_binary}
+      - check
     timeout: 30s
     optional: true
 postflight:
   ping:
     type: command
     command:
-    - supervisorctl
-    - status
+      - supervisorctl
+      - status
     timeout: 15s
     optional: true
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

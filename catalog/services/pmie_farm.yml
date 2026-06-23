@@ -5,9 +5,9 @@ category: observability
 description: Performance Co-Pilot pmie farm service.
 service:
   systemd:
-  - pmie_farm
+    - pmie_farm
 apps:
-- pmie_farm
+  - pmie_farm
 variables:
   user: pcp
 processes:
@@ -27,7 +27,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

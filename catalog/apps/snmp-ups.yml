@@ -6,4 +6,4 @@ variables:
   binary: "/lib/nut/snmp-ups"
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","-V"], timeout: 10s }
+  version: { type: command, command: ["${binary}", "-V"], timeout: 10s }

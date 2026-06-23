@@ -11,7 +11,7 @@ watches:
           hook:
             command: [/usr/local/bin/sermo-swap-usage.sh]
       io:
-        delta: { op: ">", value: 1000 }   # pages swapped in+out per cycle
+        delta: { op: ">", value: 1000 }  # pages swapped in+out per cycle
         then:
           hook:
             command: [/usr/local/bin/sermo-swap-io.sh]

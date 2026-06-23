@@ -4,7 +4,7 @@ display_name: BIND (named)
 category: network
 service: named
 apps:
-- named
+  - named
 variables:
   host: 127.0.0.1
   port: 53
@@ -14,16 +14,16 @@ preflight:
   config:
     type: command
     command:
-    - ${named_checkconf}
-    - -z
+      - ${named_checkconf}
+      - -z
     timeout: 30s
     analyze:
       use:
-      - common
+        - common
 pidfile: /run/named/named.pid
 config_files:
-- /etc/bind/named.conf
-- /etc/named.conf
+  - /etc/bind/named.conf
+  - /etc/named.conf
 processes:
   main:
     exe: ${named_binary}
@@ -41,8 +41,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

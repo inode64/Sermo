@@ -5,18 +5,18 @@ category: system
 description: Node.js process manager supervising application processes.
 service:
   systemd:
-  - pm2-root
-  - pm2
+    - pm2-root
+    - pm2
   openrc:
-  - pm2
+    - pm2
 apps:
-- pm2
-- node
+  - pm2
+  - node
 variables:
   user: root
 pidfile:
-- /run/pm2.pid
-- /root/.pm2/pm2.pid
+  - /run/pm2.pid
+  - /root/.pm2/pm2.pid
 processes:
   main:
     exe: ${pm2_binary}
@@ -25,8 +25,8 @@ preflight:
   config:
     type: command
     command:
-    - ${pm2_binary}
-    - ping
+      - ${pm2_binary}
+      - ping
     timeout: 15s
 checks:
   service:
@@ -35,15 +35,15 @@ checks:
   ping:
     type: command
     command:
-    - ${pm2_binary}
-    - ping
+      - ${pm2_binary}
+      - ping
     timeout: 10s
 postflight:
   ping:
     type: command
     command:
-    - ${pm2_binary}
-    - ping
+      - ${pm2_binary}
+      - ping
     timeout: 10s
 policy:
   cooldown: 15m
@@ -56,8 +56,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

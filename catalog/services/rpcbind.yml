@@ -5,7 +5,7 @@ category: storage
 description: ONC RPC portmapper.
 service: rpcbind
 apps:
-- rpcbind
+  - rpcbind
 variables:
   host: 127.0.0.1
   port: 111

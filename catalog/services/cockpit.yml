@@ -5,21 +5,21 @@ category: system
 description: Web-based Linux server administration console.
 service:
   systemd:
-  - cockpit
+    - cockpit
 also_service:
   systemd:
-  - cockpit.socket
+    - cockpit.socket
 apps:
-- cockpit
+  - cockpit
 variables:
   host: 127.0.0.1
   port: 9090
   user: cockpit-systemd-service
 socket:
   path:
-  - /run/cockpit/session
-  - /run/cockpit/wsinstance/http.sock
-  - /run/cockpit/wsinstance/https-factory.sock
+    - /run/cockpit/session
+    - /run/cockpit/wsinstance/http.sock
+    - /run/cockpit/wsinstance/https-factory.sock
   optional: true
 processes:
   main:

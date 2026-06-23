@@ -3,20 +3,20 @@ name: syslog-ng
 category: observability
 service: syslog-ng
 apps:
-- syslog-ng
+  - syslog-ng
 variables:
   config: /etc/syslog-ng/syslog-ng.conf
 preflight:
   config:
     type: command
     command:
-    - ${syslog_ng_binary}
-    - --syntax-only
-    - --cfgfile=${config}
+      - ${syslog_ng_binary}
+      - --syntax-only
+      - --cfgfile=${config}
     timeout: 30s
 config_files:
-- ${config}
-- /etc/syslog-ng/conf.d
+  - ${config}
+  - /etc/syslog-ng/conf.d
 pidfile: /run/syslog-ng.pid
 socket: /run/syslog-ng.ctl
 processes:
@@ -30,8 +30,8 @@ checks:
   ctl:
     type: command
     command:
-    - ${syslog_ng_binary}
-    - stats
+      - ${syslog_ng_binary}
+      - stats
     timeout: 10s
     optional: true
   fds:
@@ -64,8 +64,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config
@@ -90,11 +90,11 @@ postflight:
   ctl:
     type: command
     command:
-    - ${syslog_ng_binary}
-    - stats
+      - ${syslog_ng_binary}
+      - stats
     timeout: 10s
     optional: true
 reload_on_change:
   paths:
-  - ${config}
-  - /etc/syslog-ng/conf.d
+    - ${config}
+    - /etc/syslog-ng/conf.d

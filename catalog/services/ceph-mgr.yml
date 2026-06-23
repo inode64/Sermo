@@ -2,12 +2,11 @@ kind: daemon
 name: ceph-mgr
 display_name: Ceph Manager
 category: storage
-description: 'Ceph manager daemon: hosts the cluster''s management modules (dashboard,
-  prometheus, balancer, …).'
+description: 'Ceph manager daemon: hosts the cluster''s management modules (dashboard, prometheus, balancer, …).'
 service: ceph-mgr@${hostname}
 apps:
-- ceph-mgr
-- ceph
+  - ceph-mgr
+  - ceph
 variables:
   user: ceph
 socket: /run/ceph/ceph-mgr.${hostname}.asok
@@ -23,26 +22,26 @@ checks:
   status:
     type: command
     command:
-    - ${ceph_binary}
-    - --admin-daemon
-    - /run/ceph/ceph-mgr.${hostname}.asok
-    - status
+      - ${ceph_binary}
+      - --admin-daemon
+      - /run/ceph/ceph-mgr.${hostname}.asok
+      - status
     timeout: 5s
     analyze:
       use:
-      - ceph
+        - ceph
 postflight:
   status:
     type: command
     command:
-    - ${ceph_binary}
-    - --admin-daemon
-    - /run/ceph/ceph-mgr.${hostname}.asok
-    - status
+      - ${ceph_binary}
+      - --admin-daemon
+      - /run/ceph/ceph-mgr.${hostname}.asok
+      - status
     timeout: 5s
     analyze:
       use:
-      - ceph
+        - ceph
 rules:
   restart-if-status-failed:
     type: remediation

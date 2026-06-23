@@ -5,17 +5,17 @@ category: web
 description: Varnish
 service: varnishd
 apps:
-- varnishd
+  - varnishd
 variables:
   port: 6082
 preflight:
   config:
     type: command
     command:
-    - ${varnishd_binary}
-    - -C
-    - -f
-    - /etc/varnish/default.vcl
+      - ${varnishd_binary}
+      - -C
+      - -f
+      - /etc/varnish/default.vcl
     timeout: 30s
 checks:
   service:
@@ -46,8 +46,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

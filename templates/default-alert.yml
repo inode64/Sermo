@@ -1,4 +1,4 @@
 # Default notification template. It preserves Sermo's built-in subject and body.
-subject: "{{ .Subject }}"
+subject: "{ { .Subject } }"
 body: |
-  {{ .Body }}
+  { { .Body } }

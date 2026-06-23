@@ -5,4 +5,4 @@ variables:
   binary: ${bindir}/irqbalance
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], expect_exit: 1, timeout: 10s }
+  version: { type: command, command: ["${binary}", "--version"], expect_exit: 1, timeout: 10s }

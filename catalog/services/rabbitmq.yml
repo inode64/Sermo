@@ -5,13 +5,13 @@ category: messaging
 type: queue
 service:
   systemd:
-  - rabbitmq-server
-  - rabbitmq
+    - rabbitmq-server
+    - rabbitmq
   openrc:
-  - rabbitmq
+    - rabbitmq
 apps:
-- erlang
-- rabbitmq
+  - erlang
+  - rabbitmq
 variables:
   user: rabbitmq
   host: 127.0.0.1
@@ -31,9 +31,9 @@ stop_policy:
   term_timeout: 30s
   kill_only_if:
     users:
-    - ${user}
+      - ${user}
     exe_any:
-    - ${rabbitmq_binary}
+      - ${rabbitmq_binary}
 rules:
   restart-if-amqp-failed:
     type: remediation

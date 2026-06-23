@@ -5,8 +5,8 @@ category: storage
 description: 'Ceph cluster monitor: maintains the cluster maps and the paxos quorum.'
 service: ceph-mon@${hostname}
 apps:
-- ceph-mon
-- ceph
+  - ceph-mon
+  - ceph
 variables:
   user: ceph
   host: 127.0.0.1
@@ -33,14 +33,14 @@ checks:
   status:
     type: command
     command:
-    - ${ceph_binary}
-    - --admin-daemon
-    - /run/ceph/ceph-mon.${hostname}.asok
-    - mon_status
+      - ${ceph_binary}
+      - --admin-daemon
+      - /run/ceph/ceph-mon.${hostname}.asok
+      - mon_status
     timeout: 5s
     analyze:
       use:
-      - ceph
+        - ceph
 postflight:
   messenger:
     type: ceph

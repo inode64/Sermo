@@ -5,21 +5,21 @@ category: security
 description: Dynamic firewall management daemon.
 service:
   systemd:
-  - firewalld
+    - firewalld
 apps:
-- firewalld
+  - firewalld
 variables:
   config_dir: /etc/firewalld
 config_files:
-- ${config_dir}
+  - ${config_dir}
 preflight:
   config:
     type: command
     command:
-    - ${firewalld_binary_offline}
-    - --check-config
-    - --system-config
-    - ${config_dir}
+      - ${firewalld_binary_offline}
+      - --check-config
+      - --system-config
+      - ${config_dir}
     timeout: 30s
 checks:
   service:
@@ -28,19 +28,19 @@ checks:
   state:
     type: command
     command:
-    - firewall-cmd
-    - state
+      - firewall-cmd
+      - state
     timeout: 10s
 postflight:
   state:
     type: command
     command:
-    - firewall-cmd
-    - state
+      - firewall-cmd
+      - state
     timeout: 10s
 reload_on_change:
   paths:
-  - ${config_dir}
+    - ${config_dir}
 policy:
   cooldown: 15m
   max_actions: 2
@@ -52,8 +52,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

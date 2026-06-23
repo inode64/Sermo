@@ -4,7 +4,7 @@ display_name: ProFTPD
 category: network
 service: proftpd
 apps:
-- proftpd
+  - proftpd
 variables:
   user: root
   port: 21
@@ -12,8 +12,8 @@ preflight:
   config:
     type: command
     command:
-    - ${proftpd_binary}
-    - --configtest
+      - ${proftpd_binary}
+      - --configtest
     timeout: 30s
 pidfile: /run/proftpd/proftpd.pid
 processes:
@@ -37,8 +37,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

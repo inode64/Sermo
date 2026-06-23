@@ -5,7 +5,7 @@ category: network
 description: Link Layer Discovery Protocol
 service: lldpd
 apps:
-- lldpd
+  - lldpd
 variables:
   user: lldpd
 pidfile: /run/lldpd.pid
@@ -24,7 +24,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

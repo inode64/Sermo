@@ -9,5 +9,5 @@ variables:
     - ${bindir}/mailx
 preflight:
   binary: { type: binary, path: "${binary}" }
-  version: { type: command, command: ["${binary}","--version"], timeout: 10s }
-  config: { type: command, command: ["${binary}","-v", "-:s", "-e"], timeout: 30s }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }
+  config: { type: command, command: ["${binary}", "-v", "-:s", "-e"], timeout: 30s }

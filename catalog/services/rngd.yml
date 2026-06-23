@@ -15,9 +15,9 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
 apps:
-- rngd
+  - rngd
 postflight:
   process:
     type: process

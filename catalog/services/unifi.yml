@@ -5,12 +5,12 @@ category: web
 description: Ubiquiti UniFi Network controller (management API over HTTPS).
 service:
   systemd:
-  - unifi
+    - unifi
   openrc:
-  - unifi
+    - unifi
 apps:
-- java
-- mongod
+  - java
+  - mongod
 variables:
   host: 127.0.0.1
   port: 8443

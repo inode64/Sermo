@@ -5,25 +5,25 @@ category: observability
 description: Grafana Loki log-aggregation server.
 service:
   systemd:
-  - loki
+    - loki
   openrc:
-  - loki
+    - loki
 apps:
-- loki
+  - loki
 variables:
   user: loki
   host: 127.0.0.1
   port: 3100
   config: /etc/loki/config.yml
 config_files:
-- ${config}
+  - ${config}
 preflight:
   config:
     type: command
     command:
-    - ${loki_binary}
-    - -verify-config
-    - -config.file=${config}
+      - ${loki_binary}
+      - -verify-config
+      - -config.file=${config}
     timeout: 30s
 pidfile: /run/loki.pid
 processes:
@@ -48,13 +48,13 @@ checks:
     timeout: 5s
 reload_on_change:
   paths:
-  - ${config}
+    - ${config}
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

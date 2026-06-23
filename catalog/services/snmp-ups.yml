@@ -4,7 +4,7 @@ display_name: SNMP UPS Driver
 category: hardware
 service: snmp-ups
 apps:
-- snmp-ups
+  - snmp-ups
 checks:
   service:
     type: service
@@ -15,7 +15,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
     optional: true
 postflight:
   process:

@@ -4,7 +4,7 @@ display_name: ACPI Daemon
 category: hardware
 service: acpid
 apps:
-- acpid
+  - acpid
 pidfile: /run/acpid.pid
 processes:
   main:

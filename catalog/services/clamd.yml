@@ -4,17 +4,17 @@ display_name: ClamAV Daemon
 category: security
 service:
   systemd:
-  - clamd
-  - clamav-daemon
+    - clamd
+    - clamav-daemon
   openrc:
-  - clamd
+    - clamd
 apps:
-- clamd
+  - clamd
 variables:
   user: root
 pidfile:
-- /run/clamd.pid
-- /run/clamav/clamd.pid
+  - /run/clamd.pid
+  - /run/clamav/clamd.pid
 processes:
   main:
     exe: ${clamd_binary}

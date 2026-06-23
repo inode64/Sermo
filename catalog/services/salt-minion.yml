@@ -5,7 +5,7 @@ category: system
 description: Salt minion agent.
 service: salt-minion
 apps:
-- salt-minion
+  - salt-minion
 pidfile: /run/salt-minion.pid
 checks:
   service:
@@ -17,7 +17,7 @@ checks:
     user: root
     state: running
     requires:
-    - service
+      - service
     optional: true
 postflight:
   process:

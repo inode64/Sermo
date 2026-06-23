@@ -4,7 +4,7 @@ display_name: libvirt
 category: virtualization
 service: libvirtd
 apps:
-- libvirtd
+  - libvirtd
 checks:
   service:
     type: service

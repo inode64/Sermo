@@ -5,7 +5,7 @@ category: mail
 description: DCC interface daemon used by mail filtering stacks.
 service: dcc
 apps:
-- dcc
+  - dcc
 variables:
   user: root
 pidfile: /run/dcc/dccifd.pid
@@ -24,7 +24,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

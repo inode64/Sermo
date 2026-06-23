@@ -351,6 +351,7 @@ Before finishing any code change:
 - Add or move tests when a bug or ambiguous behavior is found.
 - Run `make check` (or at least `make validate`) before treating a code change
   as complete; do not run `go test ./...` alone and skip fmt-check/lint.
+  YAML edits must pass `make yaml-validate` (included in `make validate`/`check`).
 - For daemon-facing changes, check the runtime cost in the steady-state cycle
   and avoid repeated scans, blocking calls or avoidable allocations on hot paths.
 - Update docs and examples in the same change when behavior changes.
@@ -497,12 +498,28 @@ Two rules, one battery:
 
 ```sh
 go build ./...                    # must pass
-make check                      # vet, fmt-check, lint, then go test ./...
+make check                      # vet, fmt-check, lint, yaml-validate, go test ./...
 ```
+
+YAML toolchain (install once):
+
+```sh
+go install github.com/google/yamlfmt/cmd/yamlfmt@latest
+pip install yamllint            # or pipx install yamllint
+make yaml-fmt                   # format tracked YAML (catalog, examples, docs, …)
+make yaml-validate              # yamlfmt -lint + yamllint (also runs via make validate)
+```
+
+Catalog and example YAML use **indented block sequences** (`proxy_binary:` then `  - path`
+on the next line), configured in `.yamlfmt` with `indentless_arrays: false`.
+`yamllint` mirrors that with `indent-sequences: consistent`. Inline flow maps use spaced
+braces (`{ type: binary, path: "${binary}" }`); `make yaml-fmt` runs `yamlfmt` then
+`scripts/normalize_yaml_flow.py` because yamlfmt drops those interior spaces. Inline
+comments are padded with two spaces (`pad_line_comments: 2` in `.yamlfmt`).
 
 Tool notes:
 
-- **`make lint`** is the canonical analyzer entrypoint. Do not hand-prefix
+- **`make lint`** is the canonical Go analyzer entrypoint. Do not hand-prefix
   `PATH` or call the analyzer binaries one by one unless you are debugging the
   lint target itself. `govulncheck` may need network access to refresh the
   vulnerability DB; a network/DNS failure there is an environment issue, not a

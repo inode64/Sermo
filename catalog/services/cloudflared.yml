@@ -6,27 +6,27 @@ description: Cloudflare Tunnel daemon (cloudflared)
 type: tunnel
 service:
   systemd:
-  - cloudflared
+    - cloudflared
   openrc:
-  - cloudflared
+    - cloudflared
 apps:
-- cloudflared
+  - cloudflared
 variables:
   user: cloudflared
   host: 127.0.0.1
   port: 60123
   config: /etc/cloudflared/config.yml
 config_files:
-- ${config}
+  - ${config}
 preflight:
   config:
     type: command
     command:
-    - sh
-    - -c
-    - test ! -e "$1" || exec "$0" --config "$1" tunnel ingress validate
-    - ${cloudflared_binary}
-    - ${config}
+      - sh
+      - -c
+      - test ! -e "$1" || exec "$0" --config "$1" tunnel ingress validate
+      - ${cloudflared_binary}
+      - ${config}
     timeout: 30s
 processes:
   main:
@@ -44,15 +44,15 @@ checks:
 stop_policy:
   kill_only_if:
     users:
-    - ${user}
+      - ${user}
     exe_any:
-    - ${cloudflared_binary}
+      - ${cloudflared_binary}
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

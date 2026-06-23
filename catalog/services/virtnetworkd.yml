@@ -5,9 +5,9 @@ category: virtualization
 description: Modular libvirt daemon for virtual network management.
 service:
   systemd:
-  - virtnetworkd
+    - virtnetworkd
 apps:
-- virtnetworkd
+  - virtnetworkd
 socket: /run/libvirt/virtnetworkd-sock
 processes:
   main:

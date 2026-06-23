@@ -5,11 +5,11 @@ category: observability
 description: Performance Co-Pilot metric collector daemon (pmcd).
 service:
   systemd:
-  - pmcd
+    - pmcd
   openrc:
-  - pmcd
+    - pmcd
 apps:
-- pmcd
+  - pmcd
 variables:
   host: 127.0.0.1
   port: 44321
@@ -23,13 +23,13 @@ policy:
     max: 1h
 restart_on_change:
   libraries:
-  - glibc
-  - systemd-libs
-  - lzma
+    - glibc
+    - systemd-libs
+    - lzma
 pidfile: /run/pcp/pmcd.pid
 socket:
-- /run/pcp/pmcd.socket
-- /var/lib/pcp/pmcd/root.socket
+  - /run/pcp/pmcd.socket
+  - /var/lib/pcp/pmcd/root.socket
 processes:
   main:
     exe: ${pmcd_binary}

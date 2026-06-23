@@ -5,9 +5,9 @@ category: observability
 description: Performance Co-Pilot inference engine daemon.
 service:
   systemd:
-  - pmie
+    - pmie
 apps:
-- pmie
+  - pmie
 variables:
   user: pcp
 pidfile: /run/pcp/pmie.pid
@@ -25,7 +25,7 @@ checks:
     user: ${user}
     state: running
     requires:
-    - service
+      - service
 postflight:
   process:
     type: process

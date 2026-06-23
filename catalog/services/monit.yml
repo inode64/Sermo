@@ -5,11 +5,11 @@ category: observability
 description: Monit process supervision and monitoring daemon.
 service:
   systemd:
-  - monit
+    - monit
   openrc:
-  - monit
+    - monit
 apps:
-- monit
+  - monit
 variables:
   host: 127.0.0.1
   config: /etc/monitrc
@@ -18,10 +18,10 @@ preflight:
   config:
     type: command
     command:
-    - ${monit_binary}
-    - -t
-    - -c
-    - ${config}
+      - ${monit_binary}
+      - -t
+      - -c
+      - ${config}
     timeout: 30s
 policy:
   cooldown: 15m
@@ -32,13 +32,13 @@ policy:
     max: 1h
 restart_on_change:
   libraries:
-  - glibc
-  - openssl
-  - zlib
+    - glibc
+    - openssl
+    - zlib
 config_files:
-- ${config}
-- /etc/monit/conf.d
-- /etc/monit.d
+  - ${config}
+  - /etc/monit/conf.d
+  - /etc/monit.d
 pidfile: /run/monit.pid
 processes:
   main:
@@ -57,8 +57,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

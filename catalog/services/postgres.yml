@@ -4,16 +4,16 @@ display_name: PostgreSQL ${version}
 category: database
 service:
   systemd:
-  - postgresql-${version}
-  - postgres-${version}
-  - postgresql
-  - postgres
+    - postgresql-${version}
+    - postgres-${version}
+    - postgresql
+    - postgres
   openrc:
-  - postgresql-${version}
-  - postgres-${version}
-  - postgres
+    - postgresql-${version}
+    - postgres-${version}
+    - postgres
 apps:
-- postgres-${version}
+  - postgres-${version}
 variables:
   port: 5432
   user: postgres
@@ -33,22 +33,22 @@ os:
     variables:
       config_dir: /etc/postgresql-${version}
 config_files:
-- ${config_dir}
+  - ${config_dir}
 preflight:
   config:
     type: command
     user: ${user}
     command:
-    - ${binary}
-    - -D
-    - ${config_dir}
-    - -C
-    - config_file
-    - --data-directory=${data_dir}
+      - ${binary}
+      - -D
+      - ${config_dir}
+      - -C
+      - config_file
+      - --data-directory=${data_dir}
     timeout: 30s
     analyze:
       use:
-      - postgres
+        - postgres
 processes:
   postgres:
     exe: ${binary}
@@ -84,15 +84,15 @@ checks:
     type: process
     optional: true
     exe_any:
-    - /usr/bin/pg_basebackup
-    - /usr/bin/pg_dump
-    - /usr/bin/pg_dumpall
-    - /usr/bin/pgbackrest
-    - /usr/local/bin/pgbackrest
-    - /usr/bin/wal-g-pg
-    - /usr/local/bin/wal-g-pg
-    - /usr/bin/wal-g
-    - /usr/local/bin/wal-g
+      - /usr/bin/pg_basebackup
+      - /usr/bin/pg_dump
+      - /usr/bin/pg_dumpall
+      - /usr/bin/pgbackrest
+      - /usr/local/bin/pgbackrest
+      - /usr/bin/wal-g-pg
+      - /usr/local/bin/wal-g-pg
+      - /usr/bin/wal-g
+      - /usr/local/bin/wal-g
     user: ${backup_user}
     state: running
 postflight:
@@ -107,9 +107,9 @@ stop_policy:
   term_timeout: 60s
   kill_only_if:
     users:
-    - ${user}
+      - ${user}
     exe_any:
-    - ${binary}
+      - ${binary}
 policy:
   cooldown: 15m
   max_actions: 2
@@ -121,8 +121,8 @@ rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config
@@ -132,7 +132,7 @@ rules:
   block-restart-during-backup:
     type: guard
     blocks:
-    - restart
+      - restart
     if:
       active:
         check: backup
@@ -172,4 +172,4 @@ rules:
       message: ${display_name} memory usage is high
 reload_on_change:
   paths:
-  - ${config_dir}
+    - ${config_dir}

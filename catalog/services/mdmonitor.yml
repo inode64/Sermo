@@ -5,9 +5,9 @@ category: storage
 description: mdadm monitor service for Linux software RAID arrays.
 service:
   systemd:
-  - mdmonitor
+    - mdmonitor
 apps:
-- mdadm
+  - mdadm
 processes:
   main:
     exe: ${mdadm_binary}

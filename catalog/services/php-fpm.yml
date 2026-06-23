@@ -5,21 +5,21 @@ category: web
 type: appserver
 service:
   systemd:
-  - php-fpm@${version}${sep}${instance}
-  - php-fpm@php${version}${sep}${instance}
-  - php-fpm-php${version}${sep}${instance}
-  - php${version}${sep}${instance}-fpm
-  - php-fpm${version}
-  - php${version}-fpm
+    - php-fpm@${version}${sep}${instance}
+    - php-fpm@php${version}${sep}${instance}
+    - php-fpm-php${version}${sep}${instance}
+    - php${version}${sep}${instance}-fpm
+    - php-fpm${version}
+    - php${version}-fpm
   openrc:
-  - php-fpm-php${version}${sep}${instance}
-  - php${version}${sep}${instance}
-  - php-fpm${version}${sep}${instance}
-  - php-fpm
-  - php-fpm${version}
-  - php${version}
+    - php-fpm-php${version}${sep}${instance}
+    - php${version}${sep}${instance}
+    - php-fpm${version}${sep}${instance}
+    - php-fpm
+    - php-fpm${version}
+    - php${version}
 apps:
-- php-fpm${version}
+  - php-fpm${version}
 variables:
   user: www-data
   host: 127.0.0.1
@@ -28,19 +28,19 @@ variables:
   config: /etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf
   status_path: /status
 pidfile:
-- /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
-- /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
-- /run/php-fpm-php${version}${sep}${instance}.pid
+  - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
+  - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
+  - /run/php-fpm-php${version}${sep}${instance}.pid
 preflight:
   config:
     type: command
     command:
-    - ${binary}
-    - --test
-    - --fpm-config
-    - ${config}
-    - --pid
-    - ${config_test_pidfile}
+      - ${binary}
+      - --test
+      - --fpm-config
+      - ${config}
+      - --pid
+      - ${config_test_pidfile}
     timeout: 10s
 processes:
   master:
@@ -54,11 +54,11 @@ checks:
     type: pidfile
     optional: true
     path:
-    - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
-    - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
-    - /run/php-fpm-php${version}${sep}${instance}.pid
+      - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
+      - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
+      - /run/php-fpm-php${version}${sep}${instance}.pid
     requires:
-    - service
+      - service
   service:
     type: service
     expect: active
@@ -80,16 +80,16 @@ stop_policy:
   force_kill: true
   kill_only_if:
     users:
-    - ${user}
-    - root
+      - ${user}
+      - root
     exe_any:
-    - ${binary}
+      - ${binary}
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

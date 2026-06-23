@@ -5,13 +5,13 @@ category: system
 description: DBus Daemon
 service:
   systemd:
-  - dbus
-  - dbus-daemon
+    - dbus
+    - dbus-daemon
   openrc:
-  - dbus
-  - dbus-daemon
+    - dbus
+    - dbus-daemon
 apps:
-- dbus
+  - dbus
 variables:
   user: messagebus
 pidfile: /run/dbus.pid

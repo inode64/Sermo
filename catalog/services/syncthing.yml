@@ -5,12 +5,12 @@ category: storage
 description: Syncthing continuous file-synchronization daemon.
 service:
   systemd:
-  - syncthing@${hostname}
-  - syncthing
+    - syncthing@${hostname}
+    - syncthing
   openrc:
-  - syncthing
+    - syncthing
 apps:
-- syncthing
+  - syncthing
 variables:
   host: 127.0.0.1
   port: 8384
@@ -23,9 +23,9 @@ policy:
     max: 1h
 restart_on_change:
   libraries:
-  - glibc
-  - zlib
-  - sqlite3
+    - glibc
+    - zlib
+    - sqlite3
 checks:
   service:
     type: service

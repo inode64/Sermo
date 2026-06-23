@@ -4,13 +4,13 @@ display_name: QEMU Guest Agent
 category: virtualization
 service:
   systemd:
-  - qemu-ga
-  - qemu-guest-agent
+    - qemu-ga
+    - qemu-guest-agent
   openrc:
-  - qemu-guest-agent
-  - qemu-ga
+    - qemu-guest-agent
+    - qemu-ga
 apps:
-- qemu-ga
+  - qemu-ga
 variables:
   user: root
 processes:
@@ -24,15 +24,15 @@ checks:
   version:
     type: command
     command:
-    - ${qemu_ga_binary}
-    - --version
+      - ${qemu_ga_binary}
+      - --version
     timeout: 5s
 postflight:
   version:
     type: command
     command:
-    - ${qemu_ga_binary}
-    - --version
+      - ${qemu_ga_binary}
+      - --version
     timeout: 5s
 rules:
   restart-if-version-failed:

@@ -4,7 +4,7 @@ display_name: Open vSwitch Client
 category: virtualization
 service: ovsdb-client
 apps:
-- ovsdb-client
+  - ovsdb-client
 checks:
   service:
     type: service

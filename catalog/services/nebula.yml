@@ -5,13 +5,13 @@ description: Nebula mesh-VPN node (Slack/Defined Networking).
 category: vpn
 service:
   systemd:
-  - nebula@${instance}
-  - nebula-${instance}
-  - nebula.${instance}
+    - nebula@${instance}
+    - nebula-${instance}
+    - nebula.${instance}
   openrc:
-  - nebula.${instance}
+    - nebula.${instance}
 apps:
-- nebula
+  - nebula
 variables:
   config: /etc/nebula/${instance}.yml
   host:
@@ -24,22 +24,22 @@ variables:
     default: 4242
   user: root
 config_files:
-- ${config}
+  - ${config}
 preflight:
   config:
     type: command
     command:
-    - ${nebula_binary}
-    - -test
-    - -config
-    - ${config}
+      - ${nebula_binary}
+      - -test
+      - -config
+      - ${config}
     timeout: 30s
 rules:
   block-restart-if-config-invalid:
     type: guard
     blocks:
-    - restart
-    - start
+      - restart
+      - start
     if:
       failed:
         check: config

@@ -5,12 +5,12 @@ category: web
 description: go2rtc real-time camera streaming server (WebRTC/RTSP).
 service:
   systemd:
-  - go2rtc
-  - go2rtc@config
+    - go2rtc
+    - go2rtc@config
   openrc:
-  - go2rtc
+    - go2rtc
 apps:
-- go2rtc
+  - go2rtc
 variables:
   host: 127.0.0.1
   port: 1984
