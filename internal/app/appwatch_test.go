@@ -4,16 +4,25 @@ import (
 	"context"
 	"testing"
 
+	"sermo/internal/appinspect"
 	"sermo/internal/checks"
 	"sermo/internal/notify"
 )
 
 func TestAppCheckMapsStatus(t *testing.T) {
-	errc := appCheck{name: "x", inspect: func(context.Context) string { return "error: exit 1 (want 0): boom" }}
-	if r := errc.Run(context.Background()); r.OK || r.Message == "" {
+	errc := appCheck{name: "x", inspect: func(context.Context) appinspect.Report {
+		return appinspect.Report{Status: "error: exit 1 (want 0): boom", Output: "stderr:\nboom"}
+	}}
+	r := errc.Run(context.Background())
+	if r.OK || r.Message == "" {
 		t.Fatalf("error status must map to not-OK with the detail message: %+v", r)
 	}
-	okc := appCheck{name: "x", inspect: func(context.Context) string { return "ok" }}
+	if resultOutput(r) != "stderr:\nboom" {
+		t.Fatalf("error result must carry the probe output, got %q", resultOutput(r))
+	}
+	okc := appCheck{name: "x", inspect: func(context.Context) appinspect.Report {
+		return appinspect.Report{Status: "ok"}
+	}}
 	if r := okc.Run(context.Background()); !r.OK {
 		t.Fatal("ok status must map to OK")
 	}

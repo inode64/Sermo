@@ -45,6 +45,32 @@ func alertRuleTree(notify any) map[string]any {
 	return map[string]any{"rules": map[string]any{"warn-down": rule}}
 }
 
+// TestCycleAlertCarriesFailingCheckOutput verifies the alert event (and
+// notification) carry the failing check's captured command output, so the
+// operator can see why the rule fired.
+func TestCycleAlertCarriesFailingCheckOutput(t *testing.T) {
+	h := &workerHarness{cache: map[string]checks.Result{
+		"http": {Check: "http", OK: false, Data: map[string]any{"output": "stderr:\nbind: address already in use"}},
+	}}
+	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil)
+	n := &fakeNotifier{name: "ops"}
+	w.Notifiers = map[string]notify.Notifier{"ops": n}
+	w.GlobalNotify = []string{"ops"}
+
+	w.RunCycle(context.Background())
+
+	ev, ok := h.eventOf("alert")
+	if !ok {
+		t.Fatalf("expected an alert event: %+v", h.events)
+	}
+	if !strings.Contains(ev.Output, "address already in use") {
+		t.Fatalf("alert event must carry the failing check output, got %q", ev.Output)
+	}
+	if len(n.msgs) != 1 || !strings.Contains(n.msgs[0].Body, "address already in use") {
+		t.Fatalf("notification body must include the output: %+v", n.msgs)
+	}
+}
+
 func TestCycleAlertNotifiesGlobalDefault(t *testing.T) {
 	h := &workerHarness{cache: failedCache("http")}
 	w := h.worker(alertRuleTree(nil), rules.Policy{}, nil) // rule declares no notify

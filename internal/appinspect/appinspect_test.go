@@ -240,6 +240,9 @@ func TestInspectCanTreatVersionFailureAsOptional(t *testing.T) {
 	if strict.OK || strict.Status == "ok" {
 		t.Fatalf("strict Inspect() = %+v, want version failure", strict)
 	}
+	if !strings.Contains(strict.Output, "bad flag") {
+		t.Fatalf("a failing probe must capture the command output, got %q", strict.Output)
+	}
 	optional := Inspect(context.Background(), runner, "web", resolved, WithOptionalVersion())
 	if !optional.OK || optional.Status != "ok" {
 		t.Fatalf("optional Inspect() = %+v, want ok with unknown version", optional)

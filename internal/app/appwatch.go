@@ -14,18 +14,22 @@ import (
 // appinspect captured (e.g. "error: exit 1 (want 0): <stderr>").
 type appCheck struct {
 	name    string
-	inspect func(context.Context) string
+	inspect func(context.Context) appinspect.Report
 }
 
 func (c appCheck) Name() string { return c.name }
 
 func (c appCheck) Run(ctx context.Context) checks.Result {
-	status := c.inspect(ctx)
-	return checks.Result{
+	rep := c.inspect(ctx)
+	res := checks.Result{
 		Check:   c.name,
-		OK:      status == appStatusOK,
-		Message: status,
+		OK:      rep.Status == appStatusOK,
+		Message: rep.Status,
 	}
+	if !res.OK && rep.Output != "" {
+		res.Data = map[string]any{"output": rep.Output}
+	}
+	return res
 }
 
 // appStatusOK is the appinspect status reported by a healthy application.
@@ -61,9 +65,9 @@ func BuildAppWatches(cfg *config.Config, deps Deps) []*Watch {
 		name := r.Name
 		check := appCheck{
 			name: name,
-			inspect: func(ctx context.Context) string {
+			inspect: func(ctx context.Context) appinspect.Report {
 				return appinspect.InspectOne(ctx, runner, cfg, name,
-					appinspect.WithUserLookup(deps.UserLookup)).Status
+					appinspect.WithUserLookup(deps.UserLookup))
 			},
 		}
 		out = append(out, &Watch{

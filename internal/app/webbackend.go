@@ -2856,6 +2856,7 @@ func loggedEventToWeb(e LoggedEvent) web.Event {
 		Action:  e.Action,
 		Status:  e.Status,
 		Message: e.Message,
+		Output:  e.Output,
 	}
 }
 
