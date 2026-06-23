@@ -256,7 +256,7 @@ func run(args []string) int {
 	// App-watches monitor installed applications for errors on a slower cadence.
 	// They share the scheduler/generation machinery but are not host watches, so
 	// they are kept out of the host-watch count surfaced by readiness.
-	watches = append(watches, app.BuildAppWatches(cfg, deps, app.AppWatchInterval(cfg))...)
+	watches = append(watches, app.BuildAppWatches(cfg, deps)...)
 	logger.Debug("built monitor targets", "enabled_services", len(workers), "enabled_watches", hostWatches, "enabled_apps", len(watches)-hostWatches, "configured", app.HasConfiguredTargets(cfg))
 
 	if len(workers) == 0 && len(watches) == 0 {
