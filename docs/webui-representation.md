@@ -71,7 +71,7 @@ enabled.
 | Brand | `Sermo` with status dot |
 | Role | admin / read-only label |
 | Refresh | select with refresh interval, manual refresh button |
-| Status | last refresh age, connection errors, ready state |
+| Status | last refresh age, connection errors; `#statusbar` ends with host `uptime:` then daemon `status:` (`ok` / `starting` / …) as a paired tail |
 | System status | daemon/backend/runtime summary |
 
 Editable notes:
