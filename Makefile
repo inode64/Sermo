@@ -63,7 +63,7 @@ config_subst = sed -e 's|\.\./catalog|$(SERMO_DATADIR)/catalog|g' -e 's|/usr/sha
 # Rewrite runtime/state dirs in the tmpfiles config.
 tmpfiles_subst = sed -e 's|/run/sermo|$(SERMO_RUNDIR)|g' -e 's|/var/lib/sermo|$(SERMO_STATEDIR)|g'
 
-.PHONY: all build test vet fmt fmt-check lint check cover tidy clean \
+.PHONY: all build test vet fmt fmt-check lint validate check cover tidy clean \
         install install-bin install-catalog install-examples install-config install-templates install-tmpfiles install-systemd install-openrc \
         uninstall
 
@@ -73,7 +73,10 @@ build:
 	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermoctl ./cmd/sermoctl
 	$(GO_BUILD_ENV) go build -trimpath -buildvcs=false -ldflags '$(GO_LDFLAGS)' -o $(BIN)/sermod ./cmd/sermod
 
-test:
+# Formatting and static analysis gates; make test and make check run this first.
+validate: lint
+
+test: validate
 	go test ./...
 
 vet:
@@ -89,7 +92,7 @@ fmt-check:
 # Static analysis. Finds Go-installed tools in ~/go/bin: staticcheck, revive,
 # golangci-lint (runs gosec plus focused bug analyzers via .golangci.yml), and
 # govulncheck.
-lint:
+lint: fmt-check
 	@echo "staticcheck ./..."
 	@$(LINT_CACHE_ENV) staticcheck ./...
 	@echo "revive -config revive.toml ./..."
@@ -99,11 +102,12 @@ lint:
 	@echo "govulncheck ./..."
 	@$(LINT_CACHE_ENV) govulncheck ./...
 
-# Everything CI enforces: formatting, vet, static analysis, and the test suite.
-check: fmt-check vet lint test
+# Everything CI enforces: vet, formatting, static analysis, and the test suite.
+# test depends on validate (fmt-check + lint), so those gates always run first.
+check: vet test
 
 # Coverage: print the total and write a browsable HTML report.
-cover:
+cover: validate
 	go test -coverprofile=coverage.out ./...
 	@go tool cover -func=coverage.out | tail -1
 	@go tool cover -html=coverage.out -o coverage.html
