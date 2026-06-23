@@ -211,6 +211,57 @@ func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 	}
 }
 
+// CountMatching counts processes matching the given filter. Each non-empty
+// field narrows the count (ANDed); an all-empty filter counts every process on
+// the host. user is the real-UID owner, exe is the exact resolved
+// /proc/<pid>/exe, and exeDir matches any process whose resolved executable is
+// under that directory. Reuses the Discoverer's process snapshot (shared cache
+// in the daemon).
+func (d Discoverer) CountMatching(user, exe, exeDir string) int {
+	reader := d.reader()
+
+	var (
+		uid     uint32
+		haveUID bool
+	)
+	if user != "" {
+		u, ok := d.resolveUser()(user)
+		if !ok {
+			return 0 // unknown user: nothing can match
+		}
+		uid, haveUID = u, true
+	}
+	exePath := ""
+	if exe != "" {
+		exePath = canonicalizePath(exe)
+	}
+	dir := ""
+	if exeDir != "" {
+		dir = canonicalizePath(exeDir)
+	}
+
+	n := 0
+	for _, id := range snapshotIdentities(reader) {
+		if haveUID && id.UID != uid {
+			continue
+		}
+		if exePath != "" && (!id.ExeOK || id.Exe != exePath) {
+			continue
+		}
+		if dir != "" && (!id.ExeOK || !pathUnder(id.Exe, dir)) {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// pathUnder reports whether p lies under directory dir (a strict descendant), so
+// "/opt/app" matches "/opt/app/bin/x" but not "/opt/application/x".
+func pathUnder(p, dir string) bool {
+	return strings.HasPrefix(p, strings.TrimRight(dir, string(os.PathSeparator))+string(os.PathSeparator))
+}
+
 func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserResolver) bool {
 	for _, sel := range selectors {
 		if d.matches(sel, id, resolve) {

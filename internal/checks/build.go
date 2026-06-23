@@ -99,6 +99,9 @@ type Deps struct {
 	// ProcessesAny reports the observed state of processes matching any exact
 	// resolved executable in exes with the same user. Nil falls back to Processes.
 	ProcessesAny func(exes []string, user string) string
+	// ProcessCount counts processes matching an optional user/exe/exe_dir filter,
+	// for `process_count` checks. Nil makes the check do a self-contained scan.
+	ProcessCount ProcessCountFunc
 	// PidfileFallbackPIDs reports backend-native service PIDs when the active
 	// init system does not publish a PIDFile. It lets catalog pidfile checks
 	// accept systemd's MainPID/cgroup process set instead of failing on an
@@ -314,6 +317,8 @@ func buildCheck(typ string, b base, entry map[string]any, runner execx.Runner, c
 		return buildLoadCheck(b, entry, deps)
 	case "users":
 		return buildUsersCheck(b, entry, deps)
+	case "process_count":
+		return buildProcessCountCheck(b, entry, deps)
 	case "hdparm":
 		return buildHdparmCheck(b, entry, runner)
 	case "sensors":
@@ -949,6 +954,23 @@ func buildUsersCheck(b base, entry map[string]any, deps Deps) (Check, string) {
 		return nil, errs
 	}
 	return usersCheck{base: b, preds: preds, sampler: deps.UsersSampler}, ""
+}
+
+// buildProcessCountCheck builds a check on the number of processes matching an
+// optional user/exe/exe_dir filter.
+func buildProcessCountCheck(b base, entry map[string]any, deps Deps) (Check, string) {
+	preds, errs := requireLevelPreds(entry, ProcessCountPredFields, "process_count check")
+	if errs != "" {
+		return nil, errs
+	}
+	return processCountCheck{
+		base:   b,
+		preds:  preds,
+		user:   cfgval.AsString(entry["user"]),
+		exe:    cfgval.AsString(entry["exe"]),
+		exeDir: cfgval.AsString(entry["exe_dir"]),
+		count:  deps.ProcessCount,
+	}, ""
 }
 
 // buildHdparmCheck builds a disk-throughput check (hdparm -t/-T).

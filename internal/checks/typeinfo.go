@@ -29,6 +29,7 @@ var typeInfos = []TypeInfo{
 	{Name: "autofs", Health: true},
 	{Name: "load"},
 	{Name: "users"},
+	{Name: "process_count"},
 	{Name: "hdparm"},
 	{Name: "sensors"},
 	{Name: "smart"},
