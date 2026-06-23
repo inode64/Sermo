@@ -683,8 +683,13 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 			}
 		}
 	case "process":
-		if cfgval.String(entry["exe"]) == "" {
-			add("%s.exe is required for a process check", path)
+		hasExe := cfgval.String(entry["exe"]) != ""
+		hasExeAny := len(cfgval.StringList(entry["exe_any"])) > 0
+		switch {
+		case !hasExe && !hasExeAny:
+			add("%s.exe or exe_any is required for a process check", path)
+		case hasExe && hasExeAny:
+			add("%s must define only one of exe or exe_any", path)
 		}
 		if st := cfgval.String(entry["state"]); st != "" {
 			if _, ok := processStates[st]; !ok {

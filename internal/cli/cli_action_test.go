@@ -166,6 +166,57 @@ func TestRestartBlockedExit75(t *testing.T) {
 	}
 }
 
+func TestRestartBlockedByBackupNotifiesInteractiveUser(t *testing.T) {
+	global := writeActionConfig(t)
+	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running"}, nil, nil, nil)
+	app.InteractiveUser = func() (string, bool) { return "fran", true }
+	var notified operation.Result
+	var notifiedUser string
+	app.NotifyBlockedAction = func(_ context.Context, result operation.Result, user string) error {
+		notified = result
+		notifiedUser = user
+		return nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
+	if code != exitBlocked {
+		t.Fatalf("Run() exit = %d, want %d", code, exitBlocked)
+	}
+	if notified.Service != "db" || notified.Action != "restart" || notifiedUser != "fran" {
+		t.Fatalf("notified result=%+v user=%q", notified, notifiedUser)
+	}
+}
+
+func TestRestartBlockedByBackupDoesNotNotifyCron(t *testing.T) {
+	global := writeActionConfig(t)
+	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "database backup is running"}, nil, nil, nil)
+	app.InteractiveUser = func() (string, bool) { return "", false }
+	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
+		t.Fatal("cron/non-interactive action must not notify a terminal user")
+		return nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
+	if code != exitBlocked {
+		t.Fatalf("Run() exit = %d, want %d", code, exitBlocked)
+	}
+}
+
+func TestRestartBlockedForNonBackupDoesNotNotify(t *testing.T) {
+	global := writeActionConfig(t)
+	app := actionApp(operation.Result{Service: "db", Action: "restart", Status: operation.ResultBlocked, Message: "configuration invalid"}, nil, nil, nil)
+	app.InteractiveUser = func() (string, bool) { return "fran", true }
+	app.NotifyBlockedAction = func(context.Context, operation.Result, string) error {
+		t.Fatal("non-backup block must not notify through tty")
+		return nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
+	if code != exitBlocked {
+		t.Fatalf("Run() exit = %d, want %d", code, exitBlocked)
+	}
+}
+
 func TestPreflightFailedExit1(t *testing.T) {
 	global := writeActionConfig(t)
 	var stdout bytes.Buffer
@@ -231,6 +282,31 @@ func TestCascadeTargetErrorDowngradesPrimary(t *testing.T) {
 	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
 	if code != exitRuntimeError {
 		t.Fatalf("Run() exit = %d, want %d (cascade target error must downgrade primary)", code, exitRuntimeError)
+	}
+}
+
+func TestCascadeBackupBlockNotifiesInteractiveUser(t *testing.T) {
+	global := writeCascadeConfig(t)
+	app := actionApp(operation.Result{}, nil, nil, nil)
+	app.InteractiveUser = func() (string, bool) { return "fran", true }
+	var notified operation.Result
+	app.NotifyBlockedAction = func(_ context.Context, result operation.Result, _ string) error {
+		notified = result
+		return nil
+	}
+	app.Operate = func(_ context.Context, _ options, _ *config.Config, _ config.Resolved, service, action string) (operation.Result, error) {
+		if service == "db" {
+			return operation.Result{Service: service, Action: action, Status: operation.ResultBlocked, Message: "database backup is running"}, nil
+		}
+		return operation.Result{Service: service, Action: action, Status: operation.ResultOK}, nil
+	}
+
+	code := app.Run(context.Background(), []string{"--config", global, "restart", "web"})
+	if code != exitSuccess {
+		t.Fatalf("Run() exit = %d, want %d", code, exitSuccess)
+	}
+	if notified.Service != "db" || notified.Action != "restart" {
+		t.Fatalf("notified result = %+v, want cascade db restart", notified)
 	}
 }
 

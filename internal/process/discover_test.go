@@ -309,6 +309,21 @@ func TestObserveState(t *testing.T) {
 	}
 }
 
+func TestObserveAnyState(t *testing.T) {
+	d := Discoverer{
+		Reader: fakeReader{ids: map[int]Identity{
+			100: {PID: 100, UID: 110, Exe: "/usr/bin/xtrabackup", ExeOK: true, State: "S"},
+			200: {PID: 200, UID: 999, Exe: "/usr/bin/mysqldump", ExeOK: true, State: "S"},
+		}},
+		ResolveUser: fakeUsers(map[string]uint32{"mysql": 110}),
+	}
+
+	got := d.ObserveAnyState([]string{"/usr/bin/mysqldump", "/usr/bin/xtrabackup"}, "mysql")
+	if got != StateRunning {
+		t.Fatalf("ObserveAnyState = %q, want running", got)
+	}
+}
+
 func TestStrictMatchPIDRequiresExactExeAndUser(t *testing.T) {
 	d := Discoverer{
 		Reader: fakeReader{ids: map[int]Identity{

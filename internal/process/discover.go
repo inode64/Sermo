@@ -172,13 +172,28 @@ const (
 //   - zombie:  matches exist but all are defunct;
 //   - absent:  no process matches.
 func (d Discoverer) ObserveState(exe, user string) string {
+	return d.ObserveAnyState([]string{exe}, user)
+}
+
+// ObserveAnyState reports the state of processes matching any exact resolved
+// executable in exes with the same real-user selector.
+func (d Discoverer) ObserveAnyState(exes []string, user string) string {
 	reader := d.reader()
 	resolve := d.resolveUser()
-	sel := Selector{Type: SelectorCommandMatch, Exe: exe, User: user}
+	selectors := make([]Selector, 0, len(exes))
+	for _, exe := range exes {
+		if exe == "" {
+			continue
+		}
+		selectors = append(selectors, Selector{Type: SelectorCommandMatch, Exe: exe, User: user})
+	}
+	if len(selectors) == 0 {
+		return StateAbsent
+	}
 
 	matched, live := false, false
 	for _, id := range snapshotIdentities(reader) {
-		if !d.matches(sel, id, resolve) {
+		if !d.matchesAny(selectors, id, resolve) {
 			continue
 		}
 		matched = true
@@ -194,6 +209,15 @@ func (d Discoverer) ObserveState(exe, user string) string {
 	default:
 		return StateAbsent
 	}
+}
+
+func (d Discoverer) matchesAny(selectors []Selector, id Identity, resolve UserResolver) bool {
+	for _, sel := range selectors {
+		if d.matches(sel, id, resolve) {
+			return true
+		}
+	}
+	return false
 }
 
 // StrictMatchPID reports whether pid currently matches a process selector
