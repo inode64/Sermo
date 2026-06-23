@@ -90,16 +90,18 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 
 | Tile kind | Current content |
 | --- | --- |
-| Services up | count / total; critical when any service is `failed`, neutral while any service (or the daemon) is `starting`, otherwise healthy |
-| Watches | count / total; critical when any watch is `failed`, neutral with `N starting` while watches settle, otherwise quiet |
-| Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown |
+| Services up | count / total; critical when any service is `failed`, neutral while any target is settling, otherwise healthy; click opens `failed` or `starting` service filter when applicable |
+| Watches | count / total; critical when any watch is `failed`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
+| Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown; click routes to `failed-services`, `failed-watches`, `failed-apps` or `locks-section` in priority order |
 | Monitored | monitored vs unmonitored services |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
 | Volumes | one gauge per mounted storage watch, crit when its watch is firing |
 
 Editable notes:
 
-- Tiles should jump to the related panel.
+- Tiles should jump to the related panel. During startup settling, Services up and
+  Watches tiles open the `starting` filter on the panel that still has unsettled
+  targets (`starting-services`, `starting-watches` or `starting-apps`).
 - Usage bars stay at the bottom of each tile.
 - Do not add explanatory text inside tiles.
 
