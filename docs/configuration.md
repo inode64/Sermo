@@ -1840,6 +1840,12 @@ collide with an explicit document in the same category; validation reports that
 as a configuration error. When a template uses `${current}`, inventory listings
 also mark a versioned entry as current when the active-slot wrapper and that
 entry report the same `version_short`.
+`versions.from` may be a backend-neutral path/list, or a map with `systemd` and
+`openrc` branches. Map branches are exclusive: Sermo selects only the active init
+backend from `engine.backend` or `SERMO_BACKEND`, falling back to detected
+`${init}`. Catalog service templates should put tokens in `service:` instead;
+their daemon instances materialize from active systemd/OpenRC units, while linked
+apps own binary discovery and validation.
 
 ## Binary resource variables
 

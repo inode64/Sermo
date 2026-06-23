@@ -3,7 +3,13 @@ name: named
 display_name: "BIND (named)"
 category: network
 variables:
-  binary: "/usr/bin/named"
+  binary:
+  - /usr/bin/named
+  - /usr/sbin/named
+  checkconf:
+  - /usr/bin/named-checkconf
+  - /usr/sbin/named-checkconf
 preflight:
   binary: { type: binary, path: "${binary}" }
+  checkconf: { type: binary, path: "${checkconf}" }
   version: { type: command, command: ["${binary}","-v"], timeout: 10s }

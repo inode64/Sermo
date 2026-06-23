@@ -2698,6 +2698,148 @@ func TestMaterializedTemplateMatchesUsesAllBinaryCandidates(t *testing.T) {
 	}
 }
 
+func TestMaterializedTemplateMatchesDedupesSameTupleAcrossSources(t *testing.T) {
+	root := t.TempDir()
+	etcSystemdDir := filepath.Join(root, "etc", "systemd", "system")
+	libSystemdDir := filepath.Join(root, "usr", "lib", "systemd", "system")
+	if err := os.MkdirAll(etcSystemdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(libSystemdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range []string{
+		filepath.Join(etcSystemdDir, "php-fpm@8.2.service"),
+		filepath.Join(libSystemdDir, "php-fpm@8.2.service"),
+	} {
+		if err := os.WriteFile(file, []byte("[Service]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	paths := []string{
+		filepath.Join(etcSystemdDir, "php-fpm@${version}${sep}${instance}.service"),
+		filepath.Join(libSystemdDir, "php-fpm@${version}${sep}${instance}.service"),
+	}
+	got := materializedTemplateMatches(paths, false, nil, tokensFor("php-fpm%v%s%i"))
+	if len(got) != 1 {
+		t.Fatalf("materializedTemplateMatches returned %d matches, want one: %#v", len(got), got)
+	}
+	if got[0].values["version"] != "8.2" || got[0].values["sep"] != "" || got[0].values["instance"] != "" {
+		t.Fatalf("materializedTemplateMatches values = %v, want version 8.2 with empty sep/instance", got[0].values)
+	}
+	if got[0].matchedPath != filepath.Join(etcSystemdDir, "php-fpm@8.2.service") {
+		t.Fatalf("materializedTemplateMatches kept %q, want first unit source", got[0].matchedPath)
+	}
+}
+
+func TestMaterializedServiceUnitMatchesOptionalInstanceFromVersionCandidate(t *testing.T) {
+	toks := tokensFor("php-fpm%v%s%i")
+	patterns := serviceUnitPatternsForBackend("systemd", []string{
+		"php-fpm${version}",
+	}, toks)
+	got := materializedServiceUnitMatches(patterns, []string{"php-fpm8.3.service"}, toks)
+	if len(got) != 1 {
+		t.Fatalf("materializedServiceUnitMatches returned %d matches, want one: %#v", len(got), got)
+	}
+	if got[0].values["version"] != "8.3" || got[0].values["sep"] != "" || got[0].values["instance"] != "" {
+		t.Fatalf("materializedServiceUnitMatches values = %v, want version 8.3 with empty sep/instance", got[0].values)
+	}
+	if got[0].matchedPath != "php-fpm8.3.service" {
+		t.Fatalf("materializedServiceUnitMatches matched path = %q", got[0].matchedPath)
+	}
+}
+
+func TestVersionTemplateDiscoverySelectsActiveInitSources(t *testing.T) {
+	root := t.TempDir()
+	systemdDir := filepath.Join(root, "usr", "lib", "systemd", "system")
+	openrcDir := filepath.Join(root, "etc", "init.d")
+	for _, dir := range []string{systemdDir, openrcDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, file := range []string{
+		filepath.Join(systemdDir, "svc@2.0.service"),
+		filepath.Join(openrcDir, "svc-3.0"),
+	} {
+		if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	load := func(t *testing.T, backend string) *Config {
+		t.Helper()
+		catalogDir := filepath.Join(root, "catalog-"+backend, "services")
+		enabledDir := filepath.Join(root, "enabled-"+backend)
+		if err := os.MkdirAll(catalogDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(enabledDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(catalogDir, "svc.yml"), []byte(fmt.Sprintf(`
+kind: daemon
+name: svc%%v
+service: svc${version}
+versions:
+  from:
+    systemd: %s/svc@${version}.service
+    openrc: %s/svc-${version}
+checks:
+  service: { type: service, expect: active }
+`, systemdDir, openrcDir)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		global := filepath.Join(root, "sermo-"+backend+".yml")
+		if err := os.WriteFile(global, []byte(fmt.Sprintf(`
+engine: { backend: %s }
+paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
+defaults: { policy: { cooldown: 5m } }
+`, backend, filepath.Dir(catalogDir), enabledDir)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := Load(global)
+		if err != nil {
+			t.Fatalf("Load(%s): %v", backend, err)
+		}
+		return cfg
+	}
+
+	systemd := load(t, "systemd")
+	if _, ok := systemd.Daemons["svc2.0"]; !ok {
+		t.Fatal("systemd discovery missing svc2.0")
+	}
+	if _, ok := systemd.Daemons["svc3.0"]; ok {
+		t.Fatal("systemd discovery must not use OpenRC versions.from")
+	}
+	if _, ok := systemd.Daemons["svc1.0"]; ok {
+		t.Fatal("systemd discovery must not use a shared default versions.from branch")
+	}
+
+	openrc := load(t, "openrc")
+	if _, ok := openrc.Daemons["svc3.0"]; !ok {
+		t.Fatal("openrc discovery missing svc3.0")
+	}
+	if _, ok := openrc.Daemons["svc2.0"]; ok {
+		t.Fatal("openrc discovery must not use systemd versions.from")
+	}
+	if _, ok := openrc.Daemons["svc1.0"]; ok {
+		t.Fatal("openrc discovery must not use a shared default versions.from branch")
+	}
+
+	t.Run("env backend override", func(t *testing.T) {
+		t.Setenv("SERMO_BACKEND", "openrc")
+		cfg := load(t, "auto")
+		if _, ok := cfg.Daemons["svc3.0"]; !ok {
+			t.Fatal("SERMO_BACKEND=openrc should select OpenRC versions.from")
+		}
+		if _, ok := cfg.Daemons["svc2.0"]; ok {
+			t.Fatal("SERMO_BACKEND=openrc must not select systemd versions.from")
+		}
+	})
+}
+
 func templateMatchValues(matches []templateMatch, variable string) []string {
 	out := make([]string, 0, len(matches))
 	for _, match := range matches {
@@ -2878,7 +3020,7 @@ checks: { service: { type: service, expect: active } }
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
-engine: { backend: auto }
+engine: { backend: systemd }
 paths:
   catalog: [ %s ]
   services: [ %s ]
@@ -2982,7 +3124,7 @@ defaults:
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := Load(global, WithServiceUnits("systemd", []string{"postgresql-16.service"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2993,9 +3135,12 @@ defaults:
 		if _, ok := cfg.Apps["postgres-"+v]; !ok {
 			t.Fatalf("expected materialized app postgres-%s", v)
 		}
-		if _, ok := cfg.Daemons["postgres-"+v]; !ok {
-			t.Fatalf("expected materialized daemon postgres-%s", v)
-		}
+	}
+	if _, ok := cfg.Daemons["postgres-16"]; !ok {
+		t.Fatal("expected materialized daemon postgres-16 from active service unit")
+	}
+	if _, ok := cfg.Daemons["postgres-15"]; ok {
+		t.Fatal("postgres-15 daemon must not materialize without an active service unit")
 	}
 
 	resolved, errs := cfg.Resolve("pg")
@@ -3626,16 +3771,6 @@ variables:
 
 func TestInstanceTemplateMaterialization(t *testing.T) {
 	root := t.TempDir()
-	initd := filepath.Join(root, "init.d")
-	if err := os.MkdirAll(initd, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, f := range []string{"openvpn.tun1", "openvpn.client-a"} {
-		if err := os.WriteFile(filepath.Join(initd, f), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	catalogDir := filepath.Join(root, "catalog")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
@@ -3674,22 +3809,20 @@ uses: openvpn
 display_name: "OpenVPN ${instance}"
 service: "openvpn.${instance}"
 apps: [openvpn]
-versions:
-  from: "` + initd + `/openvpn.${instance}"
 variables:
   config: "/etc/openvpn/${instance}.conf"
 `
 	write(filepath.Join(catalogDir, "services"), "openvpn.yml", tmpl)
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
-engine: { backend: auto }
+engine: { backend: openrc }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := Load(global, WithServiceUnits("openrc", []string{"openvpn.tun1", "openvpn.client-a"}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -3936,13 +4069,6 @@ checks:
 
 func TestVersionTemplateCephOSD(t *testing.T) {
 	root := t.TempDir()
-	osdRoot := filepath.Join(root, "var", "lib", "ceph", "osd")
-	// Discoverable OSDs 0, 1, 3 (2 absent, to prove discovery, not a fixed range).
-	for _, id := range []string{"0", "1", "3"} {
-		if err := os.MkdirAll(filepath.Join(osdRoot, "ceph-"+id), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
 	// Catalog files take their kind from the subdirectory (services/ → daemon,
 	// apps/ → app), so the template and its app must live in the right dirs.
 	catalogDir := filepath.Join(root, "catalog")
@@ -3955,22 +4081,21 @@ func TestVersionTemplateCephOSD(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write(filepath.Join(catalogDir, "apps"), "ceph-osd.yml", fmt.Sprintf(`
+	write(filepath.Join(catalogDir, "apps"), "ceph-osd.yml", `
 kind: app
-name: ceph-osd%%n
-display_name: "Ceph OSD ${n}"
-versions: { from: "%s/ceph-${n}" }
+name: ceph-osd
+display_name: "Ceph OSD"
 variables:
   binary: /usr/bin/ceph-osd
 preflight:
   binary: { type: binary, path: "${binary}" }
-`, osdRoot))
+`)
 	write(filepath.Join(catalogDir, "services"), "ceph-osd-%n.yml", `
 kind: daemon
 name: ceph-osd%n
 display_name: "Ceph OSD ${n}"
 service: "ceph-osd@${n}"
-apps: ["ceph-osd${n}"]
+apps: [ceph-osd]
 variables: { user: ceph }
 checks: { service: { type: service, expect: active } }
 `)
@@ -3979,7 +4104,7 @@ checks: { service: { type: service, expect: active } }
 
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
-engine: { backend: auto }
+engine: { backend: systemd }
 paths:
   catalog: [ %s ]
   services: [ %s ]
@@ -3990,16 +4115,20 @@ defaults:
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := Load(global, WithServiceUnits("systemd", []string{
+		"ceph-osd@0.service",
+		"ceph-osd@1.service",
+		"ceph-osd@3.service",
+	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	// Template gone; one concrete daemon per discovered OSD; absent id 2 not present.
+	// Template gone; one concrete daemon per active OSD unit; absent id 2 not present.
 	if _, ok := cfg.Daemons["ceph-osd%n"]; ok {
 		t.Errorf("template ceph-osd%%n should not be registered")
 	}
 	if _, ok := cfg.Daemons["ceph-osd2"]; ok {
-		t.Errorf("ceph-osd2 must not exist (no /var/lib/ceph/osd/ceph-2)")
+		t.Errorf("ceph-osd2 must not exist (no active ceph-osd@2.service)")
 	}
 	for _, id := range []string{"0", "1", "3"} {
 		name := "ceph-osd" + id
@@ -4011,12 +4140,9 @@ defaults:
 		if got := ServiceUnit(doc.Body, name); got != "ceph-osd@"+id {
 			t.Errorf("%s service unit = %q, want ceph-osd@%s", name, got, id)
 		}
-		if _, ok := cfg.Apps[name]; !ok {
-			t.Fatalf("expected materialized app %q", name)
-		}
 	}
 	// The app link survives materialization: a service using ceph-osd0 resolves
-	// cleanly (the ceph-osd app's preflight binary check is wired in).
+	// cleanly (the generic ceph-osd app's preflight binary check is wired in).
 	resolved, errs := cfg.Resolve("osd0")
 	if len(errs) != 0 {
 		t.Fatalf("Resolve(osd0) errors = %v", errs)
@@ -4028,10 +4154,6 @@ defaults:
 
 func TestVersionTemplateCephOSDNoMatch(t *testing.T) {
 	root := t.TempDir()
-	emptyRoot := filepath.Join(root, "var", "lib", "ceph", "osd") // exists, no OSDs
-	if err := os.MkdirAll(emptyRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
 	daemonsDir := filepath.Join(root, "daemons")
 	catalogServicesDir := filepath.Join(daemonsDir, "services")
 	enabledDir := filepath.Join(root, "enabled")
@@ -4044,22 +4166,21 @@ func TestVersionTemplateCephOSDNoMatch(t *testing.T) {
 	if err := os.MkdirAll(appsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(appsDir, "ceph-osd%n.yml"), []byte(fmt.Sprintf(`
+	if err := os.WriteFile(filepath.Join(appsDir, "ceph-osd.yml"), []byte(`
 kind: app
-name: ceph-osd%%n
-versions: { from: "%s/ceph-${n}" }
+name: ceph-osd
 variables:
   binary: /usr/bin/ceph-osd
 preflight:
   binary: { type: binary, path: "${binary}" }
-`, emptyRoot)), 0o644); err != nil {
+`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(catalogServicesDir, "ceph-osd-%n.yml"), []byte(`
 kind: daemon
 name: ceph-osd%n
 service: "ceph-osd@${n}"
-apps: ["ceph-osd${n}"]
+apps: [ceph-osd]
 variables: { user: ceph }
 checks: { service: { type: service, expect: active } }
 `), 0o644); err != nil {
@@ -4067,7 +4188,7 @@ checks: { service: { type: service, expect: active } }
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
-engine: { backend: auto }
+engine: { backend: systemd }
 paths:
   catalog: [ %s ]
   services: [ %s ]
@@ -4077,7 +4198,7 @@ defaults:
 `, daemonsDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := Load(global)
+	cfg, err := Load(global, WithServiceUnits("systemd", nil))
 	if err != nil {
 		t.Fatalf("Load() with no OSDs must not error, got %v", err)
 	}
@@ -4772,19 +4893,10 @@ defaults: { policy: { cooldown: 5m } }
 }
 
 // TestMultiTokenSeparatorMaterialization covers a `name: tomcat-%v%s%i` template:
-// version + optional separator + instance discovered together from config dirs.
+// version + optional separator + instance discovered together from service units.
 // The no-instance case (tomcat-8.5) must materialize without a trailing separator.
 func TestMultiTokenSeparatorMaterialization(t *testing.T) {
 	root := t.TempDir()
-	etc := filepath.Join(root, "etc")
-	for _, dir := range []string{"tomcat-8.5-main", "tomcat-9-guacamole", "tomcat-8.5"} {
-		if err := os.MkdirAll(filepath.Join(etc, dir), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(etc, dir, "server.xml"), []byte("<Server/>"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 	catalogDir := filepath.Join(root, "catalog")
 	enabledDir := filepath.Join(root, "enabled")
 	if err := os.MkdirAll(enabledDir, 0o755); err != nil {
@@ -4799,25 +4911,27 @@ kind: daemon
 name: tomcat-%%v%%s%%i
 display_name: "Tomcat ${version} (${instance})"
 service: "tomcat-${version}${sep}${instance}"
-versions:
-  from: "%s/tomcat-${version}${sep}${instance}/server.xml"
 variables:
-  config: "%s/tomcat-${version}${sep}${instance}/server.xml"
+  config: "/etc/tomcat-${version}${sep}${instance}/server.xml"
 checks:
   service: { type: service, expect: active }
-`, etc, etc)), 0o644); err != nil {
+`)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
-engine: { backend: auto }
+engine: { backend: systemd }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(global)
+	cfg, err := Load(global, WithServiceUnits("systemd", []string{
+		"tomcat-8.5-main.service",
+		"tomcat-9-guacamole.service",
+		"tomcat-8.5.service",
+	}))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

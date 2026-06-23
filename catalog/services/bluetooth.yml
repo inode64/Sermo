@@ -4,6 +4,8 @@ display_name: Bluetooth
 category: hardware
 description: Bluetooth daemon (bluetoothd).
 service: bluetooth
+apps:
+- bluetoothd
 pidfile: /run/bluetoothd.pid
 checks:
   service:
@@ -11,7 +13,7 @@ checks:
     expect: active
   process:
     type: process
-    exe: /usr/libexec/bluetooth/bluetoothd
+    exe: ${bluetoothd_binary}
     user: root
     state: running
     requires:
@@ -20,7 +22,7 @@ checks:
 postflight:
   process:
     type: process
-    exe: /usr/libexec/bluetooth/bluetoothd
+    exe: ${bluetoothd_binary}
     user: root
     state: running
     optional: true

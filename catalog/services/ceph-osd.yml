@@ -6,8 +6,6 @@ description: Ceph object storage daemon (one per backing device). Binds dynamic 
   in the 6800-7300 range across the public and cluster networks, so it is monitored
   by service state rather than a fixed port.
 service: ceph-osd@${n}
-versions:
-  from: /var/lib/ceph/osd/ceph-${n}
 apps:
 - ceph-osd
 - ceph

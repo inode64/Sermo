@@ -34,6 +34,13 @@ checks:
     timeout: 3s
     expect:
       role: broker
+policy:
+  cooldown: 15m
+  max_actions: 2
+  max_actions_window: 1h
+  backoff:
+    initial: 15m
+    max: 1h
 rules:
   restart-if-protocol-failed:
     type: remediation

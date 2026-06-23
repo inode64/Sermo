@@ -79,7 +79,7 @@ func listInstalledDaemons(ctx context.Context, cfg *config.Config, backend servi
 	}
 	out = dedupeWizardCatalogCandidates(out, backend)
 
-	if units, err := listActiveBackendUnits(ctx, backend, runner, timeout); err == nil {
+	if units, err := servicemgr.ListActiveUnits(ctx, backend, runner, timeout); err == nil {
 		for _, unit := range units {
 			if wizardUnitKnown(catalogUnits, backend, unit) {
 				continue
@@ -158,91 +158,6 @@ func wizardUnitKnown(keys map[string]struct{}, backend servicemgr.Backend, unit 
 		return ok
 	}
 	return false
-}
-
-func listActiveBackendUnits(ctx context.Context, backend servicemgr.Backend, runner execx.Runner, timeout time.Duration) ([]string, error) {
-	if runner == nil {
-		runner = execx.CommandRunner{}
-	}
-	switch backend {
-	case servicemgr.BackendSystemd:
-		res, err := execx.Run(ctx, runner, timeout, "systemctl", "list-units", "--type=service", "--state=active", "--no-legend", "--no-pager")
-		if err != nil && strings.TrimSpace(res.Stdout) == "" {
-			return nil, err
-		}
-		return parseSystemdActiveUnits(res.Stdout), nil
-	case servicemgr.BackendOpenRC:
-		res, err := execx.Run(ctx, runner, timeout, "rc-status", "--all")
-		if err != nil && strings.TrimSpace(res.Stdout) == "" {
-			return nil, err
-		}
-		return parseOpenRCActiveUnits(res.Stdout), nil
-	default:
-		return nil, fmt.Errorf("no active-unit listing for backend %q", backend)
-	}
-}
-
-func parseSystemdActiveUnits(stdout string) []string {
-	var out []string
-	sc := bufio.NewScanner(strings.NewReader(stdout))
-	for sc.Scan() {
-		fields := strings.Fields(sc.Text())
-		if len(fields) == 0 || fields[0] == "UNIT" {
-			continue
-		}
-		if strings.HasSuffix(fields[0], ".service") {
-			out = append(out, fields[0])
-		}
-	}
-	return appendUniqueStrings(nil, out...)
-}
-
-func parseOpenRCActiveUnits(stdout string) []string {
-	var out []string
-	inServiceRunlevel := false
-	sc := bufio.NewScanner(strings.NewReader(stdout))
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		lower := strings.ToLower(line)
-		switch {
-		case strings.HasPrefix(lower, "runlevel:"):
-			name := strings.TrimSpace(strings.TrimPrefix(lower, "runlevel:"))
-			inServiceRunlevel = openRCWizardRunlevel(name)
-			continue
-		case strings.HasPrefix(lower, "dynamic runlevel:"):
-			name := strings.TrimSpace(strings.TrimPrefix(lower, "dynamic runlevel:"))
-			inServiceRunlevel = openRCWizardRunlevel(name)
-			continue
-		}
-		if !inServiceRunlevel || !strings.Contains(lower, "started") {
-			continue
-		}
-		if strings.Contains(lower, "not started") || strings.Contains(lower, "stopped") || strings.Contains(lower, "crashed") {
-			continue
-		}
-		beforeState := line
-		if i := strings.Index(beforeState, "["); i >= 0 {
-			beforeState = beforeState[:i]
-		}
-		fields := strings.Fields(beforeState)
-		if len(fields) == 0 {
-			continue
-		}
-		out = append(out, fields[0])
-	}
-	// A service started in more than one matched runlevel appears once per
-	// section, and those duplicates are not adjacent in out (other services sit
-	// between them), so slices.Compact would not collapse them — dedup by value.
-	return appendUniqueStrings(nil, out...)
-}
-
-func openRCWizardRunlevel(name string) bool {
-	switch name {
-	case "default", "needed/wanted", "manual", "hotplugged":
-		return true
-	default:
-		return false
-	}
 }
 
 func wizardServiceNameForUnit(backend servicemgr.Backend, unit string) string {

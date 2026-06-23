@@ -22,7 +22,8 @@ var defaultMountDirs = []string{"mounts"}
 type Option func(*loadOptions)
 
 type loadOptions struct {
-	catalogDirs []string
+	catalogDirs  []string
+	serviceUnits map[string][]string
 }
 
 // WithCatalogDirs overrides the catalog search directories (the definition
@@ -34,6 +35,18 @@ type loadOptions struct {
 // source tree.
 func WithCatalogDirs(dirs ...string) Option {
 	return func(o *loadOptions) { o.catalogDirs = dirs }
+}
+
+// WithServiceUnits provides active backend units for service-derived daemon
+// template materialization. It is mainly used by tests; production loads query
+// the active init backend lazily.
+func WithServiceUnits(backend string, units []string) Option {
+	return func(o *loadOptions) {
+		if o.serviceUnits == nil {
+			o.serviceUnits = map[string][]string{}
+		}
+		o.serviceUnits[backend] = normalizeServiceUnits(units)
+	}
 }
 
 // Load reads the global configuration at globalPath and every daemon and
@@ -80,13 +93,14 @@ func Load(globalPath string, opts ...Option) (*Config, error) {
 	}
 
 	cfg := &Config{
-		Global:    global,
-		Daemons:   map[string]*Document{},
-		Apps:      map[string]*Document{},
-		Libraries: map[string]*Document{},
-		Patterns:  map[string]*Document{},
-		Services:  map[string]*Document{},
-		Mounts:    map[string]*Document{},
+		Global:       global,
+		Daemons:      map[string]*Document{},
+		Apps:         map[string]*Document{},
+		Libraries:    map[string]*Document{},
+		Patterns:     map[string]*Document{},
+		Services:     map[string]*Document{},
+		Mounts:       map[string]*Document{},
+		serviceUnits: cloneServiceUnits(o.serviceUnits),
 	}
 
 	for _, spec := range uniquePathSpecs(catalogPaths) {
