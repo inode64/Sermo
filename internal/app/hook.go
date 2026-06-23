@@ -42,7 +42,17 @@ func (h HookSpec) Run(ctx context.Context, runner HookRunner, env map[string]str
 	}
 	res, err := runner.RunHook(ctx, h.Command, env, h.Timeout)
 	if err != nil {
+		if res.ExitCode == -1 {
+			msg := execx.OperatorFailure(err, res, h.Timeout)
+			if msg == "" {
+				msg = "command failed to run"
+			}
+			return errors.New(msg)
+		}
 		return err
+	}
+	if res.ExitCode == -1 {
+		return errors.New("command failed to run")
 	}
 	if !checks.ExitCodeExpected(res.ExitCode, h.ExpectExit) {
 		detail := fmt.Sprintf("exit %d (want %s)", res.ExitCode, checks.ExpectExitText(h.ExpectExit))

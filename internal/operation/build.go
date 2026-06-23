@@ -2,6 +2,7 @@ package operation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"syscall"
@@ -285,7 +286,17 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 	return func(ctx context.Context) error {
 		res, err := runner.Run(ctx, argv[0], argv[1:]...)
 		if err != nil {
+			if res.ExitCode == -1 {
+				msg := execx.OperatorFailure(err, res, 0)
+				if msg == "" {
+					msg = "command failed to run"
+				}
+				return errors.New(msg)
+			}
 			return err
+		}
+		if res.ExitCode == -1 {
+			return errors.New("command failed to run")
 		}
 		if res.ExitCode != 0 {
 			msg := strings.TrimSpace(res.Stderr)
