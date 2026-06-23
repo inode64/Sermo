@@ -44,6 +44,8 @@ var (
 	LoadPredFields = []string{"load1", "load5", "load15"}
 	// UsersPredFields is the single required predicate of a users check.
 	UsersPredFields = []string{"count"}
+	// ProcessCountPredFields is the single required predicate of a process_count check.
+	ProcessCountPredFields = []string{"count"}
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{"temp", "fan", "voltage"}
 	// HdparmPredFields are the predicates of an hdparm check.

@@ -31,6 +31,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `autofs`      | the autofs automounter is active (autofs mountpoints present — `path`/`count`) (see Autofs)|
 | `load`        | a load-average threshold holds (load1/load5/load15, optional per_cpu)|
 | `users`       | the count of logged-in users (from utmp) satisfies `count {op, value}`|
+| `process_count` | the number of processes (host-wide, or filtered by `user`/`exe`/`exe_dir`) satisfies `count {op, value}`|
 | `hdparm`      | a disk's `hdparm` read throughput crosses a threshold (`read`/`cached` MB/s) (see Disk throughput)|
 | `sensors`     | hwmon hardware sensors cross a threshold (`temp` °C / `fan` RPM / `voltage` V) (see Hardware sensors)|
 | `smart`       | a drive's SMART health/attributes (failed verdict, `reallocated`, `wear`, `temperature`) (see Hardware sensors)|
