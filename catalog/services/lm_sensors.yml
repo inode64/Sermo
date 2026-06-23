@@ -1,6 +1,6 @@
 kind: daemon
 name: lm_sensors
-display_name: lm_sensors
+display_name: LM Sensors
 category: hardware
 description: Hardware sensor initialization service.
 service:
