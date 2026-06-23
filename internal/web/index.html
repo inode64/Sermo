@@ -4141,6 +4141,15 @@ function renderOverview(ctx) {
     if (startingApps.length) parts.push(`${startingApps.length} app starting`);
     return parts.length ? parts.join(" · ") : "";
   };
+  const watchesSettlingSub = () => {
+    if (startingWatches.length) return `${startingWatches.length} starting`;
+    const parts = [];
+    if (daemonStarting) parts.push("daemon starting");
+    if (startingSvcs.length) parts.push(`${startingSvcs.length} svc starting`);
+    if (startingApps.length) parts.push(`${startingApps.length} app starting`);
+    return parts.length ? parts.join(" · ") : "";
+  };
+  const watchesSettling = settling && !failedWatches.length;
 
   const tile = (opts) => `
     <button class="tile ${opts.cls || ""}" data-panel-target="${esc(opts.target || "services-section")}">
@@ -4164,10 +4173,10 @@ function renderOverview(ctx) {
     tiles.push(tile({
       label: "Watches",
       value: `${enabledWatches.length - failedWatches.length}<small> / ${enabledWatches.length}</small>`,
-      cls: failedWatches.length ? "t-crit" : (startingWatches.length ? "" : "t-ok"),
+      cls: failedWatches.length ? "t-crit" : (watchesSettling ? "" : "t-ok"),
       sub: failedWatches.length
         ? `${failedWatches.length} firing`
-        : (startingWatches.length ? `${startingWatches.length} starting` : "quiet"),
+        : (watchesSettlingSub() || "quiet"),
       target: "watches-section",
     }));
   }
