@@ -273,7 +273,7 @@ func nativeReloadFunc(spec *reloadSpec, deps checks.Deps, backend, unit string, 
 				}
 			}
 			if err := ctx.Err(); err != nil {
-				return err
+				return reloadContextError(err)
 			}
 			return process.OSSignaler{}.Signal(pid, spec.signal)
 		}
@@ -320,13 +320,13 @@ const (
 
 func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile string) (int, reloadPIDSource, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, "", err
+		return 0, "", reloadContextError(err)
 	}
 	if pid, ok := servicemgr.MainPIDContext(ctx, runner, servicemgr.Backend(backend), unit); ok {
 		return pid, reloadPIDMain, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, "", err
+		return 0, "", reloadContextError(err)
 	}
 	if pidfile != "" {
 		pid, err := process.ReadPidfile(pidfile)
@@ -337,6 +337,13 @@ func reloadPID(ctx context.Context, runner execx.Runner, backend, unit, pidfile 
 
 // reloadPidfile returns the service's top-level pidfile path, used as the signal
 // target when the backend has no MainPID (OpenRC).
+func reloadContextError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return errors.New(execx.ContextFailure(err, 0))
+}
+
 func reloadPidfile(tree map[string]any) string {
 	if paths := cfgval.StringList(tree["pidfile"]); len(paths) > 0 {
 		return paths[0]
