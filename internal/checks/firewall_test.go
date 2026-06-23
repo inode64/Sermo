@@ -13,8 +13,12 @@ import (
 func TestCountLoadedNftablesRulesHonorsCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := countLoadedNftablesRules(ctx); err == nil {
+	_, err := countLoadedNftablesRules(ctx)
+	if err == nil {
 		t.Fatal("cancelled context must fail")
+	}
+	if !strings.Contains(err.Error(), "cancelled") {
+		t.Fatalf("error = %q, want cancelled", err.Error())
 	}
 }
 
