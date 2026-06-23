@@ -1008,12 +1008,27 @@ service:
     - "php-fpm${version}${sep}${instance}"
     - "php-fpm${version}"
 apps: ["php-fpm${version}"]
+pidfile:
+  - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
+  - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
+  - "/run/php-fpm-php${version}${sep}${instance}.pid"
+checks:
+  pidfile:
+    type: pidfile
+    optional: true
+    path:
+      - "/run/php-fpm/php-fpm-${version}${sep}${instance}.pid"
+      - "/run/php-fpm/php-fpm-php${version}${sep}${instance}.pid"
+      - "/run/php-fpm-php${version}${sep}${instance}.pid"
+    requires: [service]
 ```
 
 Put the exact systemd instance first in `service.systemd`, e.g.
 `php-fpm@${version}${sep}${instance}` for `php-fpm@8.2.service`. Avoid a generic
 `php-fpm` systemd fallback in versioned templates: it can make several
-discovered PHP-FPM versions operate on the same unit.
+discovered PHP-FPM versions operate on the same unit. The pidfile check is
+optional because some systemd units publish `MainPID` even when the declared
+`PIDFile=` is not written.
 
 ### Optional components (`enable_if`)
 

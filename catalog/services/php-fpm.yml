@@ -24,10 +24,13 @@ variables:
   user: www-data
   host: 127.0.0.1
   port: 9000
-  pidfile: /run/php-fpm-php${version}${sep}${instance}.pid
+  config_test_pidfile: /run/php-fpm-php${version}${sep}${instance}.pid
   config: /etc/php/fpm-php${version}${sep}${instance}/php-fpm.conf
   status_path: /status
-pidfile: ${pidfile}
+pidfile:
+- /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
+- /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
+- /run/php-fpm-php${version}${sep}${instance}.pid
 preflight:
   config:
     type: command
@@ -37,7 +40,7 @@ preflight:
     - --fpm-config
     - ${config}
     - --pid
-    - ${pidfile}
+    - ${config_test_pidfile}
     timeout: 10s
 processes:
   master:
@@ -47,6 +50,15 @@ processes:
     exe: ${binary}
     user: ${user}
 checks:
+  pidfile:
+    type: pidfile
+    optional: true
+    path:
+    - /run/php-fpm/php-fpm-${version}${sep}${instance}.pid
+    - /run/php-fpm/php-fpm-php${version}${sep}${instance}.pid
+    - /run/php-fpm-php${version}${sep}${instance}.pid
+    requires:
+    - service
   service:
     type: service
     expect: active
