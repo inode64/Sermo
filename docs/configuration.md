@@ -694,6 +694,13 @@ curl -fsS http://127.0.0.1:9797/readyz?verbose         # -> {"ready":true,"statu
 Use `/livez` to know the process is alive; use `/readyz` before sending traffic or
 to gate a reverse proxy until monitoring has actually begun.
 
+A **monitored service whose init backend stays inactive** (for example a unit you
+intentionally keep stopped) never completes its startup observation cycle, so it
+remains `state: starting` and **`/readyz` keeps returning 503** until that unit
+becomes active or you unmonitor/disable it. This is deliberate: readiness means
+every monitored target has been observed at least once while active, not merely
+configured.
+
 Events are the daemon's activity — actions, alerts, suppressions, hook/notify
 results and errors — kept in an in-memory ring (the last 1000); they also go to
 the daemon log. `limit` defaults to 100 (max 1000). The dashboard shows a global
