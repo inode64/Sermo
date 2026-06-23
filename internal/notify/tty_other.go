@@ -13,3 +13,6 @@ func buildTTY(name string, entry map[string]any) (Notifier, error) {
 func buildWall(name string, entry map[string]any) (Notifier, error) {
 	return nil, errors.New("wall notifier is only supported on Linux")
 }
+
+// ActiveUserCount is Linux-only; elsewhere there is no utmp to read.
+func ActiveUserCount() int { return 0 }

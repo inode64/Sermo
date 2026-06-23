@@ -10,6 +10,26 @@ import (
 	"time"
 )
 
+func TestDistinctUsers(t *testing.T) {
+	cases := []struct {
+		name string
+		in   []ttySession
+		want int
+	}{
+		{"empty", nil, 0},
+		{"two sessions one user", []ttySession{{User: "fran", Line: "pts/0"}, {User: "fran", Line: "pts/1"}}, 1},
+		{"two users", []ttySession{{User: "fran", Line: "pts/0"}, {User: "root", Line: "tty1"}}, 2},
+		{"blank user ignored", []ttySession{{User: "", Line: "pts/0"}, {User: "root", Line: "tty1"}}, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := distinctUsers(tc.in); got != tc.want {
+				t.Errorf("distinctUsers(%v) = %d, want %d", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseUtmpUserSessions(t *testing.T) {
 	data := append(utmpRecord(linuxUserProcess, "pts/0", "root"), utmpRecord(2, "tty1", "login")...)
 	data = append(data, utmpRecord(linuxUserProcess, "pts/1", "fran")...)

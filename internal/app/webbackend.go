@@ -2678,13 +2678,14 @@ func operationSlotFindings(inUse, total int) []web.Finding {
 	}}
 }
 
-// Operations returns current operation-slot usage.
+// Operations returns current operation-slot usage and the active-user count.
 func (b *WebBackend) Operations(_ context.Context) web.OperationSlots {
+	users := notify.ActiveUserCount()
 	if b.opGate == nil {
-		return web.OperationSlots{}
+		return web.OperationSlots{ActiveUsers: users}
 	}
 	inUse, total := b.opGate.Usage()
-	return web.OperationSlots{InUse: inUse, Total: total}
+	return web.OperationSlots{InUse: inUse, Total: total, ActiveUsers: users}
 }
 
 // Metrics returns a check's measured metric series over the window.
