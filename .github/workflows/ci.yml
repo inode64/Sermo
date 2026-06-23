@@ -58,7 +58,7 @@ jobs:
       # (G101/G602/G703/G118) are triaged: test-fixture rules live in
       # .golangci.yml, by-design sites carry inline //nolint:gosec justifications.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           install-mode: goinstall
