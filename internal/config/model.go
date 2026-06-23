@@ -426,15 +426,21 @@ func CascadeTargets(tree map[string]any) []string {
 	return cfgval.StringList(tree["also_apply"])
 }
 
-// Notifiers returns the global `notifiers` section (nil when absent) — the
-// single way to reach it; validation, the web backend, the wizard and
-// notify.Build all consume this shape.
+// Notifiers returns the global `notifiers` section plus built-in notifiers. It is
+// the single way to reach notifier definitions; validation, the web backend, the
+// wizard and notify.Build all consume this shape.
 func (c *Config) Notifiers() map[string]any {
 	if c == nil {
 		return nil
 	}
+	out := map[string]any{
+		"tty": map[string]any{"type": "tty"},
+	}
 	m, _ := c.Global.Raw["notifiers"].(map[string]any)
-	return m
+	for name, entry := range m {
+		out[name] = entry
+	}
+	return out
 }
 
 // SortedServiceNames returns the configured service names alphabetically —

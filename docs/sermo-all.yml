@@ -99,7 +99,8 @@ web:
   guest: false                 # true allows anonymous read-only access
   disable_diagnostics: false   # true hides the Diagnostics panel from the web UI
 
-# Named notification targets (email, slack and teams are built in).
+# Named notification targets. email, slack, teams and tty are built in; `tty` is
+# also available as a default internal notifier even when it is not listed here.
 notifiers:
   ops-email:
     enabled: true
@@ -115,6 +116,9 @@ notifiers:
     enabled: false             # keep configured but skip delivery
     type: teams
     webhook: "https://prod-01.westeurope.logic.azure.com:443/workflows/x"
+  tty:
+    type: tty
+    users: [root]              # optional; omit to notify every active terminal
 
 # Default targets for watches/rules that omit notify; notify: [none] suppresses
 # delivery per site (a watch whose only action is [none] is monitor-only).

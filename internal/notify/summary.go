@@ -29,6 +29,15 @@ func ConfigSummary(typ string, entry map[string]any) string {
 			return ""
 		}
 		return u.Host
+	case "tty":
+		users := cfgval.StringList(entry["users"])
+		if len(users) == 0 {
+			return "all active terminals"
+		}
+		if len(users) == 1 {
+			return users[0]
+		}
+		return fmt.Sprintf("%s (+%d)", users[0], len(users)-1)
 	default:
 		return ""
 	}

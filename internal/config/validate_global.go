@@ -88,6 +88,10 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			} else if !strings.HasPrefix(wh, "http://") && !strings.HasPrefix(wh, "https://") {
 				add("notifiers.%s.webhook must be an http(s) URL", name)
 			}
+		case "tty":
+			if users, present := entry["users"]; present && !validStringOrStringList(users) {
+				add("notifiers.%s.users must be a string or list of strings", name)
+			}
 		case "":
 			add("notifiers.%s.type is required", name)
 		default:
@@ -98,6 +102,22 @@ func validateNotifiers(notifiers map[string]any, templateDir string, add func(st
 			}
 		}
 	}
+}
+
+func validStringOrStringList(v any) bool {
+	if _, ok := v.(string); ok {
+		return true
+	}
+	list, ok := v.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range list {
+		if _, ok := item.(string); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func validateNotifierTemplate(name string, entry map[string]any, templateDir string, add func(string, ...any)) {
