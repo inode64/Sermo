@@ -1648,6 +1648,37 @@ func TestWebBackendIncludesDisabledServices(t *testing.T) {
 	}
 }
 
+func TestWebBackendApplicationsStartingUnsettled(t *testing.T) {
+	settling := NewSettling(nil)
+	settling.Reset([]string{"git"})
+
+	b := &WebBackend{
+		cfg: &config.Config{
+			AppNames: []string{"git"},
+			Apps: map[string]*config.Document{
+				"git": {Body: map[string]any{"kind": "app", "name": "git", "display_name": "Git"}},
+			},
+		},
+		settling: settling,
+	}
+
+	apps := b.loadApplications(context.Background())
+	if len(apps) != 1 {
+		t.Fatalf("unsettled apps = %+v, want one placeholder", apps)
+	}
+	if apps[0].State != TargetStateStarting || apps[0].Name != "git" {
+		t.Fatalf("unsettled app = %+v, want git starting", apps[0])
+	}
+
+	settling.MarkObserved("git")
+	apps = b.loadApplications(context.Background())
+	for _, a := range apps {
+		if a.State == TargetStateStarting {
+			t.Fatalf("settled app still starting: %+v", a)
+		}
+	}
+}
+
 func TestWebBackendStartingStateUnsettled(t *testing.T) {
 	settling := NewSettling(nil)
 	settling.Reset([]string{"web", "disk"})
