@@ -744,6 +744,8 @@ func validateSingleShotCheckFields(path, typ string, entry map[string]any, locks
 		validateAutofsFields(path, entry, add)
 	case "load":
 		validateLoadFields(path, entry, add)
+	case "users":
+		validateThresholdPreds(path, entry, checks.UsersPredFields, add)
 	case "hdparm":
 		validateHdparmFields(path, entry, add)
 	case "sensors":

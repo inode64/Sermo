@@ -42,6 +42,8 @@ var (
 	ConntrackPredFields = []string{"used_pct", "free", "count"}
 	// LoadPredFields are the predicates of a load check.
 	LoadPredFields = []string{"load1", "load5", "load15"}
+	// UsersPredFields is the single required predicate of a users check.
+	UsersPredFields = []string{"count"}
 	// SensorPredFields are the predicates of a sensors check.
 	SensorPredFields = []string{"temp", "fan", "voltage"}
 	// HdparmPredFields are the predicates of an hdparm check.
