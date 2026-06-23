@@ -4070,11 +4070,12 @@ function renderOverview(ctx) {
   const enabledWatches = watches.filter((w) => w && w.enabled);
   const failedWatches = watches.filter((w) => watchStateText(w) === "failed");
   const startingWatches = watches.filter((w) => watchStateText(w) === "starting");
+  const startingApps = (allApps || []).filter((a) => appStateText(a) === "starting");
   const daemonStarting = ready && ready.status === "starting" && ready.ready === false;
   const activeLocks = (locks || []).filter((l) => l.state === "active");
   const failedApps = (allApps || []).filter((a) => appStateText(a) === "failed");
   const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
-  const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0;
+  const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
 
   const tile = (opts) => `
     <button class="tile ${opts.cls || ""}" data-panel-target="${esc(opts.target || "services-section")}">
