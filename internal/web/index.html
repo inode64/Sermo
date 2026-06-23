@@ -4132,6 +4132,14 @@ function renderOverview(ctx) {
   const failedApps = (allApps || []).filter((a) => appStateText(a) === "failed");
   const alerts = failedSvcs.length + failedWatches.length + failedApps.length + activeLocks.length;
   const settling = daemonStarting || startingSvcs.length > 0 || startingWatches.length > 0 || startingApps.length > 0;
+  const servicesSettlingSub = () => {
+    if (startingSvcs.length) return `${startingSvcs.length} starting`;
+    const parts = [];
+    if (daemonStarting) parts.push("daemon starting");
+    if (startingWatches.length) parts.push(`${startingWatches.length} watch starting`);
+    if (startingApps.length) parts.push(`${startingApps.length} app starting`);
+    return parts.length ? parts.join(" · ") : "";
+  };
 
   const tile = (opts) => `
     <button class="tile ${opts.cls || ""}" data-panel-target="${esc(opts.target || "services-section")}">
@@ -4148,9 +4156,7 @@ function renderOverview(ctx) {
     cls: failedSvcs.length ? "t-crit" : (settling ? "" : (enabled.length ? "t-ok" : "")),
     sub: failedSvcs.length
       ? `${failedSvcs.length} failed`
-      : (startingSvcs.length
-        ? `${startingSvcs.length} starting`
-        : (enabled.length === 0 ? "none enabled" : "all healthy")),
+      : (servicesSettlingSub() || (enabled.length === 0 ? "none enabled" : "all healthy")),
     target: failedSvcs.length ? "failed-services" : "services-section",
   }));
   if (watches.length) {
