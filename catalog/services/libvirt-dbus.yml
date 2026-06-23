@@ -1,20 +1,53 @@
 kind: daemon
 name: libvirt-dbus
-display_name: "libvirt D-Bus"
+display_name: libvirt D-Bus
 category: virtualization
-description: "D-Bus bridge exposing libvirt objects to desktop and management clients."
+description: D-Bus bridge exposing libvirt objects to desktop and management clients.
 service:
-  systemd: [libvirt-dbus]
-  openrc: [libvirt-dbus]
-apps: [libvirt-dbus]
-
+  systemd:
+  - libvirt-dbus
+  openrc:
+  - libvirt-dbus
+apps:
+- libvirt-dbus
 variables:
   user: root
-
 processes:
   main:
-    exe: "${libvirt_dbus_binary}"
-    user: "${user}"
-
+    exe: ${libvirt_dbus_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  dbus:
+    type: dbus
+    timeout: 5s
+postflight:
+  dbus:
+    type: dbus
+    timeout: 5s
+rules:
+  restart-if-dbus-failed:
+    type: remediation
+    if:
+      failed:
+        check: dbus
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

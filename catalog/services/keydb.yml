@@ -1,32 +1,47 @@
 kind: daemon
 name: keydb
-display_name: "KeyDB"
+display_name: KeyDB
 category: database
 service:
-  systemd: [keydb, keydb-server]
-  openrc: [keydb, keydb-server]
-apps: [keydb]
-
+  systemd:
+  - keydb
+  - keydb-server
+  openrc:
+  - keydb
+  - keydb-server
+apps:
+- keydb
 variables:
   host: 127.0.0.1
   port: 6379
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-
-  # KeyDB speaks the RESP protocol, so the native redis probe verifies liveness
-  # (PING) and exposes role, replication, persistence and memory in its result
-  # data. The expect asserts the last background save succeeded (reported "ok"
-  # even when persistence is disabled, so it never false-alarms).
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
   health:
     type: redis
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 3s
     expect:
       rdb_last_bgsave_status: ok
-
+  fds:
+    type: metric
+    scope: service
+    name: fds
+    op: '>'
+    value: 50000
+    optional: true
+  memory:
+    type: metric
+    scope: service
+    name: memory
+    op: '>'
+    value: 60%
+    optional: true
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -34,9 +49,36 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

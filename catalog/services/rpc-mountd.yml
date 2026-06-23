@@ -1,17 +1,51 @@
 kind: daemon
 name: rpc-mountd
-display_name: "NFS Mount Daemon"
+display_name: NFS Mount Daemon
 category: storage
-description: "RPC.mountd. The mountd RPC port is commonly dynamic, so the standalone daemon monitors init state; the fixed-port mountd probe can be added per service when the host pins a port."
+description: RPC.mountd. The mountd RPC port is commonly dynamic, so the standalone
+  daemon monitors init state; the fixed-port mountd probe can be added per service
+  when the host pins a port.
 service:
-  systemd: [nfs-mountd, rpc-mountd]
-  openrc: [rpc-mountd, nfs-mountd]
-apps: [rpc-mountd]
-
+  systemd:
+  - nfs-mountd
+  - rpc-mountd
+  openrc:
+  - rpc-mountd
+  - nfs-mountd
+apps:
+- rpc-mountd
 processes:
   main:
-    exe: "${rpc_mountd_binary}"
+    exe: ${rpc_mountd_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  mountd:
+    type: mountd
+    host: 127.0.0.1
+    port: 20048
+    timeout: 3s
+    optional: true
+postflight:
+  mountd:
+    type: mountd
+    host: 127.0.0.1
+    port: 20048
+    timeout: 3s
+    optional: true
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

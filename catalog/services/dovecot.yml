@@ -1,77 +1,116 @@
 kind: daemon
 name: dovecot
-display_name: "Dovecot"
+display_name: Dovecot
 category: messaging
-description: "Dovecot IMAP/POP3"
+description: Dovecot IMAP/POP3
 service: dovecot
-apps: [dovecot]
-
+apps:
+- dovecot
 variables:
   host: 127.0.0.1
   port: 143
   tls_port: 993
+  pop_port: 110
+  pop_tls_port: 995
+  sieve_port: 4190
   user: dovecot
   login_user: dovenull
   mail_user: mail
 preflight:
-  config: { type: command, command: ["${dovecot_doveconf}", "-n"], timeout: 30s }
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  config:
+    type: command
+    command:
+    - ${dovecot_doveconf}
+    - -n
+    timeout: 30s
 pidfile: /run/dovecot/master.pid
-
 socket: /run/dovecot/master
-
 processes:
   main:
-    exe: "${dovecot_binary}"
+    exe: ${dovecot_binary}
     user: root
   anvil:
-    exe: "${dovecot_anvil_binary}"
-    user: "${user}"
+    exe: ${dovecot_anvil_binary}
+    user: ${user}
   log:
-    exe: "${dovecot_log_binary}"
+    exe: ${dovecot_log_binary}
     user: root
   config:
-    exe: "${dovecot_config_binary}"
+    exe: ${dovecot_config_binary}
     user: root
   stats:
-    exe: "${dovecot_stats_binary}"
-    user: "${user}"
+    exe: ${dovecot_stats_binary}
+    user: ${user}
   auth-root:
-    exe: "${dovecot_auth_binary}"
+    exe: ${dovecot_auth_binary}
     user: root
   auth:
-    exe: "${dovecot_auth_binary}"
-    user: "${user}"
+    exe: ${dovecot_auth_binary}
+    user: ${user}
   imap-login:
-    exe: "${dovecot_imap_login_binary}"
-    user: "${login_user}"
+    exe: ${dovecot_imap_login_binary}
+    user: ${login_user}
   imap:
-    exe: "${dovecot_imap_binary}"
-    user: "${mail_user}"
-
+    exe: ${dovecot_imap_binary}
+    user: ${mail_user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  imap: { type: imap, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  imap:
+    type: imap
+    port: ${port}
+    timeout: 3s
 
-  # IMAPS certificate expiry. verify:false avoids alarms on self-signed internal
-  # certs; a TLS/connection error is not an alert, so a non-TLS server stays quiet.
+  # POP3 liveness (plain). optional: hosts without pop3 enabled stay quiet.
+  pop:
+    type: pop
+    port: ${pop_port}
+    timeout: 3s
+    optional: true
+
+  # ManageSieve (RFC 5804 greeting). optional when the sieve service is disabled.
+  sieve:
+    type: sieve
+    port: ${sieve_port}
+    timeout: 3s
+    optional: true
+
   cert:
     type: cert
-    host: "${host}"
-    port: "${tls_port}"
+    host: ${host}
+    port: ${tls_port}
     verify: false
     expires_in_days: 21
     timeout: 5s
 
+postflight:
+  imap:
+    type: imap
+    port: ${port}
+    timeout: 3s
+
 rules:
+  restart-if-imap-failed:
+    type: remediation
+    if:
+      failed: { check: imap }
+    for:
+      cycles: 3
+    then:
+      action: restart
+
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

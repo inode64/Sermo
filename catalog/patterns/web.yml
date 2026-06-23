@@ -1,0 +1,10 @@
+kind: patterns
+name: web
+display_name: "Web server configtest signals"
+description: "Common nginx/apache configtest failures and warnings."
+rules:
+  - { id: emerg, match: '(?i)\[emerg\]', severity: error }
+  - { id: syntax, match: '(?i)syntax error', severity: error }
+  - { id: test-failed, match: '(?i)configuration file .* test failed', severity: error }
+  - { id: deprecated, match: '(?i)deprecated', severity: warning }
+  - { id: warn, match: '(?i)\[warn\]', severity: warning }

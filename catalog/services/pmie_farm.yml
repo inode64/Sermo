@@ -1,21 +1,50 @@
 kind: daemon
 name: pmie_farm
-display_name: "PCP Inference Engine Farm"
+display_name: PCP Inference Engine Farm
 category: observability
-description: "Performance Co-Pilot pmie farm service."
+description: Performance Co-Pilot pmie farm service.
 service:
-  systemd: [pmie_farm]
-apps: [pmie_farm]
+  systemd:
+  - pmie_farm
+apps:
+- pmie_farm
 variables:
   user: pcp
-
 processes:
   main:
-    exe: "${pmie_farm_binary}"
-    user: "${user}"
+    exe: ${pmie_farm_binary}
+    user: ${user}
   pmpause:
-    exe: "${pmie_farm_pmpause_binary}"
-    user: "${user}"
-
+    exe: ${pmie_farm_pmpause_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${pmie_farm_binary}
+    user: ${user}
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${pmie_farm_binary}
+    user: ${user}
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

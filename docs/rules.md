@@ -75,6 +75,7 @@ Connection-protocol checks (MySQL, PostgreSQL, Redis, Docker, libvirt, etc.) are
 | `rspamd`      | an rspamd worker answers `GET /ping` with `pong` (see Database) |
 | `libvirt` / `libvirtd` | a libvirt daemon answers RPC; exposes VM counts (`domains.active`…), node capacity and a VM's state for `expect`/`on_change` (see Database) |
 | `dbus`        | a D-Bus daemon completes the auth/Hello handshake and answers `GetId` (see Database) |
+| `udisks2`     | UDisks2 is registered on the system bus and answers `Peer.Ping` on its Manager object (see Database) |
 | `avahi` / `avahi-daemon` | the Avahi daemon answers `GetVersionString` over its D-Bus API (see Database) |
 | `syncthing`   | a Syncthing instance answers `/rest/noauth/health` with `{"status":"OK"}` (see Database) |
 | `docker`      | the Docker Engine answers `/info`, exposing container counts (running/paused/stopped), images and a container's state/health for `expect`/`on_change` (see Database) |
@@ -783,6 +784,21 @@ Protocols, in the order of the table above:
     dbus-custom:
       type: dbus
       socket: /run/dbus/system_bus_socket   # or use `query` for a full address
+  ```
+- `udisks2` — the UDisks2 disk-management daemon on the system D-Bus bus. Connects
+  to the bus (SASL auth + Hello), verifies `org.freedesktop.UDisks2` has a name
+  owner, and calls `org.freedesktop.DBus.Peer.Ping` on
+  `/org/freedesktop/UDisks2/Manager` — proof the service is registered and
+  answering, not merely that `dbus-daemon` is up. **Target:** like `dbus`, defaults
+  to the system bus; set `socket` for a different bus socket or `query` for a full
+  D-Bus address. Socket-based, no TCP port, no auth. Result data: the D-Bus unique
+  name owning `org.freedesktop.UDisks2`. Uses `github.com/godbus/dbus/v5`.
+
+  ```yaml
+  checks:
+    udisks2:
+      type: udisks2
+      timeout: 5s
   ```
 - `avahi` (alias `avahi-daemon`) — the Avahi mDNS/DNS-SD (zeroconf) daemon, probed
   over its D-Bus API (`org.freedesktop.Avahi`). Connects to the system bus (SASL

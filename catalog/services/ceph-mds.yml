@@ -1,31 +1,68 @@
 kind: daemon
 name: ceph-mds
-display_name: "Ceph Metadata Server"
+display_name: Ceph Metadata Server
 category: storage
-description: "Ceph MDS (CephFS metadata). Binds dynamic ports in the 6800-7300 range assigned at startup, so it is monitored by service state and process presence rather than a fixed port."
-
-# One MDS instance per host, keyed by the mds id, which is the short hostname
-# (e.g. ceph-mds@radon). The built-in ${hostname} fills it in automatically — no
-# per-service configuration needed. Override with a `hostname` variable (or
-# SERMO_HOSTNAME) if your mds id is not the hostname.
-service: "ceph-mds@${hostname}"
-
-# Binary + version are owned by the ceph-mds app (same name) and linked here.
-apps: [ceph-mds]
-
+description: Ceph MDS (CephFS metadata). Binds dynamic ports in the 6800-7300 range
+  assigned at startup, so it is monitored by service state and process presence rather
+  than a fixed port.
+service: ceph-mds@${hostname}
+apps:
+- ceph-mds
+- ceph
 variables:
   user: ceph
-
-socket: "/run/ceph/ceph-mds.${hostname}.asok"
-
+socket: /run/ceph/ceph-mds.${hostname}.asok
 processes:
-  # Assumes a single mds per host (the norm); an exe+user match then selects it
-  # unambiguously. Override if this host runs multiple mds daemons.
   ceph-mds:
-    exe: "${ceph_mds_binary}"
-    user: "${user}"
-
+    exe: ${ceph_mds_binary}
+    user: ${user}
 checks:
   service:
     type: service
     expect: active
+  status:
+    type: command
+    command:
+    - ${ceph_binary}
+    - --admin-daemon
+    - /run/ceph/ceph-mds.${hostname}.asok
+    - status
+    timeout: 5s
+    analyze:
+      use:
+      - ceph
+postflight:
+  status:
+    type: command
+    command:
+    - ${ceph_binary}
+    - --admin-daemon
+    - /run/ceph/ceph-mds.${hostname}.asok
+    - status
+    timeout: 5s
+    analyze:
+      use:
+      - ceph
+rules:
+  restart-if-status-failed:
+    type: remediation
+    if:
+      failed:
+        check: status
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

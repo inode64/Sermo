@@ -1,16 +1,42 @@
 kind: daemon
 name: tuned
-display_name: "TuneD"
+display_name: TuneD
 category: system
-description: "Dynamic system tuning daemon."
+description: Dynamic system tuning daemon.
 service:
-  systemd: [tuned]
-  openrc: [tuned]
-apps: [tuned]
-
+  systemd:
+  - tuned
+  openrc:
+  - tuned
+apps:
+- tuned
 pidfile:
-  - /run/tuned/tuned.pid
-  - /run/tuned.pid
-
+- /run/tuned/tuned.pid
+- /run/tuned.pid
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  active:
+    type: command
+    command:
+    - tuned-adm
+    - active
+    timeout: 10s
+postflight:
+  active:
+    type: command
+    command:
+    - tuned-adm
+    - active
+    timeout: 10s
+rules:
+  restart-if-active-failed:
+    type: remediation
+    if:
+      failed:
+        check: active
+    for:
+      cycles: 3
+    then:
+      action: restart

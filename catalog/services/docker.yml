@@ -1,49 +1,79 @@
 kind: daemon
 name: docker
-display_name: "Docker Engine"
+display_name: Docker Engine
 category: virtualization
-description: "Docker Engine container runtime."
-
+description: Docker Engine container runtime.
 service:
-  systemd: [docker]
-  openrc: [docker]
-
+  systemd:
+  - docker
+  openrc:
+  - docker
 also_service:
-  systemd: [docker.socket]
-
-apps: [docker]
+  systemd:
+  - docker.socket
+apps:
+- docker
 variables:
-  # The engine API on its local Unix socket; set `host` (and tls for 2376) for a
-  # TCP daemon instead.
   socket: /run/docker.sock
   config: /etc/docker/daemon.json
-
-config_files: ["${config}"]
-
+config_files:
+- ${config}
 preflight:
   config:
     type: command
-    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" --validate --config-file=\"$1\"", "${docker_daemon}", "${config}"]
+    command:
+    - sh
+    - -c
+    - test ! -e "$1" || exec "$0" --validate --config-file="$1"
+    - ${docker_daemon}
+    - ${config}
     timeout: 30s
-
 processes:
   main:
-    exe: "${docker_daemon}"
+    exe: ${docker_daemon}
     user: root
   proxy:
-    exe: "${docker_proxy_binary}"
+    exe: ${docker_proxy_binary}
     user: root
-
 checks:
   service:
     type: service
     expect: active
-
-  # Native Docker probe: GETs /info over the engine socket, proving the daemon is
-  # up, and exposes container counts (total/running/paused/stopped), image count
-  # and the engine version for expect:/on_version_change. Select a `query:`
-  # container to additionally assert its state/health.
   engine:
     type: docker
-    socket: "${socket}"
+    socket: ${socket}
     timeout: 3s
+postflight:
+  engine:
+    type: docker
+    socket: ${socket}
+    timeout: 3s
+reload_on_change:
+  paths:
+  - ${config}
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

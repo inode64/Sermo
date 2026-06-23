@@ -1,11 +1,26 @@
 kind: daemon
 name: rngd
-display_name: "RNG Daemon"
+display_name: RNG Daemon
 category: hardware
-description: "Feeds kernel entropy from hardware/random sources."
+description: Feeds kernel entropy from hardware/random sources.
 service: rngd
-
 pidfile: /run/rngd.pid
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${rngd_binary}
+    user: root
+    state: running
+    requires:
+    - service
+apps:
+- rngd
+postflight:
+  process:
+    type: process
+    exe: ${rngd_binary}
+    user: root
+    state: running

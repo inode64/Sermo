@@ -1,37 +1,68 @@
 kind: daemon
 name: ceph-mgr
-display_name: "Ceph Manager"
+display_name: Ceph Manager
 category: storage
-description: "Ceph manager daemon: hosts the cluster's management modules (dashboard, prometheus, balancer, …)."
-
-# Managers run as a systemd instance keyed by the mgr id, which is the short
-# hostname (e.g. ceph-mgr@radon). The built-in ${hostname} fills it in
-# automatically — no per-service configuration needed. Override with a
-# `hostname` variable (or SERMO_HOSTNAME) if your mgr id is not the hostname.
-service: "ceph-mgr@${hostname}"
-
-# Binary + version are owned by the ceph-mgr app (same name) and linked here.
-apps: [ceph-mgr]
-
+description: 'Ceph manager daemon: hosts the cluster''s management modules (dashboard,
+  prometheus, balancer, …).'
+service: ceph-mgr@${hostname}
+apps:
+- ceph-mgr
+- ceph
 variables:
   user: ceph
-
-socket: "/run/ceph/ceph-mgr.${hostname}.asok"
-
+socket: /run/ceph/ceph-mgr.${hostname}.asok
 processes:
-  # Exactly one ceph-mgr runs per host, so an exe+user match selects it
-  # unambiguously. The mgr binds a dynamic messenger port (no fixed listener),
-  # so process liveness — not a tcp probe — is the reliable signal here.
   ceph-mgr:
-    exe: "${ceph_mgr_binary}"
-    user: "${user}"
-
-restart_on_change:
-  # Restart when a linked critical library changes on disk (e.g. an
-  # OpenSSL CVE update), so the service picks up the new code.
-  #libraries: [glibc, openssl, zlib, sqlite3, lzma, zstd, bzip2, util-linux, udev]
-
+    exe: ${ceph_mgr_binary}
+    user: ${user}
+restart_on_change: null
 checks:
   service:
     type: service
     expect: active
+  status:
+    type: command
+    command:
+    - ${ceph_binary}
+    - --admin-daemon
+    - /run/ceph/ceph-mgr.${hostname}.asok
+    - status
+    timeout: 5s
+    analyze:
+      use:
+      - ceph
+postflight:
+  status:
+    type: command
+    command:
+    - ${ceph_binary}
+    - --admin-daemon
+    - /run/ceph/ceph-mgr.${hostname}.asok
+    - status
+    timeout: 5s
+    analyze:
+      use:
+      - ceph
+rules:
+  restart-if-status-failed:
+    type: remediation
+    if:
+      failed:
+        check: status
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

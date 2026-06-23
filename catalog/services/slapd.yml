@@ -1,40 +1,50 @@
 kind: daemon
 name: slapd
-display_name: "OpenLDAP (slapd)"
+display_name: OpenLDAP (slapd)
 category: identity
 service: slapd
-apps: [slapd]
-
+apps:
+- slapd
 variables:
   host: 127.0.0.1
   port: 389
   tls_port: 636
   config_dir:
-    - /etc/ldap/slapd.d
-    - /etc/openldap/slapd.d
+  - /etc/ldap/slapd.d
+  - /etc/openldap/slapd.d
   config:
-    - /etc/ldap/slapd.conf
-    - /etc/openldap/slapd.conf
-
-config_files: ["${config_dir}", "${config}"]
-
+  - /etc/ldap/slapd.conf
+  - /etc/openldap/slapd.conf
+config_files:
+- ${config_dir}
+- ${config}
 preflight:
   config:
     type: command
-    command: ["sh", "-c", "if [ -d \"$1\" ]; then exec \"$0\" -Q -u -F \"$1\"; else exec \"$0\" -Q -u -f \"$2\"; fi", "${slapd_slaptest}", "${config_dir}", "${config}"]
+    command:
+    - sh
+    - -c
+    - if [ -d "$1" ]; then exec "$0" -Q -u -F "$1"; else exec "$0" -Q -u -f "$2";
+      fi
+    - ${slapd_slaptest}
+    - ${config_dir}
+    - ${config}
     timeout: 30s
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  ldap: { type: ldap, port: "${port}", timeout: 3s }
-
-  # LDAPS certificate expiry. verify:false avoids alarms on self-signed internal
-  # certs; a TLS/connection error is not an alert, so a non-TLS server stays quiet.
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  ldap:
+    type: ldap
+    port: ${port}
+    timeout: 3s
   cert:
     type: cert
-    host: "${host}"
-    port: "${tls_port}"
+    host: ${host}
+    port: ${tls_port}
     verify: false
     expires_in_days: 21
     timeout: 5s

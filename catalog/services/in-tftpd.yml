@@ -1,16 +1,24 @@
 kind: daemon
 name: in.tftpd
-display_name: "TFTP Server"
+display_name: TFTP Server
 category: network
-description: "TFTP server daemon for serving files over the Trivial File Transfer Protocol (TFTP)."
+description: TFTP server daemon for serving files over the Trivial File Transfer Protocol
+  (TFTP).
 service:
-  systemd: [in-tftpd, tftpd]
-  openrc: [in.tftpd, in-tftpd]
-apps: [in.tftpd]
-
+  systemd:
+  - in-tftpd
+  - tftpd
+  openrc:
+  - in.tftpd
+  - in-tftpd
+apps:
+- in.tftpd
 variables:
   port: 69
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tftp, port: "${port}" }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tftp
+    port: ${port}

@@ -1,61 +1,53 @@
 kind: daemon
 name: pmcd
-display_name: "PCP Collector (pmcd)"
+display_name: PCP Collector (pmcd)
 category: observability
-description: "Performance Co-Pilot metric collector daemon (pmcd)."
-
+description: Performance Co-Pilot metric collector daemon (pmcd).
 service:
-  systemd: [pmcd]
-  openrc: [pmcd]
-
-apps: [pmcd]
+  systemd:
+  - pmcd
+  openrc:
+  - pmcd
+apps:
+- pmcd
 variables:
   host: 127.0.0.1
   port: 44321
   user: pcp
-
 restart_on_change:
-  # Restart when a linked critical library changes on disk (e.g. an
-  # OpenSSL CVE update), so the service picks up the new code.
-  libraries: [glibc, systemd-libs, lzma]
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  libraries:
+  - glibc
+  - systemd-libs
+  - lzma
 pidfile: /run/pcp/pmcd.pid
-
 socket:
-  - /run/pcp/pmcd.socket
-  - /var/lib/pcp/pmcd/root.socket
-
+- /run/pcp/pmcd.socket
+- /var/lib/pcp/pmcd/root.socket
 processes:
   main:
-    exe: "${pmcd_binary}"
-    user: "${user}"
+    exe: ${pmcd_binary}
+    user: ${user}
   pmdaroot:
-    exe: "${pmcd_pmdaroot_binary}"
+    exe: ${pmcd_pmdaroot_binary}
     user: root
   pmdaproc:
-    exe: "${pmcd_pmdaproc_binary}"
+    exe: ${pmcd_pmdaproc_binary}
     user: root
   pmdaxfs:
-    exe: "${pmcd_pmdaxfs_binary}"
+    exe: ${pmcd_pmdaxfs_binary}
     user: root
   pmdalinux:
-    exe: "${pmcd_pmdalinux_binary}"
+    exe: ${pmcd_pmdalinux_binary}
     user: root
   pmdakvm:
-    exe: "${pmcd_pmdakvm_binary}"
+    exe: ${pmcd_pmdakvm_binary}
     user: root
-
 checks:
   service:
     type: service
     expect: active
-
-  # pmcd serves the PCP protocol on 44321; a tcp probe confirms collectors and
-  # pmlogger/pmie clients can reach it.
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s

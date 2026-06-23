@@ -1,17 +1,22 @@
 kind: daemon
 name: glusterd
-display_name: "GlusterFS"
+display_name: GlusterFS
 category: storage
-description: "GlusterFS"
+description: GlusterFS
 service: glusterd
-apps: [glusterd]
-
+apps:
+- glusterd
 variables:
   port: 24007
-
 socket: /run/glusterd.socket
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  glusterfs: { type: glusterfs, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  glusterfs:
+    type: glusterfs
+    port: ${port}
+    timeout: 3s

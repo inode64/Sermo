@@ -1,29 +1,30 @@
 kind: daemon
 name: guacd
-display_name: "Apache Guacamole"
+display_name: Apache Guacamole
 category: web
-description: "Guacamole daemon"
+description: Guacamole daemon
 service: guacd
-apps: [guacd]
-
+apps:
+- guacd
 variables:
   port: 4822
   user: guacamole
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/guacamole/guacd.pid
-
 processes:
   main:
-    exe: "${guacd_binary}"
-    user: "${user}"
-
+    exe: ${guacd_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  guacd: { type: guacd, port: "${port}", timeout: 3s }
-
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  guacd:
+    type: guacd
+    port: ${port}
+    timeout: 3s
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -31,7 +32,7 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m

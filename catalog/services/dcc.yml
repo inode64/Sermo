@@ -1,21 +1,60 @@
 kind: daemon
 name: dcc
-display_name: "Distributed Checksum Clearinghouse"
+display_name: Distributed Checksum Clearinghouse
 category: mail
-description: "DCC interface daemon used by mail filtering stacks."
+description: DCC interface daemon used by mail filtering stacks.
 service: dcc
-apps: [dcc]
-
+apps:
+- dcc
 variables:
   user: root
-
 pidfile: /run/dcc/dccifd.pid
 socket: /var/lib/dcc/dccifd
-
 processes:
   main:
-    exe: "${dcc_binary}"
-    user: "${user}"
-
+    exe: ${dcc_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${dcc_binary}
+    user: ${user}
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${dcc_binary}
+    user: ${user}
+    state: running
+rules:
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: '>'
+        value: 90%
+    for:
+      duration: 6m
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

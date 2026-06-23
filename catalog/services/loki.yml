@@ -1,57 +1,77 @@
 kind: daemon
 name: loki
-display_name: "Grafana Loki"
+display_name: Grafana Loki
 category: observability
-description: "Grafana Loki log-aggregation server."
-
+description: Grafana Loki log-aggregation server.
 service:
-  systemd: [loki]
-  openrc: [loki]
-
-apps: [loki]
+  systemd:
+  - loki
+  openrc:
+  - loki
+apps:
+- loki
 variables:
   user: loki
   host: 127.0.0.1
   port: 3100
   config: /etc/loki/config.yml
-
-config_files: ["${config}"]
-
+config_files:
+- ${config}
 preflight:
   config:
     type: command
-    command: ["${loki_binary}", "-verify-config", "-config.file=${config}"]
+    command:
+    - ${loki_binary}
+    - -verify-config
+    - -config.file=${config}
     timeout: 30s
-
 pidfile: /run/loki.pid
-
 processes:
   main:
-    exe: "${loki_binary}"
-    user: "${user}"
-
-# Loki reloads its config on SIGHUP (and POST /reload when
-# -config.expand-env/--config.file reloading is enabled). Its systemd unit
-# usually has no ExecReload, so Sermo signals MainPID; the default `when: auto`
-# uses the init reload where one exists.
+    exe: ${loki_binary}
+    user: ${user}
 reload:
   signal: HUP
-
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # /ready returns 200 once Loki has finished starting and can serve queries;
-  # before then it answers 503, so it doubles as a startup-complete signal.
   ready:
     type: http
-    url: "http://${host}:${port}/ready"
+    url: http://${host}:${port}/ready
     expect_status: 200
     timeout: 5s
+reload_on_change:
+  paths:
+  - ${config}
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

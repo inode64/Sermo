@@ -1,18 +1,105 @@
 kind: daemon
 name: filebeat
-display_name: "Filebeat"
+display_name: Filebeat
 category: observability
-description: "Lightweight log shipper for Logstash and Elasticsearch"
+description: Lightweight log shipper for Logstash and Elasticsearch
 service: filebeat
-apps: [filebeat]
-
+apps:
+- filebeat
 variables:
   config: /etc/filebeat/filebeat.yml
-
 preflight:
-  config: { type: command, command: ["${filebeat_binary}", "test", "config", "-c", "${config}"], timeout: 30s }
-
-config_files: ["${config}", /etc/filebeat/modules.d]
-
+  config:
+    type: command
+    command:
+    - ${filebeat_binary}
+    - test
+    - config
+    - -c
+    - ${config}
+    timeout: 30s
+config_files:
+- ${config}
+- /etc/filebeat/modules.d
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  config-output:
+    type: command
+    command:
+    - ${filebeat_binary}
+    - test
+    - output
+    - -c
+    - ${config}
+    timeout: 30s
+    optional: true
+  fds:
+    type: metric
+    scope: service
+    name: fds
+    op: '>'
+    value: 50000
+    optional: true
+  memory:
+    type: metric
+    scope: service
+    name: memory
+    op: '>'
+    value: 60%
+    optional: true
+postflight:
+  config-output:
+    type: command
+    command:
+    - ${filebeat_binary}
+    - test
+    - output
+    - -c
+    - ${config}
+    timeout: 30s
+    optional: true
+reload_on_change:
+  paths:
+  - ${config}
+  - /etc/filebeat/modules.d
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

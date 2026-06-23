@@ -1,41 +1,47 @@
 kind: daemon
 name: proftpd
-display_name: "ProFTPD"
+display_name: ProFTPD
 category: network
 service: proftpd
-apps: [proftpd]
-
+apps:
+- proftpd
 variables:
   user: root
   port: 21
 preflight:
-  config: { type: command, command: ["${proftpd_binary}","--configtest"], timeout: 30s }
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
+  config:
+    type: command
+    command:
+    - ${proftpd_binary}
+    - --configtest
+    timeout: 30s
 pidfile: /run/proftpd/proftpd.pid
-
 processes:
   main:
-    exe: "${proftpd_binary}"
-    user: "${user}"
-
-# ProFTPD re-reads its config on SIGHUP; its systemd unit usually has no
-# ExecReload while OpenRC's init script reloads; the default `when: auto`
-# bridges both.
+    exe: ${proftpd_binary}
+    user: ${user}
 reload:
   signal: HUP
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  ftp: { type: ftp, port: "${port}", timeout: 3s }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  ftp:
+    type: ftp
+    port: ${port}
+    timeout: 3s
 rules:
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
+      message: ${display_name} configuration is invalid

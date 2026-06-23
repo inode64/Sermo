@@ -1,27 +1,37 @@
 kind: daemon
 name: smbd
-display_name: "Samba SMB"
+display_name: Samba SMB
 category: storage
 service: smbd
-apps: [smbd]
-
+apps:
+- smbd
 variables:
   port: 445
 preflight:
   config:
     type: command
-    command: ["${smbd_testparm}", "-s"]
+    command:
+    - ${smbd_testparm}
+    - -s
     timeout: 30s
     analyze:
-      use: [common]
+      use:
+      - common
       rules:
-        - { id: dir-artifact, match: '(?i)(lock|pid) directory .* does not exist', severity: ok }
-
+      - id: dir-artifact
+        match: (?i)(lock|pid) directory .* does not exist
+        severity: ok
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
-  smb: { type: smb, port: "${port}", timeout: 3s }
-
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}
+  smb:
+    type: smb
+    port: ${port}
+    timeout: 3s
 rules:
   restart-if-worker-thread-hot:
     type: remediation
@@ -29,31 +39,20 @@ rules:
       metric:
         scope: service
         name: cpu_thread
-        op: ">"
+        op: '>'
         value: 90%
     for:
       duration: 6m
     then:
       action: restart
-
   block-restart-if-config-invalid:
     type: guard
-    blocks: [restart, start]
+    blocks:
+    - restart
+    - start
     if:
-      failed: { check: config }
+      failed:
+        check: config
     then:
       action: block
-      message: "${display_name} configuration is invalid"
-
-  restart-if-worker-thread-hot:
-    type: remediation
-    if:
-      metric:
-        scope: service
-        name: cpu_thread
-        op: ">"
-        value: 90%
-    for:
-      duration: 10m
-    then:
-      action: restart
+      message: ${display_name} configuration is invalid

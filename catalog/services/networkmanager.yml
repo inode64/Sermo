@@ -1,17 +1,72 @@
 kind: daemon
 name: networkmanager
-display_name: "NetworkManager"
+display_name: NetworkManager
 category: network
-description: "NetworkManager system network management daemon."
+description: NetworkManager system network management daemon.
 service:
-  systemd: [NetworkManager]
-  openrc: [NetworkManager, networkmanager]
-apps: [networkmanager]
-
+  systemd:
+  - NetworkManager
+  openrc:
+  - NetworkManager
+  - networkmanager
+apps:
+- networkmanager
 processes:
   main:
-    exe: "${networkmanager_binary}"
+    exe: ${networkmanager_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  status:
+    type: command
+    command:
+    - nmcli
+    - general
+    - status
+    timeout: 10s
+postflight:
+  status:
+    type: command
+    command:
+    - nmcli
+    - general
+    - status
+    timeout: 10s
+rules:
+  restart-if-status-failed:
+    type: remediation
+    if:
+      failed:
+        check: status
+    for:
+      cycles: 3
+    then:
+      action: restart
+  restart-if-worker-thread-hot:
+    type: remediation
+    if:
+      metric:
+        scope: service
+        name: cpu_thread
+        op: '>'
+        value: 90%
+    for:
+      duration: 6m
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

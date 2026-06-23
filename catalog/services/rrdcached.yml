@@ -1,13 +1,49 @@
 kind: daemon
 name: rrdcached
-display_name: "RRD Cached"
+display_name: RRD Cached
 category: observability
-description: "RRDTool data caching daemon."
+description: RRDTool data caching daemon.
 service: rrdcached
-
 pidfile: /run/rrdcached.pid
-
 socket: /run/rrdcached.sock
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  tcp:
+    type: tcp
+    host: 127.0.0.1
+    port: ${port}
+    timeout: 3s
+variables:
+  port: 42217
+postflight:
+  tcp:
+    type: tcp
+    host: 127.0.0.1
+    port: ${port}
+    timeout: 3s
+rules:
+  restart-if-tcp-failed:
+    type: remediation
+    if:
+      failed:
+        check: tcp
+    for:
+      cycles: 3
+    then:
+      action: restart
+  alert-if-fds-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: fds
+        op: '>'
+        value: 50000
+    then:
+      action: alert
+      message: ${display_name} file descriptor usage is high
+    within:
+      cycles: 10
+      min_matches: 3

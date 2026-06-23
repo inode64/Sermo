@@ -1,17 +1,22 @@
 kind: daemon
 name: virtqemud
-display_name: "libvirt QEMU Daemon"
+display_name: libvirt QEMU Daemon
 category: virtualization
-description: "Modular libvirt daemon for QEMU/KVM domains."
+description: Modular libvirt daemon for QEMU/KVM domains.
 service:
-  systemd: [virtqemud]
-apps: [virtqemud]
-
+  systemd:
+  - virtqemud
+apps:
+- virtqemud
 processes:
   main:
-    exe: "${virtqemud_binary}"
+    exe: ${virtqemud_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  libvirt: { type: libvirt, socket: /run/libvirt/virtqemud-sock, timeout: 5s }
+  service:
+    type: service
+    expect: active
+  libvirt:
+    type: libvirt
+    socket: /run/libvirt/virtqemud-sock
+    timeout: 5s

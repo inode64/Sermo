@@ -1,13 +1,16 @@
 kind: daemon
 name: pptpd
-display_name: "PPTP Server"
+display_name: PPTP Server
 category: network
 service: pptpd
-apps: [pptpd]
-
+apps:
+- pptpd
 variables:
   port: 1723
-
 checks:
-  service: { type: service, expect: active }
-  port: { type: tcp, port: "${port}" }
+  service:
+    type: service
+    expect: active
+  port:
+    type: tcp
+    port: ${port}

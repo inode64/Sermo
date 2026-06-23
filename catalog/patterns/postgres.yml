@@ -1,0 +1,10 @@
+kind: patterns
+name: postgres
+display_name: "PostgreSQL output signals"
+description: "Escalate PostgreSQL command and log output to warning/error."
+rules:
+  - { id: panic, match: '(?i)PANIC:', severity: error }
+  - { id: fatal, match: '(?i)FATAL:', severity: error }
+  - { id: corrupt, match: '(?i)corrupt', severity: error }
+  - { id: recovery, match: '(?i)recovery mode', severity: warning }
+  - { id: checkpoint, match: '(?i)checkpoint', severity: warning }

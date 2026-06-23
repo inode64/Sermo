@@ -1,21 +1,48 @@
 kind: daemon
 name: upsmon
-display_name: "NUT UPS Monitor"
+display_name: NUT UPS Monitor
 category: hardware
 service: upsmon
-apps: [upsmon]
+apps:
+- upsmon
 variables:
   user: nut
-
 pidfile: /run/nut/upsmon.pid
-
 processes:
   main:
-    exe: "${upsmon_binary}"
+    exe: ${upsmon_binary}
     user: root
   worker:
-    exe: "${upsmon_binary}"
-    user: "${user}"
-
+    exe: ${upsmon_binary}
+    user: ${user}
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${upsmon_binary}
+    user: root
+    state: running
+    requires:
+    - service
+postflight:
+  process:
+    type: process
+    exe: ${upsmon_binary}
+    user: root
+    state: running
+rules:
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high

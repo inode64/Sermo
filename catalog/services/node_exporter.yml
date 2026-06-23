@@ -1,42 +1,35 @@
 kind: daemon
 name: node_exporter
-display_name: "Prometheus Node Exporter"
+display_name: Prometheus Node Exporter
 category: observability
-description: "Prometheus node_exporter: host metrics over HTTP /metrics."
-
+description: 'Prometheus node_exporter: host metrics over HTTP /metrics.'
 service:
-  systemd: [node_exporter]
-  openrc: [node_exporter]
-
-apps: [node_exporter]
+  systemd:
+  - node_exporter
+  openrc:
+  - node_exporter
+apps:
+- node_exporter
 variables:
   host: 127.0.0.1
   port: 9100
   user: node_exporter
-
-# Defining pidfile auto-wires process-tree monitoring and a
-# requires:[service] pidfile health check (error if missing while active).
 pidfile: /run/node_exporter.pid
-
 processes:
   main:
-    exe: "${node_exporter_binary}"
-    user: "${user}"
-
+    exe: ${node_exporter_binary}
+    user: ${user}
 checks:
   service:
     type: service
     expect: active
-
   port:
     type: tcp
-    host: "${host}"
-    port: "${port}"
+    host: ${host}
+    port: ${port}
     timeout: 2s
-
-  # The scrape endpoint must answer 200 for Prometheus to collect metrics.
   metrics:
     type: http
-    url: "http://${host}:${port}/metrics"
+    url: http://${host}:${port}/metrics
     expect_status: 200
     timeout: 5s

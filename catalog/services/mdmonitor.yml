@@ -1,17 +1,23 @@
 kind: daemon
 name: mdmonitor
-display_name: "MD array monitor"
+display_name: MD array monitor
 category: storage
-description: "mdadm monitor service for Linux software RAID arrays."
+description: mdadm monitor service for Linux software RAID arrays.
 service:
-  systemd: [mdmonitor]
-apps: [mdadm]
-
+  systemd:
+  - mdmonitor
+apps:
+- mdadm
 processes:
   main:
-    exe: "${mdadm_binary}"
+    exe: ${mdadm_binary}
     user: root
-
 checks:
-  service: { type: service, expect: active }
-  raid: { type: raid, degraded: { op: ">", value: 0 } }
+  service:
+    type: service
+    expect: active
+  raid:
+    type: raid
+    degraded:
+      op: '>'
+      value: 0

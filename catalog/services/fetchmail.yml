@@ -1,22 +1,70 @@
 kind: daemon
 name: fetchmail
-display_name: "Fetchmail"
+display_name: Fetchmail
 category: messaging
 service: fetchmail
-apps: [fetchmail]
-
+apps:
+- fetchmail
 variables:
   config:
-    - /etc/fetchmailrc
-    - /etc/fetchmail/fetchmailrc
-
-config_files: ["${config}"]
-
+  - /etc/fetchmailrc
+  - /etc/fetchmail/fetchmailrc
+config_files:
+- ${config}
 preflight:
   config:
     type: command
-    command: ["sh", "-c", "test ! -e \"$1\" || exec \"$0\" --configdump -f \"$1\"", "${fetchmail_binary}", "${config}"]
+    command:
+    - sh
+    - -c
+    - test ! -e "$1" || exec "$0" --configdump -f "$1"
+    - ${fetchmail_binary}
+    - ${config}
     timeout: 30s
-
 checks:
-  service: { type: service, expect: active }
+  service:
+    type: service
+    expect: active
+  process:
+    type: process
+    exe: ${fetchmail_binary}
+    user: root
+    state: running
+    requires:
+    - service
+    optional: true
+postflight:
+  process:
+    type: process
+    exe: ${fetchmail_binary}
+    user: root
+    state: running
+    optional: true
+reload_on_change:
+  paths:
+  - ${config}
+rules:
+  block-restart-if-config-invalid:
+    type: guard
+    blocks:
+    - restart
+    - start
+    if:
+      failed:
+        check: config
+    then:
+      action: block
+      message: ${display_name} configuration is invalid
+  alert-if-memory-high:
+    type: alert
+    if:
+      metric:
+        scope: service
+        name: memory
+        op: '>'
+        value: 60%
+    for:
+      duration: 10m
+    then:
+      action: alert
+      message: ${display_name} memory usage is high
