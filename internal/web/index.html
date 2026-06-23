@@ -4226,13 +4226,19 @@ function renderOverview(ctx) {
       : "nothing on fire",
     target: alertsTarget,
   }));
+  const monitoredTarget = settling && !failedSvcs.length
+    ? servicesTarget
+    : "services-section";
+  const monitoredSub = (mon && (mon.paused || 0) > 0)
+    ? `${mon.paused} paused`
+    : (settling && !failedSvcs.length ? (servicesSettlingSub() || "settling") : "");
   if (mon && mon.total != null) {
     tiles.push(tile({
       label: "Monitored",
       value: `${mon.monitored || 0}<small> / ${mon.total || 0}</small>`,
-      cls: (mon.paused || 0) > 0 ? "t-warn" : "",
-      sub: (mon.paused || 0) > 0 ? `${mon.paused} paused` : "",
-      target: "services-section",
+      cls: (mon.paused || 0) > 0 ? "t-warn" : (settling && !failedSvcs.length ? "" : ""),
+      sub: monitoredSub,
+      target: monitoredTarget,
     }));
   }
   if (ops && ops.total) {

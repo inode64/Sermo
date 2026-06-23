@@ -93,7 +93,7 @@ Rendered by `renderOverview` from already-loaded state, without extra requests.
 | Services up | count / total; critical when any service is `failed`, neutral while any target is settling, otherwise healthy; click opens `failed` or `starting` service filter when applicable |
 | Watches | count / total; critical when any watch is `failed`, neutral while any target is settling (subtitle names starting watches, services or apps), otherwise quiet; click opens the matching `starting`/`failed` filter |
 | Alerts | count of failing services, firing watches, failed installed apps and active locks, with a per-kind breakdown; click routes to `failed-services`, `failed-watches`, `failed-apps` or `locks-section` in priority order |
-| Monitored | monitored vs unmonitored services |
+| Monitored | monitored vs unmonitored services; neutral with settling subtitle during startup, click opens the same `starting`/`failed` filter as Services up when applicable |
 | Host gauges | memory, load, fds, pids, conntrack, etc. when present |
 | Volumes | one gauge per mounted storage watch, crit when its watch is firing |
 
@@ -385,7 +385,7 @@ Opened from a service row/name. There is no separate lower detail panel.
 
 | Area | Current representation |
 | --- | --- |
-| Header | service name, unit and state |
+| Header | service name, unit and state; `starting` is the operator-facing badge — expansion detail can lag one cycle behind it during settling |
 | Actions | service row operation buttons and inline preflight |
 | Checks | resolved check state |
 | Metrics | selectable metric/check series |
