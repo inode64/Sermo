@@ -1,0 +1,9 @@
+kind: app
+name: salt-master
+display_name: "Salt Master"
+category: system
+variables:
+  binary: ${bindir}/salt
+preflight:
+  binary: { type: binary, path: "${binary}" }
+  version: { type: command, command: ["${binary}", "--version"], timeout: 10s }

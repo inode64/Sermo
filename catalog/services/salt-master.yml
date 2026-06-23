@@ -5,7 +5,7 @@ category: system
 description: Salt master controller daemon
 service: salt-master
 apps:
-- salt
+- salt-master
 variables:
   port: 4505
 pidfile: /run/salt-master.pid
