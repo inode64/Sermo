@@ -2905,7 +2905,7 @@ variables:
 	}
 	global := filepath.Join(root, "sermo.yml")
 	if err := os.WriteFile(global, []byte(fmt.Sprintf(`
-engine: { backend: auto }
+engine: { backend: openrc }
 paths: { catalog: [ %s ], services: [ %s ], runtime: /run/sermo }
 defaults: { policy: { cooldown: 5m } }
 `, catalogDir, enabledDir)), 0o644); err != nil {

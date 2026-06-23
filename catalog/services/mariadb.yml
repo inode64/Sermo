@@ -37,9 +37,6 @@ processes:
   mariadbd:
     exe: ${mariadb_binary}
     user: ${user}
-  mysqld:
-    exe: ${mariadb_mysqld_binary}
-    user: ${user}
 config_files:
 - ${config}
 checks:
@@ -78,7 +75,6 @@ stop_policy:
     - ${user}
     exe_any:
     - ${mariadb_binary}
-    - ${mariadb_mysqld_binary}
 policy:
   cooldown: 15m
   max_actions: 2
