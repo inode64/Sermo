@@ -130,6 +130,8 @@ var commandUsages = []commandUsage{
 			"sermoctl is-active SERVICE",
 		},
 		Notes: []string{
+			"Probes the init backend only (active/inactive/paused), not the daemon's",
+			"computed state. Use status when you need starting/settling visibility.",
 			"Paused monitoring counts as not active for scripting purposes.",
 		},
 		Examples: []string{
