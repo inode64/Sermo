@@ -349,6 +349,8 @@ Before finishing any code change:
 - Preserve public YAML, JSON, CLI and web field names unless the change is
   explicitly a migration.
 - Add or move tests when a bug or ambiguous behavior is found.
+- Run `make check` (or at least `make validate`) before treating a code change
+  as complete; do not run `go test ./...` alone and skip fmt-check/lint.
 - For daemon-facing changes, check the runtime cost in the steady-state cycle
   and avoid repeated scans, blocking calls or avoidable allocations on hot paths.
 - Update docs and examples in the same change when behavior changes.
@@ -488,14 +490,14 @@ Two rules, one battery:
   `.go` file; editing outside Claude Code, run it yourself (editor
   format-on-save).
 - **Every change must pass the whole battery before committing** (the tools
-  analyze the full module and are too slow per-edit). Use `make lint` for the
-  analyzer set; the Makefile already finds Go-installed tools in `~/go/bin` and
-  gives static-analysis caches a writable fallback for non-interactive agents:
+  analyze the full module and are too slow per-edit). `make test` and `make check`
+  always run `fmt-check` and `make lint` first via the `validate` target; the
+  Makefile finds Go-installed tools in `~/go/bin` and gives static-analysis
+  caches a writable fallback for non-interactive agents:
 
 ```sh
-gofmt -l ./internal ./cmd         # must print nothing
-go build ./... && go test ./...   # must pass
-make lint                         # govulncheck/staticcheck/revive/golangci-lint
+go build ./...                    # must pass
+make check                      # vet, fmt-check, lint, then go test ./...
 ```
 
 Tool notes:
